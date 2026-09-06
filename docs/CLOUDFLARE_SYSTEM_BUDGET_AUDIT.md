@@ -167,7 +167,7 @@ result establishes deployed compatibility or resolves the open capacity work.
 | Flow                                          | Concrete growth problem                                                                                                                                              | Required coherent replacement                                                                                                                                   |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Personal discovery shelf                      | Full shelf reads join up to 10,000 records; first-discovered ordering lacks the matching personal index. Adding that index alone increases discovery writes.         | Design shelf reads and durable encounter storage together; measure the complete signed-in journey, including existing-account migration.                        |
-| Public catalog and compatibility artifacts    | `hydratedCatalogArtifact` and `materializePublishedCompatibilityArtifact` can build and write KV on a public cache miss.                                             | Publish the required immutable artifacts before exposing their manifest, with bounded publisher admission and a reader that only consumes published state.      |
+| Public catalog and compatibility artifacts    | Local reader cutover removes reconstruction and writes on cache misses; normal publisher D1 scans and its complete resource envelope still need admission.           | Release the admitted retained-catalog initializer, verify live reads, and bound the complete normal publisher including future supported compatibility schemas. |
 | Bulk inbox acknowledgement and source changes | Mark-all updates and source-trigger fanout can grow with a user's receipts or a popular asset's receipts. Exact counters fix reads but do not bound these mutations. | Bound the complete mutation and preserve exact identity/group counts; measure source insert/update/delete and duplicate delivery, not only one acknowledgement. |
 | Background and alternative entrypoints        | Scheduled work, queue retries and raw bindings are not all dispatched through reviewed operation adapters.                                                           | Extend the existing reservation authority to every executing path and sum their declared daily workload before dispatch.                                        |
 | Authoring storage                             | Physical storage is near the provider ceiling; retiring obsolete copies does not bound future canonical growth.                                                      | Verify reclaimed production capacity and enforce cumulative storage admission for canonical uploads, derivatives, events and retained checkpoints.              |
@@ -176,6 +176,20 @@ These are implementation defects, not findings that are cleared by passing the
 current test suite. The 10,000-reader scenario remains uncertified and its current
 discovery/vote write model still fails. No blanket route shutdown or allowance
 increase is treated as its replacement.
+
+The local catalog cutover writes payloads before pointers, checks actual reference
+digests against source races, preserves the previous readable publication after
+failed writes, and removes obsolete portrait fields on unpublication. Five cold
+isolates consume published artifacts with no D1 reads or KV writes. Missing
+artifacts fail uncached and recover after publication at the same URL.
+The normal release now initializes retained catalog hydration through a bounded
+KV adapter in the existing authority before activation. Its additive ledger
+preserves old D1 plans; fresh account telemetry, cumulative operator reservations
+and retry ceilings cover all four KV meters. The authenticated HTTP regression
+refuses stale/exhausted/underestimated work before KV and rejects invalid success
+receipts. A real workerd test initializes 20,000 genes (18,480,071 bytes) with
+five reads and one write, then repeats with no write. Production initialization
+and dedicated CI analytics-token permission for the KV dataset remain unverified.
 
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.

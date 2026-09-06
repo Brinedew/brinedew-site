@@ -285,6 +285,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/run-admitted-d1-migrations.mjs
 
+      - name: Prepare the published catalog through shared KV admission
+        timeout-minutes: 2
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/run-admitted-catalog-initialization.mjs
+
       - name: Deploy the only allowed internal stateful worker (production)
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
 

@@ -6,6 +6,9 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmGatewayRequest,
   resetIconoplasmRuntimeCachesForTest,
+  publishPortraitReferenceSnapshot,
+  buildPortraitAwareManifestHash,
+  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
 
@@ -161,7 +164,12 @@ class FakeSharedKv {
     this.version = version
     this.getCounts = new Map()
     const mobileCards = [completeMobileCard("A1BG", version), completeMobileCard("TP53", version)]
-    const fingerprint = { published_count: 2, latest: "publisherownedv1" }
+    const fingerprint = {
+      published_count: 2,
+      latest: createHash("sha256")
+        .update(`A1BG:${"a".repeat(64)}|TP53:${"b".repeat(64)}`)
+        .digest("hex"),
+    }
     const portraitRefVersion = `v3-${fingerprint.published_count}-${fingerprint.latest}`
     const portraitRefs = [
       { symbol: "A1BG", asset_sha256: "a".repeat(64) },
@@ -267,6 +275,14 @@ class FakeSharedKv {
         }),
       ],
     ])
+    const hydrated = mergePublishedPortraitRefsIntoArtifact(
+      JSON.parse(this.store.get(`iconoplasm:catalog:${hash}`)),
+      portraitRefs,
+    )
+    this.store.set(
+      `iconoplasm:hydrated-catalog-artifact:a${hydrated.schema_version}c${hydrated.contract_revision}:${buildPortraitAwareManifestHash(hash, fingerprint)}`,
+      JSON.stringify(hydrated),
+    )
   }
 
   async get(key) {
@@ -404,6 +420,102 @@ test("DO NOT DELETE: missing publication metadata is retryable without a D1 repa
   assert.equal(db.fingerprintReads, 0)
 })
 
+test("portrait publication preserves the old version on payload, pointer or source-race failure", async () => {
+  for (const failure of ["payload", "pointer", "source-race"]) {
+    const kv = new FakeSharedKv()
+    const pointerKey = "iconoplasm:published-portrait-fingerprint:v3"
+    const oldPointer = kv.store.get(pointerKey)
+    const writes = []
+    let reads = 0
+    const db = {
+      prepare(sql) {
+        assert.match(sql, /FROM icono_publish_state/)
+        return {
+          async all() {
+            reads++
+            const sha =
+              failure === "source-race" && sql.includes("JOIN icono_portrait_assets") ? "d" : "c"
+            return { results: [{ symbol: "A1BG", asset_sha256: sha.repeat(64) }] }
+          },
+        }
+      },
+    }
+    const env = buildEnv(kv, db)
+    const readManifest = () =>
+      handleIconoplasmGatewayRequest(
+        new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+        env,
+        { waitUntil() {} },
+      )
+    resetIconoplasmRuntimeCachesForTest()
+    const before = await (await readManifest()).json()
+    kv.put = async (key, value) => {
+      writes.push(key)
+      if (
+        (failure === "payload" && key !== pointerKey) ||
+        (failure === "pointer" && key === pointerKey)
+      ) {
+        throw new Error(`injected ${failure} failure`)
+      }
+      kv.store.set(key, String(value))
+    }
+    await assert.rejects(
+      publishPortraitReferenceSnapshot(env),
+      failure === "source-race" ? /state changed/ : /injected/,
+    )
+    assert.equal(reads, 2)
+    assert.equal(kv.store.get(pointerKey), oldPointer)
+    assert.equal(writes.length, failure === "payload" ? 1 : failure === "pointer" ? 3 : 0)
+    for (const reset of [false, true]) {
+      if (reset) resetIconoplasmRuntimeCachesForTest()
+      const response = await readManifest()
+      assert.equal(response.status, 200)
+      assert.equal((await response.json()).build_version, before.build_version)
+    }
+    assert.equal(reads, 2, "readers never repair the failed publication")
+  }
+})
+
+test("portrait publication exposes its version only after the exact payload is stored", async () => {
+  const kv = new FakeSharedKv()
+  const db = new FakeCostBarrierDb()
+  const writes = []
+  kv.put = async (key, value) => {
+    if (key === "iconoplasm:published-portrait-fingerprint:v3") {
+      const { fingerprint } = JSON.parse(value)
+      const payload = JSON.parse(
+        kv.store.get(
+          `iconoplasm:published-portrait-refs:v3-${fingerprint.published_count}-${fingerprint.latest}`,
+        ),
+      )
+      const digest = createHash("sha256")
+        .update(
+          payload
+            .map((row) => `${row.symbol}:${row.asset_sha256}`)
+            .sort()
+            .join("|"),
+        )
+        .digest("hex")
+      assert.equal(digest, fingerprint.latest)
+    }
+    writes.push(key)
+    kv.store.set(key, String(value))
+  }
+  resetIconoplasmRuntimeCachesForTest()
+  const rows = await publishPortraitReferenceSnapshot(buildEnv(kv, db))
+  assert.equal(rows.length, 2)
+  assert.equal(
+    writes.length,
+    3,
+    "publisher prepares the catalog once, instead of readers writing it",
+  )
+  assert.match(writes[0], /^iconoplasm:hydrated-catalog-artifact:/)
+  assert.match(writes[1], /^iconoplasm:published-portrait-refs:/)
+  assert.equal(writes[2], "iconoplasm:published-portrait-fingerprint:v3")
+  assert.equal(db.fingerprintReads, 1)
+  assert.equal(db.portraitRefReads, 1)
+})
+
 test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolate resets", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
@@ -425,6 +537,75 @@ test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolat
   )
   assert.equal(second.status, 200)
   assert.equal(db.portraitRefReads, 0)
+})
+
+test("cold catalog readers perform no D1 work or KV writes, including missing and repaired artifacts", async () => {
+  const kv = new FakeSharedKv()
+  const db = new FakeCostBarrierDb()
+  const env = buildEnv(kv, db)
+  const manifestUrl = "https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"
+  resetIconoplasmRuntimeCachesForTest()
+  const manifest = await (
+    await handleIconoplasmGatewayRequest(new Request(manifestUrl), env, { waitUntil() {} })
+  ).json()
+  const artifactUrl = `https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.${manifest.build_version}.json`
+  const artifactKey = `iconoplasm:hydrated-catalog-artifact:a5c1:${manifest.build_version}`
+  const published = kv.store.get(artifactKey)
+  assert.ok(published)
+  const originalPut = kv.put.bind(kv)
+  kv.put = async () => {
+    throw new Error("reader attempted a KV write")
+  }
+  const read = (url) => handleIconoplasmGatewayRequest(new Request(url), env, { waitUntil() {} })
+  for (let isolate = 0; isolate < 5; isolate++) {
+    resetIconoplasmRuntimeCachesForTest()
+    const response = await read(artifactUrl)
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), JSON.parse(published))
+    assert.equal(
+      (await read("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha")).status,
+      200,
+    )
+  }
+  kv.store.delete(artifactKey)
+  resetIconoplasmRuntimeCachesForTest()
+  const missing = await read(artifactUrl)
+  assert.equal(missing.status, 503)
+  assert.equal(missing.headers.get("Cache-Control"), "no-store")
+  assert.equal(db.fingerprintReads, 0)
+  assert.equal(db.portraitRefReads, 0)
+  kv.put = originalPut
+  await publishPortraitReferenceSnapshot(env)
+  kv.put = async () => {
+    throw new Error("reader attempted a KV write")
+  }
+  assert.equal(
+    (await read(artifactUrl)).status,
+    200,
+    "publisher restores the same URL without negative-cache delay",
+  )
+  assert.equal(db.fingerprintReads, 1)
+  assert.equal(db.portraitRefReads, 1)
+})
+
+test("unpublishing a portrait removes every old portrait representation from the next catalog", () => {
+  const before = {
+    schema_version: 5,
+    contract_revision: 1,
+    genes: [
+      {
+        s: "TP53",
+        n: "tumor protein p53",
+        p: { asset_sha256: "a".repeat(64) },
+        ph: "old-full.webp",
+        pt: "old-medium.webp",
+      },
+    ],
+  }
+  assert.deepEqual(mergePublishedPortraitRefsIntoArtifact(before, []).genes, [
+    { s: "TP53", n: "tumor protein p53" },
+  ])
+  assert.ok(before.genes[0].p, "source artifact remains immutable")
 })
 
 test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot after isolate reset", async () => {
@@ -507,7 +688,7 @@ test("DO NOT DELETE: corrupt portrait publication fails retryably instead of rep
   assert.match(firstPayload.error, /temporarily unavailable/)
   assert.equal(kv.getCounts.get(retiredCacheKey) || 0, 0)
   assert.equal(kv.getCounts.get(invalidCurrentCacheKey), 1)
-  assert.equal(kv.getCounts.get(incompletePortraitRefCacheKey), 1)
+  assert.equal(kv.getCounts.get(incompletePortraitRefCacheKey) || 0, 0)
   assert.equal(JSON.parse(kv.store.get(incompletePortraitRefCacheKey)).length, 0)
 
   resetIconoplasmRuntimeCachesForTest()

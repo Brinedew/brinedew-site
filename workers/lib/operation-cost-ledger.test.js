@@ -67,6 +67,130 @@ function fixture() {
   }
 }
 
+function enableKv(f, overrides = {}) {
+  f.ledger.readAccountUsage = () => ({
+    ...f.readAccountUsage(),
+    kv_measured_at: f.readAccountUsage().measured_at,
+    kv_reads: 0,
+    kv_writes: 0,
+    kv_deletes: 0,
+    kv_lists: 0,
+    ...overrides,
+  })
+}
+
+test("KV operations share one atomic allowance and failures cannot spend the D1 request counter", () => {
+  const f = fixture()
+  try {
+    enableKv(f)
+    for (let i = 0; i < 2; i++) {
+      f.ledger.register({
+        ...f.input,
+        id: `kv-${i}`,
+        prediction: { ...f.input.prediction, kv_writes: 50 },
+      })
+      f.ledger.reserve(
+        f.step({
+          id: `kv-${i}`,
+          bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 100 },
+        }),
+      )
+    }
+    f.ledger.register({
+      ...f.input,
+      id: "kv-full",
+      prediction: { ...f.input.prediction, kv_writes: 1 },
+    })
+    const before = f.db.prepare("SELECT requests FROM operation_cost_days").get().requests
+    assert.throws(
+      () =>
+        f.ledger.reserve(
+          f.step({
+            id: "kv-full",
+            bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 1 },
+          }),
+        ),
+      /SHARED_DAILY_LIMIT/,
+    )
+    assert.equal(f.ledger.kvDayUsage("2026-09-06").kv_writes, 200)
+    assert.equal(f.db.prepare("SELECT requests FROM operation_cost_days").get().requests, before)
+    assert.equal(f.ledger.readPlan("kv-full").used.requests, 0)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("KV admission rejects stale, missing, exhausted and underestimated dimensions before reservation", () => {
+  const f = fixture()
+  try {
+    f.ledger.register({ ...f.input, prediction: { ...f.input.prediction, kv_writes: 1 } })
+    const step = f.step({ bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 1 } })
+    assert.throws(() => f.ledger.reserve(step), /ACCOUNT_USAGE_UNAVAILABLE/)
+    enableKv(f, { kv_measured_at: f.readAccountUsage().measured_at - 60001 })
+    assert.throws(() => f.ledger.reserve(step), /ACCOUNT_USAGE_UNAVAILABLE/)
+    enableKv(f, { kv_writes: 700 })
+    assert.throws(() => f.ledger.reserve(step), /ACCOUNT_HEADROOM_LIMIT/)
+    enableKv(f)
+    assert.throws(
+      () => f.ledger.reserve({ ...step, bound: { ...step.bound, kv_writes: 3 } }),
+      /TWICE_PREDICTION_LIMIT/,
+    )
+    assert.equal(f.ledger.kvDayUsage("2026-09-06").kv_writes, 0)
+    assert.equal(f.ledger.readPlan(f.input.id).used.requests, 0)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("KV unknown spending and account high-water survive restart; only complete receipts settle", () => {
+  const f = fixture()
+  try {
+    enableKv(f)
+    f.ledger.register({ ...f.input, prediction: { ...f.input.prediction, kv_writes: 50 } })
+    const permit = f.ledger.reserve(
+      f.step({ bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 100 } }),
+    )
+    const actual = { rows_read: 0, rows_written: 0, requests: 1 }
+    assert.throws(() => f.ledger.settle({ ...permit, actual }), /RECEIPT_REQUIRED/)
+    const restarted = new OperationCostLedger(f.storage, () => f.readAccountUsage().measured_at)
+    restarted.initialize()
+    assert.equal(restarted.kvDayUsage("2026-09-06").kv_writes, 100)
+    restarted.settle({ ...permit, actual: { ...actual, kv_writes: 60 } })
+    assert.equal(restarted.kvDayUsage("2026-09-06").kv_writes, 60)
+    assert.throws(
+      () => restarted.settle({ ...permit, actual: { ...actual, kv_writes: 0 } }),
+      /RECEIPT_IMMUTABLE/,
+    )
+    const sample = {
+      ...f.readAccountUsage(),
+      kv_reads: 0,
+      kv_writes: 400,
+      kv_deletes: 0,
+      kv_lists: 0,
+    }
+    restarted.rememberAccountUsage(sample)
+    restarted.rememberAccountUsage({ ...sample, kv_writes: 10 })
+    assert.equal(restarted.storedAccountUsage().kv_writes, 400)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("adding KV tables preserves existing D1 plan bytes and spending", () => {
+  const f = fixture()
+  try {
+    f.ledger.register(f.input)
+    f.ledger.reserve(f.step())
+    const before = f.db.prepare("SELECT document FROM operation_cost_plans").get().document
+    f.db.exec("DROP TABLE operation_cost_kv_days; DROP TABLE operation_cost_kv_account_usage")
+    f.ledger.initialize()
+    assert.equal(f.db.prepare("SELECT document FROM operation_cost_plans").get().document, before)
+    assert.equal(f.db.prepare("SELECT rows_read FROM operation_cost_days").get().rows_read, 10)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("missing predictions, underestimates and wrong executable identities never obtain a dispatch permit", () => {
   const f = fixture()
   assert.throws(() => f.ledger.reserve(f.step()), /NOT_REGISTERED/)

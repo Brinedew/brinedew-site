@@ -19,6 +19,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   buildPublishedScannerArtifact,
+  buildPortraitAwareManifestHash,
   materializePublishedCompatibilityArtifact,
   mergePublishedPortraitRefsIntoArtifact,
   projectPublishedCompatibilityArtifact,
@@ -290,6 +291,28 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
 class FakeKV {
   constructor(entries = {}) {
     this.entries = new Map(Object.entries(entries))
+    const fingerprint = JSON.parse(
+      this.entries.get("iconoplasm:published-portrait-fingerprint:v3") || "null",
+    )?.fingerprint
+    if (fingerprint) {
+      const version =
+        fingerprint.published_count || fingerprint.latest
+          ? `v3-${fingerprint.published_count}-${fingerprint.latest}`
+          : "v3-none"
+      const refs = JSON.parse(
+        this.entries.get(`iconoplasm:published-portrait-refs:${version}`) || "null",
+      )
+      if (refs)
+        for (const [key, raw] of this.entries) {
+          if (!key.startsWith("iconoplasm:catalog:")) continue
+          const base = key.slice("iconoplasm:catalog:".length)
+          const artifact = mergePublishedPortraitRefsIntoArtifact(JSON.parse(raw), refs)
+          this.entries.set(
+            `iconoplasm:hydrated-catalog-artifact:a${artifact.schema_version}c${artifact.contract_revision}:${buildPortraitAwareManifestHash(base, fingerprint)}`,
+            JSON.stringify(artifact),
+          )
+        }
+    }
   }
 
   async get(key) {

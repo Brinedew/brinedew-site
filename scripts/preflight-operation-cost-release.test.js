@@ -13,12 +13,24 @@ const releaseManifest = JSON.parse(
 // Historical four-migration fixture retains its original boundary regressions.
 const manifest = {
   ...releaseManifest,
+  catalog_initialization_prediction: undefined,
   migrations: Object.fromEntries(
     Object.entries(releaseManifest.migrations).filter(([key]) => !/\/(009[56]|0015)_/.test(key)),
   ),
 }
 const time = Date.parse("2026-09-05T12:00:00Z")
-const sample = { day: "2026-09-05", measured_at: time, rows_read: 0, rows_written: 0, requests: 0 }
+const sample = {
+  day: "2026-09-05",
+  measured_at: time,
+  rows_read: 0,
+  rows_written: 0,
+  requests: 0,
+  kv_measured_at: time,
+  kv_reads: 0,
+  kv_writes: 0,
+  kv_deletes: 0,
+  kv_lists: 0,
+}
 const check = (observed, plan = manifest) =>
   preflightOperationCostRelease({
     manifest: plan,
@@ -79,6 +91,16 @@ test("the counter release fits protected capacity only after historical migratio
   const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
   assert.equal(result.maximum.rows_read, 849714)
   assert.equal(result.maximum.rows_written, 15528)
+  assert.equal(result.maximum.kv_reads, 5)
+  assert.equal(result.maximum.kv_writes, 1)
+  await assert.rejects(
+    preflightOperationCostRelease({
+      ...options,
+      pendingMigrations,
+      reader: { refresh: async () => ({ ...sample, kv_writes: 700 }) },
+    }),
+    /ACCOUNT_HEADROOM/,
+  )
 })
 
 test("missing, stale, future, wrong-day and malformed telemetry fail closed", async () => {
