@@ -4,6 +4,7 @@ import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotD
 import runtime from "../the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import {
   iconoplasmBackgroundJob,
+  ICONOPLASM_BACKGROUND_MINUTES,
   ICONOPLASM_RECURRING_CRON,
   ICONOPLASM_NIGHTLY_CRON,
 } from "../iconoplasm-background-schedule.js"
@@ -11,7 +12,10 @@ import {
 test("scheduled gallery publication exposes a failed internal response", async () => {
   await assert.rejects(
     runtime.scheduled(
-      { cron: ICONOPLASM_RECURRING_CRON, scheduledTime: Date.UTC(2026, 8, 6, 0, 4) },
+      {
+        cron: ICONOPLASM_RECURRING_CRON,
+        scheduledTime: Date.UTC(2026, 8, 6, 0, ICONOPLASM_BACKGROUND_MINUTES.gallery[0]),
+      },
       {},
       {},
     ),

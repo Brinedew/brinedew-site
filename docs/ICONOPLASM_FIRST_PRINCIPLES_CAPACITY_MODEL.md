@@ -388,7 +388,7 @@ run once each at 23:56-59 UTC, with one job per invocation. The 23:55 pre-warm,
 00:03 recap/catch-up and 12:06 feed triggers belong to GeneGuessr. They never
 repeat Iconoplasm maintenance. The canonical minute schedule and Wrangler
 agreement test enforce that separation. Recurring jobs also use independent
-invocations; their combined minimum is 823 Worker requests/day including the
+invocations; their combined minimum is 871 Worker requests/day including the
 three GeneGuessr triggers. This counts activations, not a proof of each job's
 CPU, subrequest or daily storage cost.
 

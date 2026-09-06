@@ -27,6 +27,7 @@ import {
   putEncryptedManifestationBody,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
+import { createD1InvocationBudget } from "../../lib/d1-invocation-budget.js"
 
 const NOW = "2026-08-30T00:00:00.000Z"
 const ADMIN = "account_admin_server"
@@ -274,6 +275,42 @@ test("account projection preserves duplicate public labels and enforces disable,
     }),
     { code: "ACCOUNT_STATUS_TERMINAL" },
   )
+})
+
+test("account projection statement reservation covers suspension, canonical withdrawal and tombstone", async (t) => {
+  const context = await bootstrap(t, "7091")
+  await saveManifestationRevision(context.db, {
+    assignmentId: context.assignmentId,
+    expectedAssignmentVersion: 2,
+    expectedManifestationVersion: 0,
+    expectedHeadVersion: 1,
+    expectedCanonicalRevisionId: context.seedRevisionId,
+    storage: storage(87),
+    manifestationId: "manifestation_cost_7091",
+    revisionId: "revision_cost_7091",
+    selectionId: "selection_cost_7091",
+    eventUuid: "event_cost_7091",
+    now: NOW,
+    ...command("command_cost_7091", "7", USER, "account"),
+  })
+  for (const [index, status] of ["disabled", "active", "erasure_pending", "tombstoned"].entries()) {
+    const budget = createD1InvocationBudget()
+    const result = await projectAuthorityAccountStatus(budget.binding(context.db), {
+      accountId: USER,
+      status,
+      finalLeavePolicy: "withdraw",
+      sourceEventId: `account_cost_event_${index}`,
+      sourceEventSequence: index + 1,
+      occurredAt: "2026-08-30T00:01:00.000Z",
+    })
+    // Three primary bookkeeping statements and four extra authoring statements
+    // for the initial missing-account check plus concurrent registration.
+    assert.ok(budget.used + 7 <= 32, `${status}: ${budget.used} authoring statements`)
+    assert.equal(result.status, status)
+    if (status === "erasure_pending")
+      assert.equal(result.canonical_revision_id, context.seedRevisionId)
+    t.diagnostic(`${status}: ${budget.used} authoring statements`)
+  }
 })
 
 test("upload intents reserve before PUT, survive termination, and atomically adopt a committed revision", async (t) => {

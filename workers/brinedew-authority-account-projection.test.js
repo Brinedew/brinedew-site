@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
+import { createRequire } from "node:module"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
@@ -8,6 +9,121 @@ import {
   drainBrinedewAuthorityAccountProjectionOutbox,
 } from "./lib/brinedew-authority-account-projection.js"
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+
+test(
+  "real D1 bounds account recovery selection with 20000 pending or deferred accounts",
+  { timeout: 120000 },
+  async (t) => {
+    const require = createRequire(import.meta.url)
+    const { Miniflare, convertV4MiniflareOptions } = createRequire(
+      require.resolve("wrangler/package.json"),
+    )("miniflare")
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('local')}}",
+        compatibilityDate: "2026-08-01",
+        d1Databases: ["DB"],
+      }),
+    )
+    const schema = new DatabaseSync(":memory:")
+    try {
+      for (const owner of ["../migrations/", "./benchmark/migrations/"]) {
+        const directory = new URL(owner, import.meta.url)
+        for (const file of readdirSync(directory)
+          .filter((f) => f.endsWith(".sql"))
+          .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10) || a.localeCompare(b)))
+          schema.exec(readFileSync(new URL(file, directory), "utf8"))
+      }
+      const db = await runtime.getD1Database("DB")
+      const definitions = schema
+        .prepare(
+          "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT IN (SELECT name FROM pragma_table_list WHERE type='shadow') ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+        )
+        .all()
+      for (let i = 0; i < definitions.length; i += 20)
+        await db.batch(definitions.slice(i, i + 20).map(({ sql }) => db.prepare(sql)))
+      await db
+        .prepare(
+          `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<20000)
+      INSERT INTO brinedew_accounts(account_id,created_at,updated_at)
+      SELECT 'acct_'||printf('%032x',i),0,0 FROM n`,
+        )
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO brinedew_authority_account_projection_outbox(account_id,source_event_id,source_event_sequence,account_version,source_status,authority_status,occurred_at)
+      SELECT account_id,'event_'||rowid,rowid,1,'active','active',0 FROM brinedew_accounts`,
+        )
+        .run()
+      const now = 1000000
+      let statement
+      const capture = {
+        prepare(sql) {
+          return {
+            bind(...args) {
+              statement = db.prepare(sql).bind(...args)
+              return this
+            },
+            async all() {
+              return { results: [] }
+            },
+          }
+        },
+      }
+      await drainBrinedewAuthorityAccountProjectionOutbox({
+        primaryDb: capture,
+        authoringDb: capture,
+        limit: 25,
+        now,
+      })
+      const read = async (expected, maximum) => {
+        const result = await statement.all()
+        assert.equal(result.results.length, expected)
+        assert.ok(result.meta.rows_read <= maximum, `${result.meta.rows_read} > ${maximum}`)
+        assert.equal(result.meta.rows_written, 0)
+        t.diagnostic(`account recovery: ${expected} candidates, ${result.meta.rows_read} reads`)
+        return result.results
+      }
+      await read(25, 120)
+      await db
+        .prepare("UPDATE brinedew_authority_account_projection_outbox SET next_attempt_at=?")
+        .bind(now + 1)
+        .run()
+      await read(0, 12)
+      await db
+        .prepare("UPDATE brinedew_authority_account_projection_outbox SET next_attempt_at=?")
+        .bind(now - 1)
+        .run()
+      await read(25, 120)
+      await db
+        .prepare("UPDATE brinedew_authority_account_projection_outbox SET next_attempt_at=?")
+        .bind(now + 1)
+        .run()
+      await db
+        .prepare(
+          "UPDATE brinedew_authority_account_projection_outbox SET next_attempt_at=NULL,occurred_at=? WHERE source_event_sequence=1",
+        )
+        .bind(now)
+        .run()
+      await db
+        .prepare(
+          "UPDATE brinedew_authority_account_projection_outbox SET next_attempt_at=? WHERE source_event_sequence=2",
+        )
+        .bind(now - 1)
+        .run()
+      const due = await read(2, 20)
+      assert.equal(
+        due[0].account_id,
+        `acct_${(2).toString(16).padStart(32, "0")}`,
+        "an older due retry must not be starved by new pending work",
+      )
+    } finally {
+      schema.close()
+      await runtime.dispose()
+    }
+  },
+)
 
 class Statement {
   constructor(database, sql, bindings = []) {
@@ -95,18 +211,26 @@ test("batch account recovery leaves downstream events durable without multiplyin
     }
   }
   let wakes = 0
-  const result = await drainBrinedewAuthorityAccountProjectionOutbox({
-    primaryDb: primary,
-    authoringDb: authoring,
-    limit: 25,
-    now: 100,
-    // An obsolete caller cannot reinstate the per-account full-batch wake.
-    wakeManifestationProjection: async () => {
-      wakes++
-    },
-  })
-  assert.equal(result.attempted, 25)
-  assert.equal(result.delivered, 25, JSON.stringify(result.results))
+  let delivered = 0
+  let batches = 0
+  for (; batches < 25; batches++) {
+    const result = await drainBrinedewAuthorityAccountProjectionOutbox({
+      primaryDb: primary,
+      authoringDb: authoring,
+      limit: 25,
+      now: 100,
+      // An obsolete caller cannot reinstate the per-account full-batch wake.
+      wakeManifestationProjection: async () => {
+        wakes++
+      },
+    })
+    assert.ok(result.statement_count <= 50)
+    assert.ok(result.delivered > 0)
+    delivered += result.delivered
+    if (!result.has_more) break
+  }
+  assert.equal(delivered, 25)
+  assert.ok(batches < 25)
   assert.equal(wakes, 0)
   assert.equal(
     primary.database
@@ -117,7 +241,7 @@ test("batch account recovery leaves downstream events durable without multiplyin
     0,
   )
   t.diagnostic(
-    `25 new accounts prepare ${queries} D1 statements; individual batch admission remains under audit`,
+    `25 new accounts recovered in ${batches + 1} bounded invocations (${queries} prepared statements total)`,
   )
 })
 

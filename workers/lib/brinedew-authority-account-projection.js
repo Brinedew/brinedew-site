@@ -7,8 +7,13 @@ import {
   normalizeBrinedewAccountId,
   readBrinedewAccount,
 } from "./brinedew-account-identity.js"
+import { createD1InvocationBudget } from "./d1-invocation-budget.js"
 
 const PROJECTION_BATCH_LIMIT = 25
+// Includes primary bookkeeping, registration races, withdrawal/selection,
+// command replay checks and failure recording. Local branch measurements reach
+// 23 statements; the additional reserve covers registration/concurrent replay.
+const ACCOUNT_PROJECTION_STATEMENT_RESERVATION = 32
 
 function authorityTimestampFromEpoch(raw) {
   const epochMilliseconds = Number(raw)
@@ -207,6 +212,9 @@ export async function drainBrinedewAuthorityAccountProjectionOutbox({
 } = {}) {
   requireDb(primaryDb, "DB")
   requireDb(authoringDb, "ICONOPLASM_AUTHORING_DB")
+  const invocation = createD1InvocationBudget()
+  primaryDb = invocation.binding(primaryDb)
+  authoringDb = invocation.binding(authoringDb)
   const attemptedAt = Math.max(0, Math.trunc(Number(now) || 0))
   const boundedLimit = Math.max(
     1,
@@ -214,18 +222,26 @@ export async function drainBrinedewAuthorityAccountProjectionOutbox({
   )
   const response = await primaryDb
     .prepare(
-      `SELECT account_id
-         FROM brinedew_authority_account_projection_outbox
-        WHERE projection_state = 'pending'
-          AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-        ORDER BY source_event_sequence ASC
-        LIMIT ?`,
+      `WITH pending AS MATERIALIZED (
+         SELECT account_id, source_event_sequence, occurred_at AS due_at
+           FROM brinedew_authority_account_projection_outbox
+          WHERE projection_state = 'pending' AND next_attempt_at IS NULL
+          ORDER BY source_event_sequence LIMIT ?2
+       ), retries AS MATERIALIZED (
+         SELECT account_id, source_event_sequence, next_attempt_at AS due_at
+           FROM brinedew_authority_account_projection_outbox
+          WHERE projection_state = 'pending' AND next_attempt_at <= ?1
+          ORDER BY next_attempt_at, source_event_sequence LIMIT ?2
+       )
+       SELECT account_id FROM (SELECT * FROM pending UNION ALL SELECT * FROM retries)
+        ORDER BY due_at, source_event_sequence LIMIT ?2`,
     )
     .bind(attemptedAt, boundedLimit)
     .all()
   const rows = Array.isArray(response?.results) ? response.results : []
   const results = []
   for (const row of rows) {
+    if (!invocation.canStart(ACCOUNT_PROJECTION_STATEMENT_RESERVATION)) break
     try {
       const projected = await projectBrinedewAccountToManifestationAuthority({
         primaryDb,
@@ -247,7 +263,8 @@ export async function drainBrinedewAuthorityAccountProjectionOutbox({
     attempted: results.length,
     delivered: results.filter((result) => result.status === "delivered").length,
     failed: results.filter((result) => result.status === "failed").length,
-    has_more: rows.length === boundedLimit,
+    has_more: rows.length === boundedLimit || results.length < rows.length,
+    statement_count: invocation.used,
     results: Object.freeze(results),
   })
 }
