@@ -37,9 +37,14 @@ function DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(haystack, before, after, me
 }
 
 test("DO NOT DELETE: discovery hover path keeps canonical discovery keys raw", () => {
-  const discoveryFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+  const discoveryEntry = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function recordGeneDiscoveryEncounter",
     "async function ensureStarterGeneDiscoveries",
+  )
+  assert.match(discoveryEntry, /recordDiscoveryEncounterAtomically\(env\.ICONOPLASM_DB/)
+  const discoveryFn = readFileSync(
+    new URL("./iconoplasm/discovery-encounter.js", import.meta.url),
+    "utf8",
   )
   assert.match(
     discoveryFn,

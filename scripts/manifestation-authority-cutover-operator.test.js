@@ -11,6 +11,10 @@ const execute = promisify(execFile)
 
 const powershellExecutable =
   process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
+// Full-suite workerd children can delay Windows process startup beyond 15s.
+// These are ledger correctness checks, not shell-startup latency benchmarks.
+// Keep a finite deadline and include spawn errors when the deadline is exceeded.
+const powershellTestDeadlineMs = 30_000
 
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
 const shardScriptUrl = new URL("./Invoke-ManifestationAuthorityCutoverShards.ps1", import.meta.url)
@@ -156,9 +160,9 @@ test("request ledger blocks before overflow and resets only on a new UTC day", a
     const result = spawnSync(
       powershellExecutable,
       ["-NoProfile", "-NonInteractive", "-Command", command],
-      { encoding: "utf8", timeout: 15_000 },
+      { encoding: "utf8", timeout: powershellTestDeadlineMs, windowsHide: true },
     )
-    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.status, 0, result.error?.message || result.stderr)
     const payload = JSON.parse(result.stdout.trim())
     assert.deepEqual(payload, { first: 2, second: 3, blocked: true, saved: 3 })
 
@@ -173,9 +177,9 @@ test("request ledger blocks before overflow and resets only on a new UTC day", a
         "-Command",
         `. ${quote(helperPath)}; Reserve-CloudflareWorkerRequests -Count 1 -DailyLimit 3 -StatePath ${quote(ledgerPath)} -Operation 'rollover' | ConvertTo-Json -Compress`,
       ],
-      { encoding: "utf8", timeout: 15_000 },
+      { encoding: "utf8", timeout: powershellTestDeadlineMs, windowsHide: true },
     )
-    assert.equal(rollover.status, 0, rollover.stderr)
+    assert.equal(rollover.status, 0, rollover.error?.message || rollover.stderr)
     assert.equal(JSON.parse(rollover.stdout).requests_reserved, 1)
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -203,7 +207,7 @@ test("request ledger serializes concurrent reservations without losing counts", 
           ["-NoProfile", "-NonInteractive", "-Command", command],
           {
             encoding: "utf8",
-            timeout: 20_000,
+            timeout: powershellTestDeadlineMs,
             maxBuffer: 64 * 1024,
             windowsHide: true,
           },

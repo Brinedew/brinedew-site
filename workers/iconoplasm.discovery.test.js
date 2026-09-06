@@ -216,6 +216,41 @@ class FakeDiscoveryDb {
     return new FakeDiscoveryStatement(this, sql)
   }
 
+  async batch(statements) {
+    if (statements.at(-1).sql.includes("FROM json_each(?) WHERE 1")) {
+      this.calls.push(...statements.map((s) => ({ method: "batch", sql: s.sql, args: s.args })))
+      const [user, encoded] = statements.at(-1).args
+      for (const gene of JSON.parse(encoded)) {
+        if (this.getDiscovery(user, gene)) continue
+        if (statements.length === 2) this.recordSharedDiscoveryEncounter([gene, 1])
+        this.insertDiscovery([
+          user,
+          gene,
+          "extension_guest_merge",
+          "extension_guest_merge",
+          "guest_buffer_merge",
+          "guest_buffer_merge",
+          null,
+          null,
+        ])
+      }
+      return statements.map(() => ({ results: [], meta: { changes: 1 } }))
+    }
+    const [personal, shared] = statements
+    this.calls.push(...statements.map((s) => ({ method: "batch", sql: s.sql, args: s.args })))
+    const [user, gene, , source, , trigger, , dwell, seedOnly] = personal.args
+    const existing = this.getDiscovery(user, gene)
+    if (existing && seedOnly) return statements.map(() => ({ results: [], meta: { changes: 0 } }))
+    if (existing) this.updateDiscovery([source, trigger, dwell, user, gene])
+    else this.insertDiscovery(personal.args)
+    const row = this.getDiscovery(user, gene)
+    if (shared) this.recordSharedDiscoveryEncounter([gene, existing ? 0 : 1])
+    return [
+      { results: [row], meta: { changes: 1 } },
+      ...(shared ? [{ results: [], meta: { changes: 1 } }] : []),
+    ]
+  }
+
   key(userId, geneSymbol) {
     return `${String(userId)}|${String(geneSymbol).toUpperCase()}`
   }
@@ -906,18 +941,19 @@ test("discoveries merge upserts guest-local symbols into the signed-in account",
   assert.equal(payload?.ok, true)
   assert.equal(payload?.authenticated, true)
   assert.equal(payload?.merged_count, 3)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), [
-    "BRCA1",
-    "EGFR",
-    "INS",
-    "PRL",
-    "RHO",
-    "TP53",
-  ])
-  assert.equal(payload?.discovered_count, 6)
+  assert.equal(payload?.schema, "iconoplasm.discoveryMerge.v2")
+  assert.deepEqual(sortSymbols(payload?.merged_symbols), ["BRCA1", "EGFR", "TP53"])
+  assert.deepEqual(payload?.discovered_symbols, payload?.merged_symbols)
+  assert.equal(payload?.discoveries, undefined)
+  assert.equal(payload?.discovered_count, undefined)
 
   const stored = env.gatewayDb.listDiscoveries("user-123")
-  assert.equal(stored.length, 6)
+  assert.equal(stored.length, 3)
+  assert.equal(stored.find((row) => row.gene_symbol === "TP53").encounter_count, 1)
+  assert.equal(
+    env.gatewayDb.calls.some((call) => call.sql.includes("FROM icono_gene_discoveries d")),
+    false,
+  )
 })
 
 test("discoveries merge enforces the same 200-symbol ceiling as the browser client", async () => {
@@ -942,7 +978,26 @@ test("discoveries merge enforces the same 200-symbol ceiling as the browser clie
     )
   const payload = await response.json()
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.merged_count, 200)
-  assert.equal(env.gatewayDb.listDiscoveries("user-123").length, 203)
+  assert.equal(response.status, 400)
+  assert.equal(payload?.ok, false)
+  assert.equal(env.gatewayDb.listDiscoveries("user-123").length, 0)
+  const request = () =>
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
+      method: "POST",
+      headers: { Cookie: "session=abc", "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: symbols.slice(0, 200) }),
+    })
+  for (let i = 0; i < 2; i++) {
+    const accepted =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        request(),
+        env,
+        {},
+      )
+    assert.equal(accepted.status, 200)
+    assert.equal((await accepted.json()).merged_symbols.length, 200)
+  }
+  const stored = env.gatewayDb.listDiscoveries("user-123")
+  assert.equal(stored.length, 200)
+  assert.ok(stored.every((row) => row.encounter_count === 1))
 })
