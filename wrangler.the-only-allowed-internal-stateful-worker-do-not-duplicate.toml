@@ -273,11 +273,12 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
 [triggers]
 # One Iconoplasm job per invocation; workers/iconoplasm-background-schedule.js
-# owns the minute map and its test checks this expression. Seven jobs retain
-# quarter-hour recovery; supervote delivery uses five 16-message batches/hour.
+# owns the minute map and its test checks this expression. Five jobs retain
+# quarter-hour recovery; account and manifestation recovery run every 12 minutes,
+# as does supervote delivery with five 16-message batches/hour.
 # Nightly archive, vote projection, canon repair and gallery run at 23:56-59
 # in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,7,10,11,15,16,17,19,20,22,25,26,27,31,32,34,35,37,39,40,41,46,47,49,50,51,52,55,56 * * * *", "56-59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,5,6,7,8,11,14,15,17,18,19,20,23,26,27,29,30,31,32,35,38,39,41,42,43,44,47,50,51,53,54,55,56,59 * * * *", "56-59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"

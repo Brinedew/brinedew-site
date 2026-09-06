@@ -55,8 +55,8 @@ test("every configured background event invokes exactly its one job, including d
   assert.equal(totals.caretakerComments * CARETAKER_COMMENT_DELIVERY_LIMIT, 80 * 24)
   assert.equal(totals.caretakerSupervotes * CARETAKER_SUPERVOTE_DELIVERY_LIMIT, 80 * 24)
   assert.equal(totals.fulfillment, 96)
-  assert.equal(totals.accounts, 96)
-  assert.equal(totals.manifestations, 96)
+  assert.equal(totals.accounts, 120)
+  assert.equal(totals.manifestations, 120)
   assert.equal(totals.gallery, 97)
   assert.equal(totals.archive, 1)
   assert.equal(totals.voteProjection, 1)
@@ -65,7 +65,12 @@ test("every configured background event invokes exactly its one job, including d
 
 test("background schedules retain bounded cadence and never repeat nightly work hourly", () => {
   for (const [job, minutes] of Object.entries(ICONOPLASM_BACKGROUND_MINUTES)) {
-    const expectedGap = job === "sharedDiscovery" ? 60 : job === "caretakerSupervotes" ? 12 : 15
+    const expectedGap =
+      job === "sharedDiscovery"
+        ? 60
+        : ["caretakerSupervotes", "accounts", "manifestations"].includes(job)
+          ? 12
+          : 15
     minutes.forEach((minute, i) =>
       assert.equal(
         minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute,
@@ -96,7 +101,10 @@ test("a failed background job is visible and cannot start another job in its inv
   }
   await assert.rejects(
     runIconoplasmBackgroundJob(
-      { cron: ICONOPLASM_RECURRING_CRON, scheduledTime: Date.UTC(2025, 0, 1, 0, 1) },
+      {
+        cron: ICONOPLASM_RECURRING_CRON,
+        scheduledTime: Date.UTC(2025, 0, 1, 0, ICONOPLASM_BACKGROUND_MINUTES.caretakerComments[0]),
+      },
       handlers,
     ),
     /delivery unavailable/,
