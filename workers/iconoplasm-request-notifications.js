@@ -10,6 +10,10 @@ import {
 } from "./iconoplasm/request-inbox-queries.js"
 import { readPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { reconcileDeliveryBacklog } from "./iconoplasm/request-delivery-reconciliation.js"
+import {
+  readReadyDeliveryLeaders,
+  claimReadyDeliveryGroup,
+} from "./iconoplasm/request-delivery-selection.js"
 
 // During the live acceptance period, only Vladimir's immutable Discord user ID
 // may receive a DM. Production delivery is enabled only by the exact explicit
@@ -452,14 +456,14 @@ async function setDiscordState(env, notificationIds, status, fields = {}) {
       ? boundedText(fields.nextAttemptAt, 64) || nextDiscordRetryAt(fields.attemptCount)
       : ""
   await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_request_notifications
+    `UPDATE icono_request_notifications NOT INDEXED
      SET discord_status = ?,
          discord_sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE discord_sent_at END,
          discord_channel_id = ?,
          discord_message_id = ?,
          discord_error = ?,
          discord_next_attempt_at = ?
-     WHERE id IN (${ids.map(() => "?").join(",")})`,
+     WHERE id IN (SELECT value FROM json_each(?))`,
   )
     .bind(
       status,
@@ -468,7 +472,7 @@ async function setDiscordState(env, notificationIds, status, fields = {}) {
       boundedText(fields.messageId, 255),
       boundedText(fields.error, 1000),
       nextAttemptAt,
-      ...ids,
+      JSON.stringify(ids),
     )
     .run()
 }
@@ -543,45 +547,11 @@ export async function deliverPendingRequestFulfillmentNotifications(
   const deliverableStatuses = allRequesters
     ? ["pending", "retry", "suppressed_not_test_recipient"]
     : ["pending", "retry"]
-  const statusPlaceholders = deliverableStatuses.map(() => "?").join(",")
-  const sameDeliveryGroup = (left, right) => `
-    ${left}.requester_user_id = ${right}.requester_user_id
-    AND ${left}.fulfillment_publication_id = ${right}.fulfillment_publication_id
-    AND ${left}.gene_symbol = ${right}.gene_symbol`
-  const where = [
-    `n.discord_status IN (${statusPlaceholders})`,
-    "n.fulfillment_publication_id <> ''",
-    "(n.discord_next_attempt_at IS NULL OR n.discord_next_attempt_at <= CURRENT_TIMESTAMP)",
-    `n.id = (
-      SELECT MIN(leader.id)
-      FROM icono_request_notifications leader
-      WHERE ${sameDeliveryGroup("leader", "n")}
-    )`,
-    `n.fulfillment_group_size = (
-      SELECT COUNT(*)
-      FROM icono_request_notifications completed
-      WHERE ${sameDeliveryGroup("completed", "n")}
-    )`,
-  ]
-  const params = [...deliverableStatuses]
-  if (ids.length) {
-    where.push(`EXISTS (
-      SELECT 1
-      FROM icono_request_notifications scoped
-      WHERE ${sameDeliveryGroup("scoped", "n")}
-        AND scoped.request_id IN (${ids.map(() => "?").join(",")})
-    )`)
-    params.push(...ids)
-  }
-  const rowsResponse = await env.ICONOPLASM_DB.prepare(
-    `SELECT n.*
-     FROM icono_request_notifications n
-     WHERE ${where.join(" AND ")}
-     ORDER BY n.created_at ASC, n.id ASC
-     LIMIT ?`,
-  )
-    .bind(...params, safeLimit)
-    .all()
+  const leaders = await readReadyDeliveryLeaders(env.ICONOPLASM_DB, {
+    requestIds: ids,
+    allRequesters,
+    limit: safeLimit,
+  })
 
   const result = {
     ok: true,
@@ -595,7 +565,7 @@ export async function deliverPendingRequestFulfillmentNotifications(
     unknown: 0,
     deferred: 0,
   }
-  for (const leader of Array.isArray(rowsResponse?.results) ? rowsResponse.results : []) {
+  for (const leader of leaders) {
     const leaderId = positiveInteger(leader?.id)
     const requesterId = userId(leader?.requester_user_id)
     const publicationId = boundedText(leader?.fulfillment_publication_id, 128)
@@ -640,18 +610,12 @@ export async function deliverPendingRequestFulfillmentNotifications(
       continue
     }
 
-    const claim = await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_request_notifications
-       SET discord_status = 'sending',
-           discord_attempt_count = discord_attempt_count + 1,
-           discord_last_attempt_at = CURRENT_TIMESTAMP,
-           discord_error = ''
-       WHERE id IN (${notificationIds.map(() => "?").join(",")})
-         AND discord_status IN (${statusPlaceholders})`,
-    )
-      .bind(...notificationIds, ...deliverableStatuses)
-      .run()
-    if (Number(claim?.meta?.changes || 0) !== notificationIds.length) continue
+    const claimed = await claimReadyDeliveryGroup(env.ICONOPLASM_DB, {
+      notificationIds,
+      leader,
+      allRequesters,
+    })
+    if (!claimed) continue
 
     const botToken = String(env?.DISCORD_BOT_TOKEN || "").trim()
     if (!botToken) {
@@ -659,8 +623,7 @@ export async function deliverPendingRequestFulfillmentNotifications(
         error: "DISCORD_BOT_TOKEN is not configured.",
         attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
-      if (failure.deferred) result.deferred += 1
-      else result.failed += 1
+      result.failed += 1
       continue
     }
 
