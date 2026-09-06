@@ -763,33 +763,44 @@ async function pendingProjectionEvents(authoringDb, { limit, now, priorityEventI
       )
       .bind(priority)
       .first()
-    return row ? [row] : []
+    return { rows: row ? [row] : [], hasMore: Boolean(row) && limit === 1 }
   }
-  const response = await authoringDb
-    .prepare(
-      `SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
-              projection_status, projection_attempts
-         FROM icono_manifestation_events AS candidate
-        WHERE candidate.projection_status IN ('pending', 'failed')
-          AND (
-            candidate.event_uuid = ?
-            OR candidate.projection_next_attempt_at IS NULL
-            OR candidate.projection_next_attempt_at <= ?
-          )
-          AND NOT EXISTS (
-            SELECT 1
-              FROM icono_manifestation_events AS newer
-             WHERE newer.gene_id = candidate.gene_id
-               AND newer.projection_status IN ('pending', 'failed')
-               AND newer.event_sequence > candidate.event_sequence
-          )
-        ORDER BY CASE WHEN candidate.event_uuid = ? THEN 0 ELSE 1 END,
-                 candidate.event_sequence ASC
-        LIMIT ?`,
-    )
-    .bind(priority, now.toISOString(), priority, limit)
-    .all()
-  return Array.isArray(response?.results) ? response.results : []
+  // Four disjoint ranges follow the existing retry index, each stopping at
+  // limit entries. Coalesce only this bounded window; looking for the newest
+  // pending event across all history turns LIMIT into an unbounded scan.
+  // Older callbacks still project the exact current authority head below.
+  const candidates = []
+  let fullRange = false
+  for (const status of ["pending", "failed"]) {
+    for (const scheduled of [false, true]) {
+      const response = await authoringDb
+        .prepare(
+          `SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
+                  projection_status, projection_attempts
+             FROM icono_manifestation_events
+             INDEXED BY idx_icono_events_projection_due
+            WHERE projection_status = ? AND ${
+              scheduled
+                ? "projection_next_attempt_at IS NOT NULL AND projection_next_attempt_at <= ?"
+                : "projection_next_attempt_at IS NULL"
+            }
+            ORDER BY projection_next_attempt_at, event_sequence
+            LIMIT ?`,
+        )
+        .bind(...(scheduled ? [status, now.toISOString(), limit] : [status, limit]))
+        .all()
+      const rows = Array.isArray(response?.results) ? response.results : []
+      fullRange ||= rows.length === limit
+      candidates.push(...rows)
+    }
+  }
+  const latest = new Map()
+  for (const row of candidates) {
+    if (!latest.has(row.gene_id) || latest.get(row.gene_id).event_sequence < row.event_sequence)
+      latest.set(row.gene_id, row)
+  }
+  const rows = [...latest.values()].sort((a, b) => a.event_sequence - b.event_sequence)
+  return { rows: rows.slice(0, limit), hasMore: fullRange || rows.length > limit }
 }
 
 function projectionEnvelope(row) {
@@ -865,11 +876,12 @@ export async function drainManifestationAuthorityProjectionOutbox(
   const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
   const clock = now instanceof Date ? now : new Date(now)
   if (!Number.isFinite(clock.getTime())) throw new TypeError("Invalid projection drain timestamp")
-  const rows = await pendingProjectionEvents(authoringDb, {
+  const pending = await pendingProjectionEvents(authoringDb, {
     limit: boundedLimit,
     now: clock,
     priorityEventId,
   })
+  const rows = pending.rows
   const results = []
   for (const row of rows) {
     let envelope = null
@@ -939,7 +951,7 @@ export async function drainManifestationAuthorityProjectionOutbox(
     attempted: results.length,
     published: results.filter((item) => item.status === "published").length,
     failed: results.filter((item) => item.status === "failed").length,
-    has_more: rows.length === boundedLimit,
+    has_more: pending.hasMore,
     results: Object.freeze(results),
   })
 }

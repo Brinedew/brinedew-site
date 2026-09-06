@@ -117,7 +117,13 @@ pending backlog and taking up to 50 events. It still reads the current authority
 head and cannot rewind canonical state. Acknowledgement touches at most 250
 consecutive gene revisions through the unique gene/revision index; older pending
 records remain available to scheduled recovery and continue to block premature
-compaction. The periodic backlog selector still needs its own admitted cost proof.
+compaction. Scheduled selection now reads four disjoint ranges through the
+existing status/retry index, at most 50 rows per range, then coalesces that bounded
+window in memory. It no longer searches the full backlog for a newer event.
+Each selected callback still reads the current authoritative head; delayed
+retries stay queued. A 5,800-event regression checks indexed query plans, complete
+eventual progress and unchanged future retries. The whole scheduled drain still
+needs mandatory admission for its downstream account/assignment/publication work.
 
 The shared alias lookup previously sorted complete gene histories on ordinary
 commands. It now takes at most 257 rows through the existing gene index before

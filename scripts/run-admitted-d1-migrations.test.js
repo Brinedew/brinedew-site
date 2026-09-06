@@ -81,8 +81,8 @@ test("no forecast fails before discovery; unknown migration fails before any DDL
 test("every inventory and migration registers before execution and records its receipt", async () => {
   const { options, calls } = harness()
   const result = await runAdmittedMigrations(options)
-  assert.equal(result.migrations_applied, 3)
-  assert.equal(result.evidence.length, 6)
+  assert.equal(result.migrations_applied, 4)
+  assert.equal(result.evidence.length, 7)
   for (let index = 2; index < calls.length; index += 3) {
     assert.equal(calls[index].suffix, "/register")
     assert.equal(calls[index + 1].suffix, "/execute")
