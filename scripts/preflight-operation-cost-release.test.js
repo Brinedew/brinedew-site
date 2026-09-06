@@ -15,7 +15,7 @@ const manifest = {
   ...releaseManifest,
   catalog_initialization_prediction: undefined,
   migrations: Object.fromEntries(
-    Object.entries(releaseManifest.migrations).filter(([key]) => !/\/(009[56]|0015)_/.test(key)),
+    Object.entries(releaseManifest.migrations).filter(([key]) => !/\/(009[567]|0015)_/.test(key)),
   ),
 }
 const time = Date.parse("2026-09-05T12:00:00Z")
@@ -86,11 +86,12 @@ test("the counter release fits protected capacity only after historical migratio
   const pendingMigrations = [
     "iconoplasm/0095_transactional_admin_counts.sql",
     "iconoplasm/0096_request_inbox_counters.sql",
+    "iconoplasm/0097_delivery_reconciliation_cursor.sql",
     "iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql",
   ]
   const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
-  assert.equal(result.maximum.rows_read, 849714)
-  assert.equal(result.maximum.rows_written, 15528)
+  assert.equal(result.maximum.rows_read, 882738)
+  assert.equal(result.maximum.rows_written, 15560)
   assert.equal(result.maximum.kv_reads, 5)
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({

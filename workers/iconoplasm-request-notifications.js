@@ -9,6 +9,7 @@ import {
   REQUEST_INBOX_PAGE_SQL,
 } from "./iconoplasm/request-inbox-queries.js"
 import { readPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
+import { reconcileDeliveryBacklog } from "./iconoplasm/request-delivery-reconciliation.js"
 
 // During the live acceptance period, only Vladimir's immutable Discord user ID
 // may receive a DM. Production delivery is enabled only by the exact explicit
@@ -484,9 +485,10 @@ export async function reconcileDeliveredRequestFulfillments(env, { requestIds = 
   const ids = Array.from(
     new Set((Array.isArray(requestIds) ? requestIds : []).map(positiveInteger).filter(Boolean)),
   ).slice(0, 50)
-  const scopedWhere = ids.length ? ` AND id IN (${ids.map(() => "?").join(",")})` : ""
+  if (!ids.length) return reconcileDeliveryBacklog(env.ICONOPLASM_DB)
+  const scopedWhere = ` AND id IN (${ids.map(() => "?").join(",")})`
   const finalized = await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_generation_requests
+    `UPDATE icono_generation_requests NOT INDEXED
      SET status = 'fulfilled',
          updated_at = CURRENT_TIMESTAMP,
          fulfilled_at = COALESCE(fulfilled_at, CURRENT_TIMESTAMP)
@@ -496,20 +498,13 @@ export async function reconcileDeliveredRequestFulfillments(env, { requestIds = 
          FROM icono_request_notifications n
          WHERE n.request_id = icono_generation_requests.id
            AND n.discord_status = 'sent'
-       )${scopedWhere}`,
+       )${scopedWhere} RETURNING id`,
   )
     .bind(...ids)
-    .run()
-  if (!ids.length) {
-    return {
-      ok: true,
-      finalized: positiveInteger(finalized?.meta?.changes),
-      pending_request_ids: [],
-    }
-  }
+    .all()
   const outstanding = await env.ICONOPLASM_DB.prepare(
     `SELECT id
-     FROM icono_generation_requests
+     FROM icono_generation_requests NOT INDEXED
      WHERE id IN (${ids.map(() => "?").join(",")})
        AND status = 'delivery_pending'
      ORDER BY id ASC`,
@@ -518,7 +513,7 @@ export async function reconcileDeliveredRequestFulfillments(env, { requestIds = 
     .all()
   return {
     ok: true,
-    finalized: positiveInteger(finalized?.meta?.changes),
+    finalized: finalized.results.length,
     pending_request_ids: (Array.isArray(outstanding?.results) ? outstanding.results : [])
       .map((row) => positiveInteger(row?.id))
       .filter(Boolean),
@@ -594,6 +589,7 @@ export async function deliverPendingRequestFulfillmentNotifications(
     considered_requests: 0,
     delivered: 0,
     delivered_requests: 0,
+    delivered_request_ids: [],
     suppressed: 0,
     failed: 0,
     unknown: 0,
@@ -767,6 +763,9 @@ export async function deliverPendingRequestFulfillmentNotifications(
       })
       result.delivered += 1
       result.delivered_requests += rows.length
+      result.delivered_request_ids.push(
+        ...rows.map((row) => positiveInteger(row.request_id)).filter(Boolean),
+      )
     } catch (error) {
       if (isWorkerSubrequestLimitError(error)) {
         await setDiscordState(env, notificationIds, "retry", {
