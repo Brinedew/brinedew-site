@@ -3378,9 +3378,9 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
     const symbol = normalizeSymbol(gene.s)
     const published = symbol ? publishedBySymbol.get(symbol) : null
     if (!published) {
-      if (!("ph" in gene) && !("pt" in gene)) return gene
+      if (!("p" in gene) && !("ph" in gene) && !("pt" in gene)) return gene
       changed = true
-      const { ph: _removedHero, pt: _removedThumb, ...current } = gene
+      const { p: _removedPortrait, ph: _removedHero, pt: _removedThumb, ...current } = gene
       return current
     }
 
@@ -3477,25 +3477,9 @@ async function queryPublishedPortraitFingerprint(env) {
   }
 }
 
-async function sharedPublishedPortraitFingerprint(env, { fresh = false } = {}) {
-  if (!env.ICONOPLASM_DB) return null
+async function sharedPublishedPortraitFingerprint(env) {
+  if (!env?.KV) return null
   const now = Date.now()
-  if (fresh) {
-    const row = await queryPublishedPortraitFingerprint(env)
-    sharedPublishedPortraitFingerprintCache.loadedAt = now
-    sharedPublishedPortraitFingerprintCache.value = row || null
-    if (row && env?.KV) {
-      await env.KV.put(
-        `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
-        JSON.stringify({
-          schema: "iconoplasm.publishedPortraitFingerprint.v1",
-          published_at: new Date(now).toISOString(),
-          fingerprint: row,
-        }),
-      )
-    }
-    return row || null
-  }
   if (
     sharedPublishedPortraitFingerprintCache.loadedAt > 0 &&
     now - sharedPublishedPortraitFingerprintCache.loadedAt <
@@ -3584,36 +3568,35 @@ function publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint) {
   return true
 }
 
-async function publishedPortraitRefs(env, { fresh = false } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  const fingerprint = await sharedPublishedPortraitFingerprint(
-    env,
-    fresh ? { fresh: true } : undefined,
-  )
-  if (!fresh && !fingerprint) {
+async function publishedPortraitRefs(env) {
+  if (!env?.KV) return []
+  const fingerprint = await sharedPublishedPortraitFingerprint(env)
+  if (!fingerprint) {
     const error = new Error("Published portrait fingerprint is unavailable")
     error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
     throw error
   }
   const version = portraitSnapshotVersion(fingerprint)
   if (
-    !fresh &&
     publishedPortraitRefsCache.key === version &&
     publishedPortraitRefSnapshotMatchesFingerprint(publishedPortraitRefsCache.value, fingerprint)
   ) {
     return publishedPortraitRefsCache.value
   }
-  if (!fresh) {
-    const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
-    if (publishedPortraitRefSnapshotMatchesFingerprint(cached, fingerprint)) {
-      publishedPortraitRefsCache.key = version
-      publishedPortraitRefsCache.value = cached
-      return cached
-    }
-    const error = new Error("Published portrait reference snapshot is unavailable")
-    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
-    throw error
+  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
+  if (publishedPortraitRefSnapshotMatchesFingerprint(cached, fingerprint)) {
+    publishedPortraitRefsCache.key = version
+    publishedPortraitRefsCache.value = cached
+    return cached
   }
+  const error = new Error("Published portrait reference snapshot is unavailable")
+  error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+  throw error
+}
+
+async function preparePortraitReferenceSnapshot(env) {
+  if (!env?.ICONOPLASM_DB || !env?.KV) throw new Error("Portrait publication bindings missing")
+  const fingerprint = await queryPublishedPortraitFingerprint(env)
   const rows = await queryPublishedPortraitRefs(env)
   if (!publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint)) {
     const expectedCount = Number(fingerprint?.published_count ?? fingerprint?.count ?? 0)
@@ -3621,10 +3604,123 @@ async function publishedPortraitRefs(env, { fresh = false } = {}) {
       `Published portrait snapshot is incomplete: expected ${expectedCount}, received ${rows.length}`,
     )
   }
+  const actualLatest = rows.length
+    ? await sha256Hex(
+        rows
+          .map((row) => `${row.symbol}:${row.asset_sha256}`)
+          .sort()
+          .join("|"),
+      )
+    : null
+  if (actualLatest !== fingerprint.latest) {
+    throw new Error("Published portrait state changed while preparing its snapshot")
+  }
+  return { fingerprint, rows }
+}
+
+async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catalogs = []) {
+  const preparedCatalogs = new Map(catalogs.map(({ baseHash, artifact }) => [baseHash, artifact]))
+  const current = await catalogManifestObj(env)
+  const currentBase = catalogBaseHash(current?.current_hash)
+  if (currentBase && !preparedCatalogs.has(currentBase)) {
+    const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${currentBase}`)
+    if (!raw) throw new Error("Current catalog source is unavailable for portrait publication")
+    preparedCatalogs.set(currentBase, JSON.parse(raw))
+  }
+  // A catalog replacement prepares both old and new base versions before the
+  // shared portrait pointer moves. Readers can observe either manifest safely.
+  for (const [baseHash, artifact] of preparedCatalogs) {
+    const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, rows)
+    if (!isCurrentCatalogArtifact(hydrated)) throw new Error("Catalog publication is invalid")
+    const key = buildPortraitAwareManifestHash(baseHash, fingerprint)
+    await env.KV.put(`${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${key}`, JSON.stringify(hydrated))
+  }
+  const version = portraitSnapshotVersion(fingerprint)
+  // These are required publication writes, not best-effort cache warming.
+  // A failed payload write must leave the prior pointer and isolate caches intact.
+  await env.KV.put(`${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${version}`, JSON.stringify(rows))
+  const now = Date.now()
+  await env.KV.put(
+    `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+    JSON.stringify({
+      schema: "iconoplasm.publishedPortraitFingerprint.v1",
+      published_at: new Date(now).toISOString(),
+      fingerprint,
+    }),
+  )
   publishedPortraitRefsCache.key = version
   publishedPortraitRefsCache.value = rows
-  await writeVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version, rows)
+  sharedPublishedPortraitFingerprintCache.loadedAt = now
+  sharedPublishedPortraitFingerprintCache.value = fingerprint
   return rows
+}
+
+export async function publishPortraitReferenceSnapshot(env) {
+  return commitPortraitReferenceSnapshot(env, await preparePortraitReferenceSnapshot(env))
+}
+
+// Release initialization consumes retained publication inputs, never live D1.
+// Its only runtime caller is the budget authority's fixed five-read/one-write
+// adapter. The callback receives that adapter's restricted KV capability.
+export async function initializePublishedHydratedCatalog(kv) {
+  const maxBytes = 20 * 1024 * 1024
+  const read = async (key) => {
+    const raw = await kv.get(key)
+    if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > maxBytes)
+      throw new Error("Catalog initialization input unavailable or oversized")
+    return JSON.parse(raw)
+  }
+  const manifest = await read(KV_CATALOG_MANIFEST)
+  const base = manifest?.current_hash
+  if (typeof base !== "string" || !/^[a-z0-9]{1,64}$/.test(base))
+    throw new Error("Catalog initialization manifest is invalid")
+  const { fingerprint } = await read(
+    `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+  )
+  if (
+    !Number.isSafeInteger(fingerprint?.published_count) ||
+    fingerprint.published_count < 0 ||
+    fingerprint.published_count > 20000 ||
+    (fingerprint.published_count === 0
+      ? fingerprint.latest !== null
+      : !/^[a-f0-9]{64}$/.test(fingerprint.latest))
+  )
+    throw new Error("Catalog initialization fingerprint is invalid")
+  const refs = await read(
+    `${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${portraitSnapshotVersion(fingerprint)}`,
+  )
+  if (!publishedPortraitRefSnapshotMatchesFingerprint(refs, fingerprint))
+    throw new Error("Catalog initialization references are invalid")
+  const latest = refs.length
+    ? await sha256Hex(
+        refs
+          .map((row) => `${row.symbol}:${row.asset_sha256}`)
+          .sort()
+          .join("|"),
+      )
+    : null
+  if (latest !== fingerprint.latest)
+    throw new Error("Catalog initialization reference digest differs")
+  const source = await read(`${KV_CATALOG_PREFIX}${base}`)
+  if (
+    !Array.isArray(source?.genes) ||
+    source.genes.length > 20000 ||
+    source.gene_count !== source.genes.length ||
+    source.genes.some((gene) => !normalizeSymbol(gene?.s))
+  )
+    throw new Error("Catalog initialization source is invalid")
+  const artifact = mergePublishedPortraitRefsIntoArtifact(source, refs)
+  if (!isCurrentCatalogArtifact(artifact))
+    throw new Error("Catalog initialization artifact is invalid")
+  const raw = JSON.stringify(artifact)
+  if (new TextEncoder().encode(raw).byteLength > maxBytes)
+    throw new Error("Catalog initialization output is oversized")
+  const buildVersion = buildPortraitAwareManifestHash(base, fingerprint)
+  const key = `${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${buildVersion}`
+  const prior = await kv.get(key)
+  const changed = prior !== raw
+  if (changed) await kv.put(key, raw)
+  return { build_version: buildVersion, gene_count: artifact.genes.length, changed }
 }
 
 // Canonical storage key for a portrait rendition.
@@ -18105,6 +18201,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
   constructor(state, env = {}) {
     this.state = state
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
+      initializeCatalog: initializePublishedHydratedCatalog,
       onAuthorityEvent: (event, scopedEnv) =>
         projectAcceptedManifestationAuthorityEvent(scopedEnv, event),
       readOtherUsage: (day) => {
@@ -25730,61 +25827,27 @@ function isCurrentCatalogArtifact(value) {
   )
 }
 
-async function hydratedCatalogArtifact(
-  env,
-  hash,
-  { fresh = false, portraitFingerprint = null, portraitRows = null } = {},
-) {
+async function hydratedCatalogArtifact(env, hash) {
   if (!env?.KV || !hash) return null
   const requestedHash = String(hash || "").trim()
   const baseHash = catalogBaseHash(requestedHash)
   if (!baseHash) return null
   const cacheKey = requestedHash.includes("-")
     ? requestedHash
-    : buildPortraitAwareManifestHash(
-        baseHash,
-        await sharedPublishedPortraitFingerprint(env, fresh ? { fresh: true } : undefined),
-      ) || baseHash
-  if (
-    !fresh &&
-    hydratedCatalogArtifactCache.key === cacheKey &&
-    hydratedCatalogArtifactCache.value
-  ) {
+    : buildPortraitAwareManifestHash(baseHash, await sharedPublishedPortraitFingerprint(env)) ||
+      baseHash
+  if (hydratedCatalogArtifactCache.key === cacheKey && hydratedCatalogArtifactCache.value) {
     return hydratedCatalogArtifactCache.value
   }
-  if (!fresh) {
-    const cached = await readVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey)
-    if (isCurrentCatalogArtifact(cached)) {
-      hydratedCatalogArtifactCache.key = cacheKey
-      hydratedCatalogArtifactCache.value = cached
-      return cached
-    }
+  const cached = await readVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey)
+  if (isCurrentCatalogArtifact(cached)) {
+    hydratedCatalogArtifactCache.key = cacheKey
+    hydratedCatalogArtifactCache.value = cached
+    return cached
   }
-
-  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${baseHash}`)
-  if (!raw) return null
-  let artifact
-  try {
-    artifact = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  // Cost barrier: this is the last whole-artifact hydration seam. Keep it behind
-  // the shared versioned cache so a fresh isolate does not reparse + rehydrate
-  // ~20k genes on its own just because it has never seen traffic before.
-  const resolvedPortraitRows =
-    portraitRows ||
-    (portraitFingerprint
-      ? await publishedPortraitRefsForFingerprint(env, portraitFingerprint)
-      : await publishedPortraitRefs(env, fresh ? { fresh: true } : undefined))
-  const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, resolvedPortraitRows)
-  hydratedCatalogArtifactCache.key = cacheKey
-  hydratedCatalogArtifactCache.value = hydrated
-  if (!fresh) {
-    await writeVersionedSharedJson(env, KV_HYDRATED_CATALOG_ARTIFACT_PREFIX, cacheKey, hydrated)
-  }
-  return hydrated
+  const error = new Error("Published hydrated catalog snapshot is unavailable")
+  error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+  throw error
 }
 
 function isPublishedCompatibilityArtifact(value, contract) {
@@ -25902,23 +25965,35 @@ export async function materializePublishedCompatibilityArtifact(env, requestedHa
   const aliasToken = portraitHashToken(aliases.version) || "aliases"
   if (aliasToken !== requestedAliasToken) return null
 
-  const candidateHash = buildPortraitAwareManifestHash(baseHash, portraitFingerprint)
   const portraitRows = await publishedPortraitRefsForFingerprint(env, portraitFingerprint)
-  const candidate = await hydratedCatalogArtifact(env, candidateHash, {
-    portraitFingerprint,
-    portraitRows,
-  })
+  // This explicit materializer is publisher-only. Anonymous readers below only
+  // consume its committed output; they cannot reconstruct missing versions.
+  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${baseHash}`)
+  if (!raw) return null
+  const candidate = mergePublishedPortraitRefsIntoArtifact(JSON.parse(raw), portraitRows)
   const compatible = projectPublishedCompatibilityArtifact(candidate, contract, aliases)
   if (!compatible) return null
   publishedCompatibilityArtifactCache.key = hash
   publishedCompatibilityArtifactCache.value = compatible
-  await writeVersionedSharedJson(env, KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX, hash, compatible)
+  await env.KV.put(
+    `${KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX}${hash}`,
+    JSON.stringify(compatible),
+  )
   return compatible
 }
 
 async function publishedCompatibilityArtifact(env, requestedHash) {
   const contract = publishedCompatibilityContractForHash(requestedHash)
-  return contract ? materializePublishedCompatibilityArtifact(env, requestedHash, contract) : null
+  if (!contract) return null
+  const artifact = await readVersionedSharedJson(
+    env,
+    KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX,
+    requestedHash,
+  )
+  if (isPublishedCompatibilityArtifact(artifact, contract)) return artifact
+  const error = new Error("Published compatibility catalog snapshot is unavailable")
+  error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
+  throw error
 }
 
 function gallerySnapshotMaxAgeMs(order) {
@@ -32216,10 +32291,8 @@ async function publishCatalogArtifact(env) {
   // Publish-time is the one place where we intentionally rebuild the hydrated
   // artifact from source-of-truth rows. Every hot path should consume the
   // versioned shared result produced from here instead of re-doing this work.
-  const hydrated = mergePublishedPortraitRefsIntoArtifact(
-    artifact,
-    await publishedPortraitRefs(env, { fresh: true }),
-  )
+  const portraitSnapshot = await preparePortraitReferenceSnapshot(env)
+  const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, portraitSnapshot.rows)
   const artifactJson = JSON.stringify(hydrated)
   // ARCHITECTURE FENCE [IPD-008]: arbitrary pages receive only this compact
   // scanner index. Portrait references remain in the canonical catalog and
@@ -32294,6 +32367,9 @@ async function publishCatalogArtifact(env) {
   if (!(await recordIconoplasmRecognitionValidationReceipt(env.ICONOPLASM_DB, validationTarget))) {
     throw new Error("Recognition policy changed during catalog publication")
   }
+  await commitPortraitReferenceSnapshot(env, portraitSnapshot, [
+    { baseHash: hash, artifact: hydrated },
+  ])
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
   catalogCache.hash = null

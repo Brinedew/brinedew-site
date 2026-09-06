@@ -57,6 +57,55 @@ test("account admission sums every database and rejects ambiguous or truncated t
   assert.throws(() => parseOperationCostAccountUsage(payload(NaN), day, time), /UNAVAILABLE/)
 })
 
+test("KV telemetry covers all action types and never treats unavailable data as zero", () => {
+  const p = payload()
+  const account = p.data.viewer.accounts[0]
+  account.kvOperationsAdaptiveGroups = ["read", "write", "delete", "list"].map((actionType, i) => ({
+    dimensions: { date: day, actionType },
+    sum: { requests: i + 1 },
+  }))
+  const usage = parseOperationCostAccountUsage(p, day, time, { includeKv: true })
+  assert.deepEqual(
+    [usage.kv_reads, usage.kv_writes, usage.kv_deletes, usage.kv_lists],
+    [1, 2, 3, 4],
+  )
+  assert.equal(usage.kv_measured_at, time)
+  for (const bad of [
+    undefined,
+    null,
+    Array(10000).fill(account.kvOperationsAdaptiveGroups[0]),
+    [{ dimensions: { date: day, actionType: "unknown" }, sum: { requests: 1 } }],
+  ]) {
+    account.kvOperationsAdaptiveGroups = bad
+    assert.throws(
+      () => parseOperationCostAccountUsage(p, day, time, { includeKv: true }),
+      /UNAVAILABLE/,
+    )
+  }
+})
+
+test("a KV operation upgrades a shared D1-only refresh instead of reusing incomplete telemetry", async () => {
+  let calls = 0
+  const reader = createOperationCostAccountUsageReader({
+    accountId: "a".repeat(32),
+    token: "test-token",
+    now: () => time,
+    fetcher: async (_url, options) => {
+      calls++
+      const p = payload()
+      if (JSON.parse(options.body).query.includes("kvOperationsAdaptiveGroups"))
+        p.data.viewer.accounts[0].kvOperationsAdaptiveGroups = []
+      return Response.json(p)
+    },
+  })
+  const [base, kv] = await Promise.all([reader.refresh(), reader.refresh({ includeKv: true })])
+  assert.equal(base.kv_reads, undefined)
+  assert.equal(kv.kv_reads, 0)
+  assert.equal(calls, 2)
+  await reader.refresh({ includeKv: true })
+  assert.equal(calls, 2)
+})
+
 test("concurrent operations share one control-plane refresh and decreasing samples cannot refund observed usage", async () => {
   let calls = 0
   let clock = time

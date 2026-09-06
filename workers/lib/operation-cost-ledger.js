@@ -2,6 +2,7 @@
 // their reservation. This ledger is internal to the existing budget authority.
 // A caller-supplied bound is NOT proof that an arbitrary SQL query is bounded.
 import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
+import { KV_COST_METERS, KV_OPERATOR_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
 
 const METERS = ["rows_read", "rows_written", "requests"]
 const LIMITS = {
@@ -35,6 +36,19 @@ function vector(value, prediction = false) {
       Number.isSafeInteger(value[meter]) &&
         value[meter] >= 0 &&
         value[meter] <= (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : LIMITS[meter]),
+      "COST_VECTOR_INVALID",
+    )
+    result[meter] = value[meter]
+  }
+  // Absent KV dimensions preserve existing immutable D1 plan documents. A KV
+  // adapter must explicitly predict and reserve every dimension it can spend.
+  for (const meter of KV_COST_METERS) {
+    if (!Object.hasOwn(value, meter)) continue
+    requireValue(
+      Number.isSafeInteger(value[meter]) &&
+        value[meter] >= 0 &&
+        value[meter] <=
+          (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : KV_OPERATOR_LIMITS[meter]),
       "COST_VECTOR_INVALID",
     )
     result[meter] = value[meter]
@@ -87,6 +101,12 @@ export class OperationCostLedger {
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_account_usage (
       day TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, rows_read INTEGER NOT NULL,
       rows_written INTEGER NOT NULL, requests INTEGER NOT NULL)`)
+    // Additive owned-schema migration: old plans, ceilings and reservations are
+    // never rewritten, and old D1-only operations retain their exact documents.
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_kv_days (
+      day TEXT PRIMARY KEY, usage TEXT NOT NULL)`)
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_kv_account_usage (
+      day TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, usage TEXT NOT NULL)`)
   }
 
   day() {
@@ -98,7 +118,32 @@ export class OperationCostLedger {
   }
 
   storedAccountUsage() {
-    return this.row("SELECT * FROM operation_cost_account_usage WHERE day = ?", this.day())
+    const primary = this.row("SELECT * FROM operation_cost_account_usage WHERE day = ?", this.day())
+    const kv = this.row("SELECT * FROM operation_cost_kv_account_usage WHERE day = ?", this.day())
+    return primary && kv
+      ? { ...primary, ...JSON.parse(kv.usage), kv_measured_at: kv.measured_at }
+      : primary
+  }
+
+  kvDayUsage(day) {
+    const stored = this.row("SELECT usage FROM operation_cost_kv_days WHERE day = ?", day)
+    const usage = stored
+      ? JSON.parse(stored.usage)
+      : Object.fromEntries(KV_COST_METERS.map((m) => [m, 0]))
+    requireValue(
+      KV_COST_METERS.every((m) => Number.isSafeInteger(usage[m]) && usage[m] >= 0),
+      "COST_SHARED_USAGE_UNAVAILABLE",
+    )
+    return usage
+  }
+
+  saveKvDayUsage(day, usage) {
+    this.storage.sql.exec(
+      `INSERT INTO operation_cost_kv_days VALUES (?, ?)
+      ON CONFLICT(day) DO UPDATE SET usage = excluded.usage`,
+      day,
+      JSON.stringify(usage),
+    )
   }
 
   rememberAccountUsage(sample) {
@@ -113,6 +158,29 @@ export class OperationCostLedger {
     )
     return this.storage.transactionSync(() => {
       const previous = this.storedAccountUsage()
+      if (KV_COST_METERS.some((m) => Object.hasOwn(sample, m))) {
+        requireValue(
+          KV_COST_METERS.every((m) => Number.isSafeInteger(sample[m]) && sample[m] >= 0),
+          "COST_ACCOUNT_USAGE_UNAVAILABLE",
+        )
+        const values = Object.fromEntries(
+          KV_COST_METERS.map((m) => [m, Math.max(sample[m], previous?.[m] ?? 0)]),
+        )
+        const kvMeasuredAt = sample.kv_measured_at ?? sample.measured_at
+        requireValue(
+          Number.isSafeInteger(kvMeasuredAt) &&
+            kvMeasuredAt <= this.now() &&
+            this.now() - kvMeasuredAt <= 60_000,
+          "COST_ACCOUNT_USAGE_UNAVAILABLE",
+        )
+        this.storage.sql.exec(
+          `INSERT INTO operation_cost_kv_account_usage VALUES (?, ?, ?)
+          ON CONFLICT(day) DO UPDATE SET measured_at = excluded.measured_at, usage = excluded.usage`,
+          sample.day,
+          kvMeasuredAt,
+          JSON.stringify(values),
+        )
+      }
       const next = { day: sample.day, measured_at: sample.measured_at }
       for (const meter of METERS) next[meter] = Math.max(sample[meter], previous?.[meter] ?? 0)
       if (
@@ -234,7 +302,7 @@ export class OperationCostLedger {
       requireValue(usage.registrations < 500, "COST_REGISTRATION_DAILY_LIMIT")
       const ceiling = predecessor
         ? { ...predecessor.ceiling }
-        : Object.fromEntries(METERS.map((meter) => [meter, 2 * prediction[meter]]))
+        : Object.fromEntries(Object.keys(prediction).map((meter) => [meter, 2 * prediction[meter]]))
       const plan = {
         id,
         immutable,
@@ -243,7 +311,7 @@ export class OperationCostLedger {
         // their complete reservation, even across UTC days and process death.
         used: predecessor
           ? { ...predecessor.used }
-          : { rows_read: 0, rows_written: 0, requests: 0 },
+          : Object.fromEntries(Object.keys(prediction).map((meter) => [meter, 0])),
         steps: {},
         status: "active",
       }
@@ -349,7 +417,38 @@ export class OperationCostLedger {
           "COST_ACCOUNT_HEADROOM_LIMIT",
         )
       }
-      for (const meter of METERS) plan.used[meter] += bound[meter]
+      const usesKv = KV_COST_METERS.some((m) => (bound[m] ?? 0) > 0)
+      if (usesKv) {
+        requireValue(
+          Number.isSafeInteger(account.kv_measured_at) &&
+            account.kv_measured_at <= this.now() &&
+            this.now() - account.kv_measured_at <= 60_000 &&
+            KV_COST_METERS.every((m) => Number.isSafeInteger(account[m]) && account[m] >= 0),
+          "COST_ACCOUNT_USAGE_UNAVAILABLE",
+        )
+        const kvUsage = this.kvDayUsage(plan.immutable.day)
+        for (const meter of KV_COST_METERS) {
+          const maximum = bound[meter] ?? 0
+          const other = otherUsage[meter] ?? 0 // the pre-existing legacy ledger meters D1 only
+          requireValue(Number.isSafeInteger(other) && other >= 0, "COST_SHARED_USAGE_UNAVAILABLE")
+          requireValue(
+            (plan.used[meter] ?? 0) + maximum <= (plan.ceiling[meter] ?? 0),
+            "COST_TWICE_PREDICTION_LIMIT",
+          )
+          requireValue(
+            kvUsage[meter] + other + maximum <= KV_OPERATOR_LIMITS[meter],
+            "COST_SHARED_DAILY_LIMIT",
+          )
+          requireValue(
+            account[meter] + kvUsage[meter] + other + maximum <= KV_ACCOUNT_CEILINGS[meter],
+            "COST_ACCOUNT_HEADROOM_LIMIT",
+          )
+          kvUsage[meter] += maximum
+        }
+        this.saveKvDayUsage(plan.immutable.day, kvUsage)
+      }
+      for (const meter of Object.keys(bound))
+        plan.used[meter] = (plan.used[meter] ?? 0) + bound[meter]
       plan.steps[stepId] = { digest: stepDigest, bound, status: "reserved" }
       this.save(plan)
       this.storage.sql.exec(
@@ -377,7 +476,17 @@ export class OperationCostLedger {
       const plan = this.readPlan(input.id)
       const step = plan.steps[identity(input.step_id)]
       requireValue(step && step.digest === input.step_sha256, "COST_RECEIPT_IDENTITY_MISMATCH")
-      const actual = Object.fromEntries(METERS.map((meter) => [meter, input.actual[meter]]))
+      const receiptMeters = [
+        ...METERS,
+        ...KV_COST_METERS.filter(
+          (m) => Object.hasOwn(step.bound, m) || Object.hasOwn(input.actual, m),
+        ),
+      ]
+      requireValue(
+        receiptMeters.every((m) => Number.isSafeInteger(input.actual[m]) && input.actual[m] >= 0),
+        "COST_RECEIPT_REQUIRED",
+      )
+      const actual = Object.fromEntries(receiptMeters.map((meter) => [meter, input.actual[meter]]))
       requireValue(actual.requests === step.bound.requests, "COST_REQUEST_RECEIPT_MISMATCH")
       if (step.status === "settled") {
         requireValue(
@@ -387,11 +496,23 @@ export class OperationCostLedger {
         return plan
       }
       const delta = {}
-      for (const meter of METERS) {
-        delta[meter] = actual[meter] - step.bound[meter]
-        requireValue(Number.isSafeInteger(plan.used[meter] + delta[meter]), "COST_RECEIPT_OVERFLOW")
-        plan.used[meter] += delta[meter]
-        if (actual[meter] > step.bound[meter]) plan.status = "tripped"
+      for (const meter of receiptMeters) {
+        delta[meter] = actual[meter] - (step.bound[meter] ?? 0)
+        requireValue(
+          Number.isSafeInteger((plan.used[meter] ?? 0) + delta[meter]),
+          "COST_RECEIPT_OVERFLOW",
+        )
+        plan.used[meter] = (plan.used[meter] ?? 0) + delta[meter]
+        if (actual[meter] > (step.bound[meter] ?? 0)) plan.status = "tripped"
+      }
+      if (KV_COST_METERS.some((m) => delta[m])) {
+        const kvUsage = this.kvDayUsage(plan.immutable.day)
+        for (const meter of KV_COST_METERS) kvUsage[meter] += delta[meter] ?? 0
+        requireValue(
+          KV_COST_METERS.every((m) => Number.isSafeInteger(kvUsage[m]) && kvUsage[m] >= 0),
+          "COST_RECEIPT_OVERFLOW",
+        )
+        this.saveKvDayUsage(plan.immutable.day, kvUsage)
       }
       step.status = "settled"
       step.actual = actual
