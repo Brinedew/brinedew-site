@@ -64,10 +64,12 @@ export function createFinalizationMigrationCostAdapter({ db, executable_sha256, 
       // Four linear passes (capped count, counter seed, two indexes), plus
       // bounded guards and schema bookkeeping. Reserve extra row visits for
       // the input/index cursors. Writes cover both new indexes, one summary
-      // row, migration receipt and schema/sequence bookkeeping.
+      // row, migration receipt and schema/sequence bookkeeping. The fixed DDL
+      // creates six schema objects and one summary row; 64 covers that metadata
+      // and receipt indexes independently of the number of stored job rows.
       const bound = {
         rows_read: 8 * args.max_rows + 4 * (args.max_unfinished + 1) + 8704,
-        rows_written: args.max_rows + args.max_unfinished + 512,
+        rows_written: args.max_rows + args.max_unfinished + 64,
         requests: 1,
       }
       const bytes = new TextEncoder().encode(

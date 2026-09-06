@@ -173,6 +173,8 @@ function projectionOutboxDatabase() {
       gene_revision INTEGER GENERATED ALWAYS AS (event_sequence) STORED,
       UNIQUE(gene_id, gene_revision)
     );
+    CREATE INDEX idx_icono_events_projection_due ON icono_manifestation_events
+      (projection_status, projection_next_attempt_at, event_sequence);
   `)
   return {
     database,
@@ -225,6 +227,96 @@ function exactRecord(
     accepted_tags_derivative: acceptedTagsDerivative,
   }
 }
+
+test("scheduled recovery drains bounded indexed windows without rewinding or ignoring retry delays", async (t) => {
+  const primary = primaryDatabase()
+  const authoring = projectionOutboxDatabase()
+  t.after(() => {
+    primary.database.close()
+    authoring.database.close()
+  })
+  const insert = authoring.database.prepare(`INSERT INTO icono_manifestation_events
+    (event_uuid,event_sequence,gene_id,payload_json,projection_status,projection_next_attempt_at)
+    VALUES(?,?,?,?,?,?)`)
+  for (let sequence = 1; sequence <= 5800; sequence++) {
+    const event = callback(sequence)
+    insert.run(
+      event.event_id,
+      sequence,
+      event.gene_id,
+      JSON.stringify(event.payload),
+      sequence <= 5000 ? "published" : sequence <= 5600 ? "pending" : "failed",
+      sequence > 5750
+        ? "2099-01-01T00:00:00.000Z"
+        : sequence > 5700
+          ? "2026-01-01T00:00:00.000Z"
+          : null,
+    )
+  }
+  const ranges = []
+  const prepare = authoring.prepare.bind(authoring)
+  authoring.prepare = (sql) => {
+    if (!sql.includes("INDEXED BY idx_icono_events_projection_due")) return prepare(sql)
+    return {
+      bind(...parameters) {
+        return {
+          async all() {
+            const plan = authoring.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...parameters)
+            assert.ok(
+              plan.every(({ detail }) => !/SCAN |TEMP B-TREE/.test(detail)),
+              JSON.stringify(plan),
+            )
+            assert.ok(plan.some(({ detail }) => detail.includes("idx_icono_events_projection_due")))
+            const result = await prepare(sql)
+              .bind(...parameters)
+              .all()
+            ranges.push(result.results.length)
+            assert.ok(result.results.length <= 50)
+            return result
+          },
+        }
+      },
+    }
+  }
+  let finished = false
+  for (let pass = 0; pass < 25; pass++) {
+    const result = await drainManifestationAuthorityProjectionOutbox(
+      {
+        primaryDb: primary,
+        authoringDb: authoring,
+        limit: 50,
+        now: new Date("2026-09-01T00:00:00.000Z"),
+        projectPublicMaterialEvent: async () => {},
+      },
+      { readCanonical: async () => exactRecord(5800) },
+    )
+    assert.equal(result.ok, true)
+    assert.ok(result.attempted <= 1, "coalesce the selected window for this one gene")
+    if (result.attempted) assert.equal(result.results[0].canonical_projection_sequence, 5800)
+    if (!result.has_more) {
+      finished = true
+      break
+    }
+  }
+  assert.equal(finished, true)
+  assert.ok(ranges.length >= 8)
+  assert.equal(
+    authoring.database
+      .prepare(
+        "SELECT COUNT(*) AS n FROM icono_manifestation_events WHERE event_sequence <= 5750 AND projection_status <> 'published'",
+      )
+      .get().n,
+    0,
+  )
+  assert.equal(
+    authoring.database
+      .prepare(
+        "SELECT COUNT(*) AS n FROM icono_manifestation_events WHERE event_sequence > 5750 AND projection_status='failed' AND projection_attempts=0",
+      )
+      .get().n,
+    50,
+  )
+})
 
 test("the primary projection preserves null -> canonical -> null history without rewinding", async (t) => {
   const primary = primaryDatabase()
