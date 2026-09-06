@@ -1,4 +1,8 @@
 // Generated from reviewed migrations; never accept caller SQL.
+export const VOTE_JOB_VERSION_MIGRATION_NAME = "0098_vote_projection_job_version.sql"
+export const VOTE_JOB_VERSION_MIGRATION_STATEMENTS = Object.freeze([
+  "ALTER TABLE icono_vote_projection_refresh_jobs\nADD COLUMN job_version INTEGER NOT NULL DEFAULT 1;"
+])
 export const ASSIGNMENT_LOOKUP_MIGRATION_NAME = "0016_account_assignment_lookup.sql"
 export const ASSIGNMENT_LOOKUP_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE INDEX idx_icono_account_assignment_projection\nON icono_caretaker_assignments (\n  account_id,\n  CASE WHEN status IN ('pending_acceptance','active','suspended') THEN 0 ELSE 1 END,\n  created_at DESC,\n  caretaker_assignment_id DESC\n);"

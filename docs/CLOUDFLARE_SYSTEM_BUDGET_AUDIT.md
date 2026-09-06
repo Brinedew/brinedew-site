@@ -377,6 +377,24 @@ that is a local stress test, not a production allowance. The release envelope
 admits at most 1,000 assignments and still requires a fresh live inventory and
 the shared cumulative daily gate. An absent index fails explicitly.
 
+Vote summary replacement now uses one atomic two-statement batch: delete the
+exact gene's old summary and bulk-insert the coordinator's normalized snapshot.
+The 100-image full-schema fixture formerly required 101 statements; it now uses
+two, with 100 reads/400 writes initially and 200 reads/500 writes on replacement,
+beside 20,000 other genes. Duplicate-key failure restores the entire old summary.
+These figures cover summary replacement, not promotion or all dependent rollups.
+
+Vote recovery no longer creates tables, checks schema or adds columns at runtime.
+Migration 0098 owns the job generation fence. Its reviewed adapter accepts either
+the original eight-column schema or the legacy runtime-added integer column,
+checks that declared starting shape inside the transaction, and preserves all
+existing job versions. With 20,000 queued jobs, the original shape costs 637 reads
+and four writes; the legacy shape costs 323 reads and three writes. Wrong shape
+or exceeded schema bounds fail before journal insertion. The release plan declares
+the legacy shape but must verify it live before applying; a clean original schema
+requires its explicit alternate argument. No generation reset or runtime DDL
+fallback remains. Complete vote-job invocation and daily bounds remain open.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in

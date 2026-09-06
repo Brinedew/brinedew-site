@@ -96,8 +96,22 @@ export function assignmentLookupMigrationStatements() {
   )
 }
 
+export function voteJobVersionMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0098_vote_projection_job_version.sql",
+    0,
+    1,
+  )
+}
+
 function output() {
   const migrations = [
+    [
+      "VOTE_JOB_VERSION",
+      "0098_vote_projection_job_version.sql",
+      voteJobVersionMigrationStatements(),
+    ],
     [
       "ASSIGNMENT_LOOKUP",
       "0016_account_assignment_lookup.sql",
