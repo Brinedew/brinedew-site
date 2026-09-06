@@ -279,6 +279,26 @@ sent/pending/mixed fixtures used 18,033 / 12,032 / 15,032 writes, all below the
 81,040. Group acknowledgement fanout and cumulative scheduled-work admission
 remain open; these fixes do not certify the full daily workload.
 
+Caretaker comment and supervote selection also scanned 40,002 rows each to choose
+20 notifications from a 20,000-row backlog: a potential 7.68 million daily reads
+across the two quarter-hour jobs. The replacement uses eight separately limited
+index ranges (pending/retry, null/earlier day/today SQL/today ISO timestamp), then
+sorts only those bounded candidates. Real workerd tests measure 94 reads for
+20 tied pending rows, 17 for an entirely future backlog, 640 with every range
+populated, and 31 for five mixed-format due rows. No migration or queue writes
+are needed for selection. Nested four-way unions respect D1's compound-select
+limit. New retries use SQL UTC timestamps; existing ISO retries remain readable,
+fixing their previously measured same-day postponement.
+
+The notification fence protects current tenure/preference, durable intent,
+per-message identity lookup and ambiguous Discord POST handling. Claims now check
+tenure/preference atomically and reject a stale attempt count, preventing an
+overlapping selection from reclaiming a freshly deferred retry. A successful
+comment uses two D1 queries after selection; a supervote uses three, including
+its separate fresh account identity lookup. No live Discord messages were sent.
+The combined scheduler invocation and cumulative daily admission remain open;
+these local query fixes do not certify scheduler capacity.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in

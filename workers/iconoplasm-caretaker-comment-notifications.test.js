@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
+import { createRequire } from "node:module"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
@@ -13,6 +15,222 @@ import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-supp
 const ACCOUNT = "account_caretaker_comment_0001"
 const AUTHOR = "account_caretaker_comment_0002"
 const ASSIGNMENT = "assignment_caretaker_comment_0001"
+
+test(
+  "real D1 bounds both caretaker selectors across tied backlogs and legacy retry formats",
+  { timeout: 120000 },
+  async (t) => {
+    const require = createRequire(import.meta.url)
+    const { Miniflare, convertV4MiniflareOptions } = createRequire(
+      require.resolve("wrangler/package.json"),
+    )("miniflare")
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('local')}}",
+        compatibilityDate: "2026-08-01",
+        d1Databases: ["DB"],
+      }),
+    )
+    const schema = new DatabaseSync(":memory:")
+    try {
+      const directory = new URL("../migrations-iconoplasm/", import.meta.url)
+      for (const file of readdirSync(directory)
+        .filter((f) => f.endsWith(".sql"))
+        .sort())
+        schema.exec(readFileSync(new URL(file, directory), "utf8"))
+      const db = await runtime.getD1Database("DB")
+      const definitions = schema
+        .prepare(
+          "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+        )
+        .all()
+      for (let i = 0; i < definitions.length; i += 20)
+        await db.batch(definitions.slice(i, i + 20).map(({ sql }) => db.prepare(sql)))
+      for (const [kind, deliver] of [
+        ["comment", deliverPendingCaretakerCommentNotifications],
+        ["supervote", deliverPendingCaretakerSupervoteNotifications],
+      ]) {
+        const table = `icono_caretaker_${kind}_notifications`
+        const extraColumns =
+          kind === "comment"
+            ? "caretaker_discord_user_id,comment_author_account_id,comment_author_name,comment_body"
+            : "preferred_asset_sha256,canonical_asset_sha256,supervote_version"
+        const extraValues =
+          kind === "comment"
+            ? "'recipient','author','Reader','body'"
+            : "printf('%064x',1),printf('%064x',2),1"
+        await db
+          .prepare(
+            `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<20000)
+        INSERT INTO ${table}(notification_key,caretaker_assignment_id,caretaker_account_id,gene_symbol,created_at,${extraColumns})
+        SELECT 'n-'||i,'assignment','account','G1',CURRENT_TIMESTAMP,${extraValues} FROM n`,
+          )
+          .run()
+        let statement
+        const capture = {
+          prepare(sql) {
+            return {
+              bind(...args) {
+                statement = db.prepare(sql).bind(...args)
+                return this
+              },
+              async all() {
+                return { results: [] }
+              },
+            }
+          },
+        }
+        await deliver(
+          { ICONOPLASM_DB: capture, DB: capture, DISCORD_BOT_TOKEN: "local-test" },
+          { limit: 20 },
+        )
+        const read = async (expected, ceiling) => {
+          const result = await statement.all()
+          assert.equal(result.results.length, expected)
+          assert.ok(
+            result.meta.rows_read <= ceiling,
+            `${kind}: ${result.meta.rows_read} > ${ceiling}`,
+          )
+          assert.equal(result.meta.rows_written, 0)
+          t.diagnostic(`${kind}: ${expected} candidates, ${result.meta.rows_read} reads`)
+          return result.results
+        }
+        await read(20, 120)
+        await db
+          .prepare(
+            `UPDATE ${table} SET discord_status='retry',discord_next_attempt_at='2099-01-01T00:00:00.000Z'`,
+          )
+          .run()
+        await read(0, 30)
+        // Populate every disjoint range, including equal timestamps. None may
+        // scan its 2,500-row prefix merely to sort notification keys.
+        await db
+          .prepare(
+            `UPDATE ${table} SET
+        discord_status=CASE WHEN rowid%8<4 THEN 'pending' ELSE 'retry' END,
+        discord_next_attempt_at=CASE rowid%4 WHEN 0 THEN NULL
+          WHEN 1 THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 days')
+          WHEN 2 THEN datetime(date('now'),'+1 second')
+          ELSE strftime('%Y-%m-%dT%H:%M:%fZ',date('now'),'+1 second') END`,
+          )
+          .run()
+        await read(20, 750)
+        await db
+          .prepare(
+            `UPDATE ${table} SET discord_status='retry',discord_next_attempt_at='2099-01-01 00:00:00'`,
+          )
+          .run()
+        await db
+          .prepare(
+            `UPDATE ${table} SET discord_next_attempt_at=CASE notification_key
+        WHEN 'n-1' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute')
+        WHEN 'n-2' THEN datetime('now','-1 minute')
+        WHEN 'n-3' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 days')
+        WHEN 'n-4' THEN datetime('now','-2 days') END
+        WHERE notification_key IN ('n-1','n-2','n-3','n-4')`,
+          )
+          .run()
+        await db
+          .prepare(
+            `UPDATE ${table} SET discord_status='pending',discord_next_attempt_at=NULL WHERE notification_key='n-5'`,
+          )
+          .run()
+        const due = await read(5, 60)
+        assert.deepEqual(
+          new Set(due.map((r) => r.notification_key)),
+          new Set(["n-1", "n-2", "n-3", "n-4", "n-5"]),
+        )
+        assert.equal(
+          due.at(-1).notification_key,
+          "n-5",
+          "new pending work must not starve an older due retry",
+        )
+        // Execute the real claim on workerd too. A missing tenure suppresses the
+        // notification without ever requesting a Discord channel.
+        const result = await deliver({ ICONOPLASM_DB: db, DB: db, DISCORD_BOT_TOKEN: "local-test" })
+        assert.equal(result.delivered, 0)
+        assert.equal(
+          (
+            await db
+              .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE discord_status='suppressed'`)
+              .first()
+          ).n,
+          5,
+        )
+      }
+    } finally {
+      schema.close()
+      await runtime.dispose()
+    }
+  },
+)
+
+for (const [kind, deliver] of [
+  ["comment", deliverPendingCaretakerCommentNotifications],
+  ["supervote", deliverPendingCaretakerSupervoteNotifications],
+]) {
+  test(`${kind} retries use UTC SQL timestamps and stale overlapping selections cannot reclaim them`, async (t) => {
+    const { primary, env } = setup(t)
+    const table = `icono_caretaker_${kind}_notifications`
+    if (kind === "comment") {
+      await caretakerCommentOutboxStatement(primary, {
+        notification_key: "overlap",
+        caretaker_assignment_id: ASSIGNMENT,
+        caretaker_account_id: ACCOUNT,
+        caretaker_discord_user_id: "123456789",
+        gene_symbol: "TP53",
+        comment_author_account_id: AUTHOR,
+        comment_author_name: "Reader",
+        comment_body: "comment",
+      }).run()
+    } else {
+      primary.raw
+        .prepare(
+          `INSERT INTO ${table}(notification_key,caretaker_assignment_id,caretaker_account_id,gene_symbol,preferred_asset_sha256,canonical_asset_sha256,supervote_version)
+        VALUES ('overlap',?,?,'TP53',?,?,3)`,
+        )
+        .run(ASSIGNMENT, ACCOUNT, "a".repeat(64), "b".repeat(64))
+    }
+    const originalPrepare = primary.prepare.bind(primary)
+    let snapshot
+    primary.prepare = (sql) => {
+      const statement = originalPrepare(sql)
+      if (!sql.startsWith("WITH due_")) return statement
+      const bind = statement.bind.bind(statement)
+      statement.bind = (...args) => {
+        const bound = bind(...args)
+        const all = bound.all.bind(bound)
+        bound.all = async () => snapshot || (snapshot = await all())
+        return bound
+      }
+      return statement
+    }
+    const originalFetch = globalThis.fetch
+    let calls = 0
+    globalThis.fetch = async () => {
+      calls += 1
+      return new Response("rate limited", { status: 429 })
+    }
+    try {
+      await deliver({ ...env, DISCORD_BOT_TOKEN: "local-test" })
+      const row = primary.raw.prepare(`SELECT * FROM ${table}`).get()
+      assert.equal(row.discord_status, "retry")
+      assert.equal(row.discord_attempt_count, 1)
+      assert.match(row.discord_next_attempt_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+      assert.ok(Date.parse(row.discord_next_attempt_at.replace(" ", "T") + "Z") > Date.now())
+      await deliver({ ...env, DISCORD_BOT_TOKEN: "local-test" })
+      assert.equal(calls, 1)
+      assert.equal(
+        primary.raw.prepare(`SELECT discord_attempt_count FROM ${table}`).get()
+          .discord_attempt_count,
+        1,
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+}
 
 function setup(t) {
   const primary = new TestD1()
