@@ -4,7 +4,7 @@ import test from "node:test"
 
 import {
   IconoplasmGenerationLeaseError,
-  assertExactGenerationLeaseExecution,
+  assertExactGenerationLeaseCompletion,
   buildExactGenerationLeasePlan,
   claimExactGenerationLeases,
   completeExactGenerationLease,
@@ -254,7 +254,7 @@ test("renewal, exact execution, failure, and redelivery are fenced by lease CAS"
     assert.equal(renewed.generation_lease_version, 2)
 
     await assert.rejects(
-      assertExactGenerationLeaseExecution({
+      assertExactGenerationLeaseCompletion({
         db: fixture.db,
         generationRequestId: initial.generation_request_id,
         generationAttemptId: initial.generation_attempt_id,
@@ -273,7 +273,7 @@ test("renewal, exact execution, failure, and redelivery are fenced by lease CAS"
       { leaseOwnerId: "workstation_owner_wrong_0001" },
     ]) {
       await assert.rejects(
-        assertExactGenerationLeaseExecution({
+        assertExactGenerationLeaseCompletion({
           db: fixture.db,
           generationRequestId: initial.generation_request_id,
           generationAttemptId: initial.generation_attempt_id,
@@ -341,7 +341,7 @@ test("completion is exact and idempotent while completed work is never reclaimed
     assert.equal((await completeExactGenerationLease(input)).replayed, true)
     assert.equal(
       (
-        await assertExactGenerationLeaseExecution({
+        await assertExactGenerationLeaseCompletion({
           ...input,
           now: new Date("2026-08-31T00:00:00.000Z"),
         })
@@ -389,6 +389,90 @@ test("an expired lease is redelivered with a new attempt and token", async () =>
     assert.notEqual(second.generation_attempt_id, first.generation_attempt_id)
     assert.notEqual(second.generation_lease_token, first.generation_lease_token)
     assert.equal(second.generation_lease_version, 2)
+  } finally {
+    fixture.database.close()
+  }
+})
+
+test("saved output can complete after an outage only while its exact attempt remains unclaimed", async () => {
+  const fixture = leaseDatabase()
+  try {
+    const row = boundRow({ generation_attempt_id: "" })
+    const ids = deterministicIds()
+    const lease = (
+      await claimExactGenerationLeases({
+        db: fixture.db,
+        rows: [row],
+        leaseOwnerId: "workstation_owner_0001",
+        leaseSeconds: 60,
+        now: new Date("2026-08-30T00:00:00Z"),
+        idFactory: ids,
+      })
+    ).leases[0]
+    const input = {
+      db: fixture.db,
+      generationRequestId: lease.generation_request_id,
+      generationAttemptId: lease.generation_attempt_id,
+      leaseToken: lease.generation_lease_token,
+      leaseOwnerId: lease.generation_lease_owner_id,
+      expectedLeaseVersion: lease.generation_lease_version,
+      now: new Date("2026-08-31T00:00:00Z"),
+    }
+    await assert.rejects(renewExactGenerationLease(input), /lease expired or changed/)
+    await assertExactGenerationLeaseCompletion(input)
+    assert.equal((await completeExactGenerationLease(input)).replayed, false)
+    assert.equal((await completeExactGenerationLease(input)).replayed, true)
+    assert.equal(
+      (
+        await claimExactGenerationLeases({
+          db: fixture.db,
+          rows: [row],
+          leaseOwnerId: "workstation_owner_0002",
+          now: input.now,
+          idFactory: ids,
+        })
+      ).leases.length,
+      0,
+    )
+  } finally {
+    fixture.database.close()
+  }
+})
+
+test("a newer claim between completion preflight and commit fences the saved older output", async () => {
+  const fixture = leaseDatabase()
+  try {
+    const row = boundRow({ generation_attempt_id: "" })
+    const ids = deterministicIds()
+    const lease = (
+      await claimExactGenerationLeases({
+        db: fixture.db,
+        rows: [row],
+        leaseOwnerId: "workstation_owner_0001",
+        leaseSeconds: 60,
+        now: new Date("2026-08-30T00:00:00Z"),
+        idFactory: ids,
+      })
+    ).leases[0]
+    const input = {
+      db: fixture.db,
+      generationRequestId: lease.generation_request_id,
+      generationAttemptId: lease.generation_attempt_id,
+      leaseToken: lease.generation_lease_token,
+      leaseOwnerId: lease.generation_lease_owner_id,
+      expectedLeaseVersion: lease.generation_lease_version,
+      now: new Date("2026-08-31T00:00:00Z"),
+    }
+    await assertExactGenerationLeaseCompletion(input)
+    await claimExactGenerationLeases({
+      db: fixture.db,
+      rows: [row],
+      leaseOwnerId: "workstation_owner_0002",
+      now: input.now,
+      idFactory: ids,
+    })
+    await assert.rejects(completeExactGenerationLease(input), /lease expired or changed/)
+    await assert.rejects(assertExactGenerationLeaseCompletion(input), /lease changed/)
   } finally {
     fixture.database.close()
   }

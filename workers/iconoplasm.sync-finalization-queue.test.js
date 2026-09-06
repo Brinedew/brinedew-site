@@ -243,9 +243,14 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql.includes("FROM icono_admin_dashboard_summary")) {
+      this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
+      return { summary_key: this.args[0] }
+    }
     if (
       this.sql.includes("FROM icono_sync_finalization_summary") ||
-      this.sql.includes("AS unfinished_count")
+      this.sql.includes("AS unfinished_count") ||
+      this.sql.includes("AS remaining_count")
     ) {
       const scope = this.sql.includes("FROM icono_sync_finalization_summary")
         ? null
@@ -259,6 +264,11 @@ class FakeStatement {
           (row) => row.status !== "completed" && row.phase === "completed_pending_finalize",
         ).length,
         unfinished_count: jobs.filter((row) => row.status !== "completed").length,
+        remaining_count: jobs.filter(
+          (row) =>
+            row.status !== "completed" &&
+            !["completed_pending_finalize", "completed"].includes(row.phase),
+        ).length,
         completed_count: jobs.filter((row) => row.status === "completed").length,
         completed_at:
           jobs

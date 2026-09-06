@@ -22,6 +22,7 @@ test("runtime identities ignore local caches but include new domain helpers and 
   }
   for (const directory of [
     "migrations",
+    "workers/benchmark/migrations",
     "migrations-iconoplasm",
     "migrations-iconoplasm-authoring",
   ])
@@ -47,5 +48,14 @@ test("runtime identities ignore local caches but include new domain helpers and 
   assert.notEqual(
     operationCostIdentities({ sourceRoot }).executable_sha256,
     withHelper.executable_sha256,
+  )
+  const beforeBenchmark = operationCostIdentities({ sourceRoot })
+  write(
+    "workers/benchmark/migrations/0002.sql",
+    "CREATE TABLE benchmark_test(id INTEGER PRIMARY KEY);\n",
+  )
+  assert.notEqual(
+    operationCostIdentities({ sourceRoot }).schema_sha256,
+    beforeBenchmark.schema_sha256,
   )
 })

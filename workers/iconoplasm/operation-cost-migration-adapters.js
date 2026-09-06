@@ -3,9 +3,29 @@ import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-auth
 import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
 import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
 import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
+import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-snapshot-retirement-adapter.js"
+import {
+  createAdminCountsMigrationCostAdapter,
+  createInboxCountersMigrationCostAdapter,
+} from "./operation-cost-counter-migration-adapters.js"
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-authoring-migration-0015",
+      createSnapshotRetirementMigrationCostAdapter({
+        db: env.ICONOPLASM_AUTHORING_DB,
+        ...identities,
+      }),
+    ],
+    [
+      "iconoplasm-migration-0095",
+      createAdminCountsMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
+    [
+      "iconoplasm-migration-0096",
+      createInboxCountersMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
     [
       "iconoplasm-authoring-migration-0014",
       createLineageAdmissionMigrationCostAdapter({

@@ -544,66 +544,6 @@ export async function acknowledgeManifestationEvents(db, input = {}) {
   })
 }
 
-export async function sweepManifestationSnapshots(
-  db,
-  { now, retentionSeconds = 24 * 60 * 60, limit = 20 } = {},
-) {
-  requireDatabase(db)
-  const timestamp = normalizeTimestamp(now)
-  await prepared(
-    db,
-    `UPDATE icono_manifestation_snapshot_leases SET status = 'expired'
-      WHERE status IN ('building', 'open') AND expires_at <= ?`,
-    timestamp,
-  ).run()
-  const retention = Math.max(
-    3600,
-    Math.min(7 * 86_400, Math.trunc(Number(retentionSeconds)) || 86_400),
-  )
-  const cutoff = new Date(new Date(timestamp).getTime() - retention * 1000).toISOString()
-  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit)) || 20))
-  const leases = await all(
-    db,
-    `SELECT snapshot_id FROM icono_manifestation_snapshot_leases
-      WHERE status IN ('completed', 'expired')
-        AND COALESCE(completed_at, expires_at) <= ?
-      ORDER BY COALESCE(completed_at, expires_at), snapshot_id LIMIT ?`,
-    cutoff,
-    boundedLimit,
-  )
-  if (!leases.length) return Object.freeze({ purged: 0 })
-  const statements = [
-    prepared(
-      db,
-      `DELETE FROM icono_manifestation_snapshot_parts WHERE rowid IN (
-      SELECT part.rowid FROM icono_manifestation_snapshot_parts part
-      JOIN icono_manifestation_snapshot_leases lease ON lease.snapshot_id=part.snapshot_id
-      WHERE lease.status IN ('completed','expired') AND COALESCE(lease.completed_at,lease.expires_at)<=?
-      ORDER BY lease.snapshot_id,part.ordinal LIMIT 250)`,
-      cutoff,
-    ),
-  ]
-  for (const lease of leases) {
-    statements.push(
-      prepared(
-        db,
-        `DELETE FROM icono_manifestation_snapshot_leases
-          WHERE snapshot_id = ? AND status IN ('completed', 'expired')
-          AND NOT EXISTS (SELECT 1 FROM icono_manifestation_snapshot_parts part
-                          WHERE part.snapshot_id=icono_manifestation_snapshot_leases.snapshot_id)`,
-        lease.snapshot_id,
-      ),
-    )
-  }
-  const results = await db.batch(statements)
-  return Object.freeze({
-    purged: results
-      .slice(1)
-      .reduce((total, result) => total + Number(result.meta?.changes || 0), 0),
-    parts_purged: Number(results[0].meta?.changes || 0),
-  })
-}
-
 export { decodeCursor, encodeCursor } from "./manifestation-sync-cursor.js"
 
 // ARCHITECTURE FENCE [IPD-012]

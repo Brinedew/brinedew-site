@@ -4,6 +4,10 @@
 // acknowledgement, and delivery so the already-large Iconoplasm runtime does
 // not absorb another state machine.
 
+import {
+  REQUEST_INBOX_COUNTS_SQL,
+  REQUEST_INBOX_PAGE_SQL,
+} from "./iconoplasm/request-inbox-queries.js"
 import { readPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 
 // During the live acceptance period, only Vladimir's immutable Discord user ID
@@ -142,50 +146,9 @@ export async function readRequestNotificationInbox(
   // created for the exact request/asset pair and the request becomes fulfilled
   // only after Discord confirms delivery. Re-check the live request and asset
   // joins here so a stale or mismatched notification cannot render.
-  const validDeliveryJoin = `
-    FROM icono_request_notifications n
-    JOIN icono_generation_requests gr
-      ON gr.id = n.request_id
-     AND gr.requester_user_id = n.requester_user_id
-     AND gr.gene_symbol = n.gene_symbol
-     AND gr.fulfilled_asset_sha256 = n.fulfilled_asset_sha256
-     AND gr.status = 'fulfilled'
-    JOIN icono_portrait_assets pa
-      ON pa.gene_symbol = n.gene_symbol
-     AND pa.asset_sha256 = n.fulfilled_asset_sha256`
   const [countRow, rowsResponse] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         COUNT(*) AS ready_count,
-         SUM(CASE WHEN n.read_at IS NULL THEN 1 ELSE 0 END) AS unread_count,
-         COUNT(DISTINCT
-           COALESCE(NULLIF(n.fulfillment_publication_id, ''), 'legacy-request:' || n.request_id)
-           || char(31) || n.gene_symbol
-         ) AS ready_group_count,
-         COUNT(DISTINCT CASE WHEN n.read_at IS NULL THEN
-           COALESCE(NULLIF(n.fulfillment_publication_id, ''), 'legacy-request:' || n.request_id)
-           || char(31) || n.gene_symbol
-         END) AS unread_group_count
-       ${validDeliveryJoin}
-       WHERE n.requester_user_id = ?
-         AND n.discord_status = 'sent'`,
-    )
-      .bind(requesterId)
-      .first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         n.*,
-         gr.created_at AS request_created_at,
-         pa.created_at AS asset_created_at,
-         pa.candidate_image_id
-       ${validDeliveryJoin}
-       WHERE n.requester_user_id = ?
-         AND n.discord_status = 'sent'
-       ORDER BY n.created_at DESC, n.id DESC
-       LIMIT ?`,
-    )
-      .bind(requesterId, safeLimit)
-      .all(),
+    env.ICONOPLASM_DB.prepare(REQUEST_INBOX_COUNTS_SQL).bind(requesterId).first(),
+    env.ICONOPLASM_DB.prepare(REQUEST_INBOX_PAGE_SQL).bind(requesterId, safeLimit).all(),
   ])
   const pending = Array.isArray(openRequests) ? openRequests : []
   const ready = Array.isArray(rowsResponse?.results) ? rowsResponse.results : []
@@ -266,6 +229,7 @@ export async function markRequestNotificationsRead(
        SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
        WHERE requester_user_id = ?
          AND discord_status = 'sent'
+         AND read_at IS NULL
          AND id IN (${placeholders})`,
     )
       .bind(requesterId, ...ids)

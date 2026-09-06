@@ -33,7 +33,15 @@ export async function readReleaseOrigin({
 
 // IDs depend on the release and adapter, never the retry number or which
 // migrations happen to remain pending. Server receipts own the continuation.
-export async function acquireReleasePlan({ releaseId, adapter, prediction, send, features, now }) {
+export async function acquireReleasePlan({
+  releaseId,
+  adapter,
+  prediction,
+  send,
+  features,
+  now,
+  identities = OPERATION_COST_IDENTITIES,
+}) {
   let id = `${releaseId}-${adapter.id}`
   let predecessor
   for (let depth = 0; depth < 8; depth++) {
@@ -60,9 +68,7 @@ export async function acquireReleasePlan({ releaseId, adapter, prediction, send,
         predecessor = prior.id
         continue
       }
-      const changed = Object.entries(OPERATION_COST_IDENTITIES).some(
-        ([key, value]) => prior[key] !== value,
-      )
+      const changed = Object.entries(identities).some(([key, value]) => prior[key] !== value)
       if (prior.expires_at > now && !changed) {
         if (stored.status !== "active") throw new Error("COST_PLAN_TRIPPED")
         return { plan: prior, stepId: `execute-${Object.keys(stored.steps).length}` }
@@ -77,7 +83,7 @@ export async function acquireReleasePlan({ releaseId, adapter, prediction, send,
       id,
       adapter_id: adapter.id,
       resource: adapter.resource,
-      ...OPERATION_COST_IDENTITIES,
+      ...identities,
       prediction,
       expires_at: Math.min(now + 3_500_000, (Math.floor(now / 86_400_000) + 1) * 86_400_000 - 1),
       ...(predecessor ? { predecessor_id: predecessor } : {}),

@@ -82,13 +82,39 @@ test("no forecast fails before discovery; unknown migration fails before any DDL
 test("every inventory and migration registers before execution and records its receipt", async () => {
   const { options, calls } = harness()
   const result = await runAdmittedMigrations(options)
-  assert.equal(result.migrations_applied, 4)
-  assert.equal(result.evidence.length, 7)
+  assert.equal(result.migrations_applied, Object.keys(manifest.migrations).length)
+  assert.equal(result.evidence.length, Object.keys(manifest.migrations).length + 3)
   for (let index = 2; index < calls.length; index += 3) {
     assert.equal(calls[index].suffix, "/register")
     assert.equal(calls[index + 1].suffix, "/execute")
     assert.equal(calls[index].body.id, calls[index + 1].body.operation_id)
   }
+})
+
+test("pre-deploy inventory pins the installed implementation and never executes DDL", async () => {
+  const { options, calls } = harness()
+  const send = options.send
+  options.send = async (...args) => {
+    const result = await send(...args)
+    if (!args[0])
+      result.adapters = result.adapters
+        .filter((adapter) => adapter.id.endsWith("-migration-inventory"))
+        .map((adapter) => ({
+          ...adapter,
+          executable_sha256: "e".repeat(64),
+          schema_sha256: "f".repeat(64),
+        }))
+    return result
+  }
+  const result = await runAdmittedMigrations({ ...options, inventoryOnly: true })
+  assert.deepEqual(result.pending_migrations.sort(), Object.keys(manifest.migrations).sort())
+  assert.equal(calls.filter((call) => call.suffix === "/execute").length, 3)
+  for (const call of calls.filter((call) => call.suffix === "/register")) {
+    assert.ok(call.body.adapter_id.endsWith("-migration-inventory"))
+    assert.equal(call.body.executable_sha256, "e".repeat(64))
+    assert.equal(call.body.schema_sha256, "f".repeat(64))
+  }
+  await assert.rejects(runAdmittedMigrations(options), /DEPLOYED_IMPLEMENTATION_MISMATCH/)
 })
 
 test("shared benchmark history and the repaired legacy comments journal remain recognized", async () => {
@@ -130,7 +156,10 @@ test("shared benchmark history and the repaired legacy comments journal remain r
         0,
       )
     } else {
-      assert.equal((await runAdmittedMigrations(options)).migrations_applied, 4)
+      assert.equal(
+        (await runAdmittedMigrations(options)).migrations_applied,
+        Object.keys(manifest.migrations).length,
+      )
     }
   }
 })

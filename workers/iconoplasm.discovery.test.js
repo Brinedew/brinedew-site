@@ -664,6 +664,42 @@ test("shared discovery symbols publish once per changed snapshot", async () => {
   assert.deepEqual(JSON.parse(writes[0].value).symbols, ["BRCA1", "TP53"])
 })
 
+test("hourly publisher initializes a genuinely empty overlay and repairs invalid publications once", async () => {
+  for (const initial of [
+    null,
+    "broken-json",
+    JSON.stringify({ symbols: [] }),
+    JSON.stringify({ schema: "wrong", symbols: [] }),
+  ]) {
+    let value = initial
+    let writes = 0
+    const env = {
+      ICONOPLASM_DB: new FakeDiscoveryDb(),
+      KV: {
+        async get() {
+          return value
+        },
+        async put(key, next) {
+          value = next
+          writes++
+        },
+      },
+    }
+    assert.deepEqual(await publishSharedGeneDiscoverySymbols(env), {
+      ok: true,
+      changed: true,
+      symbol_count: 0,
+    })
+    assert.deepEqual(await publishSharedGeneDiscoverySymbols(env), {
+      ok: true,
+      changed: false,
+      symbol_count: 0,
+    })
+    assert.equal(writes, 1)
+    assert.deepEqual(JSON.parse(value).symbols, [])
+  }
+})
+
 test("discoveries me returns the signed-in user's discovered symbols", async () => {
   const env = buildEnv({
     sessions: {

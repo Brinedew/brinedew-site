@@ -112,7 +112,7 @@ class NotificationStatement {
   }
 
   async first() {
-    if (this.sql.includes("COUNT(*) AS ready_count")) {
+    if (this.sql.includes("FROM icono_request_inbox_summary")) {
       const requesterUserId = String(this.args[0] || "")
       const ready = this.db.notifications.filter(
         (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
@@ -197,7 +197,10 @@ class NotificationStatement {
         ),
       }
     }
-    if (this.sql.includes("FROM icono_request_notifications n")) {
+    if (
+      this.sql.includes("FROM icono_request_notifications n") ||
+      this.sql.includes("FROM icono_request_inbox_members membership")
+    ) {
       const requesterUserId = String(this.args[0] || "")
       return {
         results: this.db.notifications.filter(
@@ -402,16 +405,14 @@ class FulfillmentStatement {
 
   async run() {
     if (this.sql.includes("UPDATE icono_generation_execution_leases")) {
-      const [completedAt, , generationRequestId, attemptId, token, ownerId, version, checkedAt] =
-        this.args
+      const [completedAt, , generationRequestId, attemptId, token, ownerId, version] = this.args
       const lease = this.db.leases.get(String(generationRequestId || ""))
       const matches =
         lease?.status === "active" &&
         lease.generation_attempt_id === attemptId &&
         lease.lease_token === token &&
         lease.lease_owner_id === ownerId &&
-        Number(lease.lease_version) === Number(version) &&
-        Date.parse(lease.expires_at) > Date.parse(checkedAt)
+        Number(lease.lease_version) === Number(version)
       if (matches) {
         lease.status = "completed"
         lease.completed_at = completedAt
