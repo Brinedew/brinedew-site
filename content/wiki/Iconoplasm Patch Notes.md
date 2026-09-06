@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.6 - 2026-09-06
+
+* Improved speed and reliability of gene name highlighting
 ## 0.5.5 - 2026-08-28
 
 * Optimized data loading times across browser tabs
