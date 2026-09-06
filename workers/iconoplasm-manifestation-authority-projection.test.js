@@ -263,15 +263,26 @@ test("scheduled recovery drains bounded indexed windows without rewinding or ign
           async all() {
             const plan = authoring.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...parameters)
             assert.ok(
-              plan.every(({ detail }) => !/SCAN |TEMP B-TREE/.test(detail)),
+              plan.every(
+                ({ detail }) => !/SCAN icono_manifestation_events|TEMP B-TREE/.test(detail),
+              ),
               JSON.stringify(plan),
             )
-            assert.ok(plan.some(({ detail }) => detail.includes("idx_icono_events_projection_due")))
+            assert.equal(
+              plan.filter(({ detail }) =>
+                detail.includes(
+                  "SEARCH icono_manifestation_events USING INDEX idx_icono_events_projection_due",
+                ),
+              ).length,
+              4,
+            )
             const result = await prepare(sql)
               .bind(...parameters)
               .all()
             ranges.push(result.results.length)
-            assert.ok(result.results.length <= 50)
+            assert.ok(result.results.length <= 200)
+            for (let range = 0; range < 4; range++)
+              assert.ok(result.results.filter((row) => row.range_id === range).length <= 50)
             return result
           },
         }
@@ -316,6 +327,75 @@ test("scheduled recovery drains bounded indexed windows without rewinding or ign
       .get().n,
     50,
   )
+})
+
+test("scheduled recovery honors both timestamp formats at the same-day retry boundary", async (t) => {
+  const primary = primaryDatabase()
+  const authoring = projectionOutboxDatabase()
+  t.after(() => {
+    primary.database.close()
+    authoring.database.close()
+  })
+  const due = [
+    null,
+    "2026-09-05 23:59:59",
+    "2026-09-05T23:59:59.000Z",
+    "2026-09-06 12:00:00",
+    "2026-09-06T12:00:00.000Z",
+  ]
+  const future = [
+    "2026-09-06 12:00:01",
+    "2026-09-06T12:00:01.000Z",
+    "2026-09-07 00:00:00",
+    "2026-09-07T00:00:00.000Z",
+  ]
+  const insert = authoring.database.prepare(`INSERT INTO icono_manifestation_events
+    (event_uuid,event_sequence,gene_id,payload_json,projection_status,projection_next_attempt_at) VALUES(?,?,?,?,?,?)`)
+  const expected = []
+  let sequence = 0
+  for (const status of ["pending", "failed"]) {
+    for (const timestamp of [...due, ...future]) {
+      const event = callback(++sequence)
+      insert.run(
+        event.event_id,
+        sequence,
+        event.gene_id,
+        JSON.stringify(event.payload),
+        status,
+        timestamp,
+      )
+      if (due.includes(timestamp)) expected.push(event.event_id)
+    }
+  }
+  const selected = []
+  const prepare = authoring.prepare.bind(authoring)
+  authoring.prepare = (sql) => {
+    if (!sql.includes("INDEXED BY idx_icono_events_projection_due")) return prepare(sql)
+    return {
+      bind(...parameters) {
+        return {
+          async all() {
+            const response = await prepare(sql)
+              .bind(...parameters)
+              .all()
+            selected.push(...response.results.map((row) => row.event_uuid))
+            return response
+          },
+        }
+      },
+    }
+  }
+  await drainManifestationAuthorityProjectionOutbox(
+    {
+      primaryDb: primary,
+      authoringDb: authoring,
+      limit: 50,
+      now: new Date("2026-09-06T12:00:00.000Z"),
+      projectPublicMaterialEvent: async () => {},
+    },
+    { readCanonical: async () => exactRecord(sequence) },
+  )
+  assert.deepEqual(selected.sort(), expected.sort())
 })
 
 test("the primary projection preserves null -> canonical -> null history without rewinding", async (t) => {

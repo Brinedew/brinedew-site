@@ -33,6 +33,104 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
 const identities = { executable_sha256: "a".repeat(64), schema_sha256: "b".repeat(64) }
 
 test(
+  "workerd retry selection bounds all eight full ranges beside a large future backlog",
+  { timeout: 120000 },
+  async (t) => {
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('retry selection')}}",
+        compatibilityDate: "2025-11-12",
+        d1Databases: ["DB"],
+      }),
+    )
+    try {
+      const db = await runtime.getD1Database("DB")
+      // Isolate the candidate SELECT's row receipt; full-schema mutation and
+      // callback costs are exercised by the integration tests below.
+      await db
+        .prepare(
+          `CREATE TABLE icono_manifestation_events (
+      event_uuid TEXT PRIMARY KEY, event_sequence INTEGER UNIQUE, gene_id TEXT,
+      gene_revision INTEGER, payload_json TEXT, projection_status TEXT,
+      projection_attempts INTEGER DEFAULT 0, projection_next_attempt_at TEXT)`,
+        )
+        .run()
+      await db
+        .prepare(
+          `CREATE INDEX idx_icono_events_projection_due ON icono_manifestation_events
+      (projection_status, projection_next_attempt_at, event_sequence)`,
+        )
+        .run()
+      await db
+        .prepare(
+          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<20000)
+      INSERT INTO icono_manifestation_events
+      (event_uuid,event_sequence,gene_id,gene_revision,payload_json,projection_status,projection_next_attempt_at)
+      SELECT 'event_'||n,n,'gene_one',n,'{}',CASE WHEN n%8<4 THEN 'pending' ELSE 'failed' END,
+        CASE WHEN n>800 THEN CASE WHEN n%2=0 THEN '2026-09-06 12:01:00' ELSE '2026-09-06T12:01:00.000Z' END
+        ELSE CASE n%4 WHEN 0 THEN NULL WHEN 1 THEN '2026-09-05 23:59:59'
+          WHEN 2 THEN '2026-09-06 12:00:00' ELSE '2026-09-06T12:00:00.000Z' END END FROM ids`,
+        )
+        .run()
+      const meter = createOperationCostD1Meter(db)
+      const selected = []
+      const authoringDb = {
+        prepare(sql) {
+          if (!sql.includes("INDEXED BY idx_icono_events_projection_due")) return db.prepare(sql)
+          return {
+            bind(...parameters) {
+              return {
+                async all() {
+                  const result = await meter.db
+                    .prepare(sql)
+                    .bind(...parameters)
+                    .all()
+                  selected.push(...result.results)
+                  return result
+                },
+              }
+            },
+          }
+        },
+      }
+      const result = await drainManifestationAuthorityProjectionOutbox({
+        authoringDb,
+        primaryDb: {
+          prepare() {
+            throw new Error("candidate-only cost fixture")
+          },
+        },
+        limit: 50,
+        now: new Date("2026-09-06T12:00:00.000Z"),
+      })
+      assert.equal(result.has_more, true)
+      assert.equal(selected.length, 400)
+      assert.ok(selected.every((row) => row.event_sequence <= 800))
+      for (const status of ["pending", "failed"])
+        for (let range = 0; range < 4; range++)
+          assert.equal(
+            selected.filter((row) => row.projection_status === status && row.range_id === range)
+              .length,
+            50,
+          )
+      const actual = meter.finish()
+      assert.ok(actual.rows_read <= 816, JSON.stringify(actual))
+      assert.equal(actual.rows_written, 0)
+      t.diagnostic(
+        JSON.stringify({
+          operation: "eight-full-retry-ranges",
+          bound: { rows_read: 816, rows_written: 0 },
+          actual,
+        }),
+      )
+    } finally {
+      await runtime.dispose()
+    }
+  },
+)
+
+test(
   "local workerd D1 receipts fit migration and diagnosis reservations at catalogue scale",
   { timeout: 120000 },
   async (t) => {

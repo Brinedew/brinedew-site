@@ -50,7 +50,7 @@ export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
       db,
       `UPDATE icono_manifestation_events
           SET projection_status = 'failed', projection_attempts = projection_attempts + 1,
-              projection_next_attempt_at = datetime('now', '+1 minute')
+              projection_next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute')
         WHERE event_sequence = ? AND projection_status <> 'published'`,
       result.accepted_event_sequence,
     )
