@@ -24,6 +24,13 @@ Do not confuse the Cloudflare API token above with the app admin token:
 - `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN` lets Wrangler and GitHub Actions manage Cloudflare resources.
 - `ICONOPLASM_ADMIN_TOKEN` is the shared app credential accepted by Iconoplasm admin HTTP endpoints.
 
+The GitHub repository secret `ICONOPLASM_ADMIN_TOKEN` must also match the live
+app credential. Migration admission uses it directly. Release preflight verifies
+it with an authenticated HEAD request before pausing application work; a nonempty
+but stale repository secret must fail before that pause. When synchronizing this
+secret, pass the locally verified value through standard input without printing
+it or putting it on the command line.
+
 The app admin token does not expire by itself. When it appears to "expire", the usual cause is secret drift. Production has two Worker secret copies that must match:
 
 - public edge worker: `the-only-allowed-public-edge-worker-that-must-not-touch-state`

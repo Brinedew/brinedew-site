@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
-import { preflightOperationCostRelease, verifyReleaseAuthentication } from "./preflight-operation-cost-release.mjs"
+import {
+  preflightOperationCostRelease,
+  verifyReleaseAuthentication,
+} from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
 const manifest = JSON.parse(
@@ -32,7 +35,10 @@ test("release authentication is checked without D1 work, redirects or credential
   assert.equal(calls, 1)
   for (const status of [401, 403, 429, 503])
     await assert.rejects(
-      verifyReleaseAuthentication({ token: "test-secret", fetcher: async () => new Response(null, { status }) }),
+      verifyReleaseAuthentication({
+        token: "test-secret",
+        fetcher: async () => new Response(null, { status }),
+      }),
       status === 401 || status === 403 ? /AUTHENTICATION_FAILED/ : /ADMISSION_UNAVAILABLE_HTTP_/,
     )
 })
