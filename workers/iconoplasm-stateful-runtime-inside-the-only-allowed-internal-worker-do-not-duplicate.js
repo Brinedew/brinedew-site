@@ -21145,7 +21145,7 @@ async function projectVoteCoordinatorLedgerRow(
   return true
 }
 
-async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
+export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
   env,
   { symbol, assetSummaries = [] } = {},
 ) {
@@ -21153,47 +21153,38 @@ async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return 0
 
-  const statements = [
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`).bind(
-      safeSymbol,
-    ),
-  ]
-  let written = 0
+  const rows = []
   for (const rawRow of Array.isArray(assetSummaries) ? assetSummaries : []) {
     const assetSha = normalizeSha256(rawRow?.asset_sha256 || "")
     if (!assetSha) continue
-    statements.push(
-      env.ICONOPLASM_DB.prepare(
-        `INSERT INTO icono_vote_asset_summary (
-         gene_symbol,
-         asset_sha256,
-         candidate_ref,
-         vision_id,
-         candidate_image_id,
-         upvotes,
-         downvotes,
-         score,
-         vote_count,
-         updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      ).bind(
-        safeSymbol,
-        assetSha,
-        voteAssetIdentity(safeSymbol, assetSha),
-        sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
-        optionalInt(rawRow?.candidate_image_id),
-        Math.max(0, Number(rawRow?.upvotes || 0) || 0),
-        Math.max(0, Number(rawRow?.downvotes || 0) || 0),
-        Number(rawRow?.score || 0) || 0,
-        Math.max(0, Number(rawRow?.vote_count || 0) || 0),
-      ),
-    )
-    written += 1
+    rows.push([
+      assetSha,
+      voteAssetIdentity(safeSymbol, assetSha),
+      sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
+      optionalInt(rawRow?.candidate_image_id),
+      Math.max(0, Number(rawRow?.upvotes || 0) || 0),
+      Math.max(0, Number(rawRow?.downvotes || 0) || 0),
+      Number(rawRow?.score || 0) || 0,
+      Math.max(0, Number(rawRow?.vote_count || 0) || 0),
+    ])
   }
   // D1 batch executes transactionally. A failed insert can no longer strand an
   // empty or half-populated summary after the delete succeeds.
-  await env.ICONOPLASM_DB.batch(statements)
-  return written
+  await env.ICONOPLASM_DB.batch([
+    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`).bind(
+      safeSymbol,
+    ),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_vote_asset_summary (
+      gene_symbol, asset_sha256, candidate_ref, vision_id, candidate_image_id,
+      upvotes, downvotes, score, vote_count, updated_at
+    ) SELECT ?, json_extract(value,'$[0]'), json_extract(value,'$[1]'),
+      json_extract(value,'$[2]'), json_extract(value,'$[3]'), json_extract(value,'$[4]'),
+      json_extract(value,'$[5]'), json_extract(value,'$[6]'), json_extract(value,'$[7]'),
+      CURRENT_TIMESTAMP FROM json_each(?)`,
+    ).bind(safeSymbol, JSON.stringify(rows)),
+  ])
+  return rows.length
 }
 
 function voteProjectionVisionIdsFromCoordinatorAssetSummaries(assetSummaries) {
@@ -21227,50 +21218,10 @@ function voteProjectionRefreshJobReason(rawReason, fallback = "vote_projection_r
   return sanitizeText(rawReason || "", 2000) || fallback
 }
 
-const voteProjectionRefreshJobSchemas = new WeakSet()
-
-async function ensureVoteProjectionRefreshJobsTable(env) {
-  if (!env?.ICONOPLASM_DB) return false
-  if (voteProjectionRefreshJobSchemas.has(env.ICONOPLASM_DB)) return true
-  await env.ICONOPLASM_DB.prepare(
-    `CREATE TABLE IF NOT EXISTS icono_vote_projection_refresh_jobs (
-       gene_symbol TEXT PRIMARY KEY,
-       actor_id TEXT,
-       reason TEXT NOT NULL DEFAULT '',
-       requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       last_attempt_at TEXT,
-       next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       attempts INTEGER NOT NULL DEFAULT 0,
-       last_error TEXT NOT NULL DEFAULT '',
-       job_version INTEGER NOT NULL DEFAULT 1
-     )`,
-  ).run()
-  const columns = await env.ICONOPLASM_DB.prepare(
-    `PRAGMA table_info(icono_vote_projection_refresh_jobs)`,
-  ).all()
-  if (
-    !(Array.isArray(columns?.results) ? columns.results : []).some(
-      (column) => String(column?.name || "") === "job_version",
-    )
-  ) {
-    await env.ICONOPLASM_DB.prepare(
-      `ALTER TABLE icono_vote_projection_refresh_jobs
-       ADD COLUMN job_version INTEGER NOT NULL DEFAULT 1`,
-    ).run()
-  }
-  await env.ICONOPLASM_DB.prepare(
-    `CREATE INDEX IF NOT EXISTS idx_icono_vote_projection_refresh_jobs_next_attempt
-     ON icono_vote_projection_refresh_jobs (next_attempt_at, requested_at)`,
-  ).run()
-  voteProjectionRefreshJobSchemas.add(env.ICONOPLASM_DB)
-  return true
-}
-
 async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB" }
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
-  await ensureVoteProjectionRefreshJobsTable(env)
   const nowIso = new Date().toISOString()
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_vote_projection_refresh_jobs (
@@ -21334,7 +21285,6 @@ async function recordVoteProjectionRefreshFailure(
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return false
-  await ensureVoteProjectionRefreshJobsTable(env)
   const delayMinutes = Math.max(
     1,
     Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
@@ -21735,7 +21685,6 @@ async function processVoteProjectionRefreshForSymbol(
 async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}) {
   if (!env?.ICONOPLASM_DB)
     return { ok: false, code: "NO_DB", processed: 0, failed: 0, remaining: 0 }
-  await ensureVoteProjectionRefreshJobsTable(env)
   const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit || 100), 10) || 100))
   const nowIso = new Date().toISOString()
   const queued = await env.ICONOPLASM_DB.prepare(
@@ -21833,7 +21782,6 @@ async function processVoteProjectionRefreshQueueMessage(env, rawMessage) {
   if (!message) {
     throw new Error("Unsupported Iconoplasm vote projection Queue message.")
   }
-  await ensureVoteProjectionRefreshJobsTable(env)
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version
      FROM icono_vote_projection_refresh_jobs
@@ -21905,7 +21853,6 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
     return { ok: true, processed, failed, retrying, skipped, results }
   }
 
-  await ensureVoteProjectionRefreshJobsTable(env)
   const nowIso = new Date().toISOString()
   const dueEntries = []
   const dueJobsBySymbol = new Map()
@@ -22035,7 +21982,6 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
 
 async function listPendingVoteProjectionRefreshJobs(env, { limit = 200 } = {}) {
   if (!env?.ICONOPLASM_DB) return []
-  await ensureVoteProjectionRefreshJobsTable(env)
   const cleanedLimit = Math.max(
     1,
     Math.min(1000, Number.parseInt(String(limit || "200"), 10) || 200),
