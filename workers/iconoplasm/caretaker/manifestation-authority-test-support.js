@@ -9,6 +9,7 @@ const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0006_resumable_cutover_upload_envelopes.sql",
   "../../../migrations-iconoplasm-authoring/0007_manifestation_page_visibility.sql",
   "../../../migrations-iconoplasm-authoring/0012_streamed_replica_snapshots.sql",
+  "../../../migrations-iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
 
 class TestStatement {

@@ -1,5 +1,9 @@
 import puppeteer from "@cloudflare/puppeteer"
-import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
+import {
+  readSyncFinalizationSummary,
+  readSyncFinalizationDrainCounts,
+} from "./iconoplasm/sync-finalization-summary.js"
+import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
 import {
   createOperationCostAuthority,
   OPERATION_COST_ROUTE_PREFIX,
@@ -56,7 +60,7 @@ import {
 } from "./lib/iconoplasm-generation-provenance.js"
 import {
   IconoplasmGenerationLeaseError,
-  assertExactGenerationLeaseExecution,
+  assertExactGenerationLeaseCompletion,
   completeExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
 import {
@@ -4857,8 +4861,10 @@ async function createGenerationRequest(
     const existing = await env.ICONOPLASM_DB.prepare(
       `SELECT id, COALESCE(generation_request_contract_sha256, '') AS generation_request_contract_sha256
        FROM icono_generation_requests
+       INDEXED BY idx_icono_generation_requests_client_request
        WHERE requester_user_id = ?
          AND client_request_id = ?
+         AND client_request_id <> ''
        LIMIT 1`,
     )
       .bind(requesterNorm, clientRequestNorm)
@@ -5074,8 +5080,10 @@ async function createGenerationRequest(
     const existing = await env.ICONOPLASM_DB.prepare(
       `SELECT id, COALESCE(generation_request_contract_sha256, '') AS generation_request_contract_sha256
        FROM icono_generation_requests
+       INDEXED BY idx_icono_generation_requests_client_request
        WHERE requester_user_id = ?
          AND client_request_id = ?
+         AND client_request_id <> ''
        LIMIT 1`,
     )
       .bind(requesterNorm, clientRequestNorm)
@@ -11260,7 +11268,7 @@ export async function fulfillGenerationRequests(
       conflicts.push({ request_id: intent.requestId, reason: "request_not_found" })
     } else {
       try {
-        await assertExactGenerationLeaseExecution({
+        await assertExactGenerationLeaseCompletion({
           db: env.ICONOPLASM_DB,
           generationRequestId: intent.generationRequestId,
           generationAttemptId: intent.generationAttemptId,
@@ -11731,21 +11739,21 @@ async function writeSharedGeneDiscoverySymbolCache(env, symbols) {
 }
 
 async function readSharedGeneDiscoverySymbols(env) {
-  if (env.KV) {
-    try {
-      const raw = await env.KV.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
-      if (raw != null) return normalizeSharedDiscoverySymbolList(JSON.parse(raw))
-    } catch {
-      // Fall through to D1 once; then repopulate the shared cache below.
-    }
-  }
-  const symbols = await readSharedGeneDiscoverySymbolsFromD1(env)
   try {
-    await writeSharedGeneDiscoverySymbolCache(env, symbols)
+    const raw = await env.KV?.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
+    if (raw == null) return null
+    const published = JSON.parse(raw)
+    if (
+      published?.schema !== "iconoplasm.sharedGeneDiscoverySymbols.v1" ||
+      !Array.isArray(published.symbols)
+    )
+      return null
+    return normalizeSharedDiscoverySymbolList(published)
   } catch {
-    // Search can still answer from D1 when KV has a transient write failure.
+    // The hourly publisher owns this overlay. A cold or unavailable publication
+    // must not turn simultaneous reader searches into corpus scans and KV writes.
+    return null
   }
-  return symbols
 }
 
 async function recordSharedGeneDiscoveryEncounter(
@@ -11789,14 +11797,9 @@ export async function publishSharedGeneDiscoverySymbols(env) {
     return { ok: false, skipped: true, reason: "bindings_missing" }
   }
   const nextSymbols = await readSharedGeneDiscoverySymbolsFromD1(env, { limit: 20000 })
-  let currentSymbols = []
-  try {
-    const raw = await env.KV.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
-    currentSymbols = normalizeSharedDiscoverySymbolList(raw ? JSON.parse(raw) : null)
-  } catch {
-    currentSymbols = []
-  }
+  const currentSymbols = await readSharedGeneDiscoverySymbols(env)
   const unchanged =
+    currentSymbols !== null &&
     currentSymbols.length === nextSymbols.length &&
     currentSymbols.every((symbol, index) => symbol === nextSymbols[index])
   if (unchanged) {
@@ -20309,198 +20312,17 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
   return true
 }
 
-async function rebuildAdminGalleryCountCache(env) {
+async function assertAdminCountSummary(env) {
   if (!env?.ICONOPLASM_DB) return false
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_gallery_count_cache`).run()
-  // Do not collapse this back into one giant INSERT ... SELECT ... UNION ALL.
-  // D1 rejected that shape in production with "too many terms in compound
-  // SELECT" after the Sync button had already refreshed the dashboard summary,
-  // which made the GUI report a 500 for work that mostly succeeded. The small
-  // fixed statements below are slightly more verbose and much easier on D1:
-  // each count is independently attributable, independently debuggable, and
-  // cannot fail because SQLite's compound-select term limit changed under us.
-  // If this needs to grow, add another single-count statement and keep the test
-  // that forbids UNION ALL in the gallery count-cache rebuild.
-  const countSelects = [
-    {
-      key: "live:all",
-      mode: "live",
-      filter: "all",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_admin_gene_rollup`,
-    },
-    {
-      key: "live:mismatch",
-      mode: "live",
-      filter: "mismatch",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_admin_gene_rollup
-             WHERE COALESCE(current_asset_missing, 0) = 1`,
-    },
-    {
-      key: "live:pinned",
-      mode: "live",
-      filter: "pinned",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_admin_gene_rollup
-             WHERE COALESCE(admin_override, 0) = 1`,
-    },
-    {
-      key: "live:missing",
-      mode: "live",
-      filter: "missing",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_admin_gene_rollup
-             WHERE COALESCE(candidate_count, 0) = 0`,
-    },
-    {
-      key: "live:stale",
-      mode: "live",
-      filter: "stale",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_admin_gene_rollup
-             WHERE COALESCE(stale_count, 0) > 0`,
-    },
-    {
-      key: "all:all",
-      mode: "all",
-      filter: "all",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_portrait_assets pa
-             WHERE COALESCE(pa.asset_sha256, '') <> ''`,
-    },
-    {
-      key: "all:mismatch",
-      mode: "all",
-      filter: "mismatch",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_portrait_assets pa
-              LEFT JOIN icono_admin_gene_rollup gr
-                ON gr.gene_symbol = pa.gene_symbol
-             WHERE COALESCE(pa.asset_sha256, '') <> ''
-               AND COALESCE(gr.current_asset_missing, 0) = 1`,
-    },
-    {
-      key: "all:pinned",
-      mode: "all",
-      filter: "pinned",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_portrait_assets pa
-              LEFT JOIN icono_admin_gene_rollup gr
-                ON gr.gene_symbol = pa.gene_symbol
-             WHERE COALESCE(pa.asset_sha256, '') <> ''
-               AND COALESCE(gr.admin_override, 0) = 1`,
-    },
-    {
-      key: "all:missing",
-      mode: "all",
-      filter: "missing",
-      sql: `SELECT 0 AS total`,
-    },
-    {
-      key: "all:stale",
-      mode: "all",
-      filter: "stale",
-      sql: `SELECT COUNT(*) AS total
-              FROM icono_portrait_assets pa
-             WHERE COALESCE(pa.asset_sha256, '') <> ''
-               AND COALESCE(pa.is_stale, 0) = 1`,
-    },
-  ]
-  for (const item of countSelects) {
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_admin_gallery_count_cache (count_key, mode, filter, total, updated_at)
-       SELECT ?, ?, ?, COALESCE(total, 0), CURRENT_TIMESTAMP
-       FROM (${item.sql})`,
-    )
-      .bind(item.key, item.mode, item.filter)
-      .run()
-  }
-  return true
-}
-
-async function rebuildDashboardSummary(env) {
-  if (!env.ICONOPLASM_DB) return false
-  // Dashboard summary is a public-sync health number, so it must be scoped to
-  // the canonical published catalog. Asset rows and old rollup rows may exist
-  // for genes that were removed from icono_gene_catalog; those rows are useful
-  // in asset admin/debug surfaces, but they are not "missing live portraits" on
-  // the public site. In the 2026-05 incident, 137 non-catalog rollup rows made
-  // the overview say 19,090/19,160 with 70 no-live genes even though every
-  // canonical catalog row had a live portrait. Joining from icono_gene_catalog
-  // is the guardrail that keeps the Sync button from chasing ghosts.
+  // Migration 0095 maintains exact dashboard/gallery counters in the same
+  // transactions as their source rows. Reads and publication tail steps must
+  // never rebuild them by scanning the complete catalogue or asset history.
   const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COUNT(gc.gene_symbol) AS genes,
-       SUM(CASE WHEN COALESCE(gr.current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS with_live,
-       SUM(CASE WHEN COALESCE(gr.admin_override, 0) = 1 AND COALESCE(gr.current_asset_sha256, '') <> '' THEN 1 ELSE 0 END) AS overrides,
-       SUM(CASE WHEN COALESCE(gr.current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS drift,
-       SUM(CASE WHEN COALESCE(gr.current_asset_missing, 0) = 1 THEN 1 ELSE 0 END) AS current_asset_missing,
-       SUM(CASE WHEN gr.gene_symbol IS NULL OR COALESCE(gr.candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS missing,
-       SUM(CASE WHEN COALESCE(gr.current_asset_sha256, '') = '' THEN 1 ELSE 0 END) AS no_live,
-       SUM(COALESCE(gr.stale_count, 0)) AS stale_assets,
-       SUM(COALESCE(gr.legacy_count, 0)) AS legacy_assets,
-       SUM(CASE WHEN gr.gene_symbol IS NULL OR COALESCE(gr.candidate_count, 0) = 0 THEN 1 ELSE 0 END) AS zero_candidates,
-       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) = 1 THEN 1 ELSE 0 END) AS one_candidate,
-       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) BETWEEN 2 AND 5 THEN 1 ELSE 0 END) AS two_to_five_candidates,
-       SUM(CASE WHEN COALESCE(gr.candidate_count, 0) >= 6 THEN 1 ELSE 0 END) AS six_plus_candidates
-     FROM icono_gene_catalog gc
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = gc.gene_symbol`,
-  ).first()
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_admin_dashboard_summary (
-       summary_key,
-       genes,
-       with_live,
-       overrides,
-       drift,
-       current_asset_missing,
-       missing,
-       no_live,
-       stale_assets,
-       legacy_assets,
-       zero_candidates,
-       one_candidate,
-       two_to_five_candidates,
-       six_plus_candidates,
-       updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(summary_key) DO UPDATE SET
-       genes = excluded.genes,
-       with_live = excluded.with_live,
-       overrides = excluded.overrides,
-       drift = excluded.drift,
-       current_asset_missing = excluded.current_asset_missing,
-       missing = excluded.missing,
-       no_live = excluded.no_live,
-       stale_assets = excluded.stale_assets,
-       legacy_assets = excluded.legacy_assets,
-       zero_candidates = excluded.zero_candidates,
-       one_candidate = excluded.one_candidate,
-       two_to_five_candidates = excluded.two_to_five_candidates,
-       six_plus_candidates = excluded.six_plus_candidates,
-       updated_at = CURRENT_TIMESTAMP`,
+    "SELECT summary_key FROM icono_admin_dashboard_summary WHERE summary_key = ?",
   )
-    .bind(
-      ADMIN_DASHBOARD_SUMMARY_KEY,
-      Number(row?.genes || 0),
-      Number(row?.with_live || 0),
-      Number(row?.overrides || 0),
-      Number(row?.drift || 0),
-      Number(row?.current_asset_missing || 0),
-      Number(row?.missing || 0),
-      Number(row?.no_live || 0),
-      Number(row?.stale_assets || 0),
-      Number(row?.legacy_assets || 0),
-      Number(row?.zero_candidates || 0),
-      Number(row?.one_candidate || 0),
-      Number(row?.two_to_five_candidates || 0),
-      Number(row?.six_plus_candidates || 0),
-    )
-    .run()
-  await rebuildAdminGalleryCountCache(env)
+    .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
+    .first()
+  if (!row) throw new Error("Admin count summary is missing; migration 0095 is required")
   return true
 }
 
@@ -20927,8 +20749,7 @@ async function bulkRebuildAdminReadModels(env) {
        ON la.gene_symbol = pi.gene_symbol`,
   ).run()
 
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_dashboard_summary`).run()
-  await rebuildDashboardSummary(env)
+  await assertAdminCountSummary(env)
 
   await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup`).run()
   await env.ICONOPLASM_DB.prepare(
@@ -21246,7 +21067,7 @@ async function syncAdminReadModels(
     }
   }
   if (!skipDashboard && !partial) {
-    await rebuildDashboardSummary(env)
+    await assertAdminCountSummary(env)
     if (budgetState) {
       await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
     }
@@ -22696,19 +22517,6 @@ async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = nul
   return (Array.isArray(resp?.results) ? resp.results : []).map(mapSyncFinalizationJobRow)
 }
 
-async function countSyncFinalizationJobs(env, { whereSql = "1 = 1", bindArgs = [] } = {}) {
-  if (!env?.ICONOPLASM_DB) return 0
-  await ensureSyncFinalizationJobsTable(env)
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS count
-     FROM icono_sync_finalization_jobs
-     WHERE ${whereSql}`,
-  )
-    .bind(...(Array.isArray(bindArgs) ? bindArgs : []))
-    .first()
-  return Math.max(0, Number(row?.count || 0) || 0)
-}
-
 async function writeSyncFinalizationJobState(
   env,
   {
@@ -23040,21 +22848,9 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
-  const remainingBeforeFinalize = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase NOT IN (?, ?)`,
-    bindArgs: [
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-    ],
-  })
-  const pendingFinalizeCount = await countSyncFinalizationJobs(env, {
-    whereSql: `status <> ? AND phase = ?`,
-    bindArgs: [
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-    ],
-  })
+  const drainCounts = await readSyncFinalizationDrainCounts(env.ICONOPLASM_DB)
+  const remainingBeforeFinalize = Number(drainCounts.remaining_count)
+  const pendingFinalizeCount = Number(drainCounts.pending_finalize_count)
   if (remainingBeforeFinalize > 0 || pendingFinalizeCount <= 0) {
     // Ready-first finalization is the difference between progress and a budget
     // treadmill. A mixed ledger can contain thousands of rows already parked in
@@ -23067,17 +22863,8 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
     // or card-catalog KV until the full ledger is drained, which is the budget
     // fence that prevents per-scope KV fanout.
     if (scopedEnabled > 0 && remainingBeforeFinalize > 0) {
-      const scopedPendingFinalizeCount = await countSyncFinalizationJobs(env, {
-        whereSql: `phase = ?
-          AND status <> ?
-          AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-        bindArgs: [
-          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-          scopedEnabled,
-          scopedSymbolsJson,
-        ],
-      })
+      const scopedCounts = await readSyncFinalizationDrainCounts(env.ICONOPLASM_DB, scopedSymbols)
+      const scopedPendingFinalizeCount = Number(scopedCounts.pending_finalize_count)
       if (scopedPendingFinalizeCount > 0) {
         const completedAt = new Date().toISOString()
         await env.ICONOPLASM_DB.prepare(
@@ -24276,7 +24063,6 @@ async function resetAdminReadModelBootstrap(env) {
   await Promise.all([
     env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary`).run(),
     env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_gene_rollup`).run(),
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_dashboard_summary`).run(),
     env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup`).run(),
   ])
   adminReadModelState.ready = false
@@ -24349,7 +24135,7 @@ async function runAdminReadModelBootstrapStep(
     await rebuildGeneRollupForSymbols(env, symbols)
     const touchedVisionIds = await collectVisionIdsForSymbols(env, symbols)
     await rebuildVisionRollupsBatch(env, touchedVisionIds)
-    await rebuildDashboardSummary(env)
+    await assertAdminCountSummary(env)
 
     state = await writeAdminReadModelBootstrapState(env, {
       ...state,
@@ -24372,7 +24158,7 @@ async function runAdminReadModelBootstrapStep(
       cleanedVisionBatch,
     )
     if (visionIds.length === 0) {
-      await rebuildDashboardSummary(env)
+      await assertAdminCountSummary(env)
       state = await writeAdminReadModelBootstrapState(env, {
         ...state,
         status: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
@@ -24390,7 +24176,7 @@ async function runAdminReadModelBootstrapStep(
     }
 
     await rebuildVisionRollupsBatch(env, visionIds)
-    await rebuildDashboardSummary(env)
+    await assertAdminCountSummary(env)
     state = await writeAdminReadModelBootstrapState(env, {
       ...state,
       last_vision_id: visionIds[visionIds.length - 1] || state.last_vision_id,
@@ -24428,12 +24214,7 @@ async function ensureAdminReadModelsReady(env) {
       .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
       .first()
     if (!summary) {
-      // Do not bootstrap the entire admin read model from a live request.
-      // Production already crossed the point where a first-run full rebuild can
-      // blow D1 CPU limits, so the heavy backfill now happens in a migration.
-      // Request-time code only makes sure the lightweight dashboard row exists
-      // so the admin page degrades to empty data instead of throwing a 500.
-      await rebuildDashboardSummary(env)
+      throw new Error("Admin count summary is missing; migration 0095 is required")
     }
     adminReadModelState.ready = true
   })()
@@ -31506,6 +31287,17 @@ async function handlePublicGeneSearch(request, env) {
           ? iconoplasmCacheControl("publicSearch")
           : iconoplasmCacheControl("sensitive"),
     })
+  const sharedSymbols =
+    requestedScope === "shared" ? await readSharedGeneDiscoverySymbols(env) : undefined
+  if (sharedSymbols === null)
+    return json(
+      {
+        error: "Shared discoveries are temporarily unavailable",
+        code: "SHARED_DISCOVERY_PUBLICATION_UNAVAILABLE",
+      },
+      503,
+      { "Cache-Control": "no-store" },
+    )
   await warmCatalogCache(env)
   const limit = Math.max(
     1,
@@ -31526,7 +31318,7 @@ async function handlePublicGeneSearch(request, env) {
       candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
     }
   } else if (requestedScope === "shared") {
-    candidateSymbols = await readSharedGeneDiscoverySymbols(env)
+    candidateSymbols = sharedSymbols
   } else if (requestedScope === "starter") {
     candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
   } else {
@@ -39226,6 +39018,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     ) {
       throw e
     }
+    const unavailable = d1DailyRowReadLimitResponse(e)
+    if (unavailable) return asHead(request, unavailable)
     if (e instanceof IconoplasmSessionUnavailableError) {
       return asHead(
         request,

@@ -51,12 +51,46 @@ export function lineageAdmissionMigrationStatements() {
   return reviewedMigrationStatements("migrations-iconoplasm-authoring", lineageFilename, 1, 4)
 }
 
+export function adminCountsMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0095_transactional_admin_counts.sql",
+    9,
+    12,
+  )
+}
+
+export function inboxCountersMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0096_request_inbox_counters.sql",
+    15,
+    21,
+  )
+}
+
+export function snapshotRetirementMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm-authoring",
+    "0015_retire_materialized_snapshot_parts.sql",
+    0,
+    2,
+  )
+}
+
 function output() {
   const migrations = [
     ["FINALIZATION", filename, finalizationMigrationStatements()],
     ["AUTHORING_STREAM", authoringFilename, authoringStreamMigrationStatements()],
     ["UPLOAD_RESERVATION", uploadFilename, uploadReservationMigrationStatements()],
     ["LINEAGE_ADMISSION", lineageFilename, lineageAdmissionMigrationStatements()],
+    ["ADMIN_COUNTS", "0095_transactional_admin_counts.sql", adminCountsMigrationStatements()],
+    ["INBOX_COUNTERS", "0096_request_inbox_counters.sql", inboxCountersMigrationStatements()],
+    [
+      "SNAPSHOT_RETIREMENT",
+      "0015_retire_materialized_snapshot_parts.sql",
+      snapshotRetirementMigrationStatements(),
+    ],
   ]
   return (
     "// Generated from reviewed migrations; never accept caller SQL.\n" +

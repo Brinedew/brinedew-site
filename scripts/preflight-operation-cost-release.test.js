@@ -7,9 +7,16 @@ import {
 } from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
-const manifest = JSON.parse(
+const releaseManifest = JSON.parse(
   readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
 )
+// Historical four-migration fixture retains its original boundary regressions.
+const manifest = {
+  ...releaseManifest,
+  migrations: Object.fromEntries(
+    Object.entries(releaseManifest.migrations).filter(([key]) => !/\/(009[56]|0015)_/.test(key)),
+  ),
+}
 const time = Date.parse("2026-09-05T12:00:00Z")
 const sample = { day: "2026-09-05", measured_at: time, rows_read: 0, rows_written: 0, requests: 0 }
 const check = (observed, plan = manifest) =>
@@ -57,6 +64,23 @@ test("release reserves headroom for all reviewed migrations and three inventorie
   }
 })
 
+test("the counter release fits protected capacity only after historical migrations are verified applied", async () => {
+  const options = {
+    manifest: releaseManifest,
+    reader: { refresh: async () => sample },
+    now: () => time,
+  }
+  await assert.rejects(preflightOperationCostRelease(options), /EXCEEDS_DAILY_ALLOCATION/)
+  const pendingMigrations = [
+    "iconoplasm/0095_transactional_admin_counts.sql",
+    "iconoplasm/0096_request_inbox_counters.sql",
+    "iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql",
+  ]
+  const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
+  assert.equal(result.maximum.rows_read, 849714)
+  assert.equal(result.maximum.rows_written, 15528)
+})
+
 test("missing, stale, future, wrong-day and malformed telemetry fail closed", async () => {
   for (const observed of [
     null,
@@ -78,6 +102,26 @@ test("missing, stale, future, wrong-day and malformed telemetry fail closed", as
     }),
     /COST_ACCOUNT_USAGE_UNAVAILABLE/,
   )
+})
+
+test("applied migrations do not consume new-release headroom; unknown or duplicate pending names fail closed", async () => {
+  const verify = (pendingMigrations) =>
+    preflightOperationCostRelease({
+      manifest,
+      pendingMigrations,
+      reader: { refresh: async () => sample },
+      now: () => time,
+    })
+  const none = await verify([])
+  assert.deepEqual(none.required, { rows_read: 3600, rows_written: 0, requests: 40 })
+  assert.equal(none.maximum.rows_written, 0)
+  const key = "iconoplasm-authoring/0013_strict_upload_reservations.sql"
+  const one = await verify([key])
+  assert.equal(one.required.rows_written, 32)
+  assert.equal(one.required.rows_read, 7952)
+  assert.ok(one.maximum.rows_written > 0)
+  await assert.rejects(verify([key, key]), /MIGRATION_NOT_REVIEWED/)
+  await assert.rejects(verify(["iconoplasm/unknown.sql"]), /MIGRATION_NOT_REVIEWED/)
 })
 
 test("invalid forecast fails before contacting Cloudflare", async () => {

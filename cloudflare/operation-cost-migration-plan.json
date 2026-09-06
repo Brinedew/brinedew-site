@@ -2,6 +2,26 @@
   "schema": "iconoplasm.migrationCostPlan.v1",
   "inventory_prediction": { "rows_read": 600, "rows_written": 0, "requests": 1 },
   "migrations": {
+    "iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql": {
+      "adapter_id": "iconoplasm-authoring-migration-0015",
+      "arguments": { "max_leases": 1024, "max_schema_rows": 512 },
+      "prediction": { "rows_read": 6274, "rows_written": 8, "requests": 1 }
+    },
+    "iconoplasm/0095_transactional_admin_counts.sql": {
+      "adapter_id": "iconoplasm-migration-0095",
+      "arguments": {
+        "max_catalog": 20000,
+        "max_rollup": 20000,
+        "max_assets": 50000,
+        "max_schema_rows": 512
+      },
+      "prediction": { "rows_read": 376524, "rows_written": 128, "requests": 1 }
+    },
+    "iconoplasm/0096_request_inbox_counters.sql": {
+      "adapter_id": "iconoplasm-migration-0096",
+      "arguments": { "max_notifications": 3000, "max_schema_rows": 512 },
+      "prediction": { "rows_read": 40520, "rows_written": 7628, "requests": 1 }
+    },
     "iconoplasm-authoring/0014_bounded_lineage_upload_admission.sql": {
       "adapter_id": "iconoplasm-authoring-migration-0014",
       "arguments": { "max_rows": 50000, "max_indexed_rows": 768, "max_schema_rows": 256 },

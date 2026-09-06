@@ -6,6 +6,7 @@ import {
 } from "./iconoplasm-generation-lease.js"
 
 import { IconoplasmGenerationSourceError } from "./lib/iconoplasm-generation-provenance.js"
+import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
 
 const CACHE_CONTROL = "private, no-store"
 
@@ -37,6 +38,8 @@ async function parseJson(request) {
 }
 
 function rejected(error, fallbackCode, fallbackMessage) {
+  const unavailable = d1DailyRowReadLimitResponse(error)
+  if (unavailable) return unavailable
   const expected =
     error instanceof IconoplasmGenerationLeaseError ||
     error instanceof IconoplasmGenerationSourceError

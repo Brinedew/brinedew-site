@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
+import { availableParallelism } from "node:os"
 
 const explicitTestArgs = process.argv.slice(2)
 
@@ -67,10 +68,17 @@ if (testFiles.length === 0) {
 }
 
 const tsxCliPath = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url))
-const result = spawnSync(process.execPath, [tsxCliPath, "--test", ...testFiles], {
-  cwd: process.cwd(),
-  stdio: "inherit",
-})
+// Workerd and PowerShell integration files spawn their own processes. Starting
+// one test process per host CPU starves bounded child startup checks on Windows.
+const concurrency = Math.min(4, availableParallelism())
+const result = spawnSync(
+  process.execPath,
+  [tsxCliPath, "--test", `--test-concurrency=${concurrency}`, ...testFiles],
+  {
+    cwd: process.cwd(),
+    stdio: "inherit",
+  },
+)
 
 if (result.error) {
   console.error(result.error.message)

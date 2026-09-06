@@ -7,30 +7,10 @@ import {
   createManifestationSnapshot,
   readManifestationSnapshotPage,
   completeManifestationSnapshot,
-  sweepManifestationSnapshots,
 } from "./manifestation-authority-sync.js"
 
 const cursorSecret = "streamed-snapshot-hostile-tests-secret-00000001"
 const now = "2030-01-01T00:00:00.000Z"
-
-test("legacy cleanup deletes at most 250 copied parts and retains unfinished leases", async (t) => {
-  const db = new TestD1()
-  t.after(() => db.close())
-  await registerGeneIdentity(db, { geneId: "gene_cleanup", canonicalSymbol: "CLEAN" })
-  const lease = await createManifestationSnapshot(db, {
-    consumerId: "cleanup_reader",
-    cursorSecret,
-    now,
-  })
-  const insert = db.raw.prepare(`INSERT INTO icono_manifestation_snapshot_parts
-    (snapshot_id,ordinal,part_kind,source_key,gene_id,part_json,payload_sha256)
-    VALUES (?,?,'authority_event',?,'gene_cleanup','{}',?)`)
-  for (let i = 1; i <= 260; i++) insert.run(lease.snapshot_id, i, String(i), "a".repeat(64))
-  const options = { now: "2030-01-03T00:00:00.000Z" }
-  assert.deepEqual(await sweepManifestationSnapshots(db, options), { purged: 0, parts_purged: 250 })
-  assert.equal(row(db, "SELECT count(*) AS n FROM icono_manifestation_snapshot_parts").n, 10)
-  assert.deepEqual(await sweepManifestationSnapshots(db, options), { purged: 1, parts_purged: 10 })
-})
 
 test("large bootstrap streams immutable bounded pages with zero copied rows and no GET writes", async (t) => {
   const db = new TestD1()
@@ -65,7 +45,13 @@ test("large bootstrap streams immutable bounded pages with zero copied rows and 
   assert.equal(last.has_more, false)
   assert.equal(last.total_parts, 260)
   assert.equal(row(db, "SELECT total_changes() AS writes").writes, before)
-  assert.equal(row(db, "SELECT count(*) AS n FROM icono_manifestation_snapshot_parts").n, 0)
+  assert.equal(
+    row(
+      db,
+      "SELECT count(*) AS n FROM sqlite_schema WHERE name='icono_manifestation_snapshot_parts'",
+    ).n,
+    0,
+  )
   const all = [...first.parts, ...last.parts]
   assert.equal(
     all.some((p) => p.gene_id === "gene_after_snapshot"),
