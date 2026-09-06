@@ -111,6 +111,7 @@ import {
 export { IconoplasmManifestationCutoverCoordinator }
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { readBrinedewAccount } from "./lib/brinedew-account-identity.js"
+import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
 import {
   drainBrinedewAuthorityAccountProjectionOutbox,
   synchronizeActiveBrinedewAccountToManifestationAuthority,
@@ -32309,11 +32310,17 @@ export async function drainIconoplasmManifestationAuthorityProjection(
   if (!env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
     throw new Error("Manifestation authority projection bindings are missing")
   }
+  const invocationBudget = createD1InvocationBudget()
+  env = { ...env }
+  for (const name of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB", "ICONOPLASM_AUDIT_DB"]) {
+    if (env[name]?.prepare) env[name] = invocationBudget.binding(env[name])
+  }
   const drained = await drainManifestationAuthorityProjectionOutbox({
     primaryDb: env.ICONOPLASM_DB,
     authoringDb: env.ICONOPLASM_AUTHORING_DB,
     limit,
     priorityEventId,
+    invocationBudget,
     projectAssignmentEvent: async (event) => {
       await projectCaretakerAssignmentNotification(env.ICONOPLASM_DB, event)
       return projectCaretakerAssignmentEventToVoteCoordinator(env, event)
@@ -32368,7 +32375,12 @@ async function resolveActiveCaretakerAccountSession(request, env) {
     primaryDb: env.DB,
     authoringDb: env.ICONOPLASM_AUTHORING_DB,
     accountId,
-    wakeManifestationProjection: () => drainIconoplasmManifestationAuthorityProjection(env, 10),
+    wakeManifestationProjection: (event) => {
+      if (!event?.event_id) throw new Error("Accepted account projection event is missing")
+      return drainIconoplasmManifestationAuthorityProjection(env, 1, {
+        priorityEventId: event.event_id,
+      })
+    },
   })
   return Object.freeze({ account_id: accountId })
 }
@@ -32523,10 +32535,12 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     isAdmin: isIconoplasmAdmin,
     json,
     resolveActiveAccount: resolveActiveCaretakerAccountSession,
-    wakeAuthorityProjection: (env, event) =>
-      drainIconoplasmManifestationAuthorityProjection(env, event?.event_id ? 1 : 50, {
-        priorityEventId: event?.event_id || null,
-      }),
+    wakeAuthorityProjection: (env, event) => {
+      if (!event?.event_id) throw new Error("Accepted authority mutation event is missing")
+      return drainIconoplasmManifestationAuthorityProjection(env, 1, {
+        priorityEventId: event.event_id,
+      })
+    },
   }),
   ...createIconoplasmCaretakerNotificationHandlers({
     json,

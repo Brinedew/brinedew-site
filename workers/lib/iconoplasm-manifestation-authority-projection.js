@@ -1,7 +1,11 @@
 import { readCanonicalProjectionRecord } from "../iconoplasm/caretaker/manifestation-authority.js"
+import { createD1InvocationBudget } from "./d1-invocation-budget.js"
 
 const ACTIVE_AUTHORITY_MODE = "authoritative"
 const CUTOVER_AUTHORITY_MODE = "shadow_frozen"
+// Exact projection, assignment notification, one event-scoped public wake and
+// terminal bookkeeping use at most 14 statements; retain failure-path margin.
+const PROJECTION_STATEMENT_RESERVATION = 16
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const GENERATED_DERIVATIVE_FIELDS = Object.freeze([
   "recipe_id",
@@ -867,12 +871,15 @@ export async function drainManifestationAuthorityProjectionOutbox(
     now = new Date(),
     priorityEventId = null,
     onIntegrityFailure = null,
+    invocationBudget = createD1InvocationBudget(),
   } = {},
   { readCanonical = readCanonicalProjectionRecord } = {},
 ) {
   if (!authoringDb?.prepare) {
     projectionError("AUTHORING_DB_REQUIRED", "ICONOPLASM_AUTHORING_DB binding missing")
   }
+  authoringDb = invocationBudget.binding(authoringDb)
+  primaryDb = invocationBudget.binding(primaryDb)
   const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
   const clock = now instanceof Date ? now : new Date(now)
   if (!Number.isFinite(clock.getTime())) throw new TypeError("Invalid projection drain timestamp")
@@ -884,6 +891,7 @@ export async function drainManifestationAuthorityProjectionOutbox(
   const rows = pending.rows
   const results = []
   for (const row of rows) {
+    if (!invocationBudget.canStart(PROJECTION_STATEMENT_RESERVATION)) break
     let envelope = null
     try {
       envelope = projectionEnvelope(row)
@@ -951,7 +959,8 @@ export async function drainManifestationAuthorityProjectionOutbox(
     attempted: results.length,
     published: results.filter((item) => item.status === "published").length,
     failed: results.filter((item) => item.status === "failed").length,
-    has_more: pending.hasMore,
+    has_more: pending.hasMore || results.length < rows.length,
+    statement_count: invocationBudget.used,
     results: Object.freeze(results),
   })
 }

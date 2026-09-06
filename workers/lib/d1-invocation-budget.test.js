@@ -55,6 +55,7 @@ test("D1 invocation admission is shared across bindings and refuses a whole over
   })
   assert.equal(first.calls + second.calls, 50)
   assert.equal(budget.binding(first), a)
+  assert.equal(budget.binding(a), a)
 })
 
 test("failed D1 sends remain charged and foreign statements cannot bypass batch admission", async () => {

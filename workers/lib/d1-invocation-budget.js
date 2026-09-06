@@ -61,6 +61,7 @@ export function createD1InvocationBudget() {
         },
       })
       bindings.set(db, binding)
+      bindings.set(binding, binding)
       return binding
     },
   })
