@@ -2057,13 +2057,13 @@ test("vote projection completion is generation-checked so stale workers cannot e
     "utf8",
   )
   const enqueueStart = source.indexOf("async function enqueueVoteProjectionRefreshJob")
-  const clearStart = source.indexOf("async function clearVoteProjectionRefreshJob")
+  const clearStart = source.indexOf("const cleared = await env.ICONOPLASM_DB.batch")
   const failureStart = source.indexOf("async function recordVoteProjectionRefreshFailure")
   assert.notEqual(enqueueStart, -1)
   assert.notEqual(clearStart, -1)
   assert.notEqual(failureStart, -1)
-  const enqueue = source.slice(enqueueStart, clearStart)
-  const clear = source.slice(clearStart, failureStart)
+  const enqueue = source.slice(enqueueStart, failureStart)
+  const clear = source.slice(clearStart, source.indexOf("} catch (error)", clearStart))
   const failure = source.slice(
     failureStart,
     source.indexOf("function iconoplasmVoteProjectionQueueDisabled"),
