@@ -142,6 +142,7 @@ export async function preflightOperationCostRelease({
   for (const meter of Object.keys(required)) {
     if (!Number.isSafeInteger(sample[meter]) || sample[meter] < 0)
       throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
+    if (KV_COST_METERS.includes(meter) && required[meter] === 0) continue
     if (sample[meter] + required[meter] > (ACCOUNT_CEILINGS[meter] ?? KV_ACCOUNT_CEILINGS[meter]))
       throw new Error(`COST_RELEASE_ACCOUNT_HEADROOM: ${meter}`)
   }

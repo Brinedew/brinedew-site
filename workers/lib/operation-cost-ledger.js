@@ -173,13 +173,17 @@ export class OperationCostLedger {
             this.now() - kvMeasuredAt <= 60_000,
           "COST_ACCOUNT_USAGE_UNAVAILABLE",
         )
-        this.storage.sql.exec(
-          `INSERT INTO operation_cost_kv_account_usage VALUES (?, ?, ?)
-          ON CONFLICT(day) DO UPDATE SET measured_at = excluded.measured_at, usage = excluded.usage`,
-          sample.day,
-          kvMeasuredAt,
-          JSON.stringify(values),
+        if (
+          previous?.kv_measured_at !== kvMeasuredAt ||
+          KV_COST_METERS.some((m) => previous?.[m] !== values[m])
         )
+          this.storage.sql.exec(
+            `INSERT INTO operation_cost_kv_account_usage VALUES (?, ?, ?)
+          ON CONFLICT(day) DO UPDATE SET measured_at = excluded.measured_at, usage = excluded.usage`,
+            sample.day,
+            kvMeasuredAt,
+            JSON.stringify(values),
+          )
       }
       const next = { day: sample.day, measured_at: sample.measured_at }
       for (const meter of METERS) next[meter] = Math.max(sample[meter], previous?.[meter] ?? 0)
@@ -337,6 +341,8 @@ export class OperationCostLedger {
         this.storage.sql.exec("DELETE FROM operation_cost_plans WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_days WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_account_usage WHERE day < ?", oldest)
+        this.storage.sql.exec("DELETE FROM operation_cost_kv_days WHERE day < ?", oldest)
+        this.storage.sql.exec("DELETE FROM operation_cost_kv_account_usage WHERE day < ?", oldest)
       }
       return plan
     })
@@ -403,6 +409,10 @@ export class OperationCostLedger {
           plan.used[meter] + bound[meter] <= plan.ceiling[meter],
           "COST_TWICE_PREDICTION_LIMIT",
         )
+        // A reviewed capability with no D1 access cannot spend D1 capacity.
+        // Preserve the existing D1 product gate for either kind of D1 work,
+        // while allowing independently budgeted KV work during a D1 outage.
+        if (meter !== "requests" && bound.rows_read === 0 && bound.rows_written === 0) continue
         requireValue(
           usage[meter] + otherUsage[meter] + bound[meter] <=
             LIMITS[meter] - (meter === "requests" ? CONTROL_REQUEST_HEADROOM : 0),
@@ -435,6 +445,7 @@ export class OperationCostLedger {
             (plan.used[meter] ?? 0) + maximum <= (plan.ceiling[meter] ?? 0),
             "COST_TWICE_PREDICTION_LIMIT",
           )
+          if (maximum === 0) continue
           requireValue(
             kvUsage[meter] + other + maximum <= KV_OPERATOR_LIMITS[meter],
             "COST_SHARED_DAILY_LIMIT",

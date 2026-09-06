@@ -103,6 +103,13 @@ the reservation. Release retries inherit their spending and cannot renew the
 two-times-prediction ceiling. These controls cover this initialization adapter;
 they do not yet certify all publication or background KV work.
 
+Exhaustion is checked against the resources an adapter can actually spend. The
+KV-only capability has no D1 access and can therefore run with healthy KV/Worker
+headroom during a D1 outage; every adapter that touches D1 retains both D1 gates.
+A zero-delete/zero-list bound cannot consume those KV allowances. Identical cached
+KV telemetry causes no further storage write, and the auxiliary KV day tables
+use the same seven-day retention as the original authority tables.
+
 ### Retired snapshot storage
 
 Migration 0015 removes only `icono_manifestation_snapshot_parts`, the old copied
