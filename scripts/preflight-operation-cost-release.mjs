@@ -7,6 +7,22 @@ import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/oper
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 
+export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
+  if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
+  const response = await fetcher(
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations",
+    {
+      method: "HEAD",
+      redirect: "error",
+      signal: AbortSignal.timeout(20_000),
+      headers: { "x-iconoplasm-admin-token": token },
+    },
+  )
+  if (response.status === 401 || response.status === 403)
+    throw new Error("COST_RELEASE_AUTHENTICATION_FAILED")
+  if (!response.ok) throw new Error(`COST_RELEASE_ADMISSION_UNAVAILABLE_HTTP_${response.status}`)
+}
+
 // This read-only check prevents a known refusal from pausing production. The
 // server still reserves every operation atomically; telemetry is not a permit.
 export async function preflightOperationCostRelease({ manifest, reader, now = Date.now }) {
@@ -103,6 +119,9 @@ async function main() {
   process.stdout.write(
     JSON.stringify(await preflightOperationCostRelease({ manifest, reader })) + "\n",
   )
+  // Verify the credential against the current authority before a deployment
+  // can pause application traffic. This HEAD performs no application D1 work.
+  await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

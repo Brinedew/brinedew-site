@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
-import { preflightOperationCostRelease } from "./preflight-operation-cost-release.mjs"
+import { preflightOperationCostRelease, verifyReleaseAuthentication } from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
 const manifest = JSON.parse(
@@ -15,6 +15,27 @@ const check = (observed, plan = manifest) =>
     reader: { refresh: async () => observed },
     now: () => time,
   })
+
+test("release authentication is checked without D1 work, redirects or credential output", async () => {
+  let calls = 0
+  const fetcher = async (url, options) => {
+    calls++
+    assert.equal(url, "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations")
+    assert.equal(options.method, "HEAD")
+    assert.equal(options.redirect, "error")
+    assert.equal(options.headers["x-iconoplasm-admin-token"], "test-secret")
+    return new Response(null)
+  }
+  await assert.rejects(verifyReleaseAuthentication({ fetcher }), /TOKEN_REQUIRED/)
+  assert.equal(calls, 0)
+  await verifyReleaseAuthentication({ token: "test-secret", fetcher })
+  assert.equal(calls, 1)
+  for (const status of [401, 403, 429, 503])
+    await assert.rejects(
+      verifyReleaseAuthentication({ token: "test-secret", fetcher: async () => new Response(null, { status }) }),
+      status === 401 || status === 403 ? /AUTHENTICATION_FAILED/ : /ADMISSION_UNAVAILABLE_HTTP_/,
+    )
+})
 
 test("release reserves headroom for all reviewed migrations and three inventories", async () => {
   const result = await check(sample)
