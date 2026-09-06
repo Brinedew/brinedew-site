@@ -167,7 +167,12 @@ export async function projectBrinedewAccountToManifestationAuthority(
     })
     await markDelivered(primaryDb, row, attemptedAt)
     if (result?.accepted_event_sequence && typeof wakeManifestationProjection === "function") {
-      await wakeManifestationProjection()
+      await wakeManifestationProjection(
+        Object.freeze({
+          event_id: result.event_id,
+          event_sequence: Number(result.accepted_event_sequence),
+        }),
+      )
     }
     return Object.freeze({ ...result, account_id: accountId })
   } catch (error) {

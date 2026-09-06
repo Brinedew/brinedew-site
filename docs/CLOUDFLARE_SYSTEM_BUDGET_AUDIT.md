@@ -337,6 +337,19 @@ account withdrawal still changes a lineage's revision lifecycle rows, and fallba
 selection still needs a bounded-history proof. This local isolation and statement
 admission fix does not certify scheduler capacity or deployment.
 
+Manifestation recovery now shares one statement budget with its assignment and
+public-publication callbacks, reserving 16 statements before another event starts.
+A full-schema workerd integration test exercises the actual runtime wrapper and
+both callback paths: three complete gene projections use 46 statements and six
+mocked coordinator calls, with 114 reads and 78 writes across primary/authoring
+for the first batch. Ten genes finish across four invocations. These figures
+exclude the mocked coordinators' own work and are not a full journey total.
+Interactive account synchronization now wakes only its exact accepted event;
+admin mutation callbacks likewise reject a missing event ID instead of draining
+an unrelated 50-event backlog. The original mutation and its projection still
+need to fit one shared HTTP invocation envelope; the scheduled-job proof does
+not establish that larger bound.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in
