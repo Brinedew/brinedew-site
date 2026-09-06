@@ -4,6 +4,7 @@ import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-
 import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
 import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
 import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-snapshot-retirement-adapter.js"
+import { createVoteJobVersionMigrationCostAdapter } from "./operation-cost-vote-job-migration-adapter.js"
 import {
   createAdminCountsMigrationCostAdapter,
   createInboxCountersMigrationCostAdapter,
@@ -13,6 +14,10 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0098",
+      createVoteJobVersionMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
     [
       "iconoplasm-authoring-migration-0016",
       createAssignmentLookupMigrationCostAdapter({
