@@ -1,6 +1,8 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
 import { executeOperationCostD1Batch } from "./operation-cost-d1-meter.js"
 import {
+  CANONICAL_LIFECYCLE_GUARDS_MIGRATION_NAME,
+  CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS,
   ADMIN_COUNTS_MIGRATION_NAME,
   ADMIN_COUNTS_MIGRATION_STATEMENTS,
   INBOX_COUNTERS_MIGRATION_NAME,
@@ -14,6 +16,14 @@ import {
 // Fixed server-owned SQL only. Each size guard stops at its envelope plus one;
 // guards, DDL, seed and journal insertion execute in one atomic D1 batch.
 const specifications = {
+  canonicalLifecycleGuards: {
+    resource: "iconoplasm-authoring",
+    name: CANONICAL_LIFECYCLE_GUARDS_MIGRATION_NAME,
+    sql: CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS,
+    tables: {},
+    writes: () => 32,
+    readPasses: 0,
+  },
   assignmentLookup: {
     resource: "iconoplasm-authoring",
     name: ASSIGNMENT_LOOKUP_MIGRATION_NAME,
@@ -134,3 +144,6 @@ export const createDeliveryCursorMigrationCostAdapter = (options) =>
 
 export const createAssignmentLookupMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("assignmentLookup", options)
+
+export const createCanonicalLifecycleGuardsMigrationCostAdapter = (options) =>
+  createCounterMigrationAdapter("canonicalLifecycleGuards", options)
