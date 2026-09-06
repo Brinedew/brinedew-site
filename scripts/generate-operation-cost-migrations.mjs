@@ -108,6 +108,16 @@ export function voteJobVersionMigrationStatements() {
 function output() {
   const migrations = [
     [
+      "CANONICAL_LIFECYCLE_GUARDS",
+      "0017_canonical_lifecycle_keyed_guards.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm-authoring",
+        "0017_canonical_lifecycle_keyed_guards.sql",
+        3,
+        6,
+      ),
+    ],
+    [
       "VOTE_JOB_VERSION",
       "0098_vote_projection_job_version.sql",
       voteJobVersionMigrationStatements(),

@@ -1,4 +1,13 @@
 // Generated from reviewed migrations; never accept caller SQL.
+export const CANONICAL_LIFECYCLE_GUARDS_MIGRATION_NAME = "0017_canonical_lifecycle_keyed_guards.sql"
+export const CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS = Object.freeze([
+  "DROP TRIGGER icono_canonical_manifestation_reselect_before_ineligible;",
+  "CREATE TRIGGER icono_canonical_manifestation_reselect_before_ineligible\nBEFORE UPDATE OF status ON icono_manifestations\nWHEN OLD.status = 'active' AND NEW.status <> 'active'\nBEGIN\n  SELECT CASE WHEN EXISTS (\n    SELECT 1 FROM icono_manifestation_heads h\n    WHERE h.gene_id = OLD.gene_id\n      AND h.canonical_manifestation_id = OLD.manifestation_id\n  ) THEN RAISE(ABORT, 'canonical_manifestation_must_be_reselected_first') END;\nEND;",
+  "DROP TRIGGER icono_canonical_revision_reselect_before_ineligible;",
+  "CREATE TRIGGER icono_canonical_revision_reselect_before_ineligible\nBEFORE UPDATE OF status ON icono_manifestation_revision_lifecycle\nWHEN OLD.status = 'active' AND NEW.status <> 'active'\nBEGIN\n  SELECT CASE WHEN EXISTS (\n    SELECT 1 FROM icono_manifestation_revisions r\n    JOIN icono_manifestations m ON m.manifestation_id = r.manifestation_id\n    JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id\n    WHERE r.manifestation_revision_id = OLD.manifestation_revision_id\n      AND h.canonical_revision_id = OLD.manifestation_revision_id\n  ) THEN RAISE(ABORT, 'canonical_revision_must_be_reselected_first') END;\nEND;",
+  "DROP TRIGGER icono_canonical_storage_reselect_before_delete;",
+  "CREATE TRIGGER icono_canonical_storage_reselect_before_delete\nBEFORE DELETE ON icono_manifestation_revision_storage_secrets\nBEGIN\n  SELECT CASE WHEN EXISTS (\n    SELECT 1 FROM icono_manifestation_revisions r\n    JOIN icono_manifestations m ON m.manifestation_id = r.manifestation_id\n    JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id\n    WHERE r.manifestation_revision_id = OLD.manifestation_revision_id\n      AND h.canonical_revision_id = OLD.manifestation_revision_id\n  ) THEN RAISE(ABORT, 'canonical_revision_storage_must_be_reselected_first') END;\nEND;"
+])
 export const VOTE_JOB_VERSION_MIGRATION_NAME = "0098_vote_projection_job_version.sql"
 export const VOTE_JOB_VERSION_MIGRATION_STATEMENTS = Object.freeze([
   "ALTER TABLE icono_vote_projection_refresh_jobs\nADD COLUMN job_version INTEGER NOT NULL DEFAULT 1;"
