@@ -10,9 +10,23 @@ import {
 const ROOT = new URL("../", import.meta.url)
 const ENDPOINT = "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations"
 const DATABASES = {
-  geneguessr: "migrations",
-  iconoplasm: "migrations-iconoplasm",
-  "iconoplasm-authoring": "migrations-iconoplasm-authoring",
+  // Benchmark owns two tables in the same database and migration journal.
+  geneguessr: ["migrations", "workers/benchmark/migrations"],
+  iconoplasm: ["migrations-iconoplasm"],
+  "iconoplasm-authoring": ["migrations-iconoplasm-authoring"],
+}
+
+function isReviewedHistoricalMigration(resource, name, applied) {
+  // Production first received the minimal comments table under this name.
+  // The committed 0045 and 0046 explicitly document that earlier variant.
+  // Recognize its journal row only alongside both completed canonical repairs;
+  // never remove it, replay it, or treat it as a substitute for either repair.
+  return (
+    resource === "iconoplasm" &&
+    name === "0045_add_gene_comments.sql" &&
+    applied.has("0045_gene_comments_and_clans_backend.sql") &&
+    applied.has("0046_gene_comment_columns.sql")
+  )
 }
 
 function requirePrediction(prediction) {
@@ -66,7 +80,7 @@ export async function runAdmittedMigrations({
     return receipt.result
   }
   const pending = []
-  for (const [resource, directory] of Object.entries(DATABASES)) {
+  for (const [resource, directories] of Object.entries(DATABASES)) {
     const results = await execute(
       `${resource}-migration-inventory`,
       manifest.inventory_prediction,
@@ -75,10 +89,18 @@ export async function runAdmittedMigrations({
     const rows = results?.[0]?.results
     if (!Array.isArray(rows) || rows.length >= 513)
       throw new Error("COST_MIGRATION_INVENTORY_TRUNCATED")
-    const expected = files(directory)
+    const expected = directories.flatMap((directory) => files(directory))
+    if (new Set(expected).size !== expected.length)
+      throw new Error(`COST_MIGRATION_SOURCE_NAME_COLLISION: ${resource}`)
     const applied = new Set(rows.map((row) => row.name))
-    if (applied.size !== rows.length || [...applied].some((name) => !expected.includes(name)))
-      throw new Error("COST_MIGRATION_HISTORY_DIVERGED")
+    if (
+      applied.size !== rows.length ||
+      [...applied].some(
+        (name) =>
+          !expected.includes(name) && !isReviewedHistoricalMigration(resource, name, applied),
+      )
+    )
+      throw new Error(`COST_MIGRATION_HISTORY_DIVERGED: ${resource}`)
     for (const name of expected) {
       if (applied.has(name)) continue
       const reviewed = manifest.migrations[`${resource}/${name}`]

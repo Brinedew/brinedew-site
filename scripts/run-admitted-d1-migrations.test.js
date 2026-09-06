@@ -33,6 +33,7 @@ function harness(extra = false) {
       manifest,
       releaseId: "test-release",
       files: (directory) => {
+        if (directory === "workers/benchmark/migrations") return []
         const resource = resources.find((resource) => directories[resource] === directory)
         return [
           "0001.sql",
@@ -87,5 +88,49 @@ test("every inventory and migration registers before execution and records its r
     assert.equal(calls[index].suffix, "/register")
     assert.equal(calls[index + 1].suffix, "/execute")
     assert.equal(calls[index].body.id, calls[index + 1].body.operation_id)
+  }
+})
+
+test("shared benchmark history and the repaired legacy comments journal remain recognized", async () => {
+  const benchmark = ["0001_benchmark_init.sql", "0002_add_session_state.sql"]
+  const repairs = ["0045_gene_comments_and_clans_backend.sql", "0046_gene_comment_columns.sql"]
+  for (const defect of [null, "unknown", "duplicate", "missing-repair"]) {
+    const { options, calls } = harness()
+    const originalFiles = options.files
+    options.files = (directory) =>
+      directory === "workers/benchmark/migrations"
+        ? benchmark
+        : [...originalFiles(directory), ...(directory === "migrations-iconoplasm" ? repairs : [])]
+    const originalSend = options.send
+    options.send = async (suffix, method, body) => {
+      const result = await originalSend(suffix, method, body)
+      if (suffix === "/execute" && body.adapter_id.endsWith("-migration-inventory")) {
+        const resource = body.adapter_id.replace(/-migration-inventory$/, "")
+        const names = [
+          "0001.sql",
+          ...(resource === "geneguessr" ? benchmark : []),
+          ...(resource === "iconoplasm" ? [...repairs, "0045_add_gene_comments.sql"] : []),
+        ]
+        if (resource === "iconoplasm") {
+          if (defect === "unknown") names.push("0045_unknown_variant.sql")
+          if (defect === "duplicate") names.push("0045_add_gene_comments.sql")
+          if (defect === "missing-repair") names.splice(names.indexOf(repairs[1]), 1)
+        }
+        result.result = [{ results: names.map((name, id) => ({ id: id + 1, name })) }]
+      }
+      return result
+    }
+    if (defect) {
+      await assert.rejects(runAdmittedMigrations(options), /HISTORY_DIVERGED: iconoplasm/)
+      assert.equal(
+        calls.filter(
+          (call) =>
+            call.suffix === "/execute" && !call.body.adapter_id.endsWith("-migration-inventory"),
+        ).length,
+        0,
+      )
+    } else {
+      assert.equal((await runAdmittedMigrations(options)).migrations_applied, 4)
+    }
   }
 })
