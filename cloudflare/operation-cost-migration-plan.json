@@ -34,7 +34,7 @@
     "iconoplasm/0096_request_inbox_counters.sql": {
       "adapter_id": "iconoplasm-migration-0096",
       "arguments": { "max_notifications": 3000, "max_schema_rows": 512 },
-      "prediction": { "rows_read": 40520, "rows_written": 7628, "requests": 1 }
+      "prediction": { "rows_read": 40520, "rows_written": 9256, "requests": 1 }
     },
     "iconoplasm-authoring/0014_bounded_lineage_upload_admission.sql": {
       "adapter_id": "iconoplasm-authoring-migration-0014",

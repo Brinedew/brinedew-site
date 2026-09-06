@@ -34,9 +34,10 @@ const specifications = {
     name: INBOX_COUNTERS_MIGRATION_NAME,
     sql: INBOX_COUNTERS_MIGRATION_STATEMENTS,
     tables: { max_notifications: "icono_request_notifications" },
-    // One notification index entry; at most two member entries, one group and
-    // one user-summary update per valid receipt. Include DDL/journal metadata.
-    writes: (args) => 5 * args.max_notifications + 256,
+    // Two notification indexes, at most four inbox writes per sent receipt.
+    // Each two-write delivery group needs an eligible, non-sent member, so its
+    // seed cannot overlap that member's inbox work. Include DDL/journal rows.
+    writes: (args) => 6 * args.max_notifications + 512,
     readPasses: 16,
   },
 }

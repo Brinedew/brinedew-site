@@ -26,13 +26,16 @@ test("operator refuses absent or malformed predictions before credential and net
             shell,
             ["-NoProfile", "-File", script, "-Action", "Register", "-PlanPath", planPath],
             {
-              timeout: 5000,
+              // This tests preflight refusal, not PowerShell startup latency.
+              // Concurrent workerd fixtures can delay Windows child startup.
+              timeout: 30000,
+              windowsHide: true,
               encoding: "utf8",
               stdio: ["ignore", "pipe", "pipe"],
             },
           ),
         (error) => {
-          assert.equal(error.status, 1)
+          assert.equal(error.status, 1, error.code || error.message)
           assert.match(error.stderr, new RegExp(code))
           assert.doesNotMatch(error.stderr, /telemetry|budget exhausted|TOKEN is unavailable/)
           return true

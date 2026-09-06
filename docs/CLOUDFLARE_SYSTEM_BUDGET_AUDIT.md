@@ -109,8 +109,9 @@ Release preflight now admits a read-only inventory through the installed
 authority before staging new code. It pins that installed adapter's identities;
 DDL still requires the new release identities. The forecast covers only the
 verified pending set, and unknown/divergent history stops before DDL. Historical
-migration receipts are preserved. The two counter migrations, transport retirement
-and three inventories reserve 849,714 reads / 15,528 writes within the operator allocation. A hypothetical
+migration receipts are preserved. The two counter migrations (including delivery
+readiness), reconciliation cursor, transport retirement and three inventories
+reserve 882,738 reads / 18,816 writes within the operator allocation. A hypothetical
 release needing every historical migration is correctly refused rather than
 misreported as affordable. Fifteen release/continuation tests pass locally.
 The schema fingerprint also includes benchmark migrations sharing GeneGuessr's
@@ -241,9 +242,42 @@ completions, because D1's changes receipt also counted trigger changes (200 for
 50 requests). Tests cover rollback of completions when the checkpoint fails,
 overlapping runs, scoped replay, and progress beyond unsent rows. The cursor
 migration used 312 reads and five writes under its reviewed release envelope.
-These are local measurements, not deployed prevention. Delivery's leader selection,
-group acknowledgement fanout and cumulative scheduled-work admission still require
-their own repairs; bounded reconciliation alone does not certify the daily budget.
+These are local measurements, not deployed prevention.
+
+Delivery selection was measured separately with 20,000 ready, single-request
+groups: selecting one leader read 120,000 rows, or a potential 11.52 million reads
+at 96 runs/day. A readiness projection now follows notification changes inside
+the same transaction. Only groups with eligible members remain in that derived
+queue. Separate indexed mode ranges preserve the default test-recipient gate and
+explicit all-requesters mode; each range stops before fetching payloads. New
+groups use creation time as their due time, so newly arriving pending groups
+cannot permanently outrank an older due retry. Scoped calls use at most 50 exact
+request IDs. Local workerd measurements: two reads for ordinary selection, three
+for all-requesters selection, seven for one scoped request and 350 for 50. An
+entirely future-dated backlog costs one/two reads, not a scan.
+
+The publication-member index now orders by ID after the complete group identity;
+the old status column in the middle prevented genuinely bounded leader/member
+lookups. Three obsolete status/request-batch indexes were removed after checking
+the remaining consumers; exact request, user-inbox and publication lookups stay
+indexed. This halves a 500-request delivery's measured writes from 6,003 to 3,003.
+That full delivery uses 18,013 reads, one mocked Discord message and ten previews.
+No live messages were sent. Claims use bounded JSON IDs below D1's 100-parameter
+limit, atomically require the complete still-ready group, and count `RETURNING`
+IDs rather than trigger-inflated change totals. Tests cover overlapping claims,
+mid-claim rollback, partial stale claims and replay. Reconstructing eligibility
+for a malformed 20,000-member group reads only the structural sentinel range
+(2,515 reads) and retains an overflow flag, preventing accidental delivery.
+
+The readiness schema is included in **unreleased** migration 0096; a fresh remote
+check confirmed that migration had not been pushed. Combining the seeds preserves
+a shared maximum: a retained delivery group needs a non-sent member, whose two
+queue writes cannot overlap that member's four inbox seed writes. With the two
+notification indexes and DDL, reserve `6*N + 512` writes. At 3,000 notifications,
+sent/pending/mixed fixtures used 18,033 / 12,032 / 15,032 writes, all below the
+18,512 envelope. The corresponding reads were 37,763 / 25,760 / 31,759, below
+81,040. Group acknowledgement fanout and cumulative scheduled-work admission
+remain open; these fixes do not certify the full daily workload.
 
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.

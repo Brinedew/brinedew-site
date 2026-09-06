@@ -18,6 +18,12 @@ function database() {
   db.exec(
     "ALTER TABLE icono_generation_requests ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN candidate_image_id INTEGER DEFAULT 1",
   )
+  db.exec(
+    "ALTER TABLE icono_request_notifications ADD COLUMN fulfillment_group_size INTEGER NOT NULL DEFAULT 1; ALTER TABLE icono_request_notifications ADD COLUMN discord_next_attempt_at TEXT; CREATE INDEX idx_icono_request_notifications_fulfillment_publication ON icono_request_notifications(requester_user_id,fulfillment_publication_id,gene_symbol,discord_status,id)",
+  )
+  db.exec(
+    "CREATE INDEX idx_icono_request_notifications_delivery ON icono_request_notifications(discord_status); CREATE INDEX idx_icono_request_notifications_delivery_due ON icono_request_notifications(discord_status); CREATE INDEX idx_icono_request_notifications_delivery_batch ON icono_request_notifications(discord_status)",
+  )
   return db
 }
 
@@ -132,7 +138,7 @@ test("inbox counts and newest-page plans do not traverse growing notification hi
       INSERT INTO icono_generation_requests(id,requester_user_id,gene_symbol,fulfilled_asset_sha256,status)
       SELECT n,'user','TP53','a','fulfilled' FROM ids`)
     db.exec(`WITH RECURSIVE ids(n) AS (VALUES(10) UNION ALL SELECT n+1 FROM ids WHERE n<20010)
-      INSERT INTO icono_request_notifications SELECT n,n,'user','TP53','a','sent',NULL,'history','2020-01-01' FROM ids`)
+      INSERT INTO icono_request_notifications(id,request_id,requester_user_id,gene_symbol,fulfilled_asset_sha256,discord_status,read_at,fulfillment_publication_id,created_at) SELECT n,n,'user','TP53','a','sent',NULL,'history','2020-01-01' FROM ids`)
     assertExact(db)
     const plans = [
       db.prepare("EXPLAIN QUERY PLAN " + REQUEST_INBOX_COUNTS_SQL).all("user"),
