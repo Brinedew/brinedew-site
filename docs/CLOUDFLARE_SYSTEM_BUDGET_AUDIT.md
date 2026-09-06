@@ -423,3 +423,16 @@ The recovery selector uses three bounded indexed UTC timestamp ranges and report
 per hour preserve 288 recovery jobs/day versus the former 250/day intent.
 This bounds statements, not yet aggregate row cost: candidate history and
 vision-rollup scans still require the remaining audit and daily admission.
+
+Canonical lifecycle triggers were another hidden corpus scan: withdrawing one
+noncanonical lineage examined all 20,000 gene heads in the full-schema fixture.
+Migration 0017 retains reselect-before-withdraw/delete errors and resolves the
+head by its authoritative gene key. Canonical selection validation already
+requires the selected lineage and revision to belong to that gene. Lineage,
+revision lifecycle and body deletion together now read 17 rows in that fixture;
+all three still reject mutation of the current canonical revision. The reviewed
+atomic trigger migration costs 837 reads and six writes locally, within its
+33,024-read/32-write envelope. The complete pending release maximum is now
+985,814 reads and 19,896 writes; historical migrations must still be verified
+applied before that release can be admitted. Canonical fallback selection itself
+still requires the separate history-index redesign.

@@ -84,6 +84,7 @@ test("the counter release fits protected capacity only after historical migratio
   }
   await assert.rejects(preflightOperationCostRelease(options), /EXCEEDS_DAILY_ALLOCATION/)
   const pendingMigrations = [
+    "iconoplasm-authoring/0017_canonical_lifecycle_keyed_guards.sql",
     "iconoplasm/0095_transactional_admin_counts.sql",
     "iconoplasm/0096_request_inbox_counters.sql",
     "iconoplasm/0097_delivery_reconciliation_cursor.sql",
@@ -92,8 +93,8 @@ test("the counter release fits protected capacity only after historical migratio
     "iconoplasm/0098_vote_projection_job_version.sql",
   ]
   const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
-  assert.equal(result.maximum.rows_read, 952790)
-  assert.equal(result.maximum.rows_written, 19864)
+  assert.equal(result.maximum.rows_read, 985814)
+  assert.equal(result.maximum.rows_written, 19896)
   assert.equal(result.maximum.kv_reads, 5)
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({
