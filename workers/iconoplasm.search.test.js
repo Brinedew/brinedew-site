@@ -142,6 +142,30 @@ class FakeSearchDb {
     return new FakeSearchStatement(this, sql)
   }
 
+  async batch(statements) {
+    const [personal, shared] = statements
+    const [user, gene, , source, , trigger, , dwell, seedOnly] = personal.args
+    const existing = this.getDiscovery(user, gene)
+    if (existing && seedOnly) return statements.map(() => ({ results: [], meta: { changes: 0 } }))
+    if (existing) this.updateDiscovery([source, trigger, dwell, user, gene])
+    else this.insertDiscovery(personal.args)
+    const row = this.getDiscovery(user, gene)
+    if (shared) {
+      const prior = this.sharedRows.get(gene)
+      this.upsertSharedDiscovery([
+        gene,
+        prior?.first_non_admin_discovered_at || row.first_discovered_at,
+        row.last_encountered_at,
+        (prior?.non_admin_discoverer_count || 0) + (existing && prior ? 0 : 1),
+        (prior?.non_admin_encounter_count || 0) + 1,
+      ])
+    }
+    return [
+      { results: [row], meta: { changes: 1 } },
+      ...(shared ? [{ results: [], meta: { changes: 1 } }] : []),
+    ]
+  }
+
   key(userId, geneSymbol) {
     return `${String(userId)}|${String(geneSymbol || "")
       .trim()

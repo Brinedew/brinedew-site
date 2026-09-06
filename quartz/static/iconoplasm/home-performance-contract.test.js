@@ -1794,11 +1794,23 @@ test("gene page visits stay in a private guest merge buffer until auth", async (
   )
   assert.match(
     app,
-    /websiteGuestDiscoveryMergeRemaining - pendingSymbols\.length/,
+    /websiteGuestDiscoveryMergeRemaining -= pendingSymbols\.length/,
     "each page session must stop after one bounded merge batch",
   )
   assert.match(app, /\/api\/iconoplasm\/discoveries\/merge/)
-  assert.match(app, /websiteGuestDiscoveries\.remove\(pendingSymbols\)/)
+  assert.match(app, /websiteGuestDiscoveries\.remove\(payload\.merged_symbols\)/)
+  const mergeStart = app.indexOf("function mergeWebsiteGuestDiscoveriesIfSignedIn()")
+  const mergeEnd = app.indexOf("function invalidateImageEditProviders()", mergeStart)
+  const merge = app.slice(mergeStart, mergeEnd)
+  assert.ok(
+    merge.indexOf("websiteGuestDiscoveryMergeRemaining -=") < merge.indexOf("fetchAuthedJSON("),
+    "reserve the attempt before an uncertain network outcome",
+  )
+  assert.ok(
+    merge.indexOf('payload.schema !== "iconoplasm.discoveryMerge.v2"') <
+      merge.indexOf("websiteGuestDiscoveries.remove("),
+    "only a validated merge acknowledgement may clear local data",
+  )
   assert.match(app, /lastGenePageDiscoveryVisitKey/)
   assert.match(app, /\/api\/iconoplasm\/discoveries\/encounter/)
   assert.match(app, /source: "gene_page_visit"/)

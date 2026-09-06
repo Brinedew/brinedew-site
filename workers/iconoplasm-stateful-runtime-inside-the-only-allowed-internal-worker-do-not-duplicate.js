@@ -1,5 +1,9 @@
 import puppeteer from "@cloudflare/puppeteer"
 import {
+  recordDiscoveryEncounterAtomically,
+  mergeDiscoverySymbolsAtomically,
+} from "./iconoplasm/discovery-encounter.js"
+import {
   readSyncFinalizationSummary,
   readSyncFinalizationDrainCounts,
 } from "./iconoplasm/sync-finalization-summary.js"
@@ -11707,74 +11711,19 @@ async function recordGeneDiscoveryEncounter(
     return { ok: false, error: "hover_dwell discovery events must include dwell_ms" }
   }
 
-  async function readDiscoveryRow() {
-    // D1 cost fence: extension hover dwell is one of the highest-frequency public
-    // write paths in Iconoplasm. `icono_gene_discoveries` already stores
-    // canonical uppercase symbols and uses PRIMARY KEY (user_id, gene_symbol), so
-    // this predicate must stay raw. Wrapping gene_symbol in upper(...) turns a
-    // single hover into a scan over that user's discovery shelf.
-    return env.ICONOPLASM_DB.prepare(
-      `SELECT *
-       FROM icono_gene_discoveries
-       WHERE user_id = ?
-         AND gene_symbol = ?
-       LIMIT 1`,
-    )
-      .bind(userIdNorm, geneSymbolNorm)
-      .first()
-  }
-
-  const existing = await readDiscoveryRow()
-
-  if (existing) {
-    await env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_gene_discoveries
-       SET last_encountered_at = CURRENT_TIMESTAMP,
-           encounter_count = encounter_count + 1,
-           last_source = ?,
-           last_trigger = ?,
-           last_dwell_ms = ?
-       WHERE user_id = ?
-         AND gene_symbol = ?`,
-    )
-      .bind(sourceNorm, triggerNorm, dwellMsNorm, userIdNorm, geneSymbolNorm)
-      .run()
-  } else {
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_gene_discoveries (
-         user_id,
-         gene_symbol,
-         first_source,
-         last_source,
-         first_trigger,
-         last_trigger,
-         first_dwell_ms,
-         last_dwell_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
-        userIdNorm,
-        geneSymbolNorm,
-        sourceNorm,
-        sourceNorm,
-        triggerNorm,
-        triggerNorm,
-        dwellMsNorm,
-        dwellMsNorm,
-      )
-      .run()
-  }
-
-  const row = await readDiscoveryRow()
-  await recordSharedGeneDiscoveryEncounter(env, {
+  const { row, created } = await recordDiscoveryEncounterAtomically(env.ICONOPLASM_DB, {
+    userId: userIdNorm,
     geneSymbol: geneSymbolNorm,
-    created: !existing,
+    source: sourceNorm,
+    trigger: triggerNorm,
+    dwellMs: dwellMsNorm,
     isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
+    seedOnly: sourceNorm === DISCOVERY_SOURCE_STARTER_SEED,
   })
 
   return {
     ok: true,
-    created: !existing,
+    created,
     discovery: mapGeneDiscoveryRow(row || {}),
   }
 }
@@ -11850,42 +11799,6 @@ async function readSharedGeneDiscoverySymbols(env) {
     // must not turn simultaneous reader searches into corpus scans and KV writes.
     return null
   }
-}
-
-async function recordSharedGeneDiscoveryEncounter(
-  env,
-  { geneSymbol, created = false, isAdmin = false } = {},
-) {
-  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
-  const geneSymbolNorm = normalizeSymbol(geneSymbol || "")
-  if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
-  if (isAdmin) return { ok: true, refreshed: false }
-
-  // This is an encounter counter, not an analytical report. Re-aggregating all
-  // discoverers of a popular gene here made the nth TP53 hover scan n personal
-  // rows, so a synchronized audience produced quadratic D1 reads. The personal
-  // row above already tells us whether this is a new discoverer; keep the
-  // shared rollup O(1) by applying that fact atomically.
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_shared_gene_discoveries (
-       gene_symbol,
-       first_non_admin_discovered_at,
-       latest_non_admin_encountered_at,
-       non_admin_discoverer_count,
-       non_admin_encounter_count,
-       updated_at
-     ) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 1, CURRENT_TIMESTAMP)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       latest_non_admin_encountered_at = CURRENT_TIMESTAMP,
-       non_admin_discoverer_count =
-         icono_shared_gene_discoveries.non_admin_discoverer_count + ?,
-       non_admin_encounter_count =
-         icono_shared_gene_discoveries.non_admin_encounter_count + 1,
-       updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(geneSymbolNorm, created ? 1 : 0)
-    .run()
-  return { ok: true, refreshed: true }
 }
 
 export async function publishSharedGeneDiscoverySymbols(env) {
@@ -12414,33 +12327,25 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
     return { ok: false, error: "Authentication required" }
   }
-  await ensureStarterGeneDiscoveries(env, { userId: userIdNorm })
+  if (!Array.isArray(symbols) || symbols.length > WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE) {
+    return {
+      ok: false,
+      error: `Merge at most ${WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE} discovery symbols`,
+    }
+  }
   const requestedSymbols = normalizeRequestedSymbols(
     symbols,
     WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
   )
-  if (!requestedSymbols.length) {
-    return {
-      ok: true,
-      merged_count: 0,
-      discoveries: await listUserGeneDiscoveries(env, { userId: userIdNorm }),
-    }
-  }
-  let mergedCount = 0
-  for (const symbol of requestedSymbols) {
-    const result = await recordGeneDiscoveryEncounter(env, {
-      userId: userIdNorm,
-      geneSymbol: symbol,
-      source: DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE,
-      trigger: DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE,
-      dwellMs: null,
-    })
-    if (result.ok) mergedCount += 1
-  }
+  await mergeDiscoverySymbolsAtomically(env.ICONOPLASM_DB, {
+    userId: userIdNorm,
+    symbols: requestedSymbols,
+    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
+  })
   return {
     ok: true,
-    merged_count: mergedCount,
-    discoveries: await listUserGeneDiscoveries(env, { userId: userIdNorm }),
+    merged_count: requestedSymbols.length,
+    merged_symbols: requestedSymbols,
   }
 }
 
@@ -33269,9 +33174,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ok: true,
             authenticated: true,
             merged_count: result.merged_count,
-            discoveries: result.discoveries,
-            discovered_symbols: result.discoveries.map((row) => row.gene_symbol).filter(Boolean),
-            discovered_count: result.discoveries.length,
+            schema: "iconoplasm.discoveryMerge.v2",
+            merged_symbols: result.merged_symbols,
+            checked_symbols: result.merged_symbols,
+            discovered_symbols: result.merged_symbols,
           },
           200,
           { "Cache-Control": "no-store" },
