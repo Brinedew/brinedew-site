@@ -124,6 +124,8 @@ test("authenticated catalog release shares retry ceilings and rejects unsafe ini
   }
   for (const scenario of [
     "success",
+    "D1 exhausted",
+    "KV deletes exhausted",
     "underestimate",
     "stale",
     "exhausted",
@@ -144,11 +146,15 @@ test("authenticated catalog release shares retry ceilings and rejects unsafe ini
         },
       },
       kvUsage:
-        scenario === "stale"
-          ? { kv_measured_at: 0 }
-          : scenario === "exhausted"
-            ? { kv_writes: 1000 }
-            : {},
+        scenario === "D1 exhausted"
+          ? { rows_read: 8_000_000, rows_written: 100_000 }
+          : scenario === "KV deletes exhausted"
+            ? { kv_deletes: 1000 }
+            : scenario === "stale"
+              ? { kv_measured_at: 0 }
+              : scenario === "exhausted"
+                ? { kv_writes: 1000 }
+                : {},
       initializeCatalog: async (kv) => {
         for (let i = 0; i < 5; i++) await kv.get(`key-${i}`)
         await kv.put("iconoplasm:hydrated-catalog-artifact:test", "{}")
@@ -188,7 +194,7 @@ test("authenticated catalog release shares retry ceilings and rejects unsafe ini
         })
       assert.equal((await gateway(f.request("/execute", {}), env)).status, 403)
       assert.equal(forwards, 0)
-      if (scenario === "success") {
+      if (["success", "D1 exhausted", "KV deletes exhausted"].includes(scenario)) {
         assert.equal((await run()).result.changed, true)
         await run()
         await assert.rejects(run(), /COST_/)
