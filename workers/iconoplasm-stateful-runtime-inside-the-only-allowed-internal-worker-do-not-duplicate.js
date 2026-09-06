@@ -9811,11 +9811,30 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
     previewMap.set(visionId, existing)
   }
 
-  let written = 0
+  const rows = []
   for (const row of summaryRows) {
     const visionId = validAdminRollupVisionId(row?.vision_id || "")
     if (!visionId) continue
     const emulsionId = unqualifiedEmulsionDisplayCode(row?.emulsion_id || "")
+    rows.push([
+      visionId,
+      emulsionId,
+      normalizeFavoriteEmulsionFamilyId(emulsionId),
+      sanitizeText(row?.workflow_id || "", 32) || "",
+      sanitizeText(row?.workflow_label || "", 255) || "",
+      sanitizeText(row?.prompt_version || "", 16) || "",
+      sanitizeText(row?.variant_slot || "", 32) || "",
+      sanitizeText(row?.artist_tag || "", 255) || "",
+      sanitizeText(row?.artist_name || "", 255) || "",
+      Math.max(0, Number(row?.image_count || 0) || 0),
+      Math.max(0, Number(row?.live_count || 0) || 0),
+      Number(row?.score || 0) || 0,
+      Math.max(0, Number(voteHIndexMap.get(visionId) || 0) || 0),
+      serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
+      GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION,
+    ])
+  }
+  if (rows.length)
     await env.ICONOPLASM_DB.prepare(
       `INSERT INTO icono_generation_request_vision_option_rollup (
          vision_id,
@@ -9834,7 +9853,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          preview_assets_json,
          builder_version,
          updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ) SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'), json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'), json_extract(value, '$[6]'), json_extract(value, '$[7]'), json_extract(value, '$[8]'), json_extract(value, '$[9]'), json_extract(value, '$[10]'), json_extract(value, '$[11]'), json_extract(value, '$[12]'), json_extract(value, '$[13]'), json_extract(value, '$[14]'), CURRENT_TIMESTAMP FROM json_each(?) WHERE 1
        ON CONFLICT(vision_id) DO UPDATE SET
          emulsion_id = excluded.emulsion_id,
          emulsion_family_id = excluded.emulsion_family_id,
@@ -9852,27 +9871,9 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          builder_version = excluded.builder_version,
          updated_at = CURRENT_TIMESTAMP`,
     )
-      .bind(
-        visionId,
-        emulsionId,
-        normalizeFavoriteEmulsionFamilyId(emulsionId),
-        sanitizeText(row?.workflow_id || "", 32) || "",
-        sanitizeText(row?.workflow_label || "", 255) || "",
-        sanitizeText(row?.prompt_version || "", 16) || "",
-        sanitizeText(row?.variant_slot || "", 32) || "",
-        sanitizeText(row?.artist_tag || "", 255) || "",
-        sanitizeText(row?.artist_name || "", 255) || "",
-        Math.max(0, Number(row?.image_count || 0) || 0),
-        Math.max(0, Number(row?.live_count || 0) || 0),
-        Number(row?.score || 0) || 0,
-        Math.max(0, Number(voteHIndexMap.get(visionId) || 0) || 0),
-        serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
-        GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION,
-      )
+      .bind(JSON.stringify(rows))
       .run()
-    written += 1
-  }
-  return written
+  return rows.length
 }
 
 export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds = []) {
@@ -21263,21 +21264,6 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
   return { ok: true, symbol: safeSymbol, job_version: Number(row?.job_version || 0) }
 }
 
-async function clearVoteProjectionRefreshJob(env, symbol, jobVersion) {
-  if (!env?.ICONOPLASM_DB) return false
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return false
-  const safeJobVersion = Math.max(1, Number.parseInt(String(jobVersion || 0), 10) || 0)
-  if (!safeJobVersion) return false
-  const result = await env.ICONOPLASM_DB.prepare(
-    `DELETE FROM icono_vote_projection_refresh_jobs
-     WHERE gene_symbol = ? AND job_version = ?`,
-  )
-    .bind(safeSymbol, safeJobVersion)
-    .run()
-  return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0
-}
-
 async function recordVoteProjectionRefreshFailure(
   env,
   { symbol, actorId, reason, error, attemptCount = 0, jobVersion } = {},
@@ -21585,7 +21571,13 @@ async function rollbackAppliedVoteProjectionRefreshes(env, applied, error) {
   )
 }
 
+// Two jobs leave room for both complete promotions, a failed shared vision
+// rebuild, guarded rollbacks, and durable failure records under D1's 50 statements.
+export const VOTE_PROJECTION_RECOVERY_LIMIT = 2
+
 async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
+  if (rawJobs.length > VOTE_PROJECTION_RECOVERY_LIMIT)
+    throw new RangeError("Vote recovery batch exceeds rollback-safe limit")
   const jobs = []
   const seen = new Set()
   for (const rawJob of Array.isArray(rawJobs) ? rawJobs : []) {
@@ -21629,14 +21621,22 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
       // bounded publication prepares every dirty replacement and atomically flips the barrier. Never publish
       // per vote; one vote cannot pay for shard preparation and release writes.
       adminReadModelState.ready = true
-      for (const result of applied) {
-        result.superseded = !(await clearVoteProjectionRefreshJob(
-          env,
-          result.symbol,
-          result.job_version,
-        ))
+      // Complete the batch atomically: a later delete failure must not erase
+      // an earlier job before the shared projection is rolled back.
+      const cleared = await env.ICONOPLASM_DB.batch(
+        applied.map((result) =>
+          env.ICONOPLASM_DB.prepare(
+            `DELETE FROM icono_vote_projection_refresh_jobs
+          WHERE gene_symbol = ? AND job_version = ?`,
+          ).bind(result.symbol, result.job_version),
+        ),
+      )
+      applied.forEach((result, index) => {
+        result.superseded = !(
+          Number(cleared[index]?.meta?.changes ?? cleared[index]?.changes ?? 0) > 0
+        )
         delete result.vision_ids
-      }
+      })
     } catch (error) {
       const rollbackError = await rollbackAppliedVoteProjectionRefreshes(env, applied, error)
       const finalError = rollbackError || error
@@ -21665,39 +21665,55 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
   )
 }
 
-async function processVoteProjectionRefreshForSymbol(
+export async function processPendingVoteProjectionRefreshJobs(
   env,
-  { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
+  { limit = VOTE_PROJECTION_RECOVERY_LIMIT } = {},
 ) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
-  const actorNorm = normalizeUserId(actorId || "vote_projection")
-  const reasonNorm = voteProjectionRefreshJobReason(reason)
-  const [result] = await processVoteProjectionRefreshJobBatch(env, [
-    { symbol: safeSymbol, actor_id: actorNorm, reason: reasonNorm },
-  ])
-  if (result?.ok) return result
-  const error = new Error(result?.error || "vote projection refresh failed")
-  if (result?.code) error.code = result.code
-  throw error
-}
-
-async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}) {
   if (!env?.ICONOPLASM_DB)
-    return { ok: false, code: "NO_DB", processed: 0, failed: 0, remaining: 0 }
-  const safeLimit = Math.max(1, Math.min(500, Number.parseInt(String(limit || 100), 10) || 100))
-  const nowIso = new Date().toISOString()
-  const queued = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, attempts, job_version
-     FROM icono_vote_projection_refresh_jobs
-     WHERE next_attempt_at <= ?
-     ORDER BY requested_at ASC
-     LIMIT ?`,
+    return { ok: false, code: "NO_DB", processed: 0, failed: 0, has_more: false }
+  env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      VOTE_PROJECTION_RECOVERY_LIMIT,
+      Number.parseInt(String(limit), 10) || VOTE_PROJECTION_RECOVERY_LIMIT,
+    ),
   )
-    .bind(nowIso, safeLimit)
+  const nowIso = new Date().toISOString()
+  const today = nowIso.slice(0, 10)
+  // The retained ledger has both SQLite UTC and ISO UTC timestamps. Three
+  // disjoint indexed ranges avoid treating future SQL timestamps as already due.
+  const queued = await env.ICONOPLASM_DB.prepare(
+    `WITH older AS (
+       SELECT * FROM icono_vote_projection_refresh_jobs
+       WHERE next_attempt_at < ? ORDER BY next_attempt_at, requested_at LIMIT ?
+     ), sql_today AS (
+       SELECT * FROM icono_vote_projection_refresh_jobs
+       WHERE next_attempt_at >= ? AND next_attempt_at <= ?
+       ORDER BY next_attempt_at, requested_at LIMIT ?
+     ), iso_today AS (
+       SELECT * FROM icono_vote_projection_refresh_jobs
+       WHERE next_attempt_at >= ? AND next_attempt_at <= ?
+       ORDER BY next_attempt_at, requested_at LIMIT ?
+     )
+     SELECT * FROM (
+       SELECT * FROM older UNION ALL SELECT * FROM sql_today UNION ALL SELECT * FROM iso_today
+     ) ORDER BY next_attempt_at, requested_at LIMIT ?`,
+  )
+    .bind(
+      today,
+      safeLimit + 1,
+      `${today} `,
+      nowIso.slice(0, 19).replace("T", " "),
+      safeLimit + 1,
+      `${today}T`,
+      nowIso,
+      safeLimit + 1,
+      safeLimit + 1,
+    )
     .all()
   const rows = Array.isArray(queued?.results) ? queued.results : []
-  const results = await processVoteProjectionRefreshJobBatch(env, rows)
+  const results = await processVoteProjectionRefreshJobBatch(env, rows.slice(0, safeLimit))
   let processed = 0
   let failed = 0
   for (const result of results) {
@@ -21717,18 +21733,11 @@ async function processPendingVoteProjectionRefreshJobs(env, { limit = 100 } = {}
       })
     }
   }
-  const remainingRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS count
-     FROM icono_vote_projection_refresh_jobs
-     WHERE next_attempt_at <= ?`,
-  )
-    .bind(nowIso)
-    .first()
   return {
     ok: true,
     processed,
     failed,
-    remaining: Number(remainingRow?.count || 0),
+    has_more: rows.length > safeLimit || results.some((result) => result?.superseded),
     results,
   }
 }
@@ -21769,58 +21778,16 @@ function normalizeVoteProjectionRefreshQueueMessage(rawMessage) {
   }
 }
 
+function voteProjectionUtcTimestamp(raw) {
+  const value = String(raw || "")
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(" ", "T")}Z` : value
+}
+
 function voteProjectionQueueRetryDelaySeconds(rawNextAttemptAt, nowMs = Date.now()) {
   // ARCHITECTURE FENCE [IPD-004]: retry delivery is a wakeup for due work, not
   // a five-minute poll. Capping a one-hour ledger backoff at five minutes burns
   // retries and can dead-letter the message before the job is runnable.
-  return queueDelaySecondsUntil(rawNextAttemptAt, nowMs, 30)
-}
-
-async function processVoteProjectionRefreshQueueMessage(env, rawMessage) {
-  if (!env?.ICONOPLASM_DB) return { ok: false, skipped: true, reason: "NO_DB" }
-  const message = normalizeVoteProjectionRefreshQueueMessage(rawMessage)
-  if (!message) {
-    throw new Error("Unsupported Iconoplasm vote projection Queue message.")
-  }
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version
-     FROM icono_vote_projection_refresh_jobs
-     WHERE gene_symbol = ?
-     LIMIT 1`,
-  )
-    .bind(message.symbol)
-    .first()
-  if (!row) {
-    return { ok: true, skipped: true, reason: "JOB_ALREADY_DRAINED", symbol: message.symbol }
-  }
-  const nowIso = new Date().toISOString()
-  const nextAttemptAt = sanitizeText(row?.next_attempt_at || "", 64)
-  if (nextAttemptAt && nextAttemptAt > nowIso) {
-    return {
-      ok: true,
-      skipped: true,
-      reason: "BACKOFF_NOT_DUE",
-      symbol: message.symbol,
-      next_attempt_at: nextAttemptAt,
-    }
-  }
-  try {
-    return await processVoteProjectionRefreshForSymbol(env, {
-      symbol: message.symbol,
-      actorId: row?.actor_id || message.actor_id,
-      reason: row?.reason || message.reason,
-    })
-  } catch (error) {
-    await recordVoteProjectionRefreshFailure(env, {
-      symbol: message.symbol,
-      actorId: row?.actor_id || message.actor_id,
-      reason: row?.reason || message.reason,
-      error,
-      attemptCount: Number(row?.attempts || 0),
-      jobVersion: row?.job_version,
-    })
-    throw error
-  }
+  return queueDelaySecondsUntil(voteProjectionUtcTimestamp(rawNextAttemptAt), nowMs, 30)
 }
 
 export async function handleIconoplasmVoteProjectionQueue(batch, env) {
@@ -21853,10 +21820,12 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
     return { ok: true, processed, failed, retrying, skipped, results }
   }
 
+  env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
   const nowIso = new Date().toISOString()
   const dueEntries = []
   const dueJobsBySymbol = new Map()
   const rowBySymbol = new Map()
+  let lookupAttempts = 0
   for (const message of messages) {
     try {
       const queueMessage = normalizeVoteProjectionRefreshQueueMessage(message?.body)
@@ -21864,6 +21833,21 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
         throw new Error("Unsupported Iconoplasm vote projection Queue message.")
       }
       if (!rowBySymbol.has(queueMessage.symbol)) {
+        if (lookupAttempts >= VOTE_PROJECTION_RECOVERY_LIMIT) {
+          if (typeof message?.retry !== "function")
+            throw new Error("Deferred vote recovery cannot be retried")
+          message.retry({ delaySeconds: 30 })
+          retrying += 1
+          skipped += 1
+          results.push({
+            ok: true,
+            skipped: true,
+            reason: "INVOCATION_WORK_LIMIT",
+            symbol: queueMessage.symbol,
+          })
+          continue
+        }
+        lookupAttempts += 1
         const row = await env.ICONOPLASM_DB.prepare(
           `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version
            FROM icono_vote_projection_refresh_jobs
@@ -21887,7 +21871,10 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
         continue
       }
       const nextAttemptAt = sanitizeText(row?.next_attempt_at || "", 64)
-      if (nextAttemptAt && nextAttemptAt > nowIso) {
+      if (
+        nextAttemptAt &&
+        Date.parse(voteProjectionUtcTimestamp(nextAttemptAt)) > Date.parse(nowIso)
+      ) {
         results.push({
           ok: true,
           skipped: true,

@@ -300,11 +300,11 @@ The scheduler now assigns one job to each recurring invocation. Five background
 jobs keep a 15-minute cadence; five 16-message supervote batches/hour preserve
 the previous intended 80-message hourly throughput below the per-invocation D1
 query limit (49 queries, 32 Discord requests). Comment batches remain 20
-(41 queries, 40 Discord requests). Nightly archive, vote projection, canon
-repair and gallery are split into four invocations; GeneGuessr remains separate.
+(41 queries, 40 Discord requests). Nightly archive, canon repair and gallery
+use separate invocations. Vote recovery runs six times hourly; GeneGuessr remains separate.
 The configuration uses exactly five cron expressions. A complete-day dispatch
 test checks isolation, cadence, delayed delivery and configuration agreement.
-The capacity model now counts 871 daily activations instead of 99.
+The capacity model now counts 1,014 daily activations instead of 99.
 
 Account recovery previously woke a complete manifestation drain for every
 account plus one final drain: a 25-account batch could trigger 650 manifestation
@@ -407,3 +407,19 @@ fallback remains. Complete vote-job invocation and daily bounds remain open.
 
 Sources: [D1 limits](https://developers.cloudflare.com/d1/platform/limits/),
 [D1 metrics](https://developers.cloudflare.com/d1/observability/metrics-analytics/).
+
+Vote recovery reserves rollback room by admitting at most two unique gene
+lookups per invocation, including Queue deliveries from older configurations.
+Extra messages retry without D1 access. All selection, apply, rollback and
+failure-record calls share the 50-statement fence. A complete-schema workerd
+fault test reproduced exhaustion with three jobs; two jobs use 38 statements
+when vision projection fails. Completion deletes are one generation-checked
+atomic batch, preserving all retry records if any completion fails. The
+factory-option completion-failure case uses all 50 statements. Vision-option
+inserts now use one bulk statement regardless of the number of distinct visions.
+Failed lookups consume the same two-attempt admission allowance as successful ones.
+The recovery selector uses three bounded indexed UTC timestamp ranges and reports
+`has_more`, replacing the unbounded overdue count. Six isolated invocations
+per hour preserve 288 recovery jobs/day versus the former 250/day intent.
+This bounds statements, not yet aggregate row cost: candidate history and
+vision-rollup scans still require the remaining audit and daily admission.

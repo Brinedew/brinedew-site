@@ -383,12 +383,12 @@ infrastructure repair job.
 
 ### R-1 — nightly maintenance has one declared owner
 
-Nightly Iconoplasm archive, vote projection, canon repair and gallery publication
-run once each at 23:56-59 UTC, with one job per invocation. The 23:55 pre-warm,
+Nightly Iconoplasm archive, canon repair and gallery publication run at 23:56/58/59 UTC.
+Vote recovery runs six times hourly with two jobs per invocation. The 23:55 pre-warm,
 00:03 recap/catch-up and 12:06 feed triggers belong to GeneGuessr. They never
 repeat Iconoplasm maintenance. The canonical minute schedule and Wrangler
 agreement test enforce that separation. Recurring jobs also use independent
-invocations; their combined minimum is 871 Worker requests/day including the
+invocations; their combined minimum is 1,014 Worker requests/day including the
 three GeneGuessr triggers. This counts activations, not a proof of each job's
 CPU, subrequest or daily storage cost.
 

@@ -117,7 +117,7 @@ test("DO NOT DELETE: vote projection promotion is Queue-backed, not request wait
   )
   assert.doesNotMatch(
     scheduler,
-    /processVoteProjectionRefreshForSymbol\(/,
+    /processVoteProjectionRefreshJobBatch\(|applyVoteProjectionRefreshWithoutPublicArtifact\(/,
     "public votes must not start canonical promotion directly from the request path",
   )
   assert.doesNotMatch(
@@ -128,7 +128,7 @@ test("DO NOT DELETE: vote projection promotion is Queue-backed, not request wait
 
   const voteProjectionBatch = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function processVoteProjectionRefreshJobBatch",
-    "async function processVoteProjectionRefreshForSymbol",
+    "export async function processPendingVoteProjectionRefreshJobs",
   )
   assert.doesNotMatch(
     voteProjectionBatch,

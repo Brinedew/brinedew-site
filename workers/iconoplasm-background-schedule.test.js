@@ -59,12 +59,20 @@ test("every configured background event invokes exactly its one job, including d
   assert.equal(totals.manifestations, 120)
   assert.equal(totals.gallery, 97)
   assert.equal(totals.archive, 1)
-  assert.equal(totals.voteProjection, 1)
+  assert.equal(totals.voteProjection * 2, 288)
   assert.equal(totals.canonRepair, 1)
 })
 
 test("background schedules retain bounded cadence and never repeat nightly work hourly", () => {
   for (const [job, minutes] of Object.entries(ICONOPLASM_BACKGROUND_MINUTES)) {
+    if (job === "voteProjection") {
+      minutes.forEach((minute, i) =>
+        assert.ok(
+          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 12,
+        ),
+      )
+      continue
+    }
     const expectedGap =
       job === "sharedDiscovery"
         ? 60
