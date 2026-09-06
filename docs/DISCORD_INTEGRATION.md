@@ -232,12 +232,17 @@ Use `docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md` for action-derived
 limits. Historical usage may reveal an unmodeled path, but it may not forecast a
 changed runtime or justify paid capacity.
 
-The shared stateful Worker currently uses four of Cloudflare's five cron slots:
+The configured stateful Worker uses Cloudflare's five cron slots:
 
-- `55 23 * * *`: sole full Iconoplasm maintenance owner plus GeneGuessr pre-warm;
+- `55 23 * * *`: GeneGuessr pre-warm;
 - `3 0 * * *`: GeneGuessr recap and catch-up only;
 - `6 12 * * *`: GeneGuessr feed;
-- `*/15 * * * *`: cheap Iconoplasm gallery publication check only.
+- one recurring minute-list expression, checked against
+  `workers/iconoplasm-background-schedule.js`, gives each Iconoplasm job its own
+  invocation. Comment delivery uses four batches of 20/hour; supervote delivery
+  uses five batches of 16/hour. Both retain 80 messages/hour;
+- `56-59 23 * * *`: nightly archive, vote projection, canon repair and gallery,
+  each in a separate invocation.
 | Queues ops | 1M/mo | untouched by Discord features | n/a |
 | Browser Rendering | ~10 hr/mo (paid) | gene-card render: 1 per (gene, canonical version), cached | far under |
 | Bunny CDN | usage-billed | recap = ~1 MB/day storage + ~1 MB/day egress | ~$0.01/GB |

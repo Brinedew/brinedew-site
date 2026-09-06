@@ -296,8 +296,23 @@ tenure/preference atomically and reject a stale attempt count, preventing an
 overlapping selection from reclaiming a freshly deferred retry. A successful
 comment uses two D1 queries after selection; a supervote uses three, including
 its separate fresh account identity lookup. No live Discord messages were sent.
-The combined scheduler invocation and cumulative daily admission remain open;
-these local query fixes do not certify scheduler capacity.
+The scheduler now assigns one job to each recurring invocation. Seven recovery
+jobs keep a 15-minute cadence; five 16-message supervote batches/hour preserve
+the previous intended 80-message hourly throughput below the per-invocation D1
+query limit (49 queries, 32 Discord requests). Comment batches remain 20
+(41 queries, 40 Discord requests). Nightly archive, vote projection, canon
+repair and gallery are split into four invocations; GeneGuessr remains separate.
+The configuration uses exactly five cron expressions. A complete-day dispatch
+test checks isolation, cadence, delayed delivery and configuration agreement.
+The capacity model now counts 823 daily activations instead of 99.
+
+Account recovery previously woke a complete manifestation drain for every
+account plus one final drain: a 25-account batch could trigger 650 manifestation
+attempts. Account and manifestation recovery now have separate adjacent-minute
+invocations, and the batch API cannot request per-account wakes. Interactive
+single-account synchronization retains its immediate wake and durable outbox.
+Individual heavy-job costs and cumulative daily admission remain open; this
+local isolation fix does not certify scheduler capacity or deployment.
 
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.

@@ -1,4 +1,8 @@
 const DELIVERY_STATUSES = Object.freeze(["pending", "retry"])
+// One selector plus two/three D1 queries per successful message. Each delivery
+// also uses two Discord requests. The scheduler gives these separate invocations.
+export const CARETAKER_COMMENT_DELIVERY_LIMIT = 20
+export const CARETAKER_SUPERVOTE_DELIVERY_LIMIT = 16
 
 function bounded(value, limit = 2000) {
   return String(value || "")
@@ -126,7 +130,13 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
   const db = env?.ICONOPLASM_DB
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
   if (!db?.prepare || !token) return { ok: false, delivered: 0, skipped: "unavailable" }
-  const safeLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      CARETAKER_COMMENT_DELIVERY_LIMIT,
+      Math.trunc(Number(limit) || CARETAKER_COMMENT_DELIVERY_LIMIT),
+    ),
+  )
   const due = await dueNotificationsStatement(
     db,
     "icono_caretaker_comment_notifications",
@@ -258,14 +268,23 @@ async function finishSupervote(db, key, status, fields = {}) {
     .run()
 }
 
-export async function deliverPendingCaretakerSupervoteNotifications(env, { limit = 20 } = {}) {
+export async function deliverPendingCaretakerSupervoteNotifications(
+  env,
+  { limit = CARETAKER_SUPERVOTE_DELIVERY_LIMIT } = {},
+) {
   const db = env?.ICONOPLASM_DB
   const accounts = env?.DB
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
   if (!db?.prepare || !accounts?.prepare || !token) {
     return { ok: false, delivered: 0, skipped: "unavailable" }
   }
-  const safeLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      CARETAKER_SUPERVOTE_DELIVERY_LIMIT,
+      Math.trunc(Number(limit) || CARETAKER_SUPERVOTE_DELIVERY_LIMIT),
+    ),
+  )
   const due = await dueNotificationsStatement(
     db,
     "icono_caretaker_supervote_notifications",

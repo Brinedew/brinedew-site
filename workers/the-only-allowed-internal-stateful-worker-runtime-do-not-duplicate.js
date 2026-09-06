@@ -80,7 +80,6 @@ const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 // One owner only. The 00:03 trigger belongs to GeneGuessr recap delivery and
 // must not silently repeat Iconoplasm's full maintenance eight minutes later.
-const ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set(["55 23 * * *"])
 const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
@@ -854,106 +853,46 @@ function buildIconoplasmSubdomainRobotsTxt() {
   return buildPublicSubdomainRobotsTxt(ICONOPLASM_HOST)
 }
 
-async function runScheduledIconoplasmMaintenance(env, ctx) {
-  try {
-    const archiveResult = await archiveColdIconoplasmPublishEvents(env)
-    console.log("[CRON] Iconoplasm cold publish-event archive result:", archiveResult)
-  } catch (error) {
-    // Archiving has its own failure domain. A cold-copy failure must preserve the
-    // hot rows and stay loud, but it must not suppress canon repair or gallery
-    // publication that do not depend on the archive database.
-    console.error("[CRON] Iconoplasm cold publish-event archive failed:", error)
-  }
-  try {
-    const voteProjectionResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://geneguessr-api/__internal/iconoplasm/process-vote-projection-refresh",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              limit: 250,
-            }),
-          },
-        ),
-        env,
-        ctx,
-      )
-    const voteProjectionResult = await voteProjectionResponse.json()
-    console.log("[CRON] Iconoplasm vote projection refresh result:", voteProjectionResult)
-
-    const maintenanceResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request("https://geneguessr-api/__internal/iconoplasm/repair-canon-invariants", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            limit: 250,
-            actorId: "cron",
-            reason: "scheduled_canon_invariant_repair",
-          }),
-        }),
-        env,
-        ctx,
-      )
-    const result = await maintenanceResponse.json()
-    console.log("[CRON] Iconoplasm canon maintenance result:", result)
-
-    // Bounded gallery freshness: after repairing canon, republish the public
-    // card-catalog so canonical changes reach the home gallery / game cards
-    // within ~24h instead of waiting for a manual sync. No-op by content hash
-    // when nothing changed; self-skips (budget preflight throws, caught inside
-    // the route) when there is no free-tier KV/D1 headroom.
-    const galleryDirtyShardPublicationResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_dirty_shard_publication" }),
-        }),
-        env,
-        ctx,
-      )
-    const galleryDirtyShardPublicationResult = await galleryDirtyShardPublicationResponse.json()
-    console.log(
-      "[CRON] Iconoplasm gallery dirty-shard publication result:",
-      galleryDirtyShardPublicationResult,
+async function runScheduledIconoplasmMaintenanceStep(env, ctx, path, body) {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(`https://geneguessr-api/__internal/iconoplasm/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      env,
+      ctx,
     )
-  } catch (err) {
-    console.error("[CRON] Iconoplasm canon maintenance failed:", err)
-  }
+  const result = await response.json()
+  if (!response.ok || result?.ok === false)
+    throw new Error(
+      `Scheduled ${path} failed: ${response.status} ${result.code || result.error || "unknown"}`,
+    )
+  return result
 }
 
+async function runScheduledIconoplasmFulfillment(env) {
+  const delivery = await deliverPendingRequestFulfillmentNotifications(env, { limit: 1 })
+  const requestIds = delivery.delivered_request_ids || []
+  let finalized = 0
+  for (let offset = 0; offset < requestIds.length; offset += 50) {
+    const settled = await reconcileDeliveredRequestFulfillments(env, {
+      requestIds: requestIds.slice(offset, offset + 50),
+    })
+    finalized += settled.finalized
+  }
+  const recovery = await reconcileDeliveredRequestFulfillments(env)
+  return { ...delivery, finalized: finalized + recovery.finalized }
+}
 async function runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx) {
   // ARCHITECTURE FENCE [IPD-010]: one cron delivery prepares at most one
   // bounded dirty-shard step. Never add a caller-controlled drain count or a
-  // complete-catalog fallback here.
-  try {
-    const galleryDirtyShardPublicationResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request("https://geneguessr-api/__internal/iconoplasm/publish-gallery-dirty-shards", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: "scheduled_gallery_dirty_shard_publication_frequent" }),
-        }),
-        env,
-        ctx,
-      )
-    const galleryDirtyShardPublicationResult = await galleryDirtyShardPublicationResponse.json()
-    console.log(
-      "[CRON] Iconoplasm frequent gallery dirty-shard publication result:",
-      galleryDirtyShardPublicationResult,
-    )
-  } catch (err) {
-    console.error(
-      "[CRON] Iconoplasm frequent gallery dirty-shard publication failed:",
-      String(err?.message || err || "unknown error"),
-      "code=" + String(err?.code || ""),
-    )
-  }
+  // complete-catalog fallback here. Failed HTTP responses must fail the job.
+  return runScheduledIconoplasmMaintenanceStep(env, ctx, "publish-gallery-dirty-shards", {
+    reason: "scheduled_gallery_dirty_shard_publication_frequent",
+  })
 }
-
 function stableSitemapDate() {
   // Keep `lastmod` stable within a day to avoid thrashing crawlers with a constantly-changing sitemap.
   return new Date().toISOString().slice(0, 10)
@@ -1304,7 +1243,8 @@ import {
   IconoplasmManifestationCutoverCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
-  drainIconoplasmAuthorityProjectionOutboxes,
+  drainIconoplasmAuthorityAccountProjection,
+  drainIconoplasmManifestationAuthorityProjection,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
@@ -1319,6 +1259,10 @@ import {
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
+import {
+  iconoplasmBackgroundJob,
+  runIconoplasmBackgroundJob,
+} from "./iconoplasm-background-schedule.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
@@ -3249,200 +3193,44 @@ export default {
       `[CRON] Triggered at ${new Date().toISOString()} via "${cronExprRaw}" -> "${cronExpr}"`,
     )
 
-    if (
-      env.ICONOPLASM_SCHEMA_TRANSITION !== "1" &&
-      ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS.has(cronExpr)
-    ) {
-      await runScheduledIconoplasmMaintenance(env, ctx)
-    }
-
-    if (cronExpr === "*/15 * * * *") {
+    const backgroundEvent = { cron: cronExpr, scheduledTime: event?.scheduledTime }
+    if (iconoplasmBackgroundJob(backgroundEvent)) {
       if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") return
-      // These jobs share a clock, not a failure domain. Drain the durable outbox
-      // even when the unrelated gallery dirty-shard publication fails, while
-      // preserving the publication job's existing fail-loud behavior.
-      const scheduledMinute = new Date(Number(event?.scheduledTime || Date.now())).getUTCMinutes()
-      const sharedDiscoveryPublicationPromise =
-        scheduledMinute === 0
-          ? publishSharedGeneDiscoverySymbols(env)
-          : Promise.resolve({ ok: true, skipped: true, reason: "not_hour_boundary" })
-      const [
-        galleryDirtyShardPublication,
-        notificationDelivery,
-        sharedDiscoveryPublication,
-        geneCardMaterializationRecovery,
-        recognitionPolicyReconciliation,
-        authorityProjectionRecovery,
-        caretakerCommentNotificationDelivery,
-        caretakerSupervoteNotificationDelivery,
-      ] = await Promise.allSettled([
-        runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
-        deliverPendingRequestFulfillmentNotifications(env, { limit: 20 }),
-        sharedDiscoveryPublicationPromise,
-        recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
-        reconcileIconoplasmRecognitionPolicies(env),
-        drainIconoplasmAuthorityProjectionOutboxes(env, { limit: 25 }),
-        deliverPendingCaretakerCommentNotifications(env, { limit: 20 }),
-        deliverPendingCaretakerSupervoteNotifications(env, { limit: 20 }),
-      ])
-      if (caretakerSupervoteNotificationDelivery.status === "rejected") {
-        console.error(
-          "[CRON] Caretaker supervote notification delivery failed:",
-          String(caretakerSupervoteNotificationDelivery.reason?.message || "unknown error"),
-        )
-      }
-      if (caretakerCommentNotificationDelivery.status === "rejected") {
-        console.error(
-          "[CRON] Caretaker comment notification delivery failed:",
-          String(caretakerCommentNotificationDelivery.reason?.message || "unknown error"),
-        )
-      }
-      if (authorityProjectionRecovery.status === "rejected") {
-        console.error(
-          "[CRON] Manifestation authority projection recovery failed:",
-          String(
-            authorityProjectionRecovery.reason?.message ||
-              authorityProjectionRecovery.reason ||
-              "unknown error",
-          ),
-        )
-      } else if (!authorityProjectionRecovery.value.ok) {
-        console.error(
-          "[CRON] Manifestation authority projection recovery remains pending:",
-          authorityProjectionRecovery.value,
-        )
-      }
-      if (notificationDelivery.status === "fulfilled") {
-        const deliveredRequestIds = notificationDelivery.value.delivered_request_ids || []
-        let freshlyFinalized = 0
-        for (let offset = 0; offset < deliveredRequestIds.length; offset += 50) {
-          const settled = await reconcileDeliveredRequestFulfillments(env, {
-            requestIds: deliveredRequestIds.slice(offset, offset + 50),
-          })
-          freshlyFinalized += settled.finalized
+      const background = await runIconoplasmBackgroundJob(backgroundEvent, {
+        gallery: () => runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
+        fulfillment: () => runScheduledIconoplasmFulfillment(env),
+        sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
+        materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
+        recognition: () => reconcileIconoplasmRecognitionPolicies(env),
+        accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),
+        manifestations: () => drainIconoplasmManifestationAuthorityProjection(env, 25),
+        caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
+        caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),
+        archive: () => archiveColdIconoplasmPublishEvents(env),
+        voteProjection: () =>
+          runScheduledIconoplasmMaintenanceStep(env, ctx, "process-vote-projection-refresh", {
+            limit: 250,
+          }),
+        canonRepair: () =>
+          runScheduledIconoplasmMaintenanceStep(env, ctx, "repair-canon-invariants", {
+            limit: 250,
+            actorId: "cron",
+            reason: "scheduled_canon_invariant_repair",
+          }),
+      })
+      if (background.handled) {
+        const result = background.result
+        if (
+          result?.ok === false ||
+          Object.values(result || {}).some((step) => step?.status === "rejected")
+        ) {
+          console.error(`[CRON] Iconoplasm ${background.job} remains pending:`, result)
+        } else {
+          console.log(`[CRON] Iconoplasm ${background.job}:`, result)
         }
-        const notificationSettlement = await reconcileDeliveredRequestFulfillments(env)
-        if (notificationDelivery.value.considered) {
-          console.log("[CRON] Iconoplasm fulfillment notifications:", {
-            ...notificationDelivery.value,
-            finalized: freshlyFinalized + notificationSettlement.finalized,
-          })
-        }
-      } else {
-        console.error(
-          "[CRON] Iconoplasm fulfillment notification delivery failed:",
-          String(
-            notificationDelivery.reason?.message || notificationDelivery.reason || "unknown error",
-          ),
-        )
+        return
       }
-      if (sharedDiscoveryPublication.status === "fulfilled") {
-        if (sharedDiscoveryPublication.value.changed) {
-          console.log(
-            "[CRON] Iconoplasm shared discovery publication:",
-            sharedDiscoveryPublication.value,
-          )
-        }
-      } else {
-        console.error(
-          "[CRON] Iconoplasm shared discovery publication failed:",
-          String(
-            sharedDiscoveryPublication.reason?.message ||
-              sharedDiscoveryPublication.reason ||
-              "unknown error",
-          ),
-        )
-      }
-      if (
-        geneCardMaterializationRecovery.status === "fulfilled" &&
-        geneCardMaterializationRecovery.value.enqueued
-      ) {
-        console.log(
-          "[CRON] Iconoplasm requested gene-card recovery:",
-          geneCardMaterializationRecovery.value,
-        )
-      } else if (geneCardMaterializationRecovery.status === "rejected") {
-        console.error(
-          "[CRON] Iconoplasm requested gene-card recovery failed:",
-          String(
-            geneCardMaterializationRecovery.reason?.message ||
-              geneCardMaterializationRecovery.reason ||
-              "unknown error",
-          ),
-        )
-      }
-      const extensionBlocklistReconciliation =
-        recognitionPolicyReconciliation.status === "fulfilled"
-          ? recognitionPolicyReconciliation.value.extension_blocklist
-          : recognitionPolicyReconciliation
-      const publicationAliasReconciliation =
-        recognitionPolicyReconciliation.status === "fulfilled"
-          ? recognitionPolicyReconciliation.value.publication_aliases
-          : recognitionPolicyReconciliation
-      const recognitionPairReconciliation =
-        recognitionPolicyReconciliation.status === "fulfilled"
-          ? recognitionPolicyReconciliation.value.pair
-          : recognitionPolicyReconciliation
-      if (
-        extensionBlocklistReconciliation.status === "fulfilled" &&
-        extensionBlocklistReconciliation.value.changed
-      ) {
-        console.log(
-          "[CRON] Iconoplasm extension blocklist publication:",
-          extensionBlocklistReconciliation.value,
-        )
-      } else if (extensionBlocklistReconciliation.status === "rejected") {
-        console.error(
-          "[CRON] Iconoplasm extension blocklist publication failed:",
-          String(
-            extensionBlocklistReconciliation.reason?.message ||
-              extensionBlocklistReconciliation.reason ||
-              "unknown error",
-          ),
-        )
-      }
-      if (
-        publicationAliasReconciliation.status === "fulfilled" &&
-        publicationAliasReconciliation.value.changed
-      ) {
-        console.log(
-          "[CRON] Iconoplasm publication alias policy:",
-          publicationAliasReconciliation.value,
-        )
-      } else if (publicationAliasReconciliation.status === "rejected") {
-        console.error(
-          "[CRON] Iconoplasm publication alias policy failed:",
-          String(
-            publicationAliasReconciliation.reason?.message ||
-              publicationAliasReconciliation.reason ||
-              "unknown error",
-          ),
-        )
-      }
-      if (
-        recognitionPairReconciliation.status === "fulfilled" &&
-        recognitionPairReconciliation.value.changed
-      ) {
-        console.log(
-          "[CRON] Iconoplasm recognition policy pair:",
-          recognitionPairReconciliation.value,
-        )
-      } else if (recognitionPairReconciliation.status === "rejected") {
-        console.error(
-          "[CRON] Iconoplasm recognition policy pair failed:",
-          String(
-            recognitionPairReconciliation.reason?.message ||
-              recognitionPairReconciliation.reason ||
-              "unknown error",
-          ),
-        )
-      }
-      if (galleryDirtyShardPublication.status === "rejected") {
-        throw galleryDirtyShardPublication.reason
-      }
-      return
     }
-
     if (cronExpr === "3 0 * * *") {
       try {
         const result = await handlePostDailyRecap(env)

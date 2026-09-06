@@ -2,6 +2,22 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import runtime from "../the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
+import {
+  iconoplasmBackgroundJob,
+  ICONOPLASM_RECURRING_CRON,
+  ICONOPLASM_NIGHTLY_CRON,
+} from "../iconoplasm-background-schedule.js"
+
+test("scheduled gallery publication exposes a failed internal response", async () => {
+  await assert.rejects(
+    runtime.scheduled(
+      { cron: ICONOPLASM_RECURRING_CRON, scheduledTime: Date.UTC(2026, 8, 6, 0, 4) },
+      {},
+      {},
+    ),
+    /Scheduled publish-gallery-dirty-shards failed/,
+  )
+})
 
 test("rejected authority requests cannot schedule projection repairs or touch D1", async () => {
   let queries = 0
@@ -120,6 +136,11 @@ test("schema transition refuses application D1, preserves queued work and leaves
     ctx,
   )
   assert.deepEqual(retry, { delaySeconds: 60 })
-  await runtime.scheduled({ cron: "*/15 * * * *" }, env, ctx)
+  for (const cron of [ICONOPLASM_RECURRING_CRON, ICONOPLASM_NIGHTLY_CRON]) {
+    for (let minute = 0; minute < 60; minute++) {
+      const event = { cron, scheduledTime: Date.UTC(2026, 8, 6, 23, minute) }
+      if (iconoplasmBackgroundJob(event)) await runtime.scheduled(event, env, ctx)
+    }
+  }
   assert.equal(queries, 0)
 })

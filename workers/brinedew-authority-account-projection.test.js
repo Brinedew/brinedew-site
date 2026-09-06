@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
-import { projectBrinedewAccountToManifestationAuthority } from "./lib/brinedew-authority-account-projection.js"
+import {
+  projectBrinedewAccountToManifestationAuthority,
+  drainBrinedewAuthorityAccountProjectionOutbox,
+} from "./lib/brinedew-authority-account-projection.js"
+import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
 
 class Statement {
   constructor(database, sql, bindings = []) {
@@ -62,6 +66,60 @@ function primaryDatabase() {
     },
   }
 }
+
+test("batch account recovery leaves downstream events durable without multiplying projection drains", async (t) => {
+  const primary = primaryDatabase()
+  const authoring = new TestD1()
+  t.after(() => {
+    primary.database.close()
+    authoring.close()
+  })
+  for (let i = 1; i <= 24; i++) {
+    const accountId = `acct_${i.toString(16).padStart(32, "0")}`
+    primary.database
+      .prepare("INSERT INTO brinedew_accounts(account_id,created_at,updated_at) VALUES (?,1,1)")
+      .run(accountId)
+    primary.database
+      .prepare(
+        `INSERT INTO brinedew_account_lifecycle_events(event_id,command_id,account_id,event_type,to_status,account_version,occurred_at)
+      VALUES (?,? ,?,'account_created','active',1,1)`,
+      )
+      .run(`account_event_batch_${i}`, `command_batch_${i}`, accountId)
+  }
+  let queries = 0
+  for (const db of [primary, authoring]) {
+    const prepare = db.prepare.bind(db)
+    db.prepare = (sql) => {
+      queries++
+      return prepare(sql)
+    }
+  }
+  let wakes = 0
+  const result = await drainBrinedewAuthorityAccountProjectionOutbox({
+    primaryDb: primary,
+    authoringDb: authoring,
+    limit: 25,
+    now: 100,
+    // An obsolete caller cannot reinstate the per-account full-batch wake.
+    wakeManifestationProjection: async () => {
+      wakes++
+    },
+  })
+  assert.equal(result.attempted, 25)
+  assert.equal(result.delivered, 25, JSON.stringify(result.results))
+  assert.equal(wakes, 0)
+  assert.equal(
+    primary.database
+      .prepare(
+        "SELECT COUNT(*) AS n FROM brinedew_authority_account_projection_outbox WHERE projection_state='pending'",
+      )
+      .get().n,
+    0,
+  )
+  t.diagnostic(
+    `25 new accounts prepare ${queries} D1 statements; individual batch admission remains under audit`,
+  )
+})
 
 test("stable account projection registers once, delivers idempotently, and wakes authority events", async (t) => {
   const primary = primaryDatabase()
