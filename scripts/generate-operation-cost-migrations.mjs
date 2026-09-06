@@ -6,6 +6,7 @@ const root = fileURLToPath(new URL("../", import.meta.url))
 const filename = "0094_finalization_summary.sql"
 const authoringFilename = "0012_streamed_replica_snapshots.sql"
 const uploadFilename = "0013_strict_upload_reservations.sql"
+const lineageFilename = "0014_bounded_lineage_upload_admission.sql"
 const target = path.join(root, "workers/generated/operation-cost-migrations.js")
 
 // Deliberately handles this one reviewed migration's line-oriented SQL. This
@@ -46,11 +47,16 @@ export function uploadReservationMigrationStatements() {
   return reviewedMigrationStatements("migrations-iconoplasm-authoring", uploadFilename, 2, 4)
 }
 
+export function lineageAdmissionMigrationStatements() {
+  return reviewedMigrationStatements("migrations-iconoplasm-authoring", lineageFilename, 1, 4)
+}
+
 function output() {
   const migrations = [
     ["FINALIZATION", filename, finalizationMigrationStatements()],
     ["AUTHORING_STREAM", authoringFilename, authoringStreamMigrationStatements()],
     ["UPLOAD_RESERVATION", uploadFilename, uploadReservationMigrationStatements()],
+    ["LINEAGE_ADMISSION", lineageFilename, lineageAdmissionMigrationStatements()],
   ]
   return (
     "// Generated from reviewed migrations; never accept caller SQL.\n" +

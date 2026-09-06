@@ -2,6 +2,11 @@
   "schema": "iconoplasm.migrationCostPlan.v1",
   "inventory_prediction": { "rows_read": 600, "rows_written": 0, "requests": 1 },
   "migrations": {
+    "iconoplasm-authoring/0014_bounded_lineage_upload_admission.sql": {
+      "adapter_id": "iconoplasm-authoring-migration-0014",
+      "arguments": { "max_rows": 50000, "max_indexed_rows": 768, "max_schema_rows": 256 },
+      "prediction": { "rows_read": 301152, "rows_written": 400, "requests": 1 }
+    },
     "iconoplasm-authoring/0013_strict_upload_reservations.sql": {
       "adapter_id": "iconoplasm-authoring-migration-0013",
       "arguments": {},
