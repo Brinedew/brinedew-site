@@ -65,50 +65,6 @@ test("production Iconoplasm maintenance is not an hourly free-plan cron", () => 
   )
 })
 
-test("23:55 is the sole production owner of full Iconoplasm maintenance", () => {
-  const source = read(
-    "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-  )
-  assert.match(source, /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS/)
-  const maintenanceSet = /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set\(\[([^\]]*)\]\)/s.exec(
-    source,
-  )
-  assert.ok(maintenanceSet, "maintenance cron set must be present")
-  assert.match(maintenanceSet[1], /"55 23 \* \* \*"/)
-  assert.doesNotMatch(
-    maintenanceSet[1],
-    /"3 0 \* \* \*"/,
-    "the GeneGuessr recap trigger must not repeat full Iconoplasm maintenance",
-  )
-  assert.match(source, /cronExpr === "3 0 \* \* \*"/)
-  assert.match(source, /handlePostDailyRecap/)
-  assert.match(source, /process-vote-projection-refresh/)
-})
-
-test("frequent dirty-shard publication cron is gallery-only, never the heavy maintenance", () => {
-  const runtime = read(
-    "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-  )
-  const wrangler = read("wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml")
-  // The */15 tick exists and is routed to the cheap gallery-only path...
-  assert.match(wrangler, /crons\s*=\s*\[[^\]]*["']\*\/15 \* \* \* \*["']/s)
-  assert.match(runtime, /cronExpr === "\*\/15 \* \* \* \*"/)
-  assert.match(runtime, /runScheduledIconoplasmGalleryDirtyShardPublication/)
-  assert.match(runtime, /publishSharedGeneDiscoverySymbols/)
-  // ...and must NOT be in the heavy maintenance set (vote projection + canon repair),
-  // or the frequent tick would burn free-plan budget every 15 minutes.
-  const maintenanceSet = /ICONOPLASM_SCHEDULED_MAINTENANCE_CRONS = new Set\(\[([^\]]*)\]\)/s.exec(
-    runtime,
-  )
-  assert.ok(maintenanceSet, "maintenance cron set must be present")
-  assert.doesNotMatch(maintenanceSet[1], /\*\/15/)
-  // The gallery-only tick must not invoke the heavy maintenance routine.
-  assert.doesNotMatch(
-    runtime,
-    /cronExpr === "\*\/15 \* \* \* \*"\)\s*\{[\s\S]*?runScheduledIconoplasmMaintenance/,
-  )
-})
-
 test("credential docs retire cache and Wrangler fallback paths", () => {
   const deployDocs = read("docs/ICONOPLASM_DEPLOY_CREDENTIALS.md")
   const operationsDocs = read("docs/ICONOPLASM_OPERATIONS.md")

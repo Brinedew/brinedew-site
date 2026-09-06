@@ -204,7 +204,6 @@ export async function drainBrinedewAuthorityAccountProjectionOutbox({
   authoringDb,
   limit = 10,
   now = Date.now(),
-  wakeManifestationProjection = null,
 } = {}) {
   requireDb(primaryDb, "DB")
   requireDb(authoringDb, "ICONOPLASM_AUTHORING_DB")
@@ -233,7 +232,6 @@ export async function drainBrinedewAuthorityAccountProjectionOutbox({
         authoringDb,
         accountId: row.account_id,
         now: attemptedAt,
-        wakeManifestationProjection,
       })
       results.push({ account_id: row.account_id, status: "delivered", projected })
     } catch (error) {

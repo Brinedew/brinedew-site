@@ -32301,7 +32301,7 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-async function drainIconoplasmManifestationAuthorityProjection(
+export async function drainIconoplasmManifestationAuthorityProjection(
   env,
   limit = 10,
   { priorityEventId = null } = {},
@@ -32331,23 +32331,18 @@ async function drainIconoplasmManifestationAuthorityProjection(
   return Object.freeze({ ...drained, ok: drained.ok && !drained.has_more })
 }
 
-export async function drainIconoplasmAuthorityProjectionOutboxes(env, { limit = 10 } = {}) {
+export async function drainIconoplasmAuthorityAccountProjection(env, { limit = 10 } = {}) {
   if (!env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
     throw new Error("Manifestation authority projection bindings are missing")
   }
   const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
-  const manifestationWake = () => drainIconoplasmManifestationAuthorityProjection(env, boundedLimit)
-  const accounts = await drainBrinedewAuthorityAccountProjectionOutbox({
+  // Batch recovery never wakes a full downstream drain for each account.
+  // The next scheduled minute owns one independent manifestation batch;
+  // interactive single-account synchronization retains its immediate wake.
+  return drainBrinedewAuthorityAccountProjectionOutbox({
     primaryDb: env.DB,
     authoringDb: env.ICONOPLASM_AUTHORING_DB,
     limit: boundedLimit,
-    wakeManifestationProjection: manifestationWake,
-  })
-  const manifestations = await manifestationWake()
-  return Object.freeze({
-    ok: accounts.ok && !accounts.has_more && manifestations.ok,
-    accounts,
-    manifestations,
   })
 }
 

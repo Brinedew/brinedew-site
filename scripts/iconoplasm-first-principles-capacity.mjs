@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url"
+import { ICONOPLASM_BACKGROUND_INVOCATIONS_PER_DAY } from "../workers/iconoplasm-background-schedule.js"
 
 const ZERO_COST = Object.freeze({
   workerRequests: 0,
@@ -85,8 +86,8 @@ export function firstPersonaOverLimit(perPersona, base = ZERO_COST, limits = FRE
 
 export const ATOMIC_COSTS = Object.freeze({
   scheduledMinimum: cost({
-    // 96 quarter-hour + 3 daily Worker cron activations.
-    workerRequests: 99,
+    // Independent Iconoplasm jobs plus three daily GeneGuessr activations.
+    workerRequests: ICONOPLASM_BACKGROUND_INVOCATIONS_PER_DAY + 3,
     // Hourly observability publication. The hourly shared-discovery publisher
     // adds at most 24 KV reads and only writes when its symbol set changed.
     kvWrites: 24,
