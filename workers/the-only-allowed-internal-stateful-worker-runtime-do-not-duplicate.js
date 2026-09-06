@@ -3209,7 +3209,7 @@ export default {
         archive: () => archiveColdIconoplasmPublishEvents(env),
         voteProjection: () =>
           runScheduledIconoplasmMaintenanceStep(env, ctx, "process-vote-projection-refresh", {
-            limit: 250,
+            limit: 2,
           }),
         canonRepair: () =>
           runScheduledIconoplasmMaintenanceStep(env, ctx, "repair-canon-invariants", {

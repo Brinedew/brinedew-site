@@ -165,7 +165,7 @@ retry_delay = 30
 [[queues.consumers]]
 queue = "iconoplasm-vote-projection"
 dead_letter_queue = "iconoplasm-vote-projection-dlq"
-max_batch_size = 25
+max_batch_size = 2
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
@@ -276,9 +276,9 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # owns the minute map and its test checks this expression. Five jobs retain
 # quarter-hour recovery; account and manifestation recovery run every 12 minutes,
 # as does supervote delivery with five 16-message batches/hour.
-# Nightly archive, vote projection, canon repair and gallery run at 23:56-59
+# Vote recovery runs six times hourly; nightly archive, canon repair and gallery run at 23:56/58/59
 # in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,5,6,7,8,11,14,15,17,18,19,20,23,26,27,29,30,31,32,35,38,39,41,42,43,44,47,50,51,53,54,55,56,59 * * * *", "56-59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,6,7,8,11,13,14,15,17,18,19,20,23,24,26,27,29,30,31,32,34,35,38,39,41,42,43,44,45,47,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
@@ -390,7 +390,7 @@ retry_delay = 30
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-vote-projection-staging"
 dead_letter_queue = "iconoplasm-vote-projection-staging-dlq"
-max_batch_size = 25
+max_batch_size = 2
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
