@@ -14,7 +14,35 @@ function boundedCodePoints(value, limit = 2000) {
 
 function retryAt(attempt) {
   const seconds = Math.min(6 * 60 * 60, 30 * 2 ** Math.min(9, Math.max(0, attempt - 1)))
-  return new Date(Date.now() + seconds * 1000).toISOString()
+  return new Date(Date.now() + seconds * 1000).toISOString().slice(0, 19).replace("T", " ")
+}
+
+// The existing (status, next_attempt_at, created_at) indexes protect each range.
+// Sort only bounded candidates, never the whole pending backlog. Keep the legacy
+// ISO timestamps readable without applying a function to the indexed column.
+function dueNotificationsStatement(db, table, limit) {
+  const ranges = [
+    "discord_next_attempt_at IS NULL",
+    "discord_next_attempt_at < date('now')",
+    "discord_next_attempt_at >= date('now') || ' ' AND discord_next_attempt_at <= CURRENT_TIMESTAMP",
+    "discord_next_attempt_at >= date('now') || 'T' AND discord_next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+  ]
+  const candidates = DELIVERY_STATUSES.flatMap((status) =>
+    ranges.map(
+      (range) =>
+        `SELECT * FROM ${table} WHERE discord_status = '${status}' AND ${range}
+       ORDER BY discord_next_attempt_at, created_at LIMIT ?1`,
+    ),
+  )
+  return db
+    .prepare(
+      `WITH ${candidates.map((sql, index) => `due_${index} AS MATERIALIZED (${sql})`).join(",\n")},
+    pending AS MATERIALIZED (SELECT * FROM due_0 UNION ALL SELECT * FROM due_1 UNION ALL SELECT * FROM due_2 UNION ALL SELECT * FROM due_3),
+    retries AS MATERIALIZED (SELECT * FROM due_4 UNION ALL SELECT * FROM due_5 UNION ALL SELECT * FROM due_6 UNION ALL SELECT * FROM due_7)
+    SELECT * FROM (SELECT * FROM pending UNION ALL SELECT * FROM retries)
+    ORDER BY COALESCE(datetime(discord_next_attempt_at), created_at), notification_key LIMIT ?1`,
+    )
+    .bind(limit)
 }
 
 export async function resolveCaretakerCommentRecipient(env, { symbol, authorAccountId }) {
@@ -99,38 +127,36 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
   if (!db?.prepare || !token) return { ok: false, delivered: 0, skipped: "unavailable" }
   const safeLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
-  const due = await db
-    .prepare(
-      `SELECT * FROM icono_caretaker_comment_notifications
-        WHERE discord_status IN ('pending', 'retry')
-          AND (discord_next_attempt_at IS NULL OR discord_next_attempt_at <= CURRENT_TIMESTAMP)
-        ORDER BY created_at, notification_key LIMIT ?`,
-    )
-    .bind(safeLimit)
-    .all()
+  const due = await dueNotificationsStatement(
+    db,
+    "icono_caretaker_comment_notifications",
+    safeLimit,
+  ).all()
   let delivered = 0
   for (const row of due?.results || []) {
     const claim = await db
       .prepare(
-        `UPDATE icono_caretaker_comment_notifications
-            SET discord_status = 'sending', discord_attempt_count = discord_attempt_count + 1,
-                updated_at = CURRENT_TIMESTAMP, discord_error = ''
-          WHERE notification_key = ? AND discord_status IN ('pending', 'retry')`,
+        `WITH eligible AS MATERIALIZED (
+           SELECT 1 FROM icono_caretaker_assignment_notifications
+            WHERE caretaker_assignment_id = ? AND account_id = ? AND assignment_status = 'active'
+         )
+         UPDATE icono_caretaker_comment_notifications
+            SET discord_status = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN 'sending' ELSE 'suppressed' END,
+                discord_attempt_count = discord_attempt_count + 1,
+                updated_at = CURRENT_TIMESTAMP,
+                discord_error = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN '' ELSE 'assignment_not_active' END
+          WHERE notification_key = ? AND discord_status IN ('pending', 'retry')
+            AND discord_attempt_count = ?
+          RETURNING discord_status`,
       )
-      .bind(row.notification_key)
-      .run()
-    if (Number(claim?.meta?.changes || 0) !== 1) continue
-    const current = await db
-      .prepare(
-        `SELECT 1 AS active FROM icono_caretaker_assignment_notifications
-          WHERE caretaker_assignment_id = ? AND account_id = ? AND assignment_status = 'active'`,
+      .bind(
+        row.caretaker_assignment_id,
+        row.caretaker_account_id,
+        row.notification_key,
+        row.discord_attempt_count,
       )
-      .bind(row.caretaker_assignment_id, row.caretaker_account_id)
       .first()
-    if (!current) {
-      await finish(db, row.notification_key, "suppressed", { error: "assignment_not_active" })
-      continue
-    }
+    if (claim?.discord_status !== "sending") continue
     let channelResponse
     try {
       channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
@@ -240,30 +266,17 @@ export async function deliverPendingCaretakerSupervoteNotifications(env, { limit
     return { ok: false, delivered: 0, skipped: "unavailable" }
   }
   const safeLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))
-  const due = await db
-    .prepare(
-      `SELECT * FROM icono_caretaker_supervote_notifications
-        WHERE discord_status IN ('pending', 'retry')
-          AND (discord_next_attempt_at IS NULL OR discord_next_attempt_at <= CURRENT_TIMESTAMP)
-        ORDER BY created_at, notification_key LIMIT ?`,
-    )
-    .bind(safeLimit)
-    .all()
+  const due = await dueNotificationsStatement(
+    db,
+    "icono_caretaker_supervote_notifications",
+    safeLimit,
+  ).all()
   let delivered = 0
   for (const row of due?.results || []) {
     const claim = await db
       .prepare(
-        `UPDATE icono_caretaker_supervote_notifications
-            SET discord_status = 'sending', discord_attempt_count = discord_attempt_count + 1,
-                updated_at = CURRENT_TIMESTAMP, discord_error = ''
-          WHERE notification_key = ? AND discord_status IN ('pending', 'retry')`,
-      )
-      .bind(row.notification_key)
-      .run()
-    if (Number(claim?.meta?.changes || 0) !== 1) continue
-    const current = await db
-      .prepare(
-        `SELECT 1 AS current_preference
+        `WITH eligible AS MATERIALIZED (
+         SELECT 1
            FROM icono_caretaker_supervote_projection supervote
            JOIN icono_caretaker_assignment_notifications assignment
              ON assignment.caretaker_assignment_id = supervote.caretaker_assignment_id
@@ -279,7 +292,16 @@ export async function deliverPendingCaretakerSupervoteNotifications(env, { limit
               SELECT 1 FROM icono_publish_state publish
                WHERE publish.gene_symbol = supervote.gene_symbol
                  AND publish.current_asset_sha256 IS NOT supervote.asset_sha256
-            )`,
+            )
+         )
+         UPDATE icono_caretaker_supervote_notifications
+            SET discord_status = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN 'sending' ELSE 'suppressed' END,
+                discord_attempt_count = discord_attempt_count + 1,
+                updated_at = CURRENT_TIMESTAMP,
+                discord_error = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN '' ELSE 'preference_no_longer_current' END
+          WHERE notification_key = ? AND discord_status IN ('pending', 'retry')
+            AND discord_attempt_count = ?
+          RETURNING discord_status`,
       )
       .bind(
         row.caretaker_assignment_id,
@@ -287,14 +309,11 @@ export async function deliverPendingCaretakerSupervoteNotifications(env, { limit
         row.gene_symbol,
         row.preferred_asset_sha256,
         Number(row.supervote_version),
+        row.notification_key,
+        row.discord_attempt_count,
       )
       .first()
-    if (!current) {
-      await finishSupervote(db, row.notification_key, "suppressed", {
-        error: "preference_no_longer_current",
-      })
-      continue
-    }
+    if (claim?.discord_status !== "sending") continue
     let identity
     try {
       identity = await accounts
