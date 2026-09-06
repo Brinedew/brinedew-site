@@ -769,34 +769,47 @@ async function pendingProjectionEvents(authoringDb, { limit, now, priorityEventI
       .first()
     return { rows: row ? [row] : [], hasMore: Boolean(row) && limit === 1 }
   }
-  // Four disjoint ranges follow the existing retry index, each stopping at
+  // Eight disjoint ranges follow the existing retry index, each stopping at
   // limit entries. Coalesce only this bounded window; looking for the newest
   // pending event across all history turns LIMIT into an unbounded scan.
   // Older callbacks still project the exact current authority head below.
   const candidates = []
   let fullRange = false
+  const isoNow = now.toISOString()
+  const day = isoNow.slice(0, 10)
+  const sqlNow = isoNow.replace("T", " ").replace("Z", "")
+  // Legacy delivery wrote SQL timestamps while recovery wrote ISO timestamps.
+  // Separate today's two encodings so neither sorts before a future retry.
+  // Do not apply datetime() to the indexed column or scan a future backlog.
+  const ranges = [
+    ["projection_next_attempt_at IS NULL", []],
+    ["projection_next_attempt_at < ?", [day]],
+    ["projection_next_attempt_at >= ? AND projection_next_attempt_at <= ?", [day + " ", sqlNow]],
+    ["projection_next_attempt_at >= ? AND projection_next_attempt_at <= ?", [day + "T", isoNow]],
+  ]
   for (const status of ["pending", "failed"]) {
-    for (const scheduled of [false, true]) {
-      const response = await authoringDb
-        .prepare(
-          `SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
+    const queries = ranges.map(
+      ([predicate], index) => `range_${index} AS (
+           SELECT event_uuid, event_sequence, gene_id, gene_revision, payload_json,
+                  ${index} AS range_id,
                   projection_status, projection_attempts
              FROM icono_manifestation_events
              INDEXED BY idx_icono_events_projection_due
-            WHERE projection_status = ? AND ${
-              scheduled
-                ? "projection_next_attempt_at IS NOT NULL AND projection_next_attempt_at <= ?"
-                : "projection_next_attempt_at IS NULL"
-            }
+            WHERE projection_status = ? AND ${predicate}
             ORDER BY projection_next_attempt_at, event_sequence
-            LIMIT ?`,
-        )
-        .bind(...(scheduled ? [status, now.toISOString(), limit] : [status, limit]))
-        .all()
-      const rows = Array.isArray(response?.results) ? response.results : []
-      fullRange ||= rows.length === limit
-      candidates.push(...rows)
-    }
+            LIMIT ?)`,
+    )
+    const response = await authoringDb
+      .prepare(
+        `WITH ${queries.join(", ")} ${ranges.map((_, index) => `SELECT * FROM range_${index}`).join(" UNION ALL ")}`,
+      )
+      .bind(...ranges.flatMap(([, bindings]) => [status, ...bindings, limit]))
+      .all()
+    const rows = Array.isArray(response?.results) ? response.results : []
+    fullRange ||= ranges.some(
+      (_, index) => rows.filter((row) => row.range_id === index).length === limit,
+    )
+    candidates.push(...rows)
   }
   const latest = new Map()
   for (const row of candidates) {
