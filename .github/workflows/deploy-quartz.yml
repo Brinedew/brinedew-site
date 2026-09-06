@@ -213,6 +213,7 @@ jobs:
         timeout-minutes: 1
         env:
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/preflight-operation-cost-release.mjs
 
@@ -269,6 +270,7 @@ jobs:
         timeout-minutes: 1
         env:
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/preflight-operation-cost-release.mjs
 
