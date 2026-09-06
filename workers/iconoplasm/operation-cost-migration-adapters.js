@@ -8,10 +8,18 @@ import {
   createAdminCountsMigrationCostAdapter,
   createInboxCountersMigrationCostAdapter,
   createDeliveryCursorMigrationCostAdapter,
+  createAssignmentLookupMigrationCostAdapter,
 } from "./operation-cost-counter-migration-adapters.js"
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-authoring-migration-0016",
+      createAssignmentLookupMigrationCostAdapter({
+        db: env.ICONOPLASM_AUTHORING_DB,
+        ...identities,
+      }),
+    ],
     [
       "iconoplasm-migration-0097",
       createDeliveryCursorMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),

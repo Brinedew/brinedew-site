@@ -7,11 +7,21 @@ import {
   INBOX_COUNTERS_MIGRATION_STATEMENTS,
   DELIVERY_CURSOR_MIGRATION_NAME,
   DELIVERY_CURSOR_MIGRATION_STATEMENTS,
+  ASSIGNMENT_LOOKUP_MIGRATION_NAME,
+  ASSIGNMENT_LOOKUP_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 
 // Fixed server-owned SQL only. Each size guard stops at its envelope plus one;
 // guards, DDL, seed and journal insertion execute in one atomic D1 batch.
 const specifications = {
+  assignmentLookup: {
+    resource: "iconoplasm-authoring",
+    name: ASSIGNMENT_LOOKUP_MIGRATION_NAME,
+    sql: ASSIGNMENT_LOOKUP_MIGRATION_STATEMENTS,
+    tables: { max_assignments: "icono_caretaker_assignments" },
+    writes: (args) => args.max_assignments + 32,
+    readPasses: 4,
+  },
   deliveryCursor: {
     name: DELIVERY_CURSOR_MIGRATION_NAME,
     sql: DELIVERY_CURSOR_MIGRATION_STATEMENTS,
@@ -45,7 +55,7 @@ const specifications = {
 function createCounterMigrationAdapter(kind, { db, executable_sha256, schema_sha256 }) {
   const specification = specifications[kind]
   return {
-    resource: "iconoplasm",
+    resource: specification.resource || "iconoplasm",
     executable_sha256,
     schema_sha256,
     async prepare(args) {
@@ -121,3 +131,6 @@ export const createInboxCountersMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("inbox", options)
 export const createDeliveryCursorMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("deliveryCursor", options)
+
+export const createAssignmentLookupMigrationCostAdapter = (options) =>
+  createCounterMigrationAdapter("assignmentLookup", options)

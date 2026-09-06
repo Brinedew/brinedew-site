@@ -1,4 +1,8 @@
 // Generated from reviewed migrations; never accept caller SQL.
+export const ASSIGNMENT_LOOKUP_MIGRATION_NAME = "0016_account_assignment_lookup.sql"
+export const ASSIGNMENT_LOOKUP_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE INDEX idx_icono_account_assignment_projection\nON icono_caretaker_assignments (\n  account_id,\n  CASE WHEN status IN ('pending_acceptance','active','suspended') THEN 0 ELSE 1 END,\n  created_at DESC,\n  caretaker_assignment_id DESC\n);"
+])
 export const FINALIZATION_MIGRATION_NAME = "0094_finalization_summary.sql"
 export const FINALIZATION_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE icono_sync_finalization_summary (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  queued_count INTEGER NOT NULL CHECK (queued_count >= 0),\n  running_count INTEGER NOT NULL CHECK (running_count >= 0),\n  retrying_count INTEGER NOT NULL CHECK (retrying_count >= 0),\n  pending_finalize_count INTEGER NOT NULL CHECK (pending_finalize_count >= 0),\n  unfinished_count INTEGER NOT NULL CHECK (unfinished_count >= 0),\n  completed_count INTEGER NOT NULL CHECK (completed_count >= 0)\n);",

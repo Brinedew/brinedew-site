@@ -365,6 +365,18 @@ events: selection returns 400 candidates using 400 reads and zero writes, below
 the reviewed 816-read bound. The full-schema integration separately covers
 projection writes and both callback paths.
 
+Account projection's tenure choice now requires migration 0016's expression
+index. It preserves open-tenure priority, latest creation time and the stable
+assignment-ID tie-breaker; ended tenures remain eligible for identity projection.
+The full-schema workerd fixture contains 20,000 ended tenures with tied creation
+times. The old indexed history sort uses 40,001 reads; the new exact selection
+uses two for either an ended or open tenure and one for an empty account.
+Migration admission checks source and schema bounds before its atomic index and
+journal batch. The 20,000-row stress fixture costs 60,869 reads and 20,004 writes;
+that is a local stress test, not a production allowance. The release envelope
+admits at most 1,000 assignments and still requires a fresh live inventory and
+the shared cumulative daily gate. An absent index fails explicitly.
+
 - Complete attribution and cost proofs for all execution paths; preserve unknowns
   as unknown rather than declaring them free.
 - Fix recurring aggregates, read-triggered rebuilds and write amplification in
