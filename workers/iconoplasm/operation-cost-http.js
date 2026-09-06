@@ -6,6 +6,8 @@ import { createOperationCostQueryRegistry } from "./operation-cost-query-registr
 import { createOperationCostAccountUsageReader } from "./operation-cost-account-usage.js"
 import { createMigrationOperationCostAdapters } from "./operation-cost-migration-adapters.js"
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
+import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
+import { createCatalogInitializationCostAdapter } from "./operation-cost-catalog-initialization-adapter.js"
 
 const MAX_BODY_BYTES = 70_000
 export const OPERATION_COST_ROUTE_PREFIX = "/api/iconoplasm/admin/cost/operations"
@@ -65,6 +67,14 @@ export function createOperationCostAuthority(storage, env, options = {}) {
   const registry = createOperationCostQueryRegistry()
   const adapters = new Map([
     [
+      "catalog-snapshot-initialization",
+      createCatalogInitializationCostAdapter({
+        kv: env.KV,
+        initialize: options.initializeCatalog,
+        ...OPERATION_COST_IDENTITIES,
+      }),
+    ],
+    [
       "authority-replica",
       createReplicaOperationCostAdapter({
         env,
@@ -86,8 +96,10 @@ export function createOperationCostAuthority(storage, env, options = {}) {
   const executor = new OperationCostExecutor({
     ledger,
     adapters,
-    beforeReserve: async () => {
-      const sample = await usage.refresh()
+    beforeReserve: async ({ bound }) => {
+      const sample = await usage.refresh({
+        includeKv: KV_COST_METERS.some((m) => (bound[m] ?? 0) > 0),
+      })
       ledger.rememberAccountUsage(sample || usage.current())
     },
   })

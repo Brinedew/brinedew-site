@@ -6,6 +6,8 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
+  buildPortraitAwareManifestHash,
+  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmPublicationAliasManifestFromPolicy } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
@@ -436,6 +438,15 @@ function publishPortraitFixture(kv, rows = []) {
   kv.entries.set(
     `iconoplasm:published-portrait-refs:v3-${fingerprint.published_count}-${fingerprint.latest}`,
     JSON.stringify(refs),
+  )
+  const { current_hash: base } = JSON.parse(kv.entries.get("iconoplasm:catalog-manifest"))
+  const artifact = mergePublishedPortraitRefsIntoArtifact(
+    JSON.parse(kv.entries.get(`iconoplasm:catalog:${base}`)),
+    refs,
+  )
+  kv.entries.set(
+    `iconoplasm:hydrated-catalog-artifact:a${artifact.schema_version}c${artifact.contract_revision}:${buildPortraitAwareManifestHash(base, fingerprint)}`,
+    JSON.stringify(artifact),
   )
 }
 

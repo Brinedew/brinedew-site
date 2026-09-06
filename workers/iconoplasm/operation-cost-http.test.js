@@ -2,10 +2,11 @@ import assert from "node:assert/strict"
 import { DatabaseSync } from "node:sqlite"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import { runAdmittedCatalogInitialization } from "../../scripts/run-admitted-catalog-initialization.mjs"
 import { createOperationCostAuthority, OPERATION_COST_ROUTE_PREFIX } from "./operation-cost-http.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
-function fixture({ migrated = true } = {}) {
+function fixture({ migrated = true, kv, initializeCatalog, kvUsage = {} } = {}) {
   const clock = Date.parse("2026-09-06T12:00:00Z")
   const local = new DatabaseSync(":memory:")
   const provider = new DatabaseSync(":memory:")
@@ -75,13 +76,19 @@ function fixture({ migrated = true } = {}) {
       rows_read: 0,
       rows_written: 0,
       requests: 0,
+      kv_measured_at: clock,
+      kv_reads: 0,
+      kv_writes: 0,
+      kv_deletes: 0,
+      kv_lists: 0,
+      ...kvUsage,
     }),
     refresh: async () => {},
   }
   const authority = createOperationCostAuthority(
     storage,
-    { ICONOPLASM_DB: db },
-    { usage, now: () => clock },
+    { ICONOPLASM_DB: db, KV: kv },
+    { usage, now: () => clock, initializeCatalog },
   )
   authority.initialize()
   const request = (suffix, input) =>
@@ -104,6 +111,105 @@ function fixture({ migrated = true } = {}) {
     },
   }
 }
+
+test("authenticated catalog release shares retry ceilings and rejects unsafe initialization before KV", async () => {
+  const prediction = {
+    rows_read: 0,
+    rows_written: 0,
+    requests: 2,
+    kv_reads: 5,
+    kv_writes: 1,
+    kv_deletes: 0,
+    kv_lists: 0,
+  }
+  for (const scenario of [
+    "success",
+    "underestimate",
+    "stale",
+    "exhausted",
+    "failure",
+    "bad-receipt",
+  ]) {
+    let reads = 0,
+      writes = 0,
+      forwards = 0
+    const f = fixture({
+      kv: {
+        get: async () => {
+          reads++
+          return "{}"
+        },
+        put: async () => {
+          writes++
+        },
+      },
+      kvUsage:
+        scenario === "stale"
+          ? { kv_measured_at: 0 }
+          : scenario === "exhausted"
+            ? { kv_writes: 1000 }
+            : {},
+      initializeCatalog: async (kv) => {
+        for (let i = 0; i < 5; i++) await kv.get(`key-${i}`)
+        await kv.put("iconoplasm:hydrated-catalog-artifact:test", "{}")
+        if (scenario === "failure") throw new Error("provider failure")
+        return scenario === "bad-receipt"
+          ? {}
+          : { build_version: "test", gene_count: 1, changed: true }
+      },
+    })
+    try {
+      const env = {
+        ICONOPLASM_ADMIN_TOKEN: "test-only",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            fetch: (request) => {
+              forwards++
+              return f.authority.fetch(request)
+            },
+          }),
+        },
+      }
+      const send = async (suffix, method, input) => {
+        const request = f.request(suffix, input)
+        request.headers.set("x-iconoplasm-admin-token", "test-only")
+        const response = await gateway(request, env)
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.code || body.error)
+        return body
+      }
+      const run = () =>
+        runAdmittedCatalogInitialization({
+          prediction: scenario === "underestimate" ? { ...prediction, kv_reads: 1 } : prediction,
+          releaseId: "catalog-release",
+          send,
+          now: f.clock,
+        })
+      assert.equal((await gateway(f.request("/execute", {}), env)).status, 403)
+      assert.equal(forwards, 0)
+      if (scenario === "success") {
+        assert.equal((await run()).result.changed, true)
+        await run()
+        await assert.rejects(run(), /COST_/)
+        assert.equal(reads, 10)
+        assert.equal(writes, 2)
+      } else {
+        await assert.rejects(run())
+        if (["underestimate", "stale", "exhausted"].includes(scenario)) {
+          assert.equal(reads, 0)
+          assert.equal(writes, 0)
+        } else {
+          assert.equal(reads, 5)
+          assert.equal(writes, 1)
+        }
+      }
+      assert.equal(f.calls.length, 0)
+    } finally {
+      f.close()
+    }
+  }
+})
 
 test("HTTP authority denies unplanned/underestimated work, then executes a fitting registered operation without owner approval", async () => {
   const f = fixture()

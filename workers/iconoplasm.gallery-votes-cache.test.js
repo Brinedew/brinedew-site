@@ -5,6 +5,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
+  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   listIconoplasmTestKv,
@@ -97,6 +98,15 @@ class FakeKv {
     this.hash = hash
     this.artifact = artifact
     this.entries = new Map()
+    this.entries.set(
+      `iconoplasm:hydrated-catalog-artifact:a5c1:${hash}-a5c1-v3-2-galleryvotesv1`,
+      JSON.stringify(
+        mergePublishedPortraitRefsIntoArtifact(artifact, [
+          { symbol: "A1BG", asset_sha256: "b".repeat(64) },
+          { symbol: "TP53", asset_sha256: "a".repeat(64) },
+        ]),
+      ),
+    )
     this.recognitionPairReady = seedIconoplasmTestRecognitionPair(this.entries)
   }
 

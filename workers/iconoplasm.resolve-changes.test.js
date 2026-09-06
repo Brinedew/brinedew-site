@@ -5,6 +5,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
+  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   listIconoplasmTestKv,
@@ -256,6 +257,12 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
         gene_count: artifact.gene_count,
       }),
       [`iconoplasm:catalog:${hash}`]: JSON.stringify(artifact),
+      [`iconoplasm:hydrated-catalog-artifact:a5c1:${hash}-a5c1-v3-1-resolveportraitv1`]:
+        JSON.stringify(
+          mergePublishedPortraitRefsIntoArtifact(artifact, [
+            { symbol: "PRL", asset_sha256: "a".repeat(64) },
+          ]),
+        ),
       "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
         schema: "iconoplasm.publishedPortraitFingerprint.v1",
         published_at: "2026-04-05T00:00:00.000Z",

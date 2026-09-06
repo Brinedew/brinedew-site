@@ -71,6 +71,38 @@ scale before running production work.
 
 ## Release and acceptance
 
+### Read-only published catalog cutover
+
+Catalog hydration formerly repaired a missing artifact on a reader request.
+That mechanism kept a cold isolate usable, but multiplied D1 reads and KV writes
+across readers. The replacement preserves the exact portrait fingerprint and
+catalog identity: the publisher verifies the reference digest, writes hydrated
+payloads before their fingerprint pointer, and advances the catalog manifest
+last. Failed publication does not advance the isolate cache. Missing published
+artifacts return an uncached 503; readers never reconstruct or persist them.
+KV remains eventually consistent across locations; this ordering is not a claim
+of cross-location transactional visibility.
+
+Before activating this reader, the release initializes the retained current
+catalog through the existing operation-cost authority. Its reviewed capability
+allows five KV reads and one hydrated-artifact write, no D1, lists or deletes.
+It verifies the source, references and fingerprint and preserves both pointers.
+Inputs and output are capped at 20 MiB and 20,000 genes. A real local workerd
+test processes an 18,480,071-byte, 20,000-gene catalog within that envelope;
+repetition performs five reads and zero writes. Supported extension releases
+currently share the same schema; a future older supported schema must have its
+compatibility artifact published explicitly before exposing it.
+
+KV admission extends the same transactional reservation and continuation
+authority. Additive auxiliary tables preserve existing D1 plans and receipts.
+Operator daily ceilings are 10,000 reads, 200 writes, 100 deletes and 100 lists;
+account admission ceilings are 70,000 reads and 700 for each other operation.
+Fresh account-wide `kvOperationsAdaptiveGroups` telemetry is mandatory. Missing,
+stale or malformed telemetry refuses work before KV; uncertain execution keeps
+the reservation. Release retries inherit their spending and cannot renew the
+two-times-prediction ceiling. These controls cover this initialization adapter;
+they do not yet certify all publication or background KV work.
+
 ### Retired snapshot storage
 
 Migration 0015 removes only `icono_manifestation_snapshot_parts`, the old copied

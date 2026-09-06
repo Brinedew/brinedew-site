@@ -11,6 +11,7 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishIconoplasmGalleryDirtyShardsForTest,
   resetIconoplasmRuntimeCachesForTest,
+  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   listIconoplasmTestKv,
@@ -488,6 +489,10 @@ function putCatalogResolveArtifact(
   ],
   hash = "aliascatalog01",
 ) {
+  kvStore.set(
+    `iconoplasm:hydrated-catalog-artifact:a5c1:${hash}-a5c1`,
+    JSON.stringify(mergePublishedPortraitRefsIntoArtifact({ schema_version: 4, genes }, [])),
+  )
   kvStore.set(
     "iconoplasm:catalog-manifest",
     JSON.stringify({

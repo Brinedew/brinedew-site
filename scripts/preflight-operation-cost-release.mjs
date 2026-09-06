@@ -7,6 +7,12 @@ import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/oper
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { runAdmittedMigrations, createReleaseSender } from "./run-admitted-d1-migrations.mjs"
+import {
+  KV_COST_METERS,
+  KV_OPERATOR_LIMITS,
+  KV_ACCOUNT_CEILINGS,
+} from "../workers/lib/operation-cost-meters.js"
+import { createCatalogInitializationCostAdapter } from "../workers/iconoplasm/operation-cost-catalog-initialization-adapter.js"
 
 export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
@@ -96,7 +102,28 @@ export async function preflightOperationCostRelease({
     maximum.rows_written > D1_OPERATOR_DAILY_LIMITS.writes
   )
     throw new Error("COST_RELEASE_EXCEEDS_DAILY_ALLOCATION")
-  const sample = await reader.refresh()
+  const initialization = manifest.catalog_initialization_prediction
+  if (initialization) {
+    if (
+      Object.keys(initialization).sort().join() !==
+        "kv_deletes,kv_lists,kv_reads,kv_writes,requests,rows_read,rows_written" ||
+      Object.values(initialization).some((value) => !Number.isSafeInteger(value) || value < 0) ||
+      initialization.requests < 1
+    )
+      throw new Error("COST_PREDICTION_REQUIRED")
+    const { bound } = await createCatalogInitializationCostAdapter(
+      OPERATION_COST_IDENTITIES,
+    ).prepare({})
+    for (const meter of Object.keys(bound)) {
+      if (bound[meter] > 2 * initialization[meter]) throw new Error("COST_TWICE_PREDICTION_LIMIT")
+      required[meter] = (required[meter] ?? 0) + 2 * initialization[meter]
+      maximum[meter] = (maximum[meter] ?? 0) + bound[meter]
+    }
+    for (const meter of KV_COST_METERS)
+      if (maximum[meter] > KV_OPERATOR_LIMITS[meter])
+        throw new Error("COST_RELEASE_EXCEEDS_DAILY_ALLOCATION")
+  }
+  const sample = await reader.refresh({ includeKv: Boolean(initialization) })
   const checkedAt = now()
   if (
     sample?.day !== new Date(checkedAt).toISOString().slice(0, 10) ||
@@ -105,10 +132,17 @@ export async function preflightOperationCostRelease({
     checkedAt - sample.measured_at > 60_000
   )
     throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
+  if (
+    initialization &&
+    (!Number.isSafeInteger(sample.kv_measured_at) ||
+      sample.kv_measured_at > checkedAt ||
+      checkedAt - sample.kv_measured_at > 60_000)
+  )
+    throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
   for (const meter of Object.keys(required)) {
     if (!Number.isSafeInteger(sample[meter]) || sample[meter] < 0)
       throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
-    if (sample[meter] + required[meter] > ACCOUNT_CEILINGS[meter])
+    if (sample[meter] + required[meter] > (ACCOUNT_CEILINGS[meter] ?? KV_ACCOUNT_CEILINGS[meter]))
       throw new Error(`COST_RELEASE_ACCOUNT_HEADROOM: ${meter}`)
   }
   return { day: sample.day, measured_at: sample.measured_at, observed: sample, required, maximum }
