@@ -281,7 +281,8 @@ test("stable account projection registers once, delivers idempotently, and wakes
       authoringDb: authoring,
       accountId,
       now: 100,
-      wakeManifestationProjection: async () => {
+      wakeManifestationProjection: async (event) => {
+        assert.deepEqual(event, { event_id: "event_authority_account_1", event_sequence: 17 })
         wakes += 1
       },
     },
