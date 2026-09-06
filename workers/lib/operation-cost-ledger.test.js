@@ -176,6 +176,46 @@ test("KV unknown spending and account high-water survive restart; only complete 
   }
 })
 
+test("cached KV telemetry adds no storage writes and auxiliary days share receipt retention", () => {
+  const f = fixture()
+  try {
+    const sample = {
+      ...f.readAccountUsage(),
+      kv_measured_at: f.readAccountUsage().measured_at,
+      kv_reads: 100,
+      kv_writes: 10,
+      kv_deletes: 0,
+      kv_lists: 0,
+    }
+    f.ledger.rememberAccountUsage(sample)
+    const writes = () => f.db.prepare("SELECT total_changes() AS n").get().n
+    const before = writes()
+    f.ledger.rememberAccountUsage(sample)
+    f.ledger.rememberAccountUsage({ ...sample, kv_reads: 50 })
+    assert.equal(writes(), before)
+    assert.equal(f.ledger.storedAccountUsage().kv_reads, 100)
+    f.db.prepare("INSERT INTO operation_cost_kv_days VALUES (?,?)").run("2026-08-20", "{}")
+    f.db
+      .prepare("INSERT INTO operation_cost_kv_account_usage VALUES (?,?,?)")
+      .run("2026-08-20", 0, "{}")
+    f.ledger.register(f.input)
+    assert.equal(
+      f.db.prepare("SELECT COUNT(*) AS n FROM operation_cost_kv_days WHERE day='2026-08-20'").get()
+        .n,
+      0,
+    )
+    assert.equal(
+      f.db
+        .prepare("SELECT COUNT(*) AS n FROM operation_cost_kv_account_usage WHERE day='2026-08-20'")
+        .get().n,
+      0,
+    )
+    assert.equal(f.ledger.storedAccountUsage().kv_reads, 100)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("adding KV tables preserves existing D1 plan bytes and spending", () => {
   const f = fixture()
   try {

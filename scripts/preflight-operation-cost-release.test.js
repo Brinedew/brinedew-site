@@ -93,6 +93,11 @@ test("the counter release fits protected capacity only after historical migratio
   assert.equal(result.maximum.rows_written, 15528)
   assert.equal(result.maximum.kv_reads, 5)
   assert.equal(result.maximum.kv_writes, 1)
+  await preflightOperationCostRelease({
+    ...options,
+    pendingMigrations,
+    reader: { refresh: async () => ({ ...sample, kv_deletes: 1000, kv_lists: 1000 }) },
+  })
   await assert.rejects(
     preflightOperationCostRelease({
       ...options,
