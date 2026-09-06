@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.7 - 2026-09-06
+
+* hotfix for previous release
 ## 0.5.6 - 2026-09-06
 
 * Improved speed and reliability of gene name highlighting
