@@ -4,10 +4,16 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
-function runtimeSources(directory) {
-  return readdirSync(path.join(root, directory), { withFileTypes: true }).flatMap((entry) => {
+function runtimeSources(sourceRoot, directory) {
+  return readdirSync(path.join(sourceRoot, directory), { withFileTypes: true }).flatMap((entry) => {
     const name = `${directory}/${entry.name}`
-    if (entry.isDirectory()) return runtimeSources(name)
+    // Dependency and provider caches are machine-local state, never Worker
+    // source. Dependencies are pinned by the lockfile below. Walking these
+    // directories made a checkout with Wrangler caches disagree with CI.
+    if (entry.isDirectory())
+      return ["node_modules", ".wrangler", ".git"].includes(entry.name)
+        ? []
+        : runtimeSources(sourceRoot, name)
     return /\.(?:[cm]?js|json)$/.test(name) &&
       !/\.(?:test|spec)\.[cm]?js$/.test(name) &&
       name !== "workers/generated/operation-cost-identities.js" &&
@@ -19,31 +25,32 @@ function runtimeSources(directory) {
 
 // Cover imported domain handlers as well as the gate itself. A hand-maintained
 // short list allowed a changed transitive SQL helper to keep old plans valid.
-const sourceFiles = [
-  ...runtimeSources("workers"),
-  ...runtimeSources("shared"),
-  "pnpm-lock.yaml",
-  "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-  "scripts/generate-operation-cost-migrations.mjs",
-]
 const schemaDirectories = ["migrations", "migrations-iconoplasm", "migrations-iconoplasm-authoring"]
 
-function digest(files) {
+function digest(sourceRoot, files) {
   const hash = createHash("sha256")
   for (const name of [...files].sort()) {
     hash.update(name + "\n")
-    hash.update(readFileSync(path.join(root, name), "utf8").replace(/\r\n/g, "\n"))
+    hash.update(readFileSync(path.join(sourceRoot, name), "utf8").replace(/\r\n/g, "\n"))
     hash.update("\n")
   }
   return hash.digest("hex")
 }
 
-export function operationCostIdentities() {
+export function operationCostIdentities({ sourceRoot = root } = {}) {
+  const sourceFiles = [
+    ...runtimeSources(sourceRoot, "workers"),
+    ...runtimeSources(sourceRoot, "shared"),
+    "pnpm-lock.yaml",
+    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    "scripts/generate-operation-cost-migrations.mjs",
+  ]
   return {
-    executable_sha256: digest(sourceFiles),
+    executable_sha256: digest(sourceRoot, sourceFiles),
     schema_sha256: digest(
+      sourceRoot,
       schemaDirectories.flatMap((directory) =>
-        readdirSync(path.join(root, directory))
+        readdirSync(path.join(sourceRoot, directory))
           .filter((name) => name.endsWith(".sql"))
           .map((name) => `${directory}/${name}`),
       ),
