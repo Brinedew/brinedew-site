@@ -85,10 +85,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          source_config="wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
+          quarantine_config="wrangler.b742-hard-quarantine.generated.toml"
+          node --input-type=module - <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs"
+
+          const source = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
+          const output = "wrangler.b742-hard-quarantine.generated.toml"
+          const original = readFileSync(source, "utf8")
+          const expected = 'main = "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"'
+          const replacement = 'main = "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"'
+          if (!original.includes(expected)) throw new Error("Canonical stateful Worker main entrypoint changed")
+          const updated = original.replace(expected, replacement)
+          if (updated === original || updated.includes(expected)) throw new Error("Failed to replace exactly the canonical Worker main entrypoint")
+          writeFileSync(output, updated)
+          NODE
+          trap 'rm -f "${quarantine_config}"' EXIT
+          grep -F 'main = "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"' "${quarantine_config}"
           pnpm exec wrangler deploy \
-            workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js \
             --env="" \
-            --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml \
+            --config "${quarantine_config}" \
             --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
             --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${GITHUB_SHA}-b742-hard-quarantine"
 
