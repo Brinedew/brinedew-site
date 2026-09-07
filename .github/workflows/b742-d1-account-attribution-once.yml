@@ -48,17 +48,11 @@ jobs:
           const query = `query B742D1Attribution($accountTag: string, $day: Date) {
             viewer {
               accounts(filter: { accountTag: $accountTag }) {
-                d1AnalyticsAdaptiveGroups(
-                  limit: 1000
-                  filter: { date_geq: $day, date_leq: $day }
-                ) {
+                d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) {
                   dimensions { date databaseId }
                   sum { readQueries writeQueries rowsRead rowsWritten queryBatchResponseBytes }
                 }
-                workersInvocationsAdaptive(
-                  limit: 10000
-                  filter: { date_geq: $day, date_leq: $day }
-                ) {
+                workersInvocationsAdaptive(limit: 10000, filter: { date_geq: $day, date_leq: $day }) {
                   dimensions { date scriptName status }
                   sum { requests errors subrequests cpuTimeUs }
                 }
@@ -70,28 +64,23 @@ jobs:
             method: 'POST',
             body: JSON.stringify({ query, variables: { accountTag: accountId, day } }),
           })
-          if (Array.isArray(analytics?.errors) && analytics.errors.length) {
-            throw new Error(`Cloudflare GraphQL failed: ${JSON.stringify(analytics.errors)}`)
-          }
+          if (Array.isArray(analytics?.errors) && analytics.errors.length) throw new Error(`Cloudflare GraphQL failed: ${JSON.stringify(analytics.errors)}`)
           const account = analytics?.data?.viewer?.accounts?.[0]
           if (!account) throw new Error('Cloudflare GraphQL returned no account')
 
           const dbList = await cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database?per_page=100`, { method: 'GET' })
           const databases = Array.isArray(dbList?.result) ? dbList.result : []
           const names = new Map(databases.map((db) => [String(db.uuid || db.id || ''), String(db.name || '')]))
-
-          const d1 = (Array.isArray(account.d1AnalyticsAdaptiveGroups) ? account.d1AnalyticsAdaptiveGroups : [])
-            .map((row) => ({
-              date: String(row?.dimensions?.date || ''),
-              databaseId: String(row?.dimensions?.databaseId || ''),
-              databaseName: names.get(String(row?.dimensions?.databaseId || '')) || '<unmapped>',
-              readQueries: Number(row?.sum?.readQueries || 0),
-              writeQueries: Number(row?.sum?.writeQueries || 0),
-              rowsRead: Number(row?.sum?.rowsRead || 0),
-              rowsWritten: Number(row?.sum?.rowsWritten || 0),
-              responseBytes: Number(row?.sum?.queryBatchResponseBytes || 0),
-            }))
-            .sort((a, b) => b.rowsRead - a.rowsRead)
+          const d1 = (Array.isArray(account.d1AnalyticsAdaptiveGroups) ? account.d1AnalyticsAdaptiveGroups : []).map((row) => ({
+            date: String(row?.dimensions?.date || ''),
+            databaseId: String(row?.dimensions?.databaseId || ''),
+            databaseName: names.get(String(row?.dimensions?.databaseId || '')) || '<unmapped>',
+            readQueries: Number(row?.sum?.readQueries || 0),
+            writeQueries: Number(row?.sum?.writeQueries || 0),
+            rowsRead: Number(row?.sum?.rowsRead || 0),
+            rowsWritten: Number(row?.sum?.rowsWritten || 0),
+            responseBytes: Number(row?.sum?.queryBatchResponseBytes || 0),
+          })).sort((a, b) => b.rowsRead - a.rowsRead)
 
           const workersByScript = new Map()
           for (const row of Array.isArray(account.workersInvocationsAdaptive) ? account.workersInvocationsAdaptive : []) {
@@ -104,14 +93,9 @@ jobs:
             workersByScript.set(script, target)
           }
           const workers = [...workersByScript.values()].sort((a, b) => b.requests - a.requests)
-          const totals = d1.reduce((t, row) => ({
-            rowsRead: t.rowsRead + row.rowsRead,
-            rowsWritten: t.rowsWritten + row.rowsWritten,
-            readQueries: t.readQueries + row.readQueries,
-            writeQueries: t.writeQueries + row.writeQueries,
-          }), { rowsRead: 0, rowsWritten: 0, readQueries: 0, writeQueries: 0 })
+          const totals = d1.reduce((t, row) => ({ rowsRead: t.rowsRead + row.rowsRead, rowsWritten: t.rowsWritten + row.rowsWritten, readQueries: t.readQueries + row.readQueries, writeQueries: t.writeQueries + row.writeQueries }), { rowsRead: 0, rowsWritten: 0, readQueries: 0, writeQueries: 0 })
 
-          async function observability(parameters, queryId) {
+          async function observability({ filters, groupBys, calculations, queryId, orderBy = 'event_count' }) {
             return cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`, {
               method: 'POST',
               body: JSON.stringify({
@@ -120,7 +104,15 @@ jobs:
                 view: 'calculations',
                 dry: true,
                 limit: 2000,
-                parameters,
+                parameters: {
+                  datasets: ['cloudflare-workers'],
+                  filterCombination: 'and',
+                  filters,
+                  calculations,
+                  groupBys,
+                  limit: 2000,
+                  orderBy: { value: orderBy, order: 'desc' },
+                },
               }),
             })
           }
@@ -132,37 +124,29 @@ jobs:
             { operator: 'sum', key: 'query_count_request', keyType: 'number', alias: 'query_count' },
             { operator: 'sum', key: 'request_count', keyType: 'number', alias: 'request_count' },
           ]
-          const baseFilters = [
-            { key: '$metadata.service', operation: 'eq', type: 'string', value: 'geneguessr-api' },
+          const base = [{ key: '$metadata.service', operation: 'eq', type: 'string', value: 'geneguessr-api' }]
+          const routeExists = { key: 'route', operation: 'exists', type: 'string' }
+          const grouped = [
+            { type: 'string', value: 'route' },
+            { type: 'string', value: 'source_class' },
+            { type: 'number', value: 'status' },
+            { type: 'string', value: 'outcome_class' },
+            { type: 'string', value: 'method' },
           ]
-          const routePayload = await observability({
-            datasets: ['cloudflare-workers'],
-            filterCombination: 'and',
-            filters: [...baseFilters, { key: 'route', operation: 'exists', type: 'string' }],
-            calculations,
-            groupBys: [
-              { type: 'string', value: 'route' },
-              { type: 'string', value: 'source_class' },
-              { type: 'string', value: 'budget_class' },
-              { type: 'string', value: 'outcome_class' },
-            ],
-            orderBy: { value: 'rows_read', order: 'desc' },
-          }, 'b742-route-cost-attribution')
+          const sourceFilter = (value) => ({ key: 'source_class', operation: 'eq', type: 'string', value })
 
-          const sourcePayload = await observability({
-            datasets: ['cloudflare-workers'],
-            filterCombination: 'and',
-            filters: baseFilters,
-            calculations,
-            groupBys: [{ type: 'string', value: 'source_class' }],
-            orderBy: { value: 'rows_read', order: 'desc' },
-          }, 'b742-source-cost-attribution')
+          const [routesPayload, workstationPayload, adminPayload, maintenancePayload] = await Promise.all([
+            observability({ filters: [...base, routeExists], groupBys: grouped, calculations, queryId: 'b742-all-routes' }),
+            observability({ filters: [...base, routeExists, sourceFilter('workstation_sync')], groupBys: grouped, calculations, queryId: 'b742-workstation-routes' }),
+            observability({ filters: [...base, routeExists, sourceFilter('admin_ui')], groupBys: grouped, calculations, queryId: 'b742-admin-routes' }),
+            observability({ filters: [...base, routeExists, sourceFilter('internal_maintenance')], groupBys: grouped, calculations, queryId: 'b742-maintenance-routes' }),
+          ])
 
           function calculationsToRows(payload) {
             const result = payload?.result || {}
-            const byAlias = new Map((Array.isArray(result.calculations) ? result.calculations : []).map((calculation) => [String(calculation.alias || calculation.calculation || ''), calculation]))
             const rows = new Map()
-            for (const [alias, calculation] of byAlias) {
+            for (const calculation of Array.isArray(result.calculations) ? result.calculations : []) {
+              const alias = String(calculation.alias || calculation.calculation || '')
               for (const aggregate of Array.isArray(calculation?.aggregates) ? calculation.aggregates : []) {
                 const groups = Object.fromEntries((Array.isArray(aggregate.groups) ? aggregate.groups : []).map((group) => [String(group.key), group.value]))
                 const key = JSON.stringify(groups)
@@ -171,17 +155,15 @@ jobs:
                 rows.set(key, row)
               }
             }
-            return [...rows.values()].sort((a, b) => Number(b.rows_read || 0) - Number(a.rows_read || 0))
+            return [...rows.values()].sort((a, b) => Number(b.event_count || 0) - Number(a.event_count || 0))
           }
 
           const report = {
-            generatedAt: now.toISOString(),
-            day,
-            totals,
-            d1,
-            workers,
-            routeAttribution: calculationsToRows(routePayload),
-            sourceAttribution: calculationsToRows(sourcePayload),
+            generatedAt: now.toISOString(), day, totals, d1, workers,
+            routes: calculationsToRows(routesPayload),
+            workstation: calculationsToRows(workstationPayload),
+            admin: calculationsToRows(adminPayload),
+            maintenance: calculationsToRows(maintenancePayload),
           }
           await writeFile('b742-d1-attribution/report.json', JSON.stringify(report, null, 2))
           console.log(JSON.stringify(report, null, 2))
