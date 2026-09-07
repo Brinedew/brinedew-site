@@ -61,16 +61,17 @@ jobs:
               path.write_text(text.replace(old, new, 1))
           PY
 
-      - name: Refresh standalone Firefox reviewer lock
+      - name: Deep-refresh standalone Firefox reviewer lock
         working-directory: iconoplasm-extension/amo-source
-        run: pnpm update --lockfile-only --config.block-exotic-subdeps=false
+        run: pnpm update --lockfile-only --depth Infinity --config.block-exotic-subdeps=false
 
-      - name: Verify reviewer lock uses current WXT browser package
+      - name: Verify reviewer lock uses current WXT browser packages
         shell: bash
         run: |
           grep -q "'@wxt-dev/browser@0.2.6'" iconoplasm-extension/amo-source/pnpm-lock.yaml
-          if grep -q "'@wxt-dev/browser@0.2.2'" iconoplasm-extension/amo-source/pnpm-lock.yaml; then
-            echo "stale @wxt-dev/browser@0.2.2 remains in reviewer lock" >&2
+          if grep -Eq "'@wxt-dev/browser@(0\.2\.2|0\.1\.43)'" iconoplasm-extension/amo-source/pnpm-lock.yaml; then
+            echo "stale @wxt-dev/browser package remains in reviewer lock" >&2
+            grep -n "@wxt-dev/browser@" iconoplasm-extension/amo-source/pnpm-lock.yaml >&2 || true
             exit 1
           fi
 
