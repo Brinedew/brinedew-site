@@ -1,0 +1,58 @@
+name: B-742 test diagnostics
+
+on:
+  push:
+    branches:
+      - fix/b742-format-production-runtime
+    paths:
+      - .github/workflows/b742-diagnose-tests.yml
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Install Quartz plugins
+        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
+
+      - name: Sync shared Iconoplasm assets
+        run: pnpm run sync:iconoplasm-shared
+
+      - name: Run suites separately and capture output
+        shell: bash
+        run: |
+          mkdir -p b742-diagnostics
+          set +e
+          node scripts/run-tests.mjs >b742-diagnostics/repository-tests.log 2>&1
+          repo_status=$?
+          pnpm --filter @brinedew/obsidian-prose-checker test >b742-diagnostics/obsidian-prose-checker.log 2>&1
+          obsidian_status=$?
+          set -e
+          printf 'repository-tests=%s\nobsidian-prose-checker=%s\n' "$repo_status" "$obsidian_status" | tee b742-diagnostics/status.txt
+
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: b742-test-diagnostics
+          path: b742-diagnostics/
+          if-no-files-found: error
+          retention-days: 1
