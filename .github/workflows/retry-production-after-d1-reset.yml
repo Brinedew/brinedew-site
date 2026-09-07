@@ -1,11 +1,19 @@
-name: Retry Production Deploy After D1 Reset
+name: Recover Production Safely After D1 Reset
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/retry-production-after-d1-reset.yml"
   schedule:
-    # Cloudflare D1 daily allowance resets at 00:00 UTC. GitHub documents that
-    # schedules at the top of the hour are more likely to be delayed, so retry
-    # at :07 instead of :00. The canonical deploy re-checks live headroom.
-    - cron: "7 0 * * *"
+    # Quarantine the known recurring D1 producers before the provider's 00:00 UTC reset.
+    - cron: "55 23 * * *"
+    # During the incident window, reassert quarantine and retry the canonical release
+    # every five minutes. The quarantine itself makes delay in any one GitHub run safe.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-5 * * *"
+    # After the owner is likely awake in Vietnam, restore background work only if the
+    # exact main commit deployed successfully and fresh D1 telemetry retains large headroom.
+    - cron: "5 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,68 +22,255 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-d1-reset-retry
+  group: production-d1-reset-recovery
   cancel-in-progress: false
 
 jobs:
-  dispatch-quota-blocked-release:
+  recover-production:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      DEPLOY_WORKFLOW: deploy-quartz.yml
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_SCRIPT_NAME: geneguessr-api
+      EVENT_NAME: ${{ github.event_name }}
+      TRIGGER_SCHEDULE: ${{ github.event.schedule }}
+      RECOVERY_DEADLINE_UTC: "2026-09-08T06:30:00Z"
     steps:
-      - name: Dispatch canonical production deploy if current main is quota-blocked
+      - name: Keep the fresh D1 day safe and drive the canonical release
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          DEPLOY_WORKFLOW: deploy-quartz.yml
         run: |
           set -euo pipefail
 
-          head_sha="$(gh api "repos/${REPOSITORY}/commits/main" --jq '.sha')"
-          echo "Current main: ${head_sha}"
+          if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            echo "Cloudflare credentials are missing; recovery cannot safely change provider controls." >&2
+            exit 1
+          fi
 
-          checks_json="$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100")"
-          ci_conclusion="$(jq -r \
-            '([.check_runs[] | select(.name == "build-and-test")] | sort_by(.completed_at // .started_at // .created_at) | last | .conclusion) // ""' \
-            <<<"${checks_json}")"
+          now_epoch="$(date -u +%s)"
+          deadline_epoch="$(date -u -d "${RECOVERY_DEADLINE_UTC}" +%s)"
+          if (( now_epoch > deadline_epoch )); then
+            echo "B-742 temporary recovery window has ended; this workflow is inert."
+            exit 0
+          fi
+
+          SAFE_CRONS='[
+            {"cron":"55 23 * * *"},
+            {"cron":"3 0 * * *"},
+            {"cron":"6 12 * * *"}
+          ]'
+          FULL_CRONS='[
+            {"cron":"55 23 * * *"},
+            {"cron":"3 0 * * *"},
+            {"cron":"6 12 * * *"},
+            {"cron":"0,2,3,4,5,6,7,8,11,13,14,15,17,18,19,20,23,24,26,27,29,30,31,32,34,35,38,39,41,42,43,44,45,47,50,51,52,53,54,55,56,59 * * * *"},
+            {"cron":"56,58,59 23 * * *"}
+          ]'
+          ICONOPLASM_QUEUES=(
+            "iconoplasm-sync-finalization"
+            "iconoplasm-vote-projection"
+            "iconoplasm-gene-card-materialization"
+          )
+
+          cf_rest() {
+            local method="$1"
+            local path="$2"
+            local body="${3:-}"
+            local args=(
+              -fsS
+              --retry 3
+              --retry-all-errors
+              --connect-timeout 10
+              --max-time 30
+              -X "${method}"
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+              -H "Accept: application/json"
+            )
+            if [[ -n "${body}" ]]; then
+              args+=(-H "Content-Type: application/json" --data "${body}")
+            fi
+            local response
+            response="$(curl "${args[@]}" "https://api.cloudflare.com/client/v4/${path}")"
+            if ! jq -e '.success == true' <<<"${response}" >/dev/null; then
+              echo "Cloudflare API ${method} ${path} failed:" >&2
+              jq -c '{errors,messages}' <<<"${response}" >&2 || true
+              return 1
+            fi
+            printf '%s' "${response}"
+          }
+
+          queue_inventory() {
+            cf_rest GET "accounts/${CLOUDFLARE_ACCOUNT_ID}/queues?per_page=100"
+          }
+
+          set_queue_pause_state() {
+            local paused="$1"
+            local inventory
+            inventory="$(queue_inventory)"
+            local queue
+            for queue in "${ICONOPLASM_QUEUES[@]}"; do
+              local queue_id
+              queue_id="$(
+                jq -r --arg name "${queue}" \
+                  '[.result[] | select(.queue_name == $name)] | if length == 1 then .[0].queue_id else empty end' \
+                  <<<"${inventory}"
+              )"
+              if [[ -z "${queue_id}" ]]; then
+                echo "Expected Iconoplasm queue '${queue}' was not uniquely found; refusing partial recovery." >&2
+                return 1
+              fi
+              cf_rest PATCH \
+                "accounts/${CLOUDFLARE_ACCOUNT_ID}/queues/${queue_id}" \
+                "$(jq -nc --argjson paused "${paused}" '{settings:{delivery_paused:$paused}}')" \
+                >/dev/null
+              echo "Queue ${queue}: delivery_paused=${paused}"
+            done
+          }
+
+          quarantine_background() {
+            # Provider-side controls do not execute D1. Cron triggers are replaced
+            # with the three independent GeneGuessr schedules; Iconoplasm queues retain
+            # their messages while delivery is paused.
+            cf_rest PUT \
+              "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_SCRIPT_NAME}/schedules" \
+              "${SAFE_CRONS}" \
+              >/dev/null
+            set_queue_pause_state true
+            echo "B-742 quarantine asserted: Iconoplasm Cron jobs disabled and Queue delivery paused."
+          }
+
+          release_background() {
+            cf_rest PUT \
+              "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_SCRIPT_NAME}/schedules" \
+              "${FULL_CRONS}" \
+              >/dev/null
+            set_queue_pause_state false
+            echo "B-742 quarantine released: normal Cron jobs and Queue delivery restored."
+          }
+
+          read_d1_usage() {
+            local utc_day body response
+            utc_day="$(date -u +%F)"
+            body="$(
+              jq -nc --arg account "${CLOUDFLARE_ACCOUNT_ID}" --arg day "${utc_day}" '{
+                query: "query B742D1Recovery($accountTag: string, $day: Date) { viewer { accounts(filter: { accountTag: $accountTag }) { d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) { dimensions { date databaseId } sum { rowsRead rowsWritten } } } } }",
+                variables: {accountTag:$account, day:$day}
+              }'
+            )"
+            response="$(
+              curl -fsS \
+                --retry 3 \
+                --retry-all-errors \
+                --connect-timeout 10 \
+                --max-time 30 \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "${body}" \
+                "https://api.cloudflare.com/client/v4/graphql"
+            )"
+            if jq -e '(.errors // []) | length > 0' <<<"${response}" >/dev/null; then
+              echo "Cloudflare D1 telemetry returned GraphQL errors." >&2
+              jq -c '.errors' <<<"${response}" >&2
+              return 1
+            fi
+            local accounts
+            accounts="$(jq '.data.viewer.accounts | length' <<<"${response}")"
+            if [[ "${accounts}" != "1" ]]; then
+              echo "Cloudflare D1 telemetry did not return exactly one account." >&2
+              return 1
+            fi
+            jq -c '{
+              reads: ([.data.viewer.accounts[0].d1AnalyticsAdaptiveGroups[].sum.rowsRead] | add // 0),
+              writes: ([.data.viewer.accounts[0].d1AnalyticsAdaptiveGroups[].sum.rowsWritten] | add // 0)
+            }' <<<"${response}"
+          }
+
+          # Quarantine is the fail-safe state for every incident-window invocation,
+          # including this workflow's merge push. This also proves the provider token
+          # can operate the controls before the next UTC reset.
+          quarantine_background
+
+          usage="$(read_d1_usage)"
+          reads="$(jq -r '.reads' <<<"${usage}")"
+          writes="$(jq -r '.writes' <<<"${usage}")"
+          echo "Fresh UTC-day D1 telemetry: ${reads} reads / ${writes} writes."
+
+          head_sha="$(gh api "repos/${REPOSITORY}/commits/main" --jq '.sha')"
+          checks_json="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100"
+          )"
+          ci_conclusion="$(
+            jq -r \
+              '([.check_runs[] | select(.name == "build-and-test")] | sort_by(.completed_at // .started_at // .created_at) | last | .conclusion) // ""' \
+              <<<"${checks_json}"
+          )"
+
+          runs_json="$(
+            gh api "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/runs?branch=main&per_page=100"
+          )"
+          successful_run_id="$(
+            jq -r --arg sha "${head_sha}" \
+              '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success")] | sort_by(.created_at) | last | .id) // empty' \
+              <<<"${runs_json}"
+          )"
+
+          # 06:05 UTC is 13:05 in Vietnam. Until then, even a successful deploy
+          # remains quarantined so the owner wakes to a protected D1 allowance.
+          if [[ "${TRIGGER_SCHEDULE:-}" == "5 6 * * *" ]]; then
+            if [[ -z "${successful_run_id}" ]]; then
+              echo "No successful canonical deploy exists for current main; leaving quarantine in place."
+              exit 0
+            fi
+            if (( reads >= 1250000 || writes >= 30000 )); then
+              echo "Post-reset usage is too high for automatic background release; leaving quarantine in place."
+              exit 0
+            fi
+            release_background
+            echo "Current main ${head_sha} deployed successfully in run ${successful_run_id}; D1 headroom passed the conservative release threshold."
+            exit 0
+          fi
+
+          if [[ -n "${successful_run_id}" ]]; then
+            echo "Current main already deployed successfully in run ${successful_run_id}; retaining quarantine until 06:05 UTC."
+            exit 0
+          fi
 
           if [[ "${ci_conclusion}" != "success" ]]; then
-            echo "Exact-main protected CI is ${ci_conclusion:-absent}; no production retry will be dispatched."
+            echo "Exact-main protected CI is ${ci_conclusion:-absent}; quarantine stays active and no deploy is dispatched."
             exit 0
           fi
 
-          runs_json="$(gh api \
-            "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/runs?branch=main&per_page=100")"
-
-          if jq -e --arg sha "${head_sha}" \
-            '.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")' \
-            <<<"${runs_json}" >/dev/null; then
-            echo "Current main already has a successful canonical production deploy."
+          active_run_id="$(
+            jq -r --arg sha "${head_sha}" \
+              '([.workflow_runs[] | select(.head_sha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending"))] | sort_by(.created_at) | last | .id) // empty' \
+              <<<"${runs_json}"
+          )"
+          if [[ -n "${active_run_id}" ]]; then
+            echo "Canonical deploy ${active_run_id} is already active; quarantine remains asserted."
             exit 0
           fi
 
-          if jq -e --arg sha "${head_sha}" \
-            '.workflow_runs[] | select(.head_sha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending"))' \
-            <<<"${runs_json}" >/dev/null; then
-            echo "A canonical production deploy for current main is already active."
-            exit 0
-          fi
-
-          latest_failed_run_id="$(jq -r --arg sha "${head_sha}" \
-            '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "failure")] | sort_by(.created_at) | last | .id) // empty' \
-            <<<"${runs_json}")"
-
+          latest_failed_run_id="$(
+            jq -r --arg sha "${head_sha}" \
+              '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "failure")] | sort_by(.created_at) | last | .id) // empty' \
+              <<<"${runs_json}"
+          )"
           if [[ -z "${latest_failed_run_id}" ]]; then
-            echo "Current main has no failed canonical production run to retry."
+            echo "No failed canonical deploy exists yet for current main; the next controller tick will re-evaluate."
             exit 0
           fi
 
-          jobs_json="$(gh api \
-            "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100")"
-          failed_step="$(jq -r \
-            '[.jobs[].steps[] | select(.conclusion == "failure") | .name] | last // ""' \
-            <<<"${jobs_json}")"
+          jobs_json="$(
+            gh api "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100"
+          )"
+          failed_step="$(
+            jq -r '[.jobs[].steps[] | select(.conclusion == "failure") | .name] | last // ""' <<<"${jobs_json}"
+          )"
 
           case "${failed_step}" in
             "Require account-wide D1 and Worker headroom before migrations"|\
@@ -83,14 +278,21 @@ jobs:
             "Refresh account capacity immediately before pausing application work")
               ;;
             *)
-              echo "Latest production failure was at '${failed_step:-unknown}', not a pre-mutation quota gate."
-              echo "Automatic reset retry is intentionally suppressed."
+              echo "Latest canonical deploy failed at '${failed_step:-unknown}'."
+              echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops."
               exit 0
               ;;
           esac
 
-          echo "Latest canonical production run ${latest_failed_run_id} was quota-blocked before mutation at: ${failed_step}"
-          echo "Dispatching the normal production workflow for current main after the UTC D1 reset."
+          # The canonical release can require roughly another million reads for the
+          # reviewed migration envelope. Once a quarantined day has already consumed
+          # 1.5M reads, preserving the site is more important than another release attempt.
+          if (( reads >= 1500000 || writes >= 30000 )); then
+            echo "Current D1 usage is already too high for a protected migration attempt; quarantine remains active."
+            exit 0
+          fi
+
+          echo "Dispatching canonical production deploy for ${head_sha}; every normal CI, headroom, migration, activation, and smoke gate remains authoritative."
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/dispatches" \
