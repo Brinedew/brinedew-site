@@ -19528,8 +19528,7 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
      )
      DELETE FROM icono_vote_asset_summary
      WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
-  )
-    .bind(symbolsJson)
+  ).bind(symbolsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -19575,8 +19574,7 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
        score = excluded.score,
        vote_count = excluded.vote_count,
        updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(symbolsJson)
+  ).bind(symbolsJson)
 
   // Preserve the last complete projection if replacement fails.
   await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
@@ -19599,8 +19597,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
      )
      DELETE FROM icono_admin_gene_rollup
      WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
-  )
-    .bind(symbolsJson)
+  ).bind(symbolsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -19869,8 +19866,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        leader_score = excluded.leader_score,
        leader_created_at = excluded.leader_created_at,
        updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(symbolsJson)
+  ).bind(symbolsJson)
 
   // Preserve the last complete projection if replacement fails.
   await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
@@ -19893,8 +19889,7 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
      )
      DELETE FROM icono_admin_vision_rollup
      WHERE vision_id IN (SELECT vision_id FROM incoming)`,
-  )
-    .bind(visionIdsJson)
+  ).bind(visionIdsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -19991,8 +19986,7 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
        blacklist_reason = excluded.blacklist_reason,
        blacklist_updated_at = excluded.blacklist_updated_at,
        updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(visionIdsJson)
+  ).bind(visionIdsJson)
 
   // Preserve the last complete projection if replacement fails.
   await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
