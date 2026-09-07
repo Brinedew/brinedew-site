@@ -1,4 +1,4 @@
-name: B-742 D1 account attribution
+name: B-742 live failure probe
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  attribute:
+  probe:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
@@ -19,10 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Query account-wide D1 and route attribution without touching D1
+      - name: Probe live public surface and recent throttling without D1 mutation
         shell: bash
         run: |
-          mkdir -p b742-d1-attribution
+          mkdir -p b742-live-probe
           node --input-type=module <<'NODE'
           import { writeFile } from 'node:fs/promises'
 
@@ -30,8 +30,7 @@ jobs:
           const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID || '').trim()
           if (!token || !accountId) throw new Error('Cloudflare telemetry credentials are unavailable')
           const now = new Date()
-          const day = now.toISOString().slice(0, 10)
-          const dayStartMs = Date.parse(`${day}T00:00:00.000Z`)
+          const from = now.getTime() - 60 * 60 * 1000
           const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 
           async function cfJson(url, options = {}) {
@@ -39,140 +38,97 @@ jobs:
             const text = await response.text()
             let payload
             try { payload = JSON.parse(text) } catch { throw new Error(`Cloudflare returned non-JSON HTTP ${response.status}`) }
-            if (!response.ok || payload?.success === false) {
-              throw new Error(`Cloudflare request failed HTTP ${response.status}: ${JSON.stringify(payload?.errors || payload)}`)
-            }
+            if (!response.ok || payload?.success === false) throw new Error(`Cloudflare request failed HTTP ${response.status}: ${JSON.stringify(payload?.errors || payload)}`)
             return payload
           }
 
-          const query = `query B742D1Attribution($accountTag: string, $day: Date) {
-            viewer {
-              accounts(filter: { accountTag: $accountTag }) {
-                d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) {
-                  dimensions { date databaseId }
-                  sum { readQueries writeQueries rowsRead rowsWritten queryBatchResponseBytes }
-                }
-                workersInvocationsAdaptive(limit: 10000, filter: { date_geq: $day, date_leq: $day }) {
-                  dimensions { date scriptName status }
-                  sum { requests errors subrequests cpuTimeUs }
-                }
+          async function publicProbe(path) {
+            const url = `https://iconoplasm.brinedew.bio${path}`
+            const started = Date.now()
+            try {
+              const response = await fetch(url, { headers: { 'User-Agent': 'B742-live-read-only-probe/1.0' }, redirect: 'manual' })
+              const body = await response.text()
+              return {
+                path,
+                status: response.status,
+                contentType: response.headers.get('content-type'),
+                cache: response.headers.get('cf-cache-status'),
+                retryAfter: response.headers.get('retry-after'),
+                location: response.headers.get('location'),
+                bytes: Buffer.byteLength(body),
+                bodyPrefix: body.slice(0, 240),
+                durationMs: Date.now() - started,
               }
+            } catch (error) {
+              return { path, error: String(error?.message || error), durationMs: Date.now() - started }
             }
-          }`
+          }
 
-          const analytics = await cfJson('https://api.cloudflare.com/client/v4/graphql', {
+          const smoke = []
+          for (const path of [
+            '/',
+            '/genes/TP53',
+            '/api/public/v1/metadata',
+            '/api/public/v1/catalog/manifest',
+            '/api/public/v1/genes/TP53',
+          ]) smoke.push(await publicProbe(path))
+
+          const telemetry = await cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`, {
             method: 'POST',
-            body: JSON.stringify({ query, variables: { accountTag: accountId, day } }),
-          })
-          if (Array.isArray(analytics?.errors) && analytics.errors.length) throw new Error(`Cloudflare GraphQL failed: ${JSON.stringify(analytics.errors)}`)
-          const account = analytics?.data?.viewer?.accounts?.[0]
-          if (!account) throw new Error('Cloudflare GraphQL returned no account')
-
-          const dbList = await cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database?per_page=100`, { method: 'GET' })
-          const databases = Array.isArray(dbList?.result) ? dbList.result : []
-          const names = new Map(databases.map((db) => [String(db.uuid || db.id || ''), String(db.name || '')]))
-          const d1 = (Array.isArray(account.d1AnalyticsAdaptiveGroups) ? account.d1AnalyticsAdaptiveGroups : []).map((row) => ({
-            date: String(row?.dimensions?.date || ''),
-            databaseId: String(row?.dimensions?.databaseId || ''),
-            databaseName: names.get(String(row?.dimensions?.databaseId || '')) || '<unmapped>',
-            readQueries: Number(row?.sum?.readQueries || 0),
-            writeQueries: Number(row?.sum?.writeQueries || 0),
-            rowsRead: Number(row?.sum?.rowsRead || 0),
-            rowsWritten: Number(row?.sum?.rowsWritten || 0),
-            responseBytes: Number(row?.sum?.queryBatchResponseBytes || 0),
-          })).sort((a, b) => b.rowsRead - a.rowsRead)
-
-          const workersByScript = new Map()
-          for (const row of Array.isArray(account.workersInvocationsAdaptive) ? account.workersInvocationsAdaptive : []) {
-            const script = String(row?.dimensions?.scriptName || '<unknown>')
-            const target = workersByScript.get(script) || { scriptName: script, requests: 0, errors: 0, subrequests: 0, cpuTimeUs: 0 }
-            target.requests += Number(row?.sum?.requests || 0)
-            target.errors += Number(row?.sum?.errors || 0)
-            target.subrequests += Number(row?.sum?.subrequests || 0)
-            target.cpuTimeUs += Number(row?.sum?.cpuTimeUs || 0)
-            workersByScript.set(script, target)
-          }
-          const workers = [...workersByScript.values()].sort((a, b) => b.requests - a.requests)
-          const totals = d1.reduce((t, row) => ({ rowsRead: t.rowsRead + row.rowsRead, rowsWritten: t.rowsWritten + row.rowsWritten, readQueries: t.readQueries + row.readQueries, writeQueries: t.writeQueries + row.writeQueries }), { rowsRead: 0, rowsWritten: 0, readQueries: 0, writeQueries: 0 })
-
-          async function observability({ filters, groupBys, calculations, queryId, orderBy = 'event_count' }) {
-            return cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`, {
-              method: 'POST',
-              body: JSON.stringify({
-                queryId,
-                timeframe: { from: dayStartMs, to: now.getTime() },
-                view: 'calculations',
-                dry: true,
+            body: JSON.stringify({
+              queryId: 'b742-recent-workstation-errors',
+              timeframe: { from, to: now.getTime() },
+              view: 'calculations',
+              dry: true,
+              limit: 2000,
+              parameters: {
+                datasets: ['cloudflare-workers'],
+                filterCombination: 'and',
+                filters: [
+                  { key: '$metadata.service', operation: 'eq', type: 'string', value: 'geneguessr-api' },
+                  { key: 'route', operation: 'exists', type: 'string' },
+                ],
+                calculations: [{ operator: 'count', alias: 'event_count' }],
+                groupBys: [
+                  { type: 'string', value: 'route' },
+                  { type: 'string', value: 'source_class' },
+                  { type: 'number', value: 'status' },
+                  { type: 'string', value: 'error_code' },
+                  { type: 'string', value: 'limiter_stage' },
+                  { type: 'string', value: 'method' },
+                ],
                 limit: 2000,
-                parameters: {
-                  datasets: ['cloudflare-workers'],
-                  filterCombination: 'and',
-                  filters,
-                  calculations,
-                  groupBys,
-                  limit: 2000,
-                  orderBy: { value: orderBy, order: 'desc' },
-                },
-              }),
-            })
-          }
+                orderBy: { value: 'event_count', order: 'desc' },
+              },
+            }),
+          })
 
-          const calculations = [
-            { operator: 'count', alias: 'event_count' },
-            { operator: 'sum', key: 'rows_read_request', keyType: 'number', alias: 'rows_read' },
-            { operator: 'sum', key: 'rows_written_request', keyType: 'number', alias: 'rows_written' },
-            { operator: 'sum', key: 'query_count_request', keyType: 'number', alias: 'query_count' },
-            { operator: 'sum', key: 'request_count', keyType: 'number', alias: 'request_count' },
-          ]
-          const base = [{ key: '$metadata.service', operation: 'eq', type: 'string', value: 'geneguessr-api' }]
-          const routeExists = { key: 'route', operation: 'exists', type: 'string' }
-          const grouped = [
-            { type: 'string', value: 'route' },
-            { type: 'string', value: 'source_class' },
-            { type: 'number', value: 'status' },
-            { type: 'string', value: 'outcome_class' },
-            { type: 'string', value: 'method' },
-          ]
-          const sourceFilter = (value) => ({ key: 'source_class', operation: 'eq', type: 'string', value })
-
-          const [routesPayload, workstationPayload, adminPayload, maintenancePayload] = await Promise.all([
-            observability({ filters: [...base, routeExists], groupBys: grouped, calculations, queryId: 'b742-all-routes' }),
-            observability({ filters: [...base, routeExists, sourceFilter('workstation_sync')], groupBys: grouped, calculations, queryId: 'b742-workstation-routes' }),
-            observability({ filters: [...base, routeExists, sourceFilter('admin_ui')], groupBys: grouped, calculations, queryId: 'b742-admin-routes' }),
-            observability({ filters: [...base, routeExists, sourceFilter('internal_maintenance')], groupBys: grouped, calculations, queryId: 'b742-maintenance-routes' }),
-          ])
-
-          function calculationsToRows(payload) {
-            const result = payload?.result || {}
-            const rows = new Map()
-            for (const calculation of Array.isArray(result.calculations) ? result.calculations : []) {
-              const alias = String(calculation.alias || calculation.calculation || '')
-              for (const aggregate of Array.isArray(calculation?.aggregates) ? calculation.aggregates : []) {
-                const groups = Object.fromEntries((Array.isArray(aggregate.groups) ? aggregate.groups : []).map((group) => [String(group.key), group.value]))
-                const key = JSON.stringify(groups)
-                const row = rows.get(key) || { groups }
-                row[alias] = Number(aggregate.value ?? aggregate.count ?? 0)
-                rows.set(key, row)
-              }
+          const rows = []
+          for (const calc of Array.isArray(telemetry?.result?.calculations) ? telemetry.result.calculations : []) {
+            for (const aggregate of Array.isArray(calc?.aggregates) ? calc.aggregates : []) {
+              const groups = Object.fromEntries((aggregate.groups || []).map((group) => [String(group.key), group.value]))
+              rows.push({ groups, eventCount: Number(aggregate.value ?? aggregate.count ?? 0) })
             }
-            return [...rows.values()].sort((a, b) => Number(b.event_count || 0) - Number(a.event_count || 0))
           }
+          rows.sort((a, b) => b.eventCount - a.eventCount)
 
-          const report = {
-            generatedAt: now.toISOString(), day, totals, d1, workers,
-            routes: calculationsToRows(routesPayload),
-            workstation: calculationsToRows(workstationPayload),
-            admin: calculationsToRows(adminPayload),
-            maintenance: calculationsToRows(maintenancePayload),
-          }
-          await writeFile('b742-d1-attribution/report.json', JSON.stringify(report, null, 2))
+          const day = now.toISOString().slice(0, 10)
+          const d1Query = `query B742Now($accountTag: string, $day: Date) { viewer { accounts(filter: { accountTag: $accountTag }) { d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) { dimensions { databaseId } sum { rowsRead rowsWritten readQueries writeQueries } } } } }`
+          const d1Payload = await cfJson('https://api.cloudflare.com/client/v4/graphql', {
+            method: 'POST',
+            body: JSON.stringify({ query: d1Query, variables: { accountTag: accountId, day } }),
+          })
+          const d1 = d1Payload?.data?.viewer?.accounts?.[0]?.d1AnalyticsAdaptiveGroups || []
+
+          const report = { generatedAt: now.toISOString(), smoke, recentRoutes: rows, d1 }
+          await writeFile('b742-live-probe/report.json', JSON.stringify(report, null, 2))
           console.log(JSON.stringify(report, null, 2))
           NODE
 
-      - name: Upload attribution report
+      - name: Upload probe report
         uses: actions/upload-artifact@v7
         with:
-          name: b742-d1-account-attribution
-          path: b742-d1-attribution/report.json
+          name: b742-live-probe
+          path: b742-live-probe/report.json
           if-no-files-found: error
           retention-days: 1
