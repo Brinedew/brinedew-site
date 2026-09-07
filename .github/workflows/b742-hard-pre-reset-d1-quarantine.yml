@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/b742-hard-pre-reset-d1-quarantine.yml"
+      - "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"
   schedule:
     # Reassert immediately before the 00:00 UTC D1 reset in case any intervening
     # operator action replaced the transition-only Worker version.
@@ -85,6 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm exec wrangler deploy \
+            workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js \
             --env="" \
             --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml \
             --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
@@ -153,12 +155,14 @@ jobs:
             fi
           done
 
-      - name: Prove the live transition blocks application D1 and preserves release admission
+      - name: Prove application D1 is closed while public gene pages remain readable
         shell: bash
         run: |
           set -euo pipefail
           response_file="$(mktemp)"
-          trap 'rm -f "${response_file}"' EXIT
+          gene_file="$(mktemp)"
+          trap 'rm -f "${response_file}" "${gene_file}"' EXIT
+
           status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${response_file}" -w '%{http_code}' \
             "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/events")"
           if [[ "${status}" != "503" ]] || ! jq -e '.code == "ICONOPLASM_SCHEMA_TRANSITION"' "${response_file}" >/dev/null; then
@@ -167,9 +171,16 @@ jobs:
             exit 1
           fi
 
+          gene_status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${gene_file}" -w '%{http_code}' \
+            "https://iconoplasm.brinedew.bio/gene/TP53")"
+          if [[ "${gene_status}" != "200" ]] || ! grep -Fq 'data-b742-d1-free-gene-shell="TP53"' "${gene_file}"; then
+            echo "Public TP53 gene page is not readable through the D1-free quarantine shell: HTTP ${gene_status}" >&2
+            exit 1
+          fi
+
           node --input-type=module -e '
             import { verifyReleaseAuthentication } from "./scripts/preflight-operation-cost-release.mjs";
             await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN });
           '
 
-          echo "B-742 hard quarantine verified live: application D1 is closed, admission remains reachable, Iconoplasm Cron is absent, and all Iconoplasm Queues are paused."
+          echo "B-742 hard quarantine verified live: application D1 is closed, TP53 is readable without D1, admission remains reachable, Iconoplasm Cron is absent, and all Iconoplasm Queues are paused."
