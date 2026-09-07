@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Query account-wide D1 attribution without touching D1
+      - name: Query account-wide D1 and route attribution without touching D1
         shell: bash
         run: |
           mkdir -p b742-d1-attribution
@@ -29,7 +29,9 @@ jobs:
           const token = String(process.env.CLOUDFLARE_API_TOKEN || '').trim()
           const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID || '').trim()
           if (!token || !accountId) throw new Error('Cloudflare telemetry credentials are unavailable')
-          const day = new Date().toISOString().slice(0, 10)
+          const now = new Date()
+          const day = now.toISOString().slice(0, 10)
+          const dayStartMs = Date.parse(`${day}T00:00:00.000Z`)
           const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 
           async function cfJson(url, options = {}) {
@@ -109,7 +111,78 @@ jobs:
             writeQueries: t.writeQueries + row.writeQueries,
           }), { rowsRead: 0, rowsWritten: 0, readQueries: 0, writeQueries: 0 })
 
-          const report = { generatedAt: new Date().toISOString(), day, totals, d1, workers }
+          async function observability(parameters, queryId) {
+            return cfJson(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`, {
+              method: 'POST',
+              body: JSON.stringify({
+                queryId,
+                timeframe: { from: dayStartMs, to: now.getTime() },
+                view: 'calculations',
+                dry: true,
+                limit: 2000,
+                parameters,
+              }),
+            })
+          }
+
+          const calculations = [
+            { operator: 'count', alias: 'event_count' },
+            { operator: 'sum', key: 'rows_read_request', keyType: 'number', alias: 'rows_read' },
+            { operator: 'sum', key: 'rows_written_request', keyType: 'number', alias: 'rows_written' },
+            { operator: 'sum', key: 'query_count_request', keyType: 'number', alias: 'query_count' },
+            { operator: 'sum', key: 'request_count', keyType: 'number', alias: 'request_count' },
+          ]
+          const baseFilters = [
+            { key: '$metadata.service', operation: 'eq', type: 'string', value: 'geneguessr-api' },
+          ]
+          const routePayload = await observability({
+            datasets: ['cloudflare-workers'],
+            filterCombination: 'and',
+            filters: [...baseFilters, { key: 'route', operation: 'exists', type: 'string' }],
+            calculations,
+            groupBys: [
+              { type: 'string', value: 'route' },
+              { type: 'string', value: 'source_class' },
+              { type: 'string', value: 'budget_class' },
+              { type: 'string', value: 'outcome_class' },
+            ],
+            orderBy: { value: 'rows_read', order: 'desc' },
+          }, 'b742-route-cost-attribution')
+
+          const sourcePayload = await observability({
+            datasets: ['cloudflare-workers'],
+            filterCombination: 'and',
+            filters: baseFilters,
+            calculations,
+            groupBys: [{ type: 'string', value: 'source_class' }],
+            orderBy: { value: 'rows_read', order: 'desc' },
+          }, 'b742-source-cost-attribution')
+
+          function calculationsToRows(payload) {
+            const result = payload?.result || {}
+            const byAlias = new Map((Array.isArray(result.calculations) ? result.calculations : []).map((calculation) => [String(calculation.alias || calculation.calculation || ''), calculation]))
+            const rows = new Map()
+            for (const [alias, calculation] of byAlias) {
+              for (const aggregate of Array.isArray(calculation?.aggregates) ? calculation.aggregates : []) {
+                const groups = Object.fromEntries((Array.isArray(aggregate.groups) ? aggregate.groups : []).map((group) => [String(group.key), group.value]))
+                const key = JSON.stringify(groups)
+                const row = rows.get(key) || { groups }
+                row[alias] = Number(aggregate.value ?? aggregate.count ?? 0)
+                rows.set(key, row)
+              }
+            }
+            return [...rows.values()].sort((a, b) => Number(b.rows_read || 0) - Number(a.rows_read || 0))
+          }
+
+          const report = {
+            generatedAt: now.toISOString(),
+            day,
+            totals,
+            d1,
+            workers,
+            routeAttribution: calculationsToRows(routePayload),
+            sourceAttribution: calculationsToRows(sourcePayload),
+          }
           await writeFile('b742-d1-attribution/report.json', JSON.stringify(report, null, 2))
           console.log(JSON.stringify(report, null, 2))
           NODE
