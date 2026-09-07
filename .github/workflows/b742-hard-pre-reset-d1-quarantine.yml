@@ -1,0 +1,168 @@
+name: B-742 Hard Pre-reset D1 Quarantine
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/b742-hard-pre-reset-d1-quarantine.yml"
+  schedule:
+    # Reassert immediately before the 00:00 UTC D1 reset in case any intervening
+    # operator action replaced the transition-only Worker version.
+    - cron: "58 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+
+concurrency:
+  group: b742-hard-pre-reset-d1-quarantine
+  cancel-in-progress: false
+
+jobs:
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+      SCRIPT_NAME: geneguessr-api
+      RECOVERY_DEADLINE_UTC: "2026-09-08T00:05:00Z"
+    steps:
+      - name: Refuse use outside the B-742 incident window
+        shell: bash
+        run: |
+          set -euo pipefail
+          if (( $(date -u +%s) > $(date -u -d "${RECOVERY_DEADLINE_UTC}" +%s) )); then
+            echo "B-742 hard quarantine window has ended; refusing to alter production."
+            exit 78
+          fi
+
+      - name: Checkout exact main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require successful protected CI for this exact commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-iconoplasm-release-ci.mjs
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Validate credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID ICONOPLASM_ADMIN_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required credential: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Stage the existing schema-transition fence without touching D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler deploy \
+            --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml \
+            --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
+            --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${GITHUB_SHA}-b742-hard-quarantine"
+
+      - name: Reassert provider-side Cron and Queue quarantine after Wrangler reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          safe_crons='[
+            {"cron":"55 23 * * *"},
+            {"cron":"3 0 * * *"},
+            {"cron":"6 12 * * *"}
+          ]'
+
+          cf_rest() {
+            local method="$1"
+            local path="$2"
+            local body="${3:-}"
+            local args=(
+              -fsS --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30
+              -X "${method}"
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+              -H "Accept: application/json"
+            )
+            if [[ -n "${body}" ]]; then
+              args+=(-H "Content-Type: application/json" --data "${body}")
+            fi
+            local response
+            response="$(curl "${args[@]}" "https://api.cloudflare.com/client/v4/${path}")"
+            jq -e '.success == true' <<<"${response}" >/dev/null || {
+              jq -c '{errors,messages}' <<<"${response}" >&2 || true
+              return 1
+            }
+            printf '%s' "${response}"
+          }
+
+          cf_rest PUT \
+            "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/schedules" \
+            "${safe_crons}" >/dev/null
+
+          for queue in \
+            iconoplasm-sync-finalization \
+            iconoplasm-vote-projection \
+            iconoplasm-gene-card-materialization; do
+            pnpm exec wrangler queues pause-delivery "${queue}"
+          done
+
+          schedules="$(cf_rest GET "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/schedules")"
+          actual_crons="$(jq -c '[.result[].cron] | sort' <<<"${schedules}")"
+          expected_crons='["3 0 * * *","55 23 * * *","6 12 * * *"]'
+          if [[ "${actual_crons}" != "${expected_crons}" ]]; then
+            echo "Unexpected production Cron set after quarantine: ${actual_crons}" >&2
+            exit 1
+          fi
+
+          queues="$(cf_rest GET "accounts/${CLOUDFLARE_ACCOUNT_ID}/queues?per_page=100")"
+          for queue in \
+            iconoplasm-sync-finalization \
+            iconoplasm-vote-projection \
+            iconoplasm-gene-card-materialization; do
+            paused="$(jq -r --arg q "${queue}" '[.result[] | select(.queue_name == $q)] | if length == 1 then .[0].settings.delivery_paused else null end' <<<"${queues}")"
+            if [[ "${paused}" != "true" ]]; then
+              echo "Queue ${queue} is not verifiably paused after quarantine." >&2
+              exit 1
+            fi
+          done
+
+      - name: Prove the live transition blocks application D1 and preserves release admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "${response_file}"' EXIT
+          status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${response_file}" -w '%{http_code}' \
+            "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/events")"
+          if [[ "${status}" != "503" ]] || ! jq -e '.code == "ICONOPLASM_SCHEMA_TRANSITION"' "${response_file}" >/dev/null; then
+            echo "Live application API is not behind the schema-transition fence: HTTP ${status}" >&2
+            cat "${response_file}" >&2
+            exit 1
+          fi
+
+          node --input-type=module -e '
+            import { verifyReleaseAuthentication } from "./scripts/preflight-operation-cost-release.mjs";
+            await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN });
+          '
+
+          echo "B-742 hard quarantine verified live: application D1 is closed, admission remains reachable, Iconoplasm Cron is absent, and all Iconoplasm Queues are paused."
