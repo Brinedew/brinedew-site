@@ -19521,7 +19521,7 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
   if (!symbols.length) return 0
   const symbolsJson = JSON.stringify(symbols)
 
-  await env.ICONOPLASM_DB.prepare(
+  const deleteStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT upper(value) AS gene_symbol
        FROM json_each(?)
@@ -19530,9 +19530,8 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
      WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
   )
     .bind(symbolsJson)
-    .run()
 
-  await env.ICONOPLASM_DB.prepare(
+  const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT upper(value) AS gene_symbol
        FROM json_each(?)
@@ -19578,7 +19577,9 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
        updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(symbolsJson)
-    .run()
+
+  // Preserve the last complete projection if replacement fails.
+  await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
 
   return symbols.length
 }
@@ -19591,7 +19592,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
   if (!symbols.length) return 0
   const symbolsJson = JSON.stringify(symbols)
 
-  await env.ICONOPLASM_DB.prepare(
+  const deleteStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT upper(value) AS gene_symbol
        FROM json_each(?)
@@ -19600,9 +19601,8 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
      WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
   )
     .bind(symbolsJson)
-    .run()
 
-  await env.ICONOPLASM_DB.prepare(
+  const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT upper(value) AS gene_symbol
        FROM json_each(?)
@@ -19871,7 +19871,9 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(symbolsJson)
-    .run()
+
+  // Preserve the last complete projection if replacement fails.
+  await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
 
   return symbols.length
 }
@@ -19884,7 +19886,7 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   if (!visionIds.length) return 0
   const visionIdsJson = JSON.stringify(visionIds)
 
-  await env.ICONOPLASM_DB.prepare(
+  const deleteStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT value AS vision_id
        FROM json_each(?)
@@ -19893,9 +19895,8 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
      WHERE vision_id IN (SELECT vision_id FROM incoming)`,
   )
     .bind(visionIdsJson)
-    .run()
 
-  await env.ICONOPLASM_DB.prepare(
+  const insertStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
        SELECT value AS vision_id
        FROM json_each(?)
@@ -19992,7 +19993,9 @@ async function rebuildVisionRollupsBatch(env, rawVisionIds) {
        updated_at = CURRENT_TIMESTAMP`,
   )
     .bind(visionIdsJson)
-    .run()
+
+  // Preserve the last complete projection if replacement fails.
+  await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
 
   // This batched function is the production mutation path used by sync
   // finalization, ingest, publish, and vote projection. The old per-vision
