@@ -1,4 +1,4 @@
-name: B-742 test diagnostics
+name: B-742 repair stale test contracts
 
 on:
   push:
@@ -8,10 +8,10 @@ on:
       - .github/workflows/b742-diagnose-tests.yml
 
 jobs:
-  diagnose:
+  repair:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,31 +28,72 @@ jobs:
           corepack prepare pnpm@11.0.9 --activate
           pnpm config set minimumReleaseAge 1440
 
-      - name: Install dependencies
+      - name: Install repository dependencies
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
       - name: Install Quartz plugins
         run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
 
+      - name: Add ordered D1 batch support to stale test doubles
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path("workers/iconoplasm.read-model-sync.test.js"): (
+                  '''  prepare(sql) {\n    return new FakeStatement(this, sql)\n  }\n}\n\nfunction bindOnlyAllowedGateway''',
+                  '''  prepare(sql) {\n    return new FakeStatement(this, sql)\n  }\n\n  async batch(statements) {\n    const results = []\n    for (const statement of statements) results.push(await statement.run())\n    return results\n  }\n}\n\nfunction bindOnlyAllowedGateway''',
+              ),
+              Path("workers/iconoplasm.sync-finalization-queue.test.js"): (
+                  '''  prepare(sql) {\n    return new FakeStatement(this, sql)\n  }\n}\n\nfunction testKv''',
+                  '''  prepare(sql) {\n    return new FakeStatement(this, sql)\n  }\n\n  async batch(statements) {\n    const results = []\n    for (const statement of statements) results.push(await statement.run())\n    return results\n  }\n}\n\nfunction testKv''',
+              ),
+          }
+
+          for path, (old, new) in replacements.items():
+              text = path.read_text()
+              if new in text:
+                  continue
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one batch insertion anchor, found {count}")
+              path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Refresh standalone Firefox reviewer lock
+        working-directory: iconoplasm-extension/amo-source
+        run: pnpm update --lockfile-only --config.block-exotic-subdeps=false
+
+      - name: Verify reviewer lock uses current WXT browser package
+        shell: bash
+        run: |
+          grep -q "'@wxt-dev/browser@0.2.6'" iconoplasm-extension/amo-source/pnpm-lock.yaml
+          if grep -q "'@wxt-dev/browser@0.2.2'" iconoplasm-extension/amo-source/pnpm-lock.yaml; then
+            echo "stale @wxt-dev/browser@0.2.2 remains in reviewer lock" >&2
+            exit 1
+          fi
+
       - name: Sync shared Iconoplasm assets
         run: pnpm run sync:iconoplasm-shared
 
-      - name: Run suites separately and capture output
+      - name: Run targeted regressions
+        run: node scripts/run-tests.mjs iconoplasm-extension.release-workflow.test.js workers/iconoplasm.read-model-sync.test.js workers/iconoplasm.sync-finalization-queue.test.js
+
+      - name: Run full protected test command
+        run: pnpm test
+
+      - name: Remove one-shot repair workflow
+        run: git rm .github/workflows/b742-diagnose-tests.yml
+
+      - name: Commit verified repairs
         shell: bash
         run: |
-          mkdir -p b742-diagnostics
-          set +e
-          node scripts/run-tests.mjs >b742-diagnostics/repository-tests.log 2>&1
-          repo_status=$?
-          pnpm --filter @brinedew/obsidian-prose-checker test >b742-diagnostics/obsidian-prose-checker.log 2>&1
-          obsidian_status=$?
-          set -e
-          printf 'repository-tests=%s\nobsidian-prose-checker=%s\n' "$repo_status" "$obsidian_status" | tee b742-diagnostics/status.txt
-
-      - name: Upload diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: b742-test-diagnostics
-          path: b742-diagnostics/
-          if-no-files-found: error
-          retention-days: 1
+          git status --short
+          git diff --exit-code -- workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js workers/generated/operation-cost-identities.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add workers/iconoplasm.read-model-sync.test.js workers/iconoplasm.sync-finalization-queue.test.js iconoplasm-extension/amo-source/pnpm-lock.yaml .github/workflows/b742-diagnose-tests.yml
+          git diff --cached --check
+          git commit -m "Fix B-742 stale CI test contracts"
+          git push origin HEAD:fix/b742-format-production-runtime
