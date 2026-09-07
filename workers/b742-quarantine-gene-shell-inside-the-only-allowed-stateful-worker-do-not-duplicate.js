@@ -67,7 +67,7 @@ function quarantineGeneShell(symbol) {
               <div class="icono-label-registry-line">ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03</div>
             </div>
           </div>
-          <div class="icono-label-footer-row"><div class="icono-label-row-label">remarks</div><div class="icono-label-footer-copy"><div class="icono-label-footer-line icono-label-footer-line--caption">read-only published shell while the D1 authority is under maintenance</div></div></div>
+          <div class="icono-label-footer-row"><div class="icono-label-row-label">remarks</div><div class="icono-label-footer-copy"><div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div></div></div>
         </div>
       </div>
     </article>
