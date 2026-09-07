@@ -1,4 +1,5 @@
 import baseRuntime, {
+  GameSession,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
   IconoplasmManifestationCutoverCoordinator,
@@ -7,6 +8,7 @@ import baseRuntime, {
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 export {
+  GameSession,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
   IconoplasmManifestationCutoverCoordinator,
