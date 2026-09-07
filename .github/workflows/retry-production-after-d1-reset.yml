@@ -1,0 +1,97 @@
+name: Retry Production Deploy After D1 Reset
+
+on:
+  schedule:
+    # Cloudflare D1 daily allowance resets at 00:00 UTC. GitHub documents that
+    # schedules at the top of the hour are more likely to be delayed, so retry
+    # at :07 instead of :00. The canonical deploy re-checks live headroom.
+    - cron: "7 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  checks: read
+  contents: read
+
+concurrency:
+  group: production-d1-reset-retry
+  cancel-in-progress: false
+
+jobs:
+  dispatch-quota-blocked-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical production deploy if current main is quota-blocked
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DEPLOY_WORKFLOW: deploy-quartz.yml
+        run: |
+          set -euo pipefail
+
+          head_sha="$(gh api "repos/${REPOSITORY}/commits/main" --jq '.sha')"
+          echo "Current main: ${head_sha}"
+
+          checks_json="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100")"
+          ci_conclusion="$(jq -r \
+            '([.check_runs[] | select(.name == "build-and-test")] | sort_by(.completed_at // .started_at // .created_at) | last | .conclusion) // ""' \
+            <<<"${checks_json}")"
+
+          if [[ "${ci_conclusion}" != "success" ]]; then
+            echo "Exact-main protected CI is ${ci_conclusion:-absent}; no production retry will be dispatched."
+            exit 0
+          fi
+
+          runs_json="$(gh api \
+            "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/runs?branch=main&per_page=100")"
+
+          if jq -e --arg sha "${head_sha}" \
+            '.workflow_runs[] | select(.head_sha == $sha and .conclusion == "success")' \
+            <<<"${runs_json}" >/dev/null; then
+            echo "Current main already has a successful canonical production deploy."
+            exit 0
+          fi
+
+          if jq -e --arg sha "${head_sha}" \
+            '.workflow_runs[] | select(.head_sha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending"))' \
+            <<<"${runs_json}" >/dev/null; then
+            echo "A canonical production deploy for current main is already active."
+            exit 0
+          fi
+
+          latest_failed_run_id="$(jq -r --arg sha "${head_sha}" \
+            '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "failure")] | sort_by(.created_at) | last | .id) // empty' \
+            <<<"${runs_json}")"
+
+          if [[ -z "${latest_failed_run_id}" ]]; then
+            echo "Current main has no failed canonical production run to retry."
+            exit 0
+          fi
+
+          jobs_json="$(gh api \
+            "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100")"
+          failed_step="$(jq -r \
+            '[.jobs[].steps[] | select(.conclusion == "failure") | .name] | last // ""' \
+            <<<"${jobs_json}")"
+
+          case "${failed_step}" in
+            "Require account-wide D1 and Worker headroom before migrations"|\
+            "Check account capacity before release mutations"|\
+            "Refresh account capacity immediately before pausing application work")
+              ;;
+            *)
+              echo "Latest production failure was at '${failed_step:-unknown}', not a pre-mutation quota gate."
+              echo "Automatic reset retry is intentionally suppressed."
+              exit 0
+              ;;
+          esac
+
+          echo "Latest canonical production run ${latest_failed_run_id} was quota-blocked before mutation at: ${failed_step}"
+          echo "Dispatching the normal production workflow for current main after the UTC D1 reset."
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/dispatches" \
+            -f ref=main
