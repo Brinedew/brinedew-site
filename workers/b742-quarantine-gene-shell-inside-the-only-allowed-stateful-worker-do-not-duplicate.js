@@ -31,7 +31,9 @@ function geneSymbolFromPath(pathname) {
   try {
     return decodeURIComponent(match[1]).trim().toUpperCase()
   } catch {
-    return String(match[1] || "").trim().toUpperCase()
+    return String(match[1] || "")
+      .trim()
+      .toUpperCase()
   }
 }
 

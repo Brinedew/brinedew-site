@@ -7,10 +7,13 @@ test("B-742 transition serves gene HTML without touching D1", async () => {
   let d1Calls = 0
   globalThis.fetch = async (input) => {
     assert.equal(String(input), "https://brinedew-bio.pages.dev/apps/iconoplasm/index")
-    return new Response('<!doctype html><html><body><div id="iconoplasm-root"></div></body></html>', {
-      status: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    })
+    return new Response(
+      '<!doctype html><html><body><div id="iconoplasm-root"></div></body></html>',
+      {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
+    )
   }
   const forbiddenDb = {
     prepare() {
