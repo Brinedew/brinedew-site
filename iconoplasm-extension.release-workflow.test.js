@@ -370,6 +370,19 @@ test(
     await extractZip(sourceZip, extractedRoot)
 
     const storeDir = runPnpm(["store", "path", "--silent"], repoRoot).stdout.trim()
+    // The reviewer archive owns its frozen lock graph. Warm that exact graph
+    // before proving the install/build can run offline; do not assume every
+    // reviewer-only transitive tarball is also present in the repository graph.
+    runPnpm(
+      [
+        "fetch",
+        "--frozen-lockfile",
+        "--config.block-exotic-subdeps=false",
+        "--store-dir",
+        storeDir,
+      ],
+      extractedRoot,
+    )
     runPnpm(
       [
         "install",

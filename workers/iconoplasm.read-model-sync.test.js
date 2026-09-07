@@ -140,6 +140,12 @@ class FakeIconoplasmDb {
   prepare(sql) {
     return new FakeStatement(this, sql)
   }
+
+  async batch(statements) {
+    const results = []
+    for (const statement of statements) results.push(await statement.run())
+    return results
+  }
 }
 
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
