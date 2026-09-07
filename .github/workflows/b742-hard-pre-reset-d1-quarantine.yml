@@ -134,7 +134,7 @@ jobs:
           done
 
           schedules="$(cf_rest GET "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/schedules")"
-          actual_crons="$(jq -c '[.result[].cron] | sort' <<<"${schedules}")"
+          actual_crons="$(jq -c '[.result.schedules[].cron] | sort' <<<"${schedules}")"
           expected_crons='["3 0 * * *","55 23 * * *","6 12 * * *"]'
           if [[ "${actual_crons}" != "${expected_crons}" ]]; then
             echo "Unexpected production Cron set after quarantine: ${actual_crons}" >&2
