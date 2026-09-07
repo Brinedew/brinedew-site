@@ -23,7 +23,7 @@ concurrency:
 jobs:
   quarantine:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -74,11 +74,18 @@ jobs:
       - name: Install exact dependencies
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
+      - name: Install Quartz plugins
+        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
+
+      - name: Build the canonical static asset bundle required by the stateful Worker
+        run: pnpm run build
+
       - name: Stage the existing schema-transition fence without touching D1
         shell: bash
         run: |
           set -euo pipefail
           pnpm exec wrangler deploy \
+            --env="" \
             --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml \
             --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
             --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${GITHUB_SHA}-b742-hard-quarantine"
