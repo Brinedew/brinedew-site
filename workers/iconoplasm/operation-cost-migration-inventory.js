@@ -9,6 +9,23 @@ export function createMigrationInventoryCostAdapter({ db, resource, ...identitie
     resource,
     ...identities,
     registry: new Map([
+      ...(resource === "iconoplasm"
+        ? [
+            ["catalog", "icono_gene_catalog", 20001],
+            ["rollup", "icono_admin_gene_rollup", 20001],
+            ["assets", "icono_portrait_assets", 50001],
+          ].map(([name, table, limit]) => [
+            `${name}-migration-size`,
+            {
+              sql: `SELECT COUNT(*) AS capped_count FROM (SELECT 1 FROM ${table} LIMIT ${limit})`,
+              prepare(args) {
+                if (args && Object.keys(args).length)
+                  throw new OperationCostError("COST_QUERY_ARGUMENTS_INVALID")
+                return { parameters: [], rows_read: 2 * limit, rows_written: 0 }
+              },
+            },
+          ])
+        : []),
       [
         "schema-objects",
         {
