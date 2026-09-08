@@ -285,10 +285,11 @@ test("normal release checks capacity before mutations and refreshes before stagi
     initial > 0 &&
       initial < workflow.indexOf("run: node scripts/reconcile-iconoplasm-crawler-policy.mjs"),
   )
-  assert.ok(refresh > initial && refresh < workflow.indexOf("ICONOPLASM_SCHEMA_TRANSITION:1"))
+  const staging = workflow.indexOf("- name: Stage migration admission in the existing state owner")
+  assert.ok(refresh > initial && refresh < staging)
   assert.match(
-    workflow.slice(refresh, workflow.indexOf("ICONOPLASM_SCHEMA_TRANSITION:1")),
-    /Stage migration admission/,
+    workflow.slice(staging, workflow.indexOf("ICONOPLASM_SCHEMA_TRANSITION:1", staging)),
+    /if: steps\.release-state\.outputs\.schema_transition != 'true'/,
   )
 })
 

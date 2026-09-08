@@ -71,6 +71,33 @@ scale before running production work.
 
 ## Release and acceptance
 
+### Reader recovery is independent of migration capacity
+
+The canonical production workflow can refresh an **already-active** schema
+transition with the published-card reader before admitting further D1 work.
+Protected exact-commit CI, executable/migration identities, topology, and fresh
+Worker/KV headroom precede that upload. The installed Cloudflare setting owns
+maintenance state; a public gene API's success or failure cannot establish it.
+This preserves the original fence against pausing a working application without
+complete migration headroom, while allowing immutable readers to recover when
+uncertain reservations consume the operator allocation. All D1 admission,
+migration cursors, source-freeze triggers and retained receipts remain unchanged.
+The workflow still fails if the remaining migration/release cannot complete;
+reader verification is explicitly not a successful full production release.
+TP53 and BRCA1 content, HEAD, unknown symbols and the protected authority route
+are checked independently. The expired one-off hard-quarantine workflow is not
+the release mechanism for this recovery.
+
+When new source corrects an interrupted release, dispatch the canonical workflow
+with `resume_run_id` naming its original failed production run. The shared
+release helper verifies repository, canonical workflow, main branch, ancestry
+and receipt-retention age before reusing that run's migration identities.
+Existing continuation rules retain predictions, ceilings and every uncertain
+step. Fresh read-only inventories use the current run/attempt identity: they
+are new observations, not another migration allowance. This avoids both
+silently renewing DDL predictions and exhausting an old two-read observation
+plan before a resumable migration can continue.
+
 ### September 8 retained-reservation recovery
 
 Run `34184941658` passed exact-commit CI and provider headroom but migration
@@ -333,6 +360,13 @@ checks shared capacity before every page, and stops with
 resume the committed cursor and retain old uncertain reservations. Its explicit
 256-request client maximum includes per-page capacity reads; the account and
 shared daily allowances are unchanged.
+
+The separate B-742 `reader-recovery` transition mode is not a migration retry
+and does not authorize any D1 work. It serves only the published-card-backed
+gene HTML and site-detail GET/HEAD routes, so it can restore the public read
+plane while votes, caretakers, generation, authoring, queues, and background
+projections remain fenced. A known missing card is 404; an unavailable card
+artifact is 503. Report this as **Reading restored**, never as **Full service**.
 
 Preflight includes schema inspection and cumulative release requests. A working
 site requires complete release headroom before entering maintenance. Only a

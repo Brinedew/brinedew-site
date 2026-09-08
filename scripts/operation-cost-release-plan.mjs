@@ -8,30 +8,64 @@ export async function readReleaseOrigin({
   repository,
   runId,
   token,
+  resumeRunId = process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
   fetcher = fetch,
   now = Date.now(),
 }) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository || "") || !/^\d+$/.test(runId || "") || !token)
     throw new Error("COST_RELEASE_ORIGIN_REQUIRED")
-  const response = await fetcher(
-    `https://api.github.com/repos/${repository}/actions/runs/${runId}`,
-    {
+  if (resumeRunId && !/^\d+$/.test(resumeRunId)) throw new Error("COST_RELEASE_ORIGIN_REQUIRED")
+  async function get(path) {
+    const response = await fetcher(`https://api.github.com/repos/${repository}/${path}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
-    },
-  )
-  if (!response.ok) throw new Error("COST_RELEASE_ORIGIN_UNAVAILABLE")
-  const run = await response.json()
+    })
+    if (!response.ok) throw new Error("COST_RELEASE_ORIGIN_UNAVAILABLE")
+    return response.json()
+  }
+  const current = await get(`actions/runs/${runId}`)
+  if (String(current.id) !== runId) throw new Error("COST_RELEASE_RECEIPT_RETENTION_EXCEEDED")
+  const originId = resumeRunId || runId
+  const run = originId === runId ? current : await get(`actions/runs/${originId}`)
   const started = Date.parse(run.created_at)
   if (
-    String(run.id) !== runId ||
+    String(run.id) !== originId ||
     !Number.isSafeInteger(started) ||
     started > now ||
     now - started > 6 * 86_400_000
   )
     throw new Error("COST_RELEASE_RECEIPT_RETENTION_EXCEEDED")
-  return { releaseId: `deploy-${runId}`, started }
+  if (originId !== runId) {
+    // A code correction may continue the same migration, but a different
+    // repository, workflow, branch or divergent checkout may not inherit it.
+    if (
+      [run, current].some(
+        (item) =>
+          item.path !== ".github/workflows/deploy-quartz.yml" ||
+          item.head_branch !== "main" ||
+          item.head_repository?.full_name !== repository ||
+          !/^[a-f0-9]{40}$/.test(item.head_sha || ""),
+      ) ||
+      run.workflow_id !== current.workflow_id ||
+      run.status !== "completed" ||
+      run.conclusion !== "failure" ||
+      started > Date.parse(current.created_at)
+    )
+      throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
+    const comparison = await get(`compare/${run.head_sha}...${current.head_sha}`)
+    if (!["ahead", "identical"].includes(comparison.status))
+      throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
+  }
+  const attempt = current.run_attempt ?? 1
+  if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("COST_RELEASE_ORIGIN_REQUIRED")
+  return {
+    releaseId: `deploy-${originId}`,
+    // Each attempt needs fresh read-only observations. They are separate from
+    // the retained migration operation, never a renewed DDL allowance.
+    inspectionId: `inspect-${runId}-${attempt}`,
+    started,
+  }
 }
 
 // IDs depend on the release and adapter, never the retry number or which

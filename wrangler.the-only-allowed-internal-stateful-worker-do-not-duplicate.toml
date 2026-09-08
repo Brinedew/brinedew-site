@@ -217,6 +217,8 @@ allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [vars]
 ICONOPLASM_SCHEMA_TRANSITION = "0"
+ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
+ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 # Billing guardrail model:
 # 1) hard monthly stop near the included PAYGO allowance, and
 # 2) smart daily allowance derived from monthly remaining budget and days left in

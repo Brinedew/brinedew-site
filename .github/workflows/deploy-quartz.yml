@@ -4,6 +4,11 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      resume_run_id:
+        description: "Original failed production run whose migration plans must continue"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +25,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CACHE_BUST: ${{ github.sha }}
+      ICONOPLASM_RELEASE_ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
     steps:
       # Bump actions/checkout @v6 -> @v7 and actions/upload-artifact @v6 -> @v7
       # (2026 current majors). This workflow is the canonical production
@@ -195,6 +201,40 @@ jobs:
           mkdir -p .wrangler-pages
           cp wrangler.pages.toml .wrangler-pages/wrangler.toml
 
+      - name: Verify operation cost implementation and migration identities
+        run: |
+          node scripts/generate-operation-cost-migrations.mjs --check
+          node scripts/generate-operation-cost-identities.mjs --check
+
+      - name: Validate Iconoplasm deployment topology
+        run: pnpm run validate:iconoplasm-topology
+
+      # A failed migration must not strand immutable readers behind its D1
+      # allocation. Only refresh an ALREADY active transition, established from
+      # provider settings, never inferred from a public HTTP failure. This is
+      # the same state owner and canonical release; no schema or ledger changes.
+      - name: Read installed schema-transition state and reader headroom
+        id: release-state
+        timeout-minutes: 1
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/read-iconoplasm-release-state.mjs
+
+      - name: Refresh published readers during existing schema maintenance
+        if: steps.release-state.outputs.schema_transition == 'true'
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          node scripts/prepare-iconoplasm-schema-transition-config.mjs
+          trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
+          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+
+      - name: Verify published readers and retained application protection
+        if: steps.release-state.outputs.schema_transition == 'true'
+        timeout-minutes: 2
+        run: node scripts/verify-iconoplasm-reader-recovery.mjs
+
       # ARCHITECTURE FENCE [IPD-012]: inspect the account allowance through
       # analytics before any migration reads; exhausted D1 is not a retry loop.
       - name: Require account-wide D1 and Worker headroom before migrations
@@ -203,11 +243,6 @@ jobs:
         run: |
           . ./scripts/lib/CloudflareWorkerRequestBudget.ps1
           Assert-CloudflareWorkerRequestHeadroom | ConvertTo-Json
-
-      - name: Verify operation cost implementation and migration identities
-        run: |
-          node scripts/generate-operation-cost-migrations.mjs --check
-          node scripts/generate-operation-cost-identities.mjs --check
 
       - name: Check account capacity before release mutations
         timeout-minutes: 1
@@ -226,9 +261,6 @@ jobs:
       # ARCHITECTURE FENCE [IPD-009]: validate the machine-readable topology
       # before uploading any Worker or reconciling a route. A CSS-only release
       # still has to deploy a cold-safe version of the one state owner.
-      - name: Validate Iconoplasm deployment topology
-        run: pnpm run validate:iconoplasm-topology
-
       # ARCHITECTURE FENCE [IPD-003]: training ingestion is not the search
       # discovery contract. This WAF rule executes before the Worker and keeps
       # GPTBot/ClaudeBot from spending the daily request allowance while
@@ -278,12 +310,13 @@ jobs:
         run: node scripts/preflight-operation-cost-release.mjs
 
       - name: Stage migration admission in the existing state owner
+        if: steps.release-state.outputs.schema_transition != 'true'
         timeout-minutes: 5
         run: |
           set -euo pipefail
           node scripts/prepare-iconoplasm-schema-transition-config.mjs
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
-          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Inspect staged migration prerequisites through admission
         timeout-minutes: 2
