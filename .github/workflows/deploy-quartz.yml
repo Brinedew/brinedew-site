@@ -266,6 +266,9 @@ jobs:
       # ARCHITECTURE FENCE [IPD-012]: admission must exist before DDL, while
       # application HTTP, queue consumers and periodic projection work wait
       # for schema readiness. These three steps must remain adjacent.
+      # B-742: every state-owner upload retains the three independent GeneGuessr
+      # schedules. Restore Iconoplasm cron work only with a reviewed capacity
+      # release; neither a successful deploy nor a clock deadline is that proof.
       - name: Refresh account capacity immediately before pausing application work
         timeout-minutes: 1
         env:
@@ -280,7 +283,7 @@ jobs:
           set -euo pipefail
           node scripts/prepare-iconoplasm-schema-transition-config.mjs
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
-          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
+          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Apply reviewed D1 migrations through prediction admission
         timeout-minutes: 3
@@ -297,7 +300,7 @@ jobs:
         run: node scripts/run-admitted-catalog-initialization.mjs
 
       - name: Deploy the only allowed internal stateful worker (production)
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         run: |
@@ -346,7 +349,7 @@ jobs:
       # that key with the previous deployment's asset URLs. Switch to the final key
       # only after Pages confirms the new static deployment.
       - name: Activate current Iconoplasm HTML shell cache version
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Verify Iconoplasm publication aliases (production)
         run: pnpm run verify:iconoplasm-publication-aliases
