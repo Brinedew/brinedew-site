@@ -133,13 +133,24 @@ export async function runAdmittedMigrations({
   return { migrations_applied: pending.length, evidence }
 }
 
-export function createReleaseSender(token, fetcher = fetch) {
+export function createReleaseSender(token, fetcher = fetch, report = () => {}) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
   // Fixed origin, bounded traffic, timeouts and no implicit retries. D1 and
   // account-wide admission are owned by the existing server ledger.
   let requests = 0
   return async (suffix, method, body) => {
     if (++requests > RELEASE_REQUEST_LIMIT) throw new Error("COST_DEPLOYMENT_REQUEST_LIMIT")
+    // B-742: persist the exact last attempted step before a deployment exits.
+    // Never log the token, headers, arbitrary arguments or response bodies.
+    const step = {
+      request: requests,
+      method,
+      route: suffix || "/",
+      adapter_id: body?.adapter_id || null,
+      operation_id: body?.operation_id || body?.id || null,
+      step_id: body?.step_id || null,
+    }
+    report({ ...step, phase: "start" })
     const response = await fetcher(ENDPOINT + suffix, {
       method,
       redirect: "error",
@@ -155,8 +166,14 @@ export function createReleaseSender(token, fetcher = fetch) {
     } catch {
       throw new Error("COST_RESPONSE_INVALID")
     }
-    if (!response.ok)
-      throw new Error(/^COST_[A-Z_]+$/.test(value.code) ? value.code : "COST_OPERATION_REFUSED")
+    const code = /^COST_[A-Z_]+$/.test(value.code) ? value.code : "COST_OPERATION_REFUSED"
+    report({
+      ...step,
+      phase: response.ok ? "complete" : "refused",
+      status: response.status,
+      ...(!response.ok ? { code } : {}),
+    })
+    if (!response.ok) throw new Error(code)
     return value
   }
 }
@@ -170,7 +187,9 @@ async function main() {
   const manifest = JSON.parse(
     readFileSync(new URL("cloudflare/operation-cost-migration-plan.json", ROOT), "utf8"),
   )
-  const send = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN)
+  const send = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN, fetch, (step) => {
+    console.error("[admitted-migration] " + JSON.stringify(step))
+  })
   const result = await runAdmittedMigrations({
     manifest,
     releaseId: origin.releaseId,

@@ -17,6 +17,30 @@ function response(value, status = 200) {
   return Response.json(value, { status, headers: { "Cache-Control": "no-store" } })
 }
 
+export function classifyOperationCostFailure(error) {
+  const message = String(error?.message || "")
+  if (/Exceeded allowed rows written in Durable Objects free tier/i.test(message))
+    return "COST_AUTHORITY_STORAGE_WRITE_QUOTA"
+  if (/Exceeded allowed rows read in Durable Objects free tier/i.test(message))
+    return "COST_AUTHORITY_STORAGE_READ_QUOTA"
+  if (/no such table/i.test(message)) return "COST_DATABASE_TABLE_MISSING"
+  if (/no such column|has no column named/i.test(message)) return "COST_DATABASE_COLUMN_MISSING"
+  if (/malformed JSON/i.test(message)) return "COST_DATABASE_MIGRATION_GUARD_REFUSED"
+  if (/database or disk is full|maximum.*database.*size|database.*size.*limit/i.test(message))
+    return "COST_DATABASE_STORAGE_FULL"
+  if (/UNIQUE constraint failed/i.test(message)) return "COST_DATABASE_UNIQUE_CONSTRAINT"
+  if (/FOREIGN KEY constraint failed/i.test(message)) return "COST_DATABASE_FOREIGN_KEY_CONSTRAINT"
+  if (/CHECK constraint failed/i.test(message)) return "COST_DATABASE_CHECK_CONSTRAINT"
+  if (/too many SQL variables|too many.*parameters/i.test(message))
+    return "COST_DATABASE_PARAMETER_LIMIT"
+  if (/syntax error|incomplete input/i.test(message)) return "COST_DATABASE_SQL_SYNTAX"
+  if (/D1.*limit|D1.*quota|rows.*read.*limit/i.test(message))
+    return "COST_DATABASE_PROVIDER_ALLOWANCE"
+  if (error instanceof TypeError) return "COST_AUTHORITY_TYPE_ERROR"
+  if (error instanceof ReferenceError) return "COST_AUTHORITY_REFERENCE_ERROR"
+  return "COST_AUTHORITY_NATIVE_FAILURE"
+}
+
 async function readBody(request) {
   const reader = request.body?.getReader()
   if (!reader) throw new OperationCostError("COST_REQUEST_BODY_REQUIRED")
@@ -169,8 +193,10 @@ export function createOperationCostAuthority(storage, env, options = {}) {
           throw new OperationCostError("COST_PRINCIPAL_FORBIDDEN")
         return response(await executor.execute(input))
       } catch (error) {
+        // B-742: distinguish native storage/provider failures using fixed codes.
+        // Raw messages may contain private SQL values and must never be returned.
         if (!(error instanceof OperationCostError))
-          return response({ code: "COST_AUTHORITY_UNAVAILABLE" }, 503)
+          return response({ code: classifyOperationCostFailure(error) }, 503)
         const status = /PRINCIPAL/.test(error.code)
           ? 403
           : /NOT_REGISTERED|PREDICTION_REQUIRED/.test(error.code)
