@@ -18,6 +18,7 @@ import {
 } from "../workers/lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "../workers/iconoplasm/operation-cost-catalog-initialization-adapter.js"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
+import { migrationSizePrerequisites } from "./operation-cost-release-prerequisites.mjs"
 
 // Two inventory preflights, schema inspection, migrations, and catalog
 // initialization each own a bounded sender. Budget their cumulative requests.
@@ -59,7 +60,9 @@ export async function preflightOperationCostRelease({
     pendingMigrations.map((key) => [key, manifest.migrations[key]]),
   )
   const required = { rows_read: 0, rows_written: 0, requests: 1 }
+  const prerequisites = migrationSizePrerequisites(Object.values(pending))
   const predictions = [
+    ...prerequisites.map((item) => item.prediction),
     ...Array(3).fill(manifest.inventory_prediction),
     ...Array(3).fill({ rows_read: 2050, rows_written: 0, requests: 1 }),
     ...Object.values(pending).map((item) => item.prediction),
@@ -88,6 +91,7 @@ export async function preflightOperationCostRelease({
     OPERATION_COST_IDENTITIES,
   )
   const steps = [
+    ...prerequisites,
     ...["geneguessr", "iconoplasm", "iconoplasm-authoring"].map((resource) => ({
       adapter_id: `${resource}-migration-inventory`,
       resource,
@@ -233,6 +237,12 @@ export async function chooseReleaseAdmission({
     )
     const { bound } = await adapters.get(first.adapter_id).prepare(first.arguments)
     const maximum = { ...bound, requests: RELEASE_CONTROL_REQUESTS }
+    for (const probe of migrationSizePrerequisites(
+      pendingMigrations.map((key) => manifest.migrations[key]),
+    )) {
+      const prepared = await adapters.get(probe.adapter_id).prepare(probe.arguments)
+      maximum.rows_read += prepared.bound.rows_read
+    }
     for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
       const inventory = adapters.get(`${resource}-migration-inventory`)
       const prepared = await inventory.prepare({

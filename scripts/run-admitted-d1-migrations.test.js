@@ -19,6 +19,7 @@ function harness(extra = false) {
   const adapters = resources.map((resource) => ({
     id: resource + "-migration-inventory",
     resource,
+    query_ids: ["applied-migrations", "notifications-migration-size", "assignments-migration-size"],
     ...OPERATION_COST_IDENTITIES,
   }))
   for (const [key, item] of Object.entries(manifest.migrations))
@@ -57,7 +58,14 @@ function harness(extra = false) {
         if (suffix === "/register") return { plan: { id: body.id } }
         return {
           result: body.adapter_id.endsWith("-migration-inventory")
-            ? [{ results: [{ id: 1, name: "0001.sql" }] }]
+            ? [
+                {
+                  results:
+                    body.arguments.statements[0].query_id === "applied-migrations"
+                      ? [{ id: 1, name: "0001.sql" }]
+                      : [{ capped_count: 0 }],
+                },
+              ]
             : { applied: true },
           usage: { rows_read: 1, rows_written: 0, requests: 1 },
         }
@@ -85,7 +93,7 @@ test("fresh inventory observations cannot change the retained migration operatio
     .map((call) => call.body)
   assert.equal(
     registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length,
-    3,
+    5,
   )
   for (const plan of registrations) {
     assert.ok(
@@ -158,6 +166,26 @@ test("every inventory and migration registers before execution and records its r
   }
 })
 
+test("oversized notification source refuses before registering any DDL, including earlier migrations", async () => {
+  const { options, calls } = harness()
+  const original = options.send
+  options.send = async (suffix, method, body) => {
+    const result = await original(suffix, method, body)
+    if (
+      suffix === "/execute" &&
+      body.arguments?.statements?.[0]?.query_id === "notifications-migration-size"
+    )
+      result.result = [{ results: [{ capped_count: 3001 }] }]
+    return result
+  }
+  await assert.rejects(runAdmittedMigrations(options), /COST_MIGRATION_SOURCE_TOO_LARGE/)
+  assert.ok(
+    calls
+      .filter((call) => call.suffix === "/register")
+      .every((call) => call.body.adapter_id.endsWith("-migration-inventory")),
+  )
+})
+
 test("pre-deploy inventory pins the installed implementation and never executes DDL", async () => {
   const { options, calls } = harness()
   const send = options.send
@@ -197,7 +225,11 @@ test("shared benchmark history and the repaired legacy comments journal remain r
     const originalSend = options.send
     options.send = async (suffix, method, body) => {
       const result = await originalSend(suffix, method, body)
-      if (suffix === "/execute" && body.adapter_id.endsWith("-migration-inventory")) {
+      if (
+        suffix === "/execute" &&
+        body.adapter_id.endsWith("-migration-inventory") &&
+        body.arguments.statements[0].query_id === "applied-migrations"
+      ) {
         const resource = body.adapter_id.replace(/-migration-inventory$/, "")
         const names = [
           "0001.sql",
