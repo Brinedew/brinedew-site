@@ -125,6 +125,29 @@ export class OperationCostLedger {
       : primary
   }
 
+  capacitySnapshot() {
+    const day = this.day()
+    const usage = this.row("SELECT * FROM operation_cost_days WHERE day = ?", day)
+    const other = this.readOtherUsage(day)
+    requireValue(
+      other && METERS.every((meter) => Number.isSafeInteger(other[meter]) && other[meter] >= 0),
+      "COST_SHARED_USAGE_UNAVAILABLE",
+    )
+    const used = Object.fromEntries(
+      METERS.map((meter) => [meter, (usage?.[meter] ?? 0) + other[meter]]),
+    )
+    const limits = { ...LIMITS, requests: LIMITS.requests - CONTROL_REQUEST_HEADROOM }
+    return {
+      day,
+      measured_at: this.now(),
+      used,
+      limits,
+      remaining: Object.fromEntries(
+        METERS.map((meter) => [meter, Math.max(0, limits[meter] - used[meter])]),
+      ),
+    }
+  }
+
   kvDayUsage(day) {
     const stored = this.row("SELECT usage FROM operation_cost_kv_days WHERE day = ?", day)
     const usage = stored

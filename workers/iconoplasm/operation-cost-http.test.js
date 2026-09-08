@@ -112,6 +112,24 @@ function fixture({ migrated = true, kv, initializeCatalog, kvUsage = {} } = {}) 
   }
 }
 
+test("capacity is admin-only, uncached and consumes no D1 queries", async () => {
+  const f = fixture()
+  try {
+    const response = await f.authority.fetch(f.request("/capacity"))
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    const value = await response.json()
+    assert.equal(value.remaining.rows_read, 1_000_000)
+    assert.equal(value.used.requests, 1)
+    const replica = f.request("/capacity")
+    replica.headers.set("x-iconoplasm-cost-principal", "replica")
+    assert.equal((await f.authority.fetch(replica)).status, 403)
+    assert.equal(f.calls.length, 0)
+  } finally {
+    f.close()
+  }
+})
+
 test("authenticated catalog release shares retry ceilings and rejects unsafe initialization before KV", async () => {
   const prediction = {
     rows_read: 0,

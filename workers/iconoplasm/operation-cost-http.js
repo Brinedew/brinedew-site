@@ -147,16 +147,20 @@ export function createOperationCostAuthority(storage, env, options = {}) {
         // Discovery, registration and receipts spend Worker requests too.
         // Keep their shared allocation visible and reserve diagnostic headroom.
         if (
-          (suffix === "" && ["GET", "HEAD"].includes(request.method)) ||
+          (["", "/capacity"].includes(suffix) && ["GET", "HEAD"].includes(request.method)) ||
           (request.method === "POST" && ["/register", "/receipt"].includes(suffix))
         )
           ledger.recordControlRequest()
         if (suffix === "" && request.method === "HEAD")
           return new Response(null, { headers: { "Cache-Control": "no-store" } })
+        if (suffix === "/capacity" && request.method === "GET") {
+          if (principal !== "admin") throw new OperationCostError("COST_PRINCIPAL_FORBIDDEN")
+          return response(ledger.capacitySnapshot())
+        }
         if (suffix === "" && request.method === "GET") {
           return response({
             schema: "iconoplasm.operationCost.v1",
-            features: ["preserved-budget-continuation"],
+            features: ["preserved-budget-continuation", "shared-capacity-snapshot"],
             adapters: [...adapters]
               .filter(([, adapter]) => allowed(adapter))
               .map(([id, adapter]) => ({
