@@ -276,7 +276,11 @@ jobs:
 
       - name: Stage migration admission in the existing state owner
         timeout-minutes: 5
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
+        run: |
+          set -euo pipefail
+          node scripts/prepare-iconoplasm-schema-transition-config.mjs
+          trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
+          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend"
 
       - name: Apply reviewed D1 migrations through prediction admission
         timeout-minutes: 3
@@ -322,7 +326,7 @@ jobs:
 
       # ARCHITECTURE FENCE [IPD-007]: Iconoplasm's matching static assets bypass Worker execution. Dynamic
       # misses go directly to the stateful runtime, removing the old second
-      # public-proxy invocation without creating another state holder.
+      # public-proxy invocation from every dynamic request.
       - name: Reassign Iconoplasm route to the stateful worker
         run: |
           node scripts/reassign-cloudflare-worker-routes.mjs \
