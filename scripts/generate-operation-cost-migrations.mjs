@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
+import { transactionalAdminCountSeedPhases } from "./generate-transactional-admin-counts.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const filename = "0094_finalization_summary.sql"
@@ -146,6 +147,7 @@ function output() {
   ]
   return (
     "// Generated from reviewed migrations; never accept caller SQL.\n" +
+    `export const ADMIN_COUNTS_SEED_PHASES = Object.freeze(${JSON.stringify(transactionalAdminCountSeedPhases(), null, 2)})\n` +
     migrations
       .map(
         ([prefix, name, statements]) =>

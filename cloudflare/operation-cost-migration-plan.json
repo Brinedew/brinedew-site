@@ -38,13 +38,10 @@
     },
     "iconoplasm/0095_transactional_admin_counts.sql": {
       "adapter_id": "iconoplasm-migration-0095",
-      "arguments": {
-        "max_catalog": 20000,
-        "max_rollup": 20000,
-        "max_assets": 50000,
-        "max_schema_rows": 512
-      },
-      "prediction": { "rows_read": 376524, "rows_written": 128, "requests": 1 }
+      "arguments": { "phase": "initialize" },
+      "migration_protocol": "admin-count-seed-v1",
+      "max_steps": 100,
+      "prediction": { "rows_read": 376524, "rows_written": 170, "requests": 64 }
     },
     "iconoplasm/0096_request_inbox_counters.sql": {
       "adapter_id": "iconoplasm-migration-0096",

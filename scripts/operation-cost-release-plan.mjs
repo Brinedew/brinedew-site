@@ -1,5 +1,8 @@
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 export const RELEASE_REQUEST_LIMIT = 40
+// Resumable migrations have at most 100 admitted steps plus per-step capacity
+// reads and inventory/registration overhead. The shared daily ceiling remains.
+export const MIGRATION_RELEASE_REQUEST_LIMIT = 256
 
 export async function readReleaseOrigin({
   repository,

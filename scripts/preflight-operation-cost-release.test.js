@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs"
 import {
   preflightOperationCostRelease,
   verifyReleaseAuthentication,
+  requireReleaseSharedCapacity,
+  chooseReleaseAdmission,
 } from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
@@ -38,6 +40,94 @@ const check = (observed, plan = manifest) =>
     now: () => time,
   })
 
+test("low provider usage cannot admit a release over retained shared reservations", async () => {
+  const release = await check(sample)
+  const capacity = {
+    day: sample.day,
+    measured_at: time,
+    remaining: { rows_read: 1000000 - 753048, rows_written: 20000 - 256, requests: 2300 },
+  }
+  assert.throws(
+    () => requireReleaseSharedCapacity(release.maximum, capacity, time),
+    /COST_RELEASE_SHARED_HEADROOM: rows_read/,
+  )
+  requireReleaseSharedCapacity({ rows_read: 1000, rows_written: 0, requests: 40 }, capacity, time)
+  for (const invalid of [
+    null,
+    { ...capacity, measured_at: time - 60001 },
+    { ...capacity, measured_at: time + 1 },
+    { ...capacity, day: "2026-09-04" },
+    { ...capacity, remaining: { ...capacity.remaining, rows_read: NaN } },
+  ])
+    assert.throws(
+      () => requireReleaseSharedCapacity(release.maximum, invalid, time),
+      /COST_SHARED_USAGE_UNAVAILABLE/,
+    )
+})
+
+test("shared reservations also count against account headroom before pausing application traffic", () => {
+  const maximum = { rows_read: 1000, rows_written: 0, requests: 40 }
+  const capacity = {
+    day: sample.day,
+    measured_at: time,
+    used: { rows_read: 753048, rows_written: 256, requests: 100 },
+    remaining: { rows_read: 246952, rows_written: 19744, requests: 2300 },
+  }
+  assert.throws(
+    () =>
+      requireReleaseSharedCapacity(maximum, capacity, time, {
+        ...sample,
+        rows_read: ACCOUNT_CEILINGS.rows_read - 753048,
+      }),
+    /COST_RELEASE_ACCOUNT_HEADROOM: rows_read/,
+  )
+  requireReleaseSharedCapacity(maximum, capacity, time, sample)
+})
+
+test("a working site cannot enter maintenance without full headroom; a paused site can resume bounded pages", async () => {
+  const options = {
+    manifest: releaseManifest,
+    pendingMigrations: ["iconoplasm/0095_transactional_admin_counts.sql"],
+    now: time,
+    result: {
+      maximum: { rows_read: 718916, rows_written: 19980, requests: 416 },
+      observed: sample,
+    },
+    capacity: {
+      day: sample.day,
+      measured_at: time,
+      used: { rows_read: 840000, rows_written: 256, requests: 500 },
+      remaining: { rows_read: 160000, rows_written: 19744, requests: 1900 },
+    },
+  }
+  await assert.rejects(
+    chooseReleaseAdmission({ ...options, readMaintenance: async () => false }),
+    /SHARED_HEADROOM/,
+  )
+  const admitted = await chooseReleaseAdmission({ ...options, readMaintenance: async () => true })
+  assert.equal(admitted.mode, "resume-existing-maintenance")
+  assert.equal(admitted.maximum.rows_read, 42252)
+  await assert.rejects(
+    chooseReleaseAdmission({
+      ...options,
+      capacity: {
+        ...options.capacity,
+        remaining: { ...options.capacity.remaining, rows_read: 100 },
+      },
+      readMaintenance: async () => true,
+    }),
+    /SHARED_HEADROOM/,
+  )
+  await assert.rejects(
+    chooseReleaseAdmission({
+      ...options,
+      pendingMigrations: ["iconoplasm/0096_request_inbox_counters.sql"],
+      readMaintenance: async () => true,
+    }),
+    /SHARED_HEADROOM/,
+  )
+})
+
 test("release authentication is checked without D1 work, redirects or credential output", async () => {
   let calls = 0
   const fetcher = async (url, options) => {
@@ -65,7 +155,7 @@ test("release authentication is checked without D1 work, redirects or credential
 test("release reserves headroom for all reviewed migrations and three inventories", async () => {
   const result = await check(sample)
   // Includes the reviewed 0014 lineage migration as well as the prior three.
-  assert.deepEqual(result.required, { rows_read: 812856, rows_written: 20880, requests: 40 })
+  assert.deepEqual(result.required, { rows_read: 825156, rows_written: 20880, requests: 416 })
   for (const meter of Object.keys(ACCOUNT_CEILINGS)) {
     const boundary = { ...sample, [meter]: ACCOUNT_CEILINGS[meter] - result.required[meter] }
     await check(boundary)
@@ -93,8 +183,8 @@ test("the counter release fits protected capacity only after historical migratio
     "iconoplasm/0098_vote_projection_job_version.sql",
   ]
   const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
-  assert.equal(result.maximum.rows_read, 985814)
-  assert.equal(result.maximum.rows_written, 19896)
+  assert.equal(result.maximum.rows_read, 718916)
+  assert.equal(result.maximum.rows_written, 19980)
   assert.equal(result.maximum.kv_reads, 5)
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({
@@ -144,12 +234,12 @@ test("applied migrations do not consume new-release headroom; unknown or duplica
       now: () => time,
     })
   const none = await verify([])
-  assert.deepEqual(none.required, { rows_read: 3600, rows_written: 0, requests: 40 })
+  assert.deepEqual(none.required, { rows_read: 15900, rows_written: 0, requests: 416 })
   assert.equal(none.maximum.rows_written, 0)
   const key = "iconoplasm-authoring/0013_strict_upload_reservations.sql"
   const one = await verify([key])
   assert.equal(one.required.rows_written, 32)
-  assert.equal(one.required.rows_read, 7952)
+  assert.equal(one.required.rows_read, 20252)
   assert.ok(one.maximum.rows_written > 0)
   await assert.rejects(verify([key, key]), /MIGRATION_NOT_REVIEWED/)
   await assert.rejects(verify(["iconoplasm/unknown.sql"]), /MIGRATION_NOT_REVIEWED/)
