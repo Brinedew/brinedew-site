@@ -106,6 +106,7 @@ jobs:
             --env="" \
             --config "${quarantine_config}" \
             --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
+            --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" \
             --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${GITHUB_SHA}-b742-hard-quarantine"
 
       - name: Reassert provider-side Cron and Queue quarantine after Wrangler reconciliation
@@ -177,7 +178,8 @@ jobs:
           set -euo pipefail
           response_file="$(mktemp)"
           gene_file="$(mktemp)"
-          trap 'rm -f "${response_file}" "${gene_file}"' EXIT
+          api_file="$(mktemp)"
+          trap 'rm -f "${response_file}" "${gene_file}" "${api_file}"' EXIT
 
           status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${response_file}" -w '%{http_code}' \
             "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/events")"
@@ -187,10 +189,18 @@ jobs:
             exit 1
           fi
 
+          api_status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${api_file}" -w '%{http_code}' \
+            "https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/TP53")"
+          if [[ "${api_status}" != "200" ]] || ! jq -e '.symbol == "TP53" and .detail_availability.source == "published_card_catalog" and (.portrait_candidates | length == 0)' "${api_file}" >/dev/null; then
+            echo "Published-card reader API is not serving real TP53 content: HTTP ${api_status}" >&2
+            cat "${api_file}" >&2
+            exit 1
+          fi
+
           gene_status="$(curl -sS --connect-timeout 10 --max-time 30 -o "${gene_file}" -w '%{http_code}' \
             "https://iconoplasm.brinedew.bio/gene/TP53")"
-          if [[ "${gene_status}" != "200" ]] || ! grep -Fq 'data-b742-d1-free-gene-shell="TP53"' "${gene_file}"; then
-            echo "Public TP53 gene page is not readable through the D1-free quarantine shell: HTTP ${gene_status}" >&2
+          if [[ "${gene_status}" != "200" ]] || ! grep -Fq 'data-icono-server-rendered-gene="true"' "${gene_file}" || ! grep -Fq 'class="icono-card-semantic-profile"' "${gene_file}" || grep -Fq 'data-b742-d1-free-gene-shell' "${gene_file}"; then
+            echo "Public TP53 gene page is not readable through the published-card reader: HTTP ${gene_status}" >&2
             exit 1
           fi
 
@@ -199,4 +209,4 @@ jobs:
             await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN });
           '
 
-          echo "B-742 hard quarantine verified live: application D1 is closed, TP53 is readable without D1, admission remains reachable, Iconoplasm Cron is absent, and all Iconoplasm Queues are paused."
+          echo "B-742 reader recovery verified live: application D1 is closed, published TP53 content is readable without D1, admission remains reachable, Iconoplasm Cron is absent, and all Iconoplasm Queues are paused."

@@ -96,6 +96,7 @@ test("GitHub run identity and original creation date survive reruns and bound re
     Response.json({ id: 123, run_attempt: 8, created_at: new Date(now - 10000).toISOString() })
   assert.deepEqual(await readReleaseOrigin({ ...options, fetcher }), {
     releaseId: "deploy-123",
+    inspectionId: "inspect-123-8",
     started: now - 10000,
   })
   for (const run of [
@@ -108,4 +109,65 @@ test("GitHub run identity and original creation date survive reruns and bound re
       /RETENTION_EXCEEDED/,
     )
   await assert.rejects(readReleaseOrigin({ ...options, token: "" }), /ORIGIN_REQUIRED/)
+})
+
+test("a corrected canonical commit resumes the old migration identity with fresh inspection identity", async () => {
+  const now = Date.parse("2026-09-08T12:00:00Z")
+  const common = {
+    path: ".github/workflows/deploy-quartz.yml",
+    head_branch: "main",
+    workflow_id: 42,
+    head_repository: { full_name: "Brinedew/brinedew-site" },
+  }
+  const old = {
+    ...common,
+    id: 123,
+    created_at: new Date(now - 10000).toISOString(),
+    head_sha: "a".repeat(40),
+    status: "completed",
+    conclusion: "failure",
+  }
+  const current = {
+    ...common,
+    id: 456,
+    created_at: new Date(now).toISOString(),
+    head_sha: "b".repeat(40),
+    run_attempt: 3,
+  }
+  const options = {
+    repository: "Brinedew/brinedew-site",
+    runId: "456",
+    resumeRunId: "123",
+    token: "test",
+    now,
+  }
+  const fetcher =
+    (prior, comparison = "ahead") =>
+    async (url) => {
+      if (url.endsWith("/runs/456")) return Response.json(current)
+      if (url.endsWith("/runs/123")) return Response.json(prior)
+      assert.ok(url.includes(`/compare/${old.head_sha}...${current.head_sha}`))
+      return Response.json({ status: comparison })
+    }
+  assert.deepEqual(await readReleaseOrigin({ ...options, fetcher: fetcher(old) }), {
+    releaseId: "deploy-123",
+    inspectionId: "inspect-456-3",
+    started: now - 10000,
+  })
+  for (const patch of [
+    { path: ".github/workflows/unreviewed.yml" },
+    { head_branch: "another-branch" },
+    { workflow_id: 99 },
+    { head_repository: { full_name: "another/repository" } },
+    { conclusion: "success" },
+    { status: "in_progress" },
+  ])
+    await assert.rejects(
+      readReleaseOrigin({ ...options, fetcher: fetcher({ ...old, ...patch }) }),
+      /CONTINUATION_ORIGIN_INVALID/,
+    )
+  await assert.rejects(
+    readReleaseOrigin({ ...options, fetcher: fetcher(old, "diverged") }),
+    /CONTINUATION_ORIGIN_INVALID/,
+  )
 })

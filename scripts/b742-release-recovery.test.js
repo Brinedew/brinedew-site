@@ -4,6 +4,7 @@ import test from "node:test"
 import toml from "toml"
 import {
   CANONICAL_CONFIG,
+  SCHEMA_TRANSITION_MODE,
   prepareSchemaTransitionConfig,
 } from "./prepare-iconoplasm-schema-transition-config.mjs"
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
@@ -17,9 +18,14 @@ test("schema staging preserves every production binding", () => {
     prepared.main,
     "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
   )
+  assert.equal(SCHEMA_TRANSITION_MODE, "reader-recovery")
   assert.deepEqual({ ...prepared, main: canonical.main }, { ...canonical })
   assert.throws(() => prepareSchemaTransitionConfig(""), /exactly one/)
   assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)
+  assert.throws(
+    () => prepareSchemaTransitionConfig(source, { mode: "shell-only" }),
+    /Unsupported schema-transition mode/,
+  )
 })
 
 test("migration staging preserves the fallback and all release gates", () => {
@@ -29,6 +35,7 @@ test("migration staging preserves the fallback and all release gates", () => {
   )
   assert.match(workflow, /node scripts\/prepare-iconoplasm-schema-transition-config\.mjs/)
   assert.match(workflow, /--config wrangler\.iconoplasm-schema-transition\.generated\.toml/)
+  assert.match(workflow, /--var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery"/)
   const names = [
     "Require successful tests for the exact deployed commit",
     "Refresh account capacity immediately before pausing application work",
@@ -43,6 +50,28 @@ test("migration staging preserves the fallback and all release gates", () => {
     assert.ok(position > previous, name)
     previous = position
   }
+  const readerRefresh = workflow.indexOf(
+    "- name: Refresh published readers during existing schema maintenance",
+  )
+  for (const gate of [
+    "Require successful tests for the exact deployed commit",
+    "Verify operation cost implementation and migration identities",
+    "Validate Iconoplasm deployment topology",
+    "Read installed schema-transition state and reader headroom",
+  ])
+    assert.ok(workflow.indexOf(`- name: ${gate}`) < readerRefresh, gate)
+  assert.match(
+    workflow.slice(readerRefresh),
+    /if: steps\.release-state\.outputs\.schema_transition == 'true'/,
+  )
+  assert.match(
+    workflow.slice(workflow.indexOf("- name: Stage migration admission")),
+    /if: steps\.release-state\.outputs\.schema_transition != 'true'/,
+  )
+  assert.ok(
+    readerRefresh <
+      workflow.indexOf("- name: Require account-wide D1 and Worker headroom before migrations"),
+  )
 })
 
 test("failure classification never returns private provider prose", () => {

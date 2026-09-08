@@ -59,3 +59,25 @@ clearly synthetic API responses for recovery, empty, and expired-session cases.
 Those fixtures prove rendering and interaction, not restoration of production
 candidate data. Fresh unmodified production checks remain required after the
 normal deployment succeeds.
+
+## B-742 maintenance reader recovery
+
+While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`, the
+canonical transition deployment may set
+`ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`. That mode permits only
+GET/HEAD reads for `/gene/:symbol`,
+`/api/iconoplasm/site/genes/:symbol`, and exact content-addressed portrait
+renditions. Gene routes use the exact published-card
+catalog selected by `KV_GALLERY_VERSION`; they do not resolve live D1 rows.
+Portrait bytes use the existing storage adapter so first-party delivery remains
+available when Bunny is unreachable from the reader's network. No image
+selection, publication repair or D1 lookup is introduced.
+
+A readable artifact with no requested card remains a 404. A missing, invalid,
+or unavailable artifact remains a 503. Candidate images, caretaker identity,
+voting, generation, authoring, and other mutation routes remain behind the
+schema-transition response. The page is explicitly noindex during maintenance,
+and the rendered card marks live candidates and caretaker data as temporarily
+unavailable. This is the B-742 **Reading restored** milestone, not **Full
+service**: full service still requires the admitted migration, normal stateful
+Worker activation, background-capacity release, and fresh live acceptance.

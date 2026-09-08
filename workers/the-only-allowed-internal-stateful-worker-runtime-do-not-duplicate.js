@@ -562,6 +562,93 @@ async function iconoplasmGeneCardBootstrapInjection(
   }
 }
 
+export async function serveIconoplasmReaderRecoveryGenePage(
+  request,
+  env,
+  ctx = { waitUntil() {} },
+) {
+  const url = new URL(request.url)
+  const symbol = iconoplasmStaticGeneSymbolFromPath(url.pathname)
+  if (!symbol) return iconoplasmGeneNotFoundResponse(request.method)
+
+  const detailUrl = new URL(url)
+  detailUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
+  detailUrl.search = ""
+  detailUrl.hash = ""
+
+  let detailResponse
+  try {
+    detailResponse = await handleIconoplasmReaderRecoverySiteGeneDetail(
+      new Request(detailUrl.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Referer: `${url.origin}${url.pathname}`,
+        },
+      }),
+      env,
+      detailUrl.pathname,
+    )
+  } catch (error) {
+    console.error("Iconoplasm reader-recovery gene detail failed:", String(error))
+    return iconoplasmGeneUnavailableResponse(request.method)
+  }
+
+  if (detailResponse.status === 404) return iconoplasmGeneNotFoundResponse(request.method)
+  if (!detailResponse.ok) return iconoplasmGeneUnavailableResponse(request.method)
+
+  let bootstrap
+  try {
+    bootstrap = await iconoplasmGeneCardBootstrapInjection(
+      request,
+      env,
+      ctx,
+      url.pathname,
+      detailResponse,
+    )
+  } catch (error) {
+    console.error("Iconoplasm reader-recovery gene bootstrap failed:", String(error))
+    return iconoplasmGeneUnavailableResponse(request.method)
+  }
+  if (bootstrap.status !== 200 || !bootstrap.shellHtml || !bootstrap.cardPayload) {
+    return iconoplasmGeneUnavailableResponse(request.method)
+  }
+
+  const targetUrl = buildStaticSiteUrl(url, "/apps/iconoplasm/index")
+  let upstream
+  try {
+    upstream = await fetch(targetUrl.toString(), {
+      method: "GET",
+      headers: { Accept: "text/html" },
+    })
+  } catch (error) {
+    console.error("Iconoplasm reader-recovery HTML shell fetch failed:", String(error))
+    return iconoplasmGeneUnavailableResponse(request.method)
+  }
+  if (!upstream.ok || !String(upstream.headers.get("content-type") || "").includes("text/html")) {
+    return iconoplasmGeneUnavailableResponse(request.method)
+  }
+
+  const cardPayload = bootstrap.cardPayload
+  const publishedRecord = {
+    s: symbol,
+    n: cardPayload.full_name || cardPayload.name || symbol,
+    p: cardPayload.portrait || {},
+  }
+  return iconoplasmCacheableHtmlShellResponse(
+    await upstream.text(),
+    upstream,
+    request,
+    env,
+    ctx,
+    url.pathname,
+    "READER-RECOVERY",
+    bootstrap,
+    { record: publishedRecord, discoveryCandidate: false },
+    detailResponse,
+  )
+}
+
 function insertIconoplasmGeneCardBootstrap(html, injection) {
   if (!injection) return html
   const marker = 'if (typeof window === "undefined" || window.__iconoplasmBootstrap) return'
@@ -1238,6 +1325,7 @@ import {
 import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  handleIconoplasmReaderRecoverySiteGeneDetail,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
   IconoplasmManifestationCutoverCoordinator,
@@ -1601,7 +1689,7 @@ function enforceNoTransformForHtml(headers, request) {
   headers.set("Cache-Control", updated)
 }
 
-function applySecurityHeaders(response, request) {
+export function applySecurityHeaders(response, request) {
   const headers = cloneHeadersPreservingCookies(response.headers)
   for (const name of STRIP_RESPONSE_HEADERS) {
     headers.delete(name)
