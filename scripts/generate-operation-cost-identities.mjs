@@ -68,8 +68,12 @@ function generatedOutput() {
 }
 const target = path.join(root, "workers/generated/operation-cost-identities.js")
 export function assertOperationCostIdentitiesCurrent() {
-  if (readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== generatedOutput()) {
-    throw new Error("Operation cost identities are stale; regenerate before release")
+  const expected = generatedOutput()
+  if (readFileSync(target, "utf8").replace(/\r\n/g, "\n") !== expected) {
+    throw new Error(
+      "Operation cost identities are stale; regenerate before release. Expected output:\n" +
+        expected,
+    )
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
