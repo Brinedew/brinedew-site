@@ -9,7 +9,7 @@ import {
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
 import { classifyOperationCostFailure } from "../workers/iconoplasm/operation-cost-http.js"
 
-test("schema staging changes only the entrypoint and preserves every production binding", () => {
+test("schema staging preserves every production binding", () => {
   const source = readFileSync(new URL(`../${CANONICAL_CONFIG}`, import.meta.url), "utf8")
   const canonical = toml.parse(source)
   const prepared = toml.parse(prepareSchemaTransitionConfig(source))
@@ -22,8 +22,11 @@ test("schema staging changes only the entrypoint and preserves every production 
   assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)
 })
 
-test("canonical migration staging uses the fallback without skipping CI, preflight or admission", () => {
-  const workflow = readFileSync(new URL("../.github/workflows/deploy-quartz.yml", import.meta.url), "utf8")
+test("migration staging preserves the fallback and all release gates", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+    "utf8",
+  )
   assert.match(workflow, /node scripts\/prepare-iconoplasm-schema-transition-config\.mjs/)
   assert.match(workflow, /--config wrangler\.iconoplasm-schema-transition\.generated\.toml/)
   const names = [
@@ -42,21 +45,24 @@ test("canonical migration staging uses the fallback without skipping CI, preflig
   }
 })
 
-test("admission failure classification never returns private provider prose", () => {
+test("failure classification never returns private provider prose", () => {
   const cases = [
     ["D1_ERROR: no such table: private_table", "COST_DATABASE_TABLE_MISSING"],
     ["D1_ERROR: no such column: private_column", "COST_DATABASE_COLUMN_MISSING"],
     ["D1_ERROR: malformed JSON", "COST_DATABASE_MIGRATION_GUARD_REFUSED"],
     ["D1_ERROR: database or disk is full", "COST_DATABASE_STORAGE_FULL"],
     ["UNIQUE constraint failed: private_table.private_value", "COST_DATABASE_UNIQUE_CONSTRAINT"],
-    ["Exceeded allowed rows written in Durable Objects free tier", "COST_AUTHORITY_STORAGE_WRITE_QUOTA"],
+    [
+      "Exceeded allowed rows written in Durable Objects free tier",
+      "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
+    ],
     ["secret-token user@example.test unknown failure", "COST_AUTHORITY_NATIVE_FAILURE"],
   ]
   for (const [message, expected] of cases)
     assert.equal(classifyOperationCostFailure(new Error(message)), expected)
 })
 
-test("release reporting identifies a refused adapter with no token, arguments or implicit retry", async () => {
+test("release reports a refused adapter without secrets or retries", async () => {
   const reports = []
   let calls = 0
   const send = createReleaseSender(
