@@ -27,10 +27,18 @@ test("every production state-owner upload retains incident cron containment", ()
   for (const step of uploads) assert.ok(step.run.includes(expected), step.name)
 })
 
-test("the temporary recovery controller can only tighten background containment", () => {
+test("the recovery controller can only tighten background containment and recurs every UTC day", () => {
   const workflow = readWorkflow("retry-production-after-d1-reset.yml")
   assert.match(workflow, /set_queue_pause_state true/)
   assert.doesNotMatch(workflow, /set_queue_pause_state false|release_background|FULL_CRONS/)
   assert.match(workflow, /Final containment check complete; background quarantine remains/)
-  assert.match(workflow, /RECOVERY_DEADLINE_UTC: "2026-09-08T06:30:00Z"/)
+  assert.doesNotMatch(workflow, /RECOVERY_DEADLINE_UTC/)
+  assert.match(workflow, /utc_minute_of_day > 390 && utc_minute_of_day < 1435/)
+})
+
+test("the hard pre-reset quarantine cannot expire on a calendar date", () => {
+  const workflow = readWorkflow("b742-hard-pre-reset-d1-quarantine.yml")
+  assert.doesNotMatch(workflow, /RECOVERY_DEADLINE_UTC/)
+  assert.match(workflow, /utc_minute_of_day > 5 && utc_minute_of_day < 1435/)
+  assert.match(workflow, /cron: "58 23 \* \* \*"/)
 })

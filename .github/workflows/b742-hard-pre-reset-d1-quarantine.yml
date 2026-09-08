@@ -30,14 +30,18 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
       SCRIPT_NAME: geneguessr-api
-      RECOVERY_DEADLINE_UTC: "2026-09-08T00:05:00Z"
     steps:
       - name: Refuse use outside the B-742 incident window
         shell: bash
         run: |
           set -euo pipefail
-          if (( $(date -u +%s) > $(date -u -d "${RECOVERY_DEADLINE_UTC}" +%s) )); then
-            echo "B-742 hard quarantine window has ended; refusing to alter production."
+          utc_hour="$(date -u +%H)"
+          utc_minute="$(date -u +%M)"
+          utc_minute_of_day=$((10#${utc_hour} * 60 + 10#${utc_minute}))
+          # The hard quarantine is allowed only across the reset boundary, every day.
+          # An absolute calendar deadline would silently disable the next reset.
+          if (( utc_minute_of_day > 5 && utc_minute_of_day < 1435 )); then
+            echo "B-742 hard quarantine window is closed; refusing to alter production."
             exit 78
           fi
 
