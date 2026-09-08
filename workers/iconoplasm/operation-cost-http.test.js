@@ -315,6 +315,12 @@ test("real Worker gateway authenticates before authority/provider access and for
     const refused = await gateway(request, env)
     assert.equal(refused.status, 428)
     assert.equal(forwards, 1)
+    const capacityRequest = f.request("/capacity")
+    capacityRequest.headers.set("x-iconoplasm-admin-token", "test-only")
+    const capacity = await gateway(capacityRequest, env)
+    assert.equal(capacity.status, 200)
+    assert.equal((await capacity.json()).remaining.rows_read, 1_000_000)
+    assert.equal(forwards, 2)
     assert.equal(f.calls.length, 0)
   } finally {
     f.close()
