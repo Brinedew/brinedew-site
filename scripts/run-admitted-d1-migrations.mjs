@@ -44,6 +44,7 @@ function requirePrediction(prediction) {
 export async function runAdmittedMigrations({
   manifest,
   releaseId,
+  inventoryReleaseId = releaseId,
   send,
   files,
   now = Date.now(),
@@ -54,7 +55,8 @@ export async function runAdmittedMigrations({
   requirePrediction(manifest.inventory_prediction)
   for (const migration of Object.values(manifest.migrations))
     requirePrediction(migration.prediction)
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(releaseId)) throw new Error("COST_RELEASE_ID_REQUIRED")
+  if ([releaseId, inventoryReleaseId].some((id) => !/^[A-Za-z0-9_-]{1,100}$/.test(id)))
+    throw new Error("COST_RELEASE_ID_REQUIRED")
   const capabilities = await send("", "GET")
   const adapters = new Map(capabilities.adapters?.map((item) => [item.id, item]) || [])
   const evidence = []
@@ -82,7 +84,7 @@ export async function runAdmittedMigrations({
     let acquisition = acquired.get(adapterId)
     if (!acquisition)
       acquisition = await acquireReleasePlan({
-        releaseId,
+        releaseId: adapterId.endsWith("-migration-inventory") ? inventoryReleaseId : releaseId,
         adapter,
         prediction,
         send,
@@ -258,6 +260,7 @@ async function main() {
   const result = await runAdmittedMigrations({
     manifest,
     releaseId: origin.releaseId,
+    inventoryReleaseId: origin.inspectionId,
     send,
     files: (directory) =>
       readdirSync(new URL(directory + "/", ROOT))

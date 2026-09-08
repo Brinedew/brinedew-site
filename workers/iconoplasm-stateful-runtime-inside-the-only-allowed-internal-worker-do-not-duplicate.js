@@ -31040,6 +31040,73 @@ async function publishedCardOnlySiteGeneDetailResponse(request, url, symbol, pub
   return json(payload, 200, headers)
 }
 
+// B-742 READER RECOVERY: this is the only application route allowed to bypass
+// the schema-transition fence. It reads the exact immutable card selected by
+// KV_GALLERY_VERSION and never resolves a live gene, caretakers, candidates, or
+// any other D1-backed projection. Keep this helper deliberately narrower than
+// handleSiteGeneDetail so the maintenance entrypoint cannot accidentally make
+// authoring or voting work reachable while the schema is being repaired.
+export async function handleIconoplasmReaderRecoverySiteGeneDetail(
+  request,
+  env,
+  path = new URL(request.url).pathname,
+) {
+  const method = String(request.method || "GET").toUpperCase()
+  if (!new Set(["GET", "HEAD"]).has(method)) {
+    return asHead(request, json({ error: "Method not allowed" }, 405, { Allow: "GET, HEAD" }))
+  }
+  if (!String(path || "").startsWith(`${SITE_GENE_API_PREFIX}/`)) {
+    return asHead(request, json({ error: "Not found" }, 404, { "Cache-Control": "no-store" }))
+  }
+
+  const rawId = String(path).slice(`${SITE_GENE_API_PREFIX}/`.length)
+  const symbol = normalizeSymbol(rawId)
+  if (!symbol) {
+    return asHead(request, json({ error: "Gene not found" }, 404, { "Cache-Control": "no-store" }))
+  }
+
+  let publishedCard
+  try {
+    publishedCard = await readPublishedGeneCardPortraitProjection(env, symbol)
+  } catch (error) {
+    // Do not expose KV/provider details. A failed artifact read is an
+    // unavailable published reader, not evidence that the gene is unknown.
+    console.error("Iconoplasm reader-recovery card artifact read failed:", String(error))
+    publishedCard = { kind: "unavailable", version: "", payload: null }
+  }
+
+  if (publishedCard.kind === "available") {
+    return asHead(
+      request,
+      await publishedCardOnlySiteGeneDetailResponse(
+        request,
+        new URL(request.url),
+        symbol,
+        publishedCard,
+      ),
+    )
+  }
+  if (publishedCard.kind === "missing") {
+    return asHead(
+      request,
+      json({ error: "Gene not found" }, 404, {
+        "Cache-Control": "public, max-age=60",
+        "X-Iconoplasm-Card-Version": publishedCard.version,
+        "X-Iconoplasm-Detail-Source": "published-card-catalog",
+      }),
+    )
+  }
+  return asHead(
+    request,
+    json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
+      "Cache-Control": "no-store",
+      "Retry-After": "60",
+      "X-Iconoplasm-Card-Version": publishedCard.version,
+      "X-Iconoplasm-Portrait-Source": "artifact-unavailable",
+    }),
+  )
+}
+
 async function handleSiteGeneDetail(request, env, path) {
   const url = new URL(request.url)
   const rawId = path.slice(`${SITE_GENE_API_PREFIX}/`.length)
@@ -31440,7 +31507,7 @@ async function mirrorGeneCommentToDiscord(request, env, ctx, { symbol, username,
   await postIconoplasmGeneCommentToDiscord(env, { symbol, username, body, imageBytes })
 }
 
-async function handlePublishedImageAssetRoute(
+export async function handlePublishedImageAssetRoute(
   request,
   env,
   ctx,
