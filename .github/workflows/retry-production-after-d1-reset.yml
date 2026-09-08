@@ -38,7 +38,6 @@ jobs:
       CLOUDFLARE_SCRIPT_NAME: geneguessr-api
       EVENT_NAME: ${{ github.event_name }}
       TRIGGER_SCHEDULE: ${{ github.event.schedule }}
-      RECOVERY_DEADLINE_UTC: "2026-09-08T06:30:00Z"
     steps:
       - name: Keep the fresh D1 day safe and drive the canonical release
         shell: bash
@@ -50,10 +49,13 @@ jobs:
             exit 1
           fi
 
-          now_epoch="$(date -u +%s)"
-          deadline_epoch="$(date -u -d "${RECOVERY_DEADLINE_UTC}" +%s)"
-          if (( now_epoch > deadline_epoch )); then
-            echo "B-742 temporary recovery window has ended; this workflow is inert."
+          utc_hour="$(date -u +%H)"
+          utc_minute="$(date -u +%M)"
+          utc_minute_of_day=$((10#${utc_hour} * 60 + 10#${utc_minute}))
+          # This controller is intentionally live every UTC day from 23:55 through
+          # 06:30. A calendar-date deadline would silently disable the next reset.
+          if (( utc_minute_of_day > 390 && utc_minute_of_day < 1435 )); then
+            echo "B-742 daily recovery window is closed; this workflow is inert."
             exit 0
           fi
 
