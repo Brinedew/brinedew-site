@@ -15,11 +15,8 @@ test("every production state-owner upload retains incident cron containment", ()
         step.run.includes("--config wrangler.iconoplasm-schema-transition.generated.toml")),
   )
   assert.equal(uploads.length, 3)
-  for (const step of uploads)
-    assert.ok(
-      step.run.includes('--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'),
-      step.name,
-    )
+  const expected = '--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'
+  for (const step of uploads) assert.ok(step.run.includes(expected), step.name)
 })
 
 test("the temporary recovery controller can only tighten background containment", () => {
