@@ -100,6 +100,36 @@ test(
       assert.equal(measured.result[0].results[0].capped_count, 20001)
       assert.ok(measured.actual.rows_read <= prepared.bound.rows_read)
       assert.equal(measured.actual.rows_written, 0)
+      // Large sources stop at envelope + 1; the read-only probe never scans
+      // their full retained history and never changes application state.
+      for (const [binding, resource, table, query, limit] of [
+        [
+          "ICONOPLASM_DB",
+          "iconoplasm",
+          "icono_request_notifications",
+          "notifications-migration-size",
+          3001,
+        ],
+        [
+          "ICONOPLASM_AUTHORING_DB",
+          "iconoplasm-authoring",
+          "icono_caretaker_assignments",
+          "assignments-migration-size",
+          1001,
+        ],
+      ]) {
+        const db = await runtime.getD1Database(binding)
+        await db.exec(`CREATE TABLE ${table} (id INTEGER PRIMARY KEY)`)
+        await db.exec(
+          `WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<20000) INSERT INTO ${table} SELECT x FROM n`,
+        )
+        const adapter = createMigrationInventoryCostAdapter({ db, resource })
+        const prepared = await adapter.prepare({ statements: [{ query_id: query, arguments: {} }] })
+        const measured = await adapter.dispatch(prepared)
+        assert.equal(measured.result[0].results[0].capped_count, limit)
+        assert.ok(measured.actual.rows_read <= prepared.bound.rows_read)
+        assert.equal(measured.actual.rows_written, 0)
+      }
       assert.ok(discovery.features.includes("shared-capacity-snapshot"))
       assert.equal((await send("/capacity")).remaining.rows_read, 1_000_000)
       for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {

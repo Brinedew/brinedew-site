@@ -8,6 +8,7 @@ import {
   MIGRATION_RELEASE_REQUEST_LIMIT,
 } from "./operation-cost-release-plan.mjs"
 import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
+import { inspectMigrationSizes } from "./operation-cost-release-prerequisites.mjs"
 
 const ROOT = new URL("../", import.meta.url)
 const ENDPOINT = "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations"
@@ -138,6 +139,13 @@ export async function runAdmittedMigrations({
   }
   // Check every database's pending set before performing the first DDL.
   if (inventoryOnly) return { pending_migrations: pendingKeys, evidence }
+  const prerequisites = await inspectMigrationSizes({
+    pending,
+    capabilities,
+    send,
+    releaseId: inventoryReleaseId,
+    now,
+  })
   const localAdapters = createMigrationOperationCostAdapters(
     { ICONOPLASM_SCHEMA_TRANSITION: "1" },
     OPERATION_COST_IDENTITIES,
@@ -185,7 +193,7 @@ export async function runAdmittedMigrations({
     }
     if (!complete) throw new Error("COST_MIGRATION_RESUME_REQUIRED")
   }
-  return { migrations_applied: pending.length, evidence }
+  return { migrations_applied: pending.length, prerequisites, evidence }
 }
 
 export function createReleaseSender(

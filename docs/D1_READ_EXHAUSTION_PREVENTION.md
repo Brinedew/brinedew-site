@@ -379,3 +379,17 @@ rowids, a simulated lost response, and source-write attempts during the seed.
 Every step must fit its bound; final totals must equal the full canonical seed.
 These checks do not certify the remaining background, storage-growth, personal
 shelf, bulk-inbox or full-UTC-day acceptance work in B-742.
+
+Before reserving any pending DDL, the release runner now checks notification
+and assignment source cardinalities through the existing admitted inventory
+adapter. The probes stop at 3,001 and 1,001 rows respectively, spend at most
+8,004 reads combined and perform no writes. Their envelopes are included in
+complete-release and maintenance-resume preflight. Already-applied migrations
+do not probe their old source tables. A changed envelope, unavailable probe or
+oversized source refuses before the first DDL registration. Atomic migration
+guards remain in place to protect against changes after observation.
+
+This preserves the old guards' correctness and admission guarantees while
+preventing a routine source-size mismatch from stranding an expensive DDL
+reservation. Real workerd tests prove the bounded probes against 20,000-row
+sources; runner tests prove refusal happens before any DDL plan is registered.
