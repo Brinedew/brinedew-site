@@ -17,7 +17,7 @@ test("schema staging preserves every production binding", () => {
     prepared.main,
     "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
   )
-  assert.deepEqual({ ...prepared, main: canonical.main }, canonical)
+  assert.deepEqual({ ...prepared, main: canonical.main }, { ...canonical })
   assert.throws(() => prepareSchemaTransitionConfig(""), /exactly one/)
   assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)
 })
