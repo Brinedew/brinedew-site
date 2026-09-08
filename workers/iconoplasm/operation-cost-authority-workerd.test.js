@@ -1,0 +1,114 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
+import esbuild from "esbuild"
+
+const require = createRequire(import.meta.url)
+const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
+const { Miniflare, convertV4MiniflareOptions } = wranglerRequire("miniflare")
+const endpoint = "https://test/api/iconoplasm/admin/cost/operations"
+const clock = Date.parse("2026-09-08T12:00:00Z")
+
+test(
+  "HTTP migration admission registers and executes inventory through real Durable Object SQLite",
+  { timeout: 30000 },
+  async () => {
+    const bundled = await esbuild.build({
+      bundle: true,
+      write: false,
+      format: "esm",
+      platform: "browser",
+      target: "es2022",
+      stdin: {
+        resolveDir: fileURLToPath(new URL("../..", import.meta.url)),
+        contents: `
+          import { createOperationCostAuthority } from './workers/iconoplasm/operation-cost-http.js';
+          const clock = ${clock};
+          export class TestAuthority {
+            constructor(state, env) {
+              const storage = {
+                sql: {exec: (...args) => {
+                  try { return state.storage.sql.exec(...args); }
+                  catch (error) { console.error('test storage failure', error.stack); throw error; }
+                }},
+                transactionSync: (fn) => state.storage.transactionSync(fn)
+              };
+              this.authority = createOperationCostAuthority(storage, env, {
+                now: () => clock,
+                usage: {
+                  refresh: async () => ({day:'2026-09-08', measured_at:clock, rows_read:0, rows_written:0, requests:0}),
+                  current: () => null
+                }
+              });
+              state.blockConcurrencyWhile(async () => this.authority.initialize());
+            }
+            fetch(request) { return this.authority.fetch(request); }
+          }
+          export default {fetch(request,env) {
+            const forwarded = new Request(request);
+            forwarded.headers.set('x-iconoplasm-cost-principal','admin');
+            return env.AUTHORITY.get(env.AUTHORITY.idFromName('same-owner')).fetch(forwarded);
+          }};
+        `,
+      },
+    })
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: bundled.outputFiles[0].text,
+        compatibilityDate: "2025-04-01",
+        durableObjects: { AUTHORITY: { className: "TestAuthority", useSQLite: true } },
+        d1Databases: ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB"],
+      }),
+    )
+    try {
+      for (const binding of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB"]) {
+        const db = await runtime.getD1Database(binding)
+        await db.exec(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+        )
+        await db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").bind("0001_test.sql").run()
+      }
+      async function send(suffix, body) {
+        const result = await runtime.dispatchFetch(endpoint + suffix, {
+          method: body === undefined ? "GET" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        })
+        const text = await result.text()
+        assert.ok(result.ok, `${suffix || "discovery"}: ${result.status}: ${text}`)
+        return JSON.parse(text)
+      }
+      const discovery = await send("")
+      for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
+        const adapter = discovery.adapters.find(
+          (item) => item.id === `${resource}-migration-inventory`,
+        )
+        assert.ok(adapter)
+        const id = `${resource}-real-inventory`
+        await send("/register", {
+          id,
+          adapter_id: adapter.id,
+          resource: adapter.resource,
+          executable_sha256: adapter.executable_sha256,
+          schema_sha256: adapter.schema_sha256,
+          prediction: { rows_read: 1026, rows_written: 0, requests: 1 },
+          expires_at: clock + 60000,
+        })
+        const result = await send("/execute", {
+          operation_id: id,
+          adapter_id: adapter.id,
+          step_id: "inventory",
+          arguments: { statements: [{ query_id: "applied-migrations", arguments: {} }] },
+        })
+        assert.equal(result.result[0].results[0].name, "0001_test.sql")
+        assert.ok(result.usage.rows_read <= 1026)
+        const receipt = await send("/receipt", { id })
+        assert.equal(receipt.plan.status, "active")
+      }
+    } finally {
+      await runtime.dispose()
+    }
+  },
+)
