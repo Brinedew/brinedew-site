@@ -40,6 +40,8 @@ if ($headSha -ne $originSha) {
   throw "[deploy] HEAD is not origin/main. Push main first so the deploy source is explicit."
 }
 
+# Canonical production deploy path: inspect admitted schema prerequisites and
+# retained shared-budget spending before the workflow attempts DDL.
 Write-Host "[deploy] Canonical production deploy path: GitHub Actions only."
 Write-Host "[deploy] Dispatching Deploy Production (Cloudflare Pages + Worker) for origin/main..."
 

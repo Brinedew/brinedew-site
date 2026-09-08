@@ -285,6 +285,13 @@ jobs:
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
           pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
+      - name: Inspect staged migration prerequisites through admission
+        timeout-minutes: 2
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/inspect-operation-cost-release.mjs
+
       - name: Apply reviewed D1 migrations through prediction admission
         timeout-minutes: 3
         env:

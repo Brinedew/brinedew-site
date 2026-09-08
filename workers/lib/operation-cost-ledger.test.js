@@ -79,6 +79,27 @@ function enableKv(f, overrides = {}) {
   })
 }
 
+test("capacity includes retained uncertain reservations and legacy usage without refunding either", () => {
+  const f = fixture()
+  try {
+    f.ledger.register(f.input)
+    f.ledger.reserve(f.step())
+    f.ledger.readOtherUsage = () => ({ rows_read: 123, rows_written: 7, requests: 5 })
+    const before = f.ledger.readPlan(f.input.id)
+    const snapshot = f.ledger.capacitySnapshot()
+    assert.equal(snapshot.used.rows_read, 133)
+    assert.equal(snapshot.used.rows_written, 9)
+    assert.equal(snapshot.remaining.rows_read, 1_000_000 - 133)
+    assert.equal(snapshot.remaining.rows_written, 20_000 - 9)
+    assert.equal(snapshot.limits.requests, 2400)
+    assert.deepEqual(f.ledger.readPlan(f.input.id), before)
+    f.ledger.readOtherUsage = () => ({ rows_read: NaN, rows_written: 0, requests: 0 })
+    assert.throws(() => f.ledger.capacitySnapshot(), /COST_SHARED_USAGE_UNAVAILABLE/)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("KV operations share one atomic allowance and failures cannot spend the D1 request counter", () => {
   const f = fixture()
   try {
