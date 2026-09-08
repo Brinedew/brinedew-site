@@ -1483,6 +1483,12 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_cost_operation_admission",
   ),
   adminApiContract(
+    "admin_cost_operations_capacity",
+    "/cost/operations/capacity",
+    GET,
+    "admin_cost_operation_admission",
+  ),
+  adminApiContract(
     "admin_cost_operations_register",
     "/cost/operations/register",
     POST,
