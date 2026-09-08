@@ -1573,9 +1573,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         portraitDetailCache[key] = data
         return data
       })
-      .catch(function () {
-        return null
-      })
       .finally(function () {
         delete portraitDetailPromiseCache[key]
       })
@@ -4201,6 +4198,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         .then(function (genePayload) {
           if (!entry.card.isConnected) return null
           hydrateBrickCard(entry.card, genePayload)
+          return null
+        })
+        .catch(function () {
           return null
         })
         .then(next)
@@ -9016,11 +9016,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       renderIconoplasmSidebar()
       contentEl.innerHTML =
         '<div class="icono-empty">' +
-        "<h2>Gene not found</h2>" +
-        '<p>"' +
-        esc(symbol) +
-        "\" doesn't match any gene in our catalog.</p>" +
-        '<p><a href="/" data-icono-nav>Browse all genes</a></p>' +
+        (err && err.status === 404
+          ? '<h2>Gene not found</h2><p>"' +
+            esc(symbol) +
+            "\" doesn't match any gene in our catalog.</p>" +
+            '<p><a href="/" data-icono-nav>Browse all genes</a></p>'
+          : "<h2>Gene page temporarily unavailable</h2>" +
+            "<p>We couldn’t load " +
+            esc(symbol) +
+            ". Please try again shortly.</p>" +
+            '<p><a href="/gene/' +
+            encodeURIComponent(symbol) +
+            '">Try again</a></p>') +
         "</div>"
       console.error("[Iconoplasm] gene load error:", err)
     })

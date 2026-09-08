@@ -309,3 +309,39 @@ condition; it does not complete this incident. After deployment compare actual
 rows_read for the affected status and gene routes, prove account headroom under
 the bounded bootstrap, and complete B-739/B-740 live acceptance. Until then,
 report source/test proof separately from deployed prevention.
+
+### September 8: resumable counter recovery (B-742)
+
+Admitted production probes found 19,023 catalog rows, 19,160 rollup rows, and
+more than 50,000 portrait assets. Migration 0095's 50,000-asset guard therefore
+rejects this real dataset. The earlier uncertain 753,048-read reservation is
+retained; low provider telemetry does not establish a refund.
+
+The replacement keeps the guard's purpose: reserve a proven maximum before
+dispatch, preserve exact counters including orphan assets, and never activate
+application code with a partial schema. A fixed 1,024-row SQLite rowid page now
+adds totals and advances its cursor in one transaction. Temporary database
+triggers freeze source inserts, updates, and deletes across all entrypoints.
+The final transaction publishes totals, replaces those locks with permanent
+counter triggers, records migration 0095, and removes the progress table.
+No source rows or private bodies are copied. A missing final response is
+resolved through the existing migration journal; initialization cannot replay it.
+
+The normal release runner reuses its immutable plan for at most 100 steps,
+checks shared capacity before every page, and stops with
+`COST_MIGRATION_RESUME_AFTER_HEADROOM` before a page that cannot fit. Retries
+resume the committed cursor and retain old uncertain reservations. Its explicit
+256-request client maximum includes per-page capacity reads; the account and
+shared daily allowances are unchanged.
+
+Preflight includes schema inspection and cumulative release requests. A working
+site requires complete release headroom before entering maintenance. Only a
+site already returning the exact schema-transition response may resume its first
+paged migration with sufficient capacity for staging diagnostics and its initial
+step. This mode is reported as `resume-existing-maintenance`, not recovery.
+
+Real workerd/D1 tests use 60,001 assets, orphan rollup/asset rows, negative source
+rowids, a simulated lost response, and source-write attempts during the seed.
+Every step must fit its bound; final totals must equal the full canonical seed.
+These checks do not certify the remaining background, storage-growth, personal
+shelf, bulk-inbox or full-UTC-day acceptance work in B-742.

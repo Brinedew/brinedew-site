@@ -25,6 +25,7 @@ function harness(extra = false) {
     adapters.push({
       id: item.adapter_id,
       resource: key.split("/")[0],
+      migration_protocol: item.migration_protocol,
       ...OPERATION_COST_IDENTITIES,
     })
   return {
@@ -46,6 +47,12 @@ function harness(extra = false) {
       send: async (suffix, method, body) => {
         calls.push({ suffix, method, body })
         if (!suffix) return { adapters }
+        if (suffix === "/capacity")
+          return {
+            day: new Date().toISOString().slice(0, 10),
+            measured_at: Date.now(),
+            remaining: { rows_read: 1000000, rows_written: 20000, requests: 2400 },
+          }
         if (suffix === "/receipt") throw new Error("COST_PREDICTION_NOT_REGISTERED")
         if (suffix === "/register") return { plan: { id: body.id } }
         return {
@@ -64,6 +71,41 @@ test("release manifest points only at real reviewed migration files", () => {
     const [resource, name] = key.split("/")
     assert.ok(existsSync(new URL(`../${directories[resource]}/${name}`, import.meta.url)), key)
   }
+})
+
+test("resumable seed keeps one immutable plan and stops before a page without shared headroom", async () => {
+  const h = harness(),
+    original = h.options.send
+  let pages = 0
+  h.options.send = async (suffix, method, body) => {
+    if (suffix === "/capacity" && pages === 2)
+      return {
+        day: new Date().toISOString().slice(0, 10),
+        measured_at: Date.now(),
+        remaining: { rows_read: 0, rows_written: 20000, requests: 2400 },
+      }
+    const response = await original(suffix, method, body)
+    if (suffix === "/execute" && body.adapter_id === "iconoplasm-migration-0095") {
+      pages++
+      return { ...response, result: { applied: false, next_phase: "catalog" } }
+    }
+    return response
+  }
+  await assert.rejects(runAdmittedMigrations(h.options), /COST_MIGRATION_RESUME_AFTER_HEADROOM/)
+  const executed = h.calls.filter(
+    (call) => call.suffix === "/execute" && call.body.adapter_id === "iconoplasm-migration-0095",
+  )
+  assert.deepEqual(
+    executed.map((call) => call.body.step_id),
+    ["execute-0", "execute-1"],
+  )
+  assert.equal(new Set(executed.map((call) => call.body.operation_id)).size, 1)
+  assert.equal(
+    h.calls.filter(
+      (call) => call.suffix === "/register" && call.body.adapter_id === "iconoplasm-migration-0095",
+    ).length,
+    1,
+  )
 })
 test("no forecast fails before discovery; unknown migration fails before any DDL", async () => {
   const missing = harness()
@@ -84,8 +126,8 @@ test("every inventory and migration registers before execution and records its r
   const result = await runAdmittedMigrations(options)
   assert.equal(result.migrations_applied, Object.keys(manifest.migrations).length)
   assert.equal(result.evidence.length, Object.keys(manifest.migrations).length + 3)
-  for (let index = 2; index < calls.length; index += 3) {
-    assert.equal(calls[index].suffix, "/register")
+  for (let index = 0; index < calls.length; index++) {
+    if (calls[index].suffix !== "/register") continue
     assert.equal(calls[index + 1].suffix, "/execute")
     assert.equal(calls[index].body.id, calls[index + 1].body.operation_id)
   }

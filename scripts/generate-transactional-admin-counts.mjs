@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import { createHash } from "node:crypto"
 
 // One formula per counter, shared by the initial seed and every OLD/NEW delta.
 // Generated SQL is reviewed and admitted as migration 0095, never evaluated
@@ -213,6 +214,113 @@ END;`)
     `${assetDelta("OLD", "-")}\n  ${assetDelta("NEW", "+")}`,
   )
   return statements.join("\n\n") + "\n"
+}
+
+// Production seeds may exceed a single release's remaining allowance. Store
+// only aggregate totals and a SQLite rowid cursor, never copied source rows.
+// The caller must keep application mutations paused until triggers are installed.
+export function transactionalAdminCountSeedPhases() {
+  const size = 1024
+  const totals = {
+    ...Object.fromEntries(Object.keys(dashboard("gr")).map((key) => [`d_${key}`, 0])),
+    ...Object.fromEntries(Object.keys(live("gr")).map((key) => [`l_${key}`, 0])),
+    ...Object.fromEntries(Object.keys(live("gr")).map((key) => [`a_${key}`, 0])),
+  }
+  const progress = "icono_admin_counts_seed_progress"
+  const initialize = [
+    `CREATE TABLE IF NOT EXISTS ${progress} (id INTEGER PRIMARY KEY CHECK(id=1), phase TEXT NOT NULL, cursor INTEGER, seed_identity TEXT NOT NULL, ${Object.keys(
+      totals,
+    )
+      .map((key) => `${key} INTEGER NOT NULL DEFAULT 0`)
+      .join(", ")})`,
+    `INSERT OR IGNORE INTO ${progress}(id,phase,seed_identity) VALUES(1,'catalog','SEED_IDENTITY')`,
+  ]
+  const freezeTriggers = []
+  for (const table of ["icono_gene_catalog", "icono_admin_gene_rollup", "icono_portrait_assets"])
+    for (const action of ["INSERT", "UPDATE", "DELETE"]) {
+      const name = `trg_icono_admin_seed_freeze_${table}_${action.toLowerCase()}`
+      freezeTriggers.push(name)
+      initialize.push(`CREATE TRIGGER IF NOT EXISTS ${name} BEFORE ${action} ON ${table}
+        WHEN COALESCE((SELECT phase FROM ${progress} WHERE id=1),'incomplete') <> 'complete'
+        BEGIN SELECT RAISE(ABORT,'COST_ADMIN_SEED_IN_PROGRESS'); END`)
+    }
+  const pages = {}
+  const specs = [
+    [
+      "catalog",
+      "rollup",
+      "icono_gene_catalog",
+      "gene_symbol",
+      "d",
+      dashboard("gr"),
+      "LEFT JOIN icono_admin_gene_rollup gr ON gr.gene_symbol=p.gene_symbol",
+    ],
+    [
+      "rollup",
+      "assets",
+      "icono_admin_gene_rollup",
+      "current_asset_missing,admin_override,candidate_count,stale_count",
+      "l",
+      live("p"),
+      "",
+    ],
+    [
+      "assets",
+      "finish",
+      "icono_portrait_assets",
+      "gene_symbol,asset_sha256,is_stale",
+      "a",
+      {
+        all: "(p.asset_sha256 <> '')",
+        mismatch: "(p.asset_sha256 <> '' AND COALESCE(gr.current_asset_missing,0)=1)",
+        pinned: "(p.asset_sha256 <> '' AND COALESCE(gr.admin_override,0)=1)",
+        missing: "0",
+        stale: "(p.asset_sha256 <> '' AND COALESCE(p.is_stale,0)=1)",
+      },
+      "LEFT JOIN icono_admin_gene_rollup gr ON gr.gene_symbol=p.gene_symbol",
+    ],
+  ]
+  for (const [phase, next, table, columns, prefix, values, join] of specs) {
+    const names = Object.keys(values).map((key) => `${prefix}_${key}`)
+    pages[phase] = `WITH page AS MATERIALIZED (
+      SELECT rowid AS source_rowid,${columns} FROM ${table}
+      WHERE rowid >= COALESCE((SELECT cursor FROM ${progress} WHERE id=1),-9223372036854775808)
+      ORDER BY rowid LIMIT ${size}
+    ) UPDATE ${progress} SET (${names.join(", ")},cursor,phase) = (
+      SELECT ${Object.entries(values)
+        .map(([key, value]) => `${prefix}_${key}+COALESCE(SUM(${value}),0)`)
+        .join(", ")},
+      CASE WHEN COUNT(*) < ${size} THEN NULL ELSE MAX(p.source_rowid)+1 END,
+      CASE WHEN COUNT(*) < ${size} THEN '${next}' ELSE '${phase}' END
+      FROM page p ${join}
+    ) WHERE id=1 AND phase='${phase}'`
+  }
+  const finish = [
+    ...freezeTriggers.map((name) => `DROP TRIGGER ${name}`),
+    `INSERT OR REPLACE INTO icono_admin_dashboard_summary(summary_key,${Object.keys(dashboard("gr")).join(",")},updated_at)
+      SELECT 'default',${Object.keys(dashboard("gr"))
+        .map((key) => `d_${key}`)
+        .join(",")},CURRENT_TIMESTAMP FROM ${progress} WHERE id=1 AND phase='finish'`,
+    ...["live", "all"].flatMap((mode) =>
+      Object.keys(live("gr")).map(
+        (filter) =>
+          `INSERT OR REPLACE INTO icono_admin_gallery_count_cache(count_key,mode,filter,total,updated_at)
+       SELECT '${mode}:${filter}','${mode}','${filter}',${mode === "live" ? "l" : "a"}_${filter},CURRENT_TIMESTAMP FROM ${progress} WHERE id=1 AND phase='finish'`,
+      ),
+    ),
+  ]
+  const identity = createHash("sha256")
+    .update(JSON.stringify({ initialize, pages, finish }))
+    .digest("hex")
+  return {
+    size,
+    identity,
+    initialize: initialize.map((sql) => sql.replace("SEED_IDENTITY", identity)),
+    pages,
+    finish,
+    status: `SELECT phase FROM ${progress} WHERE id=1`,
+    complete: `DROP TABLE ${progress}`,
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

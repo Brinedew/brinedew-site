@@ -169,6 +169,9 @@ export function createOperationCostAuthority(storage, env, options = {}) {
                 executable_sha256: adapter.executable_sha256,
                 schema_sha256: adapter.schema_sha256,
                 query_ids: adapter.query_ids || [],
+                ...(adapter.migration_protocol
+                  ? { migration_protocol: adapter.migration_protocol }
+                  : {}),
               })),
           })
         }

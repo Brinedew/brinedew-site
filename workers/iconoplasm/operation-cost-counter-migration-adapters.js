@@ -3,8 +3,6 @@ import { executeOperationCostD1Batch } from "./operation-cost-d1-meter.js"
 import {
   CANONICAL_LIFECYCLE_GUARDS_MIGRATION_NAME,
   CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS,
-  ADMIN_COUNTS_MIGRATION_NAME,
-  ADMIN_COUNTS_MIGRATION_STATEMENTS,
   INBOX_COUNTERS_MIGRATION_NAME,
   INBOX_COUNTERS_MIGRATION_STATEMENTS,
   DELIVERY_CURSOR_MIGRATION_NAME,
@@ -38,17 +36,6 @@ const specifications = {
     tables: {},
     writes: () => 32,
     readPasses: 0,
-  },
-  admin: {
-    name: ADMIN_COUNTS_MIGRATION_NAME,
-    sql: ADMIN_COUNTS_MIGRATION_STATEMENTS,
-    tables: {
-      max_catalog: "icono_gene_catalog",
-      max_rollup: "icono_admin_gene_rollup",
-      max_assets: "icono_portrait_assets",
-    },
-    writes: () => 256,
-    readPasses: 8,
   },
   inbox: {
     name: INBOX_COUNTERS_MIGRATION_NAME,
@@ -135,8 +122,6 @@ function createCounterMigrationAdapter(kind, { db, executable_sha256, schema_sha
   }
 }
 
-export const createAdminCountsMigrationCostAdapter = (options) =>
-  createCounterMigrationAdapter("admin", options)
 export const createInboxCountersMigrationCostAdapter = (options) =>
   createCounterMigrationAdapter("inbox", options)
 export const createDeliveryCursorMigrationCostAdapter = (options) =>
