@@ -3,6 +3,7 @@ import test from "node:test"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
+import { inspectReleaseSchema } from "../../scripts/inspect-operation-cost-release.mjs"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -77,10 +78,13 @@ test(
           body: body === undefined ? undefined : JSON.stringify(body),
         })
         const text = await result.text()
+        if (!result.ok && result.status === 428) throw new Error(JSON.parse(text).code)
         assert.ok(result.ok, `${suffix || "discovery"}: ${result.status}: ${text}`)
         return JSON.parse(text)
       }
       const discovery = await send("")
+      assert.ok(discovery.features.includes("shared-capacity-snapshot"))
+      assert.equal((await send("/capacity")).remaining.rows_read, 1_000_000)
       for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
         const adapter = discovery.adapters.find(
           (item) => item.id === `${resource}-migration-inventory`,
@@ -93,20 +97,38 @@ test(
           resource: adapter.resource,
           executable_sha256: adapter.executable_sha256,
           schema_sha256: adapter.schema_sha256,
-          prediction: { rows_read: 1026, rows_written: 0, requests: 1 },
+          prediction: { rows_read: 3076, rows_written: 0, requests: 1 },
           expires_at: clock + 60000,
         })
         const result = await send("/execute", {
           operation_id: id,
           adapter_id: adapter.id,
           step_id: "inventory",
-          arguments: { statements: [{ query_id: "applied-migrations", arguments: {} }] },
+          arguments: {
+            statements: [
+              { query_id: "applied-migrations", arguments: {} },
+              { query_id: "schema-objects", arguments: {} },
+            ],
+          },
         })
         assert.equal(result.result[0].results[0].name, "0001_test.sql")
-        assert.ok(result.usage.rows_read <= 1026)
+        assert.ok(result.result[1].results.some((row) => row.name === "d1_migrations"))
+        assert.ok(result.usage.rows_read <= 3076)
         const receipt = await send("/receipt", { id })
         assert.equal(receipt.plan.status, "active")
       }
+      const inspection = await inspectReleaseSchema({
+        send: (suffix, method, body) => send(suffix, method === "GET" ? undefined : body),
+        releaseId: "test-release",
+        now: clock,
+      })
+      assert.equal(inspection.schemas.length, 3)
+      assert.ok(inspection.capacity.used.rows_read > 0)
+      assert.ok(
+        inspection.schemas.every(
+          (schema) => schema.object_count > 0 && schema.usage.rows_written === 0,
+        ),
+      )
     } finally {
       await runtime.dispose()
     }

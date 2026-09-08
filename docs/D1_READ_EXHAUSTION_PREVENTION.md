@@ -71,6 +71,23 @@ scale before running production work.
 
 ## Release and acceptance
 
+### September 8 retained-reservation recovery
+
+Run `34184941658` passed exact-commit CI and provider headroom but migration
+0095 refused `COST_SHARED_DAILY_LIMIT`. The preceding run `34176838247` has
+an unsettled 753,048-read / 256-write reservation for that migration. It must
+remain charged; low account telemetry is not a provider receipt and cannot
+refund it. No schema mutation was dispatched by the September 8 retry.
+
+The same authority now exposes an admin-only `/capacity` control read of its
+combined current-day operation reservations and legacy usage, including uncertain
+work. It does not read D1 or reset any plan. Release diagnostics inspect at most
+1,025 schema objects per database through the existing registered inventory
+adapter and retain their actual provider receipts separately from expensive DDL.
+This staged capability upgrade is diagnostic, not production recovery. The next
+release-preflight change must consume the shared capacity before pausing service;
+account telemetry alone cannot establish available operator capacity.
+
 ### Read-only published catalog cutover
 
 Catalog hydration formerly repaired a missing artifact on a reader request.

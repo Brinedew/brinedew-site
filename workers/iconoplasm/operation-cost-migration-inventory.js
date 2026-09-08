@@ -10,6 +10,19 @@ export function createMigrationInventoryCostAdapter({ db, resource, ...identitie
     ...identities,
     registry: new Map([
       [
+        "schema-objects",
+        {
+          // Cap the source scan itself. ORDER BY/filtering before LIMIT could
+          // scan an arbitrarily larger schema. The operator rejects truncation.
+          sql: "SELECT name, type, sql FROM sqlite_schema LIMIT 1025",
+          prepare(args) {
+            if (args && Object.keys(args).length)
+              throw new OperationCostError("COST_QUERY_ARGUMENTS_INVALID")
+            return { parameters: [], rows_read: 2050, rows_written: 0 }
+          },
+        },
+      ],
+      [
         "applied-migrations",
         {
           sql: "SELECT id, name FROM d1_migrations ORDER BY id LIMIT 513",
