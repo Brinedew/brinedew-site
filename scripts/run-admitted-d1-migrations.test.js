@@ -73,6 +73,31 @@ test("release manifest points only at real reviewed migration files", () => {
   }
 })
 
+test("fresh inventory observations cannot change the retained migration operation identity", async () => {
+  const h = harness()
+  await runAdmittedMigrations({
+    ...h.options,
+    releaseId: "deploy-original",
+    inventoryReleaseId: "inspect-current-3",
+  })
+  const registrations = h.calls
+    .filter((call) => call.suffix === "/register")
+    .map((call) => call.body)
+  assert.equal(
+    registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length,
+    3,
+  )
+  for (const plan of registrations) {
+    assert.ok(
+      plan.id.startsWith(
+        plan.adapter_id.endsWith("-migration-inventory")
+          ? "inspect-current-3-"
+          : "deploy-original-",
+      ),
+    )
+  }
+})
+
 test("resumable seed keeps one immutable plan and stops before a page without shared headroom", async () => {
   const h = harness(),
     original = h.options.send

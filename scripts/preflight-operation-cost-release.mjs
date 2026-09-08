@@ -17,6 +17,7 @@ import {
   KV_ACCOUNT_CEILINGS,
 } from "../workers/lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "../workers/iconoplasm/operation-cost-catalog-initialization-adapter.js"
+import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 // Two inventory preflights, schema inspection, migrations, and catalog
 // initialization each own a bounded sender. Budget their cumulative requests.
@@ -271,7 +272,7 @@ async function main() {
   await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
   const inventory = await runAdmittedMigrations({
     manifest,
-    releaseId: `${origin.releaseId}-preflight`,
+    releaseId: `${origin.inspectionId}-preflight`,
     inventoryOnly: true,
     send: createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN),
     files: (directory) =>
@@ -292,15 +293,7 @@ async function main() {
     pendingMigrations: inventory.pending_migrations,
     result,
     capacity,
-    readMaintenance: async () => {
-      const response = await fetch(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/TP53",
-        { redirect: "error", signal: AbortSignal.timeout(10000), cache: "no-store" },
-      )
-      return (
-        response.status === 503 && (await response.json()).code === "ICONOPLASM_SCHEMA_TRANSITION"
-      )
-    },
+    readMaintenance: async () => (await readIconoplasmReleaseState()).schema_transition,
   })
   process.stdout.write(
     JSON.stringify({

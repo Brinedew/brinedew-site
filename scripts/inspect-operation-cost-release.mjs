@@ -66,7 +66,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   })
   const result = await inspectReleaseSchema({
     send: createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN),
-    releaseId: origin.releaseId,
+    releaseId: origin.inspectionId,
   })
   console.log(JSON.stringify(result))
 }
