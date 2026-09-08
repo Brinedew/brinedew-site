@@ -11,8 +11,8 @@ on:
     # During the incident window, reassert quarantine and retry the canonical release
     # every five minutes. The quarantine itself makes delay in any one GitHub run safe.
     - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-5 * * *"
-    # After the owner is likely awake in Vietnam, restore background work only if the
-    # exact main commit deployed successfully and fresh D1 telemetry retains large headroom.
+    # Final containment check. A successful release alone cannot certify the
+    # full-day cost of background work and must never unpause it on a timer.
     - cron: "5 6 * * *"
   workflow_dispatch:
 
@@ -61,13 +61,6 @@ jobs:
             {"cron":"55 23 * * *"},
             {"cron":"3 0 * * *"},
             {"cron":"6 12 * * *"}
-          ]'
-          FULL_CRONS='[
-            {"cron":"55 23 * * *"},
-            {"cron":"3 0 * * *"},
-            {"cron":"6 12 * * *"},
-            {"cron":"0,2,3,4,5,6,7,8,11,13,14,15,17,18,19,20,23,24,26,27,29,30,31,32,34,35,38,39,41,42,43,44,45,47,50,51,52,53,54,55,56,59 * * * *"},
-            {"cron":"56,58,59 23 * * *"}
           ]'
           ICONOPLASM_QUEUES=(
             "iconoplasm-sync-finalization"
@@ -142,15 +135,6 @@ jobs:
             echo "B-742 quarantine asserted: Iconoplasm Cron jobs disabled and Queue delivery paused."
           }
 
-          release_background() {
-            cf_rest PUT \
-              "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_SCRIPT_NAME}/schedules" \
-              "${FULL_CRONS}" \
-              >/dev/null
-            set_queue_pause_state false
-            echo "B-742 quarantine released: normal Cron jobs and Queue delivery restored."
-          }
-
           read_d1_usage() {
             local utc_day body response
             utc_day="$(date -u +%F)"
@@ -198,6 +182,14 @@ jobs:
           writes="$(jq -r '.writes' <<<"${usage}")"
           echo "Fresh UTC-day D1 telemetry: ${reads} reads / ${writes} writes."
 
+          # B-742: 13:05 in Vietnam is not evidence that background consumers
+          # fit a whole day. This controller can only tighten containment; a
+          # reviewed capacity release must restore the intended jobs explicitly.
+          if [[ "${TRIGGER_SCHEDULE:-}" == "5 6 * * *" ]]; then
+            echo "Final containment check complete; background quarantine remains in place."
+            exit 0
+          fi
+
           head_sha="$(gh api "repos/${REPOSITORY}/commits/main" --jq '.sha')"
           checks_json="$(
             gh api \
@@ -219,24 +211,8 @@ jobs:
               <<<"${runs_json}"
           )"
 
-          # 06:05 UTC is 13:05 in Vietnam. Until then, even a successful deploy
-          # remains quarantined so the owner wakes to a protected D1 allowance.
-          if [[ "${TRIGGER_SCHEDULE:-}" == "5 6 * * *" ]]; then
-            if [[ -z "${successful_run_id}" ]]; then
-              echo "No successful canonical deploy exists for current main; leaving quarantine in place."
-              exit 0
-            fi
-            if (( reads >= 1250000 || writes >= 30000 )); then
-              echo "Post-reset usage is too high for automatic background release; leaving quarantine in place."
-              exit 0
-            fi
-            release_background
-            echo "Current main ${head_sha} deployed successfully in run ${successful_run_id}; D1 headroom passed the conservative release threshold."
-            exit 0
-          fi
-
           if [[ -n "${successful_run_id}" ]]; then
-            echo "Current main already deployed successfully in run ${successful_run_id}; retaining quarantine until 06:05 UTC."
+            echo "Current main already deployed successfully in run ${successful_run_id}; retaining background quarantine."
             exit 0
           fi
 
