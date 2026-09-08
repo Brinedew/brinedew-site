@@ -7,6 +7,30 @@ import { parseHTML } from "linkedom"
 // ARCHITECTURE FENCE [IPD-008]: anonymous bootstrap must stay on the published read plane.
 
 const appPath = new URL("./app.js", import.meta.url)
+test("gene detail preserves service errors and permits a fresh retry", async () => {
+  const source = await readFile(appPath, "utf8")
+  const start = source.indexOf("function fetchGeneDetail(symbol, options)")
+  const end = source.indexOf("function invalidateGeneDetail(symbol)", start)
+  let attempts = 0
+  const unavailable = Object.assign(new Error("maintenance"), { status: 503 })
+  const load = new Function(
+    "fetchCompleteGeneDetailFromEndpoint",
+    `
+    var portraitDetailCache = {}, portraitDetailPromiseCache = {}, window = {};
+    function normalizedSymbol(value) { return value; }
+    function isCompleteGeneDetailPayload(value) { return !!value; }
+    ${source.slice(start, end)}
+    return fetchGeneDetail;
+  `,
+  )(async () => {
+    attempts++
+    if (attempts === 1) throw unavailable
+    return { symbol: "TP53" }
+  })
+  await assert.rejects(load("TP53"), (error) => error === unavailable)
+  assert.equal((await load("TP53")).symbol, "TP53")
+  assert.equal(attempts, 2)
+})
 const requestInboxPath = new URL("./request-inbox.js", import.meta.url)
 const homeOrdersPath = new URL("./home-orders.js", import.meta.url)
 const stylesPath = new URL("./styles.css", import.meta.url)

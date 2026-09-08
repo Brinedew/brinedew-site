@@ -5,8 +5,8 @@ import { createUploadReservationMigrationCostAdapter } from "./operation-cost-up
 import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
 import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-snapshot-retirement-adapter.js"
 import { createVoteJobVersionMigrationCostAdapter } from "./operation-cost-vote-job-migration-adapter.js"
+import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
-  createAdminCountsMigrationCostAdapter,
   createInboxCountersMigrationCostAdapter,
   createDeliveryCursorMigrationCostAdapter,
   createAssignmentLookupMigrationCostAdapter,
@@ -46,7 +46,11 @@ export function createMigrationOperationCostAdapters(env, identities) {
     ],
     [
       "iconoplasm-migration-0095",
-      createAdminCountsMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+      createResumableAdminCountsMigrationCostAdapter({
+        db: env.ICONOPLASM_DB,
+        transition: env.ICONOPLASM_SCHEMA_TRANSITION,
+        ...identities,
+      }),
     ],
     [
       "iconoplasm-migration-0096",

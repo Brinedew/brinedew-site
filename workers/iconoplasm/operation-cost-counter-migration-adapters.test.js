@@ -3,10 +3,8 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
-import {
-  createAdminCountsMigrationCostAdapter,
-  createInboxCountersMigrationCostAdapter,
-} from "./operation-cost-counter-migration-adapters.js"
+import { createInboxCountersMigrationCostAdapter } from "./operation-cost-counter-migration-adapters.js"
+import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 
 test(
   "counter migrations bound full-schema backfills and roll back oversized sources before DDL",
@@ -87,14 +85,20 @@ test(
         )
         .run()
       const identities = { db, executable_sha256: "a".repeat(64), schema_sha256: "b".repeat(64) }
+      const admin = createResumableAdminCountsMigrationCostAdapter({
+        ...identities,
+        transition: "1",
+      })
+      let phase = "initialize"
+      for (let steps = 0; phase !== "complete"; steps++) {
+        assert.ok(steps < 100)
+        const prepared = await admin.prepare({ phase })
+        const { result, actual } = await admin.dispatch(prepared)
+        assert.ok(actual.rows_read <= prepared.bound.rows_read)
+        assert.ok(actual.rows_written <= prepared.bound.rows_written)
+        phase = result.next_phase
+      }
       for (const [label, adapter, args, overflow, marker] of [
-        [
-          "admin",
-          createAdminCountsMigrationCostAdapter(identities),
-          { max_catalog: 20000, max_rollup: 20000, max_assets: 50000, max_schema_rows: 512 },
-          { max_catalog: 19999 },
-          "trg_icono_admin_counts_rollup_insert",
-        ],
         [
           "inbox",
           createInboxCountersMigrationCostAdapter(identities),
