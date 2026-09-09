@@ -234,6 +234,39 @@ test("a working site cannot enter maintenance without full headroom; a paused si
   )
 })
 
+test("a protected transition stages one full-table index within retained headroom", async () => {
+  const pendingMigrations = [
+    "iconoplasm/0099_finalization_queue_indexes.sql",
+    "iconoplasm/0100_finalization_job_version.sql",
+    "iconoplasm/0101_finalization_publication_barrier.sql",
+    "iconoplasm/0102_finalization_status_index.sql",
+    "iconoplasm/0103_finalization_running_index.sql",
+  ]
+  const result = await preflightOperationCostRelease({
+    manifest: releaseManifest,
+    pendingMigrations,
+    reader: { refresh: async () => sample },
+    now: () => time,
+  })
+  const capacity = {
+    day: sample.day,
+    measured_at: time,
+    used: { rows_read: 753048, rows_written: 256, requests: 100 },
+    remaining: { rows_read: 246952, rows_written: 19744, requests: 2300 },
+  }
+  const admission = await chooseReleaseAdmission({
+    manifest: releaseManifest,
+    pendingMigrations,
+    result,
+    capacity,
+    readMaintenance: async () => true,
+    now: time,
+  })
+  assert.equal(admission.mode, "resume-existing-maintenance")
+  assert.ok(admission.maximum.rows_read <= capacity.remaining.rows_read)
+  assert.ok(admission.maximum.rows_written <= capacity.remaining.rows_written)
+})
+
 test("release authentication is checked without D1 work, redirects or credential output", async () => {
   let calls = 0
   const fetcher = async (url, options) => {

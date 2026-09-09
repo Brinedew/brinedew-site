@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs"
+import { appendFileSync, readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import {
@@ -139,8 +139,15 @@ export async function runAdmittedMigrations({
   }
   // Check every database's pending set before performing the first DDL.
   if (inventoryOnly) return { pending_migrations: pendingKeys, evidence }
+  // An active schema-transition shell protects live application traffic. In
+  // that state, run exactly one reviewed full-table index migration per normal
+  // release so each DDL cost is admitted against the retained ledger before it
+  // can spend. The final Worker and browser activation remain unreachable until
+  // the inventory is empty.
+  const stageOneMigration = pending[0]?.migration_protocol === "one-migration-per-release-v1"
+  const executablePending = stageOneMigration ? pending.slice(0, 1) : pending
   const prerequisites = await inspectMigrationSizes({
-    pending,
+    pending: executablePending,
     capabilities,
     send,
     releaseId: inventoryReleaseId,
@@ -150,14 +157,19 @@ export async function runAdmittedMigrations({
     { ICONOPLASM_SCHEMA_TRANSITION: "1" },
     OPERATION_COST_IDENTITIES,
   )
-  for (const item of pending) {
+  for (const item of executablePending) {
     if (!item.migration_protocol) {
+      await execute(item.adapter_id, item.prediction, item.arguments)
+      continue
+    }
+    if (adapters.get(item.adapter_id)?.migration_protocol !== item.migration_protocol)
+      throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
+    if (item.migration_protocol === "one-migration-per-release-v1") {
       await execute(item.adapter_id, item.prediction, item.arguments)
       continue
     }
     if (
       item.migration_protocol !== "admin-count-seed-v1" ||
-      adapters.get(item.adapter_id)?.migration_protocol !== item.migration_protocol ||
       !Number.isSafeInteger(item.max_steps) ||
       item.max_steps < 1 ||
       item.max_steps > 100
@@ -193,7 +205,12 @@ export async function runAdmittedMigrations({
     }
     if (!complete) throw new Error("COST_MIGRATION_RESUME_REQUIRED")
   }
-  return { migrations_applied: pending.length, prerequisites, evidence }
+  return {
+    migrations_applied: executablePending.length,
+    continuation_required: stageOneMigration && pending.length > executablePending.length,
+    prerequisites,
+    evidence,
+  }
 }
 
 export function createReleaseSender(
@@ -275,6 +292,12 @@ async function main() {
         .filter((name) => name.endsWith(".sql"))
         .sort(),
   })
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `continuation_required=${result.continuation_required ? "true" : "false"}\n`,
+      "utf8",
+    )
   process.stdout.write(JSON.stringify(result) + "\n")
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
