@@ -421,3 +421,15 @@ nine-symbol read receipts (27, 30 and 26 rows respectively). At the supported
 all performed zero writes. These measurements cover selection, not phase work.
 Global selection, global publication and shared finalization admission still
 require their own bounds before background containment can be lifted.
+
+Affirmative reconcile reads only the supplied keep/legacy asset keys, in pages
+of at most 500 unique keys. An explicit symbol scope filters those inputs before
+SQL. Omitted candidates remain untouched and are never enumerated merely to
+count them; the response states `omitted_assets_preserved: true` in place of the
+old `kept_absent` history count. No production consumer depended on that count.
+Publication state is read only for an explicit unpublish request, which now
+requires a nonempty symbol scope and probes those unique keys. A workerd test
+kept a two-key lookup at three reads after adding 60,000 assets concentrated on
+the same genes; 1,001 existing keys cost 2,002 reads across three pages. These
+are source-selection receipts, not a bound on subsequent promotion, votes,
+emulsion examples or read-model rebuilds.

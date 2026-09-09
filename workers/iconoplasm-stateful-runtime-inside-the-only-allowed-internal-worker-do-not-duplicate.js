@@ -13,6 +13,10 @@ import {
   dueFinalizationJobsSql,
   pendingFinalizationWorkSql,
 } from "./iconoplasm/sync-finalization-selection.js"
+import {
+  readReconcileAssetKeys,
+  readReconcilePublishState,
+} from "./iconoplasm/reconcile-asset-selection.js"
 import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
 import {
   createOperationCostAuthority,
@@ -38202,9 +38206,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const scopeSymbols = Array.from(
         new Set(scopeSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean)),
       )
-      const scopeSymbolsJson = JSON.stringify(scopeSymbols)
-      const applyScope = scopeSymbols.length > 0 ? 1 : 0
-
       const keep = []
       const keepSet = new Set()
       for (const raw of keepRaw) {
@@ -38232,32 +38233,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
       const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
       const unpublishMissing = coerceBoolean(p?.unpublish_missing ?? p?.unpublishMissing, false)
+      if (unpublishMissing && !scopeSymbols.length)
+        return done(
+          "admin_reconcile_400",
+          json({ error: "Unpublishing requires explicit scope_symbols" }, 400),
+        )
       const actorId = await actor(request, env)
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
 
-      const { results: existingAssets = [] } = await env.ICONOPLASM_DB.prepare(
-        `WITH incoming_scope AS (
-           SELECT value AS gene_symbol
-           FROM json_each(?)
-         )
-         SELECT gene_symbol, asset_sha256, status, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy
-         FROM icono_portrait_assets
-         WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))`,
-      )
-        .bind(scopeSymbolsJson, applyScope)
-        .all()
-
-      const { results: existingStateRows = [] } = await env.ICONOPLASM_DB.prepare(
-        `WITH incoming_scope AS (
-           SELECT value AS gene_symbol
-           FROM json_each(?)
-         )
-         SELECT gene_symbol, current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-         FROM icono_publish_state
-         WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))`,
-      )
-        .bind(scopeSymbolsJson, applyScope)
-        .all()
+      const existingAssets = await readReconcileAssetKeys(env.ICONOPLASM_DB, {
+        keep,
+        legacy,
+        symbols: scopeSymbols,
+      })
+      const existingStateRows = unpublishMissing
+        ? await readReconcilePublishState(env.ICONOPLASM_DB, scopeSymbols)
+        : []
       const existingState = new Map()
       for (const row of existingStateRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -38286,7 +38277,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       let autoResolved = 0
       let unpublished = 0
       let ignoredInvalid = 0
-      let keptAbsent = 0
 
       for (const row of existingAssets) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -38360,10 +38350,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             .run()
           continue
         }
-        // Asset is absent from both keep and legacy. Leave it alone — absence is
-        // never a delete signal. Real removals come through the explicit
-        // /admin/remove-candidate + /admin/local-removals/* channel.
-        keptAbsent += 1
       }
 
       if (unpublishMissing) {
@@ -38418,7 +38404,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             restored_keep: restoredKeep,
             legacy_marked: legacyMarked,
             legacy_already_marked: legacyAlreadyMarked,
-            kept_absent: keptAbsent,
+            omitted_assets_preserved: true,
             auto_resolved: autoResolved,
             unpublished,
             ignored_invalid: ignoredInvalid,
