@@ -8,6 +8,10 @@ const worker = readFileSync(
   ),
   "utf8",
 )
+const finalizationPublication = readFileSync(
+  new URL("../workers/iconoplasm/sync-finalization-publication.js", import.meta.url),
+  "utf8",
+)
 const routeContract = readFileSync(
   new URL("../workers/iconoplasm-route-contract.js", import.meta.url),
   "utf8",
@@ -103,21 +107,23 @@ includesOrFail(
 for (const selectorTest of [
   "workers/iconoplasm/sync-finalization-selection.test.js",
   "workers/iconoplasm/sync-finalization-global-selection.test.js",
+  "workers/iconoplasm/sync-finalization-publication.test.js",
+  "workers/iconoplasm/finalization-job-state.test.js",
 ]) {
   includesOrFail(workflow, selectorTest, `Deploy must run ${selectorTest}.`)
 }
 includesOrFail(
   worker,
-  "scoped_finalize_only",
-  "Worker must keep scoped pending-finalize completion without global publish.",
+  "drainCompletedFinalization(env.ICONOPLASM_DB",
+  "Worker must use bounded versioned completion and durable publisher handoff.",
 )
 includesOrFail(
-  worker,
-  "pending_finalize_bulk_complete",
-  "Worker must keep the mixed-ledger pending-finalize bulk-complete path.",
+  finalizationPublication,
+  "completeReadyFinalizationPage(db, symbols, now)",
+  "Finalization must retain exact scoped or global completion pages.",
 )
 includesOrFail(
-  worker,
+  finalizationPublication,
   "global_finalize_deferred",
   "Worker must be explicit when global gallery/card-catalog publish is deferred.",
 )
