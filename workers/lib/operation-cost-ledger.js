@@ -70,6 +70,19 @@ function digest(value) {
   return value
 }
 
+function emptyMeterVector() {
+  return Object.fromEntries(METERS.map((meter) => [meter, 0]))
+}
+
+function addMeterVector(target, source) {
+  for (const meter of METERS) target[meter] += source[meter]
+  return target
+}
+
+function subtractMeterVectors(left, right) {
+  return Object.fromEntries(METERS.map((meter) => [meter, left[meter] - right[meter]]))
+}
+
 export class OperationCostLedger {
   constructor(
     storage,
@@ -137,6 +150,43 @@ export class OperationCostLedger {
       METERS.map((meter) => [meter, (usage?.[meter] ?? 0) + other[meter]]),
     )
     const limits = { ...LIMITS, requests: LIMITS.requests - CONTROL_REQUEST_HEADROOM }
+    // This is a bounded Durable Object diagnostic: registrations are capped at
+    // 500/day and every plan document is already retained for receipt recovery.
+    // Aggregate day usage remains authoritative. This detail only explains the
+    // part of that aggregate that has a valid settled receipt or an intentionally
+    // retained unknown-outcome reservation; it never manufactures a refund.
+    const settledActual = emptyMeterVector()
+    const outstandingReservations = emptyMeterVector()
+    let invalidPlanSteps = 0
+    for (const row of this.storage.sql
+      .exec("SELECT document FROM operation_cost_plans WHERE day = ?", day)
+      .toArray()) {
+      let plan
+      try {
+        plan = JSON.parse(row.document)
+      } catch {
+        invalidPlanSteps++
+        continue
+      }
+      for (const step of Object.values(plan?.steps || {})) {
+        const charged = step?.status === "settled" ? step?.actual : step?.bound
+        if (
+          !charged ||
+          !METERS.every((meter) => Number.isSafeInteger(charged[meter]) && charged[meter] >= 0)
+        ) {
+          invalidPlanSteps++
+          continue
+        }
+        if (step.status === "settled") addMeterVector(settledActual, charged)
+        else if (step.status === "reserved") addMeterVector(outstandingReservations, charged)
+        else invalidPlanSteps++
+      }
+    }
+    const operatorCharged = Object.fromEntries(METERS.map((meter) => [meter, usage?.[meter] ?? 0]))
+    const receiptedOrReserved = Object.fromEntries(
+      METERS.map((meter) => [meter, settledActual[meter] + outstandingReservations[meter]]),
+    )
+    const operatorUnattributed = subtractMeterVectors(operatorCharged, receiptedOrReserved)
     return {
       day,
       measured_at: this.now(),
@@ -145,6 +195,21 @@ export class OperationCostLedger {
       remaining: Object.fromEntries(
         METERS.map((meter) => [meter, Math.max(0, limits[meter] - used[meter])]),
       ),
+      breakdown: {
+        operation_charged: operatorCharged,
+        settled_actual: settledActual,
+        outstanding_reservations: outstandingReservations,
+        // This can include authenticated control-plane reads, which deliberately
+        // charge the shared request allocation but have no operation receipt.
+        operator_unattributed: operatorUnattributed,
+        legacy_usage: other,
+        // Never subtract uncertain usage from capacity. A negative remainder
+        // would signal corrupt receipt records, so surface it rather than clamp.
+        unknown_remainder: Object.fromEntries(
+          METERS.map((meter) => [meter, operatorUnattributed[meter]]),
+        ),
+        invalid_plan_steps: invalidPlanSteps,
+      },
     }
   }
 

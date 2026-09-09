@@ -75,6 +75,49 @@ test("publication handler registry is immutable and domain-complete", () => {
   ])
 })
 
+test("catalog and essence state require explicit valid scopes without touching D1 otherwise", async () => {
+  const calls = []
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({
+      fetchCatalogStateRows: async (_env, symbols) => {
+        calls.push({ route: "catalog", symbols })
+        return []
+      },
+      fetchEssenceStateRows: async (_env, symbols) => {
+        calls.push({ route: "essence", symbols })
+        return []
+      },
+    }),
+  )
+  const forbiddenDb = new Proxy({}, { get: () => assert.fail("invalid state scope touched D1") })
+  for (const handler of [
+    handlers["admin_publication.catalog_state"],
+    handlers["admin_publication.essence_state"],
+  ]) {
+    for (const body of [{}, { symbols: null }, { symbols: [] }, { symbols: ["", null] }]) {
+      const response = await responseFrom(handler, { body, env: { ICONOPLASM_DB: forbiddenDb } })
+      assert.equal(response.status, 400)
+    }
+  }
+  assert.deepEqual(calls, [])
+
+  const symbols = Array.from({ length: 1001 }, (_, index) => `GENE${index}`)
+  for (const [route, handler] of [
+    ["catalog", handlers["admin_publication.catalog_state"]],
+    ["essence", handlers["admin_publication.essence_state"]],
+  ]) {
+    const response = await responseFrom(handler, {
+      body: { symbols: [" tp53 ", "TP53", ...symbols] },
+      env: { ICONOPLASM_DB: {} },
+    })
+    assert.equal(response.status, 200)
+    assert.equal(calls.at(-1).route, route)
+    assert.equal(calls.at(-1).symbols[0], "TP53")
+    assert.deepEqual(calls.at(-1).symbols.slice(0, 2), ["TP53", "GENE0"])
+    assert.equal(calls.at(-1).symbols.length, 1002)
+  }
+})
+
 test("catalog upsert owns its write boundary and can defer read models", async () => {
   const writes = []
   let readModelCalls = 0
@@ -321,4 +364,16 @@ test("catalog reconcile deletes only explicit normalized symbols", async () => {
     deleted.map((entry) => entry.symbol),
     ["TP53"],
   )
+})
+
+test("catalog reconcile rejects the unadmitted keep-symbols whole-state mode", async () => {
+  const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
+  const response = await responseFrom(handlers["admin_publication.catalog_reconcile"], {
+    body: { keep_symbols: ["TP53"] },
+    env: {
+      ICONOPLASM_DB: new Proxy({}, { get: () => assert.fail("keep scope touched D1") }),
+    },
+  })
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /not admitted/)
 })
