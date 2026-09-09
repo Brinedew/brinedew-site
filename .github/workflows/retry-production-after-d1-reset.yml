@@ -207,11 +207,41 @@ jobs:
           runs_json="$(
             gh api "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/runs?branch=main&per_page=100"
           )"
-          successful_run_id="$(
+          # Reader-only recovery shares this workflow but leaves deploy-production
+          # skipped. A workflow-level green result cannot certify restored writes.
+          # Use the latest completed attempt, including reruns, so a later
+          # containment or failed release cannot hide behind an older full success.
+          latest_successful_attempt_id="$(
             jq -r --arg sha "${head_sha}" \
-              '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success")] | sort_by(.created_at) | last | .id) // empty' \
+              '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed")] | sort_by([(.run_started_at // .created_at), (.run_attempt // 1), .id]) | last | select(.conclusion == "success") | .id) // empty' \
               <<<"${runs_json}"
           )"
+          successful_run_id=""
+          if [[ -n "${latest_successful_attempt_id}" ]]; then
+            completed_jobs_json="$(
+              gh api "repos/${REPOSITORY}/actions/runs/${latest_successful_attempt_id}/jobs?filter=latest&per_page=100"
+            )"
+            if ! jq -e '(.jobs | type) == "array" and .total_count == (.jobs | length)' <<<"${completed_jobs_json}" >/dev/null; then
+              echo "Full-deployment job evidence is invalid or incomplete; retaining quarantine." >&2
+              exit 1
+            fi
+            if jq -e '
+              [.jobs[] | select(.name == "deploy-production")] as $full |
+              ($full | length) == 1 and
+              $full[0].status == "completed" and $full[0].conclusion == "success" and
+              ([
+                "Deploy the only allowed internal stateful worker (production)",
+                "Deploy production static site to Cloudflare Pages",
+                "Activate current Iconoplasm HTML shell cache version",
+                "Smoke test production host ownership and browser bootstraps",
+                "Smoke test Discord OAuth entry and anonymous session contract"
+              ] | all(. as $name |
+                ([$full[0].steps[]? | select(.name == $name and .status == "completed" and .conclusion == "success")] | length) == 1
+              ))
+            ' <<<"${completed_jobs_json}" >/dev/null; then
+              successful_run_id="${latest_successful_attempt_id}"
+            fi
+          fi
 
           if [[ -n "${successful_run_id}" ]]; then
             echo "Current main already deployed successfully in run ${successful_run_id}; retaining background quarantine."
@@ -247,7 +277,7 @@ jobs:
             gh api "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100"
           )"
           failed_step="$(
-            jq -r '[.jobs[].steps[] | select(.conclusion == "failure") | .name] | last // ""' <<<"${jobs_json}"
+            jq -r '[.jobs[] | select(.name == "deploy-production") | .steps[]? | select(.conclusion == "failure") | .name] | last // ""' <<<"${jobs_json}"
           )"
 
           case "${failed_step}" in
