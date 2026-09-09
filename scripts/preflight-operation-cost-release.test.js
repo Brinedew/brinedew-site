@@ -65,6 +65,34 @@ test("low provider usage cannot admit a release over retained shared reservation
     )
 })
 
+test("status-index release fits retained headroom with singleton prerequisites and a measured DDL envelope", async (t) => {
+  const release = await preflightOperationCostRelease({
+    manifest: releaseManifest,
+    pendingMigrations: ["iconoplasm/0102_finalization_status_index.sql"],
+    reader: { refresh: async () => sample },
+    now: () => time,
+  })
+  const capacity = {
+    day: sample.day,
+    measured_at: time,
+    remaining: { rows_read: 106754, rows_written: 6426, requests: 660 },
+  }
+  requireReleaseSharedCapacity(release.maximum, capacity, time)
+  assert.throws(
+    () =>
+      requireReleaseSharedCapacity(
+        release.maximum,
+        {
+          ...capacity,
+          remaining: { ...capacity.remaining, rows_read: release.maximum.rows_read - 1 },
+        },
+        time,
+      ),
+    /COST_RELEASE_SHARED_HEADROOM/,
+  )
+  t.diagnostic(JSON.stringify({ maximum: release.maximum }))
+})
+
 test("shared reservations also count against account headroom before pausing application traffic", () => {
   const maximum = { rows_read: 1000, rows_written: 0, requests: 40 }
   const capacity = {

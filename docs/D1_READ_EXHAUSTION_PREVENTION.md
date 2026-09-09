@@ -520,10 +520,23 @@ index, excluding completed history. Global lists stop at the requested limit;
 scoped lists probe only the explicit unique keys before sorting. Unknown stored
 phases remain visible, and future retries retain their place in the status view.
 With 25,000 jobs and 5,000 unfinished rows, the admitted migration measured
-60,117 reads and 5,004 writes within its 128,708-read/5,064-write bound. The
+60,117 reads and 5,004 writes within its 68,706-read/5,064-write bound. The
 prediction reserves 64,354 reads and 5,064 writes rather than understating the
 known index-write cost. Global 1/200/1,000-row lists measured 1/200/1,000 reads;
 the maximum 5,000-key scoped list measured 20,000 reads. Adding 60,000 unfinished
 and 20,000 completed jobs left those costs unchanged. Migration guards refuse an
 oversized source before index creation; ordinary list growth requires no new
 migration or scan. These receipts bound listing, not phase execution.
+
+The first 0102 release refused before any production mutation because its
+conservative envelope plus duplicate prerequisite scans exceeded the remaining
+shared allocation. Its preflight now reads the existing transactional summary
+for total and unfinished counts in two singleton probes. The migration still
+validates the real source inside its atomic batch before DDL, so a bad counter
+cannot authorize an oversized index build. Its single-index read envelope is
+two source passes, two capped unfinished ranges and bounded schema overhead;
+the older two-index migration keeps its published envelope. No allowance,
+unknown reservation or admission check is removed.
+At the maximum 1,024 schema objects as well as 25,000 jobs/5,000 unfinished
+rows, workerd measured 61,121 migration reads and 5,004 writes. Both preflight
+counters read one row before and after adding 80,000 jobs.
