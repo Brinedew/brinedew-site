@@ -38,6 +38,7 @@ test("global dispatch retains phase priority, orders by due time and probes boun
     db.exec(source("0028_add_finalization_jobs.sql"))
     db.exec(source("0094_finalization_summary.sql"))
     db.exec(source("0099_finalization_queue_indexes.sql"))
+    db.exec(source("0100_finalization_job_version.sql"))
     db.exec(fixture)
     const values = queries.map(([sql, args]) => {
       const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args)
@@ -89,6 +90,7 @@ test(
     try {
       schema.exec(source("0028_add_finalization_jobs.sql"))
       schema.exec(source("0094_finalization_summary.sql"))
+      schema.exec(source("0100_finalization_job_version.sql"))
       const db = await runtime.getD1Database("DB")
       for (const { sql } of schema
         .prepare(
