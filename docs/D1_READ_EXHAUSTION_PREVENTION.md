@@ -410,3 +410,48 @@ serializer; no stored identity or portrait selection changes. The production-siz
 fixture includes these prefix cases. A successful read-only comparison against
 an existing exact hydrated artifact also completes preparation without replaying
 its mutation plan if a later release stage failed.
+
+Scoped finalization wakeups now force unique gene-key probes for running leases,
+due jobs and pending-work counts. The optional-OR scope predicate previously
+allowed a status-backlog scan even for one requested gene. The replacement
+preserves exact counts, phase priority and durable retry times. A workerd fixture
+adds 60,000 unrelated completed, running and queued jobs without changing the
+nine-symbol read receipts (27, 30 and 26 rows respectively). At the supported
+5,000-symbol maximum, the three queries measured 16,667, 15,834 and 15,000 reads;
+all performed zero writes. These measurements cover selection, not phase work.
+Global selection, global publication and shared finalization admission still
+require their own bounds before background containment can be lifted.
+
+Affirmative reconcile reads only the supplied keep/legacy asset keys, in pages
+of at most 500 unique keys. An explicit symbol scope filters those inputs before
+SQL. Omitted candidates remain untouched and are never enumerated merely to
+count them; the response states `omitted_assets_preserved: true` in place of the
+old `kept_absent` history count. No production consumer depended on that count.
+Publication state is read only for an explicit unpublish request, which now
+requires a nonempty symbol scope and probes those unique keys. A workerd test
+kept a two-key lookup at three reads after adding 60,000 assets concentrated on
+the same genes; 1,001 existing keys cost 2,002 reads across three pages. These
+are source-selection receipts, not a bound on subsequent promotion, votes,
+emulsion examples or read-model rebuilds.
+
+Global Queue selection uses migration 0099's two partial indexes. The durable
+ledger and existing phase priority remain authoritative; within each phase,
+earliest due time now precedes original request time. This avoids scanning
+future retries to preserve an old arrival sort. Each of four priority ranges
+stops at the batch limit before merging, and stale-running selection stops at
+250 index entries. Scheduling consumes `has_runnable`, an existence result,
+instead of counting every runnable job. Exact remaining totals still come from
+the transactional singleton; future wakeups retain the earliest durable date.
+
+The migration has source-size admission before DDL and atomic guards for at
+most 25,000 total jobs and 5,000 unfinished jobs. The two new index populations
+are disjoint and contain no completed history. Probe identities include their
+query name so multiple checks against one database cannot share a mismatched
+prediction. A 25,000-row workerd migration with 5,000 unfinished jobs measured
+85,131 reads and 5,004 writes, within its 228,708-read/5,064-write bound. Global
+selection beside 85,000 stored jobs measured 250 reads for running leases,
+128 for a 25-job due batch, 1,253 for the 250-job maximum and nine for readiness.
+With every queued/retrying job moved into the future, due selection cost eight
+reads and readiness remained nine, with the correct future wakeup. These are selection and
+migration receipts; global publication, phase execution and whole-operation
+shared admission remain required before background containment is lifted.

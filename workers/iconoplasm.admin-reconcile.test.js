@@ -19,11 +19,15 @@ class FakeStatement {
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
     if (
-      this.sql.includes("FROM icono_portrait_assets") &&
-      this.sql.includes("COALESCE(is_legacy, 0) AS is_legacy")
+      this.sql.includes("CROSS JOIN icono_portrait_assets") &&
+      this.sql.includes("COALESCE(pa.is_legacy, 0) AS is_legacy")
     ) {
       return {
-        results: this.db.existingAssets,
+        results: this.db.existingAssets.filter((row) =>
+          JSON.parse(this.args[0]).some(
+            ([symbol, sha]) => row.gene_symbol === symbol && row.asset_sha256 === sha,
+          ),
+        ),
       }
     }
     if (
@@ -111,6 +115,23 @@ function buildEnv({ existingAssets } = {}, { bindGateway = true } = {}) {
   }
   return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
+
+test("admin reconcile refuses unscoped unpublishing before source reads", async () => {
+  const env = buildEnv()
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+        method: "POST",
+        headers: { Authorization: "Bearer secret-admin-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ unpublish_missing: true }),
+      }),
+      env,
+      {},
+    )
+  assert.equal(response.status, 400)
+  assert.match((await response.json()).error, /explicit scope_symbols/)
+  assert.equal(env.gatewayDb.calls.length, 0)
+})
 
 test("admin reconcile restores rejected legacy assets instead of leaving them hidden", async () => {
   const env = buildEnv({
@@ -223,7 +244,7 @@ test("admin reconcile NEVER rejects: an asset absent from keep is left untouched
   // Regression for the 2026-06-04 mass-deletion: an under-inclusive keep set must
   // never wipe candidates. Absence is not a delete signal — deletions only flow
   // through the explicit removal channel. This asset is absent from keep/legacy
-  // and must be left untouched (counted as kept_absent), with zero reject writes.
+  // and must be left untouched without even reading it, with zero reject writes.
   // There is no longer any flag that re-enables the destructive path.
   const env = buildEnv({
     existingAssets: [
@@ -260,7 +281,12 @@ test("admin reconcile NEVER rejects: an asset absent from keep is left untouched
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
-  assert.equal(payload?.kept_absent, 1)
+  assert.equal(payload?.omitted_assets_preserved, true)
+  assert.equal(payload?.kept_absent, undefined)
+  assert.equal(
+    env.gatewayDb.calls.some((call) => call.sql.includes("CROSS JOIN icono_portrait_assets")),
+    false,
+  )
   // The destructive path is gone entirely — no flag, no reject counter.
   assert.equal(payload?.rejected, undefined)
   assert.equal(payload?.reject_absent_from_keep, undefined)
@@ -311,7 +337,7 @@ test("admin reconcile has no flag that re-enables destructive keep-set rejection
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
-  assert.equal(payload?.kept_absent, 1)
+  assert.equal(payload?.omitted_assets_preserved, true)
 
   const rejectWrite = env.gatewayDb.calls.find(
     (call) => call.method === "run" && call.sql.includes("SET status='rejected'"),

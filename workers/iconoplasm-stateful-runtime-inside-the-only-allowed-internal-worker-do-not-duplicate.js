@@ -8,6 +8,20 @@ import {
   readSyncFinalizationSummary,
   readSyncFinalizationDrainCounts,
 } from "./iconoplasm/sync-finalization-summary.js"
+import {
+  runningFinalizationJobsSql,
+  dueFinalizationJobsSql,
+  pendingFinalizationWorkSql,
+} from "./iconoplasm/sync-finalization-selection.js"
+import {
+  GLOBAL_RUNNING_FINALIZATION_SQL,
+  GLOBAL_DUE_FINALIZATION_SQL,
+  GLOBAL_PENDING_FINALIZATION_SQL,
+} from "./iconoplasm/sync-finalization-global-selection.js"
+import {
+  readReconcileAssetKeys,
+  readReconcilePublishState,
+} from "./iconoplasm/reconcile-asset-selection.js"
 import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
 import {
   createOperationCostAuthority,
@@ -22563,27 +22577,19 @@ async function recoverStaleRunningSyncFinalizationJobs(
   // still count as pending forever, but the normal processor only selects
   // queued/retrying work. Requeue old leases here so the backlog can become
   // real work again instead of an undead counter that never drains.
-  const runningRowsResp = await env.ICONOPLASM_DB.prepare(
-    `WITH scoped_symbols AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at
-     FROM icono_sync_finalization_jobs
-     WHERE status = ?
-       AND phase <> ?
-       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     ORDER BY COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) ASC, gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(
-      scopedSymbolsJson,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      scopedEnabled,
-      ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
-    )
-    .all()
+  const runningRowsResp = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(runningFinalizationJobsSql(scopedEnabled > 0))
+        .bind(
+          scopedSymbolsJson,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          scopedEnabled,
+          ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+        )
+        .all()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_RUNNING_FINALIZATION_SQL)
+        .bind(ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT)
+        .all()
   const runningRows = Array.isArray(runningRowsResp?.results) ? runningRowsResp.results : []
   let recovered = 0
   for (const row of runningRows) {
@@ -23066,7 +23072,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       // Queue allowance during the 2026-07-22 D1-capacity incident.
       const nextDelaySeconds = drainResult?.partial
         ? 15 * 60
-        : Math.max(0, Number(drainResult?.runnable || 0) || 0) > 0
+        : drainResult?.has_runnable === true
           ? 0
           : queueDelaySecondsUntil(drainResult?.next_attempt_at)
       sentNext = await sendSyncFinalizationDrainQueueMessage(
@@ -23417,46 +23423,22 @@ async function processPendingSyncFinalizationJobs(
     symbols: scopedSymbols,
   })
   const nowIso = new Date().toISOString()
-  const queued = await env.ICONOPLASM_DB.prepare(
-    `WITH scoped_symbols AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT *
-     FROM icono_sync_finalization_jobs
-     WHERE status IN (?, ?)
-       AND phase <> ?
-       AND next_attempt_at <= ?
-       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     -- Live lesson: oldest-first alone made the queue look honest but drain
-     -- badly, because late-phase rows kept sitting behind fresh reconcile work.
-     -- Prefer jobs that are already closest to completed_pending_finalize so the
-     -- visible pending bucket can actually collapse instead of endlessly
-     -- recycling half-finished symbols.
-     ORDER BY
-       CASE phase
-         WHEN ? THEN 0
-         WHEN ? THEN 1
-         WHEN ? THEN 2
-         ELSE 3
-       END ASC,
-       requested_at ASC,
-       gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(
-      scopedSymbolsJson,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      scopedEnabled,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES,
-      safeLimit,
-    )
-    .all()
+  const queued = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(dueFinalizationJobsSql(true))
+        .bind(
+          scopedSymbolsJson,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          scopedEnabled,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES,
+          safeLimit,
+        )
+        .all()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_DUE_FINALIZATION_SQL).bind(nowIso, safeLimit).all()
   const rows = (Array.isArray(queued?.results) ? queued.results : []).map(mapSyncFinalizationJobRow)
   const results = []
   let processed = 0
@@ -23580,7 +23562,7 @@ async function processPendingSyncFinalizationJobs(
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining: Math.max(pendingWork.remaining, Number(finalizeResult?.remaining || 0) || 0),
-    runnable: pendingWork.runnable,
+    has_runnable: pendingWork.has_runnable,
     next_attempt_at: pendingWork.next_attempt_at,
     reschedule_symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     results,
@@ -23594,42 +23576,27 @@ async function summarizePendingSyncFinalizationWork(
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COUNT(*) AS remaining,
-       SUM(CASE
-         WHEN status IN (?, ?)
-          AND phase <> ?
-          AND next_attempt_at <= ? THEN 1
-         ELSE 0
-       END) AS runnable,
-       MIN(CASE
-         WHEN status IN (?, ?)
-          AND phase <> ?
-          AND next_attempt_at > ? THEN next_attempt_at
-         ELSE NULL
-       END) AS next_attempt_at
-     FROM icono_sync_finalization_jobs
-     WHERE status <> ?
-       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-  )
-    .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      scopedEnabled,
-      scopedSymbolsJson,
-    )
-    .first()
+  const row = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(pendingFinalizationWorkSql(true))
+        .bind(
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+          scopedEnabled,
+          scopedSymbolsJson,
+        )
+        .first()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_PENDING_FINALIZATION_SQL).bind(nowIso).first()
+  if (!row) throw new Error("Finalization summary is missing; migration 0094 is required")
   return {
     remaining: Math.max(0, Number(row?.remaining || 0) || 0),
-    runnable: Math.max(0, Number(row?.runnable || 0) || 0),
+    has_runnable: scopedEnabled ? Number(row.runnable || 0) > 0 : Number(row.has_runnable) === 1,
     next_attempt_at: sanitizeText(row?.next_attempt_at || "", 64) || null,
   }
 }
@@ -38251,9 +38218,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const scopeSymbols = Array.from(
         new Set(scopeSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean)),
       )
-      const scopeSymbolsJson = JSON.stringify(scopeSymbols)
-      const applyScope = scopeSymbols.length > 0 ? 1 : 0
-
       const keep = []
       const keepSet = new Set()
       for (const raw of keepRaw) {
@@ -38281,32 +38245,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
       const deferReadModels = coerceBoolean(p?.defer_read_models ?? p?.deferReadModels, false)
       const unpublishMissing = coerceBoolean(p?.unpublish_missing ?? p?.unpublishMissing, false)
+      if (unpublishMissing && !scopeSymbols.length)
+        return done(
+          "admin_reconcile_400",
+          json({ error: "Unpublishing requires explicit scope_symbols" }, 400),
+        )
       const actorId = await actor(request, env)
       const reason = String(p?.reason || "").slice(0, 2000) || "local_sync_reconcile"
 
-      const { results: existingAssets = [] } = await env.ICONOPLASM_DB.prepare(
-        `WITH incoming_scope AS (
-           SELECT value AS gene_symbol
-           FROM json_each(?)
-         )
-         SELECT gene_symbol, asset_sha256, status, COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy
-         FROM icono_portrait_assets
-         WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))`,
-      )
-        .bind(scopeSymbolsJson, applyScope)
-        .all()
-
-      const { results: existingStateRows = [] } = await env.ICONOPLASM_DB.prepare(
-        `WITH incoming_scope AS (
-           SELECT value AS gene_symbol
-           FROM json_each(?)
-         )
-         SELECT gene_symbol, current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-         FROM icono_publish_state
-         WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))`,
-      )
-        .bind(scopeSymbolsJson, applyScope)
-        .all()
+      const existingAssets = await readReconcileAssetKeys(env.ICONOPLASM_DB, {
+        keep,
+        legacy,
+        symbols: scopeSymbols,
+      })
+      const existingStateRows = unpublishMissing
+        ? await readReconcilePublishState(env.ICONOPLASM_DB, scopeSymbols)
+        : []
       const existingState = new Map()
       for (const row of existingStateRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -38335,7 +38289,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       let autoResolved = 0
       let unpublished = 0
       let ignoredInvalid = 0
-      let keptAbsent = 0
 
       for (const row of existingAssets) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -38409,10 +38362,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             .run()
           continue
         }
-        // Asset is absent from both keep and legacy. Leave it alone — absence is
-        // never a delete signal. Real removals come through the explicit
-        // /admin/remove-candidate + /admin/local-removals/* channel.
-        keptAbsent += 1
       }
 
       if (unpublishMissing) {
@@ -38467,7 +38416,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             restored_keep: restoredKeep,
             legacy_marked: legacyMarked,
             legacy_already_marked: legacyAlreadyMarked,
-            kept_absent: keptAbsent,
+            omitted_assets_preserved: true,
             auto_resolved: autoResolved,
             unpublished,
             ignored_invalid: ignoredInvalid,
