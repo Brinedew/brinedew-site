@@ -59,6 +59,12 @@ handler-level workerd regression measures one selected row at two D1 reads,
 with the same receipt after adding 60,000 unrelated catalog rows and on an
 immediate no-op repeat.
 
+When that transition was entered by the verified D1-free reader artifact, the
+canonical full-release preflight retains its recorded origin only after GitHub
+proves the same workflow, repository, `main` lineage, source ancestry, and both
+reader deployment/verification steps. This preserves the original migration
+identity without treating an arbitrary successful deployment as a continuation.
+
 ## September 5 evidence
 
 Cloudflare account analytics at approximately 09:50 UTC reported 5.97 million

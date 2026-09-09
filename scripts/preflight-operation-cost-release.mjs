@@ -24,6 +24,14 @@ import { migrationSizePrerequisites } from "./operation-cost-release-prerequisit
 // initialization each own a bounded sender. Budget their cumulative requests.
 const RELEASE_CONTROL_REQUESTS = 4 * RELEASE_REQUEST_LIMIT + MIGRATION_RELEASE_REQUEST_LIMIT
 
+// The installed reader-recovery state has already selected the retained origin
+// before this preflight runs. A successful origin is admissible only when
+// `readReleaseOrigin` proves it was the exact D1-free containment deployment;
+// all ordinary successful deployments remain invalid continuation sources.
+export function readCanonicalReleaseOrigin(options) {
+  return readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true })
+}
+
 export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")
   const response = await fetcher(
@@ -265,7 +273,7 @@ export async function chooseReleaseAdmission({
 }
 
 async function main() {
-  const origin = await readReleaseOrigin({
+  const origin = await readCanonicalReleaseOrigin({
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     token: process.env.GITHUB_TOKEN,
