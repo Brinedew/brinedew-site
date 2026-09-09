@@ -148,6 +148,8 @@ jobs:
             workers/iconoplasm-gene-discovery.test.js \
             workers/iconoplasm-gene-cold-path.test.js \
             workers/iconoplasm.sync-finalization-queue.test.js \
+            workers/iconoplasm/sync-finalization-selection.test.js \
+            workers/iconoplasm/sync-finalization-global-selection.test.js \
             workers/iconoplasm-publish-event-archive.test.js \
             workers/iconoplasm-extension-blocklist-policy.test.js \
             workers/iconoplasm-extension-blocklist-public.test.js \
