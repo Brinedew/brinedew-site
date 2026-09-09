@@ -1,5 +1,21 @@
 # D1 exhaustion: cause and prevention
 
+## September 9 follow-up measurements
+
+The completion-time query must use `completed_at > ''` against the existing
+`(status, completed_at)` index. Its former `<> ''` predicate measured 19,023 reads
+when all completed timestamps were empty. The revised range returns the same
+latest nonempty timestamp or null and costs at most two reads, including after
+80,000 blank-timestamp jobs. This is a locally measured defect; live jobs have a
+nonempty completion timestamp, so it does not establish the live cost source.
+
+Provider Query Insights in the following investigation also recorded full
+catalog (19,023 rows) and essence (19,737 rows) fetches. Workstation publication
+preflight discarded both results before execution compared its actual scope
+again. Removing those advisory reads preserves the real sync comparison and
+authenticated readiness check. Neither these sampled queries nor changes in the
+shared ledger alone establish a complete attribution of account consumption.
+
 ## September 5 evidence
 
 Cloudflare account analytics at approximately 09:50 UTC reported 5.97 million
