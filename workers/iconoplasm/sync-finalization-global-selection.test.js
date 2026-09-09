@@ -8,7 +8,10 @@ import {
   GLOBAL_DUE_FINALIZATION_SQL,
   GLOBAL_PENDING_FINALIZATION_SQL,
 } from "./sync-finalization-global-selection.js"
-import { createFinalizationQueueMigrationCostAdapter } from "./operation-cost-finalization-queue-migration-adapter.js"
+import {
+  createFinalizationQueueMigrationCostAdapter,
+  createFinalizationRunningMigrationCostAdapter,
+} from "./operation-cost-finalization-queue-migration-adapter.js"
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
@@ -38,6 +41,7 @@ test("global dispatch retains phase priority, orders by due time and probes boun
     db.exec(source("0028_add_finalization_jobs.sql"))
     db.exec(source("0094_finalization_summary.sql"))
     db.exec(source("0099_finalization_queue_indexes.sql"))
+    db.exec(source("0103_finalization_running_index.sql"))
     db.exec(source("0100_finalization_job_version.sql"))
     db.exec(fixture)
     const values = queries.map(([sql, args]) => {
@@ -140,6 +144,21 @@ test(
         assert.ok(
           actual[meter] <= prepared.bound[meter],
           JSON.stringify({ actual, bound: prepared.bound }),
+        )
+      const runningAdapter = createFinalizationRunningMigrationCostAdapter({
+        db,
+        executable_sha256: "a".repeat(64),
+        schema_sha256: "b".repeat(64),
+      })
+      const runningPrepared = await runningAdapter.prepare({
+        max_rows: 25000,
+        max_unfinished: 5000,
+      })
+      const running = await runningAdapter.dispatch(runningPrepared)
+      for (const meter of ["rows_read", "rows_written"])
+        assert.ok(
+          running.actual[meter] <= runningPrepared.bound[meter],
+          JSON.stringify({ actual: running.actual, bound: runningPrepared.bound }),
         )
       const measure = async (limit = 25) => {
         const result = []

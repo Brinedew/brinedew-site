@@ -353,6 +353,14 @@ known refusals from stranding production in transition; it does not reserve
 capacity or replace the server's atomic admission against concurrent spending.
 Implementation/migration identity generation is checked in CI and deployment.
 
+When an already-protected transition has retained reservations that cannot
+admit the entire pending release, `one-migration-per-release-v1` allows exactly
+one independently bounded DDL migration to run. The workflow records a staged
+checkpoint and skips catalog, Worker, route, Pages and browser activation. The
+existing reset controller may dispatch the next canonical run only after that
+checkpoint, and every run repeats fresh account and server admission. A working
+site still requires complete release headroom before it can enter maintenance.
+
 Release operation IDs use the original GitHub run ID and adapter ID, excluding
 the run-attempt number and pending-migration position. Reruns retrieve those
 receipts and use another step within the same ceiling. Expiry or corrected code
@@ -499,7 +507,8 @@ the same genes; 1,001 existing keys cost 2,002 reads across three pages. These
 are source-selection receipts, not a bound on subsequent promotion, votes,
 emulsion examples or read-model rebuilds.
 
-Global Queue selection uses migration 0099's two partial indexes. The durable
+Global Queue selection uses migration 0099's due partial index and migration
+0103's running-lease partial index. The durable
 ledger and existing phase priority remain authoritative; within each phase,
 earliest due time now precedes original request time. This avoids scanning
 future retries to preserve an old arrival sort. Each of four priority ranges
@@ -508,12 +517,14 @@ stops at the batch limit before merging, and stale-running selection stops at
 instead of counting every runnable job. Exact remaining totals still come from
 the transactional singleton; future wakeups retain the earliest durable date.
 
-The migration has source-size admission before DDL and atomic guards for at
-most 25,000 total jobs and 5,000 unfinished jobs. The two new index populations
-are disjoint and contain no completed history. Probe identities include their
+Each index has source-size admission before DDL and atomic guards for at most
+25,000 total jobs and 5,000 unfinished jobs. The populations are disjoint and
+contain no completed history. Splitting the formerly combined 0099 migration
+keeps the compatibility contract while allowing each full-table build to reserve
+its own 68,706-read/5,064-write envelope. Probe identities include their
 query name so multiple checks against one database cannot share a mismatched
 prediction. A 25,000-row workerd migration with 5,000 unfinished jobs measured
-85,131 reads and 5,004 writes, within its 228,708-read/5,064-write bound. Global
+60,129 reads and 5,002 writes for the due index, within its 68,706-read/5,064-write bound. Global
 selection beside 85,000 stored jobs measured 250 reads for running leases,
 128 for a 25-job due batch, 1,253 for the 250-job maximum and nine for readiness.
 With every queued/retrying job moved into the future, due selection cost eight
@@ -600,8 +611,8 @@ for total and unfinished counts in two singleton probes. The migration still
 validates the real source inside its atomic batch before DDL, so a bad counter
 cannot authorize an oversized index build. Its single-index read envelope is
 two source passes, two capped unfinished ranges and bounded schema overhead;
-the older two-index migration keeps its published envelope. No allowance,
-unknown reservation or admission check is removed.
+the queue due and running indexes use that same individually admitted envelope.
+No allowance, unknown reservation or admission check is removed.
 At the maximum 1,024 schema objects as well as 25,000 jobs/5,000 unfinished
 rows, workerd measured 61,121 migration reads and 5,004 writes. Both preflight
 counters read one row before and after adding 80,000 jobs.

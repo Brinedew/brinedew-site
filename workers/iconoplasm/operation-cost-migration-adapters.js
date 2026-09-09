@@ -3,6 +3,7 @@ import { createFinalizationJobVersionMigrationCostAdapter } from "./operation-co
 import { createFinalizationPublicationMigrationCostAdapter } from "./operation-cost-finalization-publication-migration-adapter.js"
 import {
   createFinalizationQueueMigrationCostAdapter,
+  createFinalizationRunningMigrationCostAdapter,
   createFinalizationStatusMigrationCostAdapter,
 } from "./operation-cost-finalization-queue-migration-adapter.js"
 import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
@@ -21,6 +22,10 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0103",
+      createFinalizationRunningMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
     [
       "iconoplasm-migration-0102",
       createFinalizationStatusMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
