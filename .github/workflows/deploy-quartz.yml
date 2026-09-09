@@ -16,7 +16,9 @@ permissions:
 
 concurrency:
   group: production-deploy
-  cancel-in-progress: true
+  # Finish Worker + Pages activation together. A delayed old push must not
+  # cancel a newer release halfway through its schema/publication transition.
+  cancel-in-progress: false
 
 jobs:
   deploy-production:
@@ -35,6 +37,11 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Reject stale production source before admission
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/assert-production-head.mjs
 
       - name: Protect previously published extension downloads
         env:
