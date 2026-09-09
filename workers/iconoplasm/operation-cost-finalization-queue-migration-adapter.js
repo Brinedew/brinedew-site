@@ -7,6 +7,8 @@ import {
 import {
   FINALIZATION_QUEUE_MIGRATION_NAME,
   FINALIZATION_QUEUE_MIGRATION_STATEMENTS,
+  FINALIZATION_RUNNING_MIGRATION_NAME,
+  FINALIZATION_RUNNING_MIGRATION_STATEMENTS,
   FINALIZATION_STATUS_MIGRATION_NAME,
   FINALIZATION_STATUS_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
@@ -22,7 +24,24 @@ export function createFinalizationQueueMigrationCostAdapter({
     schema_sha256,
     migrationName: FINALIZATION_QUEUE_MIGRATION_NAME,
     migrationStatements: FINALIZATION_QUEUE_MIGRATION_STATEMENTS,
-    indexCount: 2,
+    indexCount: 1,
+    migrationProtocol: "one-migration-per-release-v1",
+  })
+}
+
+export function createFinalizationRunningMigrationCostAdapter({
+  db,
+  executable_sha256,
+  schema_sha256,
+}) {
+  return createFinalizationIndexMigrationCostAdapter({
+    db,
+    executable_sha256,
+    schema_sha256,
+    migrationName: FINALIZATION_RUNNING_MIGRATION_NAME,
+    migrationStatements: FINALIZATION_RUNNING_MIGRATION_STATEMENTS,
+    indexCount: 1,
+    migrationProtocol: "one-migration-per-release-v1",
   })
 }
 
@@ -38,6 +57,7 @@ export function createFinalizationStatusMigrationCostAdapter({
     migrationName: FINALIZATION_STATUS_MIGRATION_NAME,
     migrationStatements: FINALIZATION_STATUS_MIGRATION_STATEMENTS,
     indexCount: 1,
+    migrationProtocol: "one-migration-per-release-v1",
   })
 }
 
@@ -48,11 +68,13 @@ function createFinalizationIndexMigrationCostAdapter({
   migrationName,
   migrationStatements,
   indexCount,
+  migrationProtocol,
 }) {
   return {
     resource: "iconoplasm",
     executable_sha256,
     schema_sha256,
+    ...(migrationProtocol ? { migration_protocol: migrationProtocol } : {}),
     async prepare(args) {
       if (
         !args ||
@@ -84,10 +106,9 @@ function createFinalizationIndexMigrationCostAdapter({
       // Each partial index scans the source once. The dispatch indexes are
       // disjoint; the status index contains every unfinished job exactly once.
       const bound = {
-        // One status-index migration reads the table twice (guard + DDL),
-        // and the two status guard ranges together read at most 2*(U+1).
+        // Each separated partial-index migration reads the table twice (guard +
+        // DDL), and the two status guard ranges together read at most 2*(U+1).
         // The fixed allowance covers the capped schema guard and DDL metadata.
-        // Keep the already-published dispatch-migration envelope unchanged.
         rows_read:
           (indexCount === 1
             ? 2 * args.max_rows + 2 * (args.max_unfinished + 1)
