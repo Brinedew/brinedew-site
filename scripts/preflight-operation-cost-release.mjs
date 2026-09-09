@@ -150,6 +150,12 @@ export async function preflightOperationCostRelease({
       required[meter] = (required[meter] ?? 0) + 2 * initialization[meter]
       maximum[meter] = (maximum[meter] ?? 0) + bound[meter]
     }
+    // A zero-write preflight validates the same inputs before the mutation
+    // plan is acquired, preserving its remaining write allowance on bad input.
+    required.kv_reads += 2 * initialization.kv_reads
+    maximum.kv_reads += bound.kv_reads
+    required.requests += 4
+    maximum.requests += 4
     for (const meter of KV_COST_METERS)
       if (maximum[meter] > KV_OPERATOR_LIMITS[meter])
         throw new Error("COST_RELEASE_EXCEEDS_DAILY_ALLOCATION")

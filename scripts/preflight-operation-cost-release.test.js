@@ -185,7 +185,7 @@ test("the counter release fits protected capacity only after historical migratio
   const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
   assert.equal(result.maximum.rows_read, 726920)
   assert.equal(result.maximum.rows_written, 19980)
-  assert.equal(result.maximum.kv_reads, 5)
+  assert.equal(result.maximum.kv_reads, 10)
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({
     ...options,

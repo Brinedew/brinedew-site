@@ -12,6 +12,34 @@ import {
 if (!globalThis.crypto) globalThis.crypto = webcrypto
 const identities = { executable_sha256: "a".repeat(64), schema_sha256: "b".repeat(64) }
 
+test("catalog inspection cannot send writes, and bad inputs expose only fixed stage codes", async () => {
+  let writes = 0
+  const malicious = createCatalogInitializationCostAdapter({
+    ...identities,
+    kv: {
+      put: async () => {
+        writes++
+      },
+    },
+    initialize: async (kv) => kv.put("iconoplasm:hydrated-catalog-artifact:test", "{}"),
+  })
+  await assert.rejects(
+    malicious.dispatch(await malicious.prepare({ inspect_only: true })),
+    /COST_KV_WRITE_BOUND_EXCEEDED/,
+  )
+  assert.equal(writes, 0)
+  for (const [raw, code] of [
+    [null, "COST_CATALOG_MANIFEST_UNAVAILABLE_OR_OVERSIZED"],
+    ["private invalid content", "COST_CATALOG_MANIFEST_JSON_INVALID"],
+    ["null", "COST_CATALOG_MANIFEST_INVALID"],
+  ]) {
+    await assert.rejects(
+      initializePublishedHydratedCatalog({ get: async () => raw }, { inspectOnly: true }),
+      (error) => error.code === code && !error.message.includes("private invalid content"),
+    )
+  }
+})
+
 test("catalog initialization rejects provider amplification before the extra KV call", async () => {
   for (const action of ["get", "put"]) {
     let calls = 0
@@ -68,6 +96,11 @@ test("catalog initialization validates retained identities and never changes eit
     initialize: initializePublishedHydratedCatalog,
   })
   const prepared = await adapter.prepare({})
+  const inspection = await adapter.dispatch(await adapter.prepare({ inspect_only: true }))
+  assert.equal(inspection.result.changed, true)
+  assert.equal(inspection.actual.kv_writes, 0)
+  assert.equal(inspection.actual.kv_reads, 5)
+  assert.deepEqual(store, original)
   const first = await adapter.dispatch(prepared)
   assert.equal(first.result.changed, true)
   assert.deepEqual(first.actual, {
@@ -87,7 +120,7 @@ test("catalog initialization validates retained identities and never changes eit
     `iconoplasm:published-portrait-refs:v3-1-${fingerprint.latest}`,
     JSON.stringify([{ symbol: "TP53", asset_sha256: "d".repeat(64) }]),
   )
-  await assert.rejects(adapter.dispatch(prepared), /digest differs/)
+  await assert.rejects(adapter.dispatch(prepared), /REFERENCE_DIGEST_DIFFERS/)
   assert.equal(
     store.get("iconoplasm:catalog-manifest"),
     original.get("iconoplasm:catalog-manifest"),

@@ -1,4 +1,5 @@
 import puppeteer from "@cloudflare/puppeteer"
+import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import {
   recordDiscoveryEncounterAtomically,
   mergeDiscoverySymbolsAtomically,
@@ -3667,21 +3668,28 @@ export async function publishPortraitReferenceSnapshot(env) {
 // Release initialization consumes retained publication inputs, never live D1.
 // Its only runtime caller is the budget authority's fixed five-read/one-write
 // adapter. The callback receives that adapter's restricted KV capability.
-export async function initializePublishedHydratedCatalog(kv) {
+export async function initializePublishedHydratedCatalog(kv, { inspectOnly = false } = {}) {
   const maxBytes = 20 * 1024 * 1024
-  const read = async (key) => {
+  const read = async (key, stage) => {
     const raw = await kv.get(key)
     if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > maxBytes)
-      throw new Error("Catalog initialization input unavailable or oversized")
-    return JSON.parse(raw)
+      throw new OperationCostError(`COST_CATALOG_${stage}_UNAVAILABLE_OR_OVERSIZED`)
+    try {
+      return JSON.parse(raw)
+    } catch {
+      throw new OperationCostError(`COST_CATALOG_${stage}_JSON_INVALID`)
+    }
   }
-  const manifest = await read(KV_CATALOG_MANIFEST)
+  const manifest = await read(KV_CATALOG_MANIFEST, "MANIFEST")
   const base = manifest?.current_hash
   if (typeof base !== "string" || !/^[a-z0-9]{1,64}$/.test(base))
-    throw new Error("Catalog initialization manifest is invalid")
-  const { fingerprint } = await read(
-    `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
-  )
+    throw new OperationCostError("COST_CATALOG_MANIFEST_INVALID")
+  const fingerprint = (
+    await read(
+      `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+      "FINGERPRINT",
+    )
+  )?.fingerprint
   if (
     !Number.isSafeInteger(fingerprint?.published_count) ||
     fingerprint.published_count < 0 ||
@@ -3690,12 +3698,13 @@ export async function initializePublishedHydratedCatalog(kv) {
       ? fingerprint.latest !== null
       : !/^[a-f0-9]{64}$/.test(fingerprint.latest))
   )
-    throw new Error("Catalog initialization fingerprint is invalid")
+    throw new OperationCostError("COST_CATALOG_FINGERPRINT_INVALID")
   const refs = await read(
     `${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${portraitSnapshotVersion(fingerprint)}`,
+    "REFERENCES",
   )
   if (!publishedPortraitRefSnapshotMatchesFingerprint(refs, fingerprint))
-    throw new Error("Catalog initialization references are invalid")
+    throw new OperationCostError("COST_CATALOG_REFERENCES_INVALID")
   const latest = refs.length
     ? await sha256Hex(
         refs
@@ -3705,26 +3714,26 @@ export async function initializePublishedHydratedCatalog(kv) {
       )
     : null
   if (latest !== fingerprint.latest)
-    throw new Error("Catalog initialization reference digest differs")
-  const source = await read(`${KV_CATALOG_PREFIX}${base}`)
+    throw new OperationCostError("COST_CATALOG_REFERENCE_DIGEST_DIFFERS")
+  const source = await read(`${KV_CATALOG_PREFIX}${base}`, "SOURCE")
   if (
     !Array.isArray(source?.genes) ||
     source.genes.length > 20000 ||
     source.gene_count !== source.genes.length ||
     source.genes.some((gene) => !normalizeSymbol(gene?.s))
   )
-    throw new Error("Catalog initialization source is invalid")
+    throw new OperationCostError("COST_CATALOG_SOURCE_INVALID")
   const artifact = mergePublishedPortraitRefsIntoArtifact(source, refs)
   if (!isCurrentCatalogArtifact(artifact))
-    throw new Error("Catalog initialization artifact is invalid")
+    throw new OperationCostError("COST_CATALOG_ARTIFACT_INVALID")
   const raw = JSON.stringify(artifact)
   if (new TextEncoder().encode(raw).byteLength > maxBytes)
-    throw new Error("Catalog initialization output is oversized")
+    throw new OperationCostError("COST_CATALOG_OUTPUT_OVERSIZED")
   const buildVersion = buildPortraitAwareManifestHash(base, fingerprint)
   const key = `${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${buildVersion}`
   const prior = await kv.get(key)
   const changed = prior !== raw
-  if (changed) await kv.put(key, raw)
+  if (changed && !inspectOnly) await kv.put(key, raw)
   return { build_version: buildVersion, gene_count: artifact.genes.length, changed }
 }
 

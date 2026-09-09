@@ -9,6 +9,7 @@ export async function runAdmittedCatalogInitialization({
   releaseId,
   send,
   now = Date.now(),
+  inspectOnly = false,
 }) {
   if (
     !prediction ||
@@ -42,7 +43,7 @@ export async function runAdmittedCatalogInitialization({
     operation_id: plan.id,
     step_id: stepId,
     adapter_id: adapter.id,
-    arguments: {},
+    arguments: inspectOnly ? { inspect_only: true } : {},
   })
   const result = response?.result
   if (
@@ -71,10 +72,19 @@ async function main() {
       "utf8",
     ),
   )
+  // Observe retained inputs without reserving a publication write. Keep this
+  // attempt's read-only identity separate from the original mutation lineage.
+  const send = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN)
+  await runAdmittedCatalogInitialization({
+    prediction: { ...manifest.catalog_initialization_prediction, kv_writes: 0 },
+    releaseId: `${origin.inspectionId}-catalog-check`,
+    send,
+    inspectOnly: true,
+  })
   const result = await runAdmittedCatalogInitialization({
     prediction: manifest.catalog_initialization_prediction,
     releaseId: origin.releaseId,
-    send: createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN),
+    send,
   })
   console.log(JSON.stringify(result))
 }
