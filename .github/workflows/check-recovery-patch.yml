@@ -1,0 +1,29 @@
+name: Check recovery patch in isolation
+
+on:
+  push:
+    branches: ["ops/recovery-sentinel-20260909"]
+    paths: [".github/workflows/check-recovery-patch.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install pinned repository tooling
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Show exact formatter changes and run isolated tests
+        run: |
+          pnpm exec prettier scripts/early-release-capacity-sentinel.mjs --write
+          git diff -- scripts/early-release-capacity-sentinel.mjs
+          node --test scripts/early-release-capacity-sentinel.test.js scripts/early-release-capacity-wiring.test.js
