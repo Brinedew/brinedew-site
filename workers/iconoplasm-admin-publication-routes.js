@@ -5,7 +5,6 @@ const MAX_ROWS_WRITTEN_PER_UPSERT = 4
 const REQUIRED_SERVICE_NAMES = Object.freeze([
   "actor",
   "coerceBoolean",
-  "fetchCatalogState",
   "fetchCatalogStateRows",
   "fetchEssenceStateRows",
   "fetchManifestationStateRows",
@@ -35,7 +34,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
   const {
     actor,
     coerceBoolean,
-    fetchCatalogState,
     fetchCatalogStateRows,
     fetchEssenceStateRows,
     fetchManifestationStateRows,
@@ -57,49 +55,31 @@ export function createIconoplasmAdminPublicationHandlers(services) {
       return done("admin_catalog_state_403", json({ error: "Unauthorized" }, 403))
     if (!env.ICONOPLASM_DB)
       return done("admin_catalog_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-    if (request.method === "POST") {
-      let payload
-      try {
-        payload = await request.json()
-      } catch {
-        return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
-      }
-      if (!Array.isArray(payload?.symbols))
-        return done(
-          "admin_catalog_state_400",
-          json({ error: "symbols must be a non-empty array" }, 400),
-        )
-      const rawSymbols = payload.symbols
-      if (rawSymbols.length > 25000)
-        return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
-      // A repeated symbol can turn a bounded lookup into duplicate D1 work.
-      // Preserve first-seen order because clients pair the returned hashes with
-      // their requested scope, but charge each canonical symbol only once.
-      const symbols = Array.from(new Set(rawSymbols.map((value) => normalizeSymbol(value))))
-      if (!symbols.length || symbols.some((symbol) => !symbol))
-        return done(
-          "admin_catalog_state_400",
-          json({ error: "symbols must contain at least one valid symbol" }, 400),
-        )
-      const rows = await fetchCatalogStateRows(env, symbols)
-      return done(
-        "admin_catalog_state",
-        json({ ok: true, count: rows.length, rows }, 200, NO_STORE),
-      )
+    let payload
+    try {
+      payload = await request.json()
+    } catch {
+      return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
     }
-    const state = await fetchCatalogState(env)
-    return done(
-      "admin_catalog_state",
-      json(
-        {
-          ok: true,
-          gene_count: Number(state.gene_count || 0),
-          content_hash: String(state.content_hash || ""),
-        },
-        200,
-        NO_STORE,
-      ),
-    )
+    if (!Array.isArray(payload?.symbols))
+      return done(
+        "admin_catalog_state_400",
+        json({ error: "symbols must be a non-empty array" }, 400),
+      )
+    const rawSymbols = payload.symbols
+    if (rawSymbols.length > 25000)
+      return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
+    // A repeated symbol can turn a bounded lookup into duplicate D1 work.
+    // Preserve first-seen order because clients pair the returned hashes with
+    // their requested scope, but charge each canonical symbol only once.
+    const symbols = Array.from(new Set(rawSymbols.map((value) => normalizeSymbol(value))))
+    if (!symbols.length || symbols.some((symbol) => !symbol))
+      return done(
+        "admin_catalog_state_400",
+        json({ error: "symbols must contain at least one valid symbol" }, 400),
+      )
+    const rows = await fetchCatalogStateRows(env, symbols)
+    return done("admin_catalog_state", json({ ok: true, count: rows.length, rows }, 200, NO_STORE))
   }
 
   async function catalogUpsert({ request, env, done }) {
