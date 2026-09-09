@@ -1421,7 +1421,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   adminApiContract(
     "admin_catalog_state",
     "/catalog/state",
-    GET_POST,
+    POST,
     "admin_catalog",
     "admin_publication.catalog_state",
   ),

@@ -13925,18 +13925,6 @@ function normalizeCatalogPayloadItem(rawItem) {
   }
 }
 
-async function fetchCatalogState(env) {
-  // B-742 fence: this compares current D1 state, including unpublished changes.
-  // A published KV digest can be older and must not silently replace this proof.
-  // Whole-state admission is still unresolved; see docs/B742_RECOVERY_HANDOFF.md.
-  if (!env.ICONOPLASM_DB) return { gene_count: 0, content_hash: "" }
-  const rows = await loadCatalogRowsForPublish(env)
-  return {
-    gene_count: rows.length,
-    content_hash: await hashCatalogItems(rows),
-  }
-}
-
 async function fetchCatalogStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
@@ -32179,7 +32167,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   ...createIconoplasmAdminPublicationHandlers({
     actor,
     coerceBoolean,
-    fetchCatalogState,
     fetchCatalogStateRows,
     fetchEssenceStateRows,
     fetchManifestationStateRows,

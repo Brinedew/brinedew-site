@@ -14,7 +14,6 @@ function publicationServices(overrides = {}) {
   return {
     actor: async () => "admin",
     coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
-    fetchCatalogState: async () => ({ gene_count: 1, content_hash: "hash" }),
     fetchCatalogStateRows: async () => [],
     fetchEssenceStateRows: async () => [],
     fetchManifestationStateRows: async () => [],
@@ -99,6 +98,13 @@ test("catalog and essence state require explicit valid scopes without touching D
       assert.equal(response.status, 400)
     }
   }
+  assert.deepEqual(calls, [])
+
+  const getResponse = await responseFrom(handlers["admin_publication.catalog_state"], {
+    method: "GET",
+    env: { ICONOPLASM_DB: forbiddenDb },
+  })
+  assert.equal(getResponse.status, 400)
   assert.deepEqual(calls, [])
 
   const symbols = Array.from({ length: 1001 }, (_, index) => `GENE${index}`)
