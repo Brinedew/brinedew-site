@@ -51,9 +51,26 @@ jobs:
         run: node scripts/assert-production-head.mjs
 
       - name: Require successful tests for the exact deployed commit
+        id: exact-ci
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wait-for-iconoplasm-release-ci.mjs
+
+      - name: Restore immutable static assets from the exact tested CI run
+        uses: actions/download-artifact@v7
+        with:
+          name: iconoplasm-edge-assets-${{ github.sha }}
+          path: public-iconoplasm-edge
+          run-id: ${{ steps.exact-ci.outputs.ci_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify restored immutable static asset bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in index.html privacy.html license.html caretaker-terms.html favicon.ico _headers; do
+            test -f "public-iconoplasm-edge/${asset}"
+          done
 
       - name: Setup Node.js (22.x)
         uses: actions/setup-node@v6
