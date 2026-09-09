@@ -42,6 +42,15 @@ test("finalization counts stay exact through writes without scanning completed h
       ),
     )
     assert.equal((await readSyncFinalizationSummary(db)).completed_count, 20000)
+    raw.exec(
+      readFileSync(
+        new URL(
+          "../../migrations-iconoplasm/0101_finalization_publication_barrier.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    )
     assert.deepEqual(
       { ...(await readSyncFinalizationDrainCounts(db)) },
       { remaining_count: 0, pending_finalize_count: 0 },

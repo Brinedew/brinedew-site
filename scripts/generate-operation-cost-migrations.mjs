@@ -109,6 +109,16 @@ export function voteJobVersionMigrationStatements() {
 function output() {
   const migrations = [
     [
+      "FINALIZATION_PUBLICATION",
+      "0101_finalization_publication_barrier.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0101_finalization_publication_barrier.sql",
+        3,
+        5,
+      ),
+    ],
+    [
       "FINALIZATION_JOB_VERSION",
       "0100_finalization_job_version.sql",
       reviewedMigrationStatements(

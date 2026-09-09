@@ -157,6 +157,8 @@ jobs:
             workers/iconoplasm.sync-finalization-queue.test.js \
             workers/iconoplasm/sync-finalization-selection.test.js \
             workers/iconoplasm/sync-finalization-global-selection.test.js \
+            workers/iconoplasm/sync-finalization-publication.test.js \
+            workers/iconoplasm/finalization-job-state.test.js \
             workers/iconoplasm-publish-event-archive.test.js \
             workers/iconoplasm-extension-blocklist-policy.test.js \
             workers/iconoplasm-extension-blocklist-public.test.js \

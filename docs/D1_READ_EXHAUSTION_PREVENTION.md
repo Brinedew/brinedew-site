@@ -485,3 +485,30 @@ uses a positive receipt, not an assumption of exactly one changed row.
 Version fencing does not by itself bound phase side
 effects or the global publication tail; containment remains until their shared
 admission and bounded execution are implemented and verified.
+
+The global completion tail uses migration 0101's transactional handoff state.
+Every phase already rebuilds its requested visions; collecting all ready jobs'
+vision lists repeated that work, could truncate their union and grew with the
+entire backlog. Ready jobs now finish in exact-version pages of at most 100,
+using the existing partial index or explicit scoped keys. A transactional counter
+also replaces the residual COUNT of nonterminal rows with phase `completed`.
+
+The handoff records the enqueue generation accepted by the existing publisher.
+It owns no card, head or publication watermark. New enqueues during a wakeup
+remain unacknowledged; expired tokens cannot acknowledge a replacement lease.
+Deferred wakeups retain their deadline even when all job rows are completed.
+The status contract keeps `unfinished` as an exact job count and separately
+reports `pending_handoffs` (zero or one); `total_pending` includes both. The
+workstation waits for both categories. An acknowledged wakeup is a durable
+publisher handoff, not proof that its new artifact is already live.
+
+With 60,000 completed-history rows, 5,000 terminal-phase rows and 201 ready rows,
+workerd measured migration 0101 at 10,023 reads/nine writes within its
+53,028-read/32-write bound. All 5,201 rows completed across bounded pages with
+one publisher notification; the largest completion invocation measured 1,205
+reads and 600 writes. A 5,000-symbol scope with every row ready measured 20,000
+selection reads: input enumeration, key probes and candidate ordering remain
+bounded by that explicit scope, independent of unrelated history. Tests also
+cover newer enqueues, duplicate wakeups, expired lease owners
+and a retained next-day retry. Phase execution and whole-operation shared
+admission still require completion before background containment is lifted.
