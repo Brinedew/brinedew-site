@@ -46,7 +46,9 @@ test("published readers recover before D1 admission and all later release gates 
   assert.ok(stepPosition("Read installed schema-transition state and reader headroom") < reader)
   assert.ok(reader < stepPosition("Require account-wide D1 and Worker headroom before migrations"))
   const complete = stepPosition("Check account capacity before release mutations")
-  const refreshed = stepPosition("Refresh account capacity immediately before pausing application work")
+  const refreshed = stepPosition(
+    "Refresh account capacity immediately before pausing application work",
+  )
   const stage = stepPosition("Stage migration admission in the existing state owner")
   const migrate = stepPosition("Apply reviewed D1 migrations through prediction admission")
   assert.ok(complete < refreshed && refreshed < stage && stage < migrate)
