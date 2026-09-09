@@ -11,7 +11,7 @@ export function migrationSizePrerequisites(pending) {
   }).map((probe) => ({
     ...probe,
     adapter_id: `${probe.resource}-migration-inventory`,
-    prediction: { rows_read: probe.maximum + 1, rows_written: 0, requests: 1 },
+    prediction: { rows_read: probe.counter ? 1 : probe.maximum + 1, rows_written: 0, requests: 1 },
     arguments: { statements: [{ query_id: probe.query, arguments: {} }] },
   }))
 }

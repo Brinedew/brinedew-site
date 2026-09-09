@@ -8,6 +8,7 @@ import {
   SCOPED_FINALIZATION_STATUS_LIST_SQL,
 } from "./sync-finalization-status-list.js"
 import { createFinalizationStatusMigrationCostAdapter } from "./operation-cost-finalization-queue-migration-adapter.js"
+import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
@@ -112,6 +113,33 @@ test(
         executable_sha256: "a".repeat(64),
         schema_sha256: "b".repeat(64),
       })
+      const inventory = createMigrationInventoryCostAdapter({
+        db,
+        resource: "iconoplasm",
+        executable_sha256: "a".repeat(64),
+        schema_sha256: "b".repeat(64),
+      })
+      const counters = async () => {
+        const seen = []
+        for (const query_id of [
+          "finalization-status-migration-size",
+          "finalization-status-unfinished-migration-size",
+        ]) {
+          const probe = await inventory.prepare({ statements: [{ query_id, arguments: {} }] })
+          const receipt = await inventory.dispatch(probe)
+          assert.equal(receipt.actual.rows_read, 1)
+          assert.equal(receipt.actual.rows_written, 0)
+          seen.push(receipt.result[0].results[0].capped_count)
+        }
+        return seen
+      }
+      assert.deepEqual(await counters(), [25000, 5000])
+      // Exercise the maximum supported schema as well as the maximum source.
+      const schemaCount = (await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema").first()).n
+      const padding = Array.from({ length: 1024 - schemaCount }, (_, i) =>
+        db.prepare(`CREATE TABLE status_schema_fixture_${i}(value)`),
+      )
+      for (let i = 0; i < padding.length; i += 40) await db.batch(padding.slice(i, i + 40))
       for (const args of [
         { max_rows: 24999, max_unfinished: 5000 },
         { max_rows: 25000, max_unfinished: 4999 },
@@ -168,6 +196,7 @@ test(
         )
         .run()
       const after = await measure()
+      assert.deepEqual(await counters(), [105000, 65000])
       assert.deepEqual(after, before)
       t.diagnostic(JSON.stringify({ migration: actual, before, after }))
     } finally {
