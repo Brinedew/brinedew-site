@@ -84,3 +84,15 @@ jobs:
 
       - name: Ensure Quartz builds
         run: pnpm run build
+
+      # Reader containment must never need to rebuild the corpus while D1 is
+      # impaired. Preserve the exact tested static asset bundle so the separate
+      # recovery job can rebind the existing state owner without replacing its
+      # immutable public bytes or running enrichment.
+      - name: Archive exact tested Iconoplasm static assets for recovery
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconoplasm-edge-assets-${{ github.sha }}
+          path: public-iconoplasm-edge
+          if-no-files-found: error
+          retention-days: 1
