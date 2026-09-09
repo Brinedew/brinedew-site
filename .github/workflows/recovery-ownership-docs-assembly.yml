@@ -1,0 +1,73 @@
+name: Assemble recovery ownership documentation
+on:
+  push:
+    branches: [docs/recovery-ownership-fence]
+    paths: [.github/workflows/recovery-ownership-docs-assembly.yml]
+permissions:
+  contents: write
+jobs:
+  assemble-documentation:
+    if: github.ref == 'refs/heads/docs/recovery-ownership-fence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - name: Add instruction pointers while preserving original documents
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          paths = [
+              'AGENTS.md',
+              'docs/ARCHITECTURE_FENCES.md',
+              'docs/D1_READ_EXHAUSTION_PREVENTION.md',
+              'docs/RECOVERY_RESUME_CHECKLIST.md',
+              'docs/B742_RECOVERY_HANDOFF.md',
+          ]
+          for name in paths:
+              path = Path(name)
+              original = path.read_text(encoding='utf-8')
+              if '## Recovery ownership fence: RECOVERY-001' in original:
+                  continue
+              target = ('docs/RECOVERY_OWNERSHIP_CONTRACT.md'
+                        if name == 'AGENTS.md' else 'RECOVERY_OWNERSHIP_CONTRACT.md')
+              block = (
+                  '\n## Recovery ownership fence: RECOVERY-001\n\n'
+                  f'Read [Recovery Ownership Contract]({target}) before incident, capacity,\n'
+                  'deployment or recovery work. The accepting executor owns delivery through a\n'
+                  'verified user operation; the owner does not run deployment/SQL commands or\n'
+                  'time resets. A safeguard must preserve a tested compatible repair path\n'
+                  'under its exact failure. Continue non-deploying source publication and\n'
+                  'isolated tests while live D1 is exhausted. Refusal is containment evidence.\n'
+                  'Deferred work needs an inspected registered executor, accessible source,\n'
+                  'wake condition and failure destination. A chat or Linear edit does not\n'
+                  'schedule it. Preserve security, actual admission and schema compatibility\n'
+                  'when replacing a deadlocking guard through explicit change control.\n'
+                  'This contract adds no new production gate or prerequisite redesign.\n'
+                  'Historical checkpoints below require fresh state reconciliation.\n\n'
+              )
+              title, separator, rest = original.partition('\n')
+              if not separator or not title.startswith('# '):
+                  raise RuntimeError(f'Unexpected document shape: {name}')
+              updated = title + separator + block + rest
+              assert updated.replace(block, '', 1) == original
+              path.write_text(updated, encoding='utf-8', newline='\n')
+          changed = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
+          if set(changed) - set(paths):
+              raise RuntimeError('Unexpected non-documentation changes')
+          print('Original document contents preserved; instruction pointers added:')
+          print('\n'.join(changed))
+          PY
+          git diff --check
+      - name: Publish only the documentation edits to this review branch
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/docs/recovery-ownership-fence"
+          git config user.name 'Brinedew recovery documentation'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add AGENTS.md docs/ARCHITECTURE_FENCES.md docs/D1_READ_EXHAUSTION_PREVENTION.md docs/RECOVERY_RESUME_CHECKLIST.md docs/B742_RECOVERY_HANDOFF.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'Load RECOVERY-001 before historical recovery instructions'
+            git push origin HEAD:refs/heads/docs/recovery-ownership-fence
+          fi
+          git rev-parse HEAD
