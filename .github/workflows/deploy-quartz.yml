@@ -9,6 +9,11 @@ on:
         description: "Original failed production run whose migration plans must continue"
         required: false
         type: string
+      reader_recovery_only:
+        description: "Deploy only the tested D1-free published-card reader containment artifact"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -21,7 +26,92 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  reader-recovery-only:
+    # This is an explicit containment dispatch, not a migration retry. It is
+    # deliberately unreachable from push/schedule automation and cannot resume
+    # queues, activate application writes, or stage a schema-dependent build.
+    if: github.event_name == 'workflow_dispatch' && inputs.reader_recovery_only == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CACHE_BUST: ${{ github.sha }}
+      ICONOPLASM_RELEASE_ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
+      ICONOPLASM_READER_RECOVERY_ONLY: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Reject stale production source before admission
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/assert-production-head.mjs
+
+      - name: Require successful tests for the exact deployed commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-iconoplasm-release-ci.mjs
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+          pnpm config get minimumReleaseAge
+
+      - name: Validate reader-recovery credentials
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${CLOUDFLARE_BUDGET_ANALYTICS_TOKEN:-}" ] || [ -z "${ICONOPLASM_ADMIN_TOKEN:-}" ]; then
+            echo "Missing reader-recovery deployment credentials." >&2
+            exit 1
+          fi
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Verify the D1-free containment artifact
+        run: |
+          node scripts/run-tests.mjs \
+            workers/b742-quarantine-gene-shell.test.js \
+            scripts/b742-release-recovery.test.js \
+            scripts/read-iconoplasm-release-state.test.js
+          pnpm run validate:iconoplasm-topology
+
+      - name: Read compatible installed state and non-D1 reader headroom
+        id: reader-recovery-state
+        timeout-minutes: 1
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/read-iconoplasm-release-state.mjs
+
+      - name: Deploy the D1-free reader containment artifact
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          node scripts/prepare-iconoplasm-schema-transition-config.mjs
+          trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
+          # These three are the non-Iconoplasm schedules. Queue delivery state
+          # lives at the provider and is intentionally not changed by this job.
+          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-reader-recovery" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+
+      - name: Verify published readers and retained application protection
+        timeout-minutes: 2
+        run: node scripts/verify-iconoplasm-reader-recovery.mjs
+
   deploy-production:
+    if: github.event_name != 'workflow_dispatch' || inputs.reader_recovery_only != true
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
