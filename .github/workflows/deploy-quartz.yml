@@ -455,13 +455,20 @@ jobs:
         run: node scripts/inspect-operation-cost-release.mjs
 
       - name: Apply reviewed D1 migrations through prediction admission
+        id: migrations
         timeout-minutes: 3
         env:
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/run-admitted-d1-migrations.mjs
 
+      - name: Record staged migration continuation checkpoint
+        if: steps.migrations.outputs.continuation_required == 'true'
+        run: |
+          echo "One individually admitted migration completed; retained schema-transition protection stays active."
+
       - name: Prepare the published catalog through shared KV admission
+        if: steps.migrations.outputs.continuation_required != 'true'
         timeout-minutes: 2
         env:
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
@@ -469,9 +476,11 @@ jobs:
         run: node scripts/run-admitted-catalog-initialization.mjs
 
       - name: Deploy the only allowed internal stateful worker (production)
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           set -euo pipefail
           output="$(pnpm exec wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
@@ -484,9 +493,11 @@ jobs:
           echo "$output"
 
       - name: Upload public edge worker script with routes (production)
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
 
       - name: Reassign production routes to the public edge worker
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           node scripts/reassign-cloudflare-worker-routes.mjs \
             brinedew.bio \
@@ -500,6 +511,7 @@ jobs:
       # misses go directly to the stateful runtime, removing the old second
       # public-proxy invocation from every dynamic request.
       - name: Reassign Iconoplasm route to the stateful worker
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           node scripts/reassign-cloudflare-worker-routes.mjs \
             brinedew.bio \
@@ -510,6 +522,7 @@ jobs:
       # previous frontend, while the reverse order can expose controls whose
       # migrations and authenticated handlers do not exist yet.
       - name: Deploy production static site to Cloudflare Pages
+        if: steps.migrations.outputs.continuation_required != 'true'
         working-directory: .wrangler-pages
         run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
@@ -518,12 +531,15 @@ jobs:
       # that key with the previous deployment's asset URLs. Switch to the final key
       # only after Pages confirms the new static deployment.
       - name: Activate current Iconoplasm HTML shell cache version
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Verify Iconoplasm publication aliases (production)
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: pnpm run verify:iconoplasm-publication-aliases
 
       - name: Smoke test production host ownership and browser bootstraps
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           set -euo pipefail
           smoke_dir="$(mktemp -d)"
@@ -577,6 +593,7 @@ jobs:
           fi
 
       - name: Smoke test Discord OAuth entry and anonymous session contract
+        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           set -euo pipefail
           headers_file="$(mktemp)"

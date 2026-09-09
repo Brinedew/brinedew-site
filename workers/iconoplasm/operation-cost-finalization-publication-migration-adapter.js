@@ -14,6 +14,7 @@ export function createFinalizationPublicationMigrationCostAdapter({
     resource: "iconoplasm",
     executable_sha256,
     schema_sha256,
+    migration_protocol: "one-migration-per-release-v1",
     async prepare(args) {
       if (
         !args ||

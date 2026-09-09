@@ -124,12 +124,17 @@ export async function preflightOperationCostRelease({
       throw new Error("COST_MIGRATION_NOT_REVIEWED")
     const { bound } = await adapter.prepare(step.arguments)
     if (step.migration_protocol) {
-      if (step.migration_protocol !== "admin-count-seed-v1" || step.max_steps !== 100)
+      if (
+        !["admin-count-seed-v1", "one-migration-per-release-v1"].includes(step.migration_protocol)
+      )
         throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
-      const page = await adapter.prepare({ phase: "assets" })
-      const finish = await adapter.prepare({ phase: "finish" })
-      for (const meter of Object.keys(bound))
-        bound[meter] += (step.max_steps - 2) * page.bound[meter] + finish.bound[meter]
+      if (step.migration_protocol === "admin-count-seed-v1") {
+        if (step.max_steps !== 100) throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
+        const page = await adapter.prepare({ phase: "assets" })
+        const finish = await adapter.prepare({ phase: "finish" })
+        for (const meter of Object.keys(bound))
+          bound[meter] += (step.max_steps - 2) * page.bound[meter] + finish.bound[meter]
+      }
     }
     for (const meter of Object.keys(required)) {
       if (bound[meter] > 2 * step.prediction[meter]) throw new Error("COST_TWICE_PREDICTION_LIMIT")
@@ -243,7 +248,12 @@ export async function chooseReleaseAdmission({
     // Never pause a working site on insufficient capacity. An already-paused
     // site may stage and resume its first bounded migration; the runner admits
     // every page separately and retains all uncertain shared usage.
-    if (first?.migration_protocol !== "admin-count-seed-v1" || !(await readMaintenance()))
+    if (
+      !["admin-count-seed-v1", "one-migration-per-release-v1"].includes(
+        first?.migration_protocol,
+      ) ||
+      !(await readMaintenance())
+    )
       throw error
     const adapters = createMigrationOperationCostAdapters(
       { ICONOPLASM_SCHEMA_TRANSITION: "1" },
@@ -251,9 +261,7 @@ export async function chooseReleaseAdmission({
     )
     const { bound } = await adapters.get(first.adapter_id).prepare(first.arguments)
     const maximum = { ...bound, requests: RELEASE_CONTROL_REQUESTS }
-    for (const probe of migrationSizePrerequisites(
-      pendingMigrations.map((key) => manifest.migrations[key]),
-    )) {
+    for (const probe of migrationSizePrerequisites([first])) {
       const prepared = await adapters.get(probe.adapter_id).prepare(probe.arguments)
       maximum.rows_read += prepared.bound.rows_read
     }

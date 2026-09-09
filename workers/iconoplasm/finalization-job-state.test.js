@@ -30,6 +30,7 @@ test(
       schema.exec(source("0028_add_finalization_jobs.sql"))
       schema.exec(source("0094_finalization_summary.sql"))
       schema.exec(source("0099_finalization_queue_indexes.sql"))
+      schema.exec(source("0103_finalization_running_index.sql"))
       const db = await runtime.getD1Database("jobs")
       for (const { sql } of schema
         .prepare(

@@ -45,6 +45,10 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const FINALIZATION_RUNNING_MIGRATION_NAME = "0103_finalization_running_index.sql"
+export const FINALIZATION_RUNNING_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE INDEX IF NOT EXISTS idx_icono_finalization_running\nON icono_sync_finalization_jobs(\n  COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')), gene_symbol\n)\nWHERE status = 'running' AND phase <> 'completed_pending_finalize';"
+])
 export const FINALIZATION_STATUS_MIGRATION_NAME = "0102_finalization_status_index.sql"
 export const FINALIZATION_STATUS_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE INDEX idx_icono_finalization_status_list\nON icono_sync_finalization_jobs(\n  CASE WHEN phase = 'completed_pending_finalize' THEN 0 ELSE 1 END,\n  next_attempt_at, requested_at, gene_symbol\n)\nWHERE status <> 'completed';"
@@ -63,8 +67,7 @@ export const FINALIZATION_JOB_VERSION_MIGRATION_STATEMENTS = Object.freeze([
 ])
 export const FINALIZATION_QUEUE_MIGRATION_NAME = "0099_finalization_queue_indexes.sql"
 export const FINALIZATION_QUEUE_MIGRATION_STATEMENTS = Object.freeze([
-  "CREATE INDEX idx_icono_finalization_due\nON icono_sync_finalization_jobs(\n  CASE phase WHEN 'vision_rollups' THEN 0 WHEN 'gene_rollups' THEN 1 WHEN 'vote_summaries' THEN 2 ELSE 3 END,\n  next_attempt_at, requested_at, gene_symbol\n)\nWHERE status IN ('queued', 'retrying') AND phase <> 'completed_pending_finalize';",
-  "CREATE INDEX idx_icono_finalization_running\nON icono_sync_finalization_jobs(\n  COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')), gene_symbol\n)\nWHERE status = 'running' AND phase <> 'completed_pending_finalize';"
+  "CREATE INDEX idx_icono_finalization_due\nON icono_sync_finalization_jobs(\n  CASE phase WHEN 'vision_rollups' THEN 0 WHEN 'gene_rollups' THEN 1 WHEN 'vote_summaries' THEN 2 ELSE 3 END,\n  next_attempt_at, requested_at, gene_symbol\n)\nWHERE status IN ('queued', 'retrying') AND phase <> 'completed_pending_finalize';"
 ])
 export const CANONICAL_LIFECYCLE_GUARDS_MIGRATION_NAME = "0017_canonical_lifecycle_keyed_guards.sql"
 export const CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS = Object.freeze([
