@@ -24,8 +24,7 @@ export async function earlyReleaseCapacitySentinel({
   now = Date.now,
 }) {
   const state = await readState()
-  if (typeof state?.schema_transition !== "boolean")
-    throw new Error("COST_RELEASE_STATE_INVALID")
+  if (typeof state?.schema_transition !== "boolean") throw new Error("COST_RELEASE_STATE_INVALID")
   // An already-paused application's zero-D1 readers must remain recoverable
   // when D1 is exhausted. The existing later reader gate owns Worker/KV
   // headroom and re-reads installed state before any reader upload.
@@ -61,8 +60,7 @@ export async function earlyReleaseCapacitySentinel({
       capacity.used[meter] < 0
     )
       throw new Error("COST_SHARED_USAGE_UNAVAILABLE")
-    if (capacity.remaining[meter] === 0)
-      throw new Error(`COST_RELEASE_SHARED_HEADROOM: ${meter}`)
+    if (capacity.remaining[meter] === 0) throw new Error(`COST_RELEASE_SHARED_HEADROOM: ${meter}`)
     // Preserve the full uncertain reservation just as the later preflight
     // does. Subtraction avoids overflowing an otherwise valid integer input.
     if (usage[meter] >= ceilings[meter] - capacity.used[meter])
