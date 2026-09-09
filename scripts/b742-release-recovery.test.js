@@ -74,6 +74,33 @@ test("migration staging preserves the fallback and all release gates", () => {
   )
 })
 
+test("manual reader recovery is exact-CI gated and never enters the D1 release path", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+    "utf8",
+  )
+  const start = workflow.indexOf("  reader-recovery-only:")
+  const end = workflow.indexOf("  deploy-production:", start)
+  assert.ok(start >= 0 && end > start)
+  const recovery = workflow.slice(start, end)
+  assert.match(recovery, /inputs\.reader_recovery_only == true/)
+  assert.match(recovery, /Require successful tests for the exact deployed commit/)
+  assert.match(recovery, /ICONOPLASM_READER_RECOVERY_ONLY: "1"/)
+  assert.match(recovery, /Read compatible installed state and non-D1 reader headroom/)
+  assert.match(recovery, /Deploy the D1-free reader containment artifact/)
+  assert.match(recovery, /ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery/)
+  assert.match(recovery, /Verify published readers and retained application protection/)
+  for (const forbidden of [
+    "Install Python dependencies",
+    "Enrich protein pages",
+    "Sync shared Iconoplasm assets before release guards",
+    "Apply reviewed D1 migrations through prediction admission",
+    "Prepare the published catalog through shared KV admission",
+    "Ensure requested gene-card Queues exist",
+  ])
+    assert.equal(recovery.includes(forbidden), false, forbidden)
+})
+
 test("failure classification never returns private provider prose", () => {
   const cases = [
     ["D1_ERROR: no such table: private_table", "COST_DATABASE_TABLE_MISSING"],

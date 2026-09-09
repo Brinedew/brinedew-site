@@ -11,12 +11,20 @@ const recovery = readFileSync(
   "utf8",
 )
 const sentinelName = "Reject exhausted capacity before release setup"
+// The manual D1-free reader recovery intentionally repeats the exact-source
+// and exact-CI labels. The early-release sentinel applies only to the normal
+// deployment job that can reach D1, not to that isolated containment job.
+const deployProduction = workflow.slice(workflow.indexOf("  deploy-production:"))
 
 function stepPosition(name) {
   const needle = `- name: ${name}\n`
-  const position = workflow.indexOf(needle)
+  const position = deployProduction.indexOf(needle)
   assert.ok(position >= 0, `Missing release step: ${name}`)
-  assert.equal(workflow.indexOf(needle, position + 1), -1, `Duplicate release step: ${name}`)
+  assert.equal(
+    deployProduction.indexOf(needle, position + 1),
+    -1,
+    `Duplicate release step: ${name}`,
+  )
   return position
 }
 
@@ -35,8 +43,14 @@ test("early refusal follows source and CI checks and precedes release setup", ()
   ]) {
     assert.ok(sentinel < stepPosition(name), `Sentinel must precede ${name}`)
   }
-  assert.equal(workflow.split("node scripts/early-release-capacity-sentinel.mjs").length - 1, 1)
-  const sentinelStep = workflow.slice(sentinel, workflow.indexOf("\n      - name:", sentinel))
+  assert.equal(
+    deployProduction.split("node scripts/early-release-capacity-sentinel.mjs").length - 1,
+    1,
+  )
+  const sentinelStep = deployProduction.slice(
+    sentinel,
+    deployProduction.indexOf("\n      - name:", sentinel),
+  )
   assert.match(sentinelStep, /timeout-minutes: 1/)
   assert.doesNotMatch(sentinelStep, /continue-on-error|always\(\)/)
 })
@@ -52,7 +66,10 @@ test("published readers recover before D1 admission and all later release gates 
   const stage = stepPosition("Stage migration admission in the existing state owner")
   const migrate = stepPosition("Apply reviewed D1 migrations through prediction admission")
   assert.ok(complete < refreshed && refreshed < stage && stage < migrate)
-  assert.equal(workflow.split("node scripts/preflight-operation-cost-release.mjs").length - 1, 2)
+  assert.equal(
+    deployProduction.split("node scripts/preflight-operation-cost-release.mjs").length - 1,
+    2,
+  )
   assert.match(workflow, /cancel-in-progress: false/)
 })
 

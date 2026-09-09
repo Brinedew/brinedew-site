@@ -100,6 +100,74 @@ test("capacity includes retained uncertain reservations and legacy usage without
   }
 })
 
+test("capacity breakdown separates settled receipts, retained reservations, legacy usage and unreceipted control work", () => {
+  const f = fixture()
+  try {
+    f.ledger.register(f.input)
+    const settled = f.ledger.reserve(f.step())
+    f.ledger.settle({
+      ...settled,
+      actual: { rows_read: 3, rows_written: 1, requests: 1 },
+    })
+    f.ledger.register({ ...f.input, id: "operation-2" })
+    f.ledger.reserve(
+      f.step({
+        id: "operation-2",
+        step_id: "step-2",
+        step_sha256: "d".repeat(64),
+        bound: { rows_read: 5, rows_written: 0, requests: 1 },
+      }),
+    )
+    f.ledger.recordControlRequest()
+    f.ledger.readOtherUsage = () => ({ rows_read: 7, rows_written: 4, requests: 9 })
+
+    const snapshot = f.ledger.capacitySnapshot()
+    assert.deepEqual(snapshot.breakdown, {
+      operation_charged: { rows_read: 8, rows_written: 1, requests: 3 },
+      settled_actual: { rows_read: 3, rows_written: 1, requests: 1 },
+      outstanding_reservations: { rows_read: 5, rows_written: 0, requests: 1 },
+      operator_unattributed: { rows_read: 0, rows_written: 0, requests: 1 },
+      legacy_usage: { rows_read: 7, rows_written: 4, requests: 9 },
+      unknown_remainder: { rows_read: 0, rows_written: 0, requests: 1 },
+      invalid_plan_steps: 0,
+    })
+    assert.deepEqual(snapshot.used, { rows_read: 15, rows_written: 5, requests: 12 })
+  } finally {
+    f.db.close()
+  }
+})
+
+test("capacity breakdown does not re-charge inherited predecessor spending", () => {
+  const f = fixture()
+  try {
+    const predecessor = f.ledger.register(f.input)
+    const reserved = f.ledger.reserve(f.step())
+    f.ledger.settle({
+      ...reserved,
+      actual: { rows_read: 4, rows_written: 1, requests: 1 },
+    })
+    f.advance(24 * 60 * 60 * 1000)
+    const continuation = f.ledger.register({
+      ...f.input,
+      id: "operation-2",
+      predecessor_id: predecessor.id,
+      expires_at: Date.parse("2026-09-07T12:01:00Z"),
+    })
+    assert.equal(continuation.used.rows_read, 4)
+    assert.deepEqual(f.ledger.capacitySnapshot().breakdown, {
+      operation_charged: { rows_read: 0, rows_written: 0, requests: 0 },
+      settled_actual: { rows_read: 0, rows_written: 0, requests: 0 },
+      outstanding_reservations: { rows_read: 0, rows_written: 0, requests: 0 },
+      operator_unattributed: { rows_read: 0, rows_written: 0, requests: 0 },
+      legacy_usage: { rows_read: 0, rows_written: 0, requests: 0 },
+      unknown_remainder: { rows_read: 0, rows_written: 0, requests: 0 },
+      invalid_plan_steps: 0,
+    })
+  } finally {
+    f.db.close()
+  }
+})
+
 test("KV operations share one atomic allowance and failures cannot spend the D1 request counter", () => {
   const f = fixture()
   try {
