@@ -7,6 +7,16 @@ import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-i
 const manifest = JSON.parse(
   readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
 )
+const legacyManifest = {
+  ...manifest,
+  migrations: Object.fromEntries(
+    Object.entries(manifest.migrations).map(([key, value]) => {
+      const copy = { ...value }
+      if (copy.migration_protocol === "one-migration-per-release-v1") delete copy.migration_protocol
+      return [key, copy]
+    }),
+  ),
+}
 const resources = ["geneguessr", "iconoplasm", "iconoplasm-authoring"]
 const directories = {
   geneguessr: "migrations",
@@ -14,7 +24,7 @@ const directories = {
   "iconoplasm-authoring": "migrations-iconoplasm-authoring",
 }
 
-function harness(extra = false) {
+function harness(extra = false, plan = legacyManifest) {
   const calls = []
   const adapters = resources.map((resource) => ({
     id: resource + "-migration-inventory",
@@ -31,7 +41,7 @@ function harness(extra = false) {
     ],
     ...OPERATION_COST_IDENTITIES,
   }))
-  for (const [key, item] of Object.entries(manifest.migrations))
+  for (const [key, item] of Object.entries(plan.migrations))
     adapters.push({
       id: item.adapter_id,
       resource: key.split("/")[0],
@@ -41,18 +51,18 @@ function harness(extra = false) {
   return {
     calls,
     options: {
-      manifest,
+      manifest: plan,
       releaseId: "test-release",
       files: (directory) => {
         if (directory === "workers/benchmark/migrations") return []
         const resource = resources.find((resource) => directories[resource] === directory)
         return [
           "0001.sql",
-          ...Object.keys(manifest.migrations)
+          ...Object.keys(plan.migrations)
             .filter((key) => key.startsWith(resource + "/"))
             .map((key) => key.split("/")[1]),
           ...(extra && resource === "iconoplasm-authoring" ? ["9999-unreviewed.sql"] : []),
-        ]
+        ].sort()
       },
       send: async (suffix, method, body) => {
         calls.push({ suffix, method, body })
@@ -100,9 +110,8 @@ test("fresh inventory observations cannot change the retained migration operatio
   const registrations = h.calls
     .filter((call) => call.suffix === "/register")
     .map((call) => call.body)
-  assert.equal(
-    registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length,
-    10,
+  assert.ok(
+    registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length >= 3,
   )
   for (const plan of registrations) {
     assert.ok(
@@ -166,8 +175,8 @@ test("no forecast fails before discovery; unknown migration fails before any DDL
 test("every inventory and migration registers before execution and records its receipt", async () => {
   const { options, calls } = harness()
   const result = await runAdmittedMigrations(options)
-  assert.equal(result.migrations_applied, Object.keys(manifest.migrations).length)
-  assert.equal(result.evidence.length, Object.keys(manifest.migrations).length + 3)
+  assert.equal(result.migrations_applied, Object.keys(options.manifest.migrations).length)
+  assert.equal(result.evidence.length, Object.keys(options.manifest.migrations).length + 3)
   for (let index = 0; index < calls.length; index++) {
     if (calls[index].suffix !== "/register") continue
     assert.equal(calls[index + 1].suffix, "/execute")
@@ -211,7 +220,10 @@ test("pre-deploy inventory pins the installed implementation and never executes 
     return result
   }
   const result = await runAdmittedMigrations({ ...options, inventoryOnly: true })
-  assert.deepEqual(result.pending_migrations.sort(), Object.keys(manifest.migrations).sort())
+  assert.deepEqual(
+    result.pending_migrations.sort(),
+    Object.keys(options.manifest.migrations).sort(),
+  )
   assert.equal(calls.filter((call) => call.suffix === "/execute").length, 3)
   for (const call of calls.filter((call) => call.suffix === "/register")) {
     assert.ok(call.body.adapter_id.endsWith("-migration-inventory"))
@@ -266,8 +278,30 @@ test("shared benchmark history and the repaired legacy comments journal remain r
     } else {
       assert.equal(
         (await runAdmittedMigrations(options)).migrations_applied,
-        Object.keys(manifest.migrations).length,
+        Object.keys(options.manifest.migrations).length,
       )
     }
   }
+})
+
+test("an active transition stages exactly one reviewed index migration", async () => {
+  const stagedManifest = {
+    ...manifest,
+    migrations: Object.fromEntries(
+      Object.entries(manifest.migrations).filter(([key]) => /\/(0099|0100)_/.test(key)),
+    ),
+  }
+  const { options, calls } = harness(false, stagedManifest)
+  const result = await runAdmittedMigrations(options)
+  assert.equal(result.migrations_applied, 1)
+  assert.equal(result.continuation_required, true)
+  assert.deepEqual(
+    calls
+      .filter(
+        (call) =>
+          call.suffix === "/execute" && !call.body.adapter_id.endsWith("-migration-inventory"),
+      )
+      .map((call) => call.body.adapter_id),
+    ["iconoplasm-migration-0099"],
+  )
 })

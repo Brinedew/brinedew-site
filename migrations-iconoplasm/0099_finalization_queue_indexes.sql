@@ -7,9 +7,3 @@ ON icono_sync_finalization_jobs(
   next_attempt_at, requested_at, gene_symbol
 )
 WHERE status IN ('queued', 'retrying') AND phase <> 'completed_pending_finalize';
-
-CREATE INDEX idx_icono_finalization_running
-ON icono_sync_finalization_jobs(
-  COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')), gene_symbol
-)
-WHERE status = 'running' AND phase <> 'completed_pending_finalize';

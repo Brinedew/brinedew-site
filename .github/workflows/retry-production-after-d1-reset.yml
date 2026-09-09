@@ -217,6 +217,7 @@ jobs:
               <<<"${runs_json}"
           )"
           successful_run_id=""
+          staged_run_id=""
           if [[ -n "${latest_successful_attempt_id}" ]]; then
             completed_jobs_json="$(
               gh api "repos/${REPOSITORY}/actions/runs/${latest_successful_attempt_id}/jobs?filter=latest&per_page=100"
@@ -248,6 +249,31 @@ jobs:
             exit 0
           fi
 
+          if [[ -n "${latest_successful_attempt_id}" ]] && jq -e '
+            [.jobs[] | select(.name == "deploy-production")] as $full |
+            ($full | length) == 1 and
+            $full[0].status == "completed" and $full[0].conclusion == "success" and
+            ([
+              "Verify published readers and retained application protection",
+              "Apply reviewed D1 migrations through prediction admission",
+              "Record staged migration continuation checkpoint"
+            ] | all(. as $name |
+              ([$full[0].steps[]? | select(.name == $name and .status == "completed" and .conclusion == "success")] | length) == 1
+            )) and
+            ([
+              "Prepare the published catalog through shared KV admission",
+              "Activate current Iconoplasm HTML shell cache version"
+            ] | all(. as $name |
+              ([$full[0].steps[]? | select(.name == $name and .conclusion == "skipped")] | length) == 1
+            ))
+          ' <<<"${completed_jobs_json}" >/dev/null; then
+            staged_run_id="${latest_successful_attempt_id}"
+          fi
+
+          if [[ -n "${staged_run_id}" ]]; then
+            echo "Staged migration run ${staged_run_id} completed under admission; a later canonical run may continue from fresh capacity."
+          fi
+
           if [[ "${ci_conclusion}" != "success" ]]; then
             echo "Exact-main protected CI is ${ci_conclusion:-absent}; quarantine stays active and no deploy is dispatched."
             exit 0
@@ -263,35 +289,37 @@ jobs:
             exit 0
           fi
 
-          latest_failed_run_id="$(
-            jq -r --arg sha "${head_sha}" \
-              '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "failure")] | sort_by(.created_at) | last | .id) // empty' \
-              <<<"${runs_json}"
-          )"
-          if [[ -z "${latest_failed_run_id}" ]]; then
-            echo "No failed canonical deploy exists yet for current main; the next controller tick will re-evaluate."
-            exit 0
-          fi
-
-          jobs_json="$(
-            gh api "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100"
-          )"
-          failed_step="$(
-            jq -r '[.jobs[] | select(.name == "deploy-production") | .steps[]? | select(.conclusion == "failure") | .name] | last // ""' <<<"${jobs_json}"
-          )"
-
-          case "${failed_step}" in
-            "Reject exhausted capacity before release setup"|\
-            "Require account-wide D1 and Worker headroom before migrations"|\
-            "Check account capacity before release mutations"|\
-            "Refresh account capacity immediately before pausing application work")
-              ;;
-            *)
-              echo "Latest canonical deploy failed at '${failed_step:-unknown}'."
-              echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops."
+          if [[ -z "${staged_run_id}" ]]; then
+            latest_failed_run_id="$(
+              jq -r --arg sha "${head_sha}" \
+                '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "failure")] | sort_by(.created_at) | last | .id) // empty' \
+                <<<"${runs_json}"
+            )"
+            if [[ -z "${latest_failed_run_id}" ]]; then
+              echo "No admitted staged migration or retry-safe failed canonical deploy exists; the next controller tick will re-evaluate."
               exit 0
-              ;;
-          esac
+            fi
+
+            jobs_json="$(
+              gh api "repos/${REPOSITORY}/actions/runs/${latest_failed_run_id}/jobs?per_page=100"
+            )"
+            failed_step="$(
+              jq -r '[.jobs[] | select(.name == "deploy-production") | .steps[]? | select(.conclusion == "failure") | .name] | last // ""' <<<"${jobs_json}"
+            )"
+
+            case "${failed_step}" in
+              "Reject exhausted capacity before release setup"|\
+              "Require account-wide D1 and Worker headroom before migrations"|\
+              "Check account capacity before release mutations"|\
+              "Refresh account capacity immediately before pausing application work")
+                ;;
+              *)
+                echo "Latest canonical deploy failed at '${failed_step:-unknown}'."
+                echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops."
+                exit 0
+                ;;
+            esac
+          fi
 
           # The canonical release can require roughly another million reads for the
           # reviewed migration envelope. Once a quarantined day has already consumed
