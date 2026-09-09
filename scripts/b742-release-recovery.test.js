@@ -34,6 +34,10 @@ test("migration staging preserves the fallback and all release gates", () => {
     "utf8",
   )
   assert.match(workflow, /node scripts\/prepare-iconoplasm-schema-transition-config\.mjs/)
+  assert.equal(
+    (workflow.match(/node scripts\/deploy-iconoplasm-reader-recovery\.mjs/g) || []).length,
+    3,
+  )
   assert.match(workflow, /--config wrangler\.iconoplasm-schema-transition\.generated\.toml/)
   assert.match(workflow, /--var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery"/)
   const names = [
