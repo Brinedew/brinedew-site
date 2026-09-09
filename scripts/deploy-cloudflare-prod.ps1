@@ -42,6 +42,8 @@ if ($headSha -ne $originSha) {
 
 # Canonical production deploy path: inspect admitted schema prerequisites and
 # retained shared-budget spending before the workflow attempts DDL.
+# Releases serialize through final Worker/Pages activation; queued work verifies
+# current main before admission so delayed pushes cannot deploy stale source.
 Write-Host "[deploy] Canonical production deploy path: GitHub Actions only."
 Write-Host "[deploy] Dispatching Deploy Production (Cloudflare Pages + Worker) for origin/main..."
 
