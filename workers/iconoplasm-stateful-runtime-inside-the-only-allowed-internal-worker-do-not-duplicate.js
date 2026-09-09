@@ -22133,6 +22133,7 @@ function mapSyncFinalizationJobRow(row) {
   )
   return {
     symbol,
+    job_version: Number(row?.job_version),
     actor_id: normalizeUserId(row?.actor_id || "workstation_sync"),
     reason: sanitizeText(row?.reason || "", 2000) || "sync_finalization",
     status: normalizeSyncFinalizationJobStatus(row?.status),
@@ -22279,38 +22280,6 @@ async function sendSyncFinalizationDrainQueueMessage(env, message, { delaySecond
 // workaround here. If Queue sends fail with HTTP 429 or Cloudflare auth code
 // 10000, fix the Cloudflare account/token/allowance in the dashboard and let
 // this code fail loud until the canonical Queue path works again.
-async function ensureSyncFinalizationJobsTable(env) {
-  if (!env?.ICONOPLASM_DB) return false
-  await env.ICONOPLASM_DB.prepare(
-    `CREATE TABLE IF NOT EXISTS icono_sync_finalization_jobs (
-       gene_symbol TEXT PRIMARY KEY,
-       actor_id TEXT,
-       reason TEXT NOT NULL DEFAULT '',
-       status TEXT NOT NULL DEFAULT 'queued',
-       phase TEXT NOT NULL DEFAULT 'reconcile',
-       keep_assets_json TEXT NOT NULL DEFAULT '[]',
-       legacy_assets_json TEXT NOT NULL DEFAULT '[]',
-       vision_ids_json TEXT NOT NULL DEFAULT '[]',
-       requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       last_attempt_at TEXT,
-       next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       attempts INTEGER NOT NULL DEFAULT 0,
-       last_error TEXT NOT NULL DEFAULT '',
-       completed_at TEXT
-     )`,
-  ).run()
-  await env.ICONOPLASM_DB.prepare(
-    `CREATE INDEX IF NOT EXISTS idx_icono_sync_finalization_jobs_status_next_attempt
-     ON icono_sync_finalization_jobs (status, next_attempt_at, requested_at)`,
-  ).run()
-  await env.ICONOPLASM_DB.prepare(
-    `CREATE INDEX IF NOT EXISTS idx_icono_sync_finalization_jobs_phase_status
-     ON icono_sync_finalization_jobs (phase, status, requested_at)`,
-  ).run()
-  return true
-}
-
 async function enqueueSyncFinalizationJobs(
   env,
   {
@@ -22322,7 +22291,6 @@ async function enqueueSyncFinalizationJobs(
   } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB", queued: 0 }
-  await ensureSyncFinalizationJobsTable(env)
   const safeActorId = normalizeUserId(actorId || "workstation_sync")
   const safeReason = sanitizeText(reason || "", 2000) || "sync_finalization"
   const nowIso = new Date().toISOString()
@@ -22368,6 +22336,7 @@ async function enqueueSyncFinalizationJobs(
          completed_at
         ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, NULL, ?, 0, '', NULL)
        ON CONFLICT(gene_symbol) DO UPDATE SET
+         job_version = icono_sync_finalization_jobs.job_version + 1,
          actor_id = excluded.actor_id,
          reason = excluded.reason,
          status = 'queued',
@@ -22440,7 +22409,6 @@ async function enqueueSyncFinalizationJobs(
 
 async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = null } = {}) {
   if (!env?.ICONOPLASM_DB) return []
-  await ensureSyncFinalizationJobsTable(env)
   const cleanedLimit = Math.max(1, Math.min(1000, Number.parseInt(String(limit || 200), 10) || 200))
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
@@ -22475,10 +22443,11 @@ async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = nul
   return (Array.isArray(resp?.results) ? resp.results : []).map(mapSyncFinalizationJobRow)
 }
 
-async function writeSyncFinalizationJobState(
+export async function writeSyncFinalizationJobState(
   env,
   {
     symbol,
+    expectedVersion,
     status,
     phase,
     nextAttemptAt = null,
@@ -22491,7 +22460,14 @@ async function writeSyncFinalizationJobState(
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return false
-  const fields = ["status = ?", "phase = ?", "updated_at = CURRENT_TIMESTAMP"]
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)
+    throw new Error("Finalization state transition requires an exact job version")
+  const fields = [
+    "status = ?",
+    "phase = ?",
+    "updated_at = CURRENT_TIMESTAMP",
+    "job_version = job_version + 1",
+  ]
   const bindArgs = [
     normalizeSyncFinalizationJobStatus(status),
     normalizeSyncFinalizationJobPhase(phase),
@@ -22516,20 +22492,28 @@ async function writeSyncFinalizationJobState(
     fields.push("completed_at = ?")
     bindArgs.push(completedAt)
   }
-  bindArgs.push(safeSymbol)
-  await env.ICONOPLASM_DB.prepare(
+  bindArgs.push(safeSymbol, expectedVersion)
+  const written = await env.ICONOPLASM_DB.prepare(
     `UPDATE icono_sync_finalization_jobs
      SET ${fields.join(", ")}
-     WHERE gene_symbol = ?`,
+     WHERE gene_symbol = ? AND job_version = ?`,
   )
     .bind(...bindArgs)
     .run()
-  return true
+  // D1 includes transactional summary-trigger changes in this receipt. The
+  // unique-key predicate touches at most one job; a lost fence changes zero.
+  return Number(written?.meta?.changes) > 0
 }
 
 async function recordSyncFinalizationJobFailure(
   env,
-  { symbol, error, attemptCount = 0, phase = ICONOPLASM_SYNC_FINALIZATION_PHASE_RECONCILE } = {},
+  {
+    symbol,
+    expectedVersion,
+    error,
+    attemptCount = 0,
+    phase = ICONOPLASM_SYNC_FINALIZATION_PHASE_RECONCILE,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return false
   const safeSymbol = normalizeSymbol(symbol)
@@ -22539,8 +22523,9 @@ async function recordSyncFinalizationJobFailure(
     Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
   )
   const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
-  await writeSyncFinalizationJobState(env, {
+  return writeSyncFinalizationJobState(env, {
     symbol: safeSymbol,
+    expectedVersion,
     status: ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
     phase,
     nextAttemptAt,
@@ -22550,7 +22535,6 @@ async function recordSyncFinalizationJobFailure(
       sanitizeText(String(error?.message || error || "sync finalization failed"), 2000) ||
       "sync finalization failed",
   })
-  return true
 }
 
 const ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES = 2
@@ -22561,7 +22545,6 @@ async function recoverStaleRunningSyncFinalizationJobs(
   { symbols = null, staleAfterMinutes = ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return { ok: false, recovered: 0 }
-  await ensureSyncFinalizationJobsTable(env)
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
@@ -22597,8 +22580,9 @@ async function recoverStaleRunningSyncFinalizationJobs(
     if (!leaseAt || leaseAt > cutoffIso) continue
     const symbol = normalizeSymbol(row?.gene_symbol || "")
     if (!symbol) continue
-    await writeSyncFinalizationJobState(env, {
+    const changed = await writeSyncFinalizationJobState(env, {
       symbol,
+      expectedVersion: Number(row.job_version),
       status: ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
       phase: row?.phase,
       nextAttemptAt: retryAtIso,
@@ -22607,7 +22591,7 @@ async function recoverStaleRunningSyncFinalizationJobs(
       lastError: recoveredError,
       completedAt: null,
     })
-    recovered += 1
+    if (changed) recovered += 1
   }
   return {
     ok: true,
@@ -23022,7 +23006,6 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
 
 async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
   if (!env?.ICONOPLASM_DB) return { ok: false, skipped: true, reason: "NO_DB" }
-  await ensureSyncFinalizationJobsTable(env)
   const body = rawMessage && typeof rawMessage === "object" ? rawMessage : {}
   const kind = sanitizeText(body.kind || "", 80)
   if (kind === "drain_finalization_ledger") {
@@ -23414,7 +23397,6 @@ async function processPendingSyncFinalizationJobs(
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, code: "NO_DB", processed: 0, failed: 0, finalized: 0, remaining: 0 }
   }
-  await ensureSyncFinalizationJobsTable(env)
   const safeLimit = Math.max(1, Math.min(250, Number.parseInt(String(limit || 25), 10) || 25))
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
@@ -23453,19 +23435,23 @@ async function processPendingSyncFinalizationJobs(
       phase: job.phase,
       attempts: attemptCount,
     })
-    await writeSyncFinalizationJobState(env, {
+    const claimed = await writeSyncFinalizationJobState(env, {
       symbol: job.symbol,
+      expectedVersion: job.job_version,
       status: ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
       phase: job.phase,
       lastAttemptAt: new Date().toISOString(),
       nextAttemptAt: nowIso,
       lastError: "",
     })
+    if (!claimed) continue
+    const claimedVersion = job.job_version + 1
     try {
       const phaseResult = await processSyncFinalizationJobPhase(env, ctx, job)
       if (phaseResult?.partial) {
         await writeSyncFinalizationJobState(env, {
           symbol: job.symbol,
+          expectedVersion: claimedVersion,
           status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
           phase: phaseResult.next_phase || job.phase,
           nextAttemptAt: new Date().toISOString(),
@@ -23495,8 +23481,9 @@ async function processPendingSyncFinalizationJobs(
         })
         break
       }
-      await writeSyncFinalizationJobState(env, {
+      const advanced = await writeSyncFinalizationJobState(env, {
         symbol: job.symbol,
+        expectedVersion: claimedVersion,
         status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
         phase: phaseResult.next_phase,
         nextAttemptAt: new Date().toISOString(),
@@ -23508,6 +23495,10 @@ async function processPendingSyncFinalizationJobs(
             ? ""
             : null,
       })
+      if (!advanced) {
+        results.push({ ok: true, superseded: true, symbol: job.symbol, phase: job.phase })
+        continue
+      }
       processed += 1
       console.log("[Iconoplasm] finalization Queue job advanced", {
         symbol: job.symbol,
@@ -23530,6 +23521,7 @@ async function processPendingSyncFinalizationJobs(
       })
       await recordSyncFinalizationJobFailure(env, {
         symbol: job.symbol,
+        expectedVersion: claimedVersion,
         error,
         attemptCount,
         phase: job.phase,
