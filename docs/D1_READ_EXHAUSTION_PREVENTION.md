@@ -410,3 +410,14 @@ serializer; no stored identity or portrait selection changes. The production-siz
 fixture includes these prefix cases. A successful read-only comparison against
 an existing exact hydrated artifact also completes preparation without replaying
 its mutation plan if a later release stage failed.
+
+Scoped finalization wakeups now force unique gene-key probes for running leases,
+due jobs and pending-work counts. The optional-OR scope predicate previously
+allowed a status-backlog scan even for one requested gene. The replacement
+preserves exact counts, phase priority and durable retry times. A workerd fixture
+adds 60,000 unrelated completed, running and queued jobs without changing the
+nine-symbol read receipts (27, 30 and 26 rows respectively). At the supported
+5,000-symbol maximum, the three queries measured 16,667, 15,834 and 15,000 reads;
+all performed zero writes. These measurements cover selection, not phase work.
+Global selection, global publication and shared finalization admission still
+require their own bounds before background containment can be lifted.

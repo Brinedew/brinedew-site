@@ -8,6 +8,11 @@ import {
   readSyncFinalizationSummary,
   readSyncFinalizationDrainCounts,
 } from "./iconoplasm/sync-finalization-summary.js"
+import {
+  runningFinalizationJobsSql,
+  dueFinalizationJobsSql,
+  pendingFinalizationWorkSql,
+} from "./iconoplasm/sync-finalization-selection.js"
 import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
 import {
   createOperationCostAuthority,
@@ -22564,17 +22569,7 @@ async function recoverStaleRunningSyncFinalizationJobs(
   // queued/retrying work. Requeue old leases here so the backlog can become
   // real work again instead of an undead counter that never drains.
   const runningRowsResp = await env.ICONOPLASM_DB.prepare(
-    `WITH scoped_symbols AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at
-     FROM icono_sync_finalization_jobs
-     WHERE status = ?
-       AND phase <> ?
-       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     ORDER BY COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')) ASC, gene_symbol ASC
-     LIMIT ?`,
+    runningFinalizationJobsSql(scopedEnabled > 0),
   )
     .bind(
       scopedSymbolsJson,
@@ -23417,33 +23412,7 @@ async function processPendingSyncFinalizationJobs(
     symbols: scopedSymbols,
   })
   const nowIso = new Date().toISOString()
-  const queued = await env.ICONOPLASM_DB.prepare(
-    `WITH scoped_symbols AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT *
-     FROM icono_sync_finalization_jobs
-     WHERE status IN (?, ?)
-       AND phase <> ?
-       AND next_attempt_at <= ?
-       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     -- Live lesson: oldest-first alone made the queue look honest but drain
-     -- badly, because late-phase rows kept sitting behind fresh reconcile work.
-     -- Prefer jobs that are already closest to completed_pending_finalize so the
-     -- visible pending bucket can actually collapse instead of endlessly
-     -- recycling half-finished symbols.
-     ORDER BY
-       CASE phase
-         WHEN ? THEN 0
-         WHEN ? THEN 1
-         WHEN ? THEN 2
-         ELSE 3
-       END ASC,
-       requested_at ASC,
-       gene_symbol ASC
-     LIMIT ?`,
-  )
+  const queued = await env.ICONOPLASM_DB.prepare(dueFinalizationJobsSql(scopedEnabled > 0))
     .bind(
       scopedSymbolsJson,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
@@ -23594,25 +23563,7 @@ async function summarizePendingSyncFinalizationWork(
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COUNT(*) AS remaining,
-       SUM(CASE
-         WHEN status IN (?, ?)
-          AND phase <> ?
-          AND next_attempt_at <= ? THEN 1
-         ELSE 0
-       END) AS runnable,
-       MIN(CASE
-         WHEN status IN (?, ?)
-          AND phase <> ?
-          AND next_attempt_at > ? THEN next_attempt_at
-         ELSE NULL
-       END) AS next_attempt_at
-     FROM icono_sync_finalization_jobs
-     WHERE status <> ?
-       AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))`,
-  )
+  const row = await env.ICONOPLASM_DB.prepare(pendingFinalizationWorkSql(scopedEnabled > 0))
     .bind(
       ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
       ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
