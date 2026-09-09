@@ -107,9 +107,8 @@ async function main() {
   // bindings. These existing helpers use Node built-ins and repository JS;
   // the sentinel runs before package installation and never executes DDL.
   const { readIconoplasmReleaseState } = await import("./read-iconoplasm-release-state.mjs")
-  const { createOperationCostAccountUsageReader } = await import(
-    "../workers/iconoplasm/operation-cost-account-usage.js"
-  )
+  const { createOperationCostAccountUsageReader } =
+    await import("../workers/iconoplasm/operation-cost-account-usage.js")
   const { ACCOUNT_CEILINGS } = await import("../workers/lib/operation-cost-ledger.js")
   const reader = createOperationCostAccountUsageReader({
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
