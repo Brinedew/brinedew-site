@@ -11,7 +11,11 @@ export function createCatalogInitializationCostAdapter({
     executable_sha256,
     schema_sha256,
     async prepare(args) {
-      if (!args || Object.keys(args).length) {
+      if (
+        !args ||
+        (Object.keys(args).length &&
+          !(Object.keys(args).join() === "inspect_only" && args.inspect_only === true))
+      ) {
         throw new OperationCostError("COST_CATALOG_INITIALIZATION_INVALID")
       }
       const bound = {
@@ -19,7 +23,7 @@ export function createCatalogInitializationCostAdapter({
         rows_written: 0,
         requests: 1,
         kv_reads: 5,
-        kv_writes: 1,
+        kv_writes: args.inspect_only ? 0 : 1,
         kv_deletes: 0,
         kv_lists: 0,
       }
@@ -61,7 +65,7 @@ export function createCatalogInitializationCostAdapter({
           return kv.put(key, value)
         },
       }
-      return { result: await initialize(scopedKv), actual }
+      return { result: await initialize(scopedKv, { inspectOnly: bound.kv_writes === 0 }), actual }
     },
   }
 }

@@ -393,3 +393,11 @@ This preserves the old guards' correctness and admission guarantees while
 preventing a routine source-size mismatch from stranding an expensive DDL
 reservation. Real workerd tests prove the bounded probes against 20,000-row
 sources; runner tests prove refusal happens before any DDL plan is registered.
+
+Catalog initialization also runs an admitted five-read, zero-write inspection
+before acquiring its retained mutation plan. Invalid retained manifests,
+fingerprints, reference digests and source artifacts now report fixed stage
+codes without exposing contents. The inspection uses the current attempt's
+read-only identity; publication keeps its original prediction and uncertain
+write reservations. Its extra reads are included in release headroom. The
+scoped KV capability rejects writes during inspection before sending them.
