@@ -13,10 +13,15 @@ const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
 )("miniflare")
-const schema = readFileSync(
-  new URL("../../migrations-iconoplasm/0028_add_finalization_jobs.sql", import.meta.url),
-  "utf8",
-)
+const schema =
+  readFileSync(
+    new URL("../../migrations-iconoplasm/0028_add_finalization_jobs.sql", import.meta.url),
+    "utf8",
+  ) +
+  readFileSync(
+    new URL("../../migrations-iconoplasm/0100_finalization_job_version.sql", import.meta.url),
+    "utf8",
+  )
 const now = "2026-09-09T01:00:00.000Z"
 const excluded = "completed_pending_finalize"
 const symbols = [

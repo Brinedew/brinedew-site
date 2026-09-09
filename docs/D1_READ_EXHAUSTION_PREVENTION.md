@@ -469,3 +469,19 @@ run after Worker upload but before Pages activation. Every queued release now
 verifies its exact SHA against current main before any production admission;
 stale or unverifiable source refuses. This preserves one coherent activation
 sequence and prevents delayed events from rolling the deployment backward.
+
+Finalization phase transitions use migration 0100's monotonically increasing
+job version. Enqueue, claim, retry and phase advancement each invalidate the
+previous version; a failed claim cannot execute phase work. Stale recovery and
+an old worker's success/failure compete through the same exact-key conditional
+update. This preserves durable saved payloads and retry dates while preventing
+duplicate deliveries from advancing the same claim or overwriting a newer job.
+Request-time table/index creation is removed: the canonical migration pipeline
+owns schema readiness. With 25,001 jobs and the transactional summary and queue
+indexes enabled, workerd measured 35 reads/four writes for the migration, two
+reads/seven writes for successful transitions and one read/zero writes for a
+lost claim. D1's change count includes summary-trigger updates; claim success
+uses a positive receipt, not an assumption of exactly one changed row.
+Version fencing does not by itself bound phase side
+effects or the global publication tail; containment remains until their shared
+admission and bounded execution are implemented and verified.

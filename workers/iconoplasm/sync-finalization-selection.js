@@ -16,7 +16,7 @@ export function runningFinalizationJobsSql(scoped) {
   return `WITH scoped_symbols AS (
        SELECT value AS gene_symbol FROM json_each(?)
      )
-     SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at
+     SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at, job_version
      FROM icono_sync_finalization_jobs ${index}
      WHERE status = ?
        AND phase <> ?
