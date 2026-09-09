@@ -15,7 +15,6 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
-
 This repository uses executable Chesterton's fences for decisions that look
 locally removable but protect a system-wide cost, correctness, ownership, or
 release invariant.

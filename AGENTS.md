@@ -15,7 +15,6 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
-
 ## Extension release integrity
 
 Read `docs/ICONOPLASM_RELEASE_INTEGRITY.md` before changing extension packaging,
