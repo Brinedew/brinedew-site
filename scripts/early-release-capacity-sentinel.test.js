@@ -131,7 +131,10 @@ test("capacity transport makes exactly one fixed-origin GET with no redirect or 
     token: "test-only",
     fetcher: async (url, options) => {
       calls.push(url)
-      assert.equal(url, "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations/capacity")
+      assert.equal(
+        url,
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations/capacity",
+      )
       assert.equal(options.method, "GET")
       assert.equal(options.redirect, "error")
       assert.equal(options.body, undefined)
