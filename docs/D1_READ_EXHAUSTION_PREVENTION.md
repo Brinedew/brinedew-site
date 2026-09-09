@@ -462,3 +462,10 @@ check broke when the SQL moved into dedicated modules, despite protected CI
 passing. The guard itself also runs in ordinary CI, so release-only source drift
 is caught before merge. The protected phase priority, pending-finalize exclusion
 and durable future wakeups are unchanged and remain behaviorally tested.
+
+Production releases serialize through final activation without automatically
+cancelling an active release. A delayed older push previously interrupted a newer
+run after Worker upload but before Pages activation. Every queued release now
+verifies its exact SHA against current main before any production admission;
+stale or unverifiable source refuses. This preserves one coherent activation
+sequence and prevents delayed events from rolling the deployment backward.
