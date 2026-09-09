@@ -4,10 +4,11 @@ import {
   recordDiscoveryEncounterAtomically,
   mergeDiscoverySymbolsAtomically,
 } from "./iconoplasm/discovery-encounter.js"
+import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
-  readSyncFinalizationSummary,
-  readSyncFinalizationDrainCounts,
-} from "./iconoplasm/sync-finalization-summary.js"
+  drainCompletedFinalization,
+  readFinalizationPublicationBarrier,
+} from "./iconoplasm/sync-finalization-publication.js"
 import {
   runningFinalizationJobsSql,
   dueFinalizationJobsSql,
@@ -22032,7 +22033,6 @@ const ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS = "gene_rollups"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS = "vision_rollups"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE = "completed_pending_finalize"
 const ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED = "completed"
-const ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT = 1000
 
 function normalizeSyncFinalizationJobStatus(rawStatus) {
   const value = sanitizeText(rawStatus || "", 32).toLowerCase()
@@ -22779,231 +22779,39 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
 
 async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols = null } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, finalized: 0, remaining: 0 }
-  const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
-  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
-  const drainCounts = await readSyncFinalizationDrainCounts(env.ICONOPLASM_DB)
-  const remainingBeforeFinalize = Number(drainCounts.remaining_count)
-  const pendingFinalizeCount = Number(drainCounts.pending_finalize_count)
-  if (remainingBeforeFinalize > 0 || pendingFinalizeCount <= 0) {
-    // Ready-first finalization is the difference between progress and a budget
-    // treadmill. A mixed ledger can contain thousands of rows already parked in
-    // completed_pending_finalize while a smaller set is still doing reconcile /
-    // vote-summary / vision-rollup work. If we wait for the entire ledger
-    // before marking the ready rows completed, the GUI appears stalled and the
-    // Queue keeps retrying visible "unfinished" work that has no actual work
-    // left. Scoped drains may complete only their requested symbols; global
-    // drains may bulk-complete a bounded slice. Neither path publishes gallery
-    // or card-catalog KV until the full ledger is drained, which is the budget
-    // fence that prevents per-scope KV fanout.
-    if (scopedEnabled > 0 && remainingBeforeFinalize > 0) {
-      const scopedCounts = await readSyncFinalizationDrainCounts(env.ICONOPLASM_DB, scopedSymbols)
-      const scopedPendingFinalizeCount = Number(scopedCounts.pending_finalize_count)
-      if (scopedPendingFinalizeCount > 0) {
-        const completedAt = new Date().toISOString()
-        await env.ICONOPLASM_DB.prepare(
-          `UPDATE icono_sync_finalization_jobs
-           SET status = ?,
-               phase = ?,
-               updated_at = CURRENT_TIMESTAMP,
-               completed_at = ?,
-               last_error = ''
-           WHERE phase = ?
-             AND status <> ?
-             AND gene_symbol IN (SELECT value FROM json_each(?))`,
-        )
-          .bind(
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-            completedAt,
-            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            scopedSymbolsJson,
-          )
-          .run()
-        return {
-          ok: true,
-          finalized: scopedPendingFinalizeCount,
-          remaining: Math.max(
-            0,
-            remainingBeforeFinalize + pendingFinalizeCount - scopedPendingFinalizeCount,
-          ),
-          global_finalize_deferred: true,
-          scoped_finalize_only: true,
-          broaden_next_drain: true,
-        }
+  // Each job has already completed its vision phase. Re-collecting every ready
+  // row's vision IDs here repeated that work and could silently truncate IDs.
+  // Completion pages preserve exact job versions; one durable wakeup goes to
+  // the existing publisher after the entire ledger has finished its phases.
+  return drainCompletedFinalization(env.ICONOPLASM_DB, {
+    symbols: normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 }),
+    notifyPublisher: async () => {
+      const response =
+        await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
+          path: "/api/iconoplasm/admin/read-models/sync",
+          payload: {
+            symbols: [],
+            vision_ids: [],
+            skip_vote_summaries: true,
+            skip_gene_rollups: true,
+            skip_vision_rollups: true,
+            skip_dashboard: false,
+            publish_gallery_dirty_shards: true,
+          },
+        })
+      if (response.card_catalog_publication?.deferred) {
+        return { accepted: false, nextAttemptAt: response.card_catalog_publication.resume_after }
       }
-    }
-    if (scopedEnabled <= 0 && pendingFinalizeCount > 0) {
-      const bulkLimit = Math.max(
-        1,
-        Math.min(
-          5000,
-          Number.parseInt(
-            String(
-              env?.ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT ||
-                ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT,
-            ),
-            10,
-          ) || ICONOPLASM_SYNC_FINALIZATION_PENDING_FINALIZE_BULK_COMPLETE_LIMIT,
-        ),
-      )
-      const bulkRowsResp = await env.ICONOPLASM_DB.prepare(
-        `SELECT gene_symbol
-         FROM icono_sync_finalization_jobs
-         WHERE status <> ?
-           AND phase = ?
-         ORDER BY next_attempt_at ASC, requested_at ASC, gene_symbol ASC
-         LIMIT ?`,
-      )
-        .bind(
-          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-          bulkLimit,
-        )
-        .all()
-      const bulkSymbols = normalizeSyncFinalizationJobSymbols(
-        (Array.isArray(bulkRowsResp?.results) ? bulkRowsResp.results : []).map(
-          (row) => row?.gene_symbol || "",
-        ),
-        { maxItems: bulkLimit },
-      )
-      if (bulkSymbols.length > 0) {
-        const completedAt = new Date().toISOString()
-        await env.ICONOPLASM_DB.prepare(
-          `UPDATE icono_sync_finalization_jobs
-           SET status = ?,
-               phase = ?,
-               updated_at = CURRENT_TIMESTAMP,
-               completed_at = ?,
-               last_error = ''
-           WHERE phase = ?
-             AND status <> ?
-             AND gene_symbol IN (SELECT value FROM json_each(?))`,
-        )
-          .bind(
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-            completedAt,
-            ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-            ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-            JSON.stringify(bulkSymbols),
-          )
-          .run()
-        return {
-          ok: true,
-          finalized: bulkSymbols.length,
-          remaining: Math.max(
-            0,
-            remainingBeforeFinalize + pendingFinalizeCount - bulkSymbols.length,
-          ),
-          global_finalize_deferred: true,
-          pending_finalize_bulk_complete: true,
-          broaden_next_drain: true,
-        }
+      if (response.card_catalog?.publication_more || response.migration_pending) {
+        return { accepted: false, nextAttemptAt: new Date(Date.now() + 900000).toISOString() }
       }
-    }
-    return {
-      ok: true,
-      finalized: 0,
-      remaining: remainingBeforeFinalize + pendingFinalizeCount,
-      global_finalize_deferred: remainingBeforeFinalize > 0,
-      broaden_next_drain: scopedEnabled > 0 && remainingBeforeFinalize > 0,
-    }
-  }
-
-  const pendingFinalizeRowsResp = await env.ICONOPLASM_DB.prepare(
-    `SELECT vision_ids_json
-     FROM icono_sync_finalization_jobs
-     WHERE status <> ?
-       AND phase = ?`,
-  )
-    .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-    )
-    .all()
-  const pendingFinalizeRows = Array.isArray(pendingFinalizeRowsResp?.results)
-    ? pendingFinalizeRowsResp.results
-    : []
-  const uniqueVisionIds = normalizeSyncFinalizationVisionIds(
-    pendingFinalizeRows.flatMap((row) => {
-      try {
-        const parsed = JSON.parse(String(row?.vision_ids_json || "[]"))
-        return Array.isArray(parsed) ? parsed : []
-      } catch {
-        return []
+      if (env.ICONOPLASM_CARD_PUBLICATION && response.publication_queued !== true) {
+        throw new Error("Canonical publisher did not accept the finalization wakeup")
       }
-    }),
-    { maxItems: 5000 },
-  )
-
-  // Cost fence: the dashboard refresh and one dirty-shard publication request
-  // are the global tail step. Scoped Queue messages advance symbol work but do
-  // not publish per 50-symbol slice. The publisher still derives its exact dirty
-  // set from canonical events and touches only the owning shards. Only run this
-  // block after the whole finalization ledger has drained to pending-finalize.
-  // Vision rollups follow the same rule: dedupe them across the whole ledger.
-  for (
-    let start = 0;
-    start < uniqueVisionIds.length;
-    start += ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX
-  ) {
-    const visionChunk = uniqueVisionIds.slice(
-      start,
-      start + ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
-    )
-    await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
-      path: "/api/iconoplasm/admin/read-models/sync",
-      payload: {
-        symbols: [],
-        vision_ids: visionChunk,
-        skip_vote_summaries: true,
-        skip_gene_rollups: true,
-        skip_vision_rollups: false,
-        skip_dashboard: true,
-        publish_gallery_dirty_shards: false,
-      },
-    })
-  }
-  await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
-    path: "/api/iconoplasm/admin/read-models/sync",
-    payload: {
-      symbols: [],
-      vision_ids: [],
-      skip_vote_summaries: true,
-      skip_gene_rollups: true,
-      skip_vision_rollups: true,
-      skip_dashboard: false,
-      publish_gallery_dirty_shards: true,
+      return { accepted: true }
     },
   })
-  const completedAt = new Date().toISOString()
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_sync_finalization_jobs
-     SET status = ?,
-         phase = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = ?,
-         last_error = ''
-     WHERE status <> ?
-       AND phase = ?`,
-  )
-    .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED,
-      completedAt,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-    )
-    .run()
-  return {
-    ok: true,
-    finalized: pendingFinalizeCount,
-    remaining: 0,
-  }
 }
-
 async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
   if (!env?.ICONOPLASM_DB) return { ok: false, skipped: true, reason: "NO_DB" }
   const body = rawMessage && typeof rawMessage === "object" ? rawMessage : {}
@@ -23045,7 +22853,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       if (remaining <= 0 || passFailed > 0 || drainResult?.partial || passProcessed <= 0) break
     }
     let sentNext = false
-    if (remaining > 0) {
+    if (remaining > 0 || drainResult?.publication_pending) {
       const nextSymbols = Array.isArray(drainResult?.reschedule_symbols)
         ? drainResult.reschedule_symbols
         : symbols
@@ -23181,17 +22989,8 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
         }
       }
     }
-    if (processed > 0) {
-      try {
-        const finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
-          symbols: null,
-        })
-        finalized += Math.max(0, Number(finalizeResult?.finalized || 0) || 0)
-      } catch (error) {
-        failed += 1
-        throw error
-      }
-    }
+    // Each message owns its completion page and durable publisher handoff.
+    // A second global drain here ran after ack and could lose its failed retry.
     return {
       ok: failed <= 0,
       processed,
@@ -23541,7 +23340,7 @@ async function processPendingSyncFinalizationJobs(
       ? await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols: scopedSymbols })
       : { ok: true, finalized: 0, remaining: 0 }
   const pendingWork = await summarizePendingSyncFinalizationWork(env, {
-    symbols: scopedSymbols,
+    symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     nowIso: new Date().toISOString(),
   })
   return {
@@ -23554,8 +23353,12 @@ async function processPendingSyncFinalizationJobs(
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining: Math.max(pendingWork.remaining, Number(finalizeResult?.remaining || 0) || 0),
-    has_runnable: pendingWork.has_runnable,
-    next_attempt_at: pendingWork.next_attempt_at,
+    has_runnable: pendingWork.has_runnable || Number(finalizeResult?.ready_remaining) > 0,
+    next_attempt_at:
+      pendingWork.remaining > 0
+        ? pendingWork.next_attempt_at
+        : finalizeResult?.publication_next_attempt_at || null,
+    publication_pending: finalizeResult?.publication_pending === true,
     reschedule_symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     results,
   }
@@ -27116,7 +26919,12 @@ async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
       card_catalog_publication: deferredPublication,
     }
   }
-  return { ...result, card_catalog: publication.card_catalog }
+  return {
+    ...result,
+    card_catalog: publication.card_catalog,
+    publication_queued: publication.publication_queued,
+    migration_pending: publication.migration_pending,
+  }
 }
 
 export async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest(
@@ -36910,6 +36718,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
       const summary = await readSyncFinalizationSummary(env.ICONOPLASM_DB, scopedSymbols)
+      const handoff = await readFinalizationPublicationBarrier(env.ICONOPLASM_DB)
+      const pendingHandoffs =
+        Number(handoff.enqueued_version) > Number(handoff.notified_version) ? 1 : 0
       const queuedCount = summary.queued_count
       const runningCount = summary.running_count
       const retryingCount = summary.retrying_count
@@ -36956,8 +36767,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               pending_finalize: pendingFinalizeCount,
               completed: completedCount,
               unfinished: unfinishedCount,
+              pending_handoffs: pendingHandoffs,
+              publication_next_attempt_at: handoff.next_attempt_at || null,
               last_completed_at: latestCompletedAt,
-              total_pending: unfinishedCount,
+              total_pending: Number(unfinishedCount) + pendingHandoffs,
             },
           },
           200,

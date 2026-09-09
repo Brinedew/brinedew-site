@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { existsSync, statSync } from "node:fs"
+import { statSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
+import { getFileInfo } from "prettier"
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const PRETTIER_CLI = fileURLToPath(
@@ -44,17 +45,35 @@ export function changedFiles() {
 
   return [...new Set(candidates)].filter((candidate) => {
     const absolutePath = path.join(REPOSITORY_ROOT, candidate)
-    return existsSync(absolutePath) && statSync(absolutePath).isFile()
+    try {
+      return statSync(absolutePath).isFile()
+    } catch (error) {
+      if (error.code === "ENOENT") return false
+      throw error
+    }
   })
+}
+
+export async function supportedChangedFiles(candidates) {
+  const selected = []
+  for (const candidate of candidates) {
+    const info = await getFileInfo(path.join(REPOSITORY_ROOT, candidate), {
+      ignorePath: path.join(REPOSITORY_ROOT, ".prettierignore"),
+    })
+    // pnpm creates extensionless _tmp files that can disappear between Git's
+    // inventory and CLI dispatch. Unknown files never need a formatter parser.
+    if (!info.ignored && info.inferredParser) selected.push(candidate)
+  }
+  return selected
 }
 
 export function prettierArguments({ mode, files }) {
   return [PRETTIER_CLI, mode, "--ignore-unknown", "--", ...files]
 }
 
-function main() {
+async function main() {
   const options = parseArguments(process.argv.slice(2))
-  const files = options.changed ? changedFiles() : ["."]
+  const files = options.changed ? await supportedChangedFiles(changedFiles()) : ["."]
 
   if (files.length === 0) {
     console.log("No changed files to format.")
@@ -71,4 +90,4 @@ function main() {
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : ""
-if (invokedPath.toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) main()
+if (invokedPath.toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) await main()

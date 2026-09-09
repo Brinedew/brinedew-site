@@ -4,7 +4,12 @@ import path from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 
-import { parseArguments, parseNullDelimitedPaths, prettierArguments } from "./run-prettier.mjs"
+import {
+  parseArguments,
+  parseNullDelimitedPaths,
+  prettierArguments,
+  supportedChangedFiles,
+} from "./run-prettier.mjs"
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -63,6 +68,17 @@ test("README names the stable repository commands", () => {
   ]) {
     assert.match(readme, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
   }
+})
+
+test("changed formatting omits a vanished extensionless pnpm temporary file before CLI dispatch", async () => {
+  assert.deepEqual(
+    await supportedChangedFiles([
+      "scripts/run-prettier.mjs",
+      "_tmp_31892_c6fdbbb252b2f28dc28937acbca1fbc9",
+      "migrations-iconoplasm/0101_finalization_publication_barrier.sql",
+    ]),
+    ["scripts/run-prettier.mjs"],
+  )
 })
 
 test("ordinary source searches exclude generated and vendored trees", () => {
