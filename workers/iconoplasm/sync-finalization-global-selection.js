@@ -5,7 +5,7 @@ const priority =
 const eligible = "status IN ('queued', 'retrying') AND phase <> 'completed_pending_finalize'"
 const order = "next_attempt_at, requested_at, gene_symbol"
 
-export const GLOBAL_RUNNING_FINALIZATION_SQL = `SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at
+export const GLOBAL_RUNNING_FINALIZATION_SQL = `SELECT gene_symbol, phase, attempts, requested_at, last_attempt_at, job_version
   FROM icono_sync_finalization_jobs INDEXED BY idx_icono_finalization_running
   WHERE status = 'running' AND phase <> 'completed_pending_finalize'
   ORDER BY COALESCE(NULLIF(last_attempt_at, ''), NULLIF(requested_at, '')), gene_symbol LIMIT ?`

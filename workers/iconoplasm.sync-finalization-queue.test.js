@@ -570,6 +570,7 @@ class FakeStatement {
       ] = this.args
       this.db.jobs.set(String(symbol), {
         gene_symbol: String(symbol),
+        job_version: (this.db.jobs.get(String(symbol))?.job_version || 0) + 1,
         actor_id: String(actorId),
         reason: String(reason),
         status: "queued",
@@ -643,8 +644,10 @@ class FakeStatement {
         }
         return { success: true }
       }
-      const symbol = String(this.args[this.args.length - 1] || "")
+      const symbol = String(this.args[this.args.length - 2] || "")
       const current = this.db.jobs.get(symbol)
+      if (!current || current.job_version !== this.args.at(-1))
+        return { success: true, meta: { changes: 0 } }
       if (current) {
         const setClause = this.sql.split("SET")[1]?.split("WHERE")[0] || ""
         const assignments = setClause
@@ -655,12 +658,16 @@ class FakeStatement {
         for (const assignment of assignments) {
           const [field, rawValue] = assignment.split("=").map((item) => item.trim())
           if (!field || String(rawValue || "").includes("CURRENT_TIMESTAMP")) continue
+          if (field === "job_version") {
+            current.job_version += 1
+            continue
+          }
           current[field] = this.args[index]
           index += 1
         }
         this.db.jobs.set(symbol, current)
       }
-      return { success: true }
+      return { success: true, meta: { changes: 1 } }
     }
     return { success: true }
   }
@@ -677,6 +684,7 @@ class FakeIconoplasmDb {
       if (!symbol) continue
       this.jobs.set(symbol, {
         gene_symbol: symbol,
+        job_version: job.job_version || 1,
         actor_id: String(job?.actor_id || "workstation_sync"),
         reason: String(job?.reason || "sync_finalization"),
         status: String(job?.status || "queued"),
