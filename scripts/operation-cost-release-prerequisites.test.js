@@ -70,3 +70,52 @@ test("already applied migrations do not probe obsolete sources and changed envel
     /ENVELOPE_CHANGED/,
   )
 })
+
+test("multiple source probes on one database keep separate predictions and retry identities", async () => {
+  const work = [
+    {
+      adapter_id: "iconoplasm-migration-0099",
+      arguments: { max_rows: 25000, max_unfinished: 5000 },
+    },
+  ]
+  const probes = migrationSizePrerequisites(work)
+  const plans = new Map()
+  const adapter = {
+    id: "iconoplasm-migration-inventory",
+    resource: "iconoplasm",
+    query_ids: probes.map((p) => p.query),
+    executable_sha256: "a".repeat(64),
+    schema_sha256: "b".repeat(64),
+  }
+  let executes = 0
+  const options = {
+    pending: work,
+    capabilities: { adapters: [adapter] },
+    releaseId: "inspect-two-sources",
+    now: Date.now(),
+    send: async (path, method, body) => {
+      if (path === "/receipt") {
+        if (!plans.has(body.id)) throw new Error("COST_PREDICTION_NOT_REGISTERED")
+        return { plan: { id: body.id, immutable: plans.get(body.id), steps: {}, status: "active" } }
+      }
+      if (path === "/register") {
+        plans.set(body.id, body)
+        return { plan: body }
+      }
+      executes++
+      const probe = probes.find((p) => p.query === body.arguments.statements[0].query_id)
+      return {
+        result: [{ results: [{ capped_count: probe.maximum }] }],
+        usage: { rows_read: probe.maximum, rows_written: 0 },
+      }
+    },
+  }
+  await inspectMigrationSizes(options)
+  await inspectMigrationSizes(options)
+  assert.equal(plans.size, 2)
+  assert.equal(executes, 4)
+  assert.deepEqual(
+    [...plans.values()].map((p) => p.prediction.rows_read),
+    [25001, 5001],
+  )
+})

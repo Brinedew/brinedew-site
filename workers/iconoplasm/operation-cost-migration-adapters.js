@@ -1,4 +1,5 @@
 import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
+import { createFinalizationQueueMigrationCostAdapter } from "./operation-cost-finalization-queue-migration-adapter.js"
 import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
 import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
 import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
@@ -15,6 +16,10 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0099",
+      createFinalizationQueueMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
+    ],
     [
       "iconoplasm-authoring-migration-0017",
       createCanonicalLifecycleGuardsMigrationCostAdapter({
