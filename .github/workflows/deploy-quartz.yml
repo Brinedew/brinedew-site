@@ -53,6 +53,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wait-for-iconoplasm-release-ci.mjs
 
+      # This read-only sentinel performs no application D1 work. A pass does
+      # not replace complete-release admission below. Existing maintenance
+      # keeps its independent zero-D1 published-reader recovery path.
+      - name: Reject exhausted capacity before release setup
+        timeout-minutes: 1
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+        run: node scripts/early-release-capacity-sentinel.mjs
+
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
