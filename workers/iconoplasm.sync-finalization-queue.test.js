@@ -1,5 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import {
+  GLOBAL_READY_FINALIZATION_SQL,
+  SCOPED_READY_FINALIZATION_SQL,
+  COMPLETE_READY_FINALIZATION_SQL,
+} from "./iconoplasm/sync-finalization-publication.js"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
@@ -34,6 +39,43 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if ([GLOBAL_READY_FINALIZATION_SQL, SCOPED_READY_FINALIZATION_SQL].includes(this.sql)) {
+      const scope =
+        this.sql === SCOPED_READY_FINALIZATION_SQL ? new Set(JSON.parse(this.args[0])) : null
+      return {
+        results: [...this.db.jobs.values()]
+          .filter(
+            (row) =>
+              row.status !== "completed" &&
+              ["completed_pending_finalize", "completed"].includes(row.phase) &&
+              (!scope || scope.has(row.gene_symbol)),
+          )
+          .sort((a, b) => a.gene_symbol.localeCompare(b.gene_symbol))
+          .slice(0, 100)
+          .map((row) => ({ gene_symbol: row.gene_symbol, job_version: row.job_version })),
+      }
+    }
+    if (this.sql === COMPLETE_READY_FINALIZATION_SQL) {
+      const results = []
+      for (const [symbol, version] of JSON.parse(this.args[0])) {
+        const row = this.db.jobs.get(symbol)
+        if (
+          !row ||
+          row.job_version !== version ||
+          row.status === "completed" ||
+          !["completed_pending_finalize", "completed"].includes(row.phase)
+        )
+          continue
+        Object.assign(row, {
+          status: "completed",
+          phase: "completed",
+          job_version: version + 1,
+          completed_at: this.args[1],
+        })
+        results.push({ gene_symbol: symbol })
+      }
+      return { results }
+    }
     if (this.sql.includes("INDEXED BY idx_icono_finalization_running")) {
       return {
         results: [...this.db.jobs.values()]
@@ -277,6 +319,29 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql.includes("RETURNING enqueued_version")) {
+      const [token, until, version, , now] = this.args
+      const state = this.db.handoff
+      if (
+        [...this.db.jobs.values()].some((row) => row.status !== "completed") ||
+        state.enqueued_version !== version ||
+        state.notified_version >= version ||
+        state.next_attempt_at > now
+      )
+        return null
+      Object.assign(state, { lease_token: token, next_attempt_at: until })
+      return { enqueued_version: version }
+    }
+    if (this.sql.includes("RETURNING notified_version")) {
+      const [version, token] = this.args
+      if (this.db.handoff.lease_token !== token) return null
+      Object.assign(this.db.handoff, {
+        notified_version: version,
+        lease_token: "",
+        next_attempt_at: "",
+      })
+      return { notified_version: version }
+    }
     if (this.sql.includes("AS has_runnable")) {
       const rows = [...this.db.jobs.values()]
       const eligible = rows.filter(
@@ -309,6 +374,10 @@ class FakeStatement {
         : new Set(JSON.parse(this.args[0]))
       const jobs = [...this.db.jobs.values()].filter((row) => !scope || scope.has(row.gene_symbol))
       return {
+        ...this.db.handoff,
+        terminal_phase_count: jobs.filter(
+          (row) => row.status !== "completed" && row.phase === "completed",
+        ).length,
         queued_count: jobs.filter((row) => row.status === "queued").length,
         running_count: jobs.filter((row) => row.status === "running").length,
         retrying_count: jobs.filter((row) => row.status === "retrying").length,
@@ -549,6 +618,11 @@ class FakeStatement {
 
   async run() {
     this.db.calls.push({ method: "run", sql: this.sql, args: this.args })
+    if (this.sql.includes("UPDATE icono_sync_finalization_publication")) {
+      if (this.db.handoff.lease_token === this.args[1])
+        Object.assign(this.db.handoff, { lease_token: "", next_attempt_at: this.args[0] })
+      return { success: true }
+    }
     if (
       this.sql.includes("CREATE TABLE IF NOT EXISTS icono_sync_finalization_jobs") ||
       this.sql.includes("CREATE INDEX IF NOT EXISTS idx_icono_sync_finalization_jobs")
@@ -556,6 +630,7 @@ class FakeStatement {
       return { success: true }
     }
     if (this.sql.includes("INSERT INTO icono_sync_finalization_jobs")) {
+      this.db.handoff.enqueued_version += 1
       const [
         symbol,
         actorId,
@@ -676,6 +751,12 @@ class FakeStatement {
 class FakeIconoplasmDb {
   constructor({ jobs = [] } = {}) {
     this.calls = []
+    this.handoff = {
+      enqueued_version: jobs.some((job) => job.status !== "completed") ? 1 : 0,
+      notified_version: 0,
+      lease_token: "",
+      next_attempt_at: "",
+    }
     this.jobs = new Map()
     for (const job of Array.isArray(jobs) ? jobs : []) {
       const symbol = String(job?.gene_symbol || "")
@@ -931,8 +1012,10 @@ test("admin finalization pending exposes queued, retrying, and pending-finalize 
     pending_finalize: 1,
     completed: 1,
     unfinished: 3,
+    pending_handoffs: 1,
+    publication_next_attempt_at: null,
     last_completed_at: "2026-04-16T00:04:00.000Z",
-    total_pending: 3,
+    total_pending: 4,
   })
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),
@@ -995,8 +1078,10 @@ test("admin finalization pending can scope the snapshot to selected symbols", as
     pending_finalize: 1,
     completed: 0,
     unfinished: 1,
+    pending_handoffs: 1,
+    publication_next_attempt_at: null,
     last_completed_at: "",
-    total_pending: 1,
+    total_pending: 2,
   })
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),
@@ -1566,7 +1651,11 @@ test("scoped queue drain completes scoped pending-finalize rows while deferring 
   assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
   assert.equal(queue.sent.length, 1)
   assert.deepEqual(queue.sent[0]?.symbols, [])
-  assert.ok(Number(queue.sendOptions[0]?.delaySeconds || 0) > 0)
+  assert.equal(
+    Number(queue.sendOptions[0]?.delaySeconds || 0),
+    0,
+    "the remaining global job is due now",
+  )
 })
 
 test("future retry rows schedule one due-time wakeup instead of an immediate Queue spin", async () => {
@@ -1677,7 +1766,7 @@ test("global queue drain bulk-completes ready pending-finalize rows during mixed
   assert.deepEqual(queue.sent[0]?.symbols, [])
 })
 
-test("scoped queue drain performs one global finalization when the whole ledger is pending-finalize", async () => {
+test("scoped completion schedules the remaining global page before one publisher handoff", async () => {
   const queue = buildFakeQueue()
   const kv = testKv()
   const symbols = ["TP53", "BRCA1", "EGFR"]
@@ -1715,8 +1804,16 @@ test("scoped queue drain performs one global finalization when the whole ledger 
   )
 
   assert.equal(result.ok, true)
-  assert.equal(result.finalized, 3)
-  assert.deepEqual(queue.sent, [])
+  assert.equal(result.finalized, 2)
+  assert.equal(queue.sent.length, 1)
+  assert.deepEqual(queue.sent[0].symbols, [])
+  assert.equal(kv.puts.length, 0)
+  const next = await handleIconoplasmSyncFinalizationQueue(
+    { messages: [{ body: queue.sent[0], ack() {}, retry() {} }] },
+    env,
+    { waitUntil() {} },
+  )
+  assert.equal(next.finalized, 1)
   assert.ok(kv.puts.length > 0)
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
@@ -1724,7 +1821,7 @@ test("scoped queue drain performs one global finalization when the whole ledger 
   )
 })
 
-test("queue drain finalizer chunks more than the read-model vision limit", async () => {
+test("queue drain completes 1001 ready rows in bounded pages without rebuilding their finished visions", async () => {
   const symbols = Array.from({ length: 1001 }, (_, index) => `GENE${index}`)
   const env = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
@@ -1745,26 +1842,43 @@ test("queue drain finalizer chunks more than the read-model vision limit", async
     KV: testKv(),
   }
 
-  const result = await handleIconoplasmSyncFinalizationQueue(
-    {
-      messages: [
-        {
-          body: {
-            kind: "drain_finalization_ledger",
-            run_id: "sync-test",
-            symbols: [],
+  const deliver = () =>
+    handleIconoplasmSyncFinalizationQueue(
+      {
+        messages: [
+          {
+            body: {
+              kind: "drain_finalization_ledger",
+              run_id: "sync-test",
+              symbols: [],
+            },
+            ack() {},
+            retry() {},
           },
-          ack() {},
-          retry() {},
-        },
-      ],
-    },
-    env,
-    { waitUntil() {} },
-  )
+        ],
+      },
+      env,
+      { waitUntil() {} },
+    )
 
-  assert.equal(result.ok, true)
-  assert.equal(result.finalized, 1001)
+  let total = 0
+  for (let page = 0; page < 11; page++) {
+    const result = await deliver()
+    assert.equal(result.ok, true)
+    assert.ok(result.finalized <= 100)
+    total += result.finalized
+  }
+  assert.equal(total, 1001)
+  assert.equal(
+    env.ICONOPLASM_DB.handoff.notified_version,
+    env.ICONOPLASM_DB.handoff.enqueued_version,
+  )
+  assert.equal(
+    env.ICONOPLASM_DB.calls.filter((call) =>
+      call.sql.includes("INSERT INTO icono_admin_vision_rollup"),
+    ).length,
+    0,
+  )
   assert.equal(
     [...env.ICONOPLASM_DB.jobs.values()].filter((row) => row.status !== "completed").length,
     0,
