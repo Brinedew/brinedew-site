@@ -455,3 +455,10 @@ With every queued/retrying job moved into the future, due selection cost eight
 reads and readiness remained nine, with the correct future wakeup. These are selection and
 migration receipts; global publication, phase execution and whole-operation
 shared admission remain required before background containment is lifted.
+
+The deployment drift guard now checks the runtime's selector calls and requires
+both real-SQL selector suites in the release gate. Its earlier ordering-comment
+check broke when the SQL moved into dedicated modules, despite protected CI
+passing. The guard itself also runs in ordinary CI, so release-only source drift
+is caught before merge. The protected phase priority, pending-finalize exclusion
+and durable future wakeups are unchanged and remain behaviorally tested.
