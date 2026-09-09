@@ -121,7 +121,7 @@ jobs:
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
           # These three are the non-Iconoplasm schedules. Queue delivery state
           # lives at the provider and is intentionally not changed by this job.
-          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-reader-recovery" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+          node scripts/deploy-iconoplasm-reader-recovery.mjs --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-reader-recovery" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Verify published readers and retained application protection
         timeout-minutes: 2
@@ -357,7 +357,7 @@ jobs:
           set -euo pipefail
           node scripts/prepare-iconoplasm-schema-transition-config.mjs
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
-          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+          node scripts/deploy-iconoplasm-reader-recovery.mjs --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Verify published readers and retained application protection
         if: steps.release-state.outputs.schema_transition == 'true'
@@ -445,7 +445,7 @@ jobs:
           set -euo pipefail
           node scripts/prepare-iconoplasm-schema-transition-config.mjs
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
-          pnpm exec wrangler deploy --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+          node scripts/deploy-iconoplasm-reader-recovery.mjs --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Inspect staged migration prerequisites through admission
         timeout-minutes: 2
