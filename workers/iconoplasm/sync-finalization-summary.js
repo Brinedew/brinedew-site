@@ -13,10 +13,12 @@ export const SCOPED_FINALIZATION_SUMMARY_SQL = `SELECT
       INDEXED BY sqlite_autoindex_icono_sync_finalization_jobs_1
       WHERE gene_symbol IN (SELECT value FROM json_each(?))`
 
+// completed_at is non-null TEXT. A positive range excludes the empty string
+// exactly, including when every historical value is empty; <> would scan them.
 export const GLOBAL_FINALIZATION_SUMMARY_SQL = `SELECT summary.*,
     (SELECT MAX(completed_at) FROM icono_sync_finalization_jobs
       INDEXED BY idx_icono_finalization_completed_at
-      WHERE status = 'completed' AND completed_at <> '') AS completed_at
+      WHERE status = 'completed' AND completed_at > '') AS completed_at
     FROM icono_sync_finalization_summary summary WHERE singleton = 1`
 
 export async function readSyncFinalizationSummary(db, symbols = []) {
