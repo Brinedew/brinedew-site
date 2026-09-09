@@ -85,6 +85,10 @@ test("manual reader recovery is exact-CI gated and never enters the D1 release p
   const recovery = workflow.slice(start, end)
   assert.match(recovery, /inputs\.reader_recovery_only == true/)
   assert.match(recovery, /Require successful tests for the exact deployed commit/)
+  assert.match(recovery, /id: exact-ci/)
+  assert.match(recovery, /Restore immutable static assets from the exact tested CI run/)
+  assert.match(recovery, /run-id: \$\{\{ steps\.exact-ci\.outputs\.ci_run_id \}\}/)
+  assert.match(recovery, /Verify restored immutable static asset bundle/)
   assert.match(recovery, /ICONOPLASM_READER_RECOVERY_ONLY: "1"/)
   assert.match(recovery, /Read compatible installed state and non-D1 reader headroom/)
   assert.match(recovery, /Deploy the D1-free reader containment artifact/)
@@ -99,6 +103,15 @@ test("manual reader recovery is exact-CI gated and never enters the D1 release p
     "Ensure requested gene-card Queues exist",
   ])
     assert.equal(recovery.includes(forbidden), false, forbidden)
+})
+
+test("exact push CI archives the static bundle needed by D1-free recovery", () => {
+  const ci = readFileSync(new URL("../.github/workflows/ci.yaml", import.meta.url), "utf8")
+  assert.match(ci, /Ensure Quartz builds/)
+  assert.match(ci, /Archive exact tested Iconoplasm static assets for recovery/)
+  assert.match(ci, /name: iconoplasm-edge-assets-\$\{\{ github\.sha \}\}/)
+  assert.match(ci, /path: public-iconoplasm-edge/)
+  assert.match(ci, /retention-days: 1/)
 })
 
 test("failure classification never returns private provider prose", () => {
