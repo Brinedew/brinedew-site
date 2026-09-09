@@ -6,6 +6,7 @@ import {
   verifyReleaseAuthentication,
   requireReleaseSharedCapacity,
   chooseReleaseAdmission,
+  readCanonicalReleaseOrigin,
 } from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
@@ -39,6 +40,83 @@ const check = (observed, plan = manifest) =>
     reader: { refresh: async () => observed },
     now: () => time,
   })
+
+test("canonical preflight accepts only the verified reader-recovery origin", async () => {
+  const now = Date.parse("2026-09-09T12:00:00Z")
+  const common = {
+    path: ".github/workflows/deploy-quartz.yml",
+    head_branch: "main",
+    workflow_id: 42,
+    head_repository: { full_name: "Brinedew/brinedew-site" },
+  }
+  const origin = {
+    ...common,
+    id: 123,
+    created_at: new Date(now - 10_000).toISOString(),
+    head_sha: "a".repeat(40),
+    status: "completed",
+    conclusion: "success",
+  }
+  const current = {
+    ...common,
+    id: 456,
+    created_at: new Date(now).toISOString(),
+    head_sha: "b".repeat(40),
+    run_attempt: 1,
+  }
+  const readerJobs = {
+    jobs: [
+      {
+        name: "reader-recovery-only",
+        conclusion: "success",
+        steps: [
+          { name: "Deploy the D1-free reader containment artifact", conclusion: "success" },
+          {
+            name: "Verify published readers and retained application protection",
+            conclusion: "success",
+          },
+        ],
+      },
+      { name: "deploy-production", conclusion: "skipped", steps: [] },
+    ],
+  }
+  const fetcher = async (url) => {
+    if (url.endsWith("/runs/456")) return Response.json(current)
+    if (url.endsWith("/runs/123")) return Response.json(origin)
+    if (url.endsWith("/runs/123/jobs?per_page=100")) return Response.json(readerJobs)
+    assert.match(url, new RegExp(`/compare/${origin.head_sha}\\.\\.\\.${current.head_sha}`))
+    return Response.json({ status: "ahead" })
+  }
+
+  assert.deepEqual(
+    await readCanonicalReleaseOrigin({
+      repository: "Brinedew/brinedew-site",
+      runId: "456",
+      resumeRunId: "123",
+      token: "test",
+      now,
+      fetcher,
+    }),
+    {
+      releaseId: "deploy-123",
+      inspectionId: "inspect-456-1",
+      started: now - 10_000,
+    },
+  )
+
+  readerJobs.jobs[0].steps = []
+  await assert.rejects(
+    readCanonicalReleaseOrigin({
+      repository: "Brinedew/brinedew-site",
+      runId: "456",
+      resumeRunId: "123",
+      token: "test",
+      now,
+      fetcher,
+    }),
+    /COST_RELEASE_CONTINUATION_ORIGIN_INVALID/,
+  )
+})
 
 test("low provider usage cannot admit a release over retained shared reservations", async () => {
   const release = await check(sample)
