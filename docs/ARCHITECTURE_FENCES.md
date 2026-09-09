@@ -1,5 +1,21 @@
 # Architecture fences
 
+## Recovery ownership fence: RECOVERY-001
+
+Read [Recovery Ownership Contract](RECOVERY_OWNERSHIP_CONTRACT.md) before incident, capacity,
+deployment or recovery work. The accepting executor owns delivery through a
+verified user operation; the owner does not run deployment/SQL commands or
+time resets. A safeguard must preserve a tested compatible repair path
+under its exact failure. Continue non-deploying source publication and
+isolated tests while live D1 is exhausted. Refusal is containment evidence.
+Deferred work needs an inspected registered executor, accessible source,
+wake condition and failure destination. A chat or Linear edit does not
+schedule it. Preserve security, actual admission and schema compatibility
+when replacing a deadlocking guard through explicit change control.
+This contract adds no new production gate or prerequisite redesign.
+Historical checkpoints below require fresh state reconciliation.
+
+
 This repository uses executable Chesterton's fences for decisions that look
 locally removable but protect a system-wide cost, correctness, ownership, or
 release invariant.
