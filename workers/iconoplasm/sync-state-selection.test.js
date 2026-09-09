@@ -10,6 +10,7 @@ import {
   readEssenceStateRows,
 } from "./sync-state-selection.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { createIconoplasmAdminPublicationHandlers } from "../iconoplasm-admin-publication-routes.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -105,6 +106,106 @@ test(
       }
     } finally {
       schema.close()
+      await runtime.dispose()
+    }
+  },
+)
+
+test(
+  "catalog-state handler completes scoped repeat checks at the same D1 cost after unrelated growth",
+  { timeout: 120000 },
+  async () => {
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('catalog state cost')}}",
+        compatibilityDate: "2026-08-01",
+        d1Databases: ["DB"],
+      }),
+    )
+    try {
+      const db = await runtime.getD1Database("DB")
+      await db
+        .prepare(
+          `CREATE TABLE icono_gene_catalog (
+            gene_symbol TEXT PRIMARY KEY, full_name TEXT, uniprot TEXT,
+            color_hex TEXT, tmh INTEGER, aliases_json TEXT
+          )`,
+        )
+        .run()
+      await db
+        .prepare(
+          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<19023)
+           INSERT INTO icono_gene_catalog(gene_symbol,full_name,aliases_json)
+           SELECT printf('G%05d',n),'Selected','[]' FROM ids`,
+        )
+        .run()
+      const handlers = createIconoplasmAdminPublicationHandlers({
+        actor: async () => "admin",
+        coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
+        fetchCatalogStateRows: async (env, symbols) =>
+          (await readCatalogStateRows(env.ICONOPLASM_DB, symbols)).map((row) => ({
+            symbol: row.gene_symbol,
+            content_hash: "test-hash",
+          })),
+        fetchEssenceStateRows: async () => [],
+        fetchManifestationStateRows: async () => [],
+        isAdmin: async () => true,
+        json: (data, status = 200, headers = {}) =>
+          new Response(JSON.stringify(data), {
+            status,
+            headers: { "Content-Type": "application/json", ...headers },
+          }),
+        mutationLimiterSnapshot: () => ({}),
+        normalizeCatalogPayloadItem: (item) => item,
+        normalizeEssencePayload: (item) => item,
+        normalizeSymbol: (value) =>
+          String(value || "")
+            .trim()
+            .toUpperCase(),
+        prepareGeneEssenceUpsertStatement: () => {
+          throw new Error("unused")
+        },
+        publishCatalogArtifact: async () => ({}),
+        rebuildSharedGeneDiscoveryRollup: async () => ({}),
+        sanitizeText: (value) => String(value || ""),
+        syncAdminReadModels: async () => ({}),
+      })
+      const request = () =>
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/catalog/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: ["G00001"] }),
+        })
+      const run = async () => {
+        const meter = createOperationCostD1Meter(db)
+        const response = await handlers["admin_publication.catalog_state"]({
+          request: request(),
+          env: { ICONOPLASM_DB: meter.db },
+          done: async (_route, result) => result,
+        })
+        assert.equal(response.status, 200)
+        assert.deepEqual(
+          (await response.json()).rows.map((row) => row.symbol),
+          ["G00001"],
+        )
+        return meter.finish()
+      }
+      const before = await run()
+      await db
+        .prepare(
+          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<60000)
+           INSERT INTO icono_gene_catalog(gene_symbol,full_name,aliases_json)
+           SELECT printf('UNRELATED%05d',n),'Unrelated','[]' FROM ids`,
+        )
+        .run()
+      const repeat = await run()
+      assert.equal(before.rows_written, 0)
+      assert.equal(repeat.rows_written, 0)
+      assert.equal(before.rows_read, 2)
+      assert.equal(repeat.rows_read, before.rows_read)
+      assert.ok(repeat.rows_read <= 2, JSON.stringify({ before, repeat }))
+    } finally {
       await runtime.dispose()
     }
   },

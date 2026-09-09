@@ -32,6 +32,18 @@ and an empty normalized scope does no database work. Existing deliberately
 unscoped routes remain whole-state operations and still require complete
 operation admission; this scoped fix does not certify their cost.
 
+September 9 B-749 retires the aggregate `GET /api/iconoplasm/admin/catalog/state`
+path entirely. The endpoint now accepts only a nonempty explicit `POST` symbol
+scope, and the workstation planner derives ordinary catalog checks from the
+candidate cursor's exact symbols. A scoped job repeats that same state check
+before it writes, so unpublished rows remain authoritative without a published
+KV digest or a hidden catalogue scan. Explicit recovery passes its complete
+membership to the worker; catalog deletion remains the separately authenticated
+`delete_symbols` reconcile command rather than an inferred complement. The
+handler-level workerd regression measures one selected row at two D1 reads,
+with the same receipt after adding 60,000 unrelated catalog rows and on an
+immediate no-op repeat.
+
 ## September 5 evidence
 
 Cloudflare account analytics at approximately 09:50 UTC reported 5.97 million

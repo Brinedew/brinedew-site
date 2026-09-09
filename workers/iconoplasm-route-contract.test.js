@@ -292,7 +292,7 @@ test("declared route method mismatches return 405 with an Allow contract", async
   assert.deepEqual(await response.json(), { error: "Method not allowed" })
 })
 
-test("declared API handlers execute HEAD through the contract instead of falling through", async () => {
+test("catalog state rejects HEAD because state comparison requires an explicit POST scope", async () => {
   const response = await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/catalog/state", {
       method: "HEAD",
@@ -301,33 +301,9 @@ test("declared API handlers execute HEAD through the contract instead of falling
         "x-iconoplasm-only-allowed-stateful-worker-internal": "1",
       },
     }),
-    {
-      ICONOPLASM_ADMIN_TOKEN: "founder-secret",
-      ICONOPLASM_DB: {
-        prepare() {
-          return {
-            async all() {
-              return {
-                results: [
-                  {
-                    gene_symbol: "TP53",
-                    full_name: "tumor protein p53",
-                    uniprot: "P04637",
-                    color_hex: "#35353C",
-                    tmh: 0,
-                    aliases_json: "[]",
-                  },
-                ],
-              }
-            },
-          }
-        },
-      },
-    },
+    { ICONOPLASM_ADMIN_TOKEN: "founder-secret" },
     { waitUntil() {} },
   )
 
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(await response.text(), "")
+  assert.equal(response.status, 404)
 })
