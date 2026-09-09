@@ -14,6 +14,11 @@ import {
   pendingFinalizationWorkSql,
 } from "./iconoplasm/sync-finalization-selection.js"
 import {
+  GLOBAL_RUNNING_FINALIZATION_SQL,
+  GLOBAL_DUE_FINALIZATION_SQL,
+  GLOBAL_PENDING_FINALIZATION_SQL,
+} from "./iconoplasm/sync-finalization-global-selection.js"
+import {
   readReconcileAssetKeys,
   readReconcilePublishState,
 } from "./iconoplasm/reconcile-asset-selection.js"
@@ -22572,17 +22577,19 @@ async function recoverStaleRunningSyncFinalizationJobs(
   // still count as pending forever, but the normal processor only selects
   // queued/retrying work. Requeue old leases here so the backlog can become
   // real work again instead of an undead counter that never drains.
-  const runningRowsResp = await env.ICONOPLASM_DB.prepare(
-    runningFinalizationJobsSql(scopedEnabled > 0),
-  )
-    .bind(
-      scopedSymbolsJson,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      scopedEnabled,
-      ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
-    )
-    .all()
+  const runningRowsResp = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(runningFinalizationJobsSql(scopedEnabled > 0))
+        .bind(
+          scopedSymbolsJson,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          scopedEnabled,
+          ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+        )
+        .all()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_RUNNING_FINALIZATION_SQL)
+        .bind(ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT)
+        .all()
   const runningRows = Array.isArray(runningRowsResp?.results) ? runningRowsResp.results : []
   let recovered = 0
   for (const row of runningRows) {
@@ -23065,7 +23072,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       // Queue allowance during the 2026-07-22 D1-capacity incident.
       const nextDelaySeconds = drainResult?.partial
         ? 15 * 60
-        : Math.max(0, Number(drainResult?.runnable || 0) || 0) > 0
+        : drainResult?.has_runnable === true
           ? 0
           : queueDelaySecondsUntil(drainResult?.next_attempt_at)
       sentNext = await sendSyncFinalizationDrainQueueMessage(
@@ -23416,20 +23423,22 @@ async function processPendingSyncFinalizationJobs(
     symbols: scopedSymbols,
   })
   const nowIso = new Date().toISOString()
-  const queued = await env.ICONOPLASM_DB.prepare(dueFinalizationJobsSql(scopedEnabled > 0))
-    .bind(
-      scopedSymbolsJson,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      scopedEnabled,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES,
-      safeLimit,
-    )
-    .all()
+  const queued = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(dueFinalizationJobsSql(true))
+        .bind(
+          scopedSymbolsJson,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          scopedEnabled,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_GENE_ROLLUPS,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_VOTE_SUMMARIES,
+          safeLimit,
+        )
+        .all()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_DUE_FINALIZATION_SQL).bind(nowIso, safeLimit).all()
   const rows = (Array.isArray(queued?.results) ? queued.results : []).map(mapSyncFinalizationJobRow)
   const results = []
   let processed = 0
@@ -23553,7 +23562,7 @@ async function processPendingSyncFinalizationJobs(
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining: Math.max(pendingWork.remaining, Number(finalizeResult?.remaining || 0) || 0),
-    runnable: pendingWork.runnable,
+    has_runnable: pendingWork.has_runnable,
     next_attempt_at: pendingWork.next_attempt_at,
     reschedule_symbols: finalizeResult?.broaden_next_drain ? [] : scopedSymbols,
     results,
@@ -23567,24 +23576,27 @@ async function summarizePendingSyncFinalizationWork(
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const row = await env.ICONOPLASM_DB.prepare(pendingFinalizationWorkSql(scopedEnabled > 0))
-    .bind(
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      nowIso,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      scopedEnabled,
-      scopedSymbolsJson,
-    )
-    .first()
+  const row = scopedEnabled
+    ? await env.ICONOPLASM_DB.prepare(pendingFinalizationWorkSql(true))
+        .bind(
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_RETRYING,
+          ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+          nowIso,
+          ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
+          scopedEnabled,
+          scopedSymbolsJson,
+        )
+        .first()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_PENDING_FINALIZATION_SQL).bind(nowIso).first()
+  if (!row) throw new Error("Finalization summary is missing; migration 0094 is required")
   return {
     remaining: Math.max(0, Number(row?.remaining || 0) || 0),
-    runnable: Math.max(0, Number(row?.runnable || 0) || 0),
+    has_runnable: scopedEnabled ? Number(row.runnable || 0) > 0 : Number(row.has_runnable) === 1,
     next_attempt_at: sanitizeText(row?.next_attempt_at || "", 64) || null,
   }
 }

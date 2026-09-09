@@ -433,3 +433,25 @@ kept a two-key lookup at three reads after adding 60,000 assets concentrated on
 the same genes; 1,001 existing keys cost 2,002 reads across three pages. These
 are source-selection receipts, not a bound on subsequent promotion, votes,
 emulsion examples or read-model rebuilds.
+
+Global Queue selection uses migration 0099's two partial indexes. The durable
+ledger and existing phase priority remain authoritative; within each phase,
+earliest due time now precedes original request time. This avoids scanning
+future retries to preserve an old arrival sort. Each of four priority ranges
+stops at the batch limit before merging, and stale-running selection stops at
+250 index entries. Scheduling consumes `has_runnable`, an existence result,
+instead of counting every runnable job. Exact remaining totals still come from
+the transactional singleton; future wakeups retain the earliest durable date.
+
+The migration has source-size admission before DDL and atomic guards for at
+most 25,000 total jobs and 5,000 unfinished jobs. The two new index populations
+are disjoint and contain no completed history. Probe identities include their
+query name so multiple checks against one database cannot share a mismatched
+prediction. A 25,000-row workerd migration with 5,000 unfinished jobs measured
+85,131 reads and 5,004 writes, within its 228,708-read/5,064-write bound. Global
+selection beside 85,000 stored jobs measured 250 reads for running leases,
+128 for a 25-job due batch, 1,253 for the 250-job maximum and nine for readiness.
+With every queued/retrying job moved into the future, due selection cost eight
+reads and readiness remained nine, with the correct future wakeup. These are selection and
+migration receipts; global publication, phase execution and whole-operation
+shared admission remain required before background containment is lifted.

@@ -108,11 +108,8 @@ test("scoped finalization keeps phase order, retry dates and exact counts using 
       { ...selected[2][0] },
       { remaining: 7, runnable: 4, next_attempt_at: "2026-09-10" },
     )
-    // No unscoped semantic changes are smuggled into the scope fix.
-    assert.deepEqual(
-      queries(false).map(([sql, args]) => db.prepare(sql).all(...args)),
-      selected,
-    )
+    // Global delivery must use its separately bounded partial-index selectors.
+    assert.throws(() => queries(false), /explicit finalization symbol scope/)
     const [emptySql, emptyArgs] = queries(true, ["MISSING"])[2]
     assert.deepEqual(
       { ...db.prepare(emptySql).get(...emptyArgs) },
