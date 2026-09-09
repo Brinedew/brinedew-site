@@ -3360,6 +3360,22 @@ function portraitSnapshotVersion(rawFingerprint) {
   return `${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${portraitFingerprintVersion(rawFingerprint) || "none"}`
 }
 
+export async function publishedPortraitReferenceDigest(rows) {
+  if (!rows.length) return null
+  // Preserve the publisher's SQLite ORDER BY gene_symbol byte order. Sorting
+  // serialized symbol:hash pairs moves MRPL10 ahead of MRPL1 because '0' sorts
+  // before ':', falsely rejecting an unchanged published snapshot.
+  const normalized = rows.map((row) => {
+    const symbol = normalizeSymbol(row?.symbol || row?.gene_symbol || "")
+    const sha = normalizeSha256(row?.asset_sha256 || row?.current_asset_sha256 || "")
+    if (!symbol || !sha)
+      throw new TypeError("Published portrait fingerprint contains an invalid row")
+    return { symbol, sha }
+  })
+  normalized.sort((a, b) => (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0))
+  return sha256Hex(normalized.map((row) => `${row.symbol}:${row.sha}`).join("|"))
+}
+
 export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortraits) {
   // Cost barrier: this touches the whole catalog artifact. That is acceptable at
   // publish time or behind a shared versioned cache. It is not acceptable as an
@@ -3469,14 +3485,14 @@ async function queryPublishedPortraitFingerprint(env) {
       if (!symbol || !assetSha) {
         throw new TypeError("Published portrait fingerprint contains an invalid row")
       }
-      return `${symbol}:${assetSha}`
+      return { symbol, asset_sha256: assetSha }
     })
     if (!pairs.length) {
       return { published_count: 0, latest: null }
     }
     return {
       published_count: pairs.length,
-      latest: await sha256Hex(pairs.join("|")),
+      latest: await publishedPortraitReferenceDigest(pairs),
     }
   } catch (error) {
     throw new Error("Published portrait fingerprint query failed", { cause: error })
@@ -3610,14 +3626,7 @@ async function preparePortraitReferenceSnapshot(env) {
       `Published portrait snapshot is incomplete: expected ${expectedCount}, received ${rows.length}`,
     )
   }
-  const actualLatest = rows.length
-    ? await sha256Hex(
-        rows
-          .map((row) => `${row.symbol}:${row.asset_sha256}`)
-          .sort()
-          .join("|"),
-      )
-    : null
+  const actualLatest = await publishedPortraitReferenceDigest(rows)
   if (actualLatest !== fingerprint.latest) {
     throw new Error("Published portrait state changed while preparing its snapshot")
   }
@@ -3705,14 +3714,7 @@ export async function initializePublishedHydratedCatalog(kv, { inspectOnly = fal
   )
   if (!publishedPortraitRefSnapshotMatchesFingerprint(refs, fingerprint))
     throw new OperationCostError("COST_CATALOG_REFERENCES_INVALID")
-  const latest = refs.length
-    ? await sha256Hex(
-        refs
-          .map((row) => `${row.symbol}:${row.asset_sha256}`)
-          .sort()
-          .join("|"),
-      )
-    : null
+  const latest = await publishedPortraitReferenceDigest(refs)
   if (latest !== fingerprint.latest)
     throw new OperationCostError("COST_CATALOG_REFERENCE_DIGEST_DIFFERS")
   const source = await read(`${KV_CATALOG_PREFIX}${base}`, "SOURCE")

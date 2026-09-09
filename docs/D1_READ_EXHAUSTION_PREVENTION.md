@@ -401,3 +401,12 @@ codes without exposing contents. The inspection uses the current attempt's
 read-only identity; publication keeps its original prediction and uncertain
 write reservations. Its extra reads are included in release headroom. The
 scoped KV capability rejects writes during inspection before sending them.
+
+Portrait reference digests preserve SQLite's gene-symbol ordering before adding
+the `:hash` delimiter. Sorting complete serialized pairs changes the order of
+prefix families such as MRPL1/MRPL10 and INS/INS-IGF2, incorrectly rejecting the
+unchanged published fingerprint. Publication and verification use one shared
+serializer; no stored identity or portrait selection changes. The production-size
+fixture includes these prefix cases. A successful read-only comparison against
+an existing exact hydrated artifact also completes preparation without replaying
+its mutation plan if a later release stage failed.
