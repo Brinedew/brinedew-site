@@ -42,6 +42,8 @@ if ($headSha -ne $originSha) {
 
 # Canonical production deploy path: inspect admitted schema prerequisites and
 # retained shared-budget spending before the workflow attempts DDL.
+# A read-only sentinel rejects exhausted capacity before release setup while
+# preserving existing-maintenance reader recovery; all later admission stays mandatory.
 # Releases serialize through final Worker/Pages activation; queued work verifies
 # current main before admission so delayed pushes cannot deploy stale source.
 Write-Host "[deploy] Canonical production deploy path: GitHub Actions only."
