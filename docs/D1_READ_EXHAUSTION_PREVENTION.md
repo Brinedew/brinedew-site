@@ -1,5 +1,8 @@
 # D1 exhaustion: cause and prevention
 
+For the dated delivery state, decision fences and ordered remaining work, start
+with [the B-742 recovery handoff](B742_RECOVERY_HANDOFF.md).
+
 ## September 9 follow-up measurements
 
 The completion-time query must use `completed_at > ''` against the existing
@@ -15,6 +18,19 @@ preflight discarded both results before execution compared its actual scope
 again. Removing those advisory reads preserves the real sync comparison and
 authenticated readiness check. Neither these sampled queries nor changes in the
 shared ledger alone establish a complete attribution of account consumption.
+
+Explicit catalog and essence scopes now use forced unique-key probes in pages
+of 500, up to the existing 25,000-symbol request maximum. The former essence
+branch discarded scopes above 1,000 symbols and fetched the entire table; the
+catalog branch retained the filter but could scan unrelated rows through its
+optional-scope predicate. Exact per-row hashing, missing-key behavior and global
+symbol ordering remain intact. Sorting the bounded result in JavaScript avoids
+D1 temporary-sort reads. Real D1 measured two reads for one key, 2,002 for 1,001
+keys and 50,000 for 25,000 keys, with zero writes for either table. Adding 60,000
+unrelated genes did not increase those receipts. Duplicate keys are deduplicated
+and an empty normalized scope does no database work. Existing deliberately
+unscoped routes remain whole-state operations and still require complete
+operation admission; this scoped fix does not certify their cost.
 
 ## September 5 evidence
 
