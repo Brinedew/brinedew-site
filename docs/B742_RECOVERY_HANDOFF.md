@@ -15,7 +15,6 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
-
 The owner requested a budget-conscious handoff to a cheaper model. **B-742 is
 not resolved.** Finish the work below without repeating the completed incident
 investigation. This is a dated checkpoint: verify checkout and installed state

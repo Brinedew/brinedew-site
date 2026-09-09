@@ -15,7 +15,6 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
-
 Use this checklist before continuing an incident after a handoff, compaction or
 another agent's work. Read the current issue description and recent comments as
 well as this file. Historical evidence remains useful when its time is explicit.

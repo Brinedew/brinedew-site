@@ -15,7 +15,6 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
-
 For the dated delivery state, decision fences and ordered remaining work, start
 with [the B-742 recovery handoff](B742_RECOVERY_HANDOFF.md).
 
