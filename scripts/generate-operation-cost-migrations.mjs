@@ -109,6 +109,16 @@ export function voteJobVersionMigrationStatements() {
 function output() {
   const migrations = [
     [
+      "FINALIZATION_RUNNING",
+      "0103_finalization_running_index.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0103_finalization_running_index.sql",
+        0,
+        1,
+      ),
+    ],
+    [
       "FINALIZATION_STATUS",
       "0102_finalization_status_index.sql",
       reviewedMigrationStatements(
@@ -145,7 +155,7 @@ function output() {
         "migrations-iconoplasm",
         "0099_finalization_queue_indexes.sql",
         0,
-        2,
+        1,
       ),
     ],
     [

@@ -82,6 +82,7 @@ test(
         "0099_finalization_queue_indexes.sql",
         "0100_finalization_job_version.sql",
         "0101_finalization_publication_barrier.sql",
+        "0103_finalization_running_index.sql",
       ])
         schema.exec(source(name))
       const db = await runtime.getD1Database("DB")

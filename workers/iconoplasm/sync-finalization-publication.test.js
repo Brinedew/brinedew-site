@@ -62,6 +62,7 @@ test(
         "0094_finalization_summary.sql",
         "0099_finalization_queue_indexes.sql",
         "0100_finalization_job_version.sql",
+        "0103_finalization_running_index.sql",
       ])
         schema.exec(source(file))
       const db = await runtime.getD1Database("jobs")
