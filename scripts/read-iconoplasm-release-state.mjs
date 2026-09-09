@@ -102,6 +102,10 @@ async function main() {
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     resumeRunId: originRunId,
+    // The installed reader-recovery setting is the only authority that can
+    // admit a previously successful D1-free containment run. The origin still
+    // has to prove its exact deploy and verification job steps in GitHub.
+    allowReaderRecoveryOrigin: state.schema_transition && state.reader_recovery,
     token: process.env.GITHUB_TOKEN,
   })
   let maximum
