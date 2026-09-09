@@ -20897,37 +20897,6 @@ async function syncAdminReadModels(
         })
       : requestedSymbolUnits
     if (allowedSymbolUnits <= 0) {
-      const lastSnapshot = budgetState?.lastSnapshot || null
-      const doFreeTierExhausted =
-        lastSnapshot?.exhausted_by === "durable_object_rows_written_free_tier" &&
-        lastSnapshot?.exhausted === true
-      if (doFreeTierExhausted) {
-        // B-742 unresolved: this recovery exception is not a cost guarantee.
-        // Audit its actual wrapped execution and remove the exception as part
-        // of shared phase admission; exhaustion must never justify a bypass.
-        // The D1 budget kill-switch DO's free tier is saturated from usage-recording
-        // writes, not from actual D1 budget exhaustion. D1 rows_written today is well
-        // within limits. Allow finalization to proceed with a conservative chunk so
-        // the sync can finish instead of stalling until the DO resets at midnight.
-        const fallbackChunk = Math.max(1, Math.min(requestedSymbolUnits, 25))
-        const symbolChunk = symbolList.slice(symbolIndex, symbolIndex + fallbackChunk)
-        if (!symbolChunk.length) break
-        if (!skipVoteSummaries) {
-          await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
-        }
-        if (!skipGeneRollups) {
-          await rebuildGeneRollupForSymbols(env, symbolChunk)
-        }
-        if (!skipVisionRollups) {
-          const inferredVisionIds = await collectVisionIdsForSymbols(env, symbolChunk)
-          for (const visionId of inferredVisionIds) {
-            finalVisionIdSet.add(visionId)
-          }
-        }
-        processedSymbols += symbolChunk.length
-        symbolIndex += symbolChunk.length
-        continue
-      }
       partial = true
       stopReason = "rows_written_target_cap_reached_before_symbol_chunk"
       break

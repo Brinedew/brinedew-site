@@ -538,4 +538,9 @@ test("DO NOT DELETE: Iconoplasm sync finalization must not regain crutch control
     /Forbidden paths: workstation-side finalization processing, `\/api\/iconoplasm\/admin\/finalization\/process`, per-symbol Queue message formats, GitHub Actions Queue kicks/,
     "credential docs should name the forbidden sync finalization paths",
   )
+  assert.doesNotMatch(
+    runtime,
+    /doFreeTierExhausted|durable_object_rows_written_free_tier[\s\S]{0,1200}fallbackChunk/,
+    "an exhausted Durable Object budget must fail closed instead of enabling a finalization bypass",
+  )
 })
