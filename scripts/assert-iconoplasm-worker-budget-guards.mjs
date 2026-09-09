@@ -90,9 +90,22 @@ includesOrFail(
 )
 includesOrFail(
   worker,
-  "Prefer jobs that are already closest to completed_pending_finalize",
-  "Worker must keep the pending-finalize ordering guard.",
+  "prepare(dueFinalizationJobsSql(true))",
+  "Scoped dispatch must use the bounded phase-priority selector.",
 )
+includesOrFail(
+  worker,
+  "prepare(GLOBAL_DUE_FINALIZATION_SQL)",
+  "Global dispatch must use the indexed phase-priority selector.",
+)
+// The selector moved out of the runtime. Prove priority, pending-finalize
+// exclusion and durable future wakeups behaviorally in the release gate.
+for (const selectorTest of [
+  "workers/iconoplasm/sync-finalization-selection.test.js",
+  "workers/iconoplasm/sync-finalization-global-selection.test.js",
+]) {
+  includesOrFail(workflow, selectorTest, `Deploy must run ${selectorTest}.`)
+}
 includesOrFail(
   worker,
   "scoped_finalize_only",
