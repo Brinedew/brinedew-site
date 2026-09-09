@@ -293,12 +293,7 @@ async function main() {
     pendingMigrations: [],
   })
   const sentinelCapacity = await preflightSend("/capacity", "GET")
-  requireReleaseSharedCapacity(
-    sentinel.maximum,
-    sentinelCapacity,
-    Date.now(),
-    sentinel.observed,
-  )
+  requireReleaseSharedCapacity(sentinel.maximum, sentinelCapacity, Date.now(), sentinel.observed)
   // Inventory remains separately admitted and resumable through the same bounded
   // sender after the zero-D1 sentinel proves enough capacity for its baseline work.
   const inventory = await runAdmittedMigrations({
