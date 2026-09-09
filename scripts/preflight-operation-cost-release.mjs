@@ -280,17 +280,32 @@ async function main() {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     token: process.env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
   })
-  // Admit the small inventory first, without charging the plan for historical
-  // DDL. The actual inventory still reserves through the server authority.
-  await preflightOperationCostRelease({ manifest, reader, pendingMigrations: [] })
   // Verify the credential against the current authority before a deployment
   // can pause application traffic. This HEAD performs no application D1 work.
   await verifyReleaseAuthentication({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
+  // The first admitted migration inventory reads application D1. Check both
+  // provider telemetry and the authority's retained shared reservations before
+  // that read. /capacity is control-plane state and does not touch application D1.
+  const preflightSend = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN)
+  const sentinel = await preflightOperationCostRelease({
+    manifest,
+    reader,
+    pendingMigrations: [],
+  })
+  const sentinelCapacity = await preflightSend("/capacity", "GET")
+  requireReleaseSharedCapacity(
+    sentinel.maximum,
+    sentinelCapacity,
+    Date.now(),
+    sentinel.observed,
+  )
+  // Inventory remains separately admitted and resumable through the same bounded
+  // sender after the zero-D1 sentinel proves enough capacity for its baseline work.
   const inventory = await runAdmittedMigrations({
     manifest,
     releaseId: `${origin.inspectionId}-preflight`,
     inventoryOnly: true,
-    send: createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN),
+    send: preflightSend,
     files: (directory) =>
       readdirSync(new URL(`../${directory}/`, import.meta.url))
         .filter((name) => name.endsWith(".sql"))
