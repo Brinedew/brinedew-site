@@ -79,8 +79,20 @@ export function requireReaderRecoveryHeadroom(sample, now = Date.now()) {
   return { rows_read: 0, rows_written: 0, kv_writes: 0, ...maximum }
 }
 
+export function requireReaderRecoveryCompatibleState(state) {
+  if (!state || typeof state !== "object") throw new Error("COST_RELEASE_STATE_INVALID")
+  // A recovery deploy is allowed to enter the explicitly D1-free transition
+  // from normal operation, but it must never overwrite another in-progress
+  // transition with a different artifact or contract.
+  if (state.schema_transition && !state.reader_recovery)
+    throw new Error("COST_READER_RECOVERY_INCOMPATIBLE_INSTALLED_STATE")
+  return state
+}
+
 async function main() {
   const state = await readIconoplasmReleaseState()
+  const readerRecoveryOnly = process.env.ICONOPLASM_READER_RECOVERY_ONLY === "1"
+  if (readerRecoveryOnly) requireReaderRecoveryCompatibleState(state)
   const originRunId = selectReleaseOriginRunId(
     state,
     process.env.GITHUB_RUN_ID,
@@ -93,7 +105,7 @@ async function main() {
     token: process.env.GITHUB_TOKEN,
   })
   let maximum
-  if (state.schema_transition) {
+  if (state.schema_transition || readerRecoveryOnly) {
     const reader = createOperationCostAccountUsageReader({
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       token: process.env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
@@ -104,7 +116,14 @@ async function main() {
     appendFileSync(process.env.GITHUB_OUTPUT, `schema_transition=${state.schema_transition}\n`)
   if (process.env.GITHUB_ENV)
     appendFileSync(process.env.GITHUB_ENV, `ICONOPLASM_RELEASE_ORIGIN_RUN_ID=${originRunId}\n`)
-  console.log(JSON.stringify({ ...state, origin_run_id: originRunId, maximum }))
+  console.log(
+    JSON.stringify({
+      ...state,
+      origin_run_id: originRunId,
+      reader_recovery_only: readerRecoveryOnly,
+      maximum,
+    }),
+  )
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

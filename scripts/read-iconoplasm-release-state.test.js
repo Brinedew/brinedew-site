@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   readIconoplasmReleaseState,
+  requireReaderRecoveryCompatibleState,
   requireReaderRecoveryHeadroom,
   selectReleaseOriginRunId,
 } from "./read-iconoplasm-release-state.mjs"
@@ -122,5 +123,20 @@ test("zero-D1 reader recovery preserves Worker and KV headroom even when D1 is e
   assert.throws(
     () => requireReaderRecoveryHeadroom({ ...sample, kv_reads: 69901 }, now),
     /HEADROOM: kv_reads/,
+  )
+})
+
+test("reader-recovery deployment refuses to overwrite an incompatible active transition", () => {
+  assert.deepEqual(
+    requireReaderRecoveryCompatibleState({ schema_transition: false, reader_recovery: false }),
+    { schema_transition: false, reader_recovery: false },
+  )
+  assert.deepEqual(
+    requireReaderRecoveryCompatibleState({ schema_transition: true, reader_recovery: true }),
+    { schema_transition: true, reader_recovery: true },
+  )
+  assert.throws(
+    () => requireReaderRecoveryCompatibleState({ schema_transition: true, reader_recovery: false }),
+    /COST_READER_RECOVERY_INCOMPATIBLE_INSTALLED_STATE/,
   )
 })

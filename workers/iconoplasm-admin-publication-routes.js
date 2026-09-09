@@ -64,10 +64,24 @@ export function createIconoplasmAdminPublicationHandlers(services) {
       } catch {
         return done("admin_catalog_state_400", json({ error: "Invalid JSON" }, 400))
       }
-      const rawSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+      if (!Array.isArray(payload?.symbols))
+        return done(
+          "admin_catalog_state_400",
+          json({ error: "symbols must be a non-empty array" }, 400),
+        )
+      const rawSymbols = payload.symbols
       if (rawSymbols.length > 25000)
         return done("admin_catalog_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
-      const rows = await fetchCatalogStateRows(env, rawSymbols.length ? rawSymbols : null)
+      // A repeated symbol can turn a bounded lookup into duplicate D1 work.
+      // Preserve first-seen order because clients pair the returned hashes with
+      // their requested scope, but charge each canonical symbol only once.
+      const symbols = Array.from(new Set(rawSymbols.map((value) => normalizeSymbol(value))))
+      if (!symbols.length || symbols.some((symbol) => !symbol))
+        return done(
+          "admin_catalog_state_400",
+          json({ error: "symbols must contain at least one valid symbol" }, 400),
+        )
+      const rows = await fetchCatalogStateRows(env, symbols)
       return done(
         "admin_catalog_state",
         json({ ok: true, count: rows.length, rows }, 200, NO_STORE),
@@ -206,60 +220,48 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     } catch {
       return done("admin_catalog_reconcile_400", json({ error: "Invalid JSON" }, 400))
     }
-    const keepSymbolsRaw = Array.isArray(payload?.keep_symbols) ? payload.keep_symbols : []
+    if (payload?.keep_symbols !== undefined)
+      return done(
+        "admin_catalog_reconcile_400",
+        json(
+          { error: "keep_symbols reconciliation is not admitted; provide explicit delete_symbols" },
+          400,
+        ),
+      )
     const deleteSymbolsRaw = Array.isArray(payload?.delete_symbols) ? payload.delete_symbols : []
     const deferReadModels = coerceBoolean(
       payload?.defer_read_models ?? payload?.deferReadModels,
       false,
     )
-    if (keepSymbolsRaw.length > 25000)
-      return done(
-        "admin_catalog_reconcile_400",
-        json({ error: "Too many keep_symbols (max 25000)" }, 400),
-      )
     if (deleteSymbolsRaw.length > 25000)
       return done(
         "admin_catalog_reconcile_400",
         json({ error: "Too many delete_symbols (max 25000)" }, 400),
       )
-    const keepSymbols = new Set(
-      keepSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean),
-    )
     const explicitDeleteSymbols = Array.from(
       new Set(deleteSymbolsRaw.map((value) => normalizeSymbol(value)).filter(Boolean)),
     )
-    if (!keepSymbols.size && !explicitDeleteSymbols.length)
+    if (!explicitDeleteSymbols.length)
       return done(
         "admin_catalog_reconcile_400",
-        json({ error: "No keep_symbols or delete_symbols provided" }, 400),
+        json({ error: "No valid delete_symbols provided" }, 400),
       )
 
-    let toDelete = explicitDeleteSymbols
-    if (keepSymbols.size) {
-      const currentRows = await env.ICONOPLASM_DB.prepare(
-        "SELECT gene_symbol FROM icono_gene_catalog",
-      ).all()
-      const currentSymbols = Array.isArray(currentRows?.results) ? currentRows.results : []
-      toDelete = currentSymbols
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter((symbol) => symbol && !keepSymbols.has(symbol))
-    }
-    for (const symbol of toDelete) {
+    for (const symbol of explicitDeleteSymbols) {
       await env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol=?")
         .bind(symbol)
         .run()
     }
-    if (toDelete.length > 0 && !deferReadModels) {
-      await syncAdminReadModels(env, { symbols: toDelete })
+    if (!deferReadModels) {
+      await syncAdminReadModels(env, { symbols: explicitDeleteSymbols })
     }
     return done(
       "admin_catalog_reconcile",
       json(
         {
           ok: true,
-          kept: keepSymbols.size,
-          deleted: toDelete.length,
-          mode: keepSymbols.size ? "keep_symbols" : "delete_symbols",
+          deleted: explicitDeleteSymbols.length,
+          mode: "delete_symbols",
           defer_read_models: deferReadModels,
           mutation_limiter: mutationLimiterSnapshot(env),
         },
@@ -300,10 +302,23 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     } catch {
       return done("admin_essence_state_400", json({ error: "Invalid JSON" }, 400))
     }
-    const rawSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+    if (!Array.isArray(payload?.symbols))
+      return done(
+        "admin_essence_state_400",
+        json({ error: "symbols must be a non-empty array" }, 400),
+      )
+    const rawSymbols = payload.symbols
     if (rawSymbols.length > 25000)
       return done("admin_essence_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
-    const rows = await fetchEssenceStateRows(env, rawSymbols.length ? rawSymbols : null)
+    // See catalogState: retain stable first-seen membership while removing
+    // duplicate reads from an authenticated, metered state lookup.
+    const symbols = Array.from(new Set(rawSymbols.map((value) => normalizeSymbol(value))))
+    if (!symbols.length || symbols.some((symbol) => !symbol))
+      return done(
+        "admin_essence_state_400",
+        json({ error: "symbols must contain at least one valid symbol" }, 400),
+      )
+    const rows = await fetchEssenceStateRows(env, symbols)
     return done("admin_essence_state", json({ ok: true, count: rows.length, rows }, 200, NO_STORE))
   }
 
