@@ -84,7 +84,14 @@ function createFinalizationIndexMigrationCostAdapter({
       // Each partial index scans the source once. The dispatch indexes are
       // disjoint; the status index contains every unfinished job exactly once.
       const bound = {
-        rows_read: 4 * indexCount * args.max_rows + 4 * (args.max_unfinished + 1) + 8704,
+        // One status-index migration reads the table twice (guard + DDL),
+        // and the two status guard ranges together read at most 2*(U+1).
+        // The fixed allowance covers the capped schema guard and DDL metadata.
+        // Keep the already-published dispatch-migration envelope unchanged.
+        rows_read:
+          (indexCount === 1
+            ? 2 * args.max_rows + 2 * (args.max_unfinished + 1)
+            : 8 * args.max_rows + 4 * (args.max_unfinished + 1)) + 8704,
         rows_written: args.max_unfinished + 64,
         requests: 1,
       }

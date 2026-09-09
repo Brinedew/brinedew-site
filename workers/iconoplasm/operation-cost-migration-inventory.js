@@ -9,7 +9,8 @@ export const MIGRATION_SIZE_PREREQUISITES = [
     migration: "iconoplasm-migration-0102",
     resource: "iconoplasm",
     query: "finalization-status-migration-size",
-    table: "icono_sync_finalization_jobs",
+    table: "icono_sync_finalization_summary WHERE singleton = 1",
+    counter: "unfinished_count + completed_count",
     argument: "max_rows",
     maximum: 25000,
   },
@@ -17,8 +18,8 @@ export const MIGRATION_SIZE_PREREQUISITES = [
     migration: "iconoplasm-migration-0102",
     resource: "iconoplasm",
     query: "finalization-status-unfinished-migration-size",
-    table:
-      "icono_sync_finalization_jobs INDEXED BY idx_icono_finalization_unfinished WHERE status <> 'completed'",
+    table: "icono_sync_finalization_summary WHERE singleton = 1",
+    counter: "unfinished_count",
     argument: "max_unfinished",
     maximum: 5000,
   },
@@ -77,11 +78,17 @@ export function createMigrationInventoryCostAdapter({ db, resource, ...identitie
       ...MIGRATION_SIZE_PREREQUISITES.filter((item) => item.resource === resource).map((item) => [
         item.query,
         {
-          sql: `SELECT COUNT(*) AS capped_count FROM (SELECT 1 FROM ${item.table} LIMIT ${item.maximum + 1})`,
+          sql: item.counter
+            ? `SELECT ${item.counter} AS capped_count FROM ${item.table}`
+            : `SELECT COUNT(*) AS capped_count FROM (SELECT 1 FROM ${item.table} LIMIT ${item.maximum + 1})`,
           prepare(args) {
             if (args && Object.keys(args).length)
               throw new OperationCostError("COST_QUERY_ARGUMENTS_INVALID")
-            return { parameters: [], rows_read: 2 * (item.maximum + 1), rows_written: 0 }
+            return {
+              parameters: [],
+              rows_read: item.counter ? 1 : 2 * (item.maximum + 1),
+              rows_written: 0,
+            }
           },
         },
       ]),
