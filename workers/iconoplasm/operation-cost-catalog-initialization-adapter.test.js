@@ -7,10 +7,32 @@ import { createCatalogInitializationCostAdapter } from "./operation-cost-catalog
 import {
   initializePublishedHydratedCatalog,
   mergePublishedPortraitRefsIntoArtifact,
+  publishedPortraitReferenceDigest,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto
 const identities = { executable_sha256: "a".repeat(64), schema_sha256: "b".repeat(64) }
+
+test("portrait digest preserves symbol order for numeric and hyphenated prefix families", async () => {
+  const symbols = ["INS", "INS-IGF2", "MRPL1", "MRPL10", "MRPL2"]
+  const refs = symbols.map((symbol) => ({ symbol, asset_sha256: "a".repeat(64) }))
+  const expected = createHash("sha256")
+    .update(refs.map((r) => `${r.symbol}:${r.asset_sha256}`).join("|"))
+    .digest("hex")
+  assert.equal(await publishedPortraitReferenceDigest([...refs].reverse()), expected)
+  assert.equal(await publishedPortraitReferenceDigest([]), null)
+  assert.notEqual(
+    createHash("sha256")
+      .update(
+        refs
+          .map((r) => `${r.symbol}:${r.asset_sha256}`)
+          .sort()
+          .join("|"),
+      )
+      .digest("hex"),
+    expected,
+  )
+})
 
 test("catalog inspection cannot send writes, and bad inputs expose only fixed stage codes", async () => {
   let writes = 0
@@ -163,7 +185,7 @@ test(
     try {
       const kv = await runtime.getKVNamespace("KV")
       const refs = Array.from({ length: 20000 }, (_, i) => ({
-        symbol: `G${String(i).padStart(5, "0")}`,
+        symbol: i === 19998 ? "MRPL1" : i === 19999 ? "MRPL10" : `G${String(i).padStart(5, "0")}`,
         asset_sha256: createHash("sha256").update(String(i)).digest("hex"),
       }))
       const fingerprint = {

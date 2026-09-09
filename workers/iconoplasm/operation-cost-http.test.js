@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { DatabaseSync } from "node:sqlite"
 import { readFileSync } from "node:fs"
 import test from "node:test"
-import { runAdmittedCatalogInitialization } from "../../scripts/run-admitted-catalog-initialization.mjs"
+import {
+  runAdmittedCatalogInitialization,
+  runAdmittedCatalogPreparation,
+} from "../../scripts/run-admitted-catalog-initialization.mjs"
 import { createOperationCostAuthority, OPERATION_COST_ROUTE_PREFIX } from "./operation-cost-http.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -111,6 +114,64 @@ function fixture({ migrated = true, kv, initializeCatalog, kvUsage = {} } = {}) 
     },
   }
 }
+
+test("catalog preparation and later release retries do not replay an already verified publication", async () => {
+  for (const initiallyReady of [true, false]) {
+    let ready = initiallyReady,
+      writes = 0
+    const f = fixture({
+      kv: {
+        get: async () => "{}",
+        put: async () => {
+          writes++
+        },
+      },
+      initializeCatalog: async (kv, { inspectOnly }) => {
+        for (let i = 0; i < 5; i++) await kv.get(`key-${i}`)
+        const changed = !ready
+        if (changed && !inspectOnly) {
+          await kv.put("iconoplasm:hydrated-catalog-artifact:test", "{}")
+          ready = true
+        }
+        return { build_version: "test", gene_count: 1, changed }
+      },
+    })
+    const registrations = []
+    const send = async (suffix, method, body) => {
+      if (suffix === "/register") registrations.push(body.id)
+      const response = await f.authority.fetch(f.request(suffix, body))
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.code)
+      return result
+    }
+    try {
+      const options = {
+        prediction: {
+          rows_read: 0,
+          rows_written: 0,
+          requests: 2,
+          kv_reads: 5,
+          kv_writes: 1,
+          kv_deletes: 0,
+          kv_lists: 0,
+        },
+        releaseId: "original",
+        send,
+        now: f.clock,
+      }
+      await runAdmittedCatalogPreparation({ ...options, inspectionId: "first" })
+      await runAdmittedCatalogPreparation({ ...options, inspectionId: "later-release-retry" })
+      assert.equal(writes, initiallyReady ? 0 : 1)
+      assert.equal(
+        registrations.filter((id) => id.startsWith("original-")).length,
+        initiallyReady ? 0 : 1,
+      )
+      assert.equal(f.calls.length, 0)
+    } finally {
+      f.close()
+    }
+  }
+})
 
 test("capacity is admin-only, uncached and consumes no D1 queries", async () => {
   const f = fixture()

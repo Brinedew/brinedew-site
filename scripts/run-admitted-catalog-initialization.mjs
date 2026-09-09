@@ -60,6 +60,26 @@ export async function runAdmittedCatalogInitialization({
   return response
 }
 
+export async function runAdmittedCatalogPreparation({
+  prediction,
+  releaseId,
+  inspectionId,
+  send,
+  now = Date.now(),
+}) {
+  const inspection = await runAdmittedCatalogInitialization({
+    prediction: { ...prediction, kv_writes: 0 },
+    releaseId: `${inspectionId}-catalog-check`,
+    send,
+    now,
+    inspectOnly: true,
+  })
+  // Exact bytes were verified against all retained sources. A completed
+  // publication needs no replay if a later deployment step failed.
+  if (!inspection.result.changed) return inspection
+  return runAdmittedCatalogInitialization({ prediction, releaseId, send, now })
+}
+
 async function main() {
   const origin = await readReleaseOrigin({
     repository: process.env.GITHUB_REPOSITORY,
@@ -75,15 +95,10 @@ async function main() {
   // Observe retained inputs without reserving a publication write. Keep this
   // attempt's read-only identity separate from the original mutation lineage.
   const send = createReleaseSender(process.env.ICONOPLASM_ADMIN_TOKEN)
-  await runAdmittedCatalogInitialization({
-    prediction: { ...manifest.catalog_initialization_prediction, kv_writes: 0 },
-    releaseId: `${origin.inspectionId}-catalog-check`,
-    send,
-    inspectOnly: true,
-  })
-  const result = await runAdmittedCatalogInitialization({
+  const result = await runAdmittedCatalogPreparation({
     prediction: manifest.catalog_initialization_prediction,
     releaseId: origin.releaseId,
+    inspectionId: origin.inspectionId,
     send,
   })
   console.log(JSON.stringify(result))
