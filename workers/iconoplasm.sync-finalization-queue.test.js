@@ -34,6 +34,40 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    if (this.sql.includes("INDEXED BY idx_icono_finalization_running")) {
+      return {
+        results: [...this.db.jobs.values()]
+          .filter((row) => row.status === "running" && row.phase !== "completed_pending_finalize")
+          .sort(
+            (a, b) =>
+              String(a.last_attempt_at || a.requested_at || "").localeCompare(
+                String(b.last_attempt_at || b.requested_at || ""),
+              ) || a.gene_symbol.localeCompare(b.gene_symbol),
+          )
+          .slice(0, this.args[0])
+          .map((row) => ({ ...row })),
+      }
+    }
+    if (this.sql.includes("AS dispatch_priority")) {
+      return {
+        results: [...this.db.jobs.values()]
+          .filter(
+            (row) =>
+              ["queued", "retrying"].includes(row.status) &&
+              row.phase !== "completed_pending_finalize" &&
+              String(row.next_attempt_at || "") <= this.args[0],
+          )
+          .sort(
+            (a, b) =>
+              finalizationPhasePriority(a.phase) - finalizationPhasePriority(b.phase) ||
+              String(a.next_attempt_at || "").localeCompare(String(b.next_attempt_at || "")) ||
+              String(a.requested_at || "").localeCompare(String(b.requested_at || "")) ||
+              a.gene_symbol.localeCompare(b.gene_symbol),
+          )
+          .slice(0, this.args[1])
+          .map((row) => ({ ...row })),
+      }
+    }
     if (this.sql.includes("FROM icono_gene_catalog")) {
       const symbols = this.db.jobs.size ? [...this.db.jobs.keys()] : ["TP53"]
       return {
@@ -243,6 +277,24 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql.includes("AS has_runnable")) {
+      const rows = [...this.db.jobs.values()]
+      const eligible = rows.filter(
+        (row) =>
+          ["queued", "retrying"].includes(row.status) && row.phase !== "completed_pending_finalize",
+      )
+      return {
+        remaining: rows.filter((row) => row.status !== "completed").length,
+        has_runnable: Number(
+          eligible.some((row) => String(row.next_attempt_at || "") <= this.args[0]),
+        ),
+        next_attempt_at:
+          eligible
+            .map((row) => String(row.next_attempt_at || ""))
+            .filter((date) => date > this.args[0])
+            .sort()[0] || null,
+      }
+    }
     if (this.sql.includes("FROM icono_admin_dashboard_summary")) {
       this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
       return { summary_key: this.args[0] }

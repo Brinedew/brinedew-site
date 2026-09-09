@@ -6,6 +6,23 @@ import { createOperationCostD1Adapter } from "./operation-cost-d1-adapter.js"
 // read-only observation, not strand an entire migration reservation.
 export const MIGRATION_SIZE_PREREQUISITES = [
   {
+    migration: "iconoplasm-migration-0099",
+    resource: "iconoplasm",
+    query: "finalization-migration-size",
+    table: "icono_sync_finalization_jobs",
+    argument: "max_rows",
+    maximum: 25000,
+  },
+  {
+    migration: "iconoplasm-migration-0099",
+    resource: "iconoplasm",
+    query: "finalization-unfinished-migration-size",
+    table:
+      "icono_sync_finalization_jobs INDEXED BY idx_icono_finalization_unfinished WHERE status <> 'completed'",
+    argument: "max_unfinished",
+    maximum: 5000,
+  },
+  {
     migration: "iconoplasm-migration-0096",
     resource: "iconoplasm",
     query: "notifications-migration-size",

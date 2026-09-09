@@ -23,7 +23,9 @@ export async function inspectMigrationSizes({ pending, capabilities, send, relea
     if (!adapter?.query_ids?.includes(probe.query))
       throw new Error("COST_MIGRATION_PREREQUISITE_UNAVAILABLE")
     const { plan, stepId } = await acquireReleasePlan({
-      releaseId: `${releaseId}-sizes`,
+      // One resource may need several independently bounded source probes.
+      // Preserve each probe's identity across retries without mixing ceilings.
+      releaseId: `${releaseId}-sizes-${probe.query}`,
       adapter,
       prediction: probe.prediction,
       send,

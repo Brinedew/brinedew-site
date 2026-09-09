@@ -19,7 +19,13 @@ function harness(extra = false) {
   const adapters = resources.map((resource) => ({
     id: resource + "-migration-inventory",
     resource,
-    query_ids: ["applied-migrations", "notifications-migration-size", "assignments-migration-size"],
+    query_ids: [
+      "applied-migrations",
+      "notifications-migration-size",
+      "assignments-migration-size",
+      "finalization-migration-size",
+      "finalization-unfinished-migration-size",
+    ],
     ...OPERATION_COST_IDENTITIES,
   }))
   for (const [key, item] of Object.entries(manifest.migrations))
@@ -93,7 +99,7 @@ test("fresh inventory observations cannot change the retained migration operatio
     .map((call) => call.body)
   assert.equal(
     registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length,
-    5,
+    7,
   )
   for (const plan of registrations) {
     assert.ok(
