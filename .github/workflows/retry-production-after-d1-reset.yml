@@ -251,6 +251,7 @@ jobs:
           )"
 
           case "${failed_step}" in
+            "Reject exhausted capacity before release setup"|\
             "Require account-wide D1 and Worker headroom before migrations"|\
             "Check account capacity before release mutations"|\
             "Refresh account capacity immediately before pausing application work")
