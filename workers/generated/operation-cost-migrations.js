@@ -45,6 +45,10 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const FINALIZATION_STATUS_MIGRATION_NAME = "0102_finalization_status_index.sql"
+export const FINALIZATION_STATUS_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE INDEX idx_icono_finalization_status_list\nON icono_sync_finalization_jobs(\n  CASE WHEN phase = 'completed_pending_finalize' THEN 0 ELSE 1 END,\n  next_attempt_at, requested_at, gene_symbol\n)\nWHERE status <> 'completed';"
+])
 export const FINALIZATION_PUBLICATION_MIGRATION_NAME = "0101_finalization_publication_barrier.sql"
 export const FINALIZATION_PUBLICATION_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE icono_sync_finalization_publication (\n  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n  terminal_phase_count INTEGER NOT NULL CHECK(terminal_phase_count >= 0),\n  enqueued_version INTEGER NOT NULL,\n  notified_version INTEGER NOT NULL,\n  lease_token TEXT NOT NULL DEFAULT '',\n  next_attempt_at TEXT NOT NULL DEFAULT ''\n);",

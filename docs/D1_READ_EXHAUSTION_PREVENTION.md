@@ -512,3 +512,18 @@ bounded by that explicit scope, independent of unrelated history. Tests also
 cover newer enqueues, duplicate wakeups, expired lease owners
 and a retained next-day retry. Phase execution and whole-operation shared
 admission still require completion before background containment is lifted.
+
+The pending-job list retains its ready-first, due-date, request-date and symbol
+ordering. Its former optional-scope query sorted every unfinished job before
+returning the requested page. Migration 0102 adds the exact partial ordering
+index, excluding completed history. Global lists stop at the requested limit;
+scoped lists probe only the explicit unique keys before sorting. Unknown stored
+phases remain visible, and future retries retain their place in the status view.
+With 25,000 jobs and 5,000 unfinished rows, the admitted migration measured
+60,117 reads and 5,004 writes within its 128,708-read/5,064-write bound. The
+prediction reserves 64,354 reads and 5,064 writes rather than understating the
+known index-write cost. Global 1/200/1,000-row lists measured 1/200/1,000 reads;
+the maximum 5,000-key scoped list measured 20,000 reads. Adding 60,000 unfinished
+and 20,000 completed jobs left those costs unchanged. Migration guards refuse an
+oversized source before index creation; ordinary list growth requires no new
+migration or scan. These receipts bound listing, not phase execution.
