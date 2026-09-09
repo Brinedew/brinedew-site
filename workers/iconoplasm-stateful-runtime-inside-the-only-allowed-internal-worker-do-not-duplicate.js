@@ -5,6 +5,7 @@ import {
   mergeDiscoverySymbolsAtomically,
 } from "./iconoplasm/discovery-encounter.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
+import { readCatalogStateRows, readEssenceStateRows } from "./iconoplasm/sync-state-selection.js"
 import {
   GLOBAL_FINALIZATION_STATUS_LIST_SQL,
   SCOPED_FINALIZATION_STATUS_LIST_SQL,
@@ -13925,6 +13926,9 @@ function normalizeCatalogPayloadItem(rawItem) {
 }
 
 async function fetchCatalogState(env) {
+  // B-742 fence: this compares current D1 state, including unpublished changes.
+  // A published KV digest can be older and must not silently replace this proof.
+  // Whole-state admission is still unresolved; see docs/B742_RECOVERY_HANDOFF.md.
   if (!env.ICONOPLASM_DB) return { gene_count: 0, content_hash: "" }
   const rows = await loadCatalogRowsForPublish(env)
   return {
@@ -13937,34 +13941,8 @@ async function fetchCatalogStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
     ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
-    : []
-  let results = []
-  if (wantedSymbols.length && wantedSymbols.length <= 1000) {
-    const placeholders = wantedSymbols.map(() => "?").join(", ")
-    const response = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
-         FROM icono_gene_catalog
-        WHERE gene_symbol IN (${placeholders})
-        ORDER BY gene_symbol ASC`,
-    )
-      .bind(...wantedSymbols)
-      .all()
-    results = Array.isArray(response?.results) ? response.results : []
-  } else {
-    const response = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming_scope AS (
-         SELECT value AS gene_symbol
-         FROM json_each(?)
-       )
-       SELECT gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json
-         FROM icono_gene_catalog
-        WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
-        ORDER BY gene_symbol ASC`,
-    )
-      .bind(JSON.stringify(wantedSymbols), wantedSymbols.length > 0 ? 1 : 0)
-      .all()
-    results = Array.isArray(response?.results) ? response.results : []
-  }
+    : null
+  const results = await readCatalogStateRows(env.ICONOPLASM_DB, wantedSymbols)
   const out = []
   for (const row of results) {
     const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -13990,38 +13968,8 @@ async function fetchEssenceStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
     ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
-    : []
-  let results = []
-  if (wantedSymbols.length && wantedSymbols.length <= 1000) {
-    const placeholders = wantedSymbols.map(() => "?").join(", ")
-    const stmt = env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, full_name, weight_kg, molecular_weight_kda, height_cm, sex, age,
-              age_years, first_publication_year, faction,
-              skin_hex, skin_name, tissue_tau, primary_tissue, loeuf, constraint_percentile,
-              leakage_percent, leakage_hits, leakage_total,
-              aesthetics_json, aesthetics_origin_json, politics_origin_json,
-              family_surname, family_members, family_feature, manifestation,
-              sample_label, sample_number, sample_text_hash, updated_at
-         FROM icono_gene_essence
-        WHERE gene_symbol IN (${placeholders})
-        ORDER BY gene_symbol ASC`,
-    ).bind(...wantedSymbols)
-    const response = await stmt.all()
-    results = Array.isArray(response?.results) ? response.results : []
-  } else {
-    const response = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, full_name, weight_kg, molecular_weight_kda, height_cm, sex, age,
-              age_years, first_publication_year, faction,
-              skin_hex, skin_name, tissue_tau, primary_tissue, loeuf, constraint_percentile,
-              leakage_percent, leakage_hits, leakage_total,
-              aesthetics_json, aesthetics_origin_json, politics_origin_json,
-              family_surname, family_members, family_feature, manifestation,
-              sample_label, sample_number, sample_text_hash, updated_at
-         FROM icono_gene_essence
-        ORDER BY gene_symbol ASC`,
-    ).all()
-    results = Array.isArray(response?.results) ? response.results : []
-  }
+    : null
+  const results = await readEssenceStateRows(env.ICONOPLASM_DB, wantedSymbols)
 
   const out = []
   // WebCrypto hashing is asynchronous. Awaiting 19,023 digests serially made
@@ -17657,6 +17605,10 @@ export class IconoplasmVoteCoordinator {
   }
 
   async ensureBootstrapped(symbol) {
+    // B-742 fence: legacy votes seed a cold coordinator exactly once; afterward
+    // the coordinator owns votes. Do not replace a warm coordinator with a D1
+    // mirror, or declare paging elsewhere sufficient: this cold read/write set
+    // still needs bounded, resumable admission including Durable Object cost.
     const safeSymbol = normalizeSymbol(symbol)
     if (!safeSymbol) throw new Error("Missing or invalid symbol")
     if (!this.env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
@@ -19544,6 +19496,10 @@ async function listAdminReadModelVisionIdsAfter(env, rawAfterVisionId = "", limi
 }
 
 async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
+  // B-742 unresolved fence: the transactional replacement protects readers from
+  // partial summaries, but this legacy vote-history rebuild is not a bounded
+  // canonical projection. Replace it coherently with coordinator-owned state
+  // only after bounding cold bootstrap, export, replacement and phase admission.
   if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return 0
   const symbols = Array.from(
     new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
@@ -20946,6 +20902,9 @@ async function syncAdminReadModels(
         lastSnapshot?.exhausted_by === "durable_object_rows_written_free_tier" &&
         lastSnapshot?.exhausted === true
       if (doFreeTierExhausted) {
+        // B-742 unresolved: this recovery exception is not a cost guarantee.
+        // Audit its actual wrapped execution and remove the exception as part
+        // of shared phase admission; exhaustion must never justify a bypass.
         // The D1 budget kill-switch DO's free tier is saturated from usage-recording
         // writes, not from actual D1 budget exhaustion. D1 rows_written today is well
         // within limits. Allow finalization to proceed with a conservative chunk so
