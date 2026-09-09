@@ -26,6 +26,8 @@ function harness(extra = false) {
       "finalization-migration-size",
       "finalization-unfinished-migration-size",
       "finalization-terminal-migration-size",
+      "finalization-status-migration-size",
+      "finalization-status-unfinished-migration-size",
     ],
     ...OPERATION_COST_IDENTITIES,
   }))
@@ -100,7 +102,7 @@ test("fresh inventory observations cannot change the retained migration operatio
     .map((call) => call.body)
   assert.equal(
     registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length,
-    8,
+    10,
   )
   for (const plan of registrations) {
     assert.ok(

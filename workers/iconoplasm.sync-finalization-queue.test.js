@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
+  GLOBAL_FINALIZATION_STATUS_LIST_SQL,
+  SCOPED_FINALIZATION_STATUS_LIST_SQL,
+} from "./iconoplasm/sync-finalization-status-list.js"
+import {
   GLOBAL_READY_FINALIZATION_SQL,
   SCOPED_READY_FINALIZATION_SQL,
   COMPLETE_READY_FINALIZATION_SQL,
@@ -235,7 +239,9 @@ class FakeStatement {
     }
     if (
       this.sql.includes("FROM icono_sync_finalization_jobs") &&
-      this.sql.includes("WHERE status <> ?")
+      (this.sql.includes("WHERE status <> ?") ||
+        this.sql === GLOBAL_FINALIZATION_STATUS_LIST_SQL ||
+        this.sql === SCOPED_FINALIZATION_STATUS_LIST_SQL)
     ) {
       if (this.sql.includes("SELECT gene_symbol") && this.sql.includes("AND phase = ?")) {
         const [completedStatus, pendingFinalizePhase, limit] = this.args
@@ -262,7 +268,13 @@ class FakeStatement {
         this.sql.includes("WITH scoped_symbols") ||
         this.sql.includes("gene_symbol IN (SELECT value FROM json_each(?))")
       const [scopedSymbolsJson, completedStatus, scopedEnabled, pendingFinalizePhase, limit] =
-        scopedQuery ? this.args : ["[]", this.args[0], 0, this.args[1], this.args[2]]
+        this.sql === SCOPED_FINALIZATION_STATUS_LIST_SQL
+          ? [this.args[0], "completed", 1, "completed_pending_finalize", this.args[1]]
+          : this.sql === GLOBAL_FINALIZATION_STATUS_LIST_SQL
+            ? ["[]", "completed", 0, "completed_pending_finalize", this.args[0]]
+            : scopedQuery
+              ? this.args
+              : ["[]", this.args[0], 0, this.args[1], this.args[2]]
       let scopedSymbols = null
       if (Number(scopedEnabled || 0) > 0) {
         try {

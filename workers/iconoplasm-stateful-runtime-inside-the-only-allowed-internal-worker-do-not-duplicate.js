@@ -6,6 +6,10 @@ import {
 } from "./iconoplasm/discovery-encounter.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
+  GLOBAL_FINALIZATION_STATUS_LIST_SQL,
+  SCOPED_FINALIZATION_STATUS_LIST_SQL,
+} from "./iconoplasm/sync-finalization-status-list.js"
+import {
   drainCompletedFinalization,
   readFinalizationPublicationBarrier,
 } from "./iconoplasm/sync-finalization-publication.js"
@@ -22411,35 +22415,13 @@ async function listPendingSyncFinalizationJobs(env, { limit = 200, symbols = nul
   if (!env?.ICONOPLASM_DB) return []
   const cleanedLimit = Math.max(1, Math.min(1000, Number.parseInt(String(limit || 200), 10) || 200))
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
-  const scopedSymbolsJson = JSON.stringify(scopedSymbols)
-  const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `WITH scoped_symbols AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT *
-     FROM icono_sync_finalization_jobs
-     WHERE status <> ?
-       AND (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM scoped_symbols))
-     ORDER BY
-       CASE
-         WHEN phase = ? THEN 0
-         ELSE 1
-       END ASC,
-       next_attempt_at ASC,
-       requested_at ASC,
-       gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(
-      scopedSymbolsJson,
-      ICONOPLASM_SYNC_FINALIZATION_STATUS_COMPLETED,
-      scopedEnabled,
-      ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
-      cleanedLimit,
-    )
-    .all()
+  const statement = scopedSymbols.length
+    ? env.ICONOPLASM_DB.prepare(SCOPED_FINALIZATION_STATUS_LIST_SQL).bind(
+        JSON.stringify(scopedSymbols),
+        cleanedLimit,
+      )
+    : env.ICONOPLASM_DB.prepare(GLOBAL_FINALIZATION_STATUS_LIST_SQL).bind(cleanedLimit)
+  const resp = await statement.all()
   return (Array.isArray(resp?.results) ? resp.results : []).map(mapSyncFinalizationJobRow)
 }
 

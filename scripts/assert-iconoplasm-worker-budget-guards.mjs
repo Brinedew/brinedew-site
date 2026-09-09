@@ -108,6 +108,7 @@ for (const selectorTest of [
   "workers/iconoplasm/sync-finalization-selection.test.js",
   "workers/iconoplasm/sync-finalization-global-selection.test.js",
   "workers/iconoplasm/sync-finalization-publication.test.js",
+  "workers/iconoplasm/sync-finalization-status-list.test.js",
   "workers/iconoplasm/finalization-job-state.test.js",
 ]) {
   includesOrFail(workflow, selectorTest, `Deploy must run ${selectorTest}.`)
@@ -116,6 +117,16 @@ includesOrFail(
   worker,
   "drainCompletedFinalization(env.ICONOPLASM_DB",
   "Worker must use bounded versioned completion and durable publisher handoff.",
+)
+includesOrFail(
+  worker,
+  "prepare(GLOBAL_FINALIZATION_STATUS_LIST_SQL)",
+  "Global status lists must stop at the indexed limit.",
+)
+includesOrFail(
+  worker,
+  "prepare(SCOPED_FINALIZATION_STATUS_LIST_SQL)",
+  "Scoped status lists must probe explicit keys.",
 )
 includesOrFail(
   finalizationPublication,

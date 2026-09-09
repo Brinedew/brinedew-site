@@ -11,6 +11,11 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0102_finalization_status_index.sql": {
+      "adapter_id": "iconoplasm-migration-0102",
+      "arguments": { "max_rows": 25000, "max_unfinished": 5000 },
+      "prediction": { "rows_read": 64354, "rows_written": 5064, "requests": 1 }
+    },
     "iconoplasm/0101_finalization_publication_barrier.sql": {
       "adapter_id": "iconoplasm-migration-0101",
       "arguments": { "max_terminal": 5000, "max_schema_rows": 512 },
