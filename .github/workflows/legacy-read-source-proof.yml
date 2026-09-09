@@ -12,28 +12,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Print bounded source excerpts without executing application code
-        run: |
-          python3 - <<'PY'
-          import pathlib, re
-          path = pathlib.Path('workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js')
-          lines = path.read_text(encoding='utf-8').splitlines()
-          names = ['fetchCatalogState', 'loadCatalogRowsForPublish', 'fetchCatalogStateRows', 'fetchEssenceStateRows', 'fetchManifestationStateRows']
-          printed = set()
-          for name in names:
-              matches = [i for i, line in enumerate(lines) if re.match(r'^(?:async )?function ' + re.escape(name) + r'\(', line)]
-              for start in matches:
-                  end = next((i for i in range(start + 1, len(lines)) if re.match(r'^(?:export )?(?:async )?function |^(?:export )?class ', lines[i])), min(start + 300, len(lines)))
-                  print('\nFUNCTION', name, 'LINES', start + 1, end)
-                  for i in range(start, min(end, start + 300)):
-                      print(f'{i+1}: {lines[i]}')
-                      printed.add(i)
-          for term in ['readOtherUsage:', 'daily_budget_usage', 'fetchCatalogState(', 'loadCatalogRowsForPublish(']:
-              print('\nREFERENCES', term)
-              for i, line in enumerate(lines):
-                  if term in line and i not in printed:
-                      for j in range(max(0, i - 5), min(len(lines), i + 14)):
-                          if j not in printed:
-                              print(f'{j+1}: {lines[j]}')
-                              printed.add(j)
-          PY
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Reproduce actual catalog handlers against local SQLite without provider access
+        run: node scripts/probe-legacy-catalog-read.mjs
