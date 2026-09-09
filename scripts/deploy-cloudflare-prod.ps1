@@ -100,3 +100,5 @@ gh run watch $run.databaseId --exit-status
 if ($LASTEXITCODE -ne 0) {
   throw "[deploy] Production workflow failed."
 }
+
+Write-Host "[deploy] Production workflow succeeded."
