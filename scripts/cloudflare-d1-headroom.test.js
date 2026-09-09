@@ -26,7 +26,10 @@ test("operator D1 admission sums every database and fails closed on exhausted or
   `
   const result = spawnSync(executable, ["-NoProfile", "-NonInteractive", "-Command", command], {
     encoding: "utf8",
-    timeout: 15000,
+    // The test is pure local parsing, but a cold pwsh process on a busy hosted
+    // runner has exceeded 15 seconds. Keep the deadline explicit without
+    // turning valid admission coverage into timing-dependent CI noise.
+    timeout: 30000,
   })
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(JSON.parse(result.stdout), [false, false, false, false, false, true])
