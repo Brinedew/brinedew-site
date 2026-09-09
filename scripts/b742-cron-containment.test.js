@@ -10,7 +10,8 @@ test("every production state-owner upload retains incident cron containment", ()
   const workflow = parse(readWorkflow("deploy-quartz.yml"))
   const uploads = workflow.jobs["deploy-production"].steps.filter(
     (step) =>
-      step.run?.includes("pnpm exec wrangler deploy") &&
+      (step.run?.includes("pnpm exec wrangler deploy") ||
+        step.run?.includes("node scripts/deploy-iconoplasm-reader-recovery.mjs")) &&
       (step.run.includes("--config wrangler.the-only-allowed-internal-stateful-worker") ||
         step.run.includes("--config wrangler.iconoplasm-schema-transition.generated.toml")),
   )
