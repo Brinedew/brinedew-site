@@ -7,12 +7,47 @@ import {
 import {
   FINALIZATION_QUEUE_MIGRATION_NAME,
   FINALIZATION_QUEUE_MIGRATION_STATEMENTS,
+  FINALIZATION_STATUS_MIGRATION_NAME,
+  FINALIZATION_STATUS_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 
 export function createFinalizationQueueMigrationCostAdapter({
   db,
   executable_sha256,
   schema_sha256,
+}) {
+  return createFinalizationIndexMigrationCostAdapter({
+    db,
+    executable_sha256,
+    schema_sha256,
+    migrationName: FINALIZATION_QUEUE_MIGRATION_NAME,
+    migrationStatements: FINALIZATION_QUEUE_MIGRATION_STATEMENTS,
+    indexCount: 2,
+  })
+}
+
+export function createFinalizationStatusMigrationCostAdapter({
+  db,
+  executable_sha256,
+  schema_sha256,
+}) {
+  return createFinalizationIndexMigrationCostAdapter({
+    db,
+    executable_sha256,
+    schema_sha256,
+    migrationName: FINALIZATION_STATUS_MIGRATION_NAME,
+    migrationStatements: FINALIZATION_STATUS_MIGRATION_STATEMENTS,
+    indexCount: 1,
+  })
+}
+
+function createFinalizationIndexMigrationCostAdapter({
+  db,
+  executable_sha256,
+  schema_sha256,
+  migrationName,
+  migrationStatements,
+  indexCount,
 }) {
   return {
     resource: "iconoplasm",
@@ -40,16 +75,16 @@ export function createFinalizationQueueMigrationCostAdapter({
           sql: FINALIZATION_UNFINISHED_GUARD,
           parameters: [args.max_unfinished + 1, args.max_unfinished + 1, args.max_unfinished],
         },
-        ...FINALIZATION_QUEUE_MIGRATION_STATEMENTS.map((sql) => ({ sql, parameters: [] })),
+        ...migrationStatements.map((sql) => ({ sql, parameters: [] })),
         {
           sql: "INSERT INTO d1_migrations(name) VALUES (?)",
-          parameters: [FINALIZATION_QUEUE_MIGRATION_NAME],
+          parameters: [migrationName],
         },
       ]
-      // Both partial indexes scan the source once. Their populations are
-      // disjoint, and together cannot exceed the guarded unfinished count.
+      // Each partial index scans the source once. The dispatch indexes are
+      // disjoint; the status index contains every unfinished job exactly once.
       const bound = {
-        rows_read: 8 * args.max_rows + 4 * (args.max_unfinished + 1) + 8704,
+        rows_read: 4 * indexCount * args.max_rows + 4 * (args.max_unfinished + 1) + 8704,
         rows_written: args.max_unfinished + 64,
         requests: 1,
       }
@@ -67,7 +102,7 @@ export function createFinalizationQueueMigrationCostAdapter({
     },
     async dispatch(prepared) {
       const { actual } = await executeOperationCostD1Batch(db, prepared)
-      return { result: { migration: FINALIZATION_QUEUE_MIGRATION_NAME, applied: true }, actual }
+      return { result: { migration: migrationName, applied: true }, actual }
     },
   }
 }
