@@ -9,6 +9,7 @@ export async function readReleaseOrigin({
   runId,
   token,
   resumeRunId = process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
+  allowReaderRecoveryOrigin = false,
   fetcher = fetch,
   now = Date.now(),
 }) {
@@ -39,6 +40,32 @@ export async function readReleaseOrigin({
   if (originId !== runId) {
     // A code correction may continue the same migration, but a different
     // repository, workflow, branch or divergent checkout may not inherit it.
+    const isFailedCanonicalOrigin = run.status === "completed" && run.conclusion === "failure"
+    // A reader-only containment deployment can establish a transition before
+    // any migration plan exists. It is therefore the one successful origin a
+    // later canonical release may inherit. Inspect its recorded job steps,
+    // rather than trusting a successful workflow conclusion or a caller flag.
+    let isVerifiedReaderRecoveryOrigin = false
+    if (
+      !isFailedCanonicalOrigin &&
+      allowReaderRecoveryOrigin &&
+      run.status === "completed" &&
+      run.conclusion === "success"
+    ) {
+      const jobs = await get(`actions/runs/${originId}/jobs?per_page=100`)
+      const readerJobs = Array.isArray(jobs?.jobs)
+        ? jobs.jobs.filter((job) => job.name === "reader-recovery-only")
+        : []
+      const reader = readerJobs[0]
+      const completedStep = (name) =>
+        reader?.steps?.some((step) => step.name === name && step.conclusion === "success")
+      isVerifiedReaderRecoveryOrigin =
+        readerJobs.length === 1 &&
+        reader?.conclusion === "success" &&
+        completedStep("Deploy the D1-free reader containment artifact") &&
+        completedStep("Verify published readers and retained application protection") &&
+        !jobs.jobs.some((job) => job.name === "deploy-production" && job.conclusion !== "skipped")
+    }
     if (
       [run, current].some(
         (item) =>
@@ -48,8 +75,7 @@ export async function readReleaseOrigin({
           !/^[a-f0-9]{40}$/.test(item.head_sha || ""),
       ) ||
       run.workflow_id !== current.workflow_id ||
-      run.status !== "completed" ||
-      run.conclusion !== "failure" ||
+      !(isFailedCanonicalOrigin || isVerifiedReaderRecoveryOrigin) ||
       started > Date.parse(current.created_at)
     )
       throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
