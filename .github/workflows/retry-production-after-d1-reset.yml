@@ -95,7 +95,7 @@ jobs:
             response="$(curl "${args[@]}" "https://api.cloudflare.com/client/v4/${path}")"
             if ! jq -e '.success == true' <<<"${response}" >/dev/null; then
               echo "Cloudflare API ${method} ${path} failed:" >&2
-              jq -c '{errors,messages}' <<<"${response}" >&2
+              jq -c '{errors,messages}' <<<"${response}" >&2 || true
               return 1
             fi
             printf '%s' "${response}"
