@@ -1,5 +1,6 @@
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
-import { readReleaseOrigin, acquireReleasePlan } from "./operation-cost-release-plan.mjs"
+import { acquireReleasePlan } from "./operation-cost-release-plan.mjs"
+import { readCanonicalReleaseOrigin } from "./preflight-operation-cost-release.mjs"
 import { pathToFileURL } from "node:url"
 
 // Read-only diagnosis through the same authority: no raw D1/SQL or caller bounds.
@@ -58,8 +59,16 @@ export async function inspectReleaseSchema({ send, releaseId, now = Date.now() }
   return { capacity, schemas }
 }
 
+export function readInspectionReleaseOrigin(options) {
+  return readCanonicalReleaseOrigin(options)
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const origin = await readReleaseOrigin({
+  // The preceding release-state step has already proved the installed
+  // reader-recovery transition and retained origin. Use the same canonical
+  // origin validator as the later admission preflight so its verified
+  // D1-free containment origin remains usable for this read-only inspection.
+  const origin = await readInspectionReleaseOrigin({
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     token: process.env.GITHUB_TOKEN,
