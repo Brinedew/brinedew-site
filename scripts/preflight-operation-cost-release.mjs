@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
 import {
-  readReleaseOrigin,
+  readCanonicalReleaseOrigin,
   RELEASE_REQUEST_LIMIT,
   MIGRATION_RELEASE_REQUEST_LIMIT,
 } from "./operation-cost-release-plan.mjs"
@@ -28,9 +28,7 @@ const RELEASE_CONTROL_REQUESTS = 4 * RELEASE_REQUEST_LIMIT + MIGRATION_RELEASE_R
 // before this preflight runs. A successful origin is admissible only when
 // `readReleaseOrigin` proves it was the exact D1-free containment deployment;
 // all ordinary successful deployments remain invalid continuation sources.
-export function readCanonicalReleaseOrigin(options) {
-  return readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true })
-}
+export { readCanonicalReleaseOrigin }
 
 export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
   if (!token) throw new Error("COST_OPERATOR_TOKEN_REQUIRED")

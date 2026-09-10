@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import {
   acquireReleasePlan,
-  readReleaseOrigin,
+  readCanonicalReleaseOrigin,
   RELEASE_REQUEST_LIMIT,
   MIGRATION_RELEASE_REQUEST_LIMIT,
 } from "./operation-cost-release-plan.mjs"
@@ -266,7 +266,7 @@ export function createReleaseSender(
 }
 
 async function main() {
-  const origin = await readReleaseOrigin({
+  const origin = await readCanonicalReleaseOrigin({
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     token: process.env.GITHUB_TOKEN,

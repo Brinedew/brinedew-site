@@ -1,6 +1,5 @@
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
-import { acquireReleasePlan } from "./operation-cost-release-plan.mjs"
-import { readCanonicalReleaseOrigin } from "./preflight-operation-cost-release.mjs"
+import { acquireReleasePlan, readCanonicalReleaseOrigin } from "./operation-cost-release-plan.mjs"
 import { pathToFileURL } from "node:url"
 
 // Read-only diagnosis through the same authority: no raw D1/SQL or caller bounds.

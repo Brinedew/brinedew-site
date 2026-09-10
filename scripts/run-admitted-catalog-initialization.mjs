@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
-import { acquireReleasePlan, readReleaseOrigin } from "./operation-cost-release-plan.mjs"
+import { acquireReleasePlan, readCanonicalReleaseOrigin } from "./operation-cost-release-plan.mjs"
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
 
 export async function runAdmittedCatalogInitialization({
@@ -81,7 +81,7 @@ export async function runAdmittedCatalogPreparation({
 }
 
 async function main() {
-  const origin = await readReleaseOrigin({
+  const origin = await readCanonicalReleaseOrigin({
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     token: process.env.GITHUB_TOKEN,
