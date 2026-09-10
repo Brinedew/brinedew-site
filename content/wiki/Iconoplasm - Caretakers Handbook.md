@@ -9,6 +9,16 @@ aliases:
 ---
 # Iconoplasm - Caretaker's Handbook
 
+**What does it mean to be a caretaker?**
+
+Iconoplasm represents each human gene as a humanlike character. Any Iconoplasm user can claim a gene to take care for. Caretakers can modify:
+* Modify gene prose description
+* Modify gene image tags
+* 
+
+* **Quality control**: Some genes consistently  characters
+* **Real-time coordination**: Caretakers adjust to corrections in gene-to-character mappings and to new media modalities
+* Creative narratives
 
 **Who can become a caretaker?**
 At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of Brinedew.bio to be a caretaker. This might change in the future.
@@ -26,8 +36,10 @@ A change frequency limit, currently at 1 change per day, will get adjusted to be
 
 **What if I want to swap genes with another caretaker?**
 
-
+Go to a gene page and click the "request swap" button in the gene toolbar. The caretaker for that gene will get a swap request notification and can either accept or reject it. You can only have one swap request active at a time.
 
 **What happens when two caretakers have can't compromise on a compatible narrative?**
 
-For now, I will adjudicate the conflicts personally in the interest of sustained community growth. In the future, a formal system might be implemented, based on e.g. popularity of the downstream works.
+For now, I will adjudicate the conflicts personally in the interest of sustained community growth. In the future, a formal conflict resolution system might get implemented.
+
+**Can the displayed gene prose snippet conflict with canonical image?**
