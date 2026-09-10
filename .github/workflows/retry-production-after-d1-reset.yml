@@ -27,6 +27,10 @@ concurrency:
 
 jobs:
   recover-production:
+    # B-751: full server activation is verified in production run 34509853637.
+    # Retire unattended incident controls without unpausing any background work.
+    # Keep the explicit emergency path; see docs/B751_QUARANTINE_RETIREMENT.md.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
