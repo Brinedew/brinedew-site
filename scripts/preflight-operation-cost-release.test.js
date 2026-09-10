@@ -8,6 +8,7 @@ import {
   chooseReleaseAdmission,
   readCanonicalReleaseOrigin,
 } from "./preflight-operation-cost-release.mjs"
+import { readInspectionReleaseOrigin } from "./inspect-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
 
 const releaseManifest = JSON.parse(
@@ -90,6 +91,21 @@ test("canonical preflight accepts only the verified reader-recovery origin", asy
 
   assert.deepEqual(
     await readCanonicalReleaseOrigin({
+      repository: "Brinedew/brinedew-site",
+      runId: "456",
+      resumeRunId: "123",
+      token: "test",
+      now,
+      fetcher,
+    }),
+    {
+      releaseId: "deploy-123",
+      inspectionId: "inspect-456-1",
+      started: now - 10_000,
+    },
+  )
+  assert.deepEqual(
+    await readInspectionReleaseOrigin({
       repository: "Brinedew/brinedew-site",
       runId: "456",
       resumeRunId: "123",
