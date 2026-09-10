@@ -4,6 +4,13 @@ export const RELEASE_REQUEST_LIMIT = 40
 // reads and inventory/registration overhead. The shared daily ceiling remains.
 export const MIGRATION_RELEASE_REQUEST_LIMIT = 256
 
+// A verified reader-only containment deployment is the one successful origin
+// that can safely carry a retained migration lineage into canonical release
+// work. All callers after release-state selection use this shared validator.
+export function readCanonicalReleaseOrigin(options) {
+  return readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true })
+}
+
 export async function readReleaseOrigin({
   repository,
   runId,
