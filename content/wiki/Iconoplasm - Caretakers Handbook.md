@@ -11,15 +11,18 @@ aliases:
 
 
 **Who can become a caretaker?**
-At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of Brinedew.bio to be a caretaker.
+At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of Brinedew.bio to be a caretaker. This might change in the future.
 
 **How long can I stay a caretaker of a single gene?**
-There is no time limit - you can settle on your favorite gene and stay its caretaker for as long as you'd like.
+There is no time limit - you can settle on your favorite gene and stay its caretaker for as long as you'd like. A vision for Iconoplasm is to eventually settle down to a state where every gene has had the same caretaker for decades at a time.
 
-However, in some situations you could be removed from the caretaker position:
-* Going silent for months at a time despite getting coordination requests from other caretakers.
-* 
+However, it's possible that you could be removed from the caretaker position against your wish. One example would be going silent for months at a time despite getting coordination requests from other caretakers. Other such removal policies might be implemented in the future in the interest of the project's continued flourishing, after thorough consideration.
 
+**How many times can I change which gene I'm caretaking?**
+
+While you can only caretake one gene at a time, there's no limit on how many times you can change which gene you're a caretaker for. 
+
+A change frequency limit, currently at 1 change per day, will get adjusted to be slower in the future. This way, the character roster starts chaotic but eventually anneals down to a stable state.
 
 **What if I want to swap genes with another caretaker?**
 
