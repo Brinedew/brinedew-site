@@ -117,6 +117,56 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
   assert.equal(payload.publish_gallery_dirty_shards, false)
 })
 
+test("global publication sync returns the durable publisher handoff outcome", async () => {
+  const handlers = createIconoplasmAdminReadModelHandlers(
+    readModelServices({
+      syncReadModelsAndPublishGalleryDirtyShards: async () => ({
+        symbols: 0,
+        visions: 0,
+        publication_queued: true,
+        migration_pending: false,
+      }),
+    }),
+  )
+
+  const response = await responseFrom(handlers["admin_read_models.sync"], {
+    body: { publish_gallery_dirty_shards: true },
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.publication_queued, true)
+  assert.equal(payload.migration_pending, false)
+  assert.equal(payload.card_catalog_publication, null)
+})
+
+test("global publication sync preserves a safe publisher deferral", async () => {
+  const handlers = createIconoplasmAdminReadModelHandlers(
+    readModelServices({
+      syncReadModelsAndPublishGalleryDirtyShards: async () => ({
+        symbols: 0,
+        visions: 0,
+        card_catalog_publication: {
+          deferred: true,
+          resume_after: "2026-09-11T00:00:00.000Z",
+          private_diagnostic: "must not leave the worker",
+        },
+      }),
+    }),
+  )
+
+  const response = await responseFrom(handlers["admin_read_models.sync"], {
+    body: { publish_gallery_dirty_shards: true },
+  })
+  const payload = await response.json()
+
+  assert.deepEqual(payload.card_catalog_publication, {
+    deferred: true,
+    resume_after: "2026-09-11T00:00:00.000Z",
+  })
+  assert.equal("private_diagnostic" in payload.card_catalog_publication, false)
+})
+
 test("bootstrap implements the HEAD method admitted by its route contract", async () => {
   let stateReads = 0
   const handlers = createIconoplasmAdminReadModelHandlers(
