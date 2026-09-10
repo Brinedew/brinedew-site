@@ -1,0 +1,104 @@
+name: One-time provider recovery check 20260911
+
+on:
+  push:
+    branches: ["diagnostic/public-recovery-check-20260911"]
+    paths: [".github/workflows/provider-recovery-check-20260911.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  provider-read-only-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Read three provider metadata endpoints without D1 queries or state changes
+        shell: python
+        run: |
+          import datetime
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+          account = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+          if not token or not account:
+              raise SystemExit("Required existing provider credentials are unavailable.")
+          base = "https://api.cloudflare.com/client/v4/"
+          headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+          errors = []
+          print("Sample UTC: " + datetime.datetime.now(datetime.timezone.utc).isoformat())
+
+          def request(path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              selected_headers = dict(headers)
+              if data is not None:
+                  selected_headers["Content-Type"] = "application/json"
+              req = urllib.request.Request(base + path, data=data, headers=selected_headers)
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  raw = response.read(2097153)
+              if len(raw) > 2097152:
+                  raise ValueError("Provider metadata exceeded the bounded response size.")
+              result = json.loads(raw)
+              if result.get("success") is False or result.get("errors"):
+                  raise ValueError("Provider returned an API error; no retry or mutation attempted.")
+              return result
+
+          def report_failure(label, error):
+              # Never print credentials, response bodies or HTTP request headers.
+              status = error.code if isinstance(error, urllib.error.HTTPError) else None
+              errors.append(label)
+              print(json.dumps({"check": label, "error_type": type(error).__name__, "http_status": status}))
+
+          try:
+              result = request(f"accounts/{account}/workers/scripts/geneguessr-api/schedules")
+              schedules = result.get("result", {}).get("schedules")
+              if not isinstance(schedules, list):
+                  raise ValueError("Unexpected schedules metadata shape.")
+              print(json.dumps({"check": "installed_cron", "schedules": sorted(item["cron"] for item in schedules)}))
+          except Exception as error:
+              report_failure("installed_cron", error)
+
+          try:
+              result = request(f"accounts/{account}/queues?per_page=100")
+              inventory = result.get("result")
+              if not isinstance(inventory, list):
+                  raise ValueError("Unexpected queue inventory shape.")
+              names = ("iconoplasm-sync-finalization", "iconoplasm-vote-projection", "iconoplasm-gene-card-materialization")
+              for name in names:
+                  matches = [item for item in inventory if item.get("queue_name") == name]
+                  if len(matches) != 1:
+                      raise ValueError("Required queue absent or ambiguous; inspect the provider inventory.")
+                  settings = matches[0].get("settings", {})
+                  print(json.dumps({"check": "installed_queue", "queue": name,
+                                    "delivery_paused": settings.get("delivery_paused"),
+                                    "message_retention_period": settings.get("message_retention_period")}))
+          except Exception as error:
+              report_failure("installed_queues", error)
+
+          try:
+              day = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+              query = "query B742D1Recovery($accountTag: string, $day: Date) { viewer { accounts(filter: { accountTag: $accountTag }) { d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) { dimensions { date databaseId } sum { rowsRead rowsWritten } } } } }"
+              result = request("graphql", {"query": query, "variables": {"accountTag": account, "day": day}})
+              accounts = result.get("data", {}).get("viewer", {}).get("accounts", [])
+              if len(accounts) != 1:
+                  raise ValueError("D1 analytics did not return exactly one account.")
+              groups = accounts[0].get("d1AnalyticsAdaptiveGroups")
+              if not isinstance(groups, list) or len(groups) >= 1000:
+                  raise ValueError("Missing or possibly truncated D1 analytics.")
+              reads = sum(item["sum"]["rowsRead"] for item in groups)
+              writes = sum(item["sum"]["rowsWritten"] for item in groups)
+              print(json.dumps({"check": "provider_d1_today", "utc_day": day, "groups": len(groups),
+                                "rows_read": reads, "rows_written": writes,
+                                "note": "Provider analytics sample only; this is not the application admission ledger or full enabled-day acceptance."}))
+          except Exception as error:
+              report_failure("provider_d1_today", error)
+
+          print(json.dumps({"metadata_checks": 3, "failed": errors,
+                            "provider_mutations": 0, "direct_d1_queries": 0, "retries": 0}))
+          raise SystemExit(bool(errors))
