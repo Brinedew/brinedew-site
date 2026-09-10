@@ -53,7 +53,10 @@ for (const [filename, jobName] of workflows) {
 }
 
 test("canonical protected production and D1-free repair paths remain independent", () => {
-  const source = readFileSync(new URL("../.github/workflows/deploy-quartz.yml", import.meta.url), "utf8")
+  const source = readFileSync(
+    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+    "utf8",
+  )
   const workflow = parse(source)
   assert.ok(Object.hasOwn(workflow.on, "push"))
   assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
