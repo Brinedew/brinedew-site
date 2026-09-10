@@ -18,12 +18,20 @@ test("every production state-owner upload retains incident cron containment", ()
   assert.equal(uploads.length, 4)
   const conditional = uploads.filter((step) => step.if)
   assert.deepEqual(conditional.map((step) => step.if).sort(), [
+    "steps.migrations.outputs.continuation_required != 'true'",
+    "steps.migrations.outputs.continuation_required != 'true'",
     "steps.release-state.outputs.schema_transition != 'true'",
     "steps.release-state.outputs.schema_transition == 'true'",
   ])
-  // Exactly one of the two schema stages runs; a release still uploads the
-  // state owner at most three times, regardless of initial maintenance state.
-  assert.equal(uploads.filter((step) => !step.if).length + 1, 3)
+  // Exactly one reader-protection upload is selected from the installed
+  // transition state. The normal state-owner deploy and post-Pages cache
+  // activation are both unavailable while an admitted migration asks the
+  // server-side controller to continue on a later fresh-capacity window.
+  assert.equal(
+    uploads.filter((step) => step.if === "steps.migrations.outputs.continuation_required != 'true'")
+      .length,
+    2,
+  )
   const expected = '--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'
   for (const step of uploads) assert.ok(step.run.includes(expected), step.name)
 })
