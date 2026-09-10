@@ -1,0 +1,99 @@
+name: One-time public recovery check 20260911
+
+on:
+  push:
+    branches: ["diagnostic/public-recovery-check-20260911"]
+    paths: [".github/workflows/public-recovery-check-20260911.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  public-read-only-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check ten public resources without credentials or retries
+        shell: python
+        run: |
+          import datetime
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import subprocess
+          import tempfile
+
+          origin = "https://iconoplasm.brinedew.bio"
+          probes = [
+              ("Brinedew homepage", "https://brinedew.bio/", "html", "Brinedew"),
+              ("Iconoplasm homepage", origin + "/", "html", "Iconoplasm"),
+              ("GeneGuessr homepage", "https://geneguessr.brinedew.bio/", "html", "GeneGuessr"),
+              ("TP53 page", origin + "/gene/TP53", "gene_html", "TP53"),
+              ("BRCA1 page", origin + "/gene/BRCA1", "gene_html", "BRCA1"),
+              ("TP53 detail API", origin + "/api/iconoplasm/site/genes/TP53", "gene_json", "TP53"),
+              ("BRCA1 detail API", origin + "/api/iconoplasm/site/genes/BRCA1", "gene_json", "BRCA1"),
+              ("TP53 blot", origin + "/blot/TP53.webp", "webp", "TP53"),
+              ("BRCA1 blot", origin + "/blot/BRCA1.webp", "webp", "BRCA1"),
+              ("Anonymous authority protection", origin + "/api/iconoplasm/authority/events", "protected", ""),
+          ]
+          results = []
+          print("Sample UTC: " + datetime.datetime.now(datetime.timezone.utc).isoformat())
+          with tempfile.TemporaryDirectory() as tmp:
+              for index, (name, url, kind, expected) in enumerate(probes):
+                  body_path = pathlib.Path(tmp) / f"body-{index}"
+                  header_path = pathlib.Path(tmp) / f"headers-{index}"
+                  call = subprocess.run(
+                      ["curl", "--silent", "--show-error", "--location", "--max-redirs", "2",
+                       "--connect-timeout", "8", "--max-time", "20", "--max-filesize", "3145728",
+                       "--retry", "0", "--user-agent", "Brinedew-Recovery-Audit/20260911",
+                       "--dump-header", str(header_path), "--output", str(body_path),
+                       "--write-out", "%{http_code}", url],
+                      capture_output=True, text=True, timeout=25,
+                  )
+                  body = body_path.read_bytes() if body_path.exists() else b""
+                  text = body.decode("utf-8", errors="replace") if kind != "webp" else ""
+                  headers = header_path.read_text(errors="replace") if header_path.exists() else ""
+                  status = int(call.stdout) if call.stdout.isdigit() else 0
+                  try:
+                      data = json.loads(text)
+                  except (ValueError, TypeError):
+                      data = {}
+                  if not isinstance(data, dict):
+                      data = {}
+                  passed = call.returncode == 0 and status == 200
+                  detail = {}
+                  if kind in ("html", "gene_html"):
+                      detail["expected_text_present"] = expected.casefold() in text.casefold()
+                      passed = passed and detail["expected_text_present"]
+                      if kind == "gene_html":
+                          detail["semantic_gene_profile"] = "icono-card-semantic-profile" in text
+                          detail["server_rendered_gene"] = 'data-icono-server-rendered-gene="true"' in text
+                          detail["legacy_empty_shell"] = "data-b742-d1-free-gene-shell" in text
+                          passed = passed and detail["semantic_gene_profile"] and not detail["legacy_empty_shell"]
+                  elif kind == "gene_json":
+                      detail = {"symbol": data.get("symbol"), "code": data.get("code"),
+                                "source": (data.get("detail_availability") or {}).get("source")}
+                      passed = passed and detail["symbol"] == expected
+                  elif kind == "webp":
+                      detail["valid_webp_header"] = body[:4] == b"RIFF" and body[8:12] == b"WEBP"
+                      passed = passed and detail["valid_webp_header"]
+                  elif kind == "protected":
+                      detail = {"code": data.get("code"),
+                                "schema_transition": "ICONOPLASM_SCHEMA_TRANSITION" in text}
+                      passed = call.returncode == 0 and status in (401, 403) and not detail["schema_transition"]
+                  selected_headers = {}
+                  for line in headers.splitlines():
+                      key, separator, value = line.partition(":")
+                      if separator and key.lower() in ("content-type", "date", "age", "cf-cache-status", "cf-ray"):
+                          selected_headers[key.lower()] = value.strip()
+                  result = {"name": name, "url": url, "status": status, "bytes": len(body),
+                            "sha256": hashlib.sha256(body).hexdigest(), "passed": passed,
+                            "headers": selected_headers, "detail": detail}
+                  if call.returncode:
+                      result["transport_error"] = call.stderr[:300]
+                  results.append(result)
+                  print(json.dumps(result, sort_keys=True))
+          failed = [item["name"] for item in results if not item["passed"]]
+          print(json.dumps({"total": len(results), "passed": len(results) - len(failed), "failed": failed}))
+          raise SystemExit(bool(failed))
