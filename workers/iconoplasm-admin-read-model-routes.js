@@ -154,6 +154,20 @@ export function createIconoplasmAdminReadModelHandlers(services) {
           skip_gene_rollups: skipGeneRollups,
           skip_vision_rollups: skipVisionRollups,
           skip_dashboard: skipDashboard,
+          // The durable finalization consumer uses this response as the only
+          // acknowledgement that the card publisher accepted its one global
+          // wakeup. Do not drop these outcomes: doing so makes a successful
+          // handoff look rejected and leaves the completion ledger retrying.
+          publication_queued: result?.publication_queued === true,
+          migration_pending: result?.migration_pending === true,
+          card_catalog_publication:
+            result?.card_catalog_publication && typeof result.card_catalog_publication === "object"
+              ? {
+                  deferred: result.card_catalog_publication.deferred === true,
+                  resume_after:
+                    sanitizeText(result.card_catalog_publication.resume_after || "", 64) || null,
+                }
+              : null,
           card_catalog:
             result?.card_catalog && typeof result.card_catalog === "object"
               ? {
