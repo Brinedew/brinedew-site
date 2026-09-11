@@ -10,6 +10,12 @@ import {
 // Never overwrite a stable URL with different bytes or repair a miss from D1.
 // Healthy CDN misses end at paid Bunny Storage, not a per-reader Worker build.
 export const PUBLISHED_CARD_OBJECT_PREFIX = "published-cards/v2/immutable"
+// Publication objects are content-addressed and immutable, so a transient Bunny
+// Storage timeout (the request aborts at portraitStorageRequestTimeout) or a
+// retryable 408/425/429/5xx is safe to retry inside the fetch. The card
+// publication coordinator's own bounded backoff remains the outer retry bound.
+// Linear B-753.
+export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
 export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   cards: 65536,
   genes: 65536,
@@ -94,7 +100,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
   const send =
     request ||
     ((url, init, key) =>
-      fetchPortraitStorage(env, url, init, { operation: init.method, key, maxAttempts: 1 }))
+      fetchPortraitStorage(env, url, init, {
+        operation: init.method,
+        key,
+        maxAttempts: PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS,
+      }))
 
   async function read(key, { verifyStorageOnly = false } = {}) {
     const identity = objectIdentity(key)
