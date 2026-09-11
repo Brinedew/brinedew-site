@@ -298,6 +298,121 @@ test("rssAdapter no image captions in excerpts", async () => {
   }
 })
 
+// ─── sitemapAdapter (no-RSS sources) ──────────────────────────
+
+test("jsonLdArticle reads headline, author and publish date from schema.org JSON-LD", () => {
+  const { jsonLdArticle } = mod.__test
+  const ld = jsonLdArticle(fixture("asimov-article.html"))
+  assert.equal(ld.headline, "The Origins of Adjuvants")
+  assert.equal(ld.author.name, "Kamal Nahas")
+  assert.equal(ld.datePublished, "2026-01-15T00:00:00.000Z")
+})
+
+test("jsonLdArticle returns null when no Article block is present", () => {
+  const { jsonLdArticle } = mod.__test
+  assert.equal(jsonLdArticle("<html><body><p>no ld here</p></body></html>"), null)
+})
+
+test("sitemapAdapter baselines silently on first run, then posts only new articles", async () => {
+  const { sitemapAdapter } = mod.__test
+  const kv = simpleKv()
+  const baseSitemap = fixture("asimov-sitemap.xml")
+  const withNew = baseSitemap.replace(
+    "</urlset>",
+    "  <url><loc>https://press.asimov.com/articles/new-discovery</loc></url>\n</urlset>",
+  )
+  const article = fixture("asimov-article.html")
+  let sitemapCalls = 0
+  const fm = mockFetch((url) => {
+    if (String(url).includes("sitemap-0.xml")) {
+      sitemapCalls += 1
+      return new Response(sitemapCalls === 1 ? baseSitemap : withNew, { status: 200 })
+    }
+    if (String(url).includes("/articles/")) return new Response(article, { status: 200 })
+    return new Response("not found", { status: 404 })
+  })
+  try {
+    const adapter = sitemapAdapter({
+      id: "asimovpress",
+      name: "Asimov Press",
+      sitemapUrl: "https://press.asimov.com/sitemap-0.xml",
+      dropSelectors: [".ap-listen-btn"],
+      maxAgeDays: 3650,
+    })
+
+    const baseline = await adapter.collect({ KV: kv })
+    assert.deepEqual(baseline, [], "first run must baseline silently")
+    assert.ok(kv._.has("feed_source_seen_v34:asimovpress"), "seen marker must be written")
+    assert.ok(
+      kv._.has("feed_v34:asimovpress:https://press.asimov.com/articles/adjuvants"),
+      "existing article must be marked posted",
+    )
+
+    const items = await adapter.collect({ KV: kv })
+    assert.equal(items.length, 1, "only the newly discovered article should post")
+    const item = items[0]
+    assert.equal(item.id, "https://press.asimov.com/articles/new-discovery")
+    assert.equal(item.title, "The Origins of Adjuvants")
+    assert.equal(item.author, "Kamal Nahas")
+    assert.equal(item.publishedAt, "2026-01-15T00:00:00.000Z")
+    assert.ok(
+      !item.excerpt.includes("Listen to this article"),
+      "the listen control must not leak into the excerpt",
+    )
+    assert.ok(item.excerpt.includes("James Phipps"), "real lead paragraph must be present")
+  } finally {
+    fm.restore()
+  }
+})
+
+test("sitemapAdapter first run posts the newest latest-page article and baselines the rest", async () => {
+  const { sitemapAdapter } = mod.__test
+  const kv = simpleKv()
+  const sitemap = fixture("asimov-sitemap.xml")
+  const home = fixture("asimov-home.html")
+  const article = fixture("asimov-article.html")
+  const fm = mockFetch((url) => {
+    const u = String(url)
+    if (u.includes("sitemap-0.xml")) return new Response(sitemap, { status: 200 })
+    if (u === "https://press.asimov.com" || u === "https://press.asimov.com/") {
+      return new Response(home, { status: 200 })
+    }
+    if (u.endsWith("/articles/xenopus")) {
+      return new Response(article.replace("2026-01-15", "2026-09-08"), { status: 200 })
+    }
+    if (u.includes("/articles/")) return new Response(article, { status: 200 })
+    return new Response("not found", { status: 404 })
+  })
+  try {
+    const adapter = sitemapAdapter({
+      id: "asimovpress",
+      name: "Asimov Press",
+      sitemapUrl: "https://press.asimov.com/sitemap-0.xml",
+      latestPage: "https://press.asimov.com",
+      dropSelectors: [".ap-listen-btn"],
+      maxAgeDays: 3650,
+    })
+
+    const first = await adapter.collect({ KV: kv })
+    assert.equal(first.length, 1, "first run posts the single newest article")
+    assert.equal(
+      first[0].id,
+      "https://press.asimov.com/articles/xenopus",
+      "newest by published date wins",
+    )
+    assert.ok(
+      !kv._.has("feed_v34:asimovpress:https://press.asimov.com/articles/xenopus"),
+      "featured article must stay unposted so the handler posts it",
+    )
+    assert.ok(
+      kv._.has("feed_v34:asimovpress:https://press.asimov.com/articles/adjuvants"),
+      "the rest of the catalogue must be baselined",
+    )
+  } finally {
+    fm.restore()
+  }
+})
+
 // ─── handlePostDailyFeed ──────────────────────────────────────
 
 test("handlePostDailyFeed skips when no new items exist (all already posted)", async () => {
