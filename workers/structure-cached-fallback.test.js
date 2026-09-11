@@ -473,3 +473,74 @@ test("target structure endpoint repairs stale session-pinned target metadata fro
     globalThis.fetch = originalFetch
   }
 })
+
+test("target structure endpoint serves the issued day-cache structure when D1 cannot provide the target", async () => {
+  // Regression guard for the 2026-09-11 account-wide D1 read-limit incident.
+  //
+  // The daily bootstrap cache already records the exact target protein and
+  // structure identity that was issued to the browser with the target token.
+  // Byte delivery is a direct upstream fetch keyed by that identity, so it must
+  // not 404 merely because a fresh D1 target-selection read is unavailable.
+  // Here the DB has no row for the pinned target and the daily selection cache
+  // cannot load, so the pre-fix code returned 404. The issued day cache must be
+  // used instead, without any successful D1 selection read.
+  const waits = []
+  const upstreamRequests = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    upstreamRequests.push({ url: String(input), method: init?.method || "GET" })
+    return new Response(new Uint8Array([0x83, 0xa7, 0x65, 0x6e, 0x63]), {
+      status: 200,
+      headers: { "Content-Type": "application/octet-stream" },
+    })
+  }
+  const dailyPayload = {
+    origin: "https://geneguessr.brinedew.bio",
+    targetProtein: { uniprot: "Q9CACHE", gene: "CACHED", full_name: "Cached target" },
+    structureToken: { url: "https://geneguessr.brinedew.bio/api/structure-cached?type=target" },
+    structureMeta: {
+      source: "pdb",
+      r2Key: "pdb/9GWJ.bcif",
+      upstreamUrl: "https://models.rcsb.org/v1/9GWJ/full?encoding=bcif&copy_all_categories=false",
+      shortLabel: "RCSB PDB",
+      displayLabel: "RCSB PDB (9GWJ)",
+      format: "bcif",
+    },
+  }
+  const gameSessions = createGameSessions({
+    date: "2026-09-11",
+    targetId: "Q9ABSENT",
+  })
+
+  try {
+    const response = await worker.fetch(
+      new Request("https://geneguessr.brinedew.bio/api/structure-cached?type=target", {
+        headers: { Cookie: "geneguessr_session=test-session" },
+      }),
+      {
+        GAME_SESSIONS: gameSessions,
+        DB: createDb({}),
+        KV: {
+          async get(key) {
+            return String(key).startsWith("daily_bootstrap:") ? dailyPayload : null
+          },
+          async put() {},
+          async delete() {},
+        },
+      },
+      createCtx(waits),
+    )
+
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("content-type"), "application/octet-stream")
+    assert.deepEqual(upstreamRequests, [
+      {
+        url: "https://models.rcsb.org/v1/9GWJ/full?encoding=bcif&copy_all_categories=false",
+        method: "GET",
+      },
+    ])
+    await Promise.allSettled(waits)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

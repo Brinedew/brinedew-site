@@ -4427,7 +4427,12 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     }
 
     if (!protein) {
-      protein = await getDailyTargetProtein(env, { practice: practiceMode })
+      try {
+        protein = await getDailyTargetProtein(env, { practice: practiceMode })
+      } catch (err) {
+        console.warn("GeneGuessr: structure-cached daily target lookup failed", err)
+        protein = null
+      }
       console.log(
         "GeneGuessr: structure-cached fallback to daily:",
         protein?.uniprot,
@@ -4435,45 +4440,75 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       )
     }
 
-    if (!protein) {
+    // D1-independent byte delivery. The exact structure identity was already
+    // selected and issued to this browser with the bootstrap target token, and
+    // the session pins that same identity. Serving bytes must not depend on a
+    // fresh D1 target-selection read: on 2026-09-11 an account-wide D1 read
+    // limit turned an available RCSB structure into 404 "Target unavailable".
+    // Prefer the issued day cache (authoritative for today), then the session
+    // pin, and only re-derive from the DB when neither is present. This keeps
+    // the token/bytes invariant because every source here is the exact metadata
+    // that produced the token the client already holds.
+    let issuedFromDailyCache = false
+    if (!practiceMode) {
+      const dailyCached = await getDailyBootstrapCache(
+        env,
+        new Date().toISOString().slice(0, 10),
+        url.origin,
+      )
+      if (dailyCached?.structureMeta?.r2Key) {
+        targetStructureMeta = dailyCached.structureMeta
+        issuedFromDailyCache = true
+      }
+      if (!protein && dailyCached?.targetProtein) {
+        protein = dailyCached.targetProtein
+      }
+    }
+    if (!protein && !targetStructureMeta?.r2Key && state?.targetStructureMeta?.r2Key) {
+      targetStructureMeta = state.targetStructureMeta
+    }
+
+    if (!protein && !targetStructureMeta?.r2Key) {
       return Response.json({ error: "Target unavailable" }, { status: 404, headers: corsHeaders })
     }
 
-    // First-class invariant: a valid session-pinned metadata value wins. This
-    // field is the server's memory of "what structure did we tell this player
-    // they are looking at?" Valid pins are deliberately stronger than KV.
-    //
-    // Compatibility check matters for old Edge/Chrome profiles that loaded the
-    // game during the 2026-05-19 incident. Those sessions may already contain a
-    // bad pin such as `swissmodel/P24534_5dqs.pdb` while the current DB row says
-    // `structure_source='pdb', pdb_id='1B64'`. If we blindly trust that old pin,
-    // Ctrl+Shift+R cannot fix the browser because the stale value lives in the
-    // Durable Object session, not in the HTTP cache. A pin is authoritative only
-    // while it still matches the current explicit stored source for the target.
-    targetStructureMeta = state?.targetStructureMeta || null
-    if (!isSessionTargetStructureMetaStillValid(protein, targetStructureMeta)) {
-      // Old or corrupted sessions created before the pin invariant was correct
-      // have only `targetId`, or have a pin that contradicts today's DB-backed
-      // source. Backfill once from the canonical source and persist it. This is
-      // not a convenience fallback; it is a migration path that moves stale
-      // browser sessions onto the same invariant as new sessions.
-      targetStructureMeta = await getCanonicalStructureMeta(protein, env)
-      if (
-        targetStructureMeta?.r2Key &&
-        state?.targetId &&
-        !sameStructureMeta(state.targetStructureMeta, targetStructureMeta)
-      ) {
-        state.targetStructureMeta = targetStructureMeta
-        try {
-          await saveGameState(env, sessionId, state, {
-            operation: "structure_cached_target_selection_backfill",
-            requestPath: "/api/structure-cached",
-          })
-        } catch (err) {
-          console.warn(
-            "GeneGuessr: failed to backfill target structure selection",
-            err?.message || err,
-          )
+    if (protein && !issuedFromDailyCache) {
+      // First-class invariant: a valid session-pinned metadata value wins. This
+      // field is the server's memory of "what structure did we tell this player
+      // they are looking at?" Valid pins are deliberately stronger than KV.
+      //
+      // Compatibility check matters for old Edge/Chrome profiles that loaded the
+      // game during the 2026-05-19 incident. Those sessions may already contain a
+      // bad pin such as `swissmodel/P24534_5dqs.pdb` while the current DB row says
+      // `structure_source='pdb', pdb_id='1B64'`. If we blindly trust that old pin,
+      // Ctrl+Shift+R cannot fix the browser because the stale value lives in the
+      // Durable Object session, not in the HTTP cache. A pin is authoritative only
+      // while it still matches the current explicit stored source for the target.
+      targetStructureMeta = state?.targetStructureMeta || null
+      if (!isSessionTargetStructureMetaStillValid(protein, targetStructureMeta)) {
+        // Old or corrupted sessions created before the pin invariant was correct
+        // have only `targetId`, or have a pin that contradicts today's DB-backed
+        // source. Backfill once from the canonical source and persist it. This is
+        // not a convenience fallback; it is a migration path that moves stale
+        // browser sessions onto the same invariant as new sessions.
+        targetStructureMeta = await getCanonicalStructureMeta(protein, env)
+        if (
+          targetStructureMeta?.r2Key &&
+          state?.targetId &&
+          !sameStructureMeta(state.targetStructureMeta, targetStructureMeta)
+        ) {
+          state.targetStructureMeta = targetStructureMeta
+          try {
+            await saveGameState(env, sessionId, state, {
+              operation: "structure_cached_target_selection_backfill",
+              requestPath: "/api/structure-cached",
+            })
+          } catch (err) {
+            console.warn(
+              "GeneGuessr: failed to backfill target structure selection",
+              err?.message || err,
+            )
+          }
         }
       }
     }
