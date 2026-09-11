@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  handleIconoplasmSyncFinalizationQueue,
   handleIconoplasmVoteProjectionQueue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -1893,4 +1894,120 @@ test("vote projection queue consumer fails closed when the shared daily ledger i
     ),
   )
   assert.equal(message.acked, false, "an exhausted shared day must not acknowledge the message")
+})
+
+function syncFinalizationQueueEnv(budgetNamespace, db) {
+  return {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+  }
+}
+
+function syncFinalizationDrainMessage() {
+  return {
+    body: { kind: "drain_finalization_ledger", run_id: "sync-budget-test", symbols: [] },
+    acked: false,
+    retried: false,
+    ack() {
+      this.acked = true
+    },
+    retry() {
+      this.retried = true
+    },
+  }
+}
+
+function syncFinalizationBudgetDb() {
+  return {
+    prepare() {
+      return {
+        bind() {
+          return this
+        },
+        async first() {
+          return null
+        },
+        async all() {
+          return { results: [], meta: { rows_read: 1, rows_written: 0 } }
+        },
+        async run() {
+          return { success: true, meta: { rows_read: 0, rows_written: 0 } }
+        },
+      }
+    },
+    async batch(statements) {
+      return statements.map(() => ({ success: true, meta: { rows_read: 0, rows_written: 0 } }))
+    },
+  }
+}
+
+test("sync finalization queue consumer meters into the shared daily ledger (B-754)", async () => {
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const message = syncFinalizationDrainMessage()
+
+  await handleIconoplasmSyncFinalizationQueue(
+    { messages: [message] },
+    syncFinalizationQueueEnv(budgetNamespace, syncFinalizationBudgetDb()),
+    { waitUntil() {} },
+  )
+
+  const snapshotCalls = budgetNamespace.calls.filter((call) => call.pathname === "/snapshot")
+  const recordCalls = budgetNamespace.calls.filter((call) => call.pathname === "/record")
+  assert.ok(
+    snapshotCalls.length >= 1,
+    "the sync-finalization consumer must consult the shared daily ledger",
+  )
+  assert.ok(
+    recordCalls.length >= 1,
+    "the sync-finalization consumer must flush metered usage to the shared daily ledger",
+  )
+  assert.equal(
+    recordCalls[0].payload?.attribution?.route_family,
+    "background_sync_finalization",
+    "sync-finalization usage must be attributed to its own background family",
+  )
+})
+
+test("sync finalization queue consumer fails closed when the shared daily ledger is exhausted (B-754)", async () => {
+  const exhaustedNamespace = {
+    idFromName() {
+      return "global"
+    },
+    get() {
+      return {
+        fetch: async () =>
+          Response.json({
+            day_key: "2026-01-01",
+            cycle_key: "2026-01-01",
+            rows_read: 999999999999,
+            rows_written: 0,
+            rows_read_daily_smart_limit: 1000,
+            rows_written_daily_smart_limit: 1000000,
+            rows_read_daily_remaining: 0,
+            rows_written_daily_remaining: 1000000,
+            exhausted: true,
+            exhausted_by: "rows_read_daily_smart",
+            days_remaining_in_cycle: 1,
+          }),
+      }
+    },
+  }
+  const message = syncFinalizationDrainMessage()
+
+  await assert.rejects(
+    handleIconoplasmSyncFinalizationQueue(
+      { messages: [message] },
+      syncFinalizationQueueEnv(exhaustedNamespace, syncFinalizationBudgetDb()),
+      { waitUntil() {} },
+    ),
+  )
+  assert.equal(
+    message.acked,
+    false,
+    "an exhausted shared day must not acknowledge the finalization message",
+  )
 })
