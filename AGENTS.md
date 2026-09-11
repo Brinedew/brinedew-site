@@ -15,6 +15,17 @@ when replacing a deadlocking guard through explicit change control.
 This contract adds no new production gate or prerequisite redesign.
 Historical checkpoints below require fresh state reconciliation.
 
+## Agent operating rule: do not build the wall you then blame
+
+Read the canonical [Agent operating rule](https://linear.app/brinedew/document/agent-operating-rule-do-not-build-the-wall-you-then-blame-941bbcb71b75).
+Before reporting "can't", "blocked" or "fine": if the guard, contract, admission
+gate or migration tooling stopping you was written by us, it is changeable —
+change it through its own change-control and continue. A safeguard protects a
+resource, not itself. Never report "fine" while the requested outcome is
+unverified; separate "safe" from "fixed". If the only reason to stop is our own
+process, say you chose to stop. Escalate only genuine external blockers
+(provider hard limits, missing credentials, human-only approval).
+
 ## Extension release integrity
 
 Read `docs/ICONOPLASM_RELEASE_INTEGRITY.md` before changing extension packaging,
