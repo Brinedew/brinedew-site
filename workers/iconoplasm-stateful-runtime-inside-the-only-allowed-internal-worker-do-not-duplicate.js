@@ -1442,6 +1442,13 @@ function iconoplasmBudgetPolicyFromEnv(env, now = new Date()) {
   }
 }
 
+// B-744/B-742 generic protection: the provider's Free D1 read cap is 5,000,000
+// rows/UTC-day (account-wide, hard, no banking). The "smart monthly budget"
+// model is configured far above that (24B/month -> ~2.4B/day), so the shared
+// ledger never fails closed before Cloudflare's wall. Clamp the effective daily
+// read ceiling below the wall so any metered path refuses with headroom left.
+const ICONOPLASM_D1_HARD_DAILY_READ_LIMIT = 4000000
+
 function iconoplasmD1BudgetConfigFromEnv(env, now = new Date()) {
   return iconoplasmBudgetPolicyFromEnv(env, now)?.d1 || null
 }
@@ -18581,13 +18588,19 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
     const rowsWrittenMonthlyRemaining =
       rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
-    const rowsReadDailySmartLimit = d1OperationalAllowance({
+    const rowsReadDailySmartLimitRaw = d1OperationalAllowance({
       resource: "reads",
       monthlyLimit: rowsReadMonthlyLimit,
       usedBeforeDay: cycleRowsReadBeforeToday,
       daysRemaining: daysRemainingInCycle,
       burstMultiplier,
     })
+    // B-744: never let the effective daily read ceiling exceed the hard cap that
+    // sits below the provider wall, regardless of the inflated monthly budget.
+    const rowsReadDailySmartLimit =
+      rowsReadDailySmartLimitRaw === null
+        ? ICONOPLASM_D1_HARD_DAILY_READ_LIMIT
+        : Math.min(rowsReadDailySmartLimitRaw, ICONOPLASM_D1_HARD_DAILY_READ_LIMIT)
     const rowsWrittenDailySmartLimit = d1OperationalAllowance({
       resource: "writes",
       monthlyLimit: rowsWrittenMonthlyLimit,
