@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  handleIconoplasmVoteProjectionQueue,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class MeteredSummaryStatement {
   constructor(db, sql) {
@@ -1757,4 +1760,126 @@ test("authority workstation lane records its D1 usage into the shared ledger att
     )
   }
   assert.ok(Array.isArray(db.calls))
+})
+
+function voteProjectionQueueEnv(budgetNamespace, db) {
+  return {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
+  }
+}
+
+function voteProjectionMessage() {
+  return {
+    body: { kind: "process_vote_projection_refresh", symbol: "TP53" },
+    acked: false,
+    retried: false,
+    ack() {
+      this.acked = true
+    },
+    retry() {
+      this.retried = true
+    },
+  }
+}
+
+test("vote projection queue consumer meters into the shared daily ledger (B-745)", async () => {
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return this
+        },
+        async first() {
+          return null
+        },
+        async all() {
+          return { results: [], meta: { rows_read: 1, rows_written: 0 } }
+        },
+        async run() {
+          return { success: true, meta: { rows_read: 0, rows_written: 0 } }
+        },
+      }
+    },
+    async batch(statements) {
+      return statements.map(() => ({ success: true, meta: { rows_read: 0, rows_written: 0 } }))
+    },
+  }
+  const message = voteProjectionMessage()
+
+  const result = await handleIconoplasmVoteProjectionQueue(
+    { messages: [message] },
+    voteProjectionQueueEnv(budgetNamespace, db),
+  )
+
+  assert.equal(result.ok, true)
+  assert.equal(message.acked, true)
+  assert.equal(
+    budgetNamespace.calls.some((call) => call.pathname === "/snapshot"),
+    true,
+    "the vote-projection consumer must consult the shared daily ledger",
+  )
+  assert.equal(
+    budgetNamespace.calls.some((call) => call.pathname === "/record"),
+    true,
+    "the vote-projection consumer must flush metered usage to the shared daily ledger",
+  )
+})
+
+test("vote projection queue consumer fails closed when the shared daily ledger is exhausted (B-745)", async () => {
+  const exhaustedNamespace = {
+    idFromName() {
+      return "global"
+    },
+    get() {
+      return {
+        fetch: async () =>
+          Response.json({
+            day_key: "2026-01-01",
+            cycle_key: "2026-01-01",
+            rows_read: 999999999999,
+            rows_written: 0,
+            rows_read_daily_smart_limit: 1000,
+            rows_written_daily_smart_limit: 1000000,
+            rows_read_daily_remaining: 0,
+            rows_written_daily_remaining: 1000000,
+            exhausted: true,
+            exhausted_by: "rows_read_daily_smart",
+            days_remaining_in_cycle: 1,
+          }),
+      }
+    },
+  }
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return this
+        },
+        async first() {
+          return null
+        },
+        async all() {
+          return { results: [], meta: { rows_read: 0, rows_written: 0 } }
+        },
+        async run() {
+          return { success: true, meta: { rows_read: 0, rows_written: 0 } }
+        },
+      }
+    },
+  }
+  const message = voteProjectionMessage()
+
+  await assert.rejects(
+    handleIconoplasmVoteProjectionQueue(
+      { messages: [message] },
+      voteProjectionQueueEnv(exhaustedNamespace, db),
+    ),
+  )
+  assert.equal(message.acked, false, "an exhausted shared day must not acknowledge the message")
 })
