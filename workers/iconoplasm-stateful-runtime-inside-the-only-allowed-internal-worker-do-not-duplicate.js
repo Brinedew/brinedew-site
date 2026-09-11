@@ -14170,6 +14170,11 @@ async function fetchAssetStateRows(env, requestedSymbols = null) {
 
 const ICONO_WEBSITE_TRUTH_SUMMARY_KEY = "iconoplasm_website_truth_summary"
 const ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30
+// B-744: bound how often the full-table website-truth summary is recomputed.
+// A recompute scans every portrait asset (~175k rows) plus the storage-audit
+// queue (~99k). Admin storage-audit / repair flows used to force it on every
+// call; reuse the persisted summary within this window instead.
+const ICONO_WEBSITE_TRUTH_REFRESH_COOLDOWN_SECONDS = 30 * 60
 const ICONO_STORAGE_AUDIT_QUEUE_KEY = "iconoplasm_storage_audit"
 const ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH = 200
 // Cloudflare gives each invocation a finite request budget. Each audited asset
@@ -15152,6 +15157,21 @@ async function writeWebsiteTruthSummary(env, summary) {
 }
 
 async function refreshWebsiteTruthSummaryRow(env) {
+  // D1 cost fence (B-744): a full recompute scans every portrait asset
+  // (~175k rows read) plus the storage-audit queue (~99k). The admin storage
+  // audit / repair flows used to force this on every call, so a handful of
+  // admin actions could exhaust the daily read budget on their own. Reuse the
+  // persisted summary while it is fresh; only recompute when it is stale (or
+  // explicitly requested via ?refresh=1), so the expensive scan is bounded
+  // regardless of how often an operator opens the panel.
+  const previous = await fetchPersistedWebsiteTruthSummary(env)
+  const updatedAtMs = previous?.updated_at ? Date.parse(previous.updated_at) : NaN
+  if (
+    Number.isFinite(updatedAtMs) &&
+    Date.now() - updatedAtMs < ICONO_WEBSITE_TRUTH_REFRESH_COOLDOWN_SECONDS * 1000
+  ) {
+    return previous
+  }
   const summary = await computeWebsiteTruthSummary(env)
   return writeWebsiteTruthSummary(env, summary)
 }
