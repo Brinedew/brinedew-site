@@ -1881,10 +1881,33 @@ function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
   return value.startsWith("authority_workstation_")
 }
 
+// ARCHITECTURE FENCE [RECOVERY-001 / B-745]: background queue consumers own
+// bounded per-invocation work, but that is a provider statement ceiling, not a
+// daily spending authority. A re-enabled consumer must also be metered into the
+// shared daily D1 ledger so it cannot silently exhaust the account. These
+// families are only ever supplied by non-HTTP worker entrypoints (a synthetic
+// attribution), so adding them does not widen the HTTP budgeted-route set.
+// The sync-finalization consumer is bound in a separate follow-up.
+const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set(["background_vote_projection"])
+
+function isIconoplasmBackgroundBudgetedRouteFamily(routeFamily) {
+  return ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES.has(String(routeFamily || "").trim())
+}
+
+function iconoplasmBackgroundBudgetAttribution(routeFamily) {
+  return {
+    route_family: String(routeFamily || "").trim(),
+    budget_class: "background",
+    actor_class: "background_worker",
+    source_class: "background_queue",
+  }
+}
+
 function isIconoplasmBudgetedRouteFamily(routeFamily) {
   return (
     isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) ||
-    isIconoplasmAuthorityBudgetedRouteFamily(routeFamily)
+    isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) ||
+    isIconoplasmBackgroundBudgetedRouteFamily(routeFamily)
   )
 }
 
@@ -2768,10 +2791,15 @@ function iconoplasmBudgetTelemetryLockedReason() {
   return "Cloudflare is already refusing Durable Objects writes for the shared Iconoplasm budget ledger, so per-request preflight telemetry cannot be trusted right now."
 }
 
-async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request) {
+async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
+  env,
+  request,
+  attributionOverride = null,
+) {
   const budgets = iconoplasmD1BudgetConfigFromEnv(env)
   if (!budgets) return env
-  const attribution = request ? iconoplasmD1BudgetAttributionFromRequest(request) : null
+  const attribution =
+    attributionOverride || (request ? iconoplasmD1BudgetAttributionFromRequest(request) : null)
   if (!isIconoplasmBudgetedRouteFamily(attribution?.route_family)) {
     return env
   }
@@ -21763,6 +21791,15 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
     return { ok: true, processed, failed, retrying, skipped, results }
   }
 
+  // RECOVERY-001 / B-745: meter this background consumer into the shared daily
+  // D1 ledger (fail closed when the day is exhausted) in addition to the
+  // provider per-invocation statement ceiling, so a re-enabled vote-projection
+  // consumer cannot silently exhaust the account.
+  env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
+    env,
+    null,
+    iconoplasmBackgroundBudgetAttribution("background_vote_projection"),
+  )
   env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
   const nowIso = new Date().toISOString()
   const dueEntries = []
@@ -21900,6 +21937,9 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
       throw new Error(result?.error || "vote projection Queue failed")
     }
   }
+  // Flush buffered shared-daily-ledger usage for this invocation so background
+  // work is fully metered (RECOVERY-001 / B-745).
+  await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
   return {
     ok: failed <= 0,
     processed,
