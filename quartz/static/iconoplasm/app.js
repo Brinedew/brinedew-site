@@ -911,30 +911,35 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function canonicalGeneBlotMarkup(genePayload) {
-    var blot = publishedGeneBlot(genePayload)
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
-    if (!blot || !symbol) return ""
-    // Always reveal the stable semantic route. Published cards are immutable,
-    // so their canonical_url may still name an older blot renderer even after
-    // the current renderer has been materialized for this exact card.
-    var blotUrl = String(blot.semantic_url || "").trim()
+    if (!symbol) return ""
+    // The exact-card blot is rendered by the workstation, so a freshly won vote
+    // or canonical selection can be live before its blot exists. Always point the
+    // print-copy surface at the stable semantic blot route and decide
+    // image-vs-placeholder at load time: the route resolves the exact published
+    // card's blot, so this never trusts a possibly stale card blot field and
+    // never leaves the surface blank.
+    var semanticUrl = "/blot/" + encodeURIComponent(symbol) + ".webp"
     var fullName = String(
       (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
     ).trim()
     var alt = symbol + " Iconoplasm gene blot — " + fullName
     return (
-      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
+      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot data-icono-blot-state="pending" hidden>' +
+      '<div class="icono-canonical-gene-blot-pending" role="status">' +
+      '<span class="icono-canonical-gene-blot-pending-mark" aria-hidden="true"></span>' +
+      '<p class="icono-canonical-gene-blot-pending-title">print copy still developing</p>' +
+      '<p class="icono-canonical-gene-blot-pending-note">the ' +
+      esc(symbol) +
+      " canvas is being matched for this card. a fresh print can take from about ten minutes up to a day to render — check back soon.</p>" +
+      "</div>" +
       '<img class="icono-canonical-gene-blot-image" src="' +
-      esc(blotUrl) +
+      esc(semanticUrl) +
       '" data-iconoplasm-role="canonical-blot" data-gene-symbol="' +
       esc(symbol) +
       '" data-iconoplasm-canonical-image-src="' +
-      esc(blotUrl) +
-      '" width="' +
-      esc(String(blot.width || 768)) +
-      '" height="' +
-      esc(String(blot.height || 1024)) +
-      '" loading="lazy" decoding="async" fetchpriority="low" alt="' +
+      esc(semanticUrl) +
+      '" width="768" height="1024" loading="lazy" decoding="async" fetchpriority="low" alt="' +
       esc(alt) +
       '"></figure>'
     )
@@ -1481,6 +1486,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var scope = geneContent || document
     var blot = scope.querySelector("[data-icono-canonical-gene-blot]")
     if (!blot) return
+    var image = blot.querySelector(".icono-canonical-gene-blot-image")
+    if (image && image.getAttribute("data-icono-blot-wired") !== "true") {
+      image.setAttribute("data-icono-blot-wired", "true")
+      var settle = function (state) {
+        blot.setAttribute("data-icono-blot-state", state)
+      }
+      if (image.complete && image.naturalWidth > 0) {
+        settle("ready")
+      } else if (image.complete) {
+        settle("pending")
+      } else {
+        image.addEventListener(
+          "load",
+          function () {
+            settle("ready")
+          },
+          { once: true },
+        )
+        image.addEventListener(
+          "error",
+          function () {
+            settle("pending")
+          },
+          { once: true },
+        )
+      }
+    }
     blot.removeAttribute("hidden")
   }
 

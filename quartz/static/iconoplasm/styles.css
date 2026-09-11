@@ -3746,6 +3746,15 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   display: none !important;
 }
 
+/* The exact-card blot is workstation-rendered, so a freshly selected canonical
+   blot may not exist yet. The figure overlays an honest "developing"
+   placeholder and points at the stable semantic blot route; it swaps to the
+   image only once that route actually loads (see canonicalGeneBlotMarkup and
+   revealCanonicalGeneBlot). */
+.icono-canonical-gene-blot {
+  position: relative;
+}
+
 .icono-canonical-gene-blot-image {
   display: block;
   width: 100%;
@@ -3753,6 +3762,69 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   aspect-ratio: 3 / 4;
   object-fit: contain;
   background: #111;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.icono-canonical-gene-blot[data-icono-blot-state="ready"] .icono-canonical-gene-blot-image {
+  opacity: 1;
+}
+
+.icono-canonical-gene-blot-pending {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.75rem;
+  background: #111;
+  color: color-mix(in srgb, #f4ede5 74%, transparent);
+  text-align: left;
+}
+
+.icono-canonical-gene-blot[data-icono-blot-state="ready"] .icono-canonical-gene-blot-pending {
+  display: none;
+}
+
+.icono-canonical-gene-blot-pending-mark {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--accent, #1b7269);
+  animation: icono-blot-pending-pulse 1.6s ease-in-out infinite;
+}
+
+.icono-canonical-gene-blot-pending-title {
+  margin: 0;
+  font-family: ui-monospace, "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.icono-canonical-gene-blot-pending-note {
+  margin: 0;
+  max-width: 24ch;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+@keyframes icono-blot-pending-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-canonical-gene-blot-pending-mark {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
 .icono-card--brick-static {
