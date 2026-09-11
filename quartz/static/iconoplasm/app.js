@@ -925,7 +925,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     ).trim()
     var alt = symbol + " Iconoplasm gene blot — " + fullName
     return (
-      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot data-icono-blot-state="pending" hidden>' +
+      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden data-icono-blot-state="pending">' +
       '<div class="icono-canonical-gene-blot-pending" role="status">' +
       '<span class="icono-canonical-gene-blot-pending-mark" aria-hidden="true"></span>' +
       '<p class="icono-canonical-gene-blot-pending-title">print copy still developing</p>' +
