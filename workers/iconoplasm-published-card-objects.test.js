@@ -86,3 +86,43 @@ test("a stalled response body has a deadline", async () => {
   await assert.rejects(store.read(publishedCardObjectKey("genes", "a".repeat(64))), /timed out/)
   assert.equal(cancelled, true)
 })
+
+test("a transient storage timeout is retried and the publication commits (B-753)", async () => {
+  const timeoutEnv = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+    // Short timeout and no retry delay so the abort fires quickly.
+    ICONOPLASM_PORTRAIT_STORAGE_TIMEOUT_MS: "20",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  }
+  const store = createPublishedCardObjectStore(timeoutEnv)
+  const originalFetch = globalThis.fetch
+  let putAttempts = 0
+  let stored = null
+  globalThis.fetch = async (_url, init = {}) => {
+    const method = init.method || "GET"
+    if (method === "PUT") {
+      putAttempts += 1
+      if (putAttempts === 1) {
+        // First attempt stalls until portraitStorageRequestTimeout aborts it.
+        return await new Promise((_resolve, reject) => {
+          const signal = init.signal
+          if (!signal) return
+          const fail = () => reject(new DOMException("The operation was aborted", "AbortError"))
+          if (signal.aborted) return fail()
+          signal.addEventListener("abort", fail, { once: true })
+        })
+      }
+      stored = init.body
+      return new Response(null, { status: 201 })
+    }
+    return stored ? new Response(stored, { status: 200 }) : new Response(null, { status: 404 })
+  }
+  try {
+    const receipt = await store.write("genes", { symbol: "EZH2", name: "retry" })
+    assert.equal(putAttempts, 2)
+    assert.ok(receipt.key)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
