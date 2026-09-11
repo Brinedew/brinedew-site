@@ -174,11 +174,43 @@ async function fetchUrlText(url) {
   return text
 }
 
-function extractWithReadability(html) {
+function extractWithReadability(html, dropSelectors = []) {
   const { document } = parseHTML(html)
+  for (const selector of dropSelectors) {
+    for (const el of document.querySelectorAll(selector)) el.remove()
+  }
   const reader = new Readability(document)
   const article = reader.parse()
   return article?.content || null
+}
+
+/**
+ * Read the first schema.org Article JSON-LD block. Sites without an RSS feed
+ * usually still publish one, so it is the reliable source for the publish date
+ * and byline. Returns null when no Article block is present or parseable.
+ */
+function jsonLdArticle(html) {
+  const blocks = html.matchAll(
+    /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
+  )
+  for (const block of blocks) {
+    try {
+      const parsed = JSON.parse(block[1].trim())
+      const nodes = Array.isArray(parsed) ? parsed : [parsed]
+      for (const node of nodes) {
+        const type = node?.["@type"]
+        const isArticle = Array.isArray(type)
+          ? type.some((t) => String(t).toLowerCase().includes("article"))
+          : String(type || "")
+              .toLowerCase()
+              .includes("article")
+        if (isArticle) return node
+      }
+    } catch {
+      // Malformed JSON-LD block — keep looking at the rest.
+    }
+  }
+  return null
 }
 
 const rssParser = new Parser({
@@ -286,6 +318,7 @@ function readabilityAdapter(opts) {
     feedUrl,
     maxAgeDays = 30,
     maxItems = 5,
+    dropSelectors = [],
     cleanAuthor = (a) => (a || "").trim(),
   } = opts
 
@@ -325,7 +358,7 @@ function readabilityAdapter(opts) {
         if (!articleUrl) continue
         const html = await fetchUrlText(articleUrl)
         if (!html) continue
-        const articleHtml = extractWithReadability(html)
+        const articleHtml = extractWithReadability(html, dropSelectors)
         if (!articleHtml) continue
         const text = htmlToPlainText(articleHtml)
         if (!text || text.length < 400) continue
@@ -348,6 +381,157 @@ function readabilityAdapter(opts) {
         })
       }
       return out
+    },
+  }
+}
+
+/**
+ * Collect absolute article URLs from a page's anchors, keeping only those the
+ * source recognises as articles. Used to find the "latest" window on a site
+ * that has no feed.
+ */
+function articleUrlsFromHtml(html, baseUrl, pattern) {
+  const urls = []
+  const seen = new Set()
+  for (const match of html.matchAll(/href="([^"#?]+)"/g)) {
+    let abs
+    try {
+      abs = new URL(match[1], baseUrl).href
+    } catch {
+      continue
+    }
+    if (!pattern.test(abs) || seen.has(abs)) continue
+    seen.add(abs)
+    urls.push(abs)
+  }
+  return urls
+}
+
+function byNewestFirst(a, b) {
+  return Date.parse(b.publishedAt || 0) - Date.parse(a.publishedAt || 0)
+}
+
+/**
+ * Fetch one article page and turn it into a FeedItem. Publish date and byline
+ * come from schema.org Article JSON-LD; the excerpt comes from Readability.
+ * Returns null when the page is unusable or older than the age window.
+ */
+async function fetchArticleItem(url, opts) {
+  const html = await fetchUrlText(url)
+  if (!html) return null
+  const ld = jsonLdArticle(html)
+  const publishedAt = ld?.datePublished || ""
+  if (!opts.ignoreAge && publishedAt && opts.maxAgeDays) {
+    const cutoff = Date.now() - opts.maxAgeDays * 24 * 60 * 60 * 1000
+    if (Date.parse(publishedAt) < cutoff) return null
+  }
+  const articleHtml = extractWithReadability(html, opts.dropSelectors)
+  if (!articleHtml) return null
+  const text = htmlToPlainText(articleHtml)
+  if (!text || text.length < 400) return null
+  return {
+    id: url,
+    sourceName: opts.name,
+    author: opts.cleanAuthor(ld?.author?.name || opts.name),
+    title: (ld?.headline || "").trim(),
+    url: stripUtm(url),
+    excerpt: buildExcerpt(text),
+    publishedAt,
+    text,
+  }
+}
+
+/**
+ * Factory: an adapter for sites that publish no RSS/Atom feed. It reads the
+ * site's XML sitemap to discover article URLs, then fetches only the articles
+ * that have not been posted yet.
+ *
+ * The first run baselines the whole sitemap except the newest article, which it
+ * posts immediately (like the RSS adapters' first-post guarantee) so a newly
+ * added source is visible right away without dumping the back catalogue.
+ * `latestPage` is the page whose anchors carry the latest articles.
+ *
+ * @param {object} opts
+ * @param {string} opts.id
+ * @param {string} opts.name
+ * @param {string} opts.sitemapUrl
+ * @param {string} [opts.latestPage]      Homepage/latest page for first-run post.
+ * @param {RegExp} [opts.articlePattern]  Only URLs matching this are articles.
+ * @param {number} [opts.maxAgeDays=60]   Skip detected articles older than this.
+ * @param {number} [opts.maxItems=5]      Per-run cap.
+ * @param {number} [opts.bootstrapMax=1]  Articles to post on the very first run.
+ * @param {string[]} [opts.dropSelectors] Elements to remove before extraction.
+ * @param {(author: string) => string} [opts.cleanAuthor]
+ */
+function sitemapAdapter(opts) {
+  const {
+    id,
+    name,
+    sitemapUrl,
+    latestPage = null,
+    articlePattern = /\/articles\/[^/]+$/,
+    maxAgeDays = 60,
+    maxItems = 5,
+    bootstrapMax = 1,
+    dropSelectors = [],
+    cleanAuthor = (a) => (a || "").trim(),
+  } = opts
+
+  const articleOpts = { name, maxAgeDays, dropSelectors, cleanAuthor }
+
+  async function hydrate(urls, ignoreAge) {
+    const out = []
+    for (const url of urls) {
+      const item = await fetchArticleItem(url, { ...articleOpts, ignoreAge })
+      if (item) out.push(item)
+    }
+    return out
+  }
+
+  return {
+    id,
+    name,
+    async collect(env, { ignoreAge = false } = {}) {
+      const xml = await fetchUrlText(sitemapUrl)
+      if (!xml) return []
+      const urls = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)]
+        .map((m) => m[1].trim())
+        .filter((u) => articlePattern.test(u))
+      if (urls.length === 0) return []
+
+      const seen = await env.KV.get(sourceSeenKey(id))
+      if (!seen) {
+        // First run: post the newest article, baseline everything else so the
+        // back catalogue never dumps.
+        let featured = []
+        if (latestPage) {
+          const latestHtml = await fetchUrlText(latestPage)
+          if (latestHtml) {
+            const candidates = articleUrlsFromHtml(latestHtml, latestPage, articlePattern).slice(
+              0,
+              20,
+            )
+            featured = (await hydrate(candidates, true)).sort(byNewestFirst).slice(0, bootstrapMax)
+          }
+        }
+        const featuredIds = new Set(featured.map((i) => i.id))
+        const expiration = Math.floor(Date.now() / 1000) + FEED_TTL_SECONDS
+        await Promise.all(
+          urls
+            .filter((u) => !featuredIds.has(u))
+            .map((u) => env.KV.put(postedKey(id, u), "1", { expiration })),
+        )
+        await env.KV.put(sourceSeenKey(id), "1")
+        return featured
+      }
+
+      const flags = await Promise.all(urls.map((u) => env.KV.get(postedKey(id, u))))
+      const unseen = urls.filter((_, i) => !flags[i])
+      if (unseen.length === 0) return []
+
+      const out = await hydrate(unseen.slice(0, maxItems * 5), ignoreAge)
+      out.sort(byNewestFirst)
+      return out.slice(0, maxItems)
     },
   }
 }
@@ -430,6 +614,18 @@ const SOURCES = [
     id: "liorpachter",
     name: "Lior Pachter",
     feedUrl: "https://liorpachter.wordpress.com/feed/",
+  }),
+  // No RSS: discover articles from the sitemap, fetch only unseen pages, and
+  // read the publish date/byline from schema.org Article JSON-LD. The first run
+  // posts the newest article from the homepage, then the sitemap drives future
+  // posts.
+  sitemapAdapter({
+    id: "asimovpress",
+    name: "Asimov Press",
+    sitemapUrl: "https://press.asimov.com/sitemap-0.xml",
+    latestPage: "https://press.asimov.com",
+    articlePattern: /\/articles\/[^/]+$/,
+    dropSelectors: [".ap-listen-btn"],
   }),
   youtubeAdapter({
     id: "clockwork",
@@ -627,5 +823,7 @@ export const __test = {
   buildFeedMessage,
   rssAdapter,
   readabilityAdapter,
+  sitemapAdapter,
   extractWithReadability,
+  jsonLdArticle,
 }
