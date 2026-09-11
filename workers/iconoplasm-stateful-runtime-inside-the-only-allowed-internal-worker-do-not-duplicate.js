@@ -1888,14 +1888,18 @@ function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
   return value.startsWith("authority_workstation_")
 }
 
-// ARCHITECTURE FENCE [RECOVERY-001 / B-745]: background queue consumers own
-// bounded per-invocation work, but that is a provider statement ceiling, not a
-// daily spending authority. A re-enabled consumer must also be metered into the
-// shared daily D1 ledger so it cannot silently exhaust the account. These
+// ARCHITECTURE FENCE [RECOVERY-001 / B-745 / B-754]: background queue consumers
+// own bounded per-invocation work, but that is a provider statement ceiling, not
+// a daily spending authority. Every re-enabled consumer must also be metered
+// into the shared daily D1 ledger so it cannot silently exhaust the account.
+// sync-finalization is now bound alongside vote-projection (B-754); it was the
+// remaining consumer with only the provider per-invocation ceiling. These
 // families are only ever supplied by non-HTTP worker entrypoints (a synthetic
 // attribution), so adding them does not widen the HTTP budgeted-route set.
-// The sync-finalization consumer is bound in a separate follow-up.
-const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set(["background_vote_projection"])
+const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set([
+  "background_vote_projection",
+  "background_sync_finalization",
+])
 
 function isIconoplasmBackgroundBudgetedRouteFamily(routeFamily) {
   return ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES.has(String(routeFamily || "").trim())
@@ -22922,6 +22926,19 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       error: "Iconoplasm finalization Queue path is disabled; refusing to ack without processing.",
     }
   }
+  // RECOVERY-001 / B-754: meter this background consumer into the shared daily
+  // D1 ledger (fail closed when the day is exhausted), mirroring the
+  // vote-projection binding (B-745): consult `/snapshot` up front, flush
+  // buffered usage per invocation, and never ack a message the shared day
+  // refused. The provider per-invocation statement ceiling is a separate
+  // concern; the finalization drain legitimately spans many statements per
+  // invocation, so this binds the daily authority without imposing the 50
+  // statement ceiling that guards the smaller vote-projection batch.
+  env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
+    env,
+    null,
+    iconoplasmBackgroundBudgetAttribution("background_sync_finalization"),
+  )
   const permit = await iconoplasmSyncGovernorJson(
     env,
     `/permit?requested=${encodeURIComponent(String(messages.length || 1))}`,
@@ -23014,6 +23031,13 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       })
     } catch (error) {
       console.warn("Iconoplasm sync governor release failed", error)
+    }
+    // Flush buffered shared-daily-ledger usage for this invocation so
+    // background finalization work is fully metered (RECOVERY-001 / B-754).
+    try {
+      await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
+    } catch (error) {
+      console.warn("Iconoplasm daily budget usage flush failed", error)
     }
   }
 }
