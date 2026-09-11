@@ -1910,10 +1910,37 @@ function iconoplasmBackgroundBudgetAttribution(routeFamily) {
   }
 }
 
+// CONTRACT [B-744 / B-742]: no D1 read path is exempt from the shared budget.
+// The former rule kept admin read-only summaries "unmetered" on the assumption
+// that reads are harmless; on the Free plan reads ARE the scarce, hard-capped
+// resource, so that exemption is what let unbounded admin scans exhaust the
+// account uncounted. Admin read/summary/gallery paths are now metered like every
+// other budgeted route and fail closed against the daily read ceiling.
+// Authentication still precedes any budget work (see the daily-budget test).
+function isIconoplasmAdminReadBudgetedRouteFamily(routeFamily) {
+  const value = String(routeFamily || "").trim()
+  return (
+    value === "admin_overview" ||
+    value === "admin_coverage" ||
+    value === "admin_public_stats_audit" ||
+    value === "admin_assets" ||
+    value === "admin_assets_summary" ||
+    value === "admin_assets_storage_audit" ||
+    value === "admin_assets_repair_scope" ||
+    value === "admin_assets_state" ||
+    value === "admin_blots_backlog" ||
+    value === "admin_gallery" ||
+    value === "admin_gallery_publish_status" ||
+    value === "admin_gallery_dirty_shard_publication" ||
+    value.startsWith("admin_gallery_mutation")
+  )
+}
+
 function isIconoplasmBudgetedRouteFamily(routeFamily) {
   return (
     isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) ||
     isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) ||
+    isIconoplasmAdminReadBudgetedRouteFamily(routeFamily) ||
     isIconoplasmBackgroundBudgetedRouteFamily(routeFamily)
   )
 }

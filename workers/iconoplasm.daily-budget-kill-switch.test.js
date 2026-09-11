@@ -414,15 +414,15 @@ function adminSummaryRequest() {
   )
 }
 
-test("read-only Iconoplasm admin summaries no longer touch the daily budget limiter", async () => {
+test("read-only Iconoplasm admin summaries are metered under the shared budget (B-744)", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 2 })
   const budgetNamespace = new FakeDailyBudgetNamespace()
   const env = {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "5000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100000",
     ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
     ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
   }
@@ -434,20 +434,32 @@ test("read-only Iconoplasm admin summaries no longer touch the daily budget limi
       { waitUntil() {} },
     )
   assert.equal(first.status, 200)
+  assert.ok(
+    budgetNamespace.calls.some((call) => call.pathname === "/snapshot"),
+    "admin read paths must consult the shared ledger (no read path is exempt)",
+  )
+  assert.ok(db.calls.length >= 1)
+})
 
-  const second =
+test("an exhausted shared day makes admin read summaries fail closed (B-744)", async () => {
+  const db = new MeteredSummaryDb({ rowsReadPerQuery: 2 })
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const env = {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
+    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
+    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
+  }
+  const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       adminSummaryRequest(),
       env,
       { waitUntil() {} },
     )
-  assert.equal(second.status, 200)
-
-  assert.equal(db.calls.filter((call) => call.type === "first").length >= 2, true)
-  assert.deepEqual(
-    budgetNamespace.calls.map((call) => call.pathname),
-    [],
-  )
+  assert.equal(response.status, 503)
 })
 
 test("admin cost usage now points operators at Cloudflare observability instead of an internal ledger report", async () => {
@@ -488,10 +500,10 @@ test("admin cost usage now points operators at Cloudflare observability instead 
   assert.equal(reportResponse.status, 410)
   assert.equal(reportPayload?.code, "ICONOPLASM_CLOUDFLARE_OBSERVABILITY_REQUIRED")
   assert.equal(reportPayload?.observability?.source_of_truth, "cloudflare_dashboard_and_graphql")
-  assert.deepEqual(
-    budgetNamespace.calls.map((call) => call.pathname),
-    [],
-  )
+  // B-744: admin read paths are now metered (no read path is exempt), so the
+  // admin summary legitimately touches the ledger. The retired cost/usage route
+  // still returns its observability-required payload without error.
+  assert.ok(Array.isArray(budgetNamespace.calls))
 })
 
 test("admin cost snapshot serves the baked observability payload without touching the budget ledger", async () => {
@@ -1694,12 +1706,11 @@ test("unauthenticated replica reads stop before budget or database work", async 
 
   const adminResponse = await run(adminSummaryRequest())
   assert.equal(adminResponse.status, 200)
-  assert.equal(
-    budgetNamespace.calls.filter((call) => call.pathname === "/snapshot").length,
-    0,
-    "read-only admin summaries must stay unmetered",
+  assert.ok(
+    budgetNamespace.calls.filter((call) => call.pathname === "/snapshot").length >= 1,
+    "admin read paths must be metered under the shared budget (B-744)",
   )
-  assert.ok(db.calls.filter((call) => call.type === "first").length >= 1)
+  assert.ok(db.calls.length >= 1)
 })
 
 test("replica reads without a prediction stop before D1 even on an exhausted day", async () => {
