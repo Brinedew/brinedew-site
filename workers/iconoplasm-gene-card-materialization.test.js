@@ -18,6 +18,7 @@ import {
   iconoplasmGeneCardFingerprint,
   iconoplasmGeneCardObjectKey,
   iconoplasmGeneCardPngDimensions,
+  registerIconoplasmGeneBlot,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 
 const runtimeSource = readFileSync(
@@ -140,6 +141,96 @@ test("canonical blot WebP dimensions are verified before immutable storage", () 
   assert.equal(iconoplasmGeneBlotWebpDimensions(new Uint8Array([1, 2, 3])), null)
 })
 
+test("re-registering an unchanged canonical blot performs zero writes", async () => {
+  const fingerprint = "12".repeat(16)
+  const portraitAssetSha256 = "ab".repeat(32)
+  const blotAssetSha256 = "cd".repeat(32)
+  const objectKey = iconoplasmGeneBlotObjectKey("TP53", fingerprint)
+  const current = {
+    gene_symbol: "TP53",
+    blot_fingerprint: fingerprint,
+    portrait_asset_sha256: portraitAssetSha256,
+    blot_asset_sha256: blotAssetSha256,
+    object_key: objectKey,
+    width: ICONOPLASM_GENE_BLOT_WIDTH,
+    height: ICONOPLASM_GENE_BLOT_HEIGHT,
+  }
+  let batches = 0
+  const env = {
+    ICONOPLASM_DB: {
+      prepare(sql) {
+        return {
+          bind() {
+            return {
+              first: async () =>
+                sql.includes("SELECT * FROM icono_gene_blot_materializations") ? current : null,
+            }
+          },
+        }
+      },
+      async batch() {
+        batches += 1
+        return []
+      },
+    },
+  }
+
+  const result = await registerIconoplasmGeneBlot(env, {
+    symbol: "TP53",
+    blotFingerprint: fingerprint,
+    portraitAssetSha256,
+    blotAssetSha256,
+    objectKey,
+  })
+
+  assert.equal(result.changed, false)
+  assert.equal(result.row, current)
+  assert.equal(batches, 0)
+})
+
+test("registering the first canonical blot writes its row and event once", async () => {
+  const fingerprint = "34".repeat(16)
+  const portraitAssetSha256 = "ef".repeat(32)
+  const blotAssetSha256 = "56".repeat(32)
+  const objectKey = iconoplasmGeneBlotObjectKey("BRCA1", fingerprint)
+  const stored = { gene_symbol: "BRCA1", blot_fingerprint: fingerprint }
+  let reads = 0
+  let batches = 0
+  const env = {
+    ICONOPLASM_DB: {
+      prepare(sql) {
+        return {
+          bind() {
+            return {
+              first: async () =>
+                sql.includes("SELECT * FROM icono_gene_blot_materializations") && reads++ > 0
+                  ? stored
+                  : null,
+            }
+          },
+        }
+      },
+      async batch(statements) {
+        batches += 1
+        assert.equal(statements.length, 2)
+        return []
+      },
+    },
+  }
+
+  const result = await registerIconoplasmGeneBlot(env, {
+    symbol: "BRCA1",
+    blotFingerprint: fingerprint,
+    portraitAssetSha256,
+    blotAssetSha256,
+    objectKey,
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.row, stored)
+  assert.equal(batches, 1)
+})
+
 test("published blot retries read exact versioned cards by explicit symbol", () => {
   const backlog = runtimeSource.slice(
     runtimeSource.indexOf("export async function listIconoplasmGeneBlotBacklog"),
@@ -153,6 +244,19 @@ test("published blot retries read exact versioned cards by explicit symbol", () 
     backlog.slice(backlog.indexOf("if (requestedSymbols.length)")),
     /cardCatalogRecordsForArtifact/,
   )
+})
+
+test("candidate blot readiness is checked after canonical card hydration", () => {
+  const catalogReader = runtimeSource.slice(
+    runtimeSource.indexOf("async function cardCatalogRecordsForArtifact"),
+    runtimeSource.indexOf("function geneBlotServiceError"),
+  )
+  assert.match(
+    catalogReader,
+    /await hydratePublicCanonicalGeneRecords[\s\S]*exactReadyGeneBlotProjection/,
+    "the final visible card must be fingerprinted after hydration so an unchanged blot leaves the backlog",
+  )
+  assert.match(catalogReader, /if \(readyBlot\) record\.blot = readyBlot[\s\S]*else delete record\.blot/)
 })
 
 test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Rendering", () => {

@@ -27267,7 +27267,17 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
   const records = rows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
-  return hydratePublicCanonicalGeneRecords(env, records)
+  const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)
+  const rowsBySymbol = new Map(
+    rows.map((row) => [normalizeSymbol(row?.gene_symbol || ""), row]),
+  )
+  for (const record of hydratedRecords) {
+    const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
+    const readyBlot = exactReadyGeneBlotProjection(record, rowsBySymbol.get(symbol))
+    if (readyBlot) record.blot = readyBlot
+    else delete record.blot
+  }
+  return hydratedRecords
 }
 
 function geneBlotServiceError(status, code, message) {

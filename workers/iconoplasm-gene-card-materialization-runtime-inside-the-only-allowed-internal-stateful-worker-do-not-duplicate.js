@@ -657,9 +657,9 @@ export async function registerIconoplasmGeneBlot(
     String(current?.blot_fingerprint || "").toLowerCase() === fingerprint &&
     normalizeSha256(current?.portrait_asset_sha256 || "") === portraitAssetSha &&
     normalizeSha256(current?.blot_asset_sha256 || "") === blotAssetSha &&
-    String(current.object_key || "") === key &&
-    Number(current.width || 0) === ICONOPLASM_GENE_BLOT_WIDTH &&
-    Number(current.height || 0) === ICONOPLASM_GENE_BLOT_HEIGHT
+    String(current?.object_key || "") === key &&
+    Number(current?.width || 0) === ICONOPLASM_GENE_BLOT_WIDTH &&
+    Number(current?.height || 0) === ICONOPLASM_GENE_BLOT_HEIGHT
   )
   const statements = [
     env.ICONOPLASM_DB.prepare(
@@ -687,20 +687,22 @@ export async function registerIconoplasmGeneBlot(
       ICONOPLASM_GENE_BLOT_HEIGHT,
       ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
     ),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_publish_events (
+         gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at
+       ) VALUES (?, ?, ?, 'gene_blot_materialized', 'iconoplasm_workstation', ?, CURRENT_TIMESTAMP)`,
+    ).bind(
+      symbol,
+      portraitAssetSha,
+      portraitAssetSha,
+      `Ready canonical blot ${fingerprint} as ${blotAssetSha}`,
+    ),
   ]
-  if (changed) {
-    statements.push(
-      env.ICONOPLASM_DB.prepare(
-        `INSERT INTO icono_publish_events (
-           gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at
-         ) VALUES (?, ?, ?, 'gene_blot_materialized', 'iconoplasm_workstation', ?, CURRENT_TIMESTAMP)`,
-      ).bind(
-        symbol,
-        portraitAssetSha,
-        portraitAssetSha,
-        `Ready canonical blot ${fingerprint} as ${blotAssetSha}`,
-      ),
-    )
+  if (!changed) {
+    // A re-registration of the exact same blot is a no-op. Writing the row and
+    // a publish event again would consume a D1 write and fan out a duplicate
+    // event for zero image change; return the already-current row instead.
+    return { changed: false, row: current }
   }
   await env.ICONOPLASM_DB.batch(statements)
   return {
