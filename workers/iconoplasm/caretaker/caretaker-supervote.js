@@ -441,11 +441,11 @@ export class CaretakerSupervoteLedger {
         )`,
     )
     this.sql.exec(
-      `DELETE FROM caretaker_supervote_outbox
+      `DELETE FROM caretaker_supervote_outbox INDEXED BY idx_caretaker_supervote_outbox_pending
         WHERE delivered_at IS NOT NULL
           AND id NOT IN (
             SELECT id
-              FROM caretaker_supervote_outbox
+              FROM caretaker_supervote_outbox INDEXED BY idx_caretaker_supervote_outbox_pending
              WHERE delivered_at IS NOT NULL
              ORDER BY id DESC
              LIMIT ?
@@ -934,7 +934,9 @@ export class CaretakerSupervoteLedger {
         }),
       )
     }
-    this.compactHistory()
+    // Eligibility alone adds no history or delivery row. Re-pruning for every
+    // candidate multiplied the entire outbox backlog by the projection batch.
+    if (selectionCleared) this.compactHistory()
     return {
       ok: true,
       changed: true,
