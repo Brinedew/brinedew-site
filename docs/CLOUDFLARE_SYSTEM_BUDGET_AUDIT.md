@@ -27,9 +27,34 @@ The repair package addresses these measured amplifiers:
 The three sync rollup functions were also exercised against the complete schema.
 For one selected asset/vote/vision beside 20,000 unrelated assets and votes,
 their receipts were 8/5, 34/9 and 83/19 reads/writes respectively. This does not
-bound concentrated per-gene voting, shared-vision growth or the complete
-finalization journey. B-754 retains that remaining acceptance work; neither
-these fixtures nor current traffic certify the 10,000-reader capacity scenario.
+bound concentrated per-gene voting or the complete finalization journey.
+The later concentrated experiment reproduced a vision/blacklist cross product:
+100 gene assets, 10,000 votes, 10,000 additional same-vision assets and 1,000
+blacklist rows cost 10,313,151 reads for one vision rebuild. Migration 0105
+indexes the exact normalized blacklist expression; all four matching runtime
+joins require that index. The identical experiment now costs 233,351 reads and
+19 writes. A separate full-schema regression with 10,000 same-vision assets and
+5,000 blacklist rows costs 230,051 reads/19 writes on repetition and preserves
+case-insensitive blacklist metadata and exact asset/rejection totals.
+
+0105's atomic source/schema guard rejects overflow before index creation or a
+journal receipt. Its 5,000-row migration measured 15,378 reads/5,004 writes,
+inside the reviewed 18,450/5,032 envelope. The complete pending 0104+0105 release
+maximum, including inventories, is 993,914 reads and 17,384 writes, with 421
+control requests and ten KV reads/one KV write. These are conservative release
+bounds, not live population estimates, and fresh shared capacity must still fit.
+No provider or operator allowance was increased.
+
+VoteCoordinator alarms previously used raw D1 bindings and retried a failing
+outbox every minute. Their D1 deliveries now share the daily ledger and one
+50-statement invocation envelope: four ordinary votes and two caretaker events
+per alarm. A known daily refusal persists the next UTC reset plus five seconds
+in the existing coordinator; new votes and constructor wakeups respect it.
+Both outboxes retain their identities. Alarm D1 work also waits during schema
+transition. Tests cover exhausted-day zero D1, new votes, restart, automatic
+post-reset delivery and accounting. This bounds the alarm's admitted statements;
+whole-phase atomic row-cost admission, cold bootstrap and canonical export
+remain B-754 work. Current traffic does not certify the 10,000-reader scenario.
 
 `scripts/install-reset-deployer.ps1` updates the existing Windows task
 **Iconoplasm Deploy Window Dispatcher**. Its versioned runner has a 180-second
@@ -40,6 +65,13 @@ The armed exact source, reset date, deadline and retained dispatch state live in
 all twelve meters. It records the reservation before the GitHub POST and will
 not replay an uncertain dispatch. Only the latest exact-main workflow attempt,
 all six full-release steps and installed normal mode establish activation.
+The two migrations remain individually staged. Only a successful exact-attempt
+migration step plus its explicit continuation checkpoint, with every normal
+activation step skipped, permits automatic continuation. The executor preserves
+the installed migration origin, records the checkpoint before dispatch and
+retains uncertain outcomes; a generic successful or failed workflow cannot
+renew a migration allowance. CI verifies checkpoint continuation through full
+activation, restart and an uncertain second POST.
 
 The reset activation deadline is September 13 at 00:30 UTC. A miss belongs to
 B-756 and the registered **Cloudflare reset recovery** Codex heartbeat, which
