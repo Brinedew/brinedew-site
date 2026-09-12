@@ -89,6 +89,21 @@ the exact authoritative set. Duplicate identities fail before D1; a failed
 insert rolls back removals. Full export and cold coordinator initialization are
 still history-dependent and must not be represented as bounded by this change.
 
+The factory projection used three separate source aggregations for totals,
+preview ranks and h-index. Computing both ranks over one joined input and then
+aggregating together preserves all results while reducing reads. A full-schema
+fixture with 10,000 selected assets and 20,000 unrelated assets costs
+146,685 reads before and 93,339 after with vote summaries/current selections;
+with neither, it falls from 110,019 to 80,006. Both write three rows. The full
+vision/blacklist fixture now repeats at 200,040 reads/19 writes. This is still
+proportional to affected history and is not whole-phase admission.
+
+Coordinator asset metadata now updates only when its effective vision or image
+identity changes. The warm vote fixture's SQL writes fall from 19 to 15 and
+import from 17 to 13. An identical desired-vote command reads 14 SQL rows and
+writes zero, retaining the same user vote and snapshot. These counts describe
+SQLite statements; the existing alarm/wakeup and delivery costs remain separate.
+
 `scripts/install-reset-deployer.ps1` updates the existing Windows task
 **Iconoplasm Deploy Window Dispatcher**. Its versioned runner has a 180-second
 process deadline, starts at 00:00 UTC (07:00 Vietnam), wakes the laptop when
