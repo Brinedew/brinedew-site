@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite"
 import { acquireReleasePlan, readReleaseOrigin } from "./operation-cost-release-plan.mjs"
 import { OperationCostLedger } from "../workers/lib/operation-cost-ledger.js"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
+import { FULL_RELEASE_STEPS } from "./lib/iconoplasm-release-evidence.mjs"
 
 test("release retry preserves unknown spending through expiry and lost continuation response", async (t) => {
   const db = new DatabaseSync(":memory:")
@@ -111,6 +112,71 @@ test("GitHub run identity and original creation date survive reruns and bound re
   await assert.rejects(readReleaseOrigin({ ...options, token: "" }), /ORIGIN_REQUIRED/)
 })
 
+test("a successful staged migration origin requires exact-attempt checkpoint proof and retains the original identity", async () => {
+  const now = Date.parse("2026-09-13T00:10:00Z")
+  const common = {
+    path: ".github/workflows/deploy-quartz.yml",
+    head_branch: "main",
+    workflow_id: 42,
+    head_repository: { full_name: "Brinedew/brinedew-site" },
+    head_sha: "a".repeat(40),
+  }
+  const origin = {
+    ...common,
+    id: 123,
+    run_attempt: 2,
+    status: "completed",
+    conclusion: "success",
+    created_at: new Date(now - 600000).toISOString(),
+  }
+  const current = { ...common, id: 456, run_attempt: 1, created_at: new Date(now).toISOString() }
+  const job = {
+    name: "deploy-production",
+    status: "completed",
+    conclusion: "success",
+    steps: [
+      ...FULL_RELEASE_STEPS.map((name) => ({ name, status: "completed", conclusion: "skipped" })),
+      ...[
+        "Apply reviewed D1 migrations through prediction admission",
+        "Record staged migration continuation checkpoint",
+      ].map((name) => ({ name, status: "completed", conclusion: "success" })),
+    ],
+  }
+  const options = {
+    repository: "Brinedew/brinedew-site",
+    runId: "456",
+    resumeRunId: "123",
+    token: "test",
+    now,
+    allowMigrationCheckpointOrigin: true,
+    fetcher: async (url) => {
+      if (url.endsWith("/runs/123")) return Response.json(origin)
+      if (url.endsWith("/runs/456")) return Response.json(current)
+      if (url.endsWith("/attempts/2/jobs?per_page=100")) return Response.json({ jobs: [job] })
+      assert.ok(url.includes("/compare/"))
+      return Response.json({ status: "identical" })
+    },
+  }
+  assert.deepEqual(await readReleaseOrigin(options), {
+    releaseId: "deploy-123",
+    inspectionId: "inspect-456-1",
+    started: now - 600000,
+  })
+  await assert.rejects(
+    readReleaseOrigin({ ...options, allowMigrationCheckpointOrigin: false }),
+    /CONTINUATION_ORIGIN_INVALID/,
+  )
+  job.steps.find(
+    (step) => step.name === "Apply reviewed D1 migrations through prediction admission",
+  ).conclusion = "skipped"
+  await assert.rejects(readReleaseOrigin(options), /CONTINUATION_ORIGIN_INVALID/)
+  job.steps.find(
+    (step) => step.name === "Apply reviewed D1 migrations through prediction admission",
+  ).conclusion = "success"
+  job.steps[0].conclusion = "success"
+  await assert.rejects(readReleaseOrigin(options), /CONTINUATION_ORIGIN_INVALID/)
+})
+
 test("a corrected canonical commit resumes the old migration identity with fresh inspection identity", async () => {
   const now = Date.parse("2026-09-08T12:00:00Z")
   const common = {
@@ -214,7 +280,7 @@ test("a verified D1-free reader containment run may establish a later migration 
   const fetcher = async (url) => {
     if (url.endsWith("/runs/456")) return Response.json(current)
     if (url.endsWith("/runs/123")) return Response.json(origin)
-    if (url.endsWith("/runs/123/jobs?per_page=100")) return Response.json(readerJobs)
+    if (url.endsWith("/runs/123/attempts/1/jobs?per_page=100")) return Response.json(readerJobs)
     assert.ok(url.includes(`/compare/${origin.head_sha}...${current.head_sha}`))
     return Response.json({ status: "ahead" })
   }
@@ -241,7 +307,7 @@ test("a verified D1-free reader containment run may establish a later migration 
     const invalidFetcher = async (url) => {
       if (url.endsWith("/runs/456")) return Response.json(current)
       if (url.endsWith("/runs/123")) return Response.json(origin)
-      if (url.endsWith("/runs/123/jobs?per_page=100")) return Response.json(jobs)
+      if (url.endsWith("/runs/123/attempts/1/jobs?per_page=100")) return Response.json(jobs)
       return Response.json({ status: "ahead" })
     }
     await assert.rejects(

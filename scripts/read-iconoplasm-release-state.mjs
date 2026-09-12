@@ -106,6 +106,7 @@ async function main() {
     // admit a previously successful D1-free containment run. The origin still
     // has to prove its exact deploy and verification job steps in GitHub.
     allowReaderRecoveryOrigin: state.schema_transition && state.reader_recovery,
+    allowMigrationCheckpointOrigin: state.schema_transition,
     token: process.env.GITHUB_TOKEN,
   })
   let maximum
