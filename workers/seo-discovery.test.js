@@ -48,6 +48,25 @@ function htmlResponse(body) {
   })
 }
 
+test("gene metadata preserves opaque script and style bodies while replacing duplicate metadata", () => {
+  const style = `<style>.sample::before { content: '<meta name="description" content="css">'; }${".x{color:red}".repeat(25000)}</style>`
+  const script = `<script>const fixture = '<title>keep script</title></head><meta name="robots" content="script">';</script>`
+  const source = `<html><head><title>old</title>${style}${script}<meta name="description" content="old"><meta name="description" content="duplicate"><script type="application/ld+json">{"old":true}</script></head><body>Profile</body></html>`
+  const result = rewriteIconoplasmGeneDiscoveryMetadata(source, "/gene/TP53", {
+    record: publishedGene("TP53", "tumor protein p53"),
+    indexable: false,
+  })
+  assert.ok(result.includes(style))
+  assert.ok(result.includes(script))
+  assert.ok(result.endsWith("</head><body>Profile</body></html>"))
+  const markup = result.replace(style, "").replace(script, "")
+  assert.equal((markup.match(/name="description"/g) || []).length, 1)
+  assert.equal((markup.match(/name="robots"/g) || []).length, 1)
+  assert.match(markup, /<title>TP53/)
+  assert.match(markup, /rel="canonical" href="https:\/\/iconoplasm.brinedew.bio\/gene\/TP53"/)
+  assert.doesNotMatch(markup, /application\/ld\+json|content="duplicate"/)
+})
+
 let catalogFixtureSequence = 0
 
 function publishedGene(symbol, name, { published = true } = {}) {

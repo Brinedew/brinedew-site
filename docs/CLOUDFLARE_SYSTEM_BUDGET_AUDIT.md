@@ -2,6 +2,52 @@
 
 Status: implementation and capacity verification in progress; not a production safety certificate.
 
+## September 12 audit and September 13 reset release
+
+The account-wide provider sample at 18:15 UTC was 2,645,863 D1 reads,
+18,970 D1 writes, 57,545 Worker requests, 4,018,577 Durable Object SQLite
+reads, 11,268 DO writes, 46,390 DO requests and 40.75 GB-seconds. KV was
+11,760 reads, 88 writes, one delete and one list; Queues had six billable
+operations. These are account totals for the UTC day, not a single database
+or the application's smaller protected allowance. The twelve-meter reader
+in `scripts/lib/cloudflare-account-budget.mjs` rejects missing, malformed,
+truncated or stale data. In particular, an unavailable meter is not zero.
+
+The repair package addresses these measured amplifiers:
+
+| Source                      | Evidence and repaired behavior                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Daily budget DO ledger      | The ledger namespace accounted for 4,009,912 reads in the earlier 16:59 UTC sample. A cycle-key index replaces repeated scans of historical days. Real DO regression with 10,000 cycles costs at most eight reads for a warm lookup and twelve for a record operation; history and reservations remain intact.                                                                            |
+| Global asset/backlog counts | Migration 0104 maintains the existing exact counts and age buckets through transactional triggers. A full-schema fixture with 100,000 assets, 50,000 audit rows and 25,000 publications costs 883,453 reads/12,319 writes to guard and initialize, then one read/zero writes for the summary. The migration adapter reserves the whole operation and rejects oversize sources before DDL. |
+| Asset-state scope           | A successful live request charged 126,181 reads. The route now requires a nonempty normalized scope and drives indexed asset/vote lookups from it. Selecting two assets and three votes beside 100,000 unrelated records costs 22 reads and zero writes.                                                                                                                                  |
+| GeneGuessr search           | Bounded indexed FTS/prefix candidates replace popular-term scans. The 25,000-protein fixture falls from 75,000–100,000 reads to about 1,038 while retaining exact and prefix matches, exclusions and returned-row semantics.                                                                                                                                                              |
+| Workstation blot loop       | Sampled successful upload logs contained 18,002 D1 writes across 8,999 requests, while repeated backlog reads added 85,392 reads. The workstation now parks completed corpus work, verifies exact public bytes before recovering old upload receipts, and persists a daily-budget pause across restarts. The durable backlog still owns new work.                                         |
+| Gene HTML CPU               | The actual 345,198-byte shell repeatedly scanned its inline CSS for metadata edits. One markup pass preserves script/style bodies and canonical image metadata. The isolated local routine measured 3.1–3.8 ms before and 0.30–0.46 ms after; this is not a total Cloudflare CPU measurement.                                                                                             |
+
+The three sync rollup functions were also exercised against the complete schema.
+For one selected asset/vote/vision beside 20,000 unrelated assets and votes,
+their receipts were 8/5, 34/9 and 83/19 reads/writes respectively. This does not
+bound concentrated per-gene voting, shared-vision growth or the complete
+finalization journey. B-754 retains that remaining acceptance work; neither
+these fixtures nor current traffic certify the 10,000-reader capacity scenario.
+
+`scripts/install-reset-deployer.ps1` updates the existing Windows task
+**Iconoplasm Deploy Window Dispatcher**. Its versioned runner has a 180-second
+process deadline, starts at 00:00 UTC (07:00 Vietnam), wakes the laptop when
+Windows permits it, and checks every five minutes during the reset window.
+The armed exact source, reset date, deadline and retained dispatch state live in
+`artifacts/reset-deploy/`. Dispatch requires current-main CI and headroom across
+all twelve meters. It records the reservation before the GitHub POST and will
+not replay an uncertain dispatch. Only the latest exact-main workflow attempt,
+all six full-release steps and installed normal mode establish activation.
+
+The reset activation deadline is September 13 at 00:30 UTC. A miss belongs to
+B-756 and the registered **Cloudflare reset recovery** Codex heartbeat, which
+owns failure inspection and repair. The existing Prefect B-749 continuation
+retains its sync lineage and waits for the repaired server before resuming.
+Deployment, both authenticated sync checks, fresh pages/blots, and the enabled
+UTC day ending September 14 at 00:00 UTC remain separate acceptance gates.
+
 ## Acceptance contract
 
 The September 6 failure requires proactive system analysis, not another individual

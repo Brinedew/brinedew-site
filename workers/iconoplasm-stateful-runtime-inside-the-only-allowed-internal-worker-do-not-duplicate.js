@@ -5,6 +5,10 @@ import {
   mergeDiscoverySymbolsAtomically,
 } from "./iconoplasm/discovery-encounter.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
+import {
+  fetchMaintainedAssetSummary,
+  fetchStorageAuditRecheckDue,
+} from "./iconoplasm/asset-summary-counts.js"
 import { readCatalogStateRows, readEssenceStateRows } from "./iconoplasm/sync-state-selection.js"
 import {
   GLOBAL_FINALIZATION_STATUS_LIST_SQL,
@@ -14145,34 +14149,33 @@ async function fetchManifestationStateRows(env, requestedSymbols) {
   )
 }
 
-async function fetchAssetStateRows(env, requestedSymbols = null) {
+export async function fetchAssetStateRows(env, requestedSymbols = null) {
   if (!env.ICONOPLASM_DB) return []
   const wantedSymbols = Array.isArray(requestedSymbols)
-    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
+    ? [...new Set(requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean))]
     : []
-  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  if (!wantedSymbols.length) return []
   const response = await env.ICONOPLASM_DB.prepare(
     `WITH incoming_scope AS (
        SELECT value AS gene_symbol
        FROM json_each(?)
      ),
-     scoped_assets AS (
-       SELECT *
-       FROM icono_portrait_assets
-       WHERE (? = 0 OR gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+     scoped_assets AS MATERIALIZED (
+       SELECT pa.*
+       FROM incoming_scope i
+       CROSS JOIN icono_portrait_assets pa INDEXED BY sqlite_autoindex_icono_portrait_assets_1
+       WHERE pa.gene_symbol = i.gene_symbol
      ),
      scoped_votes AS (
        SELECT
-         candidate_ref,
-         COALESCE(SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-         COALESCE(SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
-         COALESCE(SUM(vote_value), 0) AS score
-       FROM icono_image_votes
-       WHERE (? = 0 OR candidate_ref IN (
-         SELECT 'a:' || gene_symbol || '|' || asset_sha256
-         FROM scoped_assets
-       ))
-       GROUP BY candidate_ref
+         iv.candidate_ref,
+         COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
+         COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
+         COALESCE(SUM(iv.vote_value), 0) AS score
+       FROM scoped_assets a
+       CROSS JOIN icono_image_votes iv INDEXED BY idx_icono_image_votes_candidate
+       WHERE iv.candidate_ref = 'a:' || a.gene_symbol || '|' || a.asset_sha256
+       GROUP BY iv.candidate_ref
      )
      SELECT
        sa.gene_symbol,
@@ -14201,17 +14204,15 @@ async function fetchAssetStateRows(env, requestedSymbols = null) {
        ON v.candidate_ref = ('a:' || sa.gene_symbol || '|' || sa.asset_sha256)
      ORDER BY sa.gene_symbol ASC, sa.asset_sha256 ASC`,
   )
-    .bind(JSON.stringify(wantedSymbols), applyScope, applyScope)
+    .bind(JSON.stringify(wantedSymbols))
     .all()
   return Array.isArray(response?.results) ? response.results : []
 }
 
 const ICONO_WEBSITE_TRUTH_SUMMARY_KEY = "iconoplasm_website_truth_summary"
 const ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30
-// B-744: bound how often the full-table website-truth summary is recomputed.
-// A recompute scans every portrait asset (~175k rows) plus the storage-audit
-// queue (~99k). Admin storage-audit / repair flows used to force it on every
-// call; reuse the persisted summary within this window instead.
+// Reuse the persisted summary within this window. Migration 0104 maintains
+// exact source counters, so a refresh no longer scans either source corpus.
 const ICONO_WEBSITE_TRUTH_REFRESH_COOLDOWN_SECONDS = 30 * 60
 const ICONO_STORAGE_AUDIT_QUEUE_KEY = "iconoplasm_storage_audit"
 const ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH = 200
@@ -14938,30 +14939,7 @@ async function fetchAdminAssetSummaryBaseline(env) {
     }
   }
 
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COUNT(*) AS candidate_assets,
-       SUM(CASE WHEN gc.gene_symbol IS NOT NULL THEN 1 ELSE 0 END) AS catalog_candidate_assets,
-       SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 0 AND lower(COALESCE(pa.status, 'draft')) <> 'rejected' THEN 1 ELSE 0 END) AS auditable_assets,
-       SUM(CASE WHEN gc.gene_symbol IS NOT NULL AND COALESCE(pa.is_legacy, 0) = 0 AND lower(COALESCE(pa.status, 'draft')) <> 'rejected' THEN 1 ELSE 0 END) AS catalog_auditable_assets,
-       SUM(CASE WHEN COALESCE(pa.is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_assets,
-       SUM(CASE WHEN COALESCE(pa.is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_assets,
-       (
-         SELECT COUNT(*)
-         FROM icono_publish_state
-         WHERE COALESCE(current_asset_sha256, '') <> ''
-       ) AS published_live_portraits,
-       (
-         SELECT COUNT(*)
-         FROM icono_publish_state ps
-         JOIN icono_gene_catalog gc2
-           ON gc2.gene_symbol = ps.gene_symbol
-         WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-       ) AS catalog_published_live_portraits
-     FROM icono_portrait_assets pa
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = pa.gene_symbol`,
-  ).first()
+  const row = await fetchMaintainedAssetSummary(env.ICONOPLASM_DB)
 
   return {
     candidate_assets: Math.max(0, Number(row?.candidate_assets || 0)),
@@ -15019,27 +14997,13 @@ async function computeWebsiteTruthSummary(env) {
     })
   }
 
-  const queueRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COALESCE(SUM(CASE WHEN q.audit_state <> 'unknown' THEN 1 ELSE 0 END), 0) AS audited_assets,
-       COALESCE(SUM(CASE WHEN q.audit_state IN ('renderable', 'regionally_divergent') THEN 1 ELSE 0 END), 0) AS verified_renderable_images,
-       COALESCE(SUM(CASE WHEN q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS storage_incomplete_assets,
-       COALESCE(SUM(CASE WHEN q.audit_state = 'regionally_divergent' THEN 1 ELSE 0 END), 0) AS storage_regionally_divergent_assets,
-       COALESCE(SUM(CASE WHEN q.audit_state <> 'unknown' AND datetime(COALESCE(q.last_audited_at, '')) <= datetime('now', '-${ICONO_STORAGE_AUDIT_RECHECK_DAYS} days') THEN 1 ELSE 0 END), 0) AS storage_recheck_due_assets,
-       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state = 'broken' THEN 1 ELSE 0 END), 0) AS broken_live_images,
-       COALESCE(SUM(CASE WHEN q.is_current = 1 AND q.audit_state IN ('renderable', 'regionally_divergent') THEN 1 ELSE 0 END), 0) AS renderable_live_confirmed,
-       COALESCE(SUM(CASE WHEN q.audit_state = 'unknown' THEN 1 ELSE 0 END), 0) AS storage_queue_backlog_assets
-     FROM icono_storage_audit_queue q
-     WHERE EXISTS (
-       SELECT 1
-       FROM icono_portrait_assets pa
-       WHERE pa.gene_symbol = q.gene_symbol
-         AND pa.asset_sha256 = q.asset_sha256
-         AND COALESCE(pa.asset_sha256, '') <> ''
-         AND COALESCE(pa.is_legacy, 0) = 0
-         AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
-     )`,
-  ).first()
+  const queueRow = {
+    ...(await fetchMaintainedAssetSummary(env.ICONOPLASM_DB)),
+    storage_recheck_due_assets: await fetchStorageAuditRecheckDue(
+      env.ICONOPLASM_DB,
+      ICONO_STORAGE_AUDIT_RECHECK_DAYS,
+    ),
+  }
 
   const auditableAssets = Math.max(0, Number(baseline?.auditable_assets || 0))
   const catalogAuditableAssets = Math.max(0, Number(baseline?.catalog_auditable_assets || 0))
@@ -15195,13 +15159,8 @@ async function writeWebsiteTruthSummary(env, summary) {
 }
 
 async function refreshWebsiteTruthSummaryRow(env) {
-  // D1 cost fence (B-744): a full recompute scans every portrait asset
-  // (~175k rows read) plus the storage-audit queue (~99k). The admin storage
-  // audit / repair flows used to force this on every call, so a handful of
-  // admin actions could exhaust the daily read budget on their own. Reuse the
-  // persisted summary while it is fresh; only recompute when it is stale (or
-  // explicitly requested via ?refresh=1), so the expensive scan is bounded
-  // regardless of how often an operator opens the panel.
+  // B-744: recompute reads maintained counts and a bounded age histogram.
+  // Keep the cooldown to avoid rewriting the public projection on each poll.
   const previous = await fetchPersistedWebsiteTruthSummary(env)
   const updatedAtMs = previous?.updated_at ? Date.parse(previous.updated_at) : NaN
   if (
@@ -18207,6 +18166,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             `ALTER TABLE daily_budget_usage ADD COLUMN request_count INTEGER NOT NULL DEFAULT 0`,
           )
         }
+        // B-744: every budget snapshot reads the current billing cycle. Without
+        // this index each check scanned every historical day in the authority,
+        // spending millions of DO reads while trying to protect D1. Keep all
+        // historical charges; index the existing rows instead of dropping them.
+        this.state.storage.sql.exec(
+          `CREATE INDEX IF NOT EXISTS idx_daily_budget_usage_cycle
+           ON daily_budget_usage(cycle_key)`,
+        )
         this.state.storage.sql.exec(`
           CREATE TABLE IF NOT EXISTS daily_budget_usage_attribution (
             day_key TEXT NOT NULL,
@@ -19575,7 +19542,7 @@ async function listAdminReadModelVisionIdsAfter(env, rawAfterVisionId = "", limi
   )
 }
 
-async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
+export async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
   // B-742 unresolved fence: the transactional replacement protects readers from
   // partial summaries, but this legacy vote-history rebuild is not a bounded
   // canonical projection. Replace it coherently with coordinator-owned state
@@ -19648,7 +19615,7 @@ async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
   return symbols.length
 }
 
-async function rebuildGeneRollupForSymbols(env, rawSymbols) {
+export async function rebuildGeneRollupForSymbols(env, rawSymbols) {
   if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return 0
   const symbols = Array.from(
     new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
@@ -19940,7 +19907,7 @@ async function rebuildGeneRollupForSymbols(env, rawSymbols) {
   return symbols.length
 }
 
-async function rebuildVisionRollupsBatch(env, rawVisionIds) {
+export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   if (!env.ICONOPLASM_DB || !Array.isArray(rawVisionIds) || rawVisionIds.length <= 0) return 0
   const visionIds = Array.from(
     new Set(rawVisionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean)),

@@ -475,6 +475,10 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
   const upperPrefixEnd = prefixUpperBound(exactUpper)
   const ftsQuery = toProteinSearchMatchQuery(query)
   if (!ftsQuery) return []
+  if (query.length > 200 || exclude.length > 100) {
+    throw new Error("Protein search accepts at most 200 query characters and 100 exclusions")
+  }
+  const candidateLimit = cleanedLimit + exclude.length + 128
 
   // Build exclusion clause if needed
   let excludeClause = ""
@@ -486,12 +490,27 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
   }
 
   try {
+    // FTS5 can produce its relevance-ordered cursor without joining every
+    // match to proteins/synonyms first. A CASE sort on the original full join
+    // defeated that optimization (100k reads for 20 broad suggestions).
+    // Indexed symbol/accession/alias lanes retain exact and prefix matches
+    // even when common words would dominate the full-text shortlist.
     const statement = `
+      WITH candidates(id) AS MATERIALIZED (
+        SELECT rowid FROM (SELECT rowid FROM protein_search WHERE protein_search MATCH ? ORDER BY rank LIMIT ?)
+        UNION
+        SELECT id FROM (SELECT id FROM proteins WHERE gene >= ? AND gene < ? ORDER BY gene LIMIT ?)
+        UNION
+        SELECT id FROM (SELECT id FROM proteins WHERE uniprot >= ? AND uniprot < ? ORDER BY uniprot LIMIT ?)
+        UNION
+        SELECT protein_id FROM (SELECT protein_id FROM protein_synonyms WHERE normalized >= ? AND normalized < ? ORDER BY normalized LIMIT ?)
+      )
       SELECT
         p.uniprot,
         p.gene,
         p.full_name,
         p.length,
+        p.synonyms,
         CASE
           WHEN p.gene = ? THEN 0
           WHEN p.uniprot = ? THEN 1
@@ -513,8 +532,9 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
           ELSE 6
         END AS match_rank,
         bm25(protein_search) AS relevance
-      FROM protein_search
-      JOIN proteins p
+      FROM candidates
+      CROSS JOIN protein_search ON protein_search.rowid = candidates.id
+      CROSS JOIN proteins p
         ON p.id = protein_search.rowid
       LEFT JOIN structure_failures sf
         ON sf.uniprot = p.uniprot
@@ -527,6 +547,17 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
     const response = await db
       .prepare(statement)
       .bind(
+        ftsQuery,
+        candidateLimit,
+        exactUpper,
+        upperPrefixEnd,
+        candidateLimit,
+        exactUpper,
+        upperPrefixEnd,
+        candidateLimit,
+        exactUpper,
+        upperPrefixEnd,
+        candidateLimit,
         exactUpper,
         exactUpper,
         exactUpper,
