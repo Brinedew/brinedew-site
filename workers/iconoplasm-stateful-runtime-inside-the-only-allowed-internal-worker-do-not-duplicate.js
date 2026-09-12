@@ -10066,6 +10066,8 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
   // ARCHITECTURE FENCE [IPD-005]: the NOCASE source join below requires the
   // matching factory_emulsion_nocase index (0081). A BINARY index is not a
   // substitute: the production mismatch spent >13M reads per factory update.
+  // Rank the joined source once, then aggregate totals, previews and h-index
+  // together. Separate aggregates repeated the source joins three times.
   await env.ICONOPLASM_DB.prepare(
     `DELETE FROM icono_generation_request_factory_option_rollup
      WHERE public_emulsion_code IN (SELECT value FROM json_each(?))`,
@@ -10105,73 +10107,38 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
         AND vs.asset_sha256 = pa.asset_sha256
        WHERE COALESCE(pa.asset_sha256, '') <> ''
      ),
-     summary AS (
+     ranked_assets AS (
        SELECT
-         public_emulsion_code,
-         MAX(emulsion_slot) AS emulsion_slot,
-         COUNT(*) AS image_count,
-         SUM(is_current) AS live_count,
-         SUM(score) AS score
-       FROM source_assets
-       GROUP BY public_emulsion_code
-     ),
-     ranked_previews AS (
-       SELECT
-         public_emulsion_code,
-         gene_symbol,
-         asset_sha256,
-         is_current,
+         *,
          ROW_NUMBER() OVER (
            PARTITION BY public_emulsion_code
            ORDER BY is_current DESC, upvotes DESC, score DESC, created_at DESC, asset_sha256 ASC
-         ) AS preview_rank
-       FROM source_assets
-     ),
-     preview_json AS (
-       SELECT
-         public_emulsion_code,
-         json_group_array(json_object(
-           'gene_symbol', gene_symbol,
-           'asset_sha256', asset_sha256,
-           'is_current', is_current,
-           'preview_rank', preview_rank
-         )) AS preview_assets_json
-       FROM (
-         SELECT * FROM ranked_previews
-         WHERE preview_rank <= 5
-         ORDER BY public_emulsion_code ASC, preview_rank ASC
-       )
-       GROUP BY public_emulsion_code
-     ),
-     ranked_votes AS (
-       SELECT
-         public_emulsion_code,
-         upvotes,
+         ) AS preview_rank,
          ROW_NUMBER() OVER (
            PARTITION BY public_emulsion_code
            ORDER BY upvotes DESC, asset_sha256 ASC
          ) AS approval_rank
        FROM source_assets
-     ),
-     h_index AS (
-       SELECT
-         public_emulsion_code,
-         MAX(CASE WHEN upvotes >= approval_rank THEN approval_rank ELSE 0 END) AS vote_h_index
-       FROM ranked_votes
-       GROUP BY public_emulsion_code
      )
      SELECT
-       summary.public_emulsion_code,
-       summary.emulsion_slot,
-       summary.image_count,
-       summary.live_count,
-       summary.score,
-       COALESCE(h_index.vote_h_index, 0),
-       COALESCE(preview_json.preview_assets_json, '[]'),
+       public_emulsion_code,
+       MAX(emulsion_slot),
+       COUNT(*),
+       SUM(is_current),
+       SUM(score),
+       MAX(CASE WHEN upvotes >= approval_rank THEN approval_rank ELSE 0 END),
+       json_group_array(json_object(
+         'gene_symbol', gene_symbol,
+         'asset_sha256', asset_sha256,
+         'is_current', is_current,
+         'preview_rank', preview_rank
+       )) FILTER (WHERE preview_rank <= 5),
        CURRENT_TIMESTAMP
-     FROM summary
-     LEFT JOIN preview_json USING (public_emulsion_code)
-     LEFT JOIN h_index USING (public_emulsion_code)`,
+     FROM (
+       SELECT * FROM ranked_assets
+       ORDER BY public_emulsion_code ASC, preview_rank ASC
+     )
+     GROUP BY public_emulsion_code`,
   )
     .bind(affectedCodesJson)
     .run()
@@ -17434,7 +17401,9 @@ export class IconoplasmVoteCoordinator {
            ELSE asset_summary.vision_id
          END,
          candidate_image_id = COALESCE(excluded.candidate_image_id, asset_summary.candidate_image_id),
-         updated_at = CURRENT_TIMESTAMP`,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE (excluded.vision_id <> '' AND asset_summary.vision_id IS NOT excluded.vision_id)
+          OR (excluded.candidate_image_id IS NOT NULL AND asset_summary.candidate_image_id IS NOT excluded.candidate_image_id)`,
       safeAssetSha,
       sanitizeVoteVisionId(visionId || ""),
       optionalInt(candidateImageId),

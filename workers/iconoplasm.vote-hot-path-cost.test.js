@@ -95,7 +95,34 @@ test(
       assert.equal(Object.hasOwn(imported.body, "asset_summaries"), false)
       assert.ok(imported.cost.rows_read <= 200, JSON.stringify(imported.cost))
       assert.ok(imported.cost.rows_written <= 60, JSON.stringify(imported.cost))
-      t.diagnostic(JSON.stringify({ assets: 10000, vote: vote.cost, import: imported.cost }))
+      const repeated = await (
+        await runtime.dispatchFetch("https://test/vote/set", {
+          method: "POST",
+          body: JSON.stringify({
+            symbol: "TP53",
+            asset_sha256: asset,
+            user_id: "test-user",
+            vote_value: 1,
+          }),
+        })
+      ).json()
+      assert.equal(repeated.status, 200)
+      assert.equal(repeated.body.changed, false)
+      assert.equal(repeated.body.snapshot.image_score, 0)
+      assert.equal(repeated.body.snapshot.user_vote, 1)
+      assert.equal(
+        repeated.cost.rows_written,
+        0,
+        "unchanged metadata and a duplicate vote do not write SQL rows",
+      )
+      t.diagnostic(
+        JSON.stringify({
+          assets: 10000,
+          vote: vote.cost,
+          import: imported.cost,
+          repeated: repeated.cost,
+        }),
+      )
     } finally {
       await runtime.dispose()
     }
