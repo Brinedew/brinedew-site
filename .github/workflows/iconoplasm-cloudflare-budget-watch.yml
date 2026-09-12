@@ -15,6 +15,7 @@ concurrency:
 jobs:
   budget-watch:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -51,5 +52,5 @@ jobs:
             exit 1
           fi
 
-      - name: Check Cloudflare KV budget headroom
+      - name: Check account D1, Durable Objects, Workers and KV headroom
         run: node scripts/check-iconoplasm-cloudflare-budget-headroom.mjs

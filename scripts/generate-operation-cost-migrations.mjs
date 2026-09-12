@@ -2,6 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import { transactionalAdminCountSeedPhases } from "./generate-transactional-admin-counts.mjs"
+import {
+  assetSummaryMigration,
+  assetSummaryMigrationStatements,
+} from "./generate-asset-summary-counts.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const filename = "0094_finalization_summary.sql"
@@ -107,7 +111,16 @@ export function voteJobVersionMigrationStatements() {
 }
 
 function output() {
+  if (
+    readFileSync(
+      path.join(root, "migrations-iconoplasm/0104_asset_summary_counts.sql"),
+      "utf8",
+    ).replace(/\r\n/g, "\n") !== assetSummaryMigration()
+  ) {
+    throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
+  }
   const migrations = [
+    ["ASSET_SUMMARY", "0104_asset_summary_counts.sql", assetSummaryMigrationStatements()],
     [
       "FINALIZATION_RUNNING",
       "0103_finalization_running_index.sql",

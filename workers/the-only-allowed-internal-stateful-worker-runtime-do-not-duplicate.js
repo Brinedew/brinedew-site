@@ -1069,10 +1069,48 @@ function iconoplasmGeneMetaDescription(record, cardPayload) {
   return `${identity} Iconoplasm character profile${detail}.`
 }
 
-function stripIconoplasmGeneImageMetadata(html) {
+function rewriteIconoplasmGeneHeadMetadata(html, replacements, appended) {
+  // The current shell contains more than 300 KB of inline CSS. Repeated
+  // replace-or-insert scans spent milliseconds per gene request on unchanged
+  // bytes. Visit markup once, keeping raw script/style bodies opaque, and
+  // insert absent metadata at the existing head boundary.
+  const pending = new Map(replacements)
   return String(html || "").replace(
-    /\s*<meta\b[^>]*\b(?:property|name)=["'](?:og:image(?::(?:url|secure_url|alt|type|width|height))?|twitter:(?:card|image|image:alt))["'][^>]*>\s*/gi,
-    "\n",
+    /<(?:((?:meta|link))\b[^>]*>|(title|script|style)\b[^>]*>[\s\S]*?<\/\2\s*>|\/head\s*>)/gi,
+    (tag, singleton, block) => {
+      const kind = String(singleton || block || "").toLowerCase()
+      let key = ""
+      if (kind === "style") return tag
+      if (kind === "script") {
+        const opening = tag.slice(0, tag.indexOf(">") + 1)
+        return /\btype\s*=\s*["']application\/ld\+json["']/i.test(opening) ||
+          /\bid\s*=\s*["']iconoplasm-gene-structured-data["']/i.test(opening)
+          ? ""
+          : tag
+      }
+      if (kind === "title") key = "title"
+      if (kind === "link" && /\brel\s*=\s*["']canonical["']/i.test(tag)) key = "canonical"
+      if (kind === "meta") {
+        key = /\b(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]?.toLowerCase() || ""
+        if (
+          /^(?:og:image(?::(?:url|secure_url|alt|type|width|height))?|twitter:(?:card|image|image:alt))$/.test(
+            key,
+          )
+        )
+          return ""
+      }
+      if (replacements.has(key)) {
+        const replacement = pending.get(key) || ""
+        pending.delete(key)
+        return replacement
+      }
+      if (!kind) {
+        const remaining = [...pending.values(), ...appended].filter(Boolean).join("\n")
+        pending.clear()
+        return `${remaining}\n${tag}`
+      }
+      return tag
+    },
   )
 }
 
@@ -1172,61 +1210,22 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
   const safeDescription = escapeIconoplasmHtmlAttribute(description)
   const blotUrl = indexable ? iconoplasmGenePublishedCardBlotUrl(cardPayload) : ""
   const blotAlt = blotUrl ? `${symbol} Iconoplasm gene blot — ${gene.fullName || symbol}` : ""
-  let next = String(html || "").replace(
-    /\s*<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi,
-    "\n",
-  )
-  next = stripIconoplasmGeneImageMetadata(next)
-  next = replaceOrInsertHeadMarkup(next, /<title>[\s\S]*?<\/title>/i, `<title>${safeTitle}</title>`)
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\bname=["']description["'][^>]*>/i,
-    `<meta name="description" content="${safeDescription}">`,
-  )
-  if (indexable) {
-    next = next.replace(/\s*<meta\b[^>]*\bname=["']robots["'][^>]*>\s*/gi, "\n")
-  } else {
-    next = replaceOrInsertHeadMarkup(
-      next,
-      /<meta\b[^>]*\bname=["']robots["'][^>]*>/i,
-      `<meta name="robots" content="noindex,follow,noarchive">`,
-    )
-  }
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<link\b[^>]*\brel=["']canonical["'][^>]*>/i,
-    `<link rel="canonical" href="${geneUrl}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/i,
-    `<meta property="og:url" content="${geneUrl}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/i,
-    `<meta name="twitter:url" content="${geneUrl}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']og:title["'][^>]*>/i,
-    `<meta property="og:title" content="${escapeIconoplasmHtmlAttribute(title)}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']og:description["'][^>]*>/i,
-    `<meta property="og:description" content="${safeDescription}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']twitter:title["'][^>]*>/i,
-    `<meta name="twitter:title" content="${escapeIconoplasmHtmlAttribute(title)}">`,
-  )
-  next = replaceOrInsertHeadMarkup(
-    next,
-    /<meta\b[^>]*\b(?:property|name)=["']twitter:description["'][^>]*>/i,
-    `<meta name="twitter:description" content="${safeDescription}">`,
-  )
+  const replacements = new Map([
+    ["title", `<title>${safeTitle}</title>`],
+    ["description", `<meta name="description" content="${safeDescription}">`],
+    ["robots", indexable ? "" : '<meta name="robots" content="noindex,follow,noarchive">'],
+    ["canonical", `<link rel="canonical" href="${geneUrl}">`],
+    ["og:url", `<meta property="og:url" content="${geneUrl}">`],
+    ["twitter:url", `<meta name="twitter:url" content="${geneUrl}">`],
+    ["og:title", `<meta property="og:title" content="${escapeIconoplasmHtmlAttribute(title)}">`],
+    ["og:description", `<meta property="og:description" content="${safeDescription}">`],
+    [
+      "twitter:title",
+      `<meta name="twitter:title" content="${escapeIconoplasmHtmlAttribute(title)}">`,
+    ],
+    ["twitter:description", `<meta name="twitter:description" content="${safeDescription}">`],
+  ])
+  const appended = []
   if (blotUrl) {
     const imageMeta = [
       `<meta property="og:image" content="${blotUrl}">`,
@@ -1240,25 +1239,21 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
       `<meta name="twitter:image" content="${blotUrl}">`,
       `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
     ].join("\n")
-    next = replaceOrInsertHeadMarkup(
-      next,
-      /<meta\b[^>]*\bdata-iconoplasm-gene-image=["']canonical["'][^>]*>/i,
-      imageMeta,
+    appended.push(imageMeta)
+  }
+  if (indexable) {
+    const structuredData = iconoplasmGeneStructuredData({
+      gene: { ...gene, symbol },
+      geneUrl,
+      title,
+      description,
+      blotUrl,
+    })
+    appended.push(
+      `<script type="application/ld+json" id="iconoplasm-gene-structured-data">${iconoplasmSafeJsonScriptPayload(structuredData)}</script>`,
     )
   }
-  if (!indexable) return next
-  const structuredData = iconoplasmGeneStructuredData({
-    gene: { ...gene, symbol },
-    geneUrl,
-    title,
-    description,
-    blotUrl,
-  })
-  return replaceOrInsertHeadMarkup(
-    next,
-    /<script\b[^>]*\bid=["']iconoplasm-gene-structured-data["'][^>]*>[\s\S]*?<\/script>/i,
-    `<script type="application/ld+json" id="iconoplasm-gene-structured-data">${iconoplasmSafeJsonScriptPayload(structuredData)}</script>`,
-  )
+  return rewriteIconoplasmGeneHeadMetadata(html, replacements, appended)
 }
 
 function resolveStaticSiteOrigin(hostname) {
