@@ -59,6 +59,114 @@ function fakeVoteCoordinatorState() {
   return { state, alarms }
 }
 
+test("vote alarm preserves every outbox identity through a daily pause, new votes, restart and automatic reset wakeup", async (t) => {
+  let now = Date.parse("2026-09-12T20:00:00Z"),
+    exhausted = true
+  t.mock.method(Date, "now", () => now)
+  const budgetCalls = []
+  const budget = {
+    idFromName: () => "global",
+    get: () => ({
+      fetch: async (request) => {
+        const body = await request.json()
+        budgetCalls.push({ path: new URL(request.url).pathname, body })
+        return Response.json({
+          day_key: body.day_key,
+          cycle_key: body.cycle_key,
+          rows_read: exhausted ? 1000000 : 0,
+          rows_written: 0,
+          rows_read_daily_smart_limit: 1000000,
+          rows_written_daily_smart_limit: 20000,
+          exhausted,
+          exhausted_by: exhausted ? "rows_read_daily_smart" : null,
+        })
+      },
+    }),
+  }
+  const db = new RecordingDb({
+    runHandler: () => ({ success: true, meta: { changes: 1, rows_read: 2, rows_written: 3 } }),
+  })
+  const queue = fakeQueue()
+  const env = {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+  }
+  const { state, alarms } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  let coordinator = new IconoplasmVoteCoordinator(state, env)
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  const assetSha = "e".repeat(64)
+  const asset = coordinator.ensureAssetSummaryRow(assetSha, { visionId: "anima-v1-9" })
+  const vote = (n) =>
+    coordinator.applyVoteMutation({
+      assetSha256: assetSha,
+      userId: `user-${n}`,
+      requestedVoteValue: 1,
+      ensuredAsset: asset,
+    })
+  for (let n = 0; n < 5; n++) vote(n)
+  const ids = coordinator.pendingOutboxRows().map((row) => row.mutation_id)
+  const paused = await coordinator.alarm()
+  assert.equal(paused.reason, "daily_d1_budget")
+  assert.equal(db.calls.length, 0)
+  assert.equal(budgetCalls.length, 1)
+  assert.deepEqual(
+    coordinator.pendingOutboxRows().map((row) => row.mutation_id),
+    ids,
+  )
+  vote(5)
+  await coordinator.armOutboxAlarm(1)
+  assert.equal(alarms.at(-1), Date.parse("2026-09-13T00:00:05Z"))
+  coordinator = new IconoplasmVoteCoordinator(state, env)
+  await state.ready
+  assert.equal(alarms.at(-1), paused.retry_at)
+  await coordinator.alarm()
+  assert.equal(budgetCalls.length, 1)
+  assert.equal(db.calls.length, 0)
+  now = paused.retry_at + 1
+  exhausted = false
+  const resumed = await coordinator.alarm()
+  assert.equal(resumed.vote.ok, true)
+  assert.equal(resumed.vote.delivered, 4)
+  assert.equal(coordinator.pendingOutboxRows().length, 2)
+  assert.ok(db.calls.length <= 50)
+  const record = budgetCalls.find((call) => call.path === "/record")
+  assert.equal(record.body.attribution.route_family, "background_vote_outbox")
+  assert.equal(record.body.attribution.source_class, "background_alarm")
+  assert.ok(record.body.query_count > 0)
+  assert.ok(alarms.at(-1) <= now + 1)
+  await coordinator.alarm()
+  assert.equal(coordinator.pendingOutboxRows().length, 0)
+  assert.equal(coordinator.getMeta("outbox_budget_retry_at"), "")
+})
+
+test("vote alarms preserve queued work without D1 traffic during schema transition", async (t) => {
+  const db = new RecordingDb()
+  const { state, alarms } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_SCHEMA_TRANSITION: "1",
+  })
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.applyVoteMutation({
+    assetSha256: "a".repeat(64),
+    userId: "reader",
+    requestedVoteValue: 1,
+  })
+  const started = Date.now()
+  assert.equal((await coordinator.alarm()).reason, "schema_transition")
+  assert.equal(db.calls.length, 0)
+  assert.equal(coordinator.pendingOutboxRows().length, 1)
+  assert.ok(alarms.at(-1) >= started + 300000)
+})
+
 class RecordingStatement {
   constructor(db, sql) {
     this.db = db
