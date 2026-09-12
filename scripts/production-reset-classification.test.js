@@ -12,6 +12,9 @@ const end = workflow.indexOf('          if [[ -n "${successful_run_id}" ]]', sta
 assert.ok(start >= 0 && end > start, "the actual workflow classification block must exist")
 const classification = workflow.slice(start, end).replace(/^          /gm, "")
 const sha = "add2f6928d0ad7185665b21481ca8b38130e58ab"
+// Windows' system bash starts WSL and drops this native process's fixture
+// environment. Use Git Bash so mocked gh/curl remain entirely offline.
+const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash"
 const requiredSteps = [
   "Deploy the only allowed internal stateful worker (production)",
   "Deploy production static site to Cloudflare Pages",
@@ -48,11 +51,8 @@ function fullJobs() {
 function classify(runs, jobs = {}, extra = {}) {
   // Execute the real workflow shell with an offline gh replacement. Unexpected
   // calls, including mutations, fail; no provider credentials enter this test.
-  const result = spawnSync(
-    "bash",
-    [
-      "-c",
-      `set -euo pipefail
+  const result = spawnSync(bash, ["-s"], {
+    input: `set -euo pipefail
       gh() {
         [[ "$1" == "api" && "$#" == "2" ]] || return 97
         case "$2" in
@@ -66,24 +66,21 @@ function classify(runs, jobs = {}, extra = {}) {
       }
       ${classification}
       printf '%s' "$successful_run_id"`,
-    ],
-    {
-      encoding: "utf8",
-      timeout: 5000,
-      env: {
-        PATH: process.env.PATH,
-        SystemRoot: process.env.SystemRoot,
-        REPOSITORY: "test/site",
-        DEPLOY_WORKFLOW: "deploy-quartz.yml",
-        head_sha: sha,
-        MOCK_RUNS: JSON.stringify({ workflow_runs: runs }),
-        MOCK_JOBS: JSON.stringify(jobs),
-        EXPECTED_RUN: String(runs.at(-1)?.id ?? ""),
-        MOCK_FAILURE: "0",
-        ...extra,
-      },
+    encoding: "utf8",
+    timeout: 5000,
+    env: {
+      PATH: process.env.PATH,
+      SystemRoot: process.env.SystemRoot,
+      REPOSITORY: "test/site",
+      DEPLOY_WORKFLOW: "deploy-quartz.yml",
+      head_sha: sha,
+      MOCK_RUNS: JSON.stringify({ workflow_runs: runs }),
+      MOCK_JOBS: JSON.stringify(jobs),
+      EXPECTED_RUN: String(runs.at(-1)?.id ?? ""),
+      MOCK_FAILURE: "0",
+      ...extra,
     },
-  )
+  })
   if (result.error) throw result.error
   return result
 }
@@ -180,11 +177,8 @@ function controller(overrides = {}) {
       { name: "deploy-production", status: "completed", conclusion: "skipped", steps: null },
     ],
   }
-  const result = spawnSync(
-    "bash",
-    [
-      "-c",
-      `set -euo pipefail
+  const result = spawnSync(bash, ["-s"], {
+    input: `set -euo pipefail
       date() {
         case "$*" in
           "-u +%H") printf 00 ;;
@@ -218,41 +212,38 @@ function controller(overrides = {}) {
         esac
       }
       ${body}`,
-    ],
-    {
-      encoding: "utf8",
-      timeout: 5000,
-      env: {
-        PATH: process.env.PATH,
-        SystemRoot: process.env.SystemRoot,
-        CLOUDFLARE_API_TOKEN: "offline-fixture",
-        CLOUDFLARE_ACCOUNT_ID: "offline-fixture",
-        CLOUDFLARE_SCRIPT_NAME: "geneguessr-api",
-        REPOSITORY: "test/site",
-        DEPLOY_WORKFLOW: "deploy-quartz.yml",
-        TEST_SHA: sha,
-        MOCK_RUNS: JSON.stringify({ workflow_runs: [failed, recovered] }),
-        MOCK_READER_JOBS: JSON.stringify(readerJobs),
-        MOCK_CHECKS: JSON.stringify({
-          check_runs: [{ name: "build-and-test", conclusion: "success" }],
-        }),
-        MOCK_TELEMETRY: telemetry(10),
-        MOCK_FAILED_JOBS: JSON.stringify({
-          jobs: [
-            { name: "reader-recovery-only", conclusion: "skipped", steps: null },
-            {
-              name: "deploy-production",
-              conclusion: "failure",
-              steps: [
-                { name: "Reject exhausted capacity before release setup", conclusion: "failure" },
-              ],
-            },
-          ],
-        }),
-        ...overrides,
-      },
+    encoding: "utf8",
+    timeout: 5000,
+    env: {
+      PATH: process.env.PATH,
+      SystemRoot: process.env.SystemRoot,
+      CLOUDFLARE_API_TOKEN: "offline-fixture",
+      CLOUDFLARE_ACCOUNT_ID: "offline-fixture",
+      CLOUDFLARE_SCRIPT_NAME: "geneguessr-api",
+      REPOSITORY: "test/site",
+      DEPLOY_WORKFLOW: "deploy-quartz.yml",
+      TEST_SHA: sha,
+      MOCK_RUNS: JSON.stringify({ workflow_runs: [failed, recovered] }),
+      MOCK_READER_JOBS: JSON.stringify(readerJobs),
+      MOCK_CHECKS: JSON.stringify({
+        check_runs: [{ name: "build-and-test", conclusion: "success" }],
+      }),
+      MOCK_TELEMETRY: telemetry(10),
+      MOCK_FAILED_JOBS: JSON.stringify({
+        jobs: [
+          { name: "reader-recovery-only", conclusion: "skipped", steps: null },
+          {
+            name: "deploy-production",
+            conclusion: "failure",
+            steps: [
+              { name: "Reject exhausted capacity before release setup", conclusion: "failure" },
+            ],
+          },
+        ],
+      }),
+      ...overrides,
     },
-  )
+  })
   if (result.error) throw result.error
   assert.equal(result.status, 0, result.stderr)
   return result.stdout

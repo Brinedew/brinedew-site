@@ -312,7 +312,10 @@ export function createIconoplasmAdminAssetHandlers(services) {
         json({ error: `Too many symbols (max ${stateSymbolMax})` }, 400),
       )
     }
-    const assets = (await fetchAssetStateRows(env, rawSymbols))
+    const symbols = [...new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean))]
+    if (!symbols.length)
+      return done("admin_assets_state_400", json(ASSET_STATE_SCOPE_REQUIRED, 400, NO_STORE))
+    const assets = (await fetchAssetStateRows(env, symbols))
       .map((row) => ({
         symbol: normalizeSymbol(row?.gene_symbol || ""),
         asset_sha256: normalizeSha256(row?.asset_sha256 || ""),

@@ -229,3 +229,19 @@ test("scoped asset state normalizes rows and drops invalid asset identities", as
     },
   )
 })
+
+test("omitted, empty and invalid POST scopes never become full asset-state reads", async () => {
+  const handlers = createIconoplasmAdminAssetHandlers(
+    assetServices({
+      fetchAssetStateRows: async () => assert.fail("Unscoped read must not reach D1"),
+    }),
+  )
+  for (const body of [{}, { symbols: null }, { symbols: [] }, { symbols: ["", " "] }]) {
+    const response = await responseFrom(handlers["admin_assets.state"], {
+      body,
+      path: "/api/iconoplasm/admin/assets/state",
+    })
+    assert.equal(response.status, 400)
+    assert.equal((await response.json()).code, "ICONOPLASM_ASSET_STATE_SCOPE_REQUIRED")
+  }
+})
