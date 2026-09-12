@@ -11,6 +11,12 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0105_artist_blacklist_lookup.sql": {
+      "adapter_id": "iconoplasm-migration-0105",
+      "arguments": { "max_rows": 5000, "max_schema_rows": 512 },
+      "migration_protocol": "one-migration-per-release-v1",
+      "prediction": { "rows_read": 10000, "rows_written": 2600, "requests": 1 }
+    },
     "iconoplasm/0104_asset_summary_counts.sql": {
       "adapter_id": "iconoplasm-migration-0104",
       "arguments": {

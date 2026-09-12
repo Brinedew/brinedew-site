@@ -120,6 +120,16 @@ function output() {
     throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
   }
   const migrations = [
+    [
+      "BLACKLIST_LOOKUP",
+      "0105_artist_blacklist_lookup.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0105_artist_blacklist_lookup.sql",
+        0,
+        1,
+      ),
+    ],
     ["ASSET_SUMMARY", "0104_asset_summary_counts.sql", assetSummaryMigrationStatements()],
     [
       "FINALIZATION_RUNNING",

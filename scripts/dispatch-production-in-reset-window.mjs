@@ -4,36 +4,12 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { readAccountBudget } from "./lib/cloudflare-account-budget.mjs"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
+import { isFullRelease, isMigrationCheckpoint } from "./lib/iconoplasm-release-evidence.mjs"
+export { isFullRelease, FULL_RELEASE_STEPS } from "./lib/iconoplasm-release-evidence.mjs"
 
 const REPOSITORY = "Brinedew/brinedew-site"
 const WORKFLOW = "deploy-quartz.yml"
 const ACTIVE = new Set(["queued", "in_progress", "waiting", "requested", "pending"])
-export const FULL_RELEASE_STEPS = Object.freeze([
-  "Deploy the only allowed internal stateful worker (production)",
-  "Deploy production static site to Cloudflare Pages",
-  "Activate current Iconoplasm HTML shell cache version",
-  "Verify Iconoplasm publication aliases (production)",
-  "Smoke test production host ownership and browser bootstraps",
-  "Smoke test Discord OAuth entry and anonymous session contract",
-])
-
-export function isFullRelease(run, jobs) {
-  if (run.status !== "completed" || run.conclusion !== "success") return false
-  const production = jobs.filter((job) => job.name === "deploy-production")
-  return (
-    production.length === 1 &&
-    production[0].status === "completed" &&
-    production[0].conclusion === "success" &&
-    FULL_RELEASE_STEPS.every(
-      (name) =>
-        production[0].steps?.filter(
-          (step) =>
-            step.name === name && step.status === "completed" && step.conclusion === "success",
-        ).length === 1,
-    )
-  )
-}
-
 export function deploymentHeadroom(usage, now) {
   if (
     usage?.day !== new Date(now).toISOString().slice(0, 10) ||
@@ -144,9 +120,11 @@ export async function dispatchResetTick({
       (a, b) =>
         Date.parse(b.run_started_at || b.created_at) - Date.parse(a.run_started_at || a.created_at),
     )[0]
+  let checkpoint = null
   if (latest?.status === "completed" && latest.conclusion === "success") {
     const run = latest
-    if (isFullRelease(run, await jobs(run))) {
+    const latestJobs = await jobs(run)
+    if (isFullRelease(run, latestJobs)) {
       const installed = await readState()
       if (typeof installed?.schema_transition !== "boolean")
         throw new Error("RESET_INSTALLED_STATE_INVALID")
@@ -162,6 +140,7 @@ export async function dispatchResetTick({
           full_release_verified_at: new Date(now()).toISOString(),
         })
     }
+    if (isMigrationCheckpoint(run, latestJobs)) checkpoint = run
   }
   const active = payload.workflow_runs.find((run) => ACTIVE.has(run.status))
   if (active) {
@@ -199,7 +178,9 @@ export async function dispatchResetTick({
         error: "Multiple new releases require executor reconciliation; no duplicate dispatch.",
       })
     const run = candidates[0]
-    if (run)
+    // A checkpoint accounts for the previous dispatch without treating it as
+    // activation. Unknown/failed outcomes still retain their reservation.
+    if (run && run.id !== checkpoint?.id)
       return save({
         phase: "failed",
         run_id: run.id,
@@ -208,11 +189,27 @@ export async function dispatchResetTick({
         error:
           "Canonical release did not complete full activation. Executor must inspect the failed or skipped step.",
       })
-    return save({
-      phase: "dispatch_outcome_unknown",
-      error:
-        "Dispatch reservation retained; no matching run is visible. Executor must reconcile before any retry.",
-    })
+    if (!run)
+      return save({
+        phase: "dispatch_outcome_unknown",
+        error:
+          "Dispatch reservation retained; no matching run is visible. Executor must reconcile before any retry.",
+      })
+  }
+  let continuationOrigin = ""
+  const checkpointKey = checkpoint ? `${checkpoint.id}:${checkpoint.run_attempt || 1}` : ""
+  if (checkpoint) {
+    const completed = state.completed_checkpoints || []
+    if (completed.includes(checkpointKey) || completed.length >= 8)
+      return save({
+        phase: "failed",
+        error:
+          "Migration checkpoint already continued or checkpoint bound reached; reconcile retained dispatch.",
+      })
+    const installed = await readState()
+    if (installed?.schema_transition !== true || !/^\d+$/.test(installed.origin_run_id || ""))
+      throw new Error("RESET_MIGRATION_CHECKPOINT_STATE_INVALID")
+    continuationOrigin = installed.origin_run_id
   }
   const checks = await gh([`repos/${REPOSITORY}/commits/${sha}/check-runs?per_page=100`])
   const ci = checks.check_runs
@@ -252,6 +249,12 @@ export async function dispatchResetTick({
     phase: "dispatch_reserved",
     reserved_at: new Date(now()).toISOString(),
     known_run_ids: runs.map((r) => r.id),
+    ...(checkpoint
+      ? {
+          completed_checkpoints: [...(state.completed_checkpoints || []), checkpointKey],
+          continuation_origin_run_id: continuationOrigin,
+        }
+      : {}),
     usage_at_dispatch: usage,
   })
   try {
@@ -261,6 +264,7 @@ export async function dispatchResetTick({
       `repos/${REPOSITORY}/actions/workflows/${WORKFLOW}/dispatches`,
       "-f",
       "ref=main",
+      ...(continuationOrigin ? ["-f", `inputs[resume_run_id]=${continuationOrigin}`] : []),
     ])
     return save({ phase: "dispatched", dispatched_at: new Date(now()).toISOString() })
   } catch {

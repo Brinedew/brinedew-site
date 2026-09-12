@@ -42,6 +42,21 @@ const check = (observed, plan = manifest) =>
     now: () => time,
   })
 
+test("September 13's two pending migrations fit the unchanged whole-release allocation", async (t) => {
+  const result = await preflightOperationCostRelease({
+    manifest: releaseManifest,
+    pendingMigrations: [
+      "iconoplasm/0104_asset_summary_counts.sql",
+      "iconoplasm/0105_artist_blacklist_lookup.sql",
+    ],
+    reader: { refresh: async () => sample },
+    now: () => time,
+  })
+  assert.ok(result.maximum.rows_read <= 1000000, JSON.stringify(result.maximum))
+  assert.ok(result.maximum.rows_written < 18000, JSON.stringify(result.maximum))
+  t.diagnostic(JSON.stringify(result.maximum))
+})
+
 test("canonical preflight accepts only the verified reader-recovery origin", async () => {
   const now = Date.parse("2026-09-09T12:00:00Z")
   const common = {
@@ -84,7 +99,7 @@ test("canonical preflight accepts only the verified reader-recovery origin", asy
   const fetcher = async (url) => {
     if (url.endsWith("/runs/456")) return Response.json(current)
     if (url.endsWith("/runs/123")) return Response.json(origin)
-    if (url.endsWith("/runs/123/jobs?per_page=100")) return Response.json(readerJobs)
+    if (url.endsWith("/runs/123/attempts/1/jobs?per_page=100")) return Response.json(readerJobs)
     assert.match(url, new RegExp(`/compare/${origin.head_sha}\\.\\.\\.${current.head_sha}`))
     return Response.json({ status: "ahead" })
   }
