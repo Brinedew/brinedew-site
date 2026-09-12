@@ -982,9 +982,9 @@ export class CaretakerSupervoteLedger {
       .toArray()
   }
 
-  async drainOutbox(deliver) {
+  async drainOutbox(deliver, { limit = 50 } = {}) {
     if (typeof deliver !== "function") throw new TypeError("deliver is required")
-    const rows = this.pendingOutboxRows(50)
+    const rows = this.pendingOutboxRows(limit)
     for (const row of rows) {
       try {
         const payload = parseJson(row.payload_json)

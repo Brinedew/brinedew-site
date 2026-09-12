@@ -181,3 +181,87 @@ test("unknown or stale usage never becomes zero; readiness mode never mutates", 
   assert.equal(f.posts.length, 0)
   assert.equal(f.writes.length, 0)
 })
+
+test("a proven migration checkpoint continues its installed origin once and retains an uncertain dispatch", async () => {
+  const f = fixture()
+  f.runs = [{ ...run, status: "in_progress", conclusion: null }]
+  const active = await dispatchResetTick(f.options)
+  f.runs = [run]
+  f.jobs = [
+    {
+      name: "deploy-production",
+      status: "completed",
+      conclusion: "success",
+      steps: [
+        ...FULL_RELEASE_STEPS.map((name) => ({ name, status: "completed", conclusion: "skipped" })),
+        ...[
+          "Apply reviewed D1 migrations through prediction admission",
+          "Record staged migration continuation checkpoint",
+        ].map((name) => ({ name, status: "completed", conclusion: "success" })),
+      ],
+    },
+  ]
+  f.options.readState = async () => ({ schema_transition: true, origin_run_id: "99" })
+  f.uncertain = true
+  const continuation = await dispatchResetTick({ ...f.options, state: active })
+  assert.equal(continuation.phase, "dispatch_outcome_unknown")
+  assert.deepEqual(continuation.completed_checkpoints, ["123:2"])
+  assert.ok(f.posts[0].includes("inputs[resume_run_id]=99"))
+  assert.equal(
+    (await dispatchResetTick({ ...f.options, state: continuation })).phase,
+    "dispatch_outcome_unknown",
+  )
+  assert.equal(f.posts.length, 1)
+  f.runs = [
+    {
+      ...run,
+      id: 456,
+      status: "in_progress",
+      conclusion: null,
+      created_at: new Date(instant + 1000).toISOString(),
+    },
+    run,
+  ]
+  const adopted = await dispatchResetTick({ ...f.options, state: continuation })
+  assert.equal(adopted.phase, "running")
+  assert.equal(adopted.run_id, 456)
+  f.runs[0] = { ...f.runs[0], status: "completed", conclusion: "success" }
+  f.jobs[0].steps = FULL_RELEASE_STEPS.map((name) => ({
+    name,
+    status: "completed",
+    conclusion: "success",
+  }))
+  f.options.readState = async () => ({ schema_transition: false })
+  assert.equal((await dispatchResetTick({ ...f.options, state: adopted })).phase, "deployed")
+  assert.equal(f.posts.length, 1)
+})
+
+test("checkpoint continuation refuses missing installed lineage and a skipped migration", async () => {
+  const f = fixture()
+  f.runs = [run]
+  f.jobs = [
+    {
+      name: "deploy-production",
+      status: "completed",
+      conclusion: "success",
+      steps: [
+        ...FULL_RELEASE_STEPS.map((name) => ({ name, status: "completed", conclusion: "skipped" })),
+        ...[
+          "Apply reviewed D1 migrations through prediction admission",
+          "Record staged migration continuation checkpoint",
+        ].map((name) => ({ name, status: "completed", conclusion: "success" })),
+      ],
+    },
+  ]
+  await assert.rejects(dispatchResetTick(f.options), /CHECKPOINT_STATE_INVALID/)
+  assert.equal(f.posts.length, 0)
+  f.jobs[0].steps.find(
+    (step) => step.name === "Apply reviewed D1 migrations through prediction admission",
+  ).conclusion = "skipped"
+  const result = await dispatchResetTick({
+    ...f.options,
+    state: { day: intent.reset_day, sha, reserved_at: run.created_at, known_run_ids: [] },
+  })
+  assert.equal(result.phase, "failed")
+  assert.equal(f.posts.length, 0)
+})

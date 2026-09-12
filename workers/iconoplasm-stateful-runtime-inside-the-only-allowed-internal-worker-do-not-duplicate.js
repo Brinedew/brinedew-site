@@ -32,7 +32,11 @@ import {
   readReconcileAssetKeys,
   readReconcilePublishState,
 } from "./iconoplasm/reconcile-asset-selection.js"
-import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
+import {
+  d1DailyRowReadLimitResponse,
+  isD1DailyRowReadLimitError,
+  secondsUntilCloudflareDailyReset,
+} from "./lib/cloudflare-availability.js"
 import {
   createOperationCostAuthority,
   OPERATION_COST_ROUTE_PREFIX,
@@ -1901,6 +1905,7 @@ function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
 // families are only ever supplied by non-HTTP worker entrypoints (a synthetic
 // attribution), so adding them does not widen the HTTP budgeted-route set.
 const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set([
+  "background_vote_outbox",
   "background_vote_projection",
   "background_sync_finalization",
 ])
@@ -2166,6 +2171,15 @@ class IconoplasmAdminMutationLimiterActiveError extends Error {
     this.name = "IconoplasmAdminMutationLimiterActiveError"
     this.detail = detail || null
   }
+}
+
+function isIconoplasmOutboxDailyBudgetError(error) {
+  return (
+    error instanceof IconoplasmD1DailyBudgetExceededError ||
+    error instanceof IconoplasmAdminMutationLimiterActiveError ||
+    isD1DailyRowReadLimitError(error) ||
+    isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
+  )
 }
 
 class IconoplasmUnclassifiedHandledRouteError extends Error {
@@ -17144,7 +17158,9 @@ export class IconoplasmVoteCoordinator {
 
   async armOutboxAlarm(delayMs = 1) {
     const delay = Math.max(1, Number(delayMs || 1) || 1)
-    await this.state.storage.setAlarm(Date.now() + delay)
+    // A new vote or a coordinator restart must not erase a known daily pause.
+    const budgetRetryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
+    await this.state.storage.setAlarm(Math.max(Date.now() + delay, budgetRetryAt))
   }
 
   pendingOutboxRows(limit = 50) {
@@ -17170,7 +17186,7 @@ export class IconoplasmVoteCoordinator {
       .toArray()
   }
 
-  async deliverOutboxRow(row) {
+  async deliverOutboxRow(row, env = this.env) {
     const symbol = normalizeSymbol(this.getMeta("symbol"))
     const mutationId = sanitizeText(row?.mutation_id || "", 255)
     const assetSha = normalizeSha256(row?.asset_sha256 || "")
@@ -17180,7 +17196,7 @@ export class IconoplasmVoteCoordinator {
       throw new Error("Invalid VoteCoordinator outbox row")
     }
 
-    await projectVoteCoordinatorLedgerRow(this.env, {
+    await projectVoteCoordinatorLedgerRow(env, {
       symbol,
       assetSha256: assetSha,
       visionId: row?.vision_id,
@@ -17188,7 +17204,7 @@ export class IconoplasmVoteCoordinator {
       userId,
       voteValue,
     })
-    await appendVoteEvent(this.env, {
+    await appendVoteEvent(env, {
       symbol,
       assetSha256: assetSha,
       visionId: row?.vision_id,
@@ -17198,7 +17214,7 @@ export class IconoplasmVoteCoordinator {
       voteValue,
       mutationId,
     })
-    const projection = await scheduleVoteProjectionRefresh(this.env, null, {
+    const projection = await scheduleVoteProjectionRefresh(env, null, {
       symbol,
       actorId: userId,
       reason: row?.reason || "vote_auto_promote",
@@ -17216,10 +17232,10 @@ export class IconoplasmVoteCoordinator {
     )
   }
 
-  async deliverCaretakerSupervoteOutbox(payload) {
-    const projection = await projectCaretakerSupervoteOutboxToD1(this.env, payload)
+  async deliverCaretakerSupervoteOutbox(payload, env = this.env) {
+    const projection = await projectCaretakerSupervoteOutboxToD1(env, payload)
     if (payload?.recompute_required) {
-      const refresh = await scheduleVoteProjectionRefresh(this.env, null, {
+      const refresh = await scheduleVoteProjectionRefresh(env, null, {
         symbol: projection.symbol,
         actorId: payload?.assignment?.caretaker_account_id || "caretaker_supervote",
         reason: `caretaker_${sanitizeText(payload?.event_type || "supervote", 64)}`,
@@ -17231,12 +17247,13 @@ export class IconoplasmVoteCoordinator {
     return projection
   }
 
-  async drainVoteOutbox() {
-    const rows = this.pendingOutboxRows(50)
+  async drainVoteOutbox(env = this.env, limit = 4) {
+    const rows = this.pendingOutboxRows(limit)
     for (const row of rows) {
       try {
-        await this.deliverOutboxRow(row)
+        await this.deliverOutboxRow(row, env)
       } catch (error) {
+        if (isIconoplasmOutboxDailyBudgetError(error)) throw error
         const attempts = Math.max(0, Number(row?.attempts || 0) || 0) + 1
         this.state.storage.sql.exec(
           `UPDATE vote_outbox
@@ -17259,11 +17276,59 @@ export class IconoplasmVoteCoordinator {
   }
 
   async alarm() {
-    const voteResult = await this.drainVoteOutbox()
-    const caretakerResult = await this.caretakerSupervotes.drainOutbox((payload) =>
-      this.deliverCaretakerSupervoteOutbox(payload),
-    )
-    return { vote: voteResult, caretaker_supervote: caretakerResult }
+    const retryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
+    if (retryAt > Date.now()) {
+      await this.armOutboxAlarm(1)
+      return { ok: true, deferred: true, retry_at: retryAt }
+    }
+    if (!this.pendingOutboxRows(1).length && !this.caretakerSupervotes.pendingOutboxRows(1).length)
+      return { ok: true, delivered: 0, pending: 0 }
+    // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
+    if (String(this.env.ICONOPLASM_SCHEMA_TRANSITION || "") === "1") {
+      await this.armOutboxAlarm(300000)
+      return { ok: true, deferred: true, reason: "schema_transition" }
+    }
+    let env
+    try {
+      env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(this.env, null, {
+        ...iconoplasmBackgroundBudgetAttribution("background_vote_outbox"),
+        source_class: "background_alarm",
+      })
+      env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
+      if (retryAt) this.setMeta("outbox_budget_retry_at", "")
+      // Four ordinary outbox records plus two caretaker records share one
+      // provider statement envelope, including enqueue and failure handling.
+      const voteResult = await this.drainVoteOutbox(env, 4)
+      let dailyError = null
+      const caretakerResult = await this.caretakerSupervotes.drainOutbox(
+        async (payload) => {
+          try {
+            return await this.deliverCaretakerSupervoteOutbox(payload, env)
+          } catch (error) {
+            if (isIconoplasmOutboxDailyBudgetError(error)) dailyError = error
+            throw error
+          }
+        },
+        { limit: 2 },
+      )
+      if (dailyError) throw dailyError
+      return { vote: voteResult, caretaker_supervote: caretakerResult }
+    } catch (error) {
+      if (isIconoplasmOutboxDailyBudgetError(error)) {
+        const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+        this.setMeta("outbox_budget_retry_at", String(nextReset))
+        await this.armOutboxAlarm(1)
+        return { ok: true, deferred: true, retry_at: nextReset, reason: "daily_d1_budget" }
+      }
+      await this.armOutboxAlarm(900000)
+      console.error(
+        "Iconoplasm vote outbox alarm deferred after failure",
+        String(error?.message || error),
+      )
+      return { ok: false, deferred: true, reason: "outbox_alarm_failed" }
+    } finally {
+      if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
+    }
   }
 
   async lookupAssetMetadata(symbol, assetSha256) {
@@ -19996,7 +20061,7 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
       AND vs.asset_sha256 = pa.asset_sha256
      LEFT JOIN icono_publish_state ps
        ON ps.gene_symbol = pa.gene_symbol
-     LEFT JOIN icono_artist_style_blacklist bl
+     LEFT JOIN icono_artist_style_blacklist bl INDEXED BY idx_icono_artist_blacklist_normalized_tag
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
      GROUP BY pa.vision_id
      ON CONFLICT(vision_id) DO UPDATE SET
@@ -20422,7 +20487,7 @@ async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
         AND vs.asset_sha256 = pa.asset_sha256
        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = pa.gene_symbol
-       LEFT JOIN icono_artist_style_blacklist bl
+       LEFT JOIN icono_artist_style_blacklist bl INDEXED BY idx_icono_artist_blacklist_normalized_tag
          ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
        WHERE pa.vision_id = ?
        GROUP BY pa.vision_id`,
@@ -20852,7 +20917,7 @@ async function bulkRebuildAdminReadModels(env) {
       AND vs.asset_sha256 = pa.asset_sha256
      LEFT JOIN icono_publish_state ps
        ON ps.gene_symbol = pa.gene_symbol
-     LEFT JOIN icono_artist_style_blacklist bl
+     LEFT JOIN icono_artist_style_blacklist bl INDEXED BY idx_icono_artist_blacklist_normalized_tag
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
      WHERE COALESCE(pa.vision_id, '') <> ''
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
@@ -24867,7 +24932,7 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
      AND vs.asset_sha256 = pa.asset_sha256
      LEFT JOIN icono_publish_state ps
       ON ps.gene_symbol = pa.gene_symbol
-     LEFT JOIN icono_artist_style_blacklist bl
+     LEFT JOIN icono_artist_style_blacklist bl INDEXED BY idx_icono_artist_blacklist_normalized_tag
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
      WHERE COALESCE(pa.vision_id, '') <> ''
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
