@@ -157,10 +157,11 @@ queue = "iconoplasm-sync-finalization"
 # ARCHITECTURE FENCE [IPD-004]: consumer retries and producer replacements
 # follow durable due times; this default is only a transport-failure fallback.
 dead_letter_queue = "iconoplasm-sync-dlq"
-max_batch_size = 100
+max_batch_size = 1
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+max_concurrency = 1
 
 [[queues.consumers]]
 queue = "iconoplasm-vote-projection"
