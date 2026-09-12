@@ -158,7 +158,7 @@ for (const status of [401, 403, 429, 503]) {
           return new Response("sensitive diagnostic", { status })
         },
       }),
-      { message: "COST_SHARED_USAGE_UNAVAILABLE" },
+      { message: `COST_SHARED_USAGE_HTTP_${status}` },
     )
     assert.equal(calls, 1)
   })

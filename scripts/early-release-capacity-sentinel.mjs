@@ -92,7 +92,7 @@ export async function readEarlyReleaseCapacity({ token, fetcher = fetch }) {
   } catch {
     throw new Error("COST_SHARED_USAGE_UNAVAILABLE")
   }
-  if (!response.ok) throw new Error("COST_SHARED_USAGE_UNAVAILABLE")
+  if (!response.ok) throw new Error(`COST_SHARED_USAGE_HTTP_${response.status}`)
   try {
     const text = await response.text()
     if (text.length > 65_536) throw new Error("COST_RESPONSE_LIMIT")
@@ -127,7 +127,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   main().catch((error) => {
     const message = String(error?.message || "")
     console.error(
-      /^COST_[A-Z_]+(?:: (?:rows_read|rows_written|requests))?$/.test(message)
+      /^COST_[A-Z0-9_]+(?:: (?:rows_read|rows_written|requests))?$/.test(message)
         ? message
         : "COST_EARLY_RELEASE_CHECK_FAILED",
     )
