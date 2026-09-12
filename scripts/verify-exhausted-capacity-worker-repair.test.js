@@ -36,7 +36,10 @@ test("the repair workflow stays exact-CI gated and D1-mutation free", () => {
   assert.match(repair, /Require successful tests for the exact deployed commit/)
   assert.match(repair, /verify-exhausted-capacity-worker-repair\.mjs/)
   assert.match(repair, /verify-exhausted-capacity-worker-state\.mjs/)
+  assert.match(repair, /Restore immutable static assets required by the Worker bundle/)
+  assert.match(repair, /run-id: \$\{\{ steps\.exact-ci\.outputs\.ci_run_id \}\}/)
   assert.match(repair, /Deploy the zero-D1 stateful Worker repair/)
+  assert.match(repair, /wrangler deploy --env=""/)
   assert.doesNotMatch(repair, /d1 migrations|run-admitted-d1|publish-dirty|pages deploy/i)
 })
 

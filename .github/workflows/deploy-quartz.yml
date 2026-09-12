@@ -160,9 +160,18 @@ jobs:
         run: node scripts/assert-production-head.mjs
 
       - name: Require successful tests for the exact deployed commit
+        id: exact-ci
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wait-for-iconoplasm-release-ci.mjs
+
+      - name: Restore immutable static assets required by the Worker bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: iconoplasm-edge-assets-${{ github.sha }}
+          path: public-iconoplasm-edge
+          run-id: ${{ steps.exact-ci.outputs.ci_run_id }}
+          github-token: ${{ github.token }}
 
       - name: Prove the exhausted-capacity repair contains no schema or data work
         run: node scripts/verify-exhausted-capacity-worker-repair.mjs
@@ -194,7 +203,7 @@ jobs:
           pnpm run validate:iconoplasm-topology
 
       - name: Deploy the zero-D1 stateful Worker repair
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+        run: pnpm exec wrangler deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
       - name: Verify live Worker boot without application mutation
         timeout-minutes: 2
