@@ -45,6 +45,10 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const BLACKLIST_LOOKUP_MIGRATION_NAME = "0105_artist_blacklist_lookup.sql"
+export const BLACKLIST_LOOKUP_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE INDEX IF NOT EXISTS idx_icono_artist_blacklist_normalized_tag\n  ON icono_artist_style_blacklist (lower(COALESCE(artist_tag, '')));"
+])
 export const ASSET_SUMMARY_MIGRATION_NAME = "0104_asset_summary_counts.sql"
 export const ASSET_SUMMARY_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE icono_asset_summary_counts(summary_key TEXT PRIMARY KEY CHECK(summary_key='default'),candidate_assets INTEGER NOT NULL DEFAULT 0 CHECK(candidate_assets>=0),catalog_candidate_assets INTEGER NOT NULL DEFAULT 0 CHECK(catalog_candidate_assets>=0),auditable_assets INTEGER NOT NULL DEFAULT 0 CHECK(auditable_assets>=0),catalog_auditable_assets INTEGER NOT NULL DEFAULT 0 CHECK(catalog_auditable_assets>=0),stale_assets INTEGER NOT NULL DEFAULT 0 CHECK(stale_assets>=0),legacy_assets INTEGER NOT NULL DEFAULT 0 CHECK(legacy_assets>=0),published_live_portraits INTEGER NOT NULL DEFAULT 0 CHECK(published_live_portraits>=0),catalog_published_live_portraits INTEGER NOT NULL DEFAULT 0 CHECK(catalog_published_live_portraits>=0),audited_assets INTEGER NOT NULL DEFAULT 0 CHECK(audited_assets>=0),verified_renderable_images INTEGER NOT NULL DEFAULT 0 CHECK(verified_renderable_images>=0),storage_incomplete_assets INTEGER NOT NULL DEFAULT 0 CHECK(storage_incomplete_assets>=0),storage_regionally_divergent_assets INTEGER NOT NULL DEFAULT 0 CHECK(storage_regionally_divergent_assets>=0),broken_live_images INTEGER NOT NULL DEFAULT 0 CHECK(broken_live_images>=0),renderable_live_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(renderable_live_confirmed>=0),storage_queue_backlog_assets INTEGER NOT NULL DEFAULT 0 CHECK(storage_queue_backlog_assets>=0));",

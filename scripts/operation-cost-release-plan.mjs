@@ -1,14 +1,19 @@
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
+import { isMigrationCheckpoint } from "./lib/iconoplasm-release-evidence.mjs"
 export const RELEASE_REQUEST_LIMIT = 40
 // Resumable migrations have at most 100 admitted steps plus per-step capacity
 // reads and inventory/registration overhead. The shared daily ceiling remains.
 export const MIGRATION_RELEASE_REQUEST_LIMIT = 256
 
-// A verified reader-only containment deployment is the one successful origin
-// that can safely carry a retained migration lineage into canonical release
-// work. All callers after release-state selection use this shared validator.
+// Verified reader containment and deliberately staged migration checkpoints
+// can carry a retained migration lineage into canonical release work. Neither
+// is application activation. Callers have already selected installed state.
 export function readCanonicalReleaseOrigin(options) {
-  return readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true })
+  return readReleaseOrigin({
+    ...options,
+    allowReaderRecoveryOrigin: true,
+    allowMigrationCheckpointOrigin: true,
+  })
 }
 
 export async function readReleaseOrigin({
@@ -17,6 +22,7 @@ export async function readReleaseOrigin({
   token,
   resumeRunId = process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
   allowReaderRecoveryOrigin = false,
+  allowMigrationCheckpointOrigin = false,
   fetcher = fetch,
   now = Date.now(),
 }) {
@@ -53,13 +59,20 @@ export async function readReleaseOrigin({
     // later canonical release may inherit. Inspect its recorded job steps,
     // rather than trusting a successful workflow conclusion or a caller flag.
     let isVerifiedReaderRecoveryOrigin = false
+    let isVerifiedMigrationCheckpoint = false
     if (
       !isFailedCanonicalOrigin &&
-      allowReaderRecoveryOrigin &&
+      (allowReaderRecoveryOrigin || allowMigrationCheckpointOrigin) &&
       run.status === "completed" &&
       run.conclusion === "success"
     ) {
-      const jobs = await get(`actions/runs/${originId}/jobs?per_page=100`)
+      const jobs = await get(
+        `actions/runs/${originId}/attempts/${run.run_attempt || 1}/jobs?per_page=100`,
+      )
+      if (!Array.isArray(jobs?.jobs) || jobs.jobs.length >= 100)
+        throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
+      isVerifiedMigrationCheckpoint =
+        allowMigrationCheckpointOrigin && isMigrationCheckpoint(run, jobs.jobs)
       const readerJobs = Array.isArray(jobs?.jobs)
         ? jobs.jobs.filter((job) => job.name === "reader-recovery-only")
         : []
@@ -67,6 +80,7 @@ export async function readReleaseOrigin({
       const completedStep = (name) =>
         reader?.steps?.some((step) => step.name === name && step.conclusion === "success")
       isVerifiedReaderRecoveryOrigin =
+        allowReaderRecoveryOrigin &&
         readerJobs.length === 1 &&
         reader?.conclusion === "success" &&
         completedStep("Deploy the D1-free reader containment artifact") &&
@@ -82,7 +96,11 @@ export async function readReleaseOrigin({
           !/^[a-f0-9]{40}$/.test(item.head_sha || ""),
       ) ||
       run.workflow_id !== current.workflow_id ||
-      !(isFailedCanonicalOrigin || isVerifiedReaderRecoveryOrigin) ||
+      !(
+        isFailedCanonicalOrigin ||
+        isVerifiedReaderRecoveryOrigin ||
+        isVerifiedMigrationCheckpoint
+      ) ||
       started > Date.parse(current.created_at)
     )
       throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
