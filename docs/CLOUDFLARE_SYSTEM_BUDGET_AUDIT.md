@@ -4,6 +4,25 @@ Status: implementation and capacity verification in progress; not a production s
 
 ## September 12 audit and September 13 reset release
 
+The later caretaker regression found a second history multiplier. Projecting
+1,000 eligibility changes beside 100 retained audit/receipt/delivered rows and
+20,000 pending delivery rows used 20,704,000 DO SQL reads and 3,000 writes.
+Eligibility changes that do not clear a selection add no history, so they now
+skip compaction: the same fixture uses 4,000 reads and 3,000 writes. Repetition
+writes zero rows. Actual history compaction requires the existing delivery
+index on both sides of its delete and reads 800 rows in that fixture, preserving
+all 20,000 pending deliveries and the last 100 delivered/audit records.
+The previously chosen delete plan examined pending rows despite its delivered
+filter; the explicit index prevents backlog growth from increasing pruning cost.
+
+The cold-bootstrap investigation distinguished SQL rollback from the real
+request boundary. A caught-failure fixture with a stubbed concurrency gate
+exposed partial state, but actual workerd `blockConcurrencyWhile` discarded the
+failed seed on both legacy-vote and eligibility faults in the existing code.
+The proposed additional transaction was therefore removed. Cold bootstrap's
+history-dependent D1/DO cost and shared pre-dispatch admission remain open;
+the pruning fix is not a certificate for that complete load.
+
 The account-wide provider sample at 18:15 UTC was 2,645,863 D1 reads,
 18,970 D1 writes, 57,545 Worker requests, 4,018,577 Durable Object SQLite
 reads, 11,268 DO writes, 46,390 DO requests and 40.75 GB-seconds. KV was
