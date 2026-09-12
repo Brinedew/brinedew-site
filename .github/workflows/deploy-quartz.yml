@@ -14,6 +14,15 @@ on:
         required: false
         default: false
         type: boolean
+      worker_repair_only:
+        description: "Deploy the exact tested B-749 zero-D1 Worker repair while application D1 is exhausted"
+        required: false
+        default: false
+        type: boolean
+      worker_repair_base_sha:
+        description: "Installed compatible commit used to prove the repair diff contains no schema or data changes"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,7 +39,7 @@ jobs:
     # This is an explicit containment dispatch, not a migration retry. It is
     # deliberately unreachable from push/schedule automation and cannot resume
     # queues, activate application writes, or stage a schema-dependent build.
-    if: github.event_name == 'workflow_dispatch' && inputs.reader_recovery_only == true
+    if: github.event_name == 'workflow_dispatch' && inputs.reader_recovery_only == true && inputs.worker_repair_only != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -127,8 +136,74 @@ jobs:
         timeout-minutes: 2
         run: node scripts/verify-iconoplasm-reader-recovery.mjs
 
+  worker-repair-only:
+    # RECOVERY-001: an exhausted application database must not prevent an
+    # exact-tested code correction that performs zero D1 reads or writes.
+    if: github.event_name == 'workflow_dispatch' && inputs.worker_repair_only == true && inputs.reader_recovery_only != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+      CACHE_BUST: ${{ github.sha }}
+      ICONOPLASM_WORKER_REPAIR_BASE_SHA: ${{ inputs.worker_repair_base_sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Reject stale production source before admission
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/assert-production-head.mjs
+
+      - name: Require successful tests for the exact deployed commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-iconoplasm-release-ci.mjs
+
+      - name: Prove the exhausted-capacity repair contains no schema or data work
+        run: node scripts/verify-exhausted-capacity-worker-repair.mjs
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Verify compatible installed state and non-D1 deployment headroom
+        run: node scripts/verify-exhausted-capacity-worker-state.mjs
+
+      - name: Verify the exact Worker repair and topology
+        run: |
+          node scripts/run-tests.mjs \
+            scripts/verify-exhausted-capacity-worker-repair.test.js \
+            scripts/generate-operation-cost-identities.test.js \
+            workers/iconoplasm-gene-card-materialization.test.js \
+            workers/iconoplasm.do-not-delete-cost-guards.test.js
+          pnpm run validate:iconoplasm-topology
+
+      - name: Deploy the zero-D1 stateful Worker repair
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+
+      - name: Verify live Worker boot without application mutation
+        timeout-minutes: 2
+        run: |
+          curl --fail --silent --show-error --max-time 30 \
+            "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST" >/dev/null
+
   deploy-production:
-    if: github.event_name != 'workflow_dispatch' || inputs.reader_recovery_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.reader_recovery_only != true && inputs.worker_repair_only != true)
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
