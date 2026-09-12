@@ -260,11 +260,11 @@ test("admin asset repair scope falls back to unverified published portraits when
       if (this.sql.includes("FROM icono_storage_audit_queue_state")) {
         return this.db.queueState
       }
-      if (this.sql.includes("COUNT(*) AS candidate_assets")) {
-        return this.db.summaryBaseline()
+      if (this.sql.includes("FROM icono_asset_summary_counts")) {
+        return { ...this.db.summaryBaseline(), ...this.db.queueAggregate() }
       }
-      if (this.sql.includes("storage_queue_backlog_assets")) {
-        return this.db.queueAggregate()
+      if (this.sql.includes("FROM icono_audit_age_years")) {
+        return { previous_total: this.db.queueAggregate().storage_recheck_due_assets }
       }
       if (this.sql.includes("FROM icono_website_truth_summary")) {
         return this.db.summaryRow
@@ -541,11 +541,11 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
       if (this.sql.includes("FROM icono_storage_audit_queue_state")) {
         return this.db.queueState
       }
-      if (this.sql.includes("COUNT(*) AS candidate_assets")) {
-        return this.db.summaryBaseline()
+      if (this.sql.includes("FROM icono_asset_summary_counts")) {
+        return { ...this.db.summaryBaseline(), ...this.db.queueAggregate() }
       }
-      if (this.sql.includes("storage_queue_backlog_assets")) {
-        return this.db.queueAggregate()
+      if (this.sql.includes("FROM icono_audit_age_years")) {
+        return { previous_total: this.db.queueAggregate().storage_recheck_due_assets }
       }
       if (this.sql.includes("FROM icono_website_truth_summary")) {
         return this.db.summaryRow

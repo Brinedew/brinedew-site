@@ -47,12 +47,13 @@ test("storage audit preserves regional divergence as durable operational truth",
   )
 
   assert.match(runtimeSource, /regional_divergence[\s\S]*regionally_divergent/)
+  assert.match(runtimeSource, /ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30/)
+  // Maintained counts and exact recheck-age behavior are exercised against
+  // SQLite in iconoplasm.asset-summary-counts.test.js.
   assert.match(
     runtimeSource,
-    /audit_state IN \('renderable', 'regionally_divergent'\)[\s\S]*storage_regionally_divergent_assets/,
+    /fetchStorageAuditRecheckDue\(\s*env\.ICONOPLASM_DB,\s*ICONO_STORAGE_AUDIT_RECHECK_DAYS,/,
   )
-  assert.match(runtimeSource, /ICONO_STORAGE_AUDIT_RECHECK_DAYS = 30/)
-  assert.match(runtimeSource, /last_audited_at[\s\S]*datetime\('now', '-' \|\| \? \|\| ' days'\)/)
   assert.match(migrationSource, /storage_regionally_divergent_assets/)
   assert.match(migrationSource, /storage_recheck_due_assets/)
 })
