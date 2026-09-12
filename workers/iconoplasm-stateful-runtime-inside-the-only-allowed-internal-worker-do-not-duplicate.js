@@ -1188,7 +1188,6 @@ const ICONOPLASM_VOTE_PROJECTION_QUEUE_BINDING = "ICONOPLASM_VOTE_PROJECTION_QUE
 const ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED_ENV = "ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED"
 const ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND = "process_vote_projection_refresh"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
-const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT = 100
 const ICONOPLASM_QUEUE_MAX_DELAY_SECONDS = 24 * 60 * 60
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
@@ -2173,10 +2172,19 @@ class IconoplasmAdminMutationLimiterActiveError extends Error {
   }
 }
 
-function isIconoplasmOutboxDailyBudgetError(error) {
+function isIconoplasmDailyBudgetError(error) {
   return (
     error instanceof IconoplasmD1DailyBudgetExceededError ||
     error instanceof IconoplasmAdminMutationLimiterActiveError ||
+    [
+      "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED",
+      "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
+      "D1_ACCOUNT_READ_LIMIT",
+      "COST_SHARED_DAILY_LIMIT",
+      "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
+      "COST_AUTHORITY_STORAGE_READ_QUOTA",
+      "QUEUE_ACCOUNT_DAILY_LIMIT",
+    ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
   )
@@ -17253,7 +17261,7 @@ export class IconoplasmVoteCoordinator {
       try {
         await this.deliverOutboxRow(row, env)
       } catch (error) {
-        if (isIconoplasmOutboxDailyBudgetError(error)) throw error
+        if (isIconoplasmDailyBudgetError(error)) throw error
         const attempts = Math.max(0, Number(row?.attempts || 0) || 0) + 1
         this.state.storage.sql.exec(
           `UPDATE vote_outbox
@@ -17305,7 +17313,7 @@ export class IconoplasmVoteCoordinator {
           try {
             return await this.deliverCaretakerSupervoteOutbox(payload, env)
           } catch (error) {
-            if (isIconoplasmOutboxDailyBudgetError(error)) dailyError = error
+            if (isIconoplasmDailyBudgetError(error)) dailyError = error
             throw error
           }
         },
@@ -17314,7 +17322,7 @@ export class IconoplasmVoteCoordinator {
       if (dailyError) throw dailyError
       return { vote: voteResult, caretaker_supervote: caretakerResult }
     } catch (error) {
-      if (isIconoplasmOutboxDailyBudgetError(error)) {
+      if (isIconoplasmDailyBudgetError(error)) {
         const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
         this.setMeta("outbox_budget_retry_at", String(nextReset))
         await this.armOutboxAlarm(1)
@@ -18038,9 +18046,6 @@ export class IconoplasmVoteCoordinator {
         asset_sha256: assetSha,
         ...result,
         snapshot: this.caretakerSupervotes.decorateSnapshot(result.snapshot),
-        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
-          this.exportAssetSummaries(),
-        ),
       })
     }
 
@@ -18107,9 +18112,6 @@ export class IconoplasmVoteCoordinator {
         deleted,
         invalid,
         results,
-        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
-          this.exportAssetSummaries(),
-        ),
       })
     }
 
@@ -18877,6 +18879,62 @@ export class IconoplasmSyncGovernor {
     this.env = env
   }
 
+  async deferFinalizationToReset() {
+    const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+    const day = new Date(dueAt).toISOString().slice(0, 10)
+    return this.state.storage.transaction(async (txn) => {
+      const current = await txn.get("finalization_reset_wake")
+      if (current?.day === day) return { ok: true, deferred: true, reset_at: current.due_at }
+      const wake = { day, due_at: dueAt }
+      await txn.put("finalization_reset_wake", wake)
+      await txn.setAlarm(dueAt)
+      return { ok: true, deferred: true, reset_at: dueAt }
+    })
+  }
+
+  async alarm() {
+    const wake = await this.state.storage.get("finalization_reset_wake")
+    if (!wake) return { ok: true, pending: false }
+    if (!Number.isFinite(wake.due_at) || !/^\d{4}-\d{2}-\d{2}$/.test(wake.day))
+      throw new Error("Finalization reset wake is malformed")
+    const defer = async (dueAt) =>
+      this.state.storage.transaction(async (txn) => {
+        const current = await txn.get("finalization_reset_wake")
+        if (current?.day !== wake.day) return
+        await txn.put("finalization_reset_wake", { ...wake, due_at: dueAt })
+        await txn.setAlarm(dueAt)
+      })
+    if (wake.due_at > Date.now()) {
+      await defer(wake.due_at)
+      return { ok: true, deferred: true }
+    }
+    if (
+      this.env.ICONOPLASM_SCHEMA_TRANSITION === "1" ||
+      iconoplasmSyncFinalizationQueueDisabled(this.env)
+    ) {
+      await defer(Date.now() + 300000)
+      return { ok: true, deferred: true, reason: "schema_transition_or_disabled" }
+    }
+    // A single global wake reaches the existing versioned D1 ledger. It owns
+    // no job progress or spending authority and survives old Queue expiration.
+    const sent = await sendSyncFinalizationDrainQueueMessage(this.env, {
+      runId: "finalization-reset-recovery",
+      symbols: [],
+    })
+    if (!sent.ok) {
+      const delay = /daily.*queue|queue.*daily/i.test(sent.detail || "")
+        ? secondsUntilCloudflareDailyReset() * 1000
+        : 900000
+      await defer(Date.now() + delay)
+      return { ok: false, deferred: true, reason: sent.code }
+    }
+    await this.state.storage.transaction(async (txn) => {
+      const current = await txn.get("finalization_reset_wake")
+      if (current?.day === wake.day) await txn.delete("finalization_reset_wake")
+    })
+    return { ok: true, pending: false, queue_message_sent: true }
+  }
+
   async storedState() {
     const raw = await this.state.storage.get("state")
     return this.pruneLeases(iconoplasmSyncGovernorStateFromRaw(raw))
@@ -18918,6 +18976,8 @@ export class IconoplasmSyncGovernor {
 
   async fetch(request) {
     const url = new URL(request.url)
+    if (request.method === "POST" && url.pathname === "/defer-finalization")
+      return Response.json(await this.deferFinalizationToReset())
     if (request.method === "POST" && url.pathname === "/permit") {
       const stored = await this.storedState()
       const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
@@ -21222,9 +21282,12 @@ export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
   if (!safeSymbol) return 0
 
   const rows = []
+  const seenAssets = new Set()
   for (const rawRow of Array.isArray(assetSummaries) ? assetSummaries : []) {
     const assetSha = normalizeSha256(rawRow?.asset_sha256 || "")
     if (!assetSha) continue
+    if (seenAssets.has(assetSha)) throw new Error("Duplicate coordinator vote summary asset")
+    seenAssets.add(assetSha)
     rows.push([
       assetSha,
       voteAssetIdentity(safeSymbol, assetSha),
@@ -21236,12 +21299,15 @@ export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
       Math.max(0, Number(rawRow?.vote_count || 0) || 0),
     ])
   }
-  // D1 batch executes transactionally. A failed insert can no longer strand an
-  // empty or half-populated summary after the delete succeeds.
+  // Preserve the coordinator's exact set atomically, but do not rewrite every
+  // historical image after one vote. Unchanged rows (and their index entries)
+  // retain their timestamps. Only removed assets and changed values write D1.
+  const rowsJson = JSON.stringify(rows)
   await env.ICONOPLASM_DB.batch([
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`).bind(
-      safeSymbol,
-    ),
+    env.ICONOPLASM_DB.prepare(
+      `DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?
+       AND asset_sha256 NOT IN (SELECT json_extract(value,'$[0]') FROM json_each(?))`,
+    ).bind(safeSymbol, rowsJson),
     env.ICONOPLASM_DB.prepare(
       `INSERT INTO icono_vote_asset_summary (
       gene_symbol, asset_sha256, candidate_ref, vision_id, candidate_image_id,
@@ -21249,8 +21315,24 @@ export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
     ) SELECT ?, json_extract(value,'$[0]'), json_extract(value,'$[1]'),
       json_extract(value,'$[2]'), json_extract(value,'$[3]'), json_extract(value,'$[4]'),
       json_extract(value,'$[5]'), json_extract(value,'$[6]'), json_extract(value,'$[7]'),
-      CURRENT_TIMESTAMP FROM json_each(?)`,
-    ).bind(safeSymbol, JSON.stringify(rows)),
+      CURRENT_TIMESTAMP FROM json_each(?) WHERE true
+    ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+      candidate_ref = excluded.candidate_ref,
+      vision_id = excluded.vision_id,
+      candidate_image_id = excluded.candidate_image_id,
+      upvotes = excluded.upvotes,
+      downvotes = excluded.downvotes,
+      score = excluded.score,
+      vote_count = excluded.vote_count,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE icono_vote_asset_summary.candidate_ref IS NOT excluded.candidate_ref
+       OR icono_vote_asset_summary.vision_id IS NOT excluded.vision_id
+       OR icono_vote_asset_summary.candidate_image_id IS NOT excluded.candidate_image_id
+       OR icono_vote_asset_summary.upvotes IS NOT excluded.upvotes
+       OR icono_vote_asset_summary.downvotes IS NOT excluded.downvotes
+       OR icono_vote_asset_summary.score IS NOT excluded.score
+       OR icono_vote_asset_summary.vote_count IS NOT excluded.vote_count`,
+    ).bind(safeSymbol, rowsJson),
   ])
   return rows.length
 }
@@ -22260,6 +22342,13 @@ async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
   return response.json()
 }
 
+async function deferFinalizationThroughExistingGovernor(env) {
+  const result = await iconoplasmSyncGovernorJson(env, "/defer-finalization")
+  if (result?.ok !== true || result?.deferred !== true || !Number.isFinite(result?.reset_at))
+    throw new Error("Existing SyncGovernor did not retain the finalization reset wake")
+  return result
+}
+
 function buildSyncFinalizationDrainQueueMessage({
   runId = "",
   symbols = [],
@@ -22489,6 +22578,7 @@ export async function writeSyncFinalizationJobState(
     attempts = null,
     lastError = null,
     completedAt = null,
+    remainingVisionIds = null,
   } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return false
@@ -22525,6 +22615,15 @@ export async function writeSyncFinalizationJobState(
   if (completedAt !== null) {
     fields.push("completed_at = ?")
     bindArgs.push(completedAt)
+  }
+  if (remainingVisionIds !== null) {
+    if (!Array.isArray(remainingVisionIds) || remainingVisionIds.length > 5000)
+      throw new Error("Finalization vision progress requires a bounded remaining list")
+    const normalized = normalizeSyncFinalizationVisionIds(remainingVisionIds, { maxItems: 5000 })
+    if (normalized.length !== remainingVisionIds.length)
+      throw new Error("Finalization vision progress contains invalid or duplicate identities")
+    fields.push("vision_ids_json = ?")
+    bindArgs.push(JSON.stringify(normalized))
   }
   bindArgs.push(safeSymbol, expectedVersion)
   const written = await env.ICONOPLASM_DB.prepare(
@@ -22576,12 +22675,23 @@ const ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT = 250
 
 async function recoverStaleRunningSyncFinalizationJobs(
   env,
-  { symbols = null, staleAfterMinutes = ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES } = {},
+  {
+    symbols = null,
+    staleAfterMinutes = ICONOPLASM_SYNC_FINALIZATION_RUNNING_STALE_MINUTES,
+    limit = ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) return { ok: false, recovered: 0 }
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   const scopedSymbolsJson = JSON.stringify(scopedSymbols)
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+      Math.trunc(Number(limit)) || 1,
+    ),
+  )
   const safeMinutes = Math.max(1, Math.min(240, Number(staleAfterMinutes || 0) || 2))
   const cutoffIso = new Date(Date.now() - safeMinutes * 60 * 1000).toISOString()
   const retryAtIso = new Date().toISOString()
@@ -22601,12 +22711,10 @@ async function recoverStaleRunningSyncFinalizationJobs(
           ICONOPLASM_SYNC_FINALIZATION_STATUS_RUNNING,
           ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
           scopedEnabled,
-          ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+          safeLimit,
         )
         .all()
-    : await env.ICONOPLASM_DB.prepare(GLOBAL_RUNNING_FINALIZATION_SQL)
-        .bind(ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT)
-        .all()
+    : await env.ICONOPLASM_DB.prepare(GLOBAL_RUNNING_FINALIZATION_SQL).bind(safeLimit).all()
   const runningRows = Array.isArray(runningRowsResp?.results) ? runningRowsResp.results : []
   let recovered = 0
   for (const row of runningRows) {
@@ -22668,12 +22776,23 @@ async function callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDu
     data = { ok: false, error: text || `Internal call to ${path} returned non-JSON` }
   }
   if (!response.ok || data?.ok === false) {
-    throw new Error(
+    const error = new Error(
       sanitizeText(
-        String(data?.error || data?.detail || text || `Internal call to ${path} failed`),
+        String(
+          data?.error?.message ||
+            data?.error ||
+            data?.detail ||
+            text ||
+            `Internal call to ${path} failed`,
+        ),
         2000,
       ) || `Internal call to ${path} failed`,
     )
+    // Preserve the original daily refusal through this in-process HTTP boundary.
+    // Losing its code turned a known reset pause into a 30-second Queue retry.
+    error.code = data?.code || data?.error?.code || null
+    error.budget = data?.budget || null
+    throw error
   }
   return data
 }
@@ -22774,11 +22893,14 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
   if (phase === ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS) {
     const visionIds = normalizeSyncFinalizationVisionIds(job?.vision_ids || [], { maxItems: 5000 })
     if (visionIds.length) {
+      // The job's remaining list is its durable progress cursor. Commit one
+      // complete vision at a time under the same job-version fence; a partial
+      // later page must not repeat every already committed vision on each wake.
       const visionRollups =
         await callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(env, ctx, {
           path: "/api/iconoplasm/admin/read-models/sync",
           payload: {
-            vision_ids: visionIds,
+            vision_ids: visionIds.slice(0, 1),
             publish_gallery_dirty_shards: false,
             skip_dashboard: true,
           },
@@ -22789,10 +22911,16 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           "rows_written_target_cap_reached_before_vision_rollups",
         )
       }
+      if (Number(visionRollups?.visions) !== 1)
+        throw new Error("Finalization vision did not return an exact completion receipt")
       return {
         symbol,
         phase,
-        next_phase: ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+        next_phase:
+          visionIds.length > 1
+            ? ICONOPLASM_SYNC_FINALIZATION_PHASE_VISION_ROLLUPS
+            : ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE,
+        remaining_vision_ids: visionIds.slice(1),
         result: { vision_rollups: visionRollups },
       }
     }
@@ -22853,39 +22981,20 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
   if (kind === "drain_finalization_ledger") {
     const runId = sanitizeText(body.run_id || body.runId || "", 128) || "manual"
     const symbols = normalizeSyncFinalizationJobSymbols(body.symbols, { maxItems: 5000 })
-    // A scoped tray publication is already bounded by a tiny explicit symbol
-    // manifest. Advancing only one phase per Queue delivery turned two images
-    // into four or five Cloudflare scheduling laps (111s in B-639). Preserve
-    // the Queue + D1 ledger as the only execution path, but let one delivery
-    // advance a small scope through every durable phase. Large/unscoped repair
-    // messages keep one pass so they cannot monopolize a consumer invocation.
-    const maxPasses =
-      coerceBoolean(body.drain_scoped_phases ?? body.drainScopedPhases, false) &&
-      symbols.length > 0 &&
-      symbols.length <= 50
-        ? 8
-        : 1
-    let drainResult = null
-    let processed = 0
-    let failed = 0
-    let finalized = 0
-    let remaining = 0
-    let passes = 0
-    for (let pass = 0; pass < maxPasses; pass += 1) {
-      drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
-        limit: ICONOPLASM_SYNC_FINALIZATION_QUEUE_DRAIN_BATCH_LIMIT,
-        finalizeIfDrained: true,
-        symbols,
-      })
-      passes += 1
-      const passProcessed = Math.max(0, Number(drainResult?.processed || 0) || 0)
-      const passFailed = Math.max(0, Number(drainResult?.failed || 0) || 0)
-      processed += passProcessed
-      failed += passFailed
-      finalized += Math.max(0, Number(drainResult?.finalized || 0) || 0)
-      remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
-      if (remaining <= 0 || passFailed > 0 || drainResult?.partial || passProcessed <= 0) break
-    }
+    // B-639 batched phases to avoid scheduling latency, but a small symbol
+    // manifest did not bound its statements or rows. One version-fenced job
+    // phase per invocation preserves progress within the provider envelope;
+    // the existing Queue immediately wakes the next due phase.
+    const drainResult = await processPendingSyncFinalizationJobs(env, ctx, {
+      limit: 1,
+      recoveryLimit: 1,
+      finalizeIfDrained: true,
+      symbols,
+    })
+    const processed = Math.max(0, Number(drainResult?.processed || 0) || 0)
+    const failed = Math.max(0, Number(drainResult?.failed || 0) || 0)
+    const finalized = Math.max(0, Number(drainResult?.finalized || 0) || 0)
+    const remaining = Math.max(0, Number(drainResult?.remaining || 0) || 0)
     let sentNext = false
     if (remaining > 0 || drainResult?.publication_pending) {
       const nextSymbols = Array.isArray(drainResult?.reschedule_symbols)
@@ -22895,20 +23004,17 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       // runnable. A replacement Queue message must follow the ledger's earliest
       // due time; immediately polling a future retry consumed the entire daily
       // Queue allowance during the 2026-07-22 D1-capacity incident.
-      const nextDelaySeconds = drainResult?.partial
-        ? 15 * 60
-        : drainResult?.has_runnable === true
+      const nextDelaySeconds =
+        !drainResult?.partial && drainResult?.has_runnable === true
           ? 0
           : queueDelaySecondsUntil(drainResult?.next_attempt_at)
-      sentNext = await sendSyncFinalizationDrainQueueMessage(
-        env,
-        {
-          runId,
-          symbols: nextSymbols,
-          drainScopedPhases: maxPasses > 1,
-        },
-        { delaySeconds: nextDelaySeconds },
-      )
+      sentNext = drainResult?.partial
+        ? await deferFinalizationThroughExistingGovernor(env)
+        : await sendSyncFinalizationDrainQueueMessage(
+            env,
+            { runId, symbols: nextSymbols },
+            { delaySeconds: nextDelaySeconds },
+          )
       if (!sentNext?.ok) {
         console.warn("Iconoplasm sync finalization Queue self-reschedule deferred", {
           run_id: runId,
@@ -22922,6 +23028,12 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
             500,
           ),
         })
+        const error = new Error(
+          sentNext?.detail || "Finalization Queue replacement was not accepted",
+        )
+        if (/daily.*queue|queue.*daily/i.test(sentNext?.detail || ""))
+          error.code = "QUEUE_ACCOUNT_DAILY_LIMIT"
+        throw error
       }
     }
     return {
@@ -22931,7 +23043,7 @@ async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
       failed,
       finalized,
       remaining,
-      passes,
+      passes: 1,
       queue_message_sent: sentNext,
       result: drainResult,
     }
@@ -22958,27 +23070,43 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       error: "Iconoplasm finalization Queue path is disabled; refusing to ack without processing.",
     }
   }
-  // RECOVERY-001 / B-754: meter this background consumer into the shared daily
-  // D1 ledger (fail closed when the day is exhausted), mirroring the
-  // vote-projection binding (B-745): consult `/snapshot` up front, flush
-  // buffered usage per invocation, and never ack a message the shared day
-  // refused. The provider per-invocation statement ceiling is a separate
-  // concern; the finalization drain legitimately spans many statements per
-  // invocation, so this binds the daily authority without imposing the 50
-  // statement ceiling that guards the smaller vote-projection batch.
-  env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
-    env,
-    null,
-    iconoplasmBackgroundBudgetAttribution("background_sync_finalization"),
-  )
-  const permit = await iconoplasmSyncGovernorJson(
-    env,
-    `/permit?requested=${encodeURIComponent(String(messages.length || 1))}`,
-    { requested: messages.length || 1 },
-  )
+  // Daily row accounting and the provider's per-invocation statement ceiling
+  // are separate guarantees. No consumer may exempt itself from the latter.
+  // One message, one stale lease and one durable job phase share the envelope.
+  try {
+    env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
+      env,
+      null,
+      iconoplasmBackgroundBudgetAttribution("background_sync_finalization"),
+    )
+  } catch (error) {
+    if (!isIconoplasmDailyBudgetError(error)) throw error
+    const wake = await deferFinalizationThroughExistingGovernor(env)
+    for (const message of messages) {
+      if (typeof message?.ack !== "function") throw error
+      message.ack()
+    }
+    return {
+      ok: false,
+      processed: 0,
+      failed: 0,
+      retrying: 0,
+      finalized: 0,
+      granted: 0,
+      deferred: true,
+      reason: "daily_d1_budget",
+      reset_at: wake.reset_at,
+    }
+  }
+  const invocationBudget = createD1InvocationBudget()
+  env = { ...env }
+  for (const name of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB", "ICONOPLASM_AUDIT_DB"]) {
+    if (env[name]?.prepare) env[name] = invocationBudget.binding(env[name])
+  }
+  const permit = await iconoplasmSyncGovernorJson(env, "/permit?requested=1", { requested: 1 })
   const permitGranted = Math.max(
     0,
-    Math.min(messages.length || 0, Number(permit?.granted || 0) || 0),
+    Math.min(1, messages.length || 0, Number(permit?.granted || 0) || 0),
   )
   const leaseId = String(permit?.lease_id || permit?.leaseId || "").trim()
   let retrying = 0
@@ -23014,9 +23142,12 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   let processed = 0
   let failed = 0
   let finalized = 0
+  let dailyBudgetError = null
+  let resetAt = null
   try {
     for (const message of permittedMessages) {
       try {
+        if (dailyBudgetError) throw dailyBudgetError
         const result = await processSyncFinalizationQueueMessage(env, ctx, message?.body)
         if (result?.kind === "drain_finalization_ledger") {
           processed += Math.max(0, Number(result?.processed || 0) || 0)
@@ -23027,6 +23158,19 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
         }
         if (typeof message?.ack === "function") message.ack()
       } catch (error) {
+        if (isIconoplasmDailyBudgetError(error)) dailyBudgetError = error
+        console.warn("Iconoplasm finalization message deferred", {
+          code: error?.code || null,
+          error: sanitizeText(String(error?.message || error || "finalization failed"), 500),
+          daily_budget: Boolean(dailyBudgetError),
+        })
+        if (dailyBudgetError) {
+          const wake = await deferFinalizationThroughExistingGovernor(env)
+          resetAt = wake.reset_at
+          if (typeof message?.ack !== "function") throw error
+          message.ack()
+          continue
+        }
         failed += 1
         retrying += 1
         if (typeof message?.retry === "function") {
@@ -23039,13 +23183,14 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     // Each message owns its completion page and durable publisher handoff.
     // A second global drain here ran after ack and could lose its failed retry.
     return {
-      ok: failed <= 0,
+      ok: failed <= 0 && !dailyBudgetError,
       processed,
       failed,
       retrying,
       finalized,
       granted: permitGranted,
       permit_granted: permitGranted,
+      ...(dailyBudgetError ? { deferred: true, reason: "daily_budget", reset_at: resetAt } : {}),
     }
   } finally {
     try {
@@ -23245,7 +23390,12 @@ export async function recoverDueIconoplasmGeneCardMaterializationsForScheduled(e
 async function processPendingSyncFinalizationJobs(
   env,
   ctx,
-  { limit = 25, finalizeIfDrained = true, symbols = null } = {},
+  {
+    limit = 25,
+    recoveryLimit = ICONOPLASM_SYNC_FINALIZATION_STALE_RECOVERY_BATCH_LIMIT,
+    finalizeIfDrained = true,
+    symbols = null,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, code: "NO_DB", processed: 0, failed: 0, finalized: 0, remaining: 0 }
@@ -23256,6 +23406,7 @@ async function processPendingSyncFinalizationJobs(
   const scopedEnabled = scopedSymbols.length > 0 ? 1 : 0
   const staleRecovery = await recoverStaleRunningSyncFinalizationJobs(env, {
     symbols: scopedSymbols,
+    limit: recoveryLimit,
   })
   const nowIso = new Date().toISOString()
   const queued = scopedEnabled
@@ -23307,7 +23458,9 @@ async function processPendingSyncFinalizationJobs(
           expectedVersion: claimedVersion,
           status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
           phase: phaseResult.next_phase || job.phase,
-          nextAttemptAt: new Date().toISOString(),
+          nextAttemptAt: new Date(
+            Date.now() + secondsUntilCloudflareDailyReset() * 1000,
+          ).toISOString(),
           lastAttemptAt: new Date().toISOString(),
           attempts: attemptCount,
           lastError: "",
@@ -23339,6 +23492,7 @@ async function processPendingSyncFinalizationJobs(
         expectedVersion: claimedVersion,
         status: ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED,
         phase: phaseResult.next_phase,
+        remainingVisionIds: phaseResult.remaining_vision_ids ?? null,
         nextAttemptAt: new Date().toISOString(),
         lastAttemptAt: new Date().toISOString(),
         attempts: attemptCount,
@@ -23366,6 +23520,10 @@ async function processPendingSyncFinalizationJobs(
         result: phaseResult.result,
       })
     } catch (error) {
+      // The shared day has already refused work. Preserve the claimed job and
+      // let its version-fenced stale recovery resume at the governor reset wake;
+      // another D1 failure write here would itself be refused and lose the code.
+      if (isIconoplasmDailyBudgetError(error)) throw error
       failed += 1
       console.error("[Iconoplasm] finalization Queue job failed", {
         symbol: job.symbol,
