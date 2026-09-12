@@ -7,6 +7,8 @@ draft: false
 ---
 # AI doesn't know who the oldest mouse is
 
+I.
+
 AIs are in the [news](https://www.telegraph.co.uk/business/2026/08/03/unreleased-ai-model-solves-decades-old-maths-problems/) this [week](https://mashable.com/tech/anthropic-fable-5-disproves-jacobian-conjecture) for supposedly solving dozens of long-standing math questions and putting research mathematicians out of a job. If any of you are looking for a new career, I urge you to pivot to the one thing AIs still can't do - reading longevity papers.
 
 Let's say you're interested in benchmarking lifespan extension communities against each other, based on which animal they work on. It's 2026, so for many of us the natural first step is to turn to ChatGPT, Claude, or any other AI assistant, and to ask it for a table of lifespan records by species. 
@@ -54,7 +56,7 @@ So, according to Aubrey here, they used a method called Aspartic acid racemizati
 In the two decades since the record claim, none of Bartke's publications have come close to recording an outlier this large. The longest lifespan I could find in his published work is a 1,537-day-old mouse from Sun et al. (2013)[^1].
 ![[image-65.png|Each data point records day of death of the animal (x-axis) and what share of the group survived longer than that animal (y-axis). Four colors signify a control group and three treatment groups. From Sun et al., 2013. ]]
 This is a good time to introduce two common lifespan-increasing interventions in mouse longevity studies:
-* **Caloric restriction** (CR) simply means giving the mouse less food that it normally eats: experimental conditions can range from 20% CR up to 50% CR. The control condition, where mice eat at their own pace, is called *ad libitum* (AL) 
+* **Caloric restriction** (CR) simply means giving the mouse less food that it normally eats: experimental conditions can range from 20% CR up to 50% CR. The control condition, where mice eat at their own pace, is called *ad libitum* (AL)[^5] 
 * **Growth hormone receptor knock-out** (GHR-KO or simply KO) is a mouse strain whose GHR gene was artificially disabled. Mice with an unperturbed genetic background are called wild-type (WT) or normal (N)
 ![[image-73.png|bGH mice are engineered to chronically overexpress bovine growth hormone. From Young et al., 2023]]
 Just by eyeballing the lifespan curves above, you can get a sense of the scale of the gap. The distance between two ticks is 250 days. To put the MPrize mouse on this chart, you would need to extend the x-axis by 1 full tick, and then put the marker past that tick. In fact, let me just add the circle where the record would be.
@@ -75,7 +77,6 @@ Relying on a press release alone would lose important quality control checks on 
 * Is the shape of the survival curve compatible with the ages in the text of the paper?
 * Was the winning animal a suspicious outlier among its cohort mates?
 * How good were the animal facility conditions based on the control group survival shape?
-* 
 
 And so on.
 
@@ -119,8 +120,6 @@ AIs, however, fail to draw this distinction and include Bartke's mouse on equal 
 III.
 
 After being warned about Bartke's record, **AIs can't decide on a singular mouse lifespan record.** 
-
-Claude Sonnet 5 
 
 If you use ChatGPT 5.6 Extra High thinking ($20 subscription), it claims the maximum mouse lifespan record of 1,628 days.
 ![[image-56.png|M. musculus is the species name for lab mice.]]
