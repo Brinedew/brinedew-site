@@ -13,7 +13,7 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
 )("miniflare")
 
 test(
-  "vote summary replaces 100 images in two atomic statements beside 20000 other genes",
+  "one changed vote among 1000 images writes only its summary beside 20000 other genes",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -46,7 +46,7 @@ test(
       SELECT 'G'||n,printf('%064x',n),'G'||n||':'||printf('%064x',n),9 FROM ids`,
         )
         .run()
-      const first = Array.from({ length: 100 }, (_, n) => ({
+      const first = Array.from({ length: 1000 }, (_, n) => ({
         asset_sha256: (n + 1).toString(16).padStart(64, "0"),
         vision_id: "anima-v1-18",
         candidate_image_id: n + 1,
@@ -58,16 +58,19 @@ test(
       for (let pass = 0; pass < 2; pass++) {
         const meter = createOperationCostD1Meter(db),
           budget = createD1InvocationBudget()
-        const rows = first.map((row) => ({ ...row, score: row.score + pass }))
+        const rows = first.map((row, index) => ({
+          ...row,
+          score: row.score + (index === 0 ? pass : 0),
+        }))
         const written = await replaceVoteAssetSummaryForSymbolFromCoordinatorState(
           { ICONOPLASM_DB: budget.binding(meter.db) },
           { symbol: "tp53", assetSummaries: rows },
         )
-        assert.equal(written, 100)
+        assert.equal(written, 1000)
         assert.equal(budget.used, 2)
         const actual = meter.finish()
-        assert.ok(actual.rows_read <= 416, JSON.stringify(actual))
-        assert.ok(actual.rows_written <= 800, JSON.stringify(actual))
+        assert.ok(actual.rows_read <= 8016, JSON.stringify(actual))
+        assert.ok(actual.rows_written <= (pass === 0 ? 4000 : 4), JSON.stringify(actual))
         const actualRows = (
           await db
             .prepare(
@@ -75,12 +78,12 @@ test(
             )
             .all()
         ).results
-        assert.equal(actualRows.length, 100)
+        assert.equal(actualRows.length, 1000)
         assert.equal(actualRows[0].score, 1 + pass)
         assert.equal(actualRows[0].candidate_image_id, 1)
-        assert.equal(actualRows[99].upvotes, 101)
-        assert.equal(actualRows[99].downvotes, 1)
-        assert.equal(actualRows[99].vote_count, 102)
+        assert.equal(actualRows[999].upvotes, 1001)
+        assert.equal(actualRows[999].downvotes, 1)
+        assert.equal(actualRows[999].vote_count, 1002)
         t.diagnostic(JSON.stringify({ pass, statements: budget.used, actual }))
       }
       const snapshot = async () =>
@@ -92,18 +95,56 @@ test(
             .all()
         ).results
       const before = await snapshot()
+      const repeated = first.map((row, index) => ({
+        ...row,
+        score: row.score + Number(index === 0),
+      }))
+      const repeatedMeter = createOperationCostD1Meter(db)
+      await replaceVoteAssetSummaryForSymbolFromCoordinatorState(
+        { ICONOPLASM_DB: repeatedMeter.db },
+        { symbol: "TP53", assetSummaries: repeated },
+      )
+      const repeatedCost = repeatedMeter.finish()
+      assert.equal(repeatedCost.rows_written, 0, JSON.stringify(repeatedCost))
+      assert.deepEqual(
+        await snapshot(),
+        before,
+        "a repeated delivery preserves exact state and timestamps",
+      )
+      t.diagnostic(JSON.stringify({ repeated: repeatedCost }))
       await assert.rejects(
         replaceVoteAssetSummaryForSymbolFromCoordinatorState(
           { ICONOPLASM_DB: db },
           { symbol: "TP53", assetSummaries: [...first, first[0]] },
         ),
-        /UNIQUE/,
+        /Duplicate/,
+      )
+      await assert.rejects(
+        replaceVoteAssetSummaryForSymbolFromCoordinatorState(
+          { ICONOPLASM_DB: db },
+          {
+            symbol: "TP53",
+            assetSummaries: [
+              ...repeated.slice(1),
+              { ...first[0], asset_sha256: "f".repeat(64), score: Infinity },
+            ],
+          },
+        ),
+        /NOT NULL/,
       )
       assert.deepEqual(
         await snapshot(),
         before,
         "a failing insert must restore the entire previous summary",
       )
+      const removalMeter = createOperationCostD1Meter(db)
+      await replaceVoteAssetSummaryForSymbolFromCoordinatorState(
+        { ICONOPLASM_DB: removalMeter.db },
+        { symbol: "TP53", assetSummaries: repeated.slice(1) },
+      )
+      const removalCost = removalMeter.finish()
+      assert.ok(removalCost.rows_written <= 4, JSON.stringify(removalCost))
+      assert.equal((await snapshot()).length, 999)
       assert.equal(
         await replaceVoteAssetSummaryForSymbolFromCoordinatorState(
           { ICONOPLASM_DB: db },

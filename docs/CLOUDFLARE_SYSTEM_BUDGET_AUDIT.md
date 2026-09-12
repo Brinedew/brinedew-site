@@ -56,6 +56,39 @@ post-reset delivery and accounting. This bounds the alarm's admitted statements;
 whole-phase atomic row-cost admission, cold bootstrap and canonical export
 remain B-754 work. Current traffic does not certify the 10,000-reader scenario.
 
+The next source pass found that partial vision finalization repeated its entire
+committed prefix. It now advances one vision and the remaining list under the
+existing job-version fence. One Queue message processes one phase and one stale
+lease, with all D1 bindings sharing the provider's 50-statement ceiling. The
+previous consumer configuration admitted 100 messages and scoped drains could
+repeat eight passes. Production now specifies batch size/concurrency one;
+functional tests complete two saved genes through all eight automatic phases.
+This does not establish a maximum row cost for a single large phase.
+
+Known daily refusals move the wakeup atomically into the existing SyncGovernor's
+one reset alarm before transport acknowledgement. D1 retains all jobs/progress;
+the alarm coalesces duplicate refusals, survives restart, waits through deployment,
+and retains failed sends. The live Queue audit at 20:23 UTC found finalization
+and its DLQ retained messages for only 60 seconds, with zero primary backlog.
+The release reconciles 24-hour retention and verifies the bounded consumer;
+the reset alarm handles old messages that still age out before reset.
+
+The warm vote and import responses also exported every historical asset summary,
+although their callers only consume the vote receipt/snapshot. Removing that
+unused export changes a real DO fixture with 10,000 images from 10,025 reads to
+22 reads for one vote (19 writes); import uses 20 reads/17 writes. The background
+coordinator state export retains its authority and remains separate work.
+
+Vote-summary projection now removes only absent assets and conditionally upserts
+changed values in one atomic D1 batch. With 1,000 images for the affected gene
+beside 20,000 other genes, one changed score formerly cost 2,000 reads/5,000
+writes; the identical update now costs 5,000 reads/three writes. A repeated
+delivery costs 5,000 reads/zero writes and preserves timestamps. This trades
+3,000 additional reads in this fixture for 4,997 fewer writes, without changing
+the exact authoritative set. Duplicate identities fail before D1; a failed
+insert rolls back removals. Full export and cold coordinator initialization are
+still history-dependent and must not be represented as bounded by this change.
+
 `scripts/install-reset-deployer.ps1` updates the existing Windows task
 **Iconoplasm Deploy Window Dispatcher**. Its versioned runner has a 180-second
 process deadline, starts at 00:00 UTC (07:00 Vietnam), wakes the laptop when

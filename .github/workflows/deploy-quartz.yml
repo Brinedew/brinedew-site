@@ -565,16 +565,10 @@ jobs:
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         if: steps.migrations.outputs.continuation_required != 'true'
-        run: |
-          set -euo pipefail
-          output="$(pnpm exec wrangler queues consumer worker add iconoplasm-sync-finalization geneguessr-api 2>&1)" || {
-            echo "$output"
-            if echo "$output" | grep -Eiq "already exists|already.*consumer|duplicate"; then
-              exit 0
-            fi
-            exit 1
-          }
-          echo "$output"
+        timeout-minutes: 2
+        # ARCHITECTURE FENCE [IPD-004]: preserve delayed work and verify the
+        # Wrangler-owned consumer instead of restoring CLI default batch sizes.
+        run: node scripts/reconcile-iconoplasm-finalization-queue.mjs --apply
 
       - name: Upload public edge worker script with routes (production)
         if: steps.migrations.outputs.continuation_required != 'true'
