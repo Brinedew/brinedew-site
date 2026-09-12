@@ -207,7 +207,10 @@ delayed until its ledger `next_attempt_at`; never immediately replace a message
 merely because `remaining > 0`, and never cap a long durable backoff to a short
 retry loop. Read `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md` before
 changing Queue consumers, retry delays, ledger status counts, or self-draining
-background work. Requested gene-card materialization follows the same fence:
+background work. Finalization hands known daily refusals to one coalesced reset
+alarm in the existing SyncGovernor before acknowledging transport; the D1 jobs
+remain authoritative even after an old Queue message expires. Requested
+gene-card materialization follows the same fence:
 one durable row owns the latest desired fingerprint, duplicate requests only
 increase demand, and a batch-size-one Queue consumer serializes Browser
 Rendering within the daily budget.

@@ -13,6 +13,7 @@ import {
   acknowledgeFinalizationPublication,
 } from "./sync-finalization-publication.js"
 import { createFinalizationPublicationMigrationCostAdapter } from "./operation-cost-finalization-publication-migration-adapter.js"
+import { writeSyncFinalizationJobState } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -267,6 +268,74 @@ test(
         notifyPublisher: async () => ({ accepted: true }),
       })
       assert.equal(second.publication_pending, false)
+
+      await db
+        .prepare(
+          "INSERT INTO icono_sync_finalization_jobs(gene_symbol,phase,vision_ids_json) VALUES('CURSOR','vision_rollups','[\"anima-v1-1\",\"anima-v1-2\"]')",
+        )
+        .run()
+      const beforeProgress = await readFinalizationPublicationBarrier(db)
+      const progressStart = receipts.length
+      const transition = (expectedVersion, remainingVisionIds) =>
+        writeSyncFinalizationJobState(
+          { ICONOPLASM_DB: metered },
+          {
+            symbol: "CURSOR",
+            expectedVersion,
+            status: "queued",
+            phase: "vision_rollups",
+            remainingVisionIds,
+          },
+        )
+      assert.equal(await transition(1, ["anima-v1-2"]), true)
+      assert.equal(
+        await transition(1, []),
+        false,
+        "duplicate completion cannot erase the remaining vision",
+      )
+      const row = await db
+        .prepare(
+          "SELECT job_version,vision_ids_json FROM icono_sync_finalization_jobs WHERE gene_symbol='CURSOR'",
+        )
+        .first()
+      assert.deepEqual(row, { job_version: 2, vision_ids_json: '["anima-v1-2"]' })
+      await assert.rejects(transition(2, ["anima-v1-2", "anima-v1-2"]), /invalid or duplicate/)
+      const afterProgress = await readFinalizationPublicationBarrier(db)
+      assert.equal(afterProgress.unfinished_count, beforeProgress.unfinished_count)
+      assert.equal(afterProgress.enqueued_version, beforeProgress.enqueued_version + 1)
+      for (const receipt of receipts.slice(progressStart)) {
+        assert.ok(receipt.rows_read <= 16, JSON.stringify(receipt))
+        assert.ok(receipt.rows_written <= 8, JSON.stringify(receipt))
+      }
+      await db
+        .prepare(
+          "UPDATE icono_sync_finalization_jobs SET job_version=job_version+1,vision_ids_json='[\"anima-v1-3\"]' WHERE gene_symbol='CURSOR'",
+        )
+        .run()
+      assert.equal(
+        await transition(2, []),
+        false,
+        "newly enqueued work retains its own full vision scope",
+      )
+      assert.equal(
+        (
+          await db
+            .prepare(
+              "SELECT vision_ids_json FROM icono_sync_finalization_jobs WHERE gene_symbol='CURSOR'",
+            )
+            .first()
+        ).vision_ids_json,
+        '["anima-v1-3"]',
+      )
+      await db
+        .prepare(
+          "UPDATE icono_sync_finalization_jobs SET phase='completed_pending_finalize' WHERE gene_symbol='CURSOR'",
+        )
+        .run()
+      await drainCompletedFinalization(db, {
+        now,
+        notifyPublisher: async () => ({ accepted: true }),
+      })
 
       await db
         .prepare(

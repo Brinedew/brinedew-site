@@ -157,6 +157,24 @@ message is only a wakeup. “Unfinished” does not mean “runnable now.”
 - Cloudflare Queue retries are billable reads. A retry delay is part of the cost
   model, not merely latency tuning.
 
+Finalization processes one version-fenced job phase and recovers at most one
+stale lease per invocation. All its D1 bindings share the 50-statement provider
+ceiling; a small symbol list is not permission to multiply phases in one call.
+The production consumer has batch size one and concurrency one. A vision phase
+commits one complete vision and its remaining list under the exact job version.
+An interrupted later vision never restarts the committed prefix.
+
+Known daily refusals atomically retain one reset alarm in the existing
+SyncGovernor before acknowledging the old transport message. Repeated refusals
+coalesce without rewriting the alarm. The alarm waits through schema transition,
+then sends one global wake to the existing D1 job ledger. Failed sends retain
+the alarm; no job identity, progress or cost reservation moves into the governor.
+This handles messages that can age out before reset. The release also reconciles
+the existing finalization Queue and DLQ to 86,400-second retention and verifies
+the Wrangler-owned consumer. The September 12 control-plane audit found both
+production retentions at 60 seconds, with zero primary backlog. This is a
+transport repair, not a higher daily allowance or a whole-phase row-cost proof.
+
 When changing a background consumer, test all four states: no job, runnable job,
 future job, and failed job whose durable backoff was just advanced. The future
 case must prove that no immediate replacement is sent.
