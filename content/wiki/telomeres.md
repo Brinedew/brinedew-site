@@ -22,3 +22,4 @@ Telomere shortening is the counting mechanism behind replicative senescence, and
 
 - Shelterin components: TRF1, TRF2, POT1, TPP1, TIN2, RAP1.
 - Elizabeth Blackburn and Jack Szostak discovered telomere maintenance; the 2009 Nobel Prize recognized the work.
+- The finite division limit that telomere shortening explains was established by the [[hayflick-moorhead-experiment|Hayflick–Moorhead experiment]].

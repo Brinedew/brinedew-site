@@ -62,6 +62,12 @@ Senescent cells accumulate with age because the same tumor-suppressor policies a
 - [[tumor-suppressor-theory-of-aging]] - senescence as a driver of aging through tumor suppression
 - [[p53-tp53.md|p53]] - key regulator of senescence induction
 - [[telomeres.md]] - telomere shortening triggers senescence
+- [[hayflick-moorhead-experiment]] - the experiment that defined replicative senescence
+- [[serrano-lowe-senescence-experiment]] - oncogene-induced senescence
+- [[baker-ink-attac-experiment]] - clearing p16-positive cells in mice
+- [[sasp]] - the secretory program that makes senescent cells affect their tissue
+- [[senolytics]] - drugs that selectively kill senescent cells
+- [[hallmarks-of-aging]] - the framework that places senescence among the aging processes
 
 ---
 
