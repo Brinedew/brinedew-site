@@ -154,7 +154,7 @@
     {
       "id": "IPD-004",
       "title": "Queue wakeups follow durable due times",
-      "decision": "Cloudflare Queue messages wake durable ledger work only when it is runnable; unfinished future work is delayed until the earliest next_attempt_at and is never polled by immediate replacement messages.",
+      "decision": "Cloudflare Queue messages wake durable ledger work only when it is runnable; unfinished future work is delayed until the earliest next_attempt_at and is never polled by immediate replacement messages. Known finalization daily refusals transfer the wakeup to one coalesced reset alarm in the existing SyncGovernor before transport acknowledgement, so Queue expiration cannot erase the wake. D1 job versions and remaining work remain authoritative.",
       "reason": "A single future retry otherwise creates an ack/read/delete/send feedback loop that consumes the daily Queue allowance without doing work. Short polling caps also spend retry attempts and can dead-letter a message before its durable backoff expires.",
       "change_control": "Queue topology, durable status accounting, retry delays, consumer configuration, behavioral tests, instructions, and the runbook must change atomically. Any replacement must prove a bounded number of billable operations while no work is due.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",

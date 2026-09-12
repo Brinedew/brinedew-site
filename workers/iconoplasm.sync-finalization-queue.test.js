@@ -43,6 +43,21 @@ class FakeStatement {
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
+    // The daily meter obtains .first() through .all() so it can read provider
+    // receipts. These singleton/RETURNING queries have the same rows either way.
+    if (
+      this.sql.includes("FROM icono_sync_finalization_summary") ||
+      this.sql.includes("FROM icono_admin_dashboard_summary") ||
+      this.sql.includes("AS unfinished_count") ||
+      this.sql.includes("AS remaining_count") ||
+      this.sql.includes("AS has_runnable") ||
+      this.sql.includes("COUNT(*) AS remaining") ||
+      this.sql.includes("RETURNING enqueued_version") ||
+      this.sql.includes("RETURNING notified_version")
+    ) {
+      const row = await this.first()
+      return { results: row ? [row] : [] }
+    }
     if ([GLOBAL_READY_FINALIZATION_SQL, SCOPED_READY_FINALIZATION_SQL].includes(this.sql)) {
       const scope =
         this.sql === SCOPED_READY_FINALIZATION_SQL ? new Set(JSON.parse(this.args[0])) : null
@@ -894,6 +909,224 @@ function buildFakeQueue({ failMessage = "" } = {}) {
   }
 }
 
+async function deliverFinalizationForTest(env, body) {
+  let acked = false
+  const retries = []
+  const result = await handleIconoplasmSyncFinalizationQueue(
+    {
+      messages: [
+        {
+          body,
+          ack: () => {
+            acked = true
+          },
+          retry: (options) => retries.push(options),
+        },
+      ],
+    },
+    env,
+    { waitUntil() {} },
+  )
+  return { result, acked, retries }
+}
+
+function finalizationGovernorForTest(env) {
+  const values = new Map(),
+    alarms = []
+  const storage = {
+    async get(key) {
+      return values.get(key)
+    },
+    async put(key, value) {
+      values.set(key, structuredClone(value))
+    },
+    async delete(key) {
+      return values.delete(key)
+    },
+    async setAlarm(value) {
+      alarms.push(value)
+    },
+    async transaction(callback) {
+      const before = structuredClone(values),
+        alarmCount = alarms.length
+      try {
+        return await callback(this)
+      } catch (error) {
+        values.clear()
+        for (const [key, value] of before) values.set(key, value)
+        alarms.length = alarmCount
+        throw error
+      }
+    },
+  }
+  const governor = new IconoplasmSyncGovernor({ storage }, env)
+  env.ICONOPLASM_SYNC_GOVERNOR = {
+    idFromName: (name) => name,
+    get: () => ({ fetch: (request) => governor.fetch(request) }),
+  }
+  return { governor, values, alarms }
+}
+
+test("the existing governor coalesces one reset wake and retains it through deployment and failed Queue sends", async (t) => {
+  let now = Date.parse("2026-09-12T20:00:00Z"),
+    fail = true
+  t.mock.method(Date, "now", () => now)
+  const sent = []
+  const env = {
+    ICONOPLASM_SCHEMA_TRANSITION: "1",
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: {
+      async send(body) {
+        if (fail) throw new Error("temporary transport failure")
+        sent.push(body)
+      },
+    },
+  }
+  const { governor, values, alarms } = finalizationGovernorForTest(env)
+  const first = await governor.deferFinalizationToReset()
+  assert.equal(first.reset_at, Date.parse("2026-09-13T00:00:05Z"))
+  for (let n = 0; n < 100; n++) await governor.deferFinalizationToReset()
+  assert.equal(alarms.length, 1, "duplicate refusals do not rewrite the alarm")
+  now = first.reset_at
+  assert.equal((await governor.alarm()).reason, "schema_transition_or_disabled")
+  assert.equal(sent.length, 0)
+  now += 300000
+  env.ICONOPLASM_SCHEMA_TRANSITION = "0"
+  assert.equal((await governor.alarm()).ok, false)
+  assert.equal(values.has("finalization_reset_wake"), true)
+  assert.equal(alarms.at(-1), now + 900000)
+  now += 900000
+  fail = false
+  const restarted = new IconoplasmSyncGovernor(governor.state, env)
+  assert.equal((await restarted.alarm()).queue_message_sent, true)
+  assert.equal(sent.length, 1)
+  assert.deepEqual(sent[0].symbols, [])
+  assert.equal(values.has("finalization_reset_wake"), false)
+  await restarted.alarm()
+  assert.equal(sent.length, 1, "an empty alarm does no Queue work")
+})
+
+test("finalization preserves its remaining vision cursor through daily refusal and lease recovery", async (t) => {
+  let now = Date.now()
+  t.mock.method(Date, "now", () => now)
+  const queue = buildFakeQueue()
+  const visions = ["anima-v1-1", "anima-v1-2", "anima-v1-3"]
+  const db = new FakeIconoplasmDb({
+    jobs: [
+      { gene_symbol: "TP53", phase: "vision_rollups", vision_ids_json: JSON.stringify(visions) },
+    ],
+  })
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: db,
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    KV: testKv(),
+  }
+  const { values, governor } = finalizationGovernorForTest(env)
+  const body = { kind: "drain_finalization_ledger", run_id: "same-retained-run", symbols: ["TP53"] }
+  const first = await deliverFinalizationForTest(env, body)
+  assert.equal(first.result.processed, 1)
+  assert.equal(first.acked, true)
+  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), visions.slice(1))
+  assert.equal(db.jobs.get("TP53").phase, "vision_rollups")
+
+  const originalBatch = db.batch.bind(db)
+  let refused = false
+  db.batch = async (statements) => {
+    if (
+      !refused &&
+      statements.some((s) => s.sql.includes("INSERT INTO icono_admin_vision_rollup"))
+    ) {
+      refused = true
+      throw new Error("D1 free tier daily row read limit exceeded")
+    }
+    return originalBatch(statements)
+  }
+  const paused = await deliverFinalizationForTest(env, body)
+  assert.equal(paused.acked, true, "transport ack follows a durable reset wake, not completion")
+  assert.equal(paused.retries.length, 0)
+  assert.ok(values.get("finalization_reset_wake").due_at > now)
+  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), visions.slice(1))
+  assert.equal(
+    db.jobs.get("TP53").status,
+    "running",
+    "a refused failure write cannot replace the claim",
+  )
+
+  queue.sent.length = 0 // Original transport messages may expire; the D1 cursor remains.
+  now = values.get("finalization_reset_wake").due_at
+  await governor.alarm()
+  assert.equal(queue.sent.length, 1)
+  for (let pass = 0; pass < 2; pass++) {
+    const resumed = await deliverFinalizationForTest({ ...env }, body)
+    assert.equal(resumed.result.processed, 1)
+    assert.equal(resumed.acked, true)
+  }
+  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), [])
+  assert.equal(db.jobs.get("TP53").status, "completed")
+  const executed = db.calls
+    .filter((c) => c.sql.includes("INSERT INTO icono_admin_vision_rollup"))
+    .map((c) => JSON.parse(c.args[0]))
+  assert.deepEqual(
+    executed,
+    visions.map((vision) => [vision]),
+    "the already committed prefix is not rebuilt",
+  )
+})
+
+test("finalization hands an exhausted day to a durable reset wake before D1 and resumes automatically", async (t) => {
+  let now = Date.now()
+  t.mock.method(Date, "now", () => now)
+  let exhausted = true
+  const db = new FakeIconoplasmDb({ jobs: [{ gene_symbol: "TP53", phase: "gene_rollups" }] })
+  const queue = buildFakeQueue()
+  const budget = {
+    idFromName: () => "global",
+    get: () => ({
+      fetch: async (request) => {
+        const body = await request.json()
+        return Response.json({
+          day_key: body.day_key,
+          cycle_key: body.cycle_key,
+          rows_read: exhausted ? 1000000 : 0,
+          rows_written: 0,
+          rows_read_daily_smart_limit: 1000000,
+          rows_written_daily_smart_limit: 20000,
+          exhausted,
+          exhausted_by: exhausted ? "rows_read_daily_smart" : null,
+        })
+      },
+    }),
+  }
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: db,
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+    KV: testKv(),
+  }
+  const { values, governor } = finalizationGovernorForTest(env)
+  const body = { kind: "drain_finalization_ledger", run_id: "retained", symbols: ["TP53"] }
+  const before = structuredClone(db.jobs.get("TP53"))
+  const paused = await deliverFinalizationForTest(env, body)
+  assert.equal(paused.result.reason, "daily_d1_budget")
+  assert.equal(paused.acked, true)
+  assert.equal(paused.retries.length, 0)
+  assert.ok(values.get("finalization_reset_wake").due_at > now)
+  assert.equal(db.calls.length, 0)
+  assert.deepEqual(db.jobs.get("TP53"), before)
+  assert.equal(queue.sent.length, 0)
+  exhausted = false
+  now = values.get("finalization_reset_wake").due_at
+  await governor.alarm()
+  assert.equal(queue.sent.length, 1)
+  const resumed = await deliverFinalizationForTest({ ...env }, queue.sent.shift())
+  assert.equal(resumed.result.processed, 1, JSON.stringify(resumed))
+  assert.equal(resumed.acked, true)
+  assert.equal(db.jobs.get("TP53").status, "completed")
+})
+
 test("card-catalog KV exhaustion defers publication until the next UTC budget day", () => {
   const error = Object.assign(new Error("budget exhausted"), {
     code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
@@ -1418,7 +1651,7 @@ test("queue finalization consumer rejects the old per-symbol message path", asyn
   assert.deepEqual(queue.sent, [])
 })
 
-test("scoped queue drain opt-in completes all durable phases in one delivery", async () => {
+test("scoped queue drain completes all phases through automatic bounded deliveries", async () => {
   const queue = buildFakeQueue()
   const symbols = ["TP53", "BRCA1"]
   const env = {
@@ -1439,37 +1672,33 @@ test("scoped queue drain opt-in completes all durable phases in one delivery", a
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
-  let acknowledged = false
-  const retries = []
-
-  const result = await handleIconoplasmSyncFinalizationQueue(
-    {
-      messages: [
-        {
-          body: {
-            kind: "drain_finalization_ledger",
-            run_id: "sync-test",
-            symbols,
-            drain_scoped_phases: true,
-          },
-          ack() {
-            acknowledged = true
-          },
-          retry(options) {
-            retries.push(options)
-          },
-        },
-      ],
-    },
-    env,
-    { waitUntil() {} },
-  )
-
-  assert.equal(result.ok, true)
-  assert.equal(result.processed, 8)
-  assert.equal(result.finalized, 2)
-  assert.equal(acknowledged, true)
-  assert.deepEqual(retries, [])
+  let body = {
+    kind: "drain_finalization_ledger",
+    run_id: "sync-test",
+    symbols,
+    drain_scoped_phases: true,
+  }
+  let processed = 0,
+    finalized = 0,
+    deliveries = 0
+  while (body) {
+    assert.ok(deliveries++ < 12, "the durable phases must make forward progress")
+    const before = env.ICONOPLASM_DB.calls.length
+    const { result, acked, retries } = await deliverFinalizationForTest(env, body)
+    assert.equal(result.ok, true)
+    assert.equal(acked, true)
+    assert.deepEqual(retries, [])
+    assert.ok(result.processed <= 1)
+    assert.ok(
+      env.ICONOPLASM_DB.calls.length - before <= 50,
+      "all phase and housekeeping statements share the provider limit",
+    )
+    processed += result.processed
+    finalized += result.finalized
+    body = queue.sent.shift()
+  }
+  assert.equal(processed, 8)
+  assert.equal(finalized, 2)
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
     ["completed", "completed"],
@@ -1500,6 +1729,7 @@ test("queue drain consumer preserves progress when self-reschedule fails", async
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
+  const { values } = finalizationGovernorForTest(env)
   let acknowledged = false
   const retries = []
 
@@ -1525,16 +1755,24 @@ test("queue drain consumer preserves progress when self-reschedule fails", async
     { waitUntil() {} },
   )
 
-  assert.equal(result.ok, true)
+  assert.equal(result.ok, false)
+  assert.equal(result.deferred, true)
+  assert.equal(result.reason, "daily_budget")
+  assert.ok(Number.isFinite(result.reset_at))
   assert.equal(result.failed, 0)
   assert.equal(result.retrying, 0)
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
   assert.deepEqual(queue.sent, [])
-  assert.deepEqual(
-    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
-    ["vote_summaries", "vote_summaries"],
+  assert.equal(
+    values.has("finalization_reset_wake"),
+    true,
+    "failed Queue replacement retains an automatic reset wake",
   )
+  assert.deepEqual(symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase).sort(), [
+    "reconcile",
+    "vote_summaries",
+  ])
 })
 
 test("queue drain message finalizes when only pending-finalize rows remain", async () => {
@@ -1962,15 +2200,16 @@ test("queue drain consumer honors message permits while processing bounded ledge
   )
 
   assert.equal(result.ok, true)
-  assert.equal(result.processed, 3)
+  assert.equal(result.processed, 1)
   assert.equal(result.permit_granted, 1)
   assert.equal(result.granted, 1)
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
-  assert.deepEqual(
-    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
-    ["vote_summaries", "vote_summaries", "vote_summaries"],
-  )
+  assert.deepEqual(symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase).sort(), [
+    "reconcile",
+    "reconcile",
+    "vote_summaries",
+  ])
   assert.equal(queue.sent.length, 1)
 })
 
