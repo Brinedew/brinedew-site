@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $repoDirectory = Split-Path -Parent $PSScriptRoot
 $evidenceDirectory = Join-Path $repoDirectory 'artifacts\reset-deploy'
 $deadlineRunner = Join-Path (Split-Path -Parent $repoDirectory) 'scripts\Invoke-HardTimeout.ps1'
-$nodePath = (Get-Command node -CommandType Application -ErrorAction Stop).Source
+$nodePath = @(Get-Command node -CommandType Application -ErrorAction Stop)[0].Source
 $nodeArguments = @((Join-Path $PSScriptRoot 'dispatch-production-in-reset-window.mjs'))
 if ($VerifyReadiness) { $nodeArguments += '--verify-readiness' }
 New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
