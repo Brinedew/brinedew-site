@@ -256,7 +256,10 @@ test("candidate blot readiness is checked after canonical card hydration", () =>
     /await hydratePublicCanonicalGeneRecords[\s\S]*exactReadyGeneBlotProjection/,
     "the final visible card must be fingerprinted after hydration so an unchanged blot leaves the backlog",
   )
-  assert.match(catalogReader, /if \(readyBlot\) record\.blot = readyBlot[\s\S]*else delete record\.blot/)
+  assert.match(
+    catalogReader,
+    /if \(readyBlot\) record\.blot = readyBlot[\s\S]*else delete record\.blot/,
+  )
 })
 
 test("GET and HEAD cannot enroll, enqueue, cache in KV, or launch Browser Rendering", () => {
