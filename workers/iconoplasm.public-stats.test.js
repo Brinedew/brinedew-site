@@ -79,11 +79,7 @@ test("admin asset summary refresh writes public stats projection to KV", async (
           return this
         },
         async first() {
-          if (text.includes("COUNT(*) AS candidate_assets")) {
-            assert.match(
-              text,
-              /AS published_live_portraits,\s*\(\s*SELECT COUNT\(\*\)[\s\S]*AS catalog_published_live_portraits/,
-            )
+          if (text.includes("FROM icono_asset_summary_counts")) {
             return {
               candidate_assets: 39548,
               catalog_candidate_assets: 39481,
@@ -93,6 +89,12 @@ test("admin asset summary refresh writes public stats projection to KV", async (
               legacy_assets: 0,
               catalog_published_live_portraits: 19023,
               published_live_portraits: 19090,
+              audited_assets: 21889,
+              verified_renderable_images: 21889,
+              storage_incomplete_assets: 0,
+              broken_live_images: 0,
+              renderable_live_confirmed: 18545,
+              storage_queue_backlog_assets: 6054,
             }
           }
           if (text.includes("FROM icono_storage_audit_queue_state")) {
@@ -104,15 +106,8 @@ test("admin asset summary refresh writes public stats projection to KV", async (
               seeded_complete: 0,
             }
           }
-          if (text.includes("storage_queue_backlog_assets")) {
-            return {
-              audited_assets: 21889,
-              verified_renderable_images: 21889,
-              storage_incomplete_assets: 0,
-              broken_live_images: 0,
-              renderable_live_confirmed: 18545,
-              storage_queue_backlog_assets: 6054,
-            }
+          if (text.includes("FROM icono_audit_age_years")) {
+            return { previous_total: 0 }
           }
           if (text.includes("FROM icono_website_truth_summary")) return null
           throw new Error(`unexpected first SQL: ${text}`)
@@ -251,7 +246,7 @@ test("admin asset summary refresh skips KV write when public stats did not mater
           return this
         },
         async first() {
-          if (text.includes("COUNT(*) AS candidate_assets")) {
+          if (text.includes("FROM icono_asset_summary_counts")) {
             return {
               candidate_assets: 39548,
               catalog_candidate_assets: 39481,
@@ -261,6 +256,12 @@ test("admin asset summary refresh skips KV write when public stats did not mater
               legacy_assets: 0,
               catalog_published_live_portraits: 19023,
               published_live_portraits: 19090,
+              audited_assets: 21889,
+              verified_renderable_images: 21889,
+              storage_incomplete_assets: 0,
+              broken_live_images: 0,
+              renderable_live_confirmed: 18545,
+              storage_queue_backlog_assets: 6054,
             }
           }
           if (text.includes("FROM icono_storage_audit_queue_state")) {
@@ -272,15 +273,8 @@ test("admin asset summary refresh skips KV write when public stats did not mater
               seeded_complete: 0,
             }
           }
-          if (text.includes("storage_queue_backlog_assets")) {
-            return {
-              audited_assets: 21889,
-              verified_renderable_images: 21889,
-              storage_incomplete_assets: 0,
-              broken_live_images: 0,
-              renderable_live_confirmed: 18545,
-              storage_queue_backlog_assets: 6054,
-            }
+          if (text.includes("FROM icono_audit_age_years")) {
+            return { previous_total: 0 }
           }
           if (text.includes("FROM icono_website_truth_summary")) return null
           throw new Error(`unexpected first SQL: ${text}`)

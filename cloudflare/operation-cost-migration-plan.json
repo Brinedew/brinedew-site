@@ -11,6 +11,18 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0104_asset_summary_counts.sql": {
+      "adapter_id": "iconoplasm-migration-0104",
+      "arguments": {
+        "max_assets": 100000,
+        "max_audit_rows": 50000,
+        "max_publish_rows": 25000,
+        "max_audit_days": 2048,
+        "max_schema_rows": 512
+      },
+      "migration_protocol": "one-migration-per-release-v1",
+      "prediction": { "rows_read": 500000, "rows_written": 6200, "requests": 1 }
+    },
     "iconoplasm/0103_finalization_running_index.sql": {
       "adapter_id": "iconoplasm-migration-0103",
       "arguments": { "max_rows": 25000, "max_unfinished": 5000 },
