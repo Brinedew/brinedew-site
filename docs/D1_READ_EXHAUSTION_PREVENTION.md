@@ -657,3 +657,31 @@ whole-phase pre-dispatch row/trigger admission, concentrated-history reads,
 cold coordinator bootstrap and full background export remain separate open
 requirements. A statement ceiling or current quiet traffic cannot certify the
 10,000-reader workload.
+
+### Caretaker cold starts do not import ordinary vote history
+
+Caretaker assignment, eligibility projection, snapshots and deliberate supervotes
+now initialize only their gene identity in the existing VoteCoordinator. Their
+own versioned tables, CAS tokens, command receipts and pending outbox remain the
+authority. Previously even one assignment imported every ordinary asset/vote and
+every candidate eligibility row for that gene. A full-schema workerd case with
+1,000 assets and votes spent 3,000 D1 reads and 10,017 DO SQL writes on that
+assignment. The same successful assignment now spends zero D1 rows and 16 DO
+SQL reads/11 writes at both 1,000 and 10,000 assets/votes, plus one alarm write.
+These receipts exclude constructor installation and DO duration/request billing.
+
+The removed eligibility bulk seed added no authorization guarantee: a deliberate
+supervote still reads the exact current D1 eligibility record and projects its
+version before the CAS command. Versioned invalidations still clear an affected
+selection through the same durable outbox. The 10,000-asset test completes an
+actual selection with one D1 read, preserves it and its receipts across restart
+and later ordinary bootstrap, rejects a newly ineligible target, and rejects a
+stale eligibility replay. A coordinator cannot be rebound to a different gene.
+The 5,000-item projection-batch contract remains intact; cold startup no longer
+misuses it as a whole-history importer. Ordinary bootstrap preserves unrelated
+meta state, including a retained outbox budget pause.
+
+Ordinary cold vote seeding and full export still grow with selected history.
+Removing this incidental import is not shared DO admission, whole-phase D1
+admission, or proof of the 10,000-reader scenario. Keep those B-754 requirements
+open and continue their implementation without replaying or resetting authority.
