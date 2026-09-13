@@ -685,3 +685,18 @@ Ordinary cold vote seeding and full export still grow with selected history.
 Removing this incidental import is not shared DO admission, whole-phase D1
 admission, or proof of the 10,000-reader scenario. Keep those B-754 requirements
 open and continue their implementation without replaying or resetting authority.
+
+Three old coordinator secondary indexes were also unused: ordinary votes always
+look up `(user_id, asset_sha256)`, assets use their primary key (including full
+export ordering), and vision totals have a separate primary-key table. Indexing
+asset/vision plus the changing timestamp added three index writes per imported
+asset/vote pair, without accelerating any current query. The existing coordinator
+constructor retires only those named indexes, preserving all data, primary keys,
+authority, outbox and receipts. A workerd removal probe retained all 1,000/10,000
+rows and measured identical DROP INDEX cost (five then four SQL reads, zero
+writes), and an actual coordinator upgrade test retains its 10,000 asset rows and
+completes ordinary vote/import/replay operations without a D1 query. With the full
+D1 schema, the 10,000-assets/votes ordinary seed drops from 70,007 to 40,007 DO SQL
+writes while returning the complete same state. This removes write amplification;
+it still needs shared DO admission and bounded resumable seeding before it can
+be included in an account-wide workload guarantee.
