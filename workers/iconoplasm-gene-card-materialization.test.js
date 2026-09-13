@@ -258,7 +258,8 @@ test("candidate blot readiness is checked after canonical card hydration", () =>
   )
   assert.match(
     catalogReader,
-    /if \(readyBlot\) record\.blot = readyBlot[\s\S]*else delete record\.blot/,
+    /return projectCardBlot\(record, readyBlot\)/,
+    "authoritative hydration freezes records, so blot projection must return a clone",
   )
 })
 

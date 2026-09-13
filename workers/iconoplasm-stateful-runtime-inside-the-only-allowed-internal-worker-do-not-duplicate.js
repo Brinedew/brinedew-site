@@ -53,6 +53,7 @@ import {
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
+  projectCardBlot,
 } from "./lib/iconoplasm-card-publication.js"
 import {
   createPublishedCardObjectStore,
@@ -27744,13 +27745,11 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
     .filter(Boolean)
   const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)
   const rowsBySymbol = new Map(rows.map((row) => [normalizeSymbol(row?.gene_symbol || ""), row]))
-  for (const record of hydratedRecords) {
+  return hydratedRecords.map((record) => {
     const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
     const readyBlot = exactReadyGeneBlotProjection(record, rowsBySymbol.get(symbol))
-    if (readyBlot) record.blot = readyBlot
-    else delete record.blot
-  }
-  return hydratedRecords
+    return projectCardBlot(record, readyBlot)
+  })
 }
 
 function geneBlotServiceError(status, code, message) {

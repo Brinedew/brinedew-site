@@ -21,6 +21,13 @@ export const CARD_DELIVERY_INDEX_SIZE = 128
 export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 55000
 export const CARD_PUBLICATION_CONTROL_WRITE_RESERVE = 1000
 
+export function projectCardBlot(record, blot) {
+  const projected = { ...record }
+  if (blot) projected.blot = blot
+  else delete projected.blot
+  return projected
+}
+
 export class CardPublicationRepository {
   constructor(storage) {
     this.storage = storage
