@@ -616,3 +616,21 @@ No allowance, unknown reservation or admission check is removed.
 At the maximum 1,024 schema objects as well as 25,000 jobs/5,000 unfinished
 rows, workerd measured 61,121 migration reads and 5,004 writes. Both preflight
 counters read one row before and after adding 80,000 jobs.
+
+The September 13 post-reset audit found 994 portrait metadata UPSERTs charging
+14,735 D1 writes. Ingest now compares the final persisted values with null-safe
+predicates before UPDATE, preserving optional-value retention, status and sample
+provenance semantics. A real workerd fixture with the complete production index
+and trigger schema measured 100 unchanged rows at 200 reads and zero writes;
+the prior SQL cost 900 reads and 1,500 writes. This is a no-op cost regression,
+not a complete-phase bound or certification of the 10,000-reader scenario.
+
+Vote projection budget refusal now retains a wake in the existing SyncGovernor
+before acknowledging transport. Finalization and vote wakes share its alarm,
+survive reconstruction, and preserve their independent retained ledgers. A reset
+wake executes one existing vote job and schedules the next due job; an empty
+ledger ends the chain. Two indexed timestamp probes account for both SQLite UTC
+and ISO UTC formats: 20,001 future jobs measured five reads and no writes. Delays
+leave delivery headroom inside the Free plan's 24-hour retention period. A failed
+send retains the wake or original message. No job attempt, version, receipt or
+allocation is reset by this transport handoff.
