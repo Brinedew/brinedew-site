@@ -71,6 +71,14 @@ test(
           "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
         )
         await db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").bind("0001_test.sql").run()
+        for (let index = 0; index < 3; index++)
+          await db.exec(
+            `CREATE TRIGGER large_schema_${index} AFTER INSERT ON d1_migrations BEGIN SELECT 1 /* ${"x".repeat(90000)} */; END`,
+          )
+        const source = await db
+          .prepare("SELECT SUM(length(sql)) AS bytes FROM sqlite_schema")
+          .first()
+        assert.ok(source.bytes > 256_000, "full DDL exceeds the existing response envelope")
       }
       async function send(suffix, body) {
         const result = await runtime.dispatchFetch(endpoint + suffix, {
@@ -81,6 +89,7 @@ test(
         const text = await result.text()
         if (!result.ok && result.status === 428) throw new Error(JSON.parse(text).code)
         assert.ok(result.ok, `${suffix || "discovery"}: ${result.status}: ${text}`)
+        assert.ok(text.length <= 256_000, "admitted responses retain the operator transport limit")
         return JSON.parse(text)
       }
       const discovery = await send("")
@@ -160,6 +169,7 @@ test(
         })
         assert.equal(result.result[0].results[0].name, "0001_test.sql")
         assert.ok(result.result[1].results.some((row) => row.name === "d1_migrations"))
+        assert.ok(result.result[1].results.every((row) => !Object.hasOwn(row, "sql")))
         assert.ok(result.usage.rows_read <= 3076)
         const receipt = await send("/receipt", { id })
         assert.equal(receipt.plan.status, "active")
