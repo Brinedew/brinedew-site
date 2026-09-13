@@ -166,10 +166,13 @@ max_concurrency = 1
 [[queues.consumers]]
 queue = "iconoplasm-vote-projection"
 dead_letter_queue = "iconoplasm-vote-projection-dlq"
+# ARCHITECTURE FENCE [IPD-004]: serialize expensive projection deliveries so
+# simultaneous consumers cannot all begin against one budget observation.
 max_batch_size = 2
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+max_concurrency = 1
 
 [[queues.consumers]]
 queue = "iconoplasm-gene-card-materialization"
@@ -385,10 +388,11 @@ queue = "iconoplasm-gene-card-materialization-staging"
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-sync-finalization-staging"
 dead_letter_queue = "iconoplasm-sync-staging-dlq"
-max_batch_size = 100
+max_batch_size = 1
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+max_concurrency = 1
 
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-vote-projection-staging"
@@ -397,6 +401,7 @@ max_batch_size = 2
 max_batch_timeout = 1
 max_retries = 5
 retry_delay = 30
+max_concurrency = 1
 
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-gene-card-materialization-staging"
