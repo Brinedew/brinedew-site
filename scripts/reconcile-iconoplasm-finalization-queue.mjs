@@ -1,6 +1,14 @@
 import { pathToFileURL } from "node:url"
 
-const QUEUE_NAMES = ["iconoplasm-sync-finalization", "iconoplasm-sync-dlq"]
+const CONSUMERS = [
+  { queue: "iconoplasm-sync-finalization", deadLetterQueue: "iconoplasm-sync-dlq", batchSize: 1 },
+  {
+    queue: "iconoplasm-vote-projection",
+    deadLetterQueue: "iconoplasm-vote-projection-dlq",
+    batchSize: 2,
+  },
+]
+const QUEUE_NAMES = CONSUMERS.flatMap(({ queue, deadLetterQueue }) => [queue, deadLetterQueue])
 const RETENTION_SECONDS = 86400
 
 // ARCHITECTURE FENCE [IPD-004]: the provider transport must retain the delayed
@@ -44,29 +52,34 @@ export async function reconcileFinalizationQueue({
       throw new Error(`Expected exactly one existing ${name} Queue`)
     return matches[0]
   })
-  const primary = queues[0]
-  const consumer = primary.consumers?.[0]
-  const expected = {
-    batch_size: 1,
-    max_concurrency: 1,
-    max_retries: 5,
-    max_wait_time_ms: 1000,
-    retry_delay: 30,
-  }
-  if (
-    primary.consumers?.length !== 1 ||
-    consumer?.type !== "worker" ||
-    consumer.script !== "geneguessr-api" ||
-    consumer.dead_letter_queue !== QUEUE_NAMES[1] ||
-    Object.entries(expected).some(([key, value]) => consumer.settings?.[key] !== value)
-  )
-    throw new Error("Finalization Queue consumer does not match the deployed bounded configuration")
-  if (
-    primary.settings?.delivery_paused !== false ||
-    primary.settings?.delivery_delay !== 0 ||
-    queues[1].consumers?.length !== 0
-  )
-    throw new Error("Finalization Queue delivery or dead-letter configuration is invalid")
+  // Validate both complete transports before changing any retention setting.
+  const consumers = CONSUMERS.map(({ queue, deadLetterQueue, batchSize }) => {
+    const primary = queues.find((item) => item.queue_name === queue)
+    const dlq = queues.find((item) => item.queue_name === deadLetterQueue)
+    const consumer = primary.consumers?.[0]
+    const expected = {
+      batch_size: batchSize,
+      max_concurrency: 1,
+      max_retries: 5,
+      max_wait_time_ms: 1000,
+      retry_delay: 30,
+    }
+    if (
+      primary.consumers?.length !== 1 ||
+      consumer?.type !== "worker" ||
+      consumer.script !== "geneguessr-api" ||
+      consumer.dead_letter_queue !== deadLetterQueue ||
+      Object.entries(expected).some(([key, value]) => consumer.settings?.[key] !== value)
+    )
+      throw new Error(`${queue} consumer does not match the deployed bounded configuration`)
+    if (
+      primary.settings?.delivery_paused !== false ||
+      primary.settings?.delivery_delay !== 0 ||
+      dlq.consumers?.length !== 0
+    )
+      throw new Error(`${queue} delivery or dead-letter configuration is invalid`)
+    return { queue, ...expected }
+  })
   const results = []
   for (const queue of queues) {
     let current = queue
@@ -91,7 +104,7 @@ export async function reconcileFinalizationQueue({
     }
     results.push({ queue: queue.queue_name, retention_seconds: RETENTION_SECONDS, changed })
   }
-  return { ok: true, consumer: expected, queues: results }
+  return { ok: true, consumers, queues: results }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

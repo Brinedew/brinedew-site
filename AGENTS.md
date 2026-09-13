@@ -210,6 +210,9 @@ changing Queue consumers, retry delays, ledger status counts, or self-draining
 background work. Finalization hands known daily refusals to one coalesced reset
 alarm in the existing SyncGovernor before acknowledging transport; the D1 jobs
 remain authoritative even after an old Queue message expires. Requested
+vote projection and finalization each use maximum consumer concurrency one;
+the release verifies both transports and their dead-letter retention. This
+serialization does not replace complete-phase row-cost admission. Requested
 gene-card materialization follows the same fence:
 one durable row owns the latest desired fingerprint, duplicate requests only
 increase demand, and a batch-size-one Queue consumer serializes Browser
