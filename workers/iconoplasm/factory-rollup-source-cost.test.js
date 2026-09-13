@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { rebuildGenerationRequestFactoryOptionRollupsBatch } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
 test(
   "factory totals, previews and ranking share one source read beside unrelated growth",
@@ -118,6 +119,27 @@ test(
             writes: receipt.meta.rows_written,
           }),
         )
+        // Exercise source-membership reconciliation and the public rollup as
+        // one actual runtime path too, not just the isolated aggregation SQL.
+        await rebuildGenerationRequestFactoryOptionRollupsBatch({ ICONOPLASM_DB: db }, [
+          "anima-v1-1",
+        ])
+        const meter = createOperationCostD1Meter(db)
+        await rebuildGenerationRequestFactoryOptionRollupsBatch({ ICONOPLASM_DB: meter.db }, [
+          "anima-v1-1",
+        ])
+        const repeated = meter.finish()
+        assert.equal(repeated.rows_written, 0, JSON.stringify(repeated))
+        assert.ok(repeated.rows_read < 160000, JSON.stringify(repeated))
+        assert.equal(
+          (
+            await db
+              .prepare("SELECT COUNT(*) AS n FROM icono_generation_request_factory_option_sources")
+              .first()
+          ).n,
+          1,
+        )
+        t.diagnostic(JSON.stringify({ density, phase: "complete factory repeat", ...repeated }))
       }
     } finally {
       schema.close()
