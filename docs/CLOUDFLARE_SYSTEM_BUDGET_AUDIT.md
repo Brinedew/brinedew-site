@@ -2,6 +2,26 @@
 
 Status: implementation and capacity verification in progress; not a production safety certificate.
 
+## September 13 reset: wait for the installed admission implementation
+
+Automatic run 34726835475, attempt 1, staged repaired source 2d47dd90 at
+00:02:39 UTC, then failed schema inspection with COST_PLAN_IDENTITY_MISMATCH.
+Its first schema receipt retained the previous executable/schema identities
+(4dfeef/237122), with one settled 97-read operation. The next database never
+registered. At 00:09:39 all three live inventory adapters matched the repaired
+fc334/6aa91 identities. These receipts demonstrate an implementation switch
+during inspection; an upload receipt alone did not prove admission readiness.
+Neither migration ran and normal activation was skipped in that attempt.
+
+Schema inspection now waits for two consecutive observations of all three exact
+release adapters before registering any plan. The wait makes at most 16 control
+requests, performs no D1 operation, and remains within the existing inspection's
+40-request allocation. It has a 60-second elapsed deadline, keeps transport
+failures explicit and never retries a registration or execution. Tests exercise
+old/new/old propagation, missing/duplicate adapters, an unchanged deployment,
+deadline expiry and transport failure. Original receipts, continuation identities,
+predictions and account limits remain authoritative.
+
 ## September 12 audit and September 13 reset release
 
 The later caretaker regression found a second history multiplier. Projecting
