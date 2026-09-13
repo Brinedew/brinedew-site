@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 // ARCHITECTURE FENCE [IPD-011]: failed bytes and late votes cannot advance canon.
-import { createCardPublication, CARD_PUBLICATION_BATCH } from "./lib/iconoplasm-card-publication.js"
+import {
+  createCardPublication,
+  CARD_PUBLICATION_BATCH,
+  projectCardBlot,
+} from "./lib/iconoplasm-card-publication.js"
 import { PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT } from "./iconoplasm-public-canonical-runtime.js"
 import {
   canonicalPublishedJson,
@@ -9,6 +13,19 @@ import {
   publishedCardObjectKey,
   publishedObjectHash,
 } from "./lib/iconoplasm-published-card-objects.js"
+
+test("blot projection clones authoritative hydrated cards instead of mutating frozen input", () => {
+  const frozen = Object.freeze({ symbol: "ATG9B", blot: { status: "stale" } })
+  const ready = { status: "ready", asset_sha256: "a".repeat(64) }
+
+  const projected = projectCardBlot(frozen, ready)
+  const withoutBlot = projectCardBlot(frozen, null)
+
+  assert.notEqual(projected, frozen)
+  assert.equal(projected.blot, ready)
+  assert.equal(frozen.blot.status, "stale")
+  assert.equal("blot" in withoutBlot, false)
+})
 
 function fixture(count = 9) {
   let documents = new Map()
