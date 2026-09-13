@@ -164,6 +164,14 @@ The production consumer has batch size one and concurrency one. A vision phase
 commits one complete vision and its remaining list under the exact job version.
 An interrupted later vision never restarts the committed prefix.
 
+Vote projection retains batch size two but has maximum consumer concurrency
+one, in production and staging. Staging finalization uses the same one-message,
+one-consumer envelope as production. Batch size alone does not limit concurrent
+deliveries against the same budget observation. Release verifies both production
+consumers and both dead-letter queues before repairing retention; it never
+unpauses or creates a consumer. Serialization supplements, but does not prove,
+complete-phase row-cost admission.
+
 Known daily refusals atomically retain one reset alarm in the existing
 SyncGovernor before acknowledging the old transport message. Repeated refusals
 coalesce without rewriting the alarm. The alarm waits through schema transition,

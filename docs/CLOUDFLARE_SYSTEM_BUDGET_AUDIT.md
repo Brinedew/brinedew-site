@@ -4,6 +4,17 @@ Status: implementation and capacity verification in progress; not a production s
 
 ## September 12 audit and September 13 reset release
 
+The September 13 00:16 UTC control-plane check found production vote projection
+at batch two with no maximum concurrency. Production finalization had already
+received batch/concurrency one from staging the release, but staging itself
+retained finalization batch 100 and vote batch 25, both without concurrency
+limits. Configuration now serializes both vote consumers and aligns staging
+finalization with production. Release reconciliation verifies both production
+consumers and their dead-letter queues before changing any retention, with
+missing concurrency, excess concurrency, oversized batches and paused delivery
+tested as failures before mutation. This closes simultaneous delivery exposure;
+whole-phase and cold-bootstrap row-cost bounds remain separate work.
+
 The later caretaker regression found a second history multiplier. Projecting
 1,000 eligibility changes beside 100 retained audit/receipt/delivered rows and
 20,000 pending delivery rows used 20,704,000 DO SQL reads and 3,000 writes.

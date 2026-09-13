@@ -29,6 +29,31 @@ function fixture() {
       settings: { delivery_delay: 0, message_retention_period: 60 },
       consumers: [],
     },
+    {
+      queue_id: "d".repeat(32),
+      queue_name: "iconoplasm-vote-projection",
+      settings: { delivery_delay: 0, delivery_paused: false, message_retention_period: 86400 },
+      consumers: [
+        {
+          type: "worker",
+          script: "geneguessr-api",
+          dead_letter_queue: "iconoplasm-vote-projection-dlq",
+          settings: {
+            batch_size: 2,
+            max_concurrency: 1,
+            max_retries: 5,
+            max_wait_time_ms: 1000,
+            retry_delay: 30,
+          },
+        },
+      ],
+    },
+    {
+      queue_id: "e".repeat(32),
+      queue_name: "iconoplasm-vote-projection-dlq",
+      settings: { delivery_delay: 0, message_retention_period: 86400 },
+      consumers: [],
+    },
   ]
   const calls = []
   const options = {
@@ -63,15 +88,17 @@ test("finalization release corrects retention once, preserves pauses/delay and v
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
   assert.deepEqual(
     queues.map((q) => q.settings.message_retention_period),
-    [86400, 86400],
+    [86400, 86400, 86400, 86400],
   )
   assert.equal(queues[0].settings.delivery_paused, false)
   assert.equal(queues[0].consumers[0].settings.batch_size, 1)
+  assert.equal(first.consumers[1].batch_size, 2)
+  assert.equal(first.consumers[1].max_concurrency, 1)
   calls.length = 0
   const again = await reconcileFinalizationQueue(options)
   assert.deepEqual(
     again.queues.map((q) => q.changed),
-    [false, false],
+    [false, false, false, false],
   )
   assert.equal(calls.length, 1, "a repeated release makes no configuration writes")
 })
@@ -86,6 +113,18 @@ test("old consumer batches, a paused queue and missing inventory fail before mut
     },
     (q) => {
       q.pop()
+    },
+    (q) => {
+      delete q[2].consumers[0].settings.max_concurrency
+    },
+    (q) => {
+      q[2].consumers[0].settings.max_concurrency = 2
+    },
+    (q) => {
+      q[2].consumers[0].settings.batch_size = 25
+    },
+    (q) => {
+      q[2].settings.delivery_paused = true
     },
   ]) {
     const { queues, calls, options } = fixture()
