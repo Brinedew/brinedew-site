@@ -15,7 +15,7 @@ on:
         default: false
         type: boolean
       worker_repair_only:
-        description: "Deploy the exact tested B-749 zero-D1 Worker repair while application D1 is exhausted"
+        description: "Deploy an exact tested schema-free Worker repair while application D1 is exhausted"
         required: false
         default: false
         type: boolean
@@ -173,7 +173,7 @@ jobs:
           run-id: ${{ steps.exact-ci.outputs.ci_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Prove the exhausted-capacity repair contains no schema or data work
+      - name: Prove the exhausted-capacity repair matches a reviewed schema-free envelope
         run: node scripts/verify-exhausted-capacity-worker-repair.mjs
 
       - name: Setup Node.js
@@ -198,6 +198,7 @@ jobs:
           node scripts/run-tests.mjs \
             scripts/verify-exhausted-capacity-worker-repair.test.js \
             scripts/generate-operation-cost-identities.test.js \
+            workers/iconoplasm-card-publication.test.js \
             workers/iconoplasm-gene-card-materialization.test.js \
             workers/iconoplasm.do-not-delete-cost-guards.test.js
           pnpm run validate:iconoplasm-topology

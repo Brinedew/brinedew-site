@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import {
   B749_WORKER_REPAIR_FILES,
+  CARD_PUBLICATION_WORKER_REPAIR_FILES,
   verifyWorkerRepairPaths,
 } from "./verify-exhausted-capacity-worker-repair.mjs"
 import { requireNormalWorkerRepairState } from "./verify-exhausted-capacity-worker-state.mjs"
@@ -24,6 +25,30 @@ test("exhausted-capacity repair accepts only the exact reviewed B-749 source env
   )
 })
 
+test("exhausted-capacity repair accepts the exact frozen-card publication envelope", () => {
+  assert.deepEqual(
+    verifyWorkerRepairPaths(CARD_PUBLICATION_WORKER_REPAIR_FILES),
+    CARD_PUBLICATION_WORKER_REPAIR_FILES,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths([
+        ...CARD_PUBLICATION_WORKER_REPAIR_FILES,
+        "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+      ]),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths(
+        CARD_PUBLICATION_WORKER_REPAIR_FILES.filter(
+          (path) => path !== "workers/lib/iconoplasm-card-publication.js",
+        ),
+      ),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+})
+
 test("the repair workflow stays exact-CI gated and D1-mutation free", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
@@ -36,6 +61,7 @@ test("the repair workflow stays exact-CI gated and D1-mutation free", () => {
   assert.match(repair, /Require successful tests for the exact deployed commit/)
   assert.match(repair, /verify-exhausted-capacity-worker-repair\.mjs/)
   assert.match(repair, /verify-exhausted-capacity-worker-state\.mjs/)
+  assert.match(repair, /workers\/iconoplasm-card-publication\.test\.js/)
   assert.match(repair, /Restore immutable static assets required by the Worker bundle/)
   assert.match(repair, /run-id: \$\{\{ steps\.exact-ci\.outputs\.ci_run_id \}\}/)
   assert.match(repair, /Deploy the zero-D1 stateful Worker repair/)
