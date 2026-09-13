@@ -1,15 +1,54 @@
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
 import { acquireReleasePlan, readCanonicalReleaseOrigin } from "./operation-cost-release-plan.mjs"
 import { pathToFileURL } from "node:url"
+import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
+
+const INVENTORY_RESOURCES = ["geneguessr", "iconoplasm", "iconoplasm-authoring"]
+
+// A successful upload can precede the admission DO switching implementations.
+// Spend only bounded discovery requests until the exact release is observed
+// twice. Never register a plan against a stale adapter or retry a mutation.
+// Sixteen probes plus the existing inspection remain inside its 40 requests.
+export async function waitForReleaseAdapters({
+  send,
+  now = Date.now,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+}) {
+  const deadline = now() + 60_000
+  let matches = 0
+  for (let attempt = 0; attempt < 16 && now() < deadline; attempt++) {
+    const capabilities = await send("", "GET")
+    if (!Array.isArray(capabilities?.adapters))
+      throw new Error("COST_SCHEMA_INSPECTION_UNAVAILABLE")
+    const current = INVENTORY_RESOURCES.every((resource) => {
+      const adapters = capabilities.adapters.filter(
+        (adapter) => adapter.id === `${resource}-migration-inventory`,
+      )
+      return (
+        adapters.length === 1 &&
+        adapters[0].resource === resource &&
+        Array.isArray(adapters[0].query_ids) &&
+        adapters[0].query_ids.includes("schema-objects") &&
+        Object.entries(OPERATION_COST_IDENTITIES).every(
+          ([key, value]) => adapters[0][key] === value,
+        )
+      )
+    })
+    matches = current ? matches + 1 : 0
+    if (matches === 2 && now() < deadline) return capabilities
+    if (attempt < 15 && now() + 2000 < deadline) await sleep(2000)
+  }
+  throw new Error("COST_DEPLOYED_IMPLEMENTATION_NOT_READY")
+}
 
 // Read-only diagnosis through the same authority: no raw D1/SQL or caller bounds.
 // The small schema receipt is independent of a large DDL reservation, so a
 // missing/changed prerequisite cannot strand the entire migration allowance.
-export async function inspectReleaseSchema({ send, releaseId, now = Date.now() }) {
-  const capabilities = await send("", "GET")
+export async function inspectReleaseSchema({ send, releaseId, now = Date.now(), sleep }) {
+  const capabilities = await waitForReleaseAdapters({ send, sleep })
   const capacity = await send("/capacity", "GET")
   const schemas = []
-  for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
+  for (const resource of INVENTORY_RESOURCES) {
     const adapter = capabilities.adapters.find(
       (item) => item.id === `${resource}-migration-inventory`,
     )
