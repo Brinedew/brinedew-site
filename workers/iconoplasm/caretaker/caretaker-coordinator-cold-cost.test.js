@@ -215,6 +215,7 @@ test(
       )
       assert.equal(ordinary.status, 200, JSON.stringify(ordinary.error))
       assert.equal(ordinary.body.asset_summaries.length, 10000)
+      assert.ok(ordinary.sql.rows_written <= 40050, JSON.stringify(ordinary.sql))
       const after = await call(symbol, "/inspect")
       assert.deepEqual(after.assignment, before.assignment)
       assert.deepEqual(after.head, before.head)
