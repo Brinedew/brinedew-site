@@ -12,22 +12,48 @@ export const B749_WORKER_REPAIR_FILES = Object.freeze([
   "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
 ])
 
+export const CARD_PUBLICATION_WORKER_REPAIR_FILES = Object.freeze([
+  ".github/workflows/deploy-quartz.yml",
+  "scripts/verify-exhausted-capacity-worker-repair.mjs",
+  "scripts/verify-exhausted-capacity-worker-repair.test.js",
+  "workers/generated/operation-cost-identities.js",
+  "workers/iconoplasm-card-publication.test.js",
+  "workers/iconoplasm-gene-card-materialization.test.js",
+  "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  "workers/lib/iconoplasm-card-publication.js",
+])
+
+const WORKER_REPAIR_ENVELOPES = Object.freeze([
+  {
+    allowed: B749_WORKER_REPAIR_FILES,
+    required: [
+      "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+      "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+    ],
+  },
+  {
+    allowed: CARD_PUBLICATION_WORKER_REPAIR_FILES,
+    required: [
+      "workers/generated/operation-cost-identities.js",
+      "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      "workers/lib/iconoplasm-card-publication.js",
+    ],
+  },
+])
+
 export function verifyWorkerRepairPaths(paths) {
   const actual = [
     ...new Set(paths.map((value) => String(value || "").trim()).filter(Boolean)),
   ].sort()
-  const allowed = new Set(B749_WORKER_REPAIR_FILES)
-  if (!actual.length || actual.some((path) => !allowed.has(path)))
-    throw new Error("COST_WORKER_REPAIR_SCOPE_REFUSED")
-  if (
-    !actual.includes(
-      "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-    ) ||
-    !actual.includes(
-      "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  const accepted = WORKER_REPAIR_ENVELOPES.some(({ allowed, required }) => {
+    const allowedSet = new Set(allowed)
+    return (
+      actual.length &&
+      actual.every((path) => allowedSet.has(path)) &&
+      required.every((path) => actual.includes(path))
     )
-  )
-    throw new Error("COST_WORKER_REPAIR_SCOPE_REFUSED")
+  })
+  if (!accepted) throw new Error("COST_WORKER_REPAIR_SCOPE_REFUSED")
   return actual
 }
 
