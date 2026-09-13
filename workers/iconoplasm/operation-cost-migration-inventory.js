@@ -114,7 +114,9 @@ export function createMigrationInventoryCostAdapter({ db, resource, ...identitie
         {
           // Cap the source scan itself. ORDER BY/filtering before LIMIT could
           // scan an arbitrarily larger schema. The operator rejects truncation.
-          sql: "SELECT name, type, sql FROM sqlite_schema LIMIT 1025",
+          // Release prerequisites need object identities, never complete DDL.
+          // Counter trigger bodies can exceed the transport's response budget.
+          sql: "SELECT name, type FROM sqlite_schema LIMIT 1025",
           prepare(args) {
             if (args && Object.keys(args).length)
               throw new OperationCostError("COST_QUERY_ARGUMENTS_INVALID")
