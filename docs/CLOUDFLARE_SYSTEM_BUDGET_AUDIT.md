@@ -22,6 +22,14 @@ old/new/old propagation, missing/duplicate adapters, an unchanged deployment,
 deadline expiry and transport failure. Original receipts, continuation identities,
 predictions and account limits remain authoritative.
 
+The next continuation, 34727491276, exposed a separate response-size defect
+after 0104 completed (648,409 reads and 159 writes). Its schema read settled
+348 reads, but returning complete trigger definitions exceeded the operator's
+256,000-character response limit. Inspection now selects only object name and
+type, which are the fields its prerequisite report uses. A real D1/DO fixture
+with over 270,000 characters of trigger definitions verifies admitted inspection
+and receipts complete within the unchanged transport and row-cost limits.
+
 ## September 12 audit and September 13 reset release
 
 The later caretaker regression found a second history multiplier. Projecting
