@@ -17723,27 +17723,26 @@ export class IconoplasmVoteCoordinator {
       .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: symbol }))
   }
 
+  ensureSymbol(symbol) {
+    const safeSymbol = normalizeSymbol(symbol)
+    if (!safeSymbol) throw new Error("Missing or invalid symbol")
+    const storedSymbol = this.getMeta("symbol")
+    if (storedSymbol && storedSymbol !== safeSymbol)
+      throw new Error("Vote coordinator belongs to another gene symbol")
+    if (!storedSymbol) this.setMeta("symbol", safeSymbol)
+    return safeSymbol
+  }
+
   async ensureBootstrapped(symbol) {
     // B-742 fence: legacy votes seed a cold coordinator exactly once; afterward
     // the coordinator owns votes. Do not replace a warm coordinator with a D1
     // mirror, or declare paging elsewhere sufficient: this cold read/write set
     // still needs bounded, resumable admission including Durable Object cost.
-    const safeSymbol = normalizeSymbol(symbol)
-    if (!safeSymbol) throw new Error("Missing or invalid symbol")
+    const safeSymbol = this.ensureSymbol(symbol)
     if (!this.env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
-    const bootstrapped = this.getMeta("bootstrapped")
-    const storedSymbol = this.getMeta("symbol")
-    if (bootstrapped === "1" && (!storedSymbol || storedSymbol === safeSymbol)) {
-      if (!storedSymbol) this.setMeta("symbol", safeSymbol)
-      return safeSymbol
-    }
+    if (this.getMeta("bootstrapped") === "1") return safeSymbol
     await this.state.blockConcurrencyWhile(async () => {
-      const boot = this.getMeta("bootstrapped")
-      const existingSymbol = this.getMeta("symbol")
-      if (boot === "1" && (!existingSymbol || existingSymbol === safeSymbol)) {
-        if (!existingSymbol) this.setMeta("symbol", safeSymbol)
-        return
-      }
+      if (this.getMeta("bootstrapped") === "1") return
 
       const assetResp = await this.env.ICONOPLASM_DB.prepare(
         `SELECT asset_sha256, vision_id, candidate_image_id
@@ -17759,18 +17758,12 @@ export class IconoplasmVoteCoordinator {
       )
         .bind(safeSymbol)
         .all()
-      const eligibilityResp = await this.env.ICONOPLASM_DB.prepare(
-        `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
-                source_status, source_event_sequence
-           FROM icono_caretaker_candidate_eligibility_projection
-          WHERE gene_symbol = ?
-          ORDER BY asset_sha256`,
-      )
-        .bind(safeSymbol)
-        .all()
       const assetRows = Array.isArray(assetResp?.results) ? assetResp.results : []
       const voteRows = Array.isArray(voteResp?.results) ? voteResp.results : []
-      const eligibilityRows = Array.isArray(eligibilityResp?.results) ? eligibilityResp.results : []
+      // Caretaker eligibility is independent of ordinary vote history. Each
+      // deliberate selection checks the exact current D1 projection before its
+      // CAS command, and versioned invalidations retain their existing delivery
+      // path. Copying every candidate here adds no selection guarantee.
 
       const assetMap = new Map()
       const visionMap = new Map()
@@ -17842,7 +17835,6 @@ export class IconoplasmVoteCoordinator {
         DELETE FROM vote_by_user_asset;
         DELETE FROM asset_summary;
         DELETE FROM vision_summary;
-        DELETE FROM meta;
       `)
       this.setMeta("symbol", safeSymbol)
       this.setMeta("bootstrapped", "1")
@@ -17888,19 +17880,6 @@ export class IconoplasmVoteCoordinator {
           vote.updated_at || new Date().toISOString(),
         )
       }
-      if (eligibilityRows.length) {
-        this.caretakerSupervotes.projectAssetEligibilityBatch({
-          projections: eligibilityRows.map((row) => ({
-            event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
-            source_event_sequence: Number(row.source_event_sequence),
-            gene_symbol: safeSymbol,
-            asset_sha256: normalizeSha256(row.asset_sha256),
-            eligibility_version: Number(row.eligibility_version),
-            eligible: Number(row.eligible),
-            source_status: sanitizeText(row.source_status || "", 64) || "unknown",
-          })),
-        })
-      }
     })
     return safeSymbol
   }
@@ -17914,7 +17893,9 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
-      await this.ensureBootstrapped(requestedSymbol)
+      // Assignment/eligibility/selection live in their own tables in this same
+      // coordinator. None needs to import all historical ordinary votes.
+      this.ensureSymbol(requestedSymbol)
       try {
         return Response.json(await this.caretakerSupervotes.projectAssignment(payload?.event))
       } catch (error) {
@@ -17934,7 +17915,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
+      const symbol = this.ensureSymbol(requestedSymbol)
       return Response.json({
         ok: true,
         symbol,
@@ -17948,7 +17929,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
+      const symbol = this.ensureSymbol(requestedSymbol)
       try {
         const targetAsset = normalizeSha256(payload?.asset_sha256 || "") || null
         if (targetAsset) {
@@ -17984,7 +17965,7 @@ export class IconoplasmVoteCoordinator {
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
       if (!requestedSymbol)
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      await this.ensureBootstrapped(requestedSymbol)
+      this.ensureSymbol(requestedSymbol)
       try {
         return Response.json(this.caretakerSupervotes.projectAssetEligibility(payload?.projection))
       } catch (error) {
@@ -18003,7 +17984,7 @@ export class IconoplasmVoteCoordinator {
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
       if (!requestedSymbol)
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      await this.ensureBootstrapped(requestedSymbol)
+      this.ensureSymbol(requestedSymbol)
       try {
         return Response.json(
           this.caretakerSupervotes.projectAssetEligibilityBatch({
