@@ -33,16 +33,24 @@ test(
             return {toArray:()=>rows};
           }};
           const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),setAlarm:async()=>{}};
-          this.coordinator=new Coordinator({storage,blockConcurrencyWhile:fn=>state.blockConcurrencyWhile(fn)},
-            {ICONOPLASM_DB:{prepare(){throw Error('Warm vote unexpectedly queried D1')}}});
+          this.context={storage,blockConcurrencyWhile:fn=>state.blockConcurrencyWhile(fn)};
+          this.env={ICONOPLASM_DB:{prepare(){throw Error('Warm vote unexpectedly queried D1')}}};
+          this.coordinator=new Coordinator(this.context,this.env);
         }
         async fetch(request) {
           const path=new URL(request.url).pathname;
           if(path==='/seed') {
             this.state.storage.sql.exec("WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<10000) INSERT INTO asset_summary(asset_sha256,vision_id,candidate_image_id) SELECT printf('%064x',n),'anima-v1-9',n FROM ids");
             this.coordinator.setMeta('symbol','TP53');this.coordinator.setMeta('bootstrapped','1');
+            // Simulate an installed coordinator upgrading with populated legacy
+            // indexes. The real constructor must retire them without data loss.
+            this.state.storage.sql.exec('CREATE INDEX IF NOT EXISTS idx_vote_by_user_asset_asset ON vote_by_user_asset(asset_sha256,updated_at DESC)');
+            this.state.storage.sql.exec('CREATE INDEX IF NOT EXISTS idx_vote_by_user_asset_vision ON vote_by_user_asset(vision_id,updated_at DESC)');
+            this.state.storage.sql.exec('CREATE INDEX IF NOT EXISTS idx_asset_summary_vision ON asset_summary(vision_id,updated_at DESC)');
+            this.coordinator=new Coordinator(this.context,this.env);
             return Response.json({ok:true});
           }
+          if(path==='/retired-indexes') return Response.json({indexes:this.state.storage.sql.exec("SELECT name FROM sqlite_schema WHERE name IN ('idx_vote_by_user_asset_asset','idx_vote_by_user_asset_vision','idx_asset_summary_vision')").toArray(),assets:this.state.storage.sql.exec('SELECT COUNT(*) AS n FROM asset_summary').toArray()[0].n});
           this.cost={rows_read:0,rows_written:0};
           const response=await this.coordinator.fetch(request);
           return Response.json({body:await response.json(),cost:this.cost,status:response.status});
@@ -63,6 +71,10 @@ test(
     )
     try {
       await runtime.dispatchFetch("https://test/seed")
+      assert.deepEqual(await (await runtime.dispatchFetch("https://test/retired-indexes")).json(), {
+        indexes: [],
+        assets: 10000,
+      })
       const asset = "1".padStart(64, "0")
       const vote = await (
         await runtime.dispatchFetch("https://test/vote/set", {
