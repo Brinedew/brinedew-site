@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
 
 test(
-  "finalization reset wake commits atomically with an alarm in real Durable Object SQLite",
+  "both retained queue wakes commit with one alarm in real Durable Object SQLite",
   { timeout: 60000 },
   async () => {
     const require = createRequire(import.meta.url)
@@ -25,13 +25,13 @@ test(
       import {IconoplasmSyncGovernor as Governor} from './workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js';
       export class TestGovernor {
         constructor(state) {
-          this.state=state;this.sends=0;this.writes=0;this.alarms=0;
+          this.state=state;this.sends=0;this.voteSends=0;this.writes=0;this.alarms=0;
           const storage={get:key=>state.storage.get(key),transaction:fn=>state.storage.transaction(tx=>fn({
             get:key=>tx.get(key),delete:key=>tx.delete(key),
             put:(key,value)=>{this.writes++;return tx.put(key,value)},
             setAlarm:value=>{this.alarms++;return tx.setAlarm(value)}
           }))};
-          this.make=()=>new Governor({storage},{ICONOPLASM_SYNC_FINALIZATION_QUEUE:{send:async()=>{this.sends++}}});
+          this.make=()=>new Governor({storage},{ICONOPLASM_SYNC_FINALIZATION_QUEUE:{send:async()=>{this.sends++}},ICONOPLASM_VOTE_PROJECTION_QUEUE:{send:async()=>{this.voteSends++}}});
           this.governor=this.make();
         }
         alarm() { return this.governor.alarm() }
@@ -39,11 +39,14 @@ test(
           const body=await request.json();
           if(body.restart)this.governor=this.make();
           if(body.fire) {
-            const wake=await this.state.storage.get('finalization_reset_wake');
-            if(wake)await this.state.storage.put('finalization_reset_wake',{...wake,due_at:Date.now()-1});
+            for(const key of ['finalization_reset_wake','vote_projection_reset_wake']) {
+              const wake=await this.state.storage.get(key);
+              if(wake)await this.state.storage.put(key,{...wake,due_at:Date.now()-1});
+            }
             await this.governor.alarm();
-          } else await this.governor.deferFinalizationToReset();
-          return Response.json({wake:await this.state.storage.get('finalization_reset_wake')||null,alarm:await this.state.storage.getAlarm(),writes:this.writes,alarms:this.alarms,sends:this.sends});
+          } else if(body.vote) await this.governor.deferVoteProjectionToReset();
+          else await this.governor.deferFinalizationToReset();
+          return Response.json({wake:await this.state.storage.get('finalization_reset_wake')||null,voteWake:await this.state.storage.get('vote_projection_reset_wake')||null,alarm:await this.state.storage.getAlarm(),writes:this.writes,alarms:this.alarms,sends:this.sends,voteSends:this.voteSends});
         }
       }
       export default {fetch(request,env){return env.GOVERNOR.get(env.GOVERNOR.idFromName('existing-owner')).fetch(request)}}
@@ -76,10 +79,21 @@ test(
       const again = await send({ restart: true })
       assert.equal(again.writes, 1)
       assert.equal(again.alarms, 1)
+      const both = await send({ vote: true })
+      assert.ok(both.voteWake.due_at > Date.now())
+      assert.equal(both.alarm, Math.min(both.wake.due_at, both.voteWake.due_at))
+      assert.equal(both.writes, 2)
+      const repeatVote = await send({ vote: true, restart: true })
+      assert.equal(repeatVote.writes, 2)
+      assert.equal(repeatVote.alarms, both.alarms)
       const fired = await send({ fire: true, restart: true })
       assert.equal(fired.wake, null)
+      assert.equal(fired.voteWake, null)
       assert.equal(fired.sends, 1)
-      assert.equal((await send({ fire: true })).sends, 1)
+      assert.equal(fired.voteSends, 1)
+      const empty = await send({ fire: true })
+      assert.equal(empty.sends, 1)
+      assert.equal(empty.voteSends, 1)
     } finally {
       await runtime.dispose()
     }
