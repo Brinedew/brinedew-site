@@ -2,7 +2,16 @@
 // their reservation. This ledger is internal to the existing budget authority.
 // A caller-supplied bound is NOT proof that an arbitrary SQL query is bounded.
 import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
-import { KV_COST_METERS, KV_OPERATOR_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
+import {
+  KV_COST_METERS,
+  KV_OPERATOR_LIMITS,
+  KV_ACCOUNT_CEILINGS,
+  DO_SQL_COST_METERS,
+  DO_SQL_OPERATOR_LIMITS,
+  DO_SQL_ACCOUNT_CEILINGS,
+  OPTIONAL_COST_METERS,
+  OPTIONAL_OPERATOR_LIMITS,
+} from "./operation-cost-meters.js"
 
 const METERS = ["rows_read", "rows_written", "requests"]
 const LIMITS = {
@@ -40,15 +49,15 @@ function vector(value, prediction = false) {
     )
     result[meter] = value[meter]
   }
-  // Absent KV dimensions preserve existing immutable D1 plan documents. A KV
-  // adapter must explicitly predict and reserve every dimension it can spend.
-  for (const meter of KV_COST_METERS) {
+  // Absent additional dimensions preserve existing immutable plan documents.
+  // An adapter must explicitly predict and reserve every dimension it spends.
+  for (const meter of OPTIONAL_COST_METERS) {
     if (!Object.hasOwn(value, meter)) continue
     requireValue(
       Number.isSafeInteger(value[meter]) &&
         value[meter] >= 0 &&
         value[meter] <=
-          (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : KV_OPERATOR_LIMITS[meter]),
+          (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : OPTIONAL_OPERATOR_LIMITS[meter]),
       "COST_VECTOR_INVALID",
     )
     result[meter] = value[meter]
@@ -120,6 +129,10 @@ export class OperationCostLedger {
       day TEXT PRIMARY KEY, usage TEXT NOT NULL)`)
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_kv_account_usage (
       day TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, usage TEXT NOT NULL)`)
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_do_sql_days (
+      day TEXT PRIMARY KEY, usage TEXT NOT NULL)`)
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_do_sql_account_usage (
+      day TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, usage TEXT NOT NULL)`)
   }
 
   day() {
@@ -133,9 +146,18 @@ export class OperationCostLedger {
   storedAccountUsage() {
     const primary = this.row("SELECT * FROM operation_cost_account_usage WHERE day = ?", this.day())
     const kv = this.row("SELECT * FROM operation_cost_kv_account_usage WHERE day = ?", this.day())
-    return primary && kv
-      ? { ...primary, ...JSON.parse(kv.usage), kv_measured_at: kv.measured_at }
-      : primary
+    const durableSql = this.row(
+      "SELECT * FROM operation_cost_do_sql_account_usage WHERE day = ?",
+      this.day(),
+    )
+    if (!primary) return null
+    return {
+      ...primary,
+      ...(kv ? { ...JSON.parse(kv.usage), kv_measured_at: kv.measured_at } : {}),
+      ...(durableSql
+        ? { ...JSON.parse(durableSql.usage), do_sql_measured_at: durableSql.measured_at }
+        : {}),
+    }
   }
 
   capacitySnapshot() {
@@ -187,6 +209,16 @@ export class OperationCostLedger {
       METERS.map((meter) => [meter, settledActual[meter] + outstandingReservations[meter]]),
     )
     const operatorUnattributed = subtractMeterVectors(operatorCharged, receiptedOrReserved)
+    const durableSqlUsage = this.durableSqlDayUsage(day)
+    const durableSqlUsed = {}
+    for (const meter of DO_SQL_COST_METERS) {
+      const otherValue = other[meter] ?? 0
+      requireValue(
+        Number.isSafeInteger(otherValue) && otherValue >= 0,
+        "COST_SHARED_USAGE_UNAVAILABLE",
+      )
+      durableSqlUsed[meter] = durableSqlUsage[meter] + otherValue
+    }
     return {
       day,
       measured_at: this.now(),
@@ -195,6 +227,18 @@ export class OperationCostLedger {
       remaining: Object.fromEntries(
         METERS.map((meter) => [meter, Math.max(0, limits[meter] - used[meter])]),
       ),
+      // Separate units: these are admitted DO SQL operations, not D1 usage,
+      // all-account telemetry or a claim to account for this authority's cost.
+      durable_sql: {
+        used: durableSqlUsed,
+        limits: DO_SQL_OPERATOR_LIMITS,
+        remaining: Object.fromEntries(
+          DO_SQL_COST_METERS.map((meter) => [
+            meter,
+            Math.max(0, DO_SQL_OPERATOR_LIMITS[meter] - durableSqlUsed[meter]),
+          ]),
+        ),
+      },
       breakdown: {
         operation_charged: operatorCharged,
         settled_actual: settledActual,
@@ -234,6 +278,27 @@ export class OperationCostLedger {
     )
   }
 
+  durableSqlDayUsage(day) {
+    const stored = this.row("SELECT usage FROM operation_cost_do_sql_days WHERE day = ?", day)
+    const usage = stored
+      ? JSON.parse(stored.usage)
+      : Object.fromEntries(DO_SQL_COST_METERS.map((meter) => [meter, 0]))
+    requireValue(
+      DO_SQL_COST_METERS.every((meter) => Number.isSafeInteger(usage[meter]) && usage[meter] >= 0),
+      "COST_SHARED_USAGE_UNAVAILABLE",
+    )
+    return usage
+  }
+
+  saveDurableSqlDayUsage(day, usage) {
+    this.storage.sql.exec(
+      `INSERT INTO operation_cost_do_sql_days VALUES (?, ?)
+      ON CONFLICT(day) DO UPDATE SET usage = excluded.usage`,
+      day,
+      JSON.stringify(usage),
+    )
+  }
+
   rememberAccountUsage(sample) {
     requireValue(
       sample &&
@@ -246,6 +311,35 @@ export class OperationCostLedger {
     )
     return this.storage.transactionSync(() => {
       const previous = this.storedAccountUsage()
+      if (DO_SQL_COST_METERS.some((meter) => Object.hasOwn(sample, meter))) {
+        const measuredAt = sample.do_sql_measured_at
+        requireValue(
+          Number.isSafeInteger(measuredAt) &&
+            measuredAt <= this.now() &&
+            this.now() - measuredAt <= 60_000 &&
+            DO_SQL_COST_METERS.every(
+              (meter) => Number.isSafeInteger(sample[meter]) && sample[meter] >= 0,
+            ),
+          "COST_ACCOUNT_USAGE_UNAVAILABLE",
+        )
+        const values = Object.fromEntries(
+          DO_SQL_COST_METERS.map((meter) => [
+            meter,
+            Math.max(sample[meter], previous?.[meter] ?? 0),
+          ]),
+        )
+        if (
+          previous?.do_sql_measured_at !== measuredAt ||
+          DO_SQL_COST_METERS.some((meter) => previous?.[meter] !== values[meter])
+        )
+          this.storage.sql.exec(
+            `INSERT INTO operation_cost_do_sql_account_usage VALUES (?, ?, ?)
+            ON CONFLICT(day) DO UPDATE SET measured_at = excluded.measured_at, usage = excluded.usage`,
+            sample.day,
+            measuredAt,
+            JSON.stringify(values),
+          )
+      }
       if (KV_COST_METERS.some((m) => Object.hasOwn(sample, m))) {
         requireValue(
           KV_COST_METERS.every((m) => Number.isSafeInteger(sample[m]) && sample[m] >= 0),
@@ -431,6 +525,11 @@ export class OperationCostLedger {
         this.storage.sql.exec("DELETE FROM operation_cost_account_usage WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_kv_days WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_kv_account_usage WHERE day < ?", oldest)
+        this.storage.sql.exec("DELETE FROM operation_cost_do_sql_days WHERE day < ?", oldest)
+        this.storage.sql.exec(
+          "DELETE FROM operation_cost_do_sql_account_usage WHERE day < ?",
+          oldest,
+        )
       }
       return plan
     })
@@ -515,6 +614,39 @@ export class OperationCostLedger {
           "COST_ACCOUNT_HEADROOM_LIMIT",
         )
       }
+      if (DO_SQL_COST_METERS.some((meter) => (bound[meter] ?? 0) > 0)) {
+        requireValue(
+          Number.isSafeInteger(account.do_sql_measured_at) &&
+            account.do_sql_measured_at <= this.now() &&
+            this.now() - account.do_sql_measured_at <= 60_000 &&
+            DO_SQL_COST_METERS.every(
+              (meter) => Number.isSafeInteger(account[meter]) && account[meter] >= 0,
+            ),
+          "COST_ACCOUNT_USAGE_UNAVAILABLE",
+        )
+        const durableSqlUsage = this.durableSqlDayUsage(plan.immutable.day)
+        for (const meter of DO_SQL_COST_METERS) {
+          const maximum = bound[meter] ?? 0
+          const other = otherUsage[meter] ?? 0
+          requireValue(Number.isSafeInteger(other) && other >= 0, "COST_SHARED_USAGE_UNAVAILABLE")
+          requireValue(
+            (plan.used[meter] ?? 0) + maximum <= (plan.ceiling[meter] ?? 0),
+            "COST_TWICE_PREDICTION_LIMIT",
+          )
+          if (maximum === 0) continue
+          requireValue(
+            durableSqlUsage[meter] + other + maximum <= DO_SQL_OPERATOR_LIMITS[meter],
+            "COST_SHARED_DAILY_LIMIT",
+          )
+          requireValue(
+            account[meter] + durableSqlUsage[meter] + other + maximum <=
+              DO_SQL_ACCOUNT_CEILINGS[meter],
+            "COST_ACCOUNT_HEADROOM_LIMIT",
+          )
+          durableSqlUsage[meter] += maximum
+        }
+        this.saveDurableSqlDayUsage(plan.immutable.day, durableSqlUsage)
+      }
       const usesKv = KV_COST_METERS.some((m) => (bound[m] ?? 0) > 0)
       if (usesKv) {
         requireValue(
@@ -577,7 +709,7 @@ export class OperationCostLedger {
       requireValue(step && step.digest === input.step_sha256, "COST_RECEIPT_IDENTITY_MISMATCH")
       const receiptMeters = [
         ...METERS,
-        ...KV_COST_METERS.filter(
+        ...OPTIONAL_COST_METERS.filter(
           (m) => Object.hasOwn(step.bound, m) || Object.hasOwn(input.actual, m),
         ),
       ]
@@ -612,6 +744,17 @@ export class OperationCostLedger {
           "COST_RECEIPT_OVERFLOW",
         )
         this.saveKvDayUsage(plan.immutable.day, kvUsage)
+      }
+      if (DO_SQL_COST_METERS.some((meter) => delta[meter])) {
+        const durableSqlUsage = this.durableSqlDayUsage(plan.immutable.day)
+        for (const meter of DO_SQL_COST_METERS) durableSqlUsage[meter] += delta[meter] ?? 0
+        requireValue(
+          DO_SQL_COST_METERS.every(
+            (meter) => Number.isSafeInteger(durableSqlUsage[meter]) && durableSqlUsage[meter] >= 0,
+          ),
+          "COST_RECEIPT_OVERFLOW",
+        )
+        this.saveDurableSqlDayUsage(plan.immutable.day, durableSqlUsage)
       }
       step.status = "settled"
       step.actual = actual

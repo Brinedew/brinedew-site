@@ -79,6 +79,263 @@ function enableKv(f, overrides = {}) {
   })
 }
 
+function durableSqlOperation(f, id = "durable-sql", writes = 100) {
+  const input = {
+    ...f.input,
+    id,
+    prediction: {
+      rows_read: 0,
+      rows_written: 0,
+      requests: 2,
+      do_rows_read: 100,
+      do_rows_written: writes,
+    },
+  }
+  const bound = {
+    rows_read: 0,
+    rows_written: 0,
+    requests: 1,
+    do_rows_read: 100,
+    do_rows_written: writes,
+  }
+  return { input, bound, step: { ...f.step({ id, bound }), id } }
+}
+
+function enableDurableSql(f, overrides = {}) {
+  f.ledger.readAccountUsage = () => ({
+    ...f.readAccountUsage(),
+    do_sql_measured_at: f.readAccountUsage().measured_at,
+    do_rows_read: 0,
+    do_rows_written: 0,
+    ...overrides,
+  })
+}
+
+test("concurrent Durable Object work shares the original authority and retains an uncertain dispatch", async () => {
+  const f = fixture()
+  try {
+    enableDurableSql(f)
+    const operations = [
+      durableSqlOperation(f, "first", 12000),
+      durableSqlOperation(f, "second", 12000),
+    ]
+    for (const operation of operations) f.ledger.register(operation.input)
+    let dispatched = 0
+    const executor = new OperationCostExecutor({
+      ledger: f.ledger,
+      adapters: new Map([
+        [
+          f.input.adapter_id,
+          {
+            ...f.input,
+            prepare: async () => ({ bound: operations[0].bound, sha256: "c".repeat(64) }),
+            dispatch: async () => {
+              dispatched++
+              throw new Error("response lost after actual work")
+            },
+          },
+        ],
+      ]),
+    })
+    const outcomes = await Promise.allSettled(
+      operations.map(({ input }) =>
+        executor.execute({
+          operation_id: input.id,
+          adapter_id: input.adapter_id,
+          step_id: "seed-page-1",
+          arguments: {},
+        }),
+      ),
+    )
+    assert.equal(dispatched, 1)
+    assert.match(outcomes[0].reason.message, /response lost/)
+    assert.match(outcomes[1].reason.message, /COST_SHARED_DAILY_LIMIT/)
+    assert.equal(f.ledger.durableSqlDayUsage(f.ledger.day()).do_rows_written, 12000)
+    const retained = f.ledger.readPlan("first")
+    const restarted = new OperationCostLedger(f.storage, f.ledger.now, f.ledger.readAccountUsage)
+    restarted.initialize()
+    assert.deepEqual(restarted.readPlan("first"), retained)
+    assert.throws(() => restarted.reserve(operations[0].step), /COST_SHARED_DAILY_LIMIT/)
+    assert.equal(restarted.durableSqlDayUsage(restarted.day()).do_rows_written, 12000)
+    assert.throws(
+      () => restarted.reserve({ ...operations[0].step, step_id: "seed-page-1" }),
+      /COST_STEP_ALREADY_RESERVED/,
+    )
+    assert.equal(restarted.capacitySnapshot().durable_sql.remaining.do_rows_written, 8000)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("Durable SQL admission fails before dispatch for missing predictions or invalid telemetry", async () => {
+  const f = fixture()
+  try {
+    const op = durableSqlOperation(f)
+    let refreshes = 0
+    let dispatches = 0
+    const executor = new OperationCostExecutor({
+      ledger: f.ledger,
+      beforeReserve: async () => {
+        refreshes++
+      },
+      adapters: new Map([
+        [
+          f.input.adapter_id,
+          {
+            ...f.input,
+            prepare: async () => ({ bound: op.bound, sha256: "c".repeat(64) }),
+            dispatch: async () => {
+              dispatches++
+              return { actual: op.bound, result: "complete" }
+            },
+          },
+        ],
+      ]),
+    })
+    f.ledger.register(f.input)
+    await assert.rejects(
+      executor.execute({
+        operation_id: f.input.id,
+        adapter_id: f.input.adapter_id,
+        step_id: "first",
+        arguments: {},
+      }),
+      /COST_TWICE_PREDICTION_LIMIT/,
+    )
+    assert.equal(refreshes, 0)
+    f.ledger.register(op.input)
+    for (const invalid of [
+      { do_sql_measured_at: undefined },
+      { do_rows_written: undefined },
+      { do_rows_read: -1 },
+      { do_sql_measured_at: f.readAccountUsage().measured_at - 60001 },
+      { do_sql_measured_at: f.readAccountUsage().measured_at + 1 },
+      { do_rows_written: 80000 },
+    ]) {
+      enableDurableSql(f, invalid)
+      await assert.rejects(
+        executor.execute({
+          operation_id: op.input.id,
+          adapter_id: op.input.adapter_id,
+          step_id: "first",
+          arguments: {},
+        }),
+        /COST_ACCOUNT_(USAGE_UNAVAILABLE|HEADROOM_LIMIT)/,
+      )
+      assert.deepEqual(f.ledger.readPlan(op.input.id).steps, {})
+    }
+    assert.equal(dispatches, 0)
+    // A D1 write outage must not block a proven zero-D1 capability's repair path.
+    enableDurableSql(f, { rows_written: 100000 })
+    const completed = await executor.execute({
+      operation_id: op.input.id,
+      adapter_id: op.input.adapter_id,
+      step_id: "first",
+      arguments: {},
+    })
+    assert.equal(completed.result, "complete")
+    assert.equal(dispatches, 1)
+    assert.equal(completed.usage.do_rows_written, 100)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("Durable SQL receipts cannot omit a dimension, refund uncertainty or conceal an invalid bound", () => {
+  const f = fixture()
+  try {
+    enableDurableSql(f)
+    const op = durableSqlOperation(f)
+    f.ledger.register(op.input)
+    const permit = f.ledger.reserve(op.step)
+    assert.throws(
+      () => f.ledger.settle({ ...permit, actual: { rows_read: 0, rows_written: 0, requests: 1 } }),
+      /COST_RECEIPT_REQUIRED/,
+    )
+    assert.equal(f.ledger.durableSqlDayUsage(f.ledger.day()).do_rows_written, 100)
+    const actual = { ...op.bound, do_rows_written: 101 }
+    const tripped = f.ledger.settle({ ...permit, actual })
+    assert.equal(tripped.status, "tripped")
+    assert.equal(f.ledger.durableSqlDayUsage(f.ledger.day()).do_rows_written, 101)
+    assert.deepEqual(f.ledger.settle({ ...permit, actual }), tripped)
+    assert.throws(() => f.ledger.settle({ ...permit, actual: op.bound }), /COST_RECEIPT_IMMUTABLE/)
+    const other = durableSqlOperation(f, "same-bad-code")
+    f.ledger.register(other.input)
+    assert.throws(() => f.ledger.reserve(other.step), /COST_VERIFIED_BOUND_INVALIDATED/)
+  } finally {
+    f.db.close()
+  }
+})
+
+test("Durable SQL reservation and plan ceiling survive reset, restart and a linked continuation", () => {
+  const f = fixture()
+  try {
+    enableDurableSql(f)
+    const op = durableSqlOperation(f)
+    f.ledger.register(op.input)
+    f.ledger.reserve(op.step)
+    const original = f.ledger.readPlan(op.input.id)
+    const priorDay = f.ledger.day()
+    f.advance(86400000)
+    const continuation = f.ledger.register({
+      ...op.input,
+      id: "continued",
+      predecessor_id: op.input.id,
+      expires_at: f.readAccountUsage().measured_at + 60000,
+    })
+    assert.deepEqual(continuation.used, original.used)
+    assert.deepEqual(continuation.ceiling, original.ceiling)
+    assert.equal(f.ledger.durableSqlDayUsage(priorDay).do_rows_written, 100)
+    assert.equal(f.ledger.durableSqlDayUsage(f.ledger.day()).do_rows_written, 0)
+    f.ledger.reserve({ ...op.step, id: "continued", step_id: "next" })
+    assert.throws(
+      () => f.ledger.reserve({ ...op.step, id: "continued", step_id: "extra" }),
+      /COST_TWICE_PREDICTION_LIMIT/,
+    )
+  } finally {
+    f.db.close()
+  }
+})
+
+test("Durable SQL telemetry retains high water across restart without rewriting existing plans", () => {
+  const f = fixture()
+  try {
+    f.ledger.register(f.input)
+    f.ledger.reserve(f.step())
+    const original = f.db
+      .prepare("SELECT document FROM operation_cost_plans WHERE id=?")
+      .get(f.input.id).document
+    f.db.exec(
+      "DROP TABLE operation_cost_do_sql_days; DROP TABLE operation_cost_do_sql_account_usage",
+    )
+    f.ledger.initialize()
+    assert.equal(
+      f.db.prepare("SELECT document FROM operation_cost_plans WHERE id=?").get(f.input.id).document,
+      original,
+    )
+    const sample = {
+      ...f.readAccountUsage(),
+      do_sql_measured_at: f.readAccountUsage().measured_at,
+      do_rows_read: 4000000,
+      do_rows_written: 70000,
+    }
+    f.ledger.rememberAccountUsage(sample)
+    const changes = f.db.prepare("SELECT total_changes() AS n").get().n
+    f.ledger.rememberAccountUsage({ ...sample, do_rows_read: 10, do_rows_written: 5 })
+    assert.equal(f.db.prepare("SELECT total_changes() AS n").get().n, changes)
+    const restarted = new OperationCostLedger(f.storage, f.ledger.now)
+    restarted.initialize()
+    assert.equal(restarted.storedAccountUsage().do_rows_read, 4000000)
+    assert.equal(restarted.storedAccountUsage().do_rows_written, 70000)
+    assert.equal(
+      f.db.prepare("SELECT document FROM operation_cost_plans WHERE id=?").get(f.input.id).document,
+      original,
+    )
+  } finally {
+    f.db.close()
+  }
+})
+
 test("capacity includes retained uncertain reservations and legacy usage without refunding either", () => {
   const f = fixture()
   try {

@@ -2,7 +2,40 @@
 
 Status: implementation and capacity verification in progress; not a production safety certificate.
 
-## September 13 reset: wait for the installed admission implementation
+## September 13 current recovery and admission work
+
+Production repairs through PR #130 activated at exact main
+`504cc33b3ba0daa12ee69b2785e38a11c9e3eb3a`, run 34737251360 attempt 1,
+with all six normal activation steps complete at 04:17:22 UTC. Exact-main
+CI 34737251357 passed 2,100 main tests and 26 plugin tests. The first reset
+activation completed at 00:35:36, missing the 00:30 deadline. B-742 remains open;
+September 13 cannot count as a complete enabled UTC day.
+
+Caretaker commands no longer import ordinary vote history. Their real
+1,000/10,000-asset fixture completes assignment with zero D1 rows and 16 DO
+SQL reads/11 writes plus one alarm write. Three unused coordinator indexes
+were retired without losing data, reducing ordinary 10,000-assets/votes cold
+seeding from 70,007 to 40,007 DO writes. See the cold-start evidence in
+`D1_READ_EXHAUSTION_PREVENTION.md`. The incidental caretaker batch failure
+is repaired; ordinary seeding and full export still depend on selected history.
+
+The next source change extends the existing operation ledger with explicit
+`do_rows_read` and `do_rows_written` predictions, reservations and receipts.
+Old plan documents and inherited ceilings are retained unchanged. The proposed
+operator share is one million reads/20,000 writes, with account headroom ceilings
+of four million/80,000; these do not raise D1, KV or Worker allowances. DO SQL
+work needs fresh account-wide SQL telemetry; unknown results stay charged and
+an underestimated bound invalidates its implementation. A proven zero-D1
+capability retains a repair path during D1 exhaustion.
+
+**This extension is in progress, not deployed enforcement for vote seeding or
+export.** Their complete caller integration and source/revision consistency are
+still required. DO invocation/duration, the authority's own SQL overhead,
+complete finalization phases and the wider growth defects below also remain
+open. Do not route ordinary public micro-operations through a costly multi-step
+operator protocol or call an optional meter a completed consumption repair.
+
+## September 13 reset history: admission implementation propagation
 
 Automatic run 34726835475, attempt 1, staged repaired source 2d47dd90 at
 00:02:39 UTC, then failed schema inspection with COST_PLAN_IDENTITY_MISMATCH.

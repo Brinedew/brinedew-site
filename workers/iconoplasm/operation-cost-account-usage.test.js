@@ -84,6 +84,73 @@ test("KV telemetry covers all action types and never treats unavailable data as 
   }
 })
 
+test("Durable SQL telemetry sums the complete account and rejects missing, malformed or truncated samples", () => {
+  const p = payload()
+  const account = p.data.viewer.accounts[0]
+  const valid = [
+    { dimensions: { date: day }, sum: { rowsRead: 10, rowsWritten: 2 } },
+    { dimensions: { date: day }, sum: { rowsRead: 20, rowsWritten: 3 } },
+  ]
+  account.durableObjectsPeriodicGroups = valid
+  const usage = parseOperationCostAccountUsage(p, day, time, { includeDoSql: true })
+  assert.deepEqual(
+    [usage.do_rows_read, usage.do_rows_written, usage.do_sql_measured_at],
+    [30, 5, time],
+  )
+  for (const invalid of [
+    undefined,
+    null,
+    Array(10000).fill(valid[0]),
+    [{ dimensions: { date: day }, sum: { rowsRead: 1 } }],
+    [{ dimensions: { date: "2026-09-05" }, sum: { rowsRead: 1, rowsWritten: 1 } }],
+    [{ dimensions: { date: day }, sum: { rowsRead: -1, rowsWritten: 1 } }],
+    [{ dimensions: { date: day }, sum: { rowsRead: 1.5, rowsWritten: 1 } }],
+  ]) {
+    account.durableObjectsPeriodicGroups = invalid
+    assert.throws(
+      () => parseOperationCostAccountUsage(p, day, time, { includeDoSql: true }),
+      /UNAVAILABLE/,
+    )
+  }
+})
+
+test("concurrent KV and Durable SQL work upgrade a shared sample without discarding either meter", async () => {
+  let calls = 0
+  let clock = time
+  let reads = 100
+  const reader = createOperationCostAccountUsageReader({
+    accountId: "a".repeat(32),
+    token: "test-token",
+    now: () => clock,
+    fetcher: async (_url, options) => {
+      calls++
+      const p = payload()
+      const query = JSON.parse(options.body).query
+      if (query.includes("kvOperationsAdaptiveGroups"))
+        p.data.viewer.accounts[0].kvOperationsAdaptiveGroups = []
+      if (query.includes("durableObjectsPeriodicGroups"))
+        p.data.viewer.accounts[0].durableObjectsPeriodicGroups = [
+          { dimensions: { date: day }, sum: { rowsRead: reads, rowsWritten: 10 } },
+        ]
+      return Response.json(p)
+    },
+  })
+  await Promise.all([
+    reader.refresh(),
+    reader.refresh({ includeKv: true }),
+    reader.refresh({ includeDoSql: true }),
+  ])
+  const current = await reader.refresh({ includeKv: true, includeDoSql: true })
+  assert.equal(current.kv_reads, 0)
+  assert.equal(current.do_rows_read, 100)
+  assert.ok(calls <= 3)
+  const before = calls
+  clock += 30000
+  reads = 1
+  assert.equal((await reader.refresh()).do_rows_read, 100)
+  assert.equal(calls, before + 1)
+})
+
 test("a KV operation upgrades a shared D1-only refresh instead of reusing incomplete telemetry", async () => {
   let calls = 0
   const reader = createOperationCostAccountUsageReader({
