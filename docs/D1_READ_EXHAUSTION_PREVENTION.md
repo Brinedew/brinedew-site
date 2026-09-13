@@ -634,3 +634,26 @@ and ISO UTC formats: 20,001 future jobs measured five reads and no writes. Delay
 leave delivery headroom inside the Free plan's 24-hour retention period. A failed
 send retains the wake or original message. No job attempt, version, receipt or
 allocation is reset by this transport handoff.
+
+The following post-reset repair removes unconditional replacement writes from
+finalization's vote, gene, vision and dependent request-picker/factory rollups.
+Deletes now remove only vanished source members; UPSERTs compare every persisted
+value with null-safe predicates. Unchanged rows retain their timestamps. The
+single-gene vote projection uses the same conditional gene summary update.
+The existing transactional summary replacement and original source authority
+remain in place; this does not substitute the legacy vote mirror for a warm
+coordinator.
+
+The full-schema workerd fixture with one selected gene/vision beside 20,000
+unrelated assets and voters changed its repeated three-stage pass from 109 reads
+and 33 writes to 117 reads and zero writes. A 101-asset same-gene repeat measured
+4,621 reads and zero writes. Tests also apply a real vote change, delete the last
+source, and inject a failed replacement to verify exact rollback, dependent
+projection updates and preservation of unrelated rows. The complete factory
+repeat with 10,000 selected assets beside 20,000 unrelated assets measured
+123,357 reads for dense vote/current state and 110,024 for sparse state, both
+zero writes. These are no-op savings;
+whole-phase pre-dispatch row/trigger admission, concentrated-history reads,
+cold coordinator bootstrap and full background export remain separate open
+requirements. A statement ceiling or current quiet traffic cannot certify the
+10,000-reader workload.

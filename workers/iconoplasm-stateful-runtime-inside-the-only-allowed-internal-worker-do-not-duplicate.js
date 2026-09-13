@@ -9891,7 +9891,11 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
        FROM json_each(?)
      )
      DELETE FROM icono_generation_request_vision_option_rollup
-     WHERE vision_id IN (SELECT vision_id FROM incoming)`,
+     WHERE vision_id IN (SELECT vision_id FROM incoming)
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_admin_vision_rollup current
+         WHERE current.vision_id = icono_generation_request_vision_option_rollup.vision_id
+       )`,
   )
     .bind(visionIdsJson)
     .run()
@@ -9993,7 +9997,21 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
          vote_h_index = excluded.vote_h_index,
          preview_assets_json = excluded.preview_assets_json,
          builder_version = excluded.builder_version,
-         updated_at = CURRENT_TIMESTAMP`,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE icono_generation_request_vision_option_rollup.emulsion_id IS NOT excluded.emulsion_id
+        OR icono_generation_request_vision_option_rollup.emulsion_family_id IS NOT excluded.emulsion_family_id
+        OR icono_generation_request_vision_option_rollup.workflow_id IS NOT excluded.workflow_id
+        OR icono_generation_request_vision_option_rollup.workflow_label IS NOT excluded.workflow_label
+        OR icono_generation_request_vision_option_rollup.prompt_version IS NOT excluded.prompt_version
+        OR icono_generation_request_vision_option_rollup.variant_slot IS NOT excluded.variant_slot
+        OR icono_generation_request_vision_option_rollup.artist_tag IS NOT excluded.artist_tag
+        OR icono_generation_request_vision_option_rollup.artist_name IS NOT excluded.artist_name
+        OR icono_generation_request_vision_option_rollup.image_count IS NOT excluded.image_count
+        OR icono_generation_request_vision_option_rollup.live_count IS NOT excluded.live_count
+        OR icono_generation_request_vision_option_rollup.score IS NOT excluded.score
+        OR icono_generation_request_vision_option_rollup.vote_h_index IS NOT excluded.vote_h_index
+        OR icono_generation_request_vision_option_rollup.preview_assets_json IS NOT excluded.preview_assets_json
+        OR icono_generation_request_vision_option_rollup.builder_version IS NOT excluded.builder_version`,
     )
       .bind(JSON.stringify(rows))
       .run()
@@ -10042,7 +10060,13 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
        SELECT value AS vision_id FROM json_each(?)
      )
      DELETE FROM icono_generation_request_factory_option_sources
-     WHERE vision_id IN (SELECT vision_id FROM incoming)`,
+     WHERE vision_id IN (SELECT vision_id FROM incoming)
+       AND (public_emulsion_code, vision_id) NOT IN (
+         SELECT upper(trim(pa.emulsion_id)), pa.vision_id
+         FROM icono_portrait_assets pa
+         JOIN incoming ON incoming.vision_id = pa.vision_id
+         WHERE COALESCE(trim(pa.emulsion_id), '') <> ''
+       )`,
   )
     .bind(visionIdsJson)
     .run()
@@ -10071,7 +10095,12 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
   // together. Separate aggregates repeated the source joins three times.
   await env.ICONOPLASM_DB.prepare(
     `DELETE FROM icono_generation_request_factory_option_rollup
-     WHERE public_emulsion_code IN (SELECT value FROM json_each(?))`,
+     WHERE public_emulsion_code IN (SELECT value FROM json_each(?))
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_portrait_assets pa
+         WHERE pa.emulsion_id COLLATE NOCASE = icono_generation_request_factory_option_rollup.public_emulsion_code
+           AND COALESCE(pa.asset_sha256, '') <> ''
+       )`,
   )
     .bind(affectedCodesJson)
     .run()
@@ -10139,7 +10168,21 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
        SELECT * FROM ranked_assets
        ORDER BY public_emulsion_code ASC, preview_rank ASC
      )
-     GROUP BY public_emulsion_code`,
+     GROUP BY public_emulsion_code
+     ON CONFLICT(public_emulsion_code) DO UPDATE SET
+       emulsion_slot = excluded.emulsion_slot,
+       image_count = excluded.image_count,
+       live_count = excluded.live_count,
+       score = excluded.score,
+       vote_h_index = excluded.vote_h_index,
+       preview_assets_json = excluded.preview_assets_json,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE icono_generation_request_factory_option_rollup.emulsion_slot IS NOT excluded.emulsion_slot
+        OR icono_generation_request_factory_option_rollup.image_count IS NOT excluded.image_count
+        OR icono_generation_request_factory_option_rollup.live_count IS NOT excluded.live_count
+        OR icono_generation_request_factory_option_rollup.score IS NOT excluded.score
+        OR icono_generation_request_factory_option_rollup.vote_h_index IS NOT excluded.vote_h_index
+        OR icono_generation_request_factory_option_rollup.preview_assets_json IS NOT excluded.preview_assets_json`,
   )
     .bind(affectedCodesJson)
     .run()
@@ -19695,7 +19738,12 @@ export async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
        FROM json_each(?)
      )
      DELETE FROM icono_vote_asset_summary
-     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
+     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_portrait_assets pa
+         WHERE pa.gene_symbol = icono_vote_asset_summary.gene_symbol
+           AND pa.asset_sha256 = icono_vote_asset_summary.asset_sha256
+       )`,
   ).bind(symbolsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
@@ -19741,7 +19789,14 @@ export async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
        downvotes = excluded.downvotes,
        score = excluded.score,
        vote_count = excluded.vote_count,
-       updated_at = CURRENT_TIMESTAMP`,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE icono_vote_asset_summary.candidate_ref IS NOT excluded.candidate_ref
+        OR icono_vote_asset_summary.vision_id IS NOT excluded.vision_id
+        OR icono_vote_asset_summary.candidate_image_id IS NOT excluded.candidate_image_id
+        OR icono_vote_asset_summary.upvotes IS NOT excluded.upvotes
+        OR icono_vote_asset_summary.downvotes IS NOT excluded.downvotes
+        OR icono_vote_asset_summary.score IS NOT excluded.score
+        OR icono_vote_asset_summary.vote_count IS NOT excluded.vote_count`,
   ).bind(symbolsJson)
 
   // Preserve the last complete projection if replacement fails.
@@ -19764,7 +19819,21 @@ export async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        FROM json_each(?)
      )
      DELETE FROM icono_admin_gene_rollup
-     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)`,
+     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_gene_catalog gc
+         WHERE gc.gene_symbol = icono_admin_gene_rollup.gene_symbol
+           AND COALESCE(NULLIF(TRIM(gc.full_name), ''), '') <> ''
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_portrait_assets pa
+         WHERE pa.gene_symbol = icono_admin_gene_rollup.gene_symbol
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_publish_state ps
+         WHERE ps.gene_symbol = icono_admin_gene_rollup.gene_symbol
+           AND COALESCE(ps.current_asset_sha256, '') <> ''
+       )`,
   ).bind(symbolsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
@@ -20033,7 +20102,42 @@ export async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        leader_downvotes = excluded.leader_downvotes,
        leader_score = excluded.leader_score,
        leader_created_at = excluded.leader_created_at,
-       updated_at = CURRENT_TIMESTAMP`,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE icono_admin_gene_rollup.full_name IS NOT excluded.full_name
+        OR icono_admin_gene_rollup.search_symbol IS NOT excluded.search_symbol
+        OR icono_admin_gene_rollup.search_full_name IS NOT excluded.search_full_name
+        OR icono_admin_gene_rollup.manifestation IS NOT excluded.manifestation
+        OR icono_admin_gene_rollup.current_asset_sha256 IS NOT excluded.current_asset_sha256
+        OR icono_admin_gene_rollup.current_asset_missing IS NOT excluded.current_asset_missing
+        OR icono_admin_gene_rollup.admin_override IS NOT excluded.admin_override
+        OR icono_admin_gene_rollup.total_assets IS NOT excluded.total_assets
+        OR icono_admin_gene_rollup.candidate_count IS NOT excluded.candidate_count
+        OR icono_admin_gene_rollup.approved_count IS NOT excluded.approved_count
+        OR icono_admin_gene_rollup.rejected_count IS NOT excluded.rejected_count
+        OR icono_admin_gene_rollup.stale_count IS NOT excluded.stale_count
+        OR icono_admin_gene_rollup.legacy_count IS NOT excluded.legacy_count
+        OR icono_admin_gene_rollup.last_asset_at IS NOT excluded.last_asset_at
+        OR icono_admin_gene_rollup.live_status IS NOT excluded.live_status
+        OR icono_admin_gene_rollup.live_is_stale IS NOT excluded.live_is_stale
+        OR icono_admin_gene_rollup.live_is_legacy IS NOT excluded.live_is_legacy
+        OR icono_admin_gene_rollup.live_autopick_eligible IS NOT excluded.live_autopick_eligible
+        OR icono_admin_gene_rollup.live_vision_id IS NOT excluded.live_vision_id
+        OR icono_admin_gene_rollup.live_emulsion_id IS NOT excluded.live_emulsion_id
+        OR icono_admin_gene_rollup.live_artist_tag IS NOT excluded.live_artist_tag
+        OR icono_admin_gene_rollup.live_artist_name IS NOT excluded.live_artist_name
+        OR icono_admin_gene_rollup.live_upvotes IS NOT excluded.live_upvotes
+        OR icono_admin_gene_rollup.live_downvotes IS NOT excluded.live_downvotes
+        OR icono_admin_gene_rollup.live_score IS NOT excluded.live_score
+        OR icono_admin_gene_rollup.live_created_at IS NOT excluded.live_created_at
+        OR icono_admin_gene_rollup.leader_asset_sha256 IS NOT excluded.leader_asset_sha256
+        OR icono_admin_gene_rollup.leader_vision_id IS NOT excluded.leader_vision_id
+        OR icono_admin_gene_rollup.leader_emulsion_id IS NOT excluded.leader_emulsion_id
+        OR icono_admin_gene_rollup.leader_artist_tag IS NOT excluded.leader_artist_tag
+        OR icono_admin_gene_rollup.leader_artist_name IS NOT excluded.leader_artist_name
+        OR icono_admin_gene_rollup.leader_upvotes IS NOT excluded.leader_upvotes
+        OR icono_admin_gene_rollup.leader_downvotes IS NOT excluded.leader_downvotes
+        OR icono_admin_gene_rollup.leader_score IS NOT excluded.leader_score
+        OR icono_admin_gene_rollup.leader_created_at IS NOT excluded.leader_created_at`,
   ).bind(symbolsJson)
 
   // Preserve the last complete projection if replacement fails.
@@ -20056,7 +20160,11 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
        FROM json_each(?)
      )
      DELETE FROM icono_admin_vision_rollup
-     WHERE vision_id IN (SELECT vision_id FROM incoming)`,
+     WHERE vision_id IN (SELECT vision_id FROM incoming)
+       AND NOT EXISTS (
+         SELECT 1 FROM icono_portrait_assets pa
+         WHERE pa.vision_id = icono_admin_vision_rollup.vision_id
+       )`,
   ).bind(visionIdsJson)
 
   const insertStatement = env.ICONOPLASM_DB.prepare(
@@ -20153,7 +20261,25 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
        blacklisted = excluded.blacklisted,
        blacklist_reason = excluded.blacklist_reason,
        blacklist_updated_at = excluded.blacklist_updated_at,
-       updated_at = CURRENT_TIMESTAMP`,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE icono_admin_vision_rollup.emulsion_id IS NOT excluded.emulsion_id
+        OR icono_admin_vision_rollup.workflow_id IS NOT excluded.workflow_id
+        OR icono_admin_vision_rollup.workflow_label IS NOT excluded.workflow_label
+        OR icono_admin_vision_rollup.prompt_version IS NOT excluded.prompt_version
+        OR icono_admin_vision_rollup.variant_slot IS NOT excluded.variant_slot
+        OR icono_admin_vision_rollup.artist_tag IS NOT excluded.artist_tag
+        OR icono_admin_vision_rollup.artist_name IS NOT excluded.artist_name
+        OR icono_admin_vision_rollup.image_count IS NOT excluded.image_count
+        OR icono_admin_vision_rollup.avg_vote IS NOT excluded.avg_vote
+        OR icono_admin_vision_rollup.rejected_count IS NOT excluded.rejected_count
+        OR icono_admin_vision_rollup.rejection_rate IS NOT excluded.rejection_rate
+        OR icono_admin_vision_rollup.upvotes IS NOT excluded.upvotes
+        OR icono_admin_vision_rollup.downvotes IS NOT excluded.downvotes
+        OR icono_admin_vision_rollup.score IS NOT excluded.score
+        OR icono_admin_vision_rollup.live_count IS NOT excluded.live_count
+        OR icono_admin_vision_rollup.blacklisted IS NOT excluded.blacklisted
+        OR icono_admin_vision_rollup.blacklist_reason IS NOT excluded.blacklist_reason
+        OR icono_admin_vision_rollup.blacklist_updated_at IS NOT excluded.blacklist_updated_at`,
   ).bind(visionIdsJson)
 
   // Preserve the last complete projection if replacement fails.
@@ -20436,7 +20562,42 @@ async function rebuildGeneRollupForSymbol(env, rawSymbol) {
        leader_downvotes = excluded.leader_downvotes,
        leader_score = excluded.leader_score,
        leader_created_at = excluded.leader_created_at,
-       updated_at = CURRENT_TIMESTAMP`,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE icono_admin_gene_rollup.full_name IS NOT excluded.full_name
+        OR icono_admin_gene_rollup.search_symbol IS NOT excluded.search_symbol
+        OR icono_admin_gene_rollup.search_full_name IS NOT excluded.search_full_name
+        OR icono_admin_gene_rollup.manifestation IS NOT excluded.manifestation
+        OR icono_admin_gene_rollup.current_asset_sha256 IS NOT excluded.current_asset_sha256
+        OR icono_admin_gene_rollup.current_asset_missing IS NOT excluded.current_asset_missing
+        OR icono_admin_gene_rollup.admin_override IS NOT excluded.admin_override
+        OR icono_admin_gene_rollup.total_assets IS NOT excluded.total_assets
+        OR icono_admin_gene_rollup.candidate_count IS NOT excluded.candidate_count
+        OR icono_admin_gene_rollup.approved_count IS NOT excluded.approved_count
+        OR icono_admin_gene_rollup.rejected_count IS NOT excluded.rejected_count
+        OR icono_admin_gene_rollup.stale_count IS NOT excluded.stale_count
+        OR icono_admin_gene_rollup.legacy_count IS NOT excluded.legacy_count
+        OR icono_admin_gene_rollup.last_asset_at IS NOT excluded.last_asset_at
+        OR icono_admin_gene_rollup.live_status IS NOT excluded.live_status
+        OR icono_admin_gene_rollup.live_is_stale IS NOT excluded.live_is_stale
+        OR icono_admin_gene_rollup.live_is_legacy IS NOT excluded.live_is_legacy
+        OR icono_admin_gene_rollup.live_autopick_eligible IS NOT excluded.live_autopick_eligible
+        OR icono_admin_gene_rollup.live_vision_id IS NOT excluded.live_vision_id
+        OR icono_admin_gene_rollup.live_emulsion_id IS NOT excluded.live_emulsion_id
+        OR icono_admin_gene_rollup.live_artist_tag IS NOT excluded.live_artist_tag
+        OR icono_admin_gene_rollup.live_artist_name IS NOT excluded.live_artist_name
+        OR icono_admin_gene_rollup.live_upvotes IS NOT excluded.live_upvotes
+        OR icono_admin_gene_rollup.live_downvotes IS NOT excluded.live_downvotes
+        OR icono_admin_gene_rollup.live_score IS NOT excluded.live_score
+        OR icono_admin_gene_rollup.live_created_at IS NOT excluded.live_created_at
+        OR icono_admin_gene_rollup.leader_asset_sha256 IS NOT excluded.leader_asset_sha256
+        OR icono_admin_gene_rollup.leader_vision_id IS NOT excluded.leader_vision_id
+        OR icono_admin_gene_rollup.leader_emulsion_id IS NOT excluded.leader_emulsion_id
+        OR icono_admin_gene_rollup.leader_artist_tag IS NOT excluded.leader_artist_tag
+        OR icono_admin_gene_rollup.leader_artist_name IS NOT excluded.leader_artist_name
+        OR icono_admin_gene_rollup.leader_upvotes IS NOT excluded.leader_upvotes
+        OR icono_admin_gene_rollup.leader_downvotes IS NOT excluded.leader_downvotes
+        OR icono_admin_gene_rollup.leader_score IS NOT excluded.leader_score
+        OR icono_admin_gene_rollup.leader_created_at IS NOT excluded.leader_created_at`,
   )
     .bind(
       symbol,
