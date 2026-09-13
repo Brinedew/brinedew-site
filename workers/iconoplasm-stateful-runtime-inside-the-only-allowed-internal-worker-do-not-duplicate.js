@@ -1,3 +1,4 @@
+import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js"
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import {
@@ -18849,29 +18850,61 @@ export class IconoplasmSyncGovernor {
   }
 
   async deferFinalizationToReset() {
+    return this.deferQueueToReset("finalization_reset_wake")
+  }
+
+  async deferVoteProjectionToReset() {
+    return this.deferQueueToReset("vote_projection_reset_wake")
+  }
+
+  async schedulePendingResetAlarm(txn) {
+    const wakes = await Promise.all(
+      ["finalization_reset_wake", "vote_projection_reset_wake"].map((key) => txn.get(key)),
+    )
+    const pending = wakes.filter(Boolean)
+    if (pending.some((wake) => !Number.isFinite(wake.due_at)))
+      throw new Error("Queue reset wake is malformed")
+    if (pending.length) await txn.setAlarm(Math.min(...pending.map((wake) => wake.due_at)))
+  }
+
+  async deferQueueToReset(key) {
     const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
     const day = new Date(dueAt).toISOString().slice(0, 10)
     return this.state.storage.transaction(async (txn) => {
-      const current = await txn.get("finalization_reset_wake")
+      const current = await txn.get(key)
       if (current?.day === day) return { ok: true, deferred: true, reset_at: current.due_at }
       const wake = { day, due_at: dueAt }
-      await txn.put("finalization_reset_wake", wake)
-      await txn.setAlarm(dueAt)
+      await txn.put(key, wake)
+      await this.schedulePendingResetAlarm(txn)
       return { ok: true, deferred: true, reset_at: dueAt }
     })
   }
 
   async alarm() {
-    const wake = await this.state.storage.get("finalization_reset_wake")
+    const finalization = await this.runQueueResetWake("finalization_reset_wake")
+    const votes = await this.runQueueResetWake("vote_projection_reset_wake")
+    if (!votes.pending && !votes.queue_message_sent && !votes.deferred) return finalization
+    return {
+      ok: finalization.ok && votes.ok,
+      pending: Boolean(finalization.pending || votes.pending),
+      deferred: Boolean(finalization.deferred || votes.deferred),
+      queue_message_sent: Boolean(finalization.queue_message_sent || votes.queue_message_sent),
+      finalization,
+      votes,
+    }
+  }
+
+  async runQueueResetWake(key) {
+    const wake = await this.state.storage.get(key)
     if (!wake) return { ok: true, pending: false }
     if (!Number.isFinite(wake.due_at) || !/^\d{4}-\d{2}-\d{2}$/.test(wake.day))
-      throw new Error("Finalization reset wake is malformed")
+      throw new Error("Queue reset wake is malformed")
     const defer = async (dueAt) =>
       this.state.storage.transaction(async (txn) => {
-        const current = await txn.get("finalization_reset_wake")
+        const current = await txn.get(key)
         if (current?.day !== wake.day) return
-        await txn.put("finalization_reset_wake", { ...wake, due_at: dueAt })
-        await txn.setAlarm(dueAt)
+        await txn.put(key, { ...wake, due_at: dueAt })
+        await this.schedulePendingResetAlarm(txn)
       })
     if (wake.due_at > Date.now()) {
       await defer(wake.due_at)
@@ -18879,17 +18912,22 @@ export class IconoplasmSyncGovernor {
     }
     if (
       this.env.ICONOPLASM_SCHEMA_TRANSITION === "1" ||
-      iconoplasmSyncFinalizationQueueDisabled(this.env)
+      (key === "finalization_reset_wake"
+        ? iconoplasmSyncFinalizationQueueDisabled(this.env)
+        : iconoplasmVoteProjectionQueueDisabled(this.env))
     ) {
       await defer(Date.now() + 300000)
       return { ok: true, deferred: true, reason: "schema_transition_or_disabled" }
     }
     // A single global wake reaches the existing versioned D1 ledger. It owns
     // no job progress or spending authority and survives old Queue expiration.
-    const sent = await sendSyncFinalizationDrainQueueMessage(this.env, {
-      runId: "finalization-reset-recovery",
-      symbols: [],
-    })
+    const sent =
+      key === "finalization_reset_wake"
+        ? await sendSyncFinalizationDrainQueueMessage(this.env, {
+            runId: "finalization-reset-recovery",
+            symbols: [],
+          })
+        : await sendVoteProjectionDrainQueueMessage(this.env)
     if (!sent.ok) {
       const delay = /daily.*queue|queue.*daily/i.test(sent.detail || "")
         ? secondsUntilCloudflareDailyReset() * 1000
@@ -18898,8 +18936,9 @@ export class IconoplasmSyncGovernor {
       return { ok: false, deferred: true, reason: sent.code }
     }
     await this.state.storage.transaction(async (txn) => {
-      const current = await txn.get("finalization_reset_wake")
-      if (current?.day === wake.day) await txn.delete("finalization_reset_wake")
+      const current = await txn.get(key)
+      if (current?.day === wake.day) await txn.delete(key)
+      await this.schedulePendingResetAlarm(txn)
     })
     return { ok: true, pending: false, queue_message_sent: true }
   }
@@ -18947,6 +18986,8 @@ export class IconoplasmSyncGovernor {
     const url = new URL(request.url)
     if (request.method === "POST" && url.pathname === "/defer-finalization")
       return Response.json(await this.deferFinalizationToReset())
+    if (request.method === "POST" && url.pathname === "/defer-vote-projection")
+      return Response.json(await this.deferVoteProjectionToReset())
     if (request.method === "POST" && url.pathname === "/permit") {
       const stored = await this.storedState()
       const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
@@ -21464,6 +21505,20 @@ async function sendVoteProjectionRefreshQueueMessage(
   }
 }
 
+async function sendVoteProjectionDrainQueueMessage(env, delaySeconds = 0) {
+  const queue = iconoplasmVoteProjectionQueueBinding(env)
+  if (!queue) return { ok: false, code: "QUEUE_BINDING_MISSING" }
+  try {
+    await queue.send(
+      { kind: "drain_vote_projection_ledger" },
+      delaySeconds > 0 ? { delaySeconds } : undefined,
+    )
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, code: "QUEUE_SEND_FAILED", detail: String(error?.message || error) }
+  }
+}
+
 async function rollbackVoteAutoPromoteAfterProjectionFailure(
   env,
   { symbol, actorId, reason, autoPromote, error } = {},
@@ -21593,6 +21648,7 @@ function voteProjectionRefreshFailureResult(job, error, extra = {}) {
     attempts: Math.max(0, Number.parseInt(String(job?.attempts || 0), 10) || 0),
     job_version: Math.max(1, Number.parseInt(String(job?.job_version || 0), 10) || 0),
     error: voteProjectionRefreshErrorMessage(error),
+    ...(isIconoplasmDailyBudgetError(error) ? { daily_budget: true } : {}),
     ...extra,
   }
 }
@@ -21840,6 +21896,11 @@ export async function processPendingVoteProjectionRefreshJobs(
       continue
     }
     failed += 1
+    if (result?.daily_budget) {
+      const error = new Error(result.error)
+      error.code = "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED"
+      throw error
+    }
     if (result?.symbol) {
       await recordVoteProjectionRefreshFailure(env, {
         symbol: result.symbol,
@@ -21908,6 +21969,54 @@ function voteProjectionQueueRetryDelaySeconds(rawNextAttemptAt, nowMs = Date.now
   return queueDelaySecondsUntil(voteProjectionUtcTimestamp(rawNextAttemptAt), nowMs, 30)
 }
 
+export async function nextVoteProjectionAttemptAt(db) {
+  // The covering due-time index reads the first key plus the first ISO key on
+  // that same day. SQLite-space and ISO-T timestamps must be compared in UTC,
+  // without applying a function to every row in the retained job ledger.
+  const response = await db
+    .prepare(
+      `
+    WITH first AS MATERIALIZED (
+      SELECT next_attempt_at FROM icono_vote_projection_refresh_jobs
+      ORDER BY next_attempt_at, requested_at LIMIT 1
+    ), iso AS (
+      SELECT next_attempt_at FROM icono_vote_projection_refresh_jobs
+      WHERE next_attempt_at >= (SELECT substr(next_attempt_at, 1, 10) || 'T' FROM first)
+        AND next_attempt_at < (SELECT substr(next_attempt_at, 1, 10) || 'U' FROM first)
+      ORDER BY next_attempt_at, requested_at LIMIT 1
+    )
+    SELECT next_attempt_at FROM first UNION ALL SELECT next_attempt_at FROM iso
+  `,
+    )
+    .all()
+  const values = (response?.results || []).map((row) =>
+    Date.parse(voteProjectionUtcTimestamp(row.next_attempt_at)),
+  )
+  if (values.some((value) => !Number.isFinite(value)))
+    throw new Error("Vote projection due time is malformed")
+  return values.length ? new Date(Math.min(...values)).toISOString() : null
+}
+
+async function deferVoteProjectionThroughExistingGovernor(env, messages) {
+  const wake = await iconoplasmSyncGovernorJson(env, "/defer-vote-projection")
+  if (wake?.ok !== true || wake?.deferred !== true || !Number.isFinite(wake?.reset_at))
+    throw new Error("Existing SyncGovernor did not retain the vote projection reset wake")
+  for (const message of messages) {
+    if (typeof message?.ack !== "function") throw new Error("Vote transport cannot acknowledge")
+    message.ack()
+  }
+  return {
+    ok: false,
+    processed: 0,
+    failed: 0,
+    retrying: 0,
+    skipped: 0,
+    deferred: true,
+    reason: "daily_d1_budget",
+    reset_at: wake.reset_at,
+  }
+}
+
 export async function handleIconoplasmVoteProjectionQueue(batch, env) {
   const messages = Array.isArray(batch?.messages) ? batch.messages : []
   if (iconoplasmVoteProjectionQueueDisabled(env)) {
@@ -21942,12 +22051,51 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
   // D1 ledger (fail closed when the day is exhausted) in addition to the
   // provider per-invocation statement ceiling, so a re-enabled vote-projection
   // consumer cannot silently exhaust the account.
-  env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
-    env,
-    null,
-    iconoplasmBackgroundBudgetAttribution("background_vote_projection"),
-  )
+  try {
+    env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
+      env,
+      null,
+      iconoplasmBackgroundBudgetAttribution("background_vote_projection"),
+    )
+  } catch (error) {
+    if (!isIconoplasmDailyBudgetError(error)) throw error
+    return deferVoteProjectionThroughExistingGovernor(env, messages)
+  }
   env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
+  const drainMessages = messages.filter(
+    (message) =>
+      decodeIconoplasmQueueMessageBody(message.body).kind === "drain_vote_projection_ledger",
+  )
+  if (drainMessages.length) {
+    // A global reset wake runs one existing job and leaves ordinary messages
+    // intact. It never installs another job authority or resets attempt/version.
+    const otherMessages = messages.filter((message) => !drainMessages.includes(message))
+    for (const message of otherMessages) {
+      if (typeof message.retry !== "function") throw new Error("Vote transport cannot defer")
+      message.retry({ delaySeconds: 30 })
+    }
+    try {
+      const result = await processPendingVoteProjectionRefreshJobs(env, { limit: 1 })
+      const nextAttemptAt = await nextVoteProjectionAttemptAt(env.ICONOPLASM_DB)
+      if (nextAttemptAt) {
+        const sent = await sendVoteProjectionDrainQueueMessage(
+          env,
+          // Free retains a message for 24 hours, including its delay. Leave
+          // delivery headroom instead of scheduling at the expiry boundary.
+          Math.min(12 * 60 * 60, voteProjectionQueueRetryDelaySeconds(nextAttemptAt)),
+        )
+        if (!sent.ok) throw new Error(sent.detail || sent.code)
+      }
+      // Retain the original delivery if replacement or accounting is uncertain.
+      await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
+      for (const message of drainMessages) message.ack()
+      return { ...result, retrying: otherMessages.length, next_attempt_at: nextAttemptAt }
+    } catch (error) {
+      if (!isIconoplasmDailyBudgetError(error)) throw error
+      return deferVoteProjectionThroughExistingGovernor(env, drainMessages)
+    }
+  }
+  let resetAt = null
   const nowIso = new Date().toISOString()
   const dueEntries = []
   const dueJobsBySymbol = new Map()
@@ -22027,6 +22175,11 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
       dueEntries.push({ message, queueMessage, job })
       dueJobsBySymbol.set(job.symbol, job)
     } catch (error) {
+      if (isIconoplasmDailyBudgetError(error)) {
+        const wake = await deferVoteProjectionThroughExistingGovernor(env, [message])
+        resetAt = wake.reset_at
+        continue
+      }
       failed += 1
       retrying += 1
       results.push({
@@ -22060,18 +22213,33 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
       if (typeof entry.message?.ack === "function") entry.message.ack()
       continue
     }
+    if (result?.daily_budget) {
+      const wake = await deferVoteProjectionThroughExistingGovernor(env, [entry.message])
+      resetAt = wake.reset_at
+      continue
+    }
     failed += 1
     retrying += 1
     if (result?.symbol && !recordedFailureSymbols.has(result.symbol)) {
       recordedFailureSymbols.add(result.symbol)
-      const recordedFailure = await recordVoteProjectionRefreshFailure(env, {
-        symbol: result.symbol,
-        actorId: result.actor_id || entry.queueMessage.actor_id,
-        reason: result.reason || entry.queueMessage.reason,
-        error: new Error(result.error || "vote projection refresh failed"),
-        attemptCount: Number(result.attempts || entry.job.attempts || 0),
-        jobVersion: result.job_version || entry.job.job_version,
-      })
+      let recordedFailure
+      try {
+        recordedFailure = await recordVoteProjectionRefreshFailure(env, {
+          symbol: result.symbol,
+          actorId: result.actor_id || entry.queueMessage.actor_id,
+          reason: result.reason || entry.queueMessage.reason,
+          error: new Error(result.error || "vote projection refresh failed"),
+          attemptCount: Number(result.attempts || entry.job.attempts || 0),
+          jobVersion: result.job_version || entry.job.job_version,
+        })
+      } catch (error) {
+        if (!isIconoplasmDailyBudgetError(error)) throw error
+        const wake = await deferVoteProjectionThroughExistingGovernor(env, [entry.message])
+        resetAt = wake.reset_at
+        failed -= 1
+        retrying -= 1
+        continue
+      }
       retryAtBySymbol.set(result.symbol, recordedFailure?.next_attempt_at || "")
     }
     if (typeof entry.message?.retry === "function") {
@@ -22088,12 +22256,13 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
   // work is fully metered (RECOVERY-001 / B-745).
   await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
   return {
-    ok: failed <= 0,
+    ok: failed <= 0 && !resetAt,
     processed,
     failed,
     retrying,
     skipped,
     results,
+    ...(resetAt ? { deferred: true, reason: "daily_d1_budget", reset_at: resetAt } : {}),
   }
 }
 
@@ -37965,40 +38134,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           const persistedIsStale = finalStatus === "rejected" ? false : isStale
 
           if (!dryRun) {
-            await env.ICONOPLASM_DB.prepare(
-              `INSERT INTO icono_portrait_assets (
-                 gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
-                 mime, width, height, bytes, status, autopick_eligible, is_stale, is_legacy,
-                 vision_id, emulsion_id, workflow_id, workflow_label, workflow_path, prompt_version, variant_slot,
-                 candidate_image_id, sample_label, sample_number, sample_text_hash, artist_tag, artist_name, created_by, created_at
-               ) VALUES (?, ?, ?, ?, ?, 'image/webp', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
-                 r2_key_full=excluded.r2_key_full,
-                 r2_key_medium=excluded.r2_key_medium,
-                 r2_key_thumb=excluded.r2_key_thumb,
-                 mime=excluded.mime,
-                 width=COALESCE(excluded.width, icono_portrait_assets.width),
-                 height=COALESCE(excluded.height, icono_portrait_assets.height),
-                 bytes=COALESCE(excluded.bytes, icono_portrait_assets.bytes),
-                 status=excluded.status,
-                 autopick_eligible=excluded.autopick_eligible,
-                 is_stale=excluded.is_stale,
-                 is_legacy=0,
-                 vision_id=COALESCE(excluded.vision_id, icono_portrait_assets.vision_id),
-                 emulsion_id=COALESCE(excluded.emulsion_id, icono_portrait_assets.emulsion_id),
-                 workflow_id=COALESCE(excluded.workflow_id, icono_portrait_assets.workflow_id),
-                 workflow_label=COALESCE(excluded.workflow_label, icono_portrait_assets.workflow_label),
-                 workflow_path=COALESCE(excluded.workflow_path, icono_portrait_assets.workflow_path),
-                 prompt_version=COALESCE(excluded.prompt_version, icono_portrait_assets.prompt_version),
-                 variant_slot=COALESCE(excluded.variant_slot, icono_portrait_assets.variant_slot),
-                 candidate_image_id=COALESCE(excluded.candidate_image_id, icono_portrait_assets.candidate_image_id),
-                 sample_label=COALESCE(excluded.sample_label, icono_portrait_assets.sample_label),
-                 sample_number=COALESCE(excluded.sample_number, icono_portrait_assets.sample_number),
-                 sample_text_hash=COALESCE(excluded.sample_text_hash, icono_portrait_assets.sample_text_hash),
-                  artist_tag=NULL,
-                  artist_name=NULL,
-                 created_by=COALESCE(excluded.created_by, icono_portrait_assets.created_by)`,
-            )
+            await env.ICONOPLASM_DB.prepare(PORTRAIT_ASSET_UPSERT_SQL)
               .bind(
                 symbol,
                 assetSha,
