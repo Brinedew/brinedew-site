@@ -17108,10 +17108,6 @@ export class IconoplasmVoteCoordinator {
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (user_id, asset_sha256)
         );
-        CREATE INDEX IF NOT EXISTS idx_vote_by_user_asset_asset
-          ON vote_by_user_asset (asset_sha256, updated_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_vote_by_user_asset_vision
-          ON vote_by_user_asset (vision_id, updated_at DESC);
         CREATE TABLE IF NOT EXISTS asset_summary (
           asset_sha256 TEXT PRIMARY KEY,
           vision_id TEXT NOT NULL DEFAULT '',
@@ -17122,8 +17118,6 @@ export class IconoplasmVoteCoordinator {
           vote_count INTEGER NOT NULL DEFAULT 0,
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE INDEX IF NOT EXISTS idx_asset_summary_vision
-          ON asset_summary (vision_id, updated_at DESC);
         CREATE TABLE IF NOT EXISTS vision_summary (
           vision_id TEXT PRIMARY KEY,
           upvotes INTEGER NOT NULL DEFAULT 0,
@@ -17149,6 +17143,17 @@ export class IconoplasmVoteCoordinator {
         CREATE INDEX IF NOT EXISTS idx_vote_outbox_pending
           ON vote_outbox (delivered_at, id);
       `)
+      // Vote lookups use (user_id, asset_sha256); asset lookups/export use the
+      // asset primary key, and vision totals have their own primary-key table.
+      // These retired secondary indexes served no query, but rewrote entries
+      // on every vote/summary timestamp update and every cold history import.
+      // DROP INDEX retains all data and measured constant SQL cost at 10k rows.
+      for (const index of [
+        "idx_vote_by_user_asset_asset",
+        "idx_vote_by_user_asset_vision",
+        "idx_asset_summary_vision",
+      ])
+        this.state.storage.sql.exec(`DROP INDEX IF EXISTS ${index}`)
       this.caretakerSupervotes.install()
       const pendingOutbox = this.state.storage.sql
         .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
