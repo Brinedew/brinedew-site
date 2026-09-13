@@ -1,5 +1,5 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
-import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
+import { KV_COST_METERS, DO_SQL_COST_METERS } from "../lib/operation-cost-meters.js"
 
 const QUERY = `query OperationCostAdmission($accountTag: string, $day: Date) {
   viewer { accounts(filter: { accountTag: $accountTag }) {
@@ -16,6 +16,10 @@ const KV_QUERY = QUERY.replace(
     }
     d1AnalyticsAdaptiveGroups`,
 )
+const DO_SQL_QUERY_FRAGMENT = `    durableObjectsPeriodicGroups(limit: 10000, filter: { date_geq: $day, date_leq: $day }) {
+      dimensions { date } sum { rowsRead rowsWritten }
+    }
+`
 
 const unavailable = () => new OperationCostError("COST_ACCOUNT_USAGE_UNAVAILABLE")
 
@@ -23,7 +27,7 @@ export function parseOperationCostAccountUsage(
   payload,
   day,
   measuredAt,
-  { includeKv = false } = {},
+  { includeKv = false, includeDoSql = false } = {},
 ) {
   const accounts = payload?.data?.viewer?.accounts
   if (
@@ -67,6 +71,17 @@ export function parseOperationCostAccountUsage(
     }
     usage.kv_measured_at = measuredAt
   }
+  if (includeDoSql) {
+    const rows = account.durableObjectsPeriodicGroups
+    if (!Array.isArray(rows) || rows.length >= 10000) throw unavailable()
+    for (const meter of DO_SQL_COST_METERS) usage[meter] = 0
+    for (const row of rows) {
+      if (row?.dimensions?.date !== day) throw unavailable()
+      add("do_rows_read", row?.sum?.rowsRead)
+      add("do_rows_written", row?.sum?.rowsWritten)
+    }
+    usage.do_sql_measured_at = measuredAt
+  }
   return usage
 }
 
@@ -84,20 +99,22 @@ export function createOperationCostAccountUsageReader({
   let retryAfter = 0
   return {
     current: () => snapshot,
-    async refresh({ includeKv = false } = {}) {
+    async refresh({ includeKv = false, includeDoSql = false } = {}) {
       const started = now()
       const day = new Date(started).toISOString().slice(0, 10)
       if (
         snapshot?.day === day &&
         (!includeKv || Number.isSafeInteger(snapshot.kv_measured_at)) &&
+        (!includeDoSql || Number.isSafeInteger(snapshot.do_sql_measured_at)) &&
         started - snapshot.measured_at >= 0 &&
         started - snapshot.measured_at < 30_000
       )
         return snapshot
       if (pending) {
         const shared = await pending
-        return includeKv && !Number.isSafeInteger(shared?.kv_measured_at)
-          ? this.refresh({ includeKv: true })
+        return (includeKv && !Number.isSafeInteger(shared?.kv_measured_at)) ||
+          (includeDoSql && !Number.isSafeInteger(shared?.do_sql_measured_at))
+          ? this.refresh({ includeKv, includeDoSql })
           : shared
       }
       // A failed sample is still a provider request. Repeated rejected work
@@ -107,11 +124,18 @@ export function createOperationCostAccountUsageReader({
       pending = Promise.resolve().then(async () => {
         try {
           const queryKv = includeKv || Number.isSafeInteger(snapshot?.kv_measured_at)
+          const queryDoSql = includeDoSql || Number.isSafeInteger(snapshot?.do_sql_measured_at)
+          let query = queryKv ? KV_QUERY : QUERY
+          if (queryDoSql)
+            query = query.replace(
+              "    d1AnalyticsAdaptiveGroups",
+              DO_SQL_QUERY_FRAGMENT + "    d1AnalyticsAdaptiveGroups",
+            )
           const response = await fetcher("https://api.cloudflare.com/client/v4/graphql", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              query: queryKv ? KV_QUERY : QUERY,
+              query,
               variables: { accountTag: accountId, day },
             }),
             signal: AbortSignal.timeout(10_000),
@@ -119,6 +143,7 @@ export function createOperationCostAccountUsageReader({
           if (!response.ok) throw unavailable()
           const next = parseOperationCostAccountUsage(await response.json(), day, started, {
             includeKv: queryKv,
+            includeDoSql: queryDoSql,
           })
           if (new Date(now()).toISOString().slice(0, 10) !== day || now() - started > 10_000)
             throw unavailable()
@@ -128,6 +153,9 @@ export function createOperationCostAccountUsageReader({
               next[meter] = Math.max(next[meter], snapshot[meter])
             if (queryKv)
               for (const meter of KV_COST_METERS)
+                next[meter] = Math.max(next[meter], snapshot[meter] ?? 0)
+            if (queryDoSql)
+              for (const meter of DO_SQL_COST_METERS)
                 next[meter] = Math.max(next[meter], snapshot[meter] ?? 0)
           }
           snapshot = next

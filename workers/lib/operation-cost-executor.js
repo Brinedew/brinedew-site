@@ -1,5 +1,5 @@
 import { OperationCostError } from "./operation-cost-ledger.js"
-import { KV_COST_METERS } from "./operation-cost-meters.js"
+import { OPTIONAL_COST_METERS } from "./operation-cost-meters.js"
 
 // The adapter and its verified cost calculation are supplied by the authority,
 // never by a request body. Only this executor receives the provider capability.
@@ -30,7 +30,7 @@ export class OperationCostExecutor {
     // This preparation validates input and computes a proven maximum. It may
     // not query the provider to discover its bound: that would be unadmitted work.
     const prepared = await adapter.prepare(input.arguments)
-    for (const meter of ["rows_read", "rows_written", "requests", ...KV_COST_METERS]) {
+    for (const meter of ["rows_read", "rows_written", "requests", ...OPTIONAL_COST_METERS]) {
       if ((plan.used[meter] ?? 0) + (prepared.bound[meter] ?? 0) > (plan.ceiling[meter] ?? 0)) {
         throw new OperationCostError("COST_TWICE_PREDICTION_LIMIT")
       }

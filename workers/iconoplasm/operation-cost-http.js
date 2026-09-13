@@ -6,7 +6,7 @@ import { createOperationCostQueryRegistry } from "./operation-cost-query-registr
 import { createOperationCostAccountUsageReader } from "./operation-cost-account-usage.js"
 import { createMigrationOperationCostAdapters } from "./operation-cost-migration-adapters.js"
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
-import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
+import { KV_COST_METERS, DO_SQL_COST_METERS } from "../lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "./operation-cost-catalog-initialization-adapter.js"
 
 const MAX_BODY_BYTES = 70_000
@@ -123,6 +123,9 @@ export function createOperationCostAuthority(storage, env, options = {}) {
     beforeReserve: async ({ bound }) => {
       const sample = await usage.refresh({
         includeKv: KV_COST_METERS.some((m) => (bound[m] ?? 0) > 0),
+        ...(DO_SQL_COST_METERS.some((meter) => (bound[meter] ?? 0) > 0)
+          ? { includeDoSql: true }
+          : {}),
       })
       ledger.rememberAccountUsage(sample || usage.current())
     },
