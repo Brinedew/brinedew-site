@@ -17396,13 +17396,51 @@ export class IconoplasmVoteCoordinator {
   }
 
   /**
-   * B-762 step 4 seam. The immutable Bunny adapter (card-publication-v2
-   * primitives, verify-before-commit) is not wired into this coordinator yet;
-   * until then desired selections stay durable and no attempt is opened, so an
-   * unwired gene costs zero publication writes. Tests inject an adapter here.
+   * B-762 immutable publication adapter. It asks the existing card-publication
+   * coordinator to materialize exactly this gene's selected winner version
+   * (three verified immutable objects: card, gene projection, portrait
+   * locator) and returns the verified card receipt. The coordinator route
+   * never touches the global head, watermark or job. Without the binding the
+   * adapter is absent and no attempt is opened, so an unwired gene costs zero
+   * publication writes. Tests may override this method.
    */
-  genePublicationAdapter(_env) {
-    return null
+  genePublicationAdapter(env = this.env) {
+    const binding = env?.ICONOPLASM_CARD_PUBLICATION
+    if (!binding) return null
+    return async (ticket, { symbol } = {}) => {
+      const cleanSymbol = normalizeSymbol(symbol)
+      if (!cleanSymbol) throw new Error("Gene publication requires a symbol")
+      const winnerAssetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
+      const stub = binding.get(binding.idFromName("canonical-cards-v2"))
+      const response = await stub.fetch("https://card-publication.internal/materialize-symbol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: cleanSymbol,
+          portrait_asset_sha256: winnerAssetSha,
+          // An explicit empty selection publishes the gene's portrait-less
+          // tombstone version instead of resurrecting stale D1 canon.
+          withdraw: !winnerAssetSha,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || data?.ok !== true) {
+        const failure = new Error(
+          `Card materialization failed (${Number(response.status || 0) || "no"} status)`,
+        )
+        failure.code = "CARD_MATERIALIZATION_FAILED"
+        throw failure
+      }
+      const receipt = data?.receipts?.card
+      const contentSha256 = normalizeSha256(receipt?.hash || "")
+      const objectKey = sanitizeText(receipt?.key || "", 512)
+      if (!contentSha256 || !objectKey) {
+        const failure = new Error("Card materialization returned no verified card receipt")
+        failure.code = "CARD_RECEIPT_MISSING"
+        throw failure
+      }
+      return { selectionKey: ticket.selectionKey, contentSha256, objectKey }
+    }
   }
 
   async drainGenePublication(env = this.env) {
@@ -26666,11 +26704,12 @@ export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordin
         throughEventAt: through.created_at,
         limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
       }),
-    async materialize(symbols) {
+    async materialize(symbols, { portraitOverrides = null } = {}) {
       const records = await cardCatalogRecordsForArtifact(env, {
         requestUrl: "https://iconoplasm.brinedew.bio/",
         symbols,
         snapshotVersion: "content-addressed",
+        portraitOverrides,
       })
       return records.map((record) =>
         buildMobileCardVMFromGeneRecord(record, {
@@ -28160,7 +28199,10 @@ async function exactReadyGeneBlotsForPublishedCards(env, cardsBySymbol) {
   )
 }
 
-async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
+async function cardCatalogRecordsForArtifact(
+  env,
+  { requestUrl, symbols = null, snapshotVersion, portraitOverrides = null },
+) {
   if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
   const symbolList = Array.isArray(symbols)
@@ -28247,7 +28289,79 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
       if (Array.isArray(result?.results)) rows.push(...result.results)
     }
   }
-  const records = rows
+  // B-762: an explicit per-symbol portrait override lets the per-gene vote
+  // authority materialize its selected winner before D1 canon changes. The
+  // override reads only that gene's exact asset row; a missing asset fails the
+  // materialization instead of silently publishing a different candidate.
+  let resolvedRows = rows
+  if (portraitOverrides && typeof portraitOverrides === "object") {
+    const overrideBySymbol = new Map()
+    for (const [key, value] of Object.entries(portraitOverrides)) {
+      const overrideSymbol = normalizeSymbol(key)
+      if (!overrideSymbol) continue
+      const raw = String(value || "")
+        .trim()
+        .toLowerCase()
+      overrideBySymbol.set(overrideSymbol, raw === "none" ? "none" : normalizeSha256(raw) || "")
+    }
+    const overrideRows = []
+    for (const row of rows) {
+      const overrideSymbol = normalizeSymbol(row?.gene_symbol || "")
+      const override = overrideBySymbol.get(overrideSymbol)
+      if (override === undefined) {
+        overrideRows.push(row)
+        continue
+      }
+      const currentSha = normalizeSha256(row?.asset_sha256 || "") || ""
+      if (override === "none" || override === "") {
+        overrideRows.push(
+          currentSha
+            ? {
+                ...row,
+                asset_sha256: null,
+                width: null,
+                height: null,
+                vision_id: null,
+                candidate_image_id: null,
+                emulsion_id: null,
+                workflow_id: null,
+                workflow_label: null,
+                workflow_path: null,
+                prompt_version: null,
+                variant_slot: null,
+                sample_label: null,
+                sample_number: null,
+                sample_text_hash: null,
+              }
+            : row,
+        )
+        continue
+      }
+      if (override === currentSha) {
+        overrideRows.push(row)
+        continue
+      }
+      const assetRow = await env.ICONOPLASM_DB.prepare(
+        `SELECT width, height, vision_id, candidate_image_id, emulsion_id,
+                workflow_id, workflow_label, workflow_path, prompt_version,
+                variant_slot, sample_label, sample_number, sample_text_hash
+           FROM icono_portrait_assets
+          WHERE gene_symbol = ?
+            AND asset_sha256 = ?
+          LIMIT 1`,
+      )
+        .bind(overrideSymbol, override)
+        .first()
+      if (!assetRow) {
+        const error = new Error(`Selected winner asset is unavailable for ${overrideSymbol}`)
+        error.code = "SELECTED_ASSET_UNAVAILABLE"
+        throw error
+      }
+      overrideRows.push({ ...row, ...assetRow, asset_sha256: override })
+    }
+    resolvedRows = overrideRows
+  }
+  const records = resolvedRows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
   const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)

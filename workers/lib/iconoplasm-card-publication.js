@@ -433,10 +433,51 @@ export function createCardPublication({
     })
     return current
   }
+  /**
+   * B-762: materialize exactly one gene for an explicitly selected winner,
+   * without touching the global head, job, watermark or requested flags.
+   * Every written object is content-addressed and verified by the object
+   * store before this returns; a failed or partial write throws and leaves no
+   * visible publication state. `portraitAssetSha256 === null` with
+   * `withdraw: true` publishes the gene's portrait-less (tombstone) version.
+   */
+  async function materializeSymbol(symbol, { portraitAssetSha256 = null, withdraw = false } = {}) {
+    const cleanSymbol = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!cleanSymbol) throw new Error("A symbol is required for per-gene materialization")
+    const cleanAssetSha = String(portraitAssetSha256 || "")
+    const overrides =
+      withdraw || !cleanAssetSha
+        ? { [cleanSymbol]: withdraw ? "none" : "" }
+        : { [cleanSymbol]: cleanAssetSha }
+    const cards = await source.materialize([cleanSymbol], { portraitOverrides: overrides })
+    const card = cards.find(
+      (candidate) =>
+        String(candidate?.symbol || candidate?.canonical_symbol || "")
+          .trim()
+          .toUpperCase() === cleanSymbol,
+    )
+    if (!card) return { symbol: cleanSymbol, withdrawn: true, receipts: null }
+    if (!source.complete(card)) throw new Error(`Invalid canonical card: ${cleanSymbol}`)
+    const stable = source.stable(card)
+    const [full, gene, portrait] = await settlePublicationWrites([
+      objects.write("cards", stable),
+      objects.write("genes", source.project(stable.payload)),
+      objects.write("portraits", source.stable(source.locator(stable))),
+    ])
+    return {
+      symbol: cleanSymbol,
+      withdrawn: false,
+      receipts: { card: full, gene, portrait },
+    }
+  }
+
   return {
     status,
     wake,
     bootstrap,
+    materializeSymbol,
     async step() {
       const effects = repo.get("effects")
       if (effects) {
