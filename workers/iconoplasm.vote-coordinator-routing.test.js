@@ -50,6 +50,20 @@ function fakeVoteCoordinatorState() {
       async setAlarm(timestamp) {
         alarms.push(timestamp)
       },
+      async getAlarm() {
+        return alarms.length ? alarms[alarms.length - 1] : null
+      },
+      async transaction(callback) {
+        sql.db.exec("BEGIN IMMEDIATE")
+        try {
+          const result = await callback()
+          sql.db.exec("COMMIT")
+          return result
+        } catch (error) {
+          sql.db.exec("ROLLBACK")
+          throw error
+        }
+      },
     },
     blockConcurrencyWhile(callback) {
       this.ready = Promise.resolve().then(callback)

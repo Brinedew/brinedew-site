@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { IconoplasmGenePublicationState } from "./gene-publication-state.js"
@@ -53,17 +54,32 @@ function fixture(t) {
   const store = make()
   store.install()
   return {
-    db, storage, store, make,
+    db,
+    storage,
+    store,
+    make,
     cost: () => ({ writes, alarmWrites }),
-    resetCost: () => { writes = 0; alarmWrites = 0 },
-    failAlarm: (value) => { failAlarm = value },
+    resetCost: () => {
+      writes = 0
+      alarmWrites = 0
+    },
+    failAlarm: (value) => {
+      failAlarm = value
+    },
     alarm: () => alarm,
-    setAlarm: (value) => { alarm = value },
-    advance: (amount) => { now += amount },
+    setAlarm: (value) => {
+      alarm = value
+    },
+    advance: (amount) => {
+      now += amount
+    },
     now: () => now,
   }
 }
-const desired = (n) => ({ selectionKey: n.toString(16).padStart(64, "0"), selectionRef: `revision:${n}` })
+const desired = (n) => ({
+  selectionKey: n.toString(16).padStart(64, "0"),
+  selectionRef: `revision:${n}`,
+})
 const uploaded = (n) => ({
   selectionKey: desired(n).selectionKey,
   contentSha256: (n + 1000).toString(16).padStart(64, "0"),
@@ -86,10 +102,13 @@ test("vote row, selection intent and alarm roll back together on alarm failure",
   const f = fixture(t)
   f.db.exec("CREATE TABLE test_votes (user_id TEXT PRIMARY KEY, value INTEGER)")
   f.failAlarm(true)
-  await assert.rejects(f.store.commitSelection(() => {
-    f.storage.sql.exec("INSERT INTO test_votes VALUES ('reader', 1)")
-    return desired(1)
-  }), /alarm storage unavailable/)
+  await assert.rejects(
+    f.store.commitSelection(() => {
+      f.storage.sql.exec("INSERT INTO test_votes VALUES ('reader', 1)")
+      return desired(1)
+    }),
+    /alarm storage unavailable/,
+  )
   assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM test_votes").get().n, 0)
   assert.equal(f.store.read(), null)
   assert.equal(f.alarm(), null)
@@ -99,7 +118,12 @@ test("throwing winner reducer preserves accepted prior state", async (t) => {
   const f = fixture(t)
   await commit(f.store, 1)
   const before = f.store.read()
-  await assert.rejects(f.store.commitSelection(() => { throw new Error("invalid entitlement") }), /invalid entitlement/)
+  await assert.rejects(
+    f.store.commitSelection(() => {
+      throw new Error("invalid entitlement")
+    }),
+    /invalid entitlement/,
+  )
   assert.deepEqual(f.store.read(), before)
 })
 
@@ -111,12 +135,41 @@ test("a thousand content-neutral or duplicate votes cost zero publication writes
   assert.deepEqual(f.cost(), { writes: 0, alarmWrites: 0 })
 })
 
+test("reference-only selection key is the SHA-256 of the canonical reference", async (t) => {
+  const f = fixture(t)
+  const reference = "gene-authority-selection-v1|symbol=TP53|winner=none"
+  const result = await f.store.commitSelection(() => ({ selectionRef: reference }))
+  assert.equal(result.changed, true)
+  assert.equal(result.state.selectionKey, createHash("sha256").update(reference).digest("hex"))
+  assert.equal(result.state.selectionRef, reference)
+})
+
+test("repeated reference-only selections stay write-free and reject rebinding", async (t) => {
+  const f = fixture(t)
+  const reference = "gene-authority-selection-v1|symbol=TP53|winner=" + "a".repeat(64)
+  const composed = await f.store.commitSelection(() => ({ selectionRef: reference }))
+  f.resetCost()
+  const repeat = await f.store.commitSelection(() => ({ selectionRef: reference }))
+  assert.equal(repeat.changed, false)
+  assert.deepEqual(f.cost(), { writes: 0, alarmWrites: 0 })
+  await assert.rejects(
+    f.store.commitSelection(() => ({
+      selectionKey: composed.state.selectionKey,
+      selectionRef: "other",
+    })),
+    /rebound/,
+  )
+})
+
 test("changed winners coalesce into one row with the newest immutable selection", async (t) => {
   const f = fixture(t)
   for (let i = 1; i <= 250; i++) await commit(f.store, i)
   assert.equal(f.store.read().desiredVersion, 250)
   assert.equal(f.store.read().selectionKey, desired(250).selectionKey)
-  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM iconoplasm_gene_publication_state_v2").get().n, 1)
+  assert.equal(
+    f.db.prepare("SELECT COUNT(*) AS n FROM iconoplasm_gene_publication_state_v2").get().n,
+    1,
+  )
   assert.equal(f.cost().writes, 250)
   assert.equal(f.cost().alarmWrites, 1)
 })
@@ -187,7 +240,10 @@ test("one gene's failed publication cannot block another gene", async (t) => {
   await commit(sick.store, 1)
   await sick.store.failAttempt(await sick.store.beginAttempt(), { retryAt: sick.now() + 86400000 })
   await commit(healthy.store, 2)
-  assert.deepEqual(await healthy.store.completeAttempt(await healthy.store.beginAttempt(), uploaded(2)), { applied: true })
+  assert.deepEqual(
+    await healthy.store.completeAttempt(await healthy.store.beginAttempt(), uploaded(2)),
+    { applied: true },
+  )
   assert.equal(sick.store.read().pending, true)
   assert.equal(healthy.store.read().pending, false)
 })
@@ -234,16 +290,26 @@ test("concurrent begin calls produce a single live attempt", async (t) => {
 
 test("invalid selection, source rebinding, async mutations and corrupt receipts are rejected", async (t) => {
   const f = fixture(t)
-  await assert.rejects(f.store.commitSelection(async () => desired(1)), /synchronous/)
-  await assert.rejects(f.store.commitSelection(() => ({ ...desired(1), selectionKey: "bad" })), /selectionKey/)
+  await assert.rejects(
+    f.store.commitSelection(async () => desired(1)),
+    /synchronous/,
+  )
+  await assert.rejects(
+    f.store.commitSelection(() => ({ ...desired(1), selectionKey: "bad" })),
+    /selectionKey/,
+  )
   await commit(f.store, 1)
-  await assert.rejects(f.store.commitSelection(() => ({ ...desired(1), selectionRef: "other" })), /rebound/)
+  await assert.rejects(
+    f.store.commitSelection(() => ({ ...desired(1), selectionRef: "other" })),
+    /rebound/,
+  )
   const ticket = await f.store.beginAttempt()
   for (const bad of [
     { ...uploaded(1), selectionKey: desired(2).selectionKey },
     { ...uploaded(1), contentSha256: "corrupt" },
     { ...uploaded(1), objectKey: "https://unexpected.example/card" },
     { ...uploaded(1), objectKey: "../card" },
-  ]) await assert.rejects(f.store.completeAttempt(ticket, bad), /artifact|objectKey/)
+  ])
+    await assert.rejects(f.store.completeAttempt(ticket, bad), /artifact|objectKey/)
   assert.equal(f.store.read().pending, true)
 })
