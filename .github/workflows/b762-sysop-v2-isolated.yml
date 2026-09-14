@@ -40,6 +40,7 @@ jobs:
             workers/iconoplasm/discovery-compact-store.test.js \
             workers/iconoplasm/discovery-compact-admin.test.js \
             workers/iconoplasm/discovery-compact-store.workerd.test.js \
+            workers/iconoplasm/discovery-compact-service.workerd.test.js \
             iconoplasm-extension/metadata-delivery.test.js \
             iconoplasm-extension/metadata-delivery-reader-view.test.js \
             scripts/b762-v1-excision-audit.mjs \
