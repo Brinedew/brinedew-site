@@ -1,0 +1,31 @@
+name: B-762 legacy excision audit
+on:
+  push:
+    branches: ["audit/b762-legacy-excision"]
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive tracked implementation for offline inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit-evidence
+          git rev-parse HEAD > audit-evidence/audit-head.txt
+          git diff --stat 09f499d3a3103bd793069cd7360b26ba0a7afcd6 48408d8ac82de7cc7504749e9e6396af1350d5c3 > audit-evidence/implementation-diff-stat.txt
+          git diff --numstat 09f499d3a3103bd793069cd7360b26ba0a7afcd6 48408d8ac82de7cc7504749e9e6396af1350d5c3 > audit-evidence/implementation-numstat.txt
+          git diff 09f499d3a3103bd793069cd7360b26ba0a7afcd6 48408d8ac82de7cc7504749e9e6396af1350d5c3 -- workers .github/workflows plans > audit-evidence/implementation.patch
+          git archive --format=tar.gz --output=audit-evidence/pinned-source.tar.gz 48408d8ac82de7cc7504749e9e6396af1350d5c3 workers shared scripts docs plans architecture-fences.json cloudflare package.json pnpm-lock.yaml pnpm-workspace.yaml AGENTS.md CLAUDE.md .github/workflows wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b762-excision-source
+          path: audit-evidence
+          retention-days: 7
+          if-no-files-found: error
