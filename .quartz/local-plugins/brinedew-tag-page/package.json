@@ -68,7 +68,7 @@
     "prettier": "^3.9.6",
     "sass": "^1.99.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=22",
