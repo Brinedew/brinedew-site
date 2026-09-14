@@ -1,5 +1,40 @@
 # Iconoplasm capacity and background-work runbook
 
+## B-762 immutable reader views (implementation branch, 14 September 2026)
+
+The per-gene publication owner now writes immutable, content-addressed directory
+pages and a self-locating view descriptor before advertising a current view.
+`ccv2-<base-manifest-hash>.c<view-descriptor-hash>` fixes both the base and the
+directory root. A historic identifier never reads a mutable overlay or falls
+back to a newer view. Missing/corrupt referenced pages fail without D1 repair.
+
+The same `iconoplasm:gallery-version` KV key selects fresh views; a separate
+per-gene KV lookup is not part of a reader action. The coordinator owns this
+projection and retries failed advertisement from durable prepared state. The
+predecessor `iconoplasm:gene-delta` key is unused. Background delta publication
+runs independently of legacy finalization, and legacy head updates cannot
+replace an advertised composite view with stale base-only data.
+
+The directory is a copy-on-write radix tree. Each verified immutable leaf holds
+at most 32 gene entries; branches have at most 16 children and depth is bounded
+at 16. An update accepts at most 120 genes, copies only their paths, and keeps
+old roots. This replaces the predecessor's growing oldest-segment merge, whose
+six-segment limit did not bound a merged object's size. Tombstones retain their
+exact portrait-less gene projection. Predecessor accepted segments are imported
+in bounded batches before they can be advertised under the new format.
+
+Site cards, exact detail/portrait reads, and the existing v1 hover transport
+resolve the same view. Updated extension source reads verified directory pages
+and separate detail/portrait objects directly from Bunny with its existing
+hedge/cache rules. Store publication remains human-owned; source tests do not
+mean an installed store extension was updated.
+
+The retained legacy publisher serves unmigrated data. This reader implementation
+does not certify authority transfer, complete v1 retirement, discovery batching,
+or account-wide 10k-reader capacity. No binding, route ownership or release
+workflow has been changed. Verify exact-source tests and installed behavior
+before activating it with the current incident executor.
+
 ## Current account state versus historical allowances
 
 **Owner clarification, 2026-08-27:** Free initially → paid R2 used → R2 disabled

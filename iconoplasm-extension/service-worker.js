@@ -174,7 +174,7 @@ async function migrateLegacyCardCaches() {
       let complete = true
       if (
         stored.schema_version === 1 &&
-        /^ccv2-[a-f0-9]{64}$/.test(stored.revision) &&
+        /^ccv2-[a-f0-9]{64}(?:\.c[a-f0-9]{64})?$/.test(stored.revision) &&
         Array.isArray(stored.entries)
       ) {
         for (const [symbol, record] of stored.entries.slice(-limit)) {
@@ -505,7 +505,7 @@ async function fetchIconoplasmApi(msg, sender = {}) {
     const immutable =
       init.method === "GET" &&
       path.match(
-        /^\/api\/public\/v1\/card-snapshots\/(ccv2-[a-f0-9]{64})\/(genes|portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
+        /^\/api\/public\/v1\/card-snapshots\/(ccv2-[a-f0-9]{64}(?:\.c[a-f0-9]{64})?)\/(genes|portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
       )
     const cacheKey = `${HOST}${path}`
     const saved = immutable && (await cardResponseCache.get(cacheKey))

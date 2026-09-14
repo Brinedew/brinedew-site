@@ -208,9 +208,11 @@ export class IconoplasmGenePublicationState {
         selectionKey: valid.selectionKey,
         contentSha256: published?.contentSha256,
         objectKey: published?.objectKey,
+        ...(published?.projections ? { projections: published.projections } : {}),
       },
       valid.selectionKey,
     )
+    if (verified.projections) verified.selectionRef = valid.selectionRef
     return this.storage.transaction(async () => {
       // A synchronous handover fence: the caller revalidates its migration
       // boundary inside the same exclusive transaction that commits the seed,
@@ -281,6 +283,7 @@ export class IconoplasmGenePublicationState {
 
   async completeAttempt(ticket, published) {
     const verified = artifact(published, ticket.selectionKey)
+    if (verified.projections) verified.selectionRef = ticket.selectionRef
     return this.storage.transaction(async () => {
       const current = this.read()
       if (!this.matches(current, ticket)) return { applied: false }

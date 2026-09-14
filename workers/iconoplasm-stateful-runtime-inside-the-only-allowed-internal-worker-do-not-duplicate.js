@@ -1,3 +1,8 @@
+import {
+  createGeneDirectory,
+  parseCardReaderView,
+  readCardReaderView,
+} from "./lib/iconoplasm-card-reader-view.js"
 import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js"
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
@@ -17182,9 +17187,7 @@ export class IconoplasmVoteCoordinator {
       // publication and the shared view: re-enqueue from the published artifact
       // and wake the shared alarm, which drains it.
       const recoveredHandoff = this.ensureReaderHandoffFromPublished()
-      if (recoveredHandoff && !this.getMeta("outbox_budget_retry_at")) {
-        await this.armOutboxAlarm(1000)
-      }
+      if (recoveredHandoff) await this.armReaderHandoffAlarm()
     })
   }
 
@@ -17546,7 +17549,7 @@ export class IconoplasmVoteCoordinator {
       const outcome = await this.publication.completeAttempt(ticket, published)
       if (outcome.applied) {
         const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
-        if (assetSha) this.setMeta("published_asset_sha256", assetSha)
+        this.setMeta("published_asset_sha256", assetSha || "")
         this.recordReaderHandoff(ticket, published)
       }
       return { ok: true, pending: false, ...outcome }
@@ -17612,20 +17615,33 @@ export class IconoplasmVoteCoordinator {
     const symbol = normalizeSymbol(this.getMeta("symbol"))
     if (!symbol) return null
     const existing = this.sqlFirst(
-      `SELECT version, delivered_at FROM publication_handoffs WHERE symbol = ?`,
+      `SELECT version, delivered_at, payload_json FROM publication_handoffs WHERE symbol = ?`,
       symbol,
     )
-    if (existing && Number(existing.version) >= state.publishedVersion && existing.delivered_at) {
-      return null
+    if (existing && Number(existing.version) >= state.publishedVersion) {
+      // Preserve attempts/deadline on restart. Re-enqueuing the same version
+      // would erase a durable backoff and repeat already admitted work.
+      return existing.delivered_at ? null : JSON.parse(existing.payload_json)
     }
     return this.recordReaderHandoff(
       {
         desiredVersion: state.publishedVersion,
         selectionKey: state.publishedArtifact.selectionKey,
-        selectionRef: state.selectionRef,
+        selectionRef: state.publishedArtifact.selectionRef || state.selectionRef,
       },
       state.publishedArtifact,
     )
+  }
+
+  async armReaderHandoffAlarm(minDelay = 1) {
+    const row = this.sqlFirst(
+      `SELECT MIN(next_attempt_at) AS due FROM publication_handoffs WHERE delivered_at IS NULL`,
+    )
+    if (row?.due == null) return
+    const due = Math.max(Date.now() + minDelay, Number(row.due) || 0)
+    const existing = await this.state.storage.getAlarm()
+    if (!existing || existing <= Date.now() || existing > due)
+      await this.state.storage.setAlarm(due)
   }
 
   async drainReaderHandoffs(env = this.env) {
@@ -17646,10 +17662,12 @@ export class IconoplasmVoteCoordinator {
           .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
           .toArray()[0]?.n || 0,
       )
+      if (pending) await this.armReaderHandoffAlarm()
       return { ok: true, delivered: 0, pending }
     }
     const binding = env?.ICONOPLASM_CARD_PUBLICATION
     if (!binding) {
+      await this.armReaderHandoffAlarm(300000)
       return {
         ok: true,
         delivered: 0,
@@ -17699,7 +17717,7 @@ export class IconoplasmVoteCoordinator {
         .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
         .toArray()[0]?.n || 0,
     )
-    if (pending) await this.armOutboxAlarm(1000)
+    if (pending) await this.armReaderHandoffAlarm()
     return { ok: true, delivered, pending }
   }
 
@@ -30424,6 +30442,15 @@ const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
 })
 const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   barrier: currentMobileCardSnapshotVersion,
+  readerView: {
+    parse: parseCardReaderView,
+    read: readPublishedReaderView,
+    record: readPublishedReaderViewLane,
+    fromHash: async (env, hash) => {
+      const object = await readReaderDirectoryObject(env, publishedCardObjectKey("indexes", hash))
+      return object?.value?.type === "gene-reader-view" ? `${object.value.base}.c${hash}` : null
+    },
+  },
   manifest: readPublishedCardCatalogManifest,
   shard: readPublishedCardCatalogShard,
   object: readPublishedBunnyCardObject,
@@ -30446,7 +30473,10 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
   // ARCHITECTURE FENCE [IPD-008]: the version is part of the URL, so this read
   // is immutable and can be cached by the browser and CDN. It reads only the
   // published card artifact selected by that version; D1 is never a fallback.
-  const barrier = await currentMobileCardSnapshotVersion(env)
+  const barrier =
+    cardPublicationManifestKey(snapshotVersion) || parseCardReaderView(snapshotVersion)
+      ? { current: snapshotVersion, previous: null }
+      : await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
@@ -30461,6 +30491,28 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
       { "Cache-Control": "no-store" },
     )
   }
+  if (parseCardReaderView(snapshotVersion)) {
+    const record = await readPublishedReaderViewLane(env, snapshotVersion, symbol, "genes")
+    const present = Boolean(record)
+    return json(
+      {
+        api_version: PUBLIC_API_VERSION,
+        schema_version: API_SCHEMA_VERSION,
+        snapshot_version: snapshotVersion,
+        canonical_key: "symbol",
+        gene: present ? { ...record } : null,
+        missing: present ? [] : [symbol],
+      },
+      present ? 200 : 404,
+      {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: `"reader-genes-${snapshotVersion}-${symbol}"`,
+        "X-Iconoplasm-Data-Source": "published-card-catalog",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      },
+    )
+  }
+
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
   const cacheUrl = new URL(request.url)
   cacheUrl.search = ""
@@ -30551,7 +30603,10 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
   // A byte-equivalent Bunny cache of this response is permitted. "One canon"
   // forbids independent selection/pointers, not caching. Worker Cache API hits
   // still consume a Worker invocation; do not mistake them for direct CDN hits.
-  const barrier = await currentMobileCardSnapshotVersion(env)
+  const barrier =
+    cardPublicationManifestKey(snapshotVersion) || parseCardReaderView(snapshotVersion)
+      ? { current: snapshotVersion, previous: null }
+      : await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
@@ -30564,6 +30619,28 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
       },
       410,
       { "Cache-Control": "no-store" },
+    )
+  }
+
+  if (parseCardReaderView(snapshotVersion)) {
+    const record = await readPublishedReaderViewLane(env, snapshotVersion, symbol, "portraits")
+    const present = Boolean(record.portrait?.asset_sha256)
+    return json(
+      {
+        api_version: PUBLIC_API_VERSION,
+        schema_version: API_SCHEMA_VERSION,
+        snapshot_version: snapshotVersion,
+        canonical_key: "symbol",
+        portrait_locator: present ? { ...record, snapshot_version: snapshotVersion } : null,
+        missing: present ? [] : [symbol],
+      },
+      present ? 200 : 404,
+      {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: `"reader-portraits-${snapshotVersion}-${symbol}"`,
+        "X-Iconoplasm-Data-Source": "published-card-catalog",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      },
     )
   }
 
@@ -30875,6 +30952,21 @@ async function readParsedCardCatalogJson(
 async function readPublishedCardCatalogManifest(env, artifactVersion) {
   const version = String(artifactVersion || "").trim()
   if (!version) return null
+  const readerView = parseCardReaderView(version)
+  if (readerView) {
+    const view = await readPublishedReaderView(env, version)
+    const base = await readPublishedCardCatalogManifest(env, view.base)
+    return base
+      ? {
+          ...base,
+          artifact_version: version,
+          snapshot_version: version,
+          content_hash: version,
+          reader_view_root: view.root,
+          reader_view_base: view.base,
+        }
+      : null
+  }
   const bunnyKey = cardPublicationManifestKey(version)
   const result = await readParsedCardCatalogJson(
     env,
@@ -30901,7 +30993,12 @@ async function readPublishedCardCatalogManifest(env, artifactVersion) {
 }
 
 async function readCardCatalogArtifactManifest(env, artifactVersion) {
-  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
+  if (
+    !artifactVersion ||
+    (!env?.KV?.get &&
+      !cardPublicationManifestKey(artifactVersion) &&
+      !parseCardReaderView(artifactVersion))
+  )
     return null
   try {
     return await readPublishedCardCatalogManifest(env, artifactVersion)
@@ -30985,7 +31082,7 @@ function cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed
 }
 
 function parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed) {
-  if (cardPublicationManifestKey(artifactVersion)) {
+  if (cardPublicationManifestKey(artifactVersion) || parseCardReaderView(artifactVersion)) {
     return (
       parsed?.schema_version === 2 &&
       Array.isArray(parsed.cards) &&
@@ -31018,7 +31115,7 @@ async function readPublishedCardCatalogShard(env, artifactVersion, shard, conten
 }
 
 async function readPublishedBunnyCardObject(env, key, validate) {
-  return readParsedCardCatalogJson(env, key, {
+  const value = await readParsedCardCatalogJson(env, key, {
     cache: cardCatalogParsedShardCache,
     readPromises: cardCatalogParsedShardReadPromises,
     cacheKey: key,
@@ -31027,6 +31124,111 @@ async function readPublishedBunnyCardObject(env, key, validate) {
     cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
     validate,
   })
+  return value && validate(value) ? value : null
+}
+
+// Self-locating reader views use only verified immutable objects. Named views
+// never consult the mutable current pointer and remain exact after compaction.
+async function readReaderDirectoryObject(env, key) {
+  const value = await readPublishedBunnyCardObject(
+    env,
+    key,
+    (value) => value && typeof value === "object",
+  )
+  return value
+    ? {
+        key,
+        hash: key
+          .split("/")
+          .at(-1)
+          .replace(/\.json$/, ""),
+        value,
+      }
+    : null
+}
+
+async function readPublishedReaderView(env, version) {
+  return readCardReaderView((key) => readReaderDirectoryObject(env, key), version)
+}
+
+async function readPublishedReaderViewArtifact(env, version, symbols, options) {
+  const view = await readPublishedReaderView(env, version)
+  if (!view) return null
+  const directory = createGeneDirectory({ read: (key) => readReaderDirectoryObject(env, key) })
+  const entries = symbols
+    ? await directory.resolve(view.root, symbols)
+    : await directory.all(view.root)
+  const missingOverrides = symbols ? symbols.filter((symbol) => !entries.has(symbol)) : null
+  const base = await readPublishedCardCatalogArtifact(env, view.base, missingOverrides, options)
+  if (!base) return null
+  const bySymbol = new Map(base.bySymbol)
+  for (const [symbol, entry] of entries) {
+    const card = await readPublishedBunnyCardObject(
+      env,
+      entry.card.key,
+      (value) => value?.symbol === symbol && assertCompleteMobileCardVM(value),
+    )
+    if (!card) throw new Error("Committed reader card unavailable")
+    // A portrait withdrawal supplies its verified portrait-less card. It must
+    // never fall through to the base's former image or remove the gene profile.
+    bySymbol.set(symbol, {
+      ...card,
+      snapshot_version: version,
+      data_source: "published_card_catalog",
+    })
+  }
+  const cards = [...bySymbol.values()].map((card) => ({ ...card, snapshot_version: version }))
+  return normalizePartialCardCatalogArtifact(
+    {
+      ...base,
+      artifact_version: version,
+      snapshot_version: version,
+      content_hash: version,
+      ...(symbols ? {} : { card_count: cards.length }),
+    },
+    cards,
+  )
+}
+
+async function readPublishedReaderViewLane(env, version, symbol, lane) {
+  const view = await readPublishedReaderView(env, version)
+  if (!view) return null
+  const entries = await createGeneDirectory({
+    read: (key) => readReaderDirectoryObject(env, key),
+  }).resolve(view.root, [symbol])
+  const entry = entries.get(symbol)
+  if (entry) {
+    const ref = lane === "genes" ? entry.gene : entry.portrait
+    const record = await readPublishedBunnyCardObject(
+      env,
+      ref.key,
+      (value) => value?.symbol === symbol,
+    )
+    if (!record) throw new Error("Committed reader projection unavailable")
+    return record
+  }
+  const base = await readPublishedCardCatalogManifest(env, view.base)
+  const shard = base?.shards?.find((ref) => cardCatalogShardMayContainSymbol(ref, symbol))
+  const ref = shard?.delivery_indexes?.find((index) =>
+    cardCatalogShardMayContainSymbol(index, symbol),
+  )
+  if (!ref) return null
+  const directory = await readPublishedBunnyCardObject(
+    env,
+    ref.key,
+    (value) =>
+      value?.schema_version === 2 && Array.isArray(value.entries) && value.entries.length <= 128,
+  )
+  if (!directory) throw new Error("Base reader directory unavailable")
+  const tuple = directory.entries.find((tuple) => tuple[0] === symbol)
+  if (!tuple) return null
+  const record = await readPublishedBunnyCardObject(
+    env,
+    publishedCardObjectKey(lane, tuple[lane === "genes" ? 2 : 3]),
+    (value) => value?.symbol === symbol,
+  )
+  if (!record) throw new Error("Base reader projection unavailable")
+  return record
 }
 
 async function readPublishedBunnyCards(env, manifest, symbols) {
@@ -31166,11 +31368,22 @@ async function readPublishedCardCatalogArtifact(
   // Cloudflare cold isolates, and recreate the exact PRL split-brain symptom
   // where private views and logged-out card routes disagree.
   const artifactVersion = String(version || "").trim()
-  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
+  if (
+    !artifactVersion ||
+    (!env?.KV?.get &&
+      !cardPublicationManifestKey(artifactVersion) &&
+      !parseCardReaderView(artifactVersion))
+  )
     return null
   const requestedSymbols = Array.isArray(symbols)
     ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
     : null
+  if (parseCardReaderView(artifactVersion)) {
+    if (!requestedSymbols && allowWholeArtifact === false) return null
+    return readPublishedReaderViewArtifact(env, artifactVersion, requestedSymbols, {
+      allowWholeArtifact,
+    })
+  }
   if (
     !requestedSymbols &&
     cardCatalogArtifactCache.version === artifactVersion &&

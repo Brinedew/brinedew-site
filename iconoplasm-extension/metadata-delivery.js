@@ -236,6 +236,70 @@
       return match[1]
     }
     async function v2Record(version, lane, symbol, signal, tab) {
+      const viewMatch = /^(ccv2-[a-f0-9]{64})\.c([a-f0-9]{64})$/.exec(version)
+      if (viewMatch) {
+        const view = await immutableObject("indexes", viewMatch[2], signal, tab)
+        if (
+          view.schema_version !== 1 ||
+          view.type !== "gene-reader-view" ||
+          view.base !== viewMatch[1]
+        )
+          throw new Error("Reader view identity mismatch")
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(symbol))
+        const route = [...new Uint8Array(digest)]
+          .map((value) => value.toString(16).padStart(2, "0"))
+          .join("")
+        let ref = view.root
+        let resolved = false
+        for (let depth = 0; depth <= 16; depth++) {
+          if (!ref || objectHash(ref.key, "indexes") !== ref.hash)
+            throw new Error("Reader directory reference mismatch")
+          const page = await immutableObject("indexes", ref.hash, signal, tab)
+          if (page.schema_version !== 1 || page.depth !== depth)
+            throw new Error("Reader directory depth mismatch")
+          if (page.type === "gene-directory-leaf") {
+            if (
+              !page.entries ||
+              Array.isArray(page.entries) ||
+              Object.keys(page.entries).length > 32
+            )
+              throw new Error("Reader directory leaf invalid")
+            const entry = page.entries[symbol]
+            if (entry) {
+              if (
+                entry.symbol !== symbol ||
+                !Number.isSafeInteger(entry.version) ||
+                entry.version < 1 ||
+                !HASH.test(entry.selection_key || "") ||
+                !["committed", "withdrawn"].includes(entry.status)
+              )
+                throw new Error("Reader directory entry invalid")
+              const receipt = lane === "genes" ? entry.gene : entry.portrait
+              if (!receipt || objectHash(receipt.key, lane) !== receipt.hash)
+                throw new Error("Reader projection identity mismatch")
+              const value = await immutableObject(lane, receipt.hash, signal, tab)
+              if (value.symbol !== symbol) throw new Error("Reader projection symbol mismatch")
+              return value
+            }
+            resolved = true
+            break
+          }
+          if (
+            page.type !== "gene-directory-branch" ||
+            !page.children ||
+            Object.keys(page.children).length > 16 ||
+            Object.keys(page.children).some((key) => !/^[a-f0-9]$/.test(key))
+          )
+            throw new Error("Reader directory branch invalid")
+          ref = page.children[route[depth]]
+          if (!ref) {
+            resolved = true
+            break
+          }
+        }
+        if (!resolved) throw new Error("Reader directory exceeds depth bound")
+        return v2Record(view.base, lane, symbol, signal, tab)
+      }
       const root = await immutableObject("manifests", version.slice(5), signal, tab)
       if (
         root.storage !== "bunny_card_catalog_v2" ||
@@ -311,7 +375,7 @@
             signal,
             tab,
             (value) =>
-              value?.schema_version === 2 && /^[A-Za-z0-9._:-]{1,100}$/.test(value.current),
+              value?.schema_version === 2 && /^[A-Za-z0-9._:-]{1,160}$/.test(value.current),
             { limit: 1024 },
           )
         } catch {
@@ -337,7 +401,7 @@
         )
           return null
         const [, version, lane, symbol] = match
-        if (/^ccv2-[a-f0-9]{64}$/.test(version)) {
+        if (/^ccv2-[a-f0-9]{64}(?:\.c[a-f0-9]{64})?$/.test(version)) {
           // The caller already has the exact snapshot/lane URL. Once this
           // tab uses first-party delivery, let that endpoint resolve the
           // record in one request instead of serially fetching its manifest,
