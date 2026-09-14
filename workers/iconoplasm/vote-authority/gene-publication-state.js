@@ -55,9 +55,24 @@ async function selection(value) {
   return { selectionKey: value.selectionKey, selectionRef }
 }
 
+// A Storage object key, never an arbitrary fetch URL or traversal path.
+function storageKey(value, name) {
+  const key = reference(value, name)
+  if (
+    key.startsWith("/") ||
+    key.includes("\\") ||
+    key.includes(":") ||
+    key.includes("?") ||
+    key.includes("#") ||
+    key.split("/").some((part) => !part || part === "." || part === "..")
+  )
+    throw new TypeError(`${name} must be a relative immutable Storage key`)
+  return key
+}
+
 function projectionReceipt(value, name) {
   if (!value || typeof value !== "object") throw new TypeError(`${name} is invalid`)
-  const key = reference(value.key, `${name}.key`)
+  const key = storageKey(value.key, `${name}.key`)
   if (!SHA256.test(String(value.hash || ""))) throw new TypeError(`${name}.hash is invalid`)
   return { key, hash: value.hash }
 }
@@ -65,17 +80,7 @@ function projectionReceipt(value, name) {
 function artifact(value, expectedSelectionKey) {
   if (!value || value.selectionKey !== expectedSelectionKey || !SHA256.test(value.contentSha256))
     throw new TypeError("artifact must identify the exact selected immutable content")
-  const objectKey = reference(value.objectKey, "objectKey")
-  // A Storage object key, never an arbitrary fetch URL or traversal path.
-  if (
-    objectKey.startsWith("/") ||
-    objectKey.includes("\\") ||
-    objectKey.includes(":") ||
-    objectKey.includes("?") ||
-    objectKey.includes("#") ||
-    objectKey.split("/").some((part) => !part || part === "." || part === "..")
-  )
-    throw new TypeError("objectKey must be a relative immutable Storage key")
+  const objectKey = storageKey(value.objectKey, "objectKey")
   const verified = {
     selectionKey: expectedSelectionKey,
     contentSha256: value.contentSha256,
