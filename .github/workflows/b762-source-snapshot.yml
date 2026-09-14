@@ -2,6 +2,8 @@ name: B-762 source snapshot
 on:
   push:
     branches: ["work/b762-sysop-v2-state"]
+    paths:
+      - ".github/workflows/b762-source-snapshot.yml"
 permissions:
   contents: read
 jobs:
@@ -12,21 +14,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Pack exact integration sources
+      - name: Pack exact integration sources and repository contracts
+        shell: bash
         run: |
-          tar -czf b762-integration-source.tgz \
-            workers \
-            iconoplasm-extension \
-            migrations-iconoplasm \
-            scripts \
-            package.json \
-            pnpm-lock.yaml \
-            wrangler.toml \
-            .github/workflows/deploy-quartz.yml \
-            .github/workflows/b762-sysop-v2-isolated.yml
+          set -euo pipefail
+          git ls-files -z workers iconoplasm-extension migrations-iconoplasm migrations-iconoplasm-authoring scripts shared quartz cloudflare docs .github AGENTS.md CLAUDE.md architecture-fences.json package.json pnpm-lock.yaml pnpm-workspace.yaml wrangler.toml 'wrangler*.toml' '.prettier*' | tar --null -T - -czf b762-integration-source.tgz
+          git rev-parse HEAD > b762-integration-source.sha
       - uses: actions/upload-artifact@v7
         with:
           name: b762-integration-source
-          path: b762-integration-source.tgz
+          path: |
+            b762-integration-source.tgz
+            b762-integration-source.sha
           if-no-files-found: error
           retention-days: 1
