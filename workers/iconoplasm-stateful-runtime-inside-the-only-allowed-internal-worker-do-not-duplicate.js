@@ -17328,6 +17328,14 @@ export class IconoplasmVoteCoordinator {
         changed = true
       }
     }
+    if (changed) {
+      // Migration boundary token: authority transfer captures this before
+      // source verification and re-checks it inside the seed transaction, so a
+      // candidate change during transfer aborts instead of certifying stale
+      // state.
+      const revision = Number(this.getMeta("candidate_authority_revision")) || 0
+      this.setMeta("candidate_authority_revision", String(revision + 1))
+    }
     return {
       changed,
       candidate_count: incoming.size,
@@ -17545,6 +17553,76 @@ export class IconoplasmVoteCoordinator {
   async commitAuthorityIntentIfActivated() {
     if (this.getMeta("authority_epoch") !== "v2") return null
     return this.publication.commitSelection(() => this.authoritativeSelectionIdentity())
+  }
+
+  /**
+   * Migration-only legacy vote read. Keyset pagination (not OFFSET) plus two
+   * complete passes: a row changed between pages makes the passes disagree and
+   * refuses the transfer instead of certifying a torn read. Bounded env, no
+   * hot-path use.
+   */
+  async readLegacyVoteSnapshot(symbol) {
+    const pageSize = 500
+    const maxPages = 40
+    const readPass = async () => {
+      const votes = new Map()
+      let lastUserId = null
+      let lastAssetSha = null
+      for (let page = 0; page < maxPages; page += 1) {
+        const response =
+          lastUserId === null
+            ? await this.env.ICONOPLASM_DB.prepare(
+                `SELECT user_id, asset_sha256, vote_value
+                   FROM icono_image_votes
+                  WHERE gene_symbol = ?
+                  ORDER BY user_id ASC, asset_sha256 ASC
+                  LIMIT ?`,
+              )
+                .bind(symbol, pageSize)
+                .all()
+            : await this.env.ICONOPLASM_DB.prepare(
+                `SELECT user_id, asset_sha256, vote_value
+                   FROM icono_image_votes
+                  WHERE gene_symbol = ?
+                    AND (user_id > ? OR (user_id = ? AND asset_sha256 > ?))
+                  ORDER BY user_id ASC, asset_sha256 ASC
+                  LIMIT ?`,
+              )
+                .bind(symbol, lastUserId, lastUserId, lastAssetSha, pageSize)
+                .all()
+        const rows = Array.isArray(response?.results) ? response.results : []
+        for (const row of rows) {
+          const userId = normalizeUserId(row?.user_id || "")
+          const assetSha = normalizeSha256(row?.asset_sha256 || "")
+          const voteValue = normalizeVoteValue(row?.vote_value)
+          if (!userId || !assetSha || voteValue == null || voteValue === 0) continue
+          votes.set(`${userId}\u0000${assetSha}`, voteValue)
+        }
+        if (rows.length < pageSize) return { complete: true, votes }
+        const last = rows[rows.length - 1]
+        const nextUser = String(last?.user_id ?? "")
+        const nextAsset = normalizeSha256(last?.asset_sha256 || "")
+        if (!nextAsset || (nextUser === lastUserId && nextAsset === lastAssetSha)) {
+          throw new Error("Legacy vote source paging did not advance")
+        }
+        lastUserId = nextUser
+        lastAssetSha = nextAsset
+      }
+      return { complete: false, votes }
+    }
+    const first = await readPass()
+    if (!first.complete) {
+      throw new Error("Legacy vote source exceeds the bounded migration envelope")
+    }
+    const second = await readPass()
+    if (!second.complete) {
+      throw new Error("Legacy vote source exceeds the bounded migration envelope")
+    }
+    if (first.votes.size !== second.votes.size) return { changed: true }
+    for (const [key, value] of first.votes) {
+      if (second.votes.get(key) !== value) return { changed: true }
+    }
+    return { changed: false, votes: second.votes }
   }
 
   pendingOutboxRows(limit = 50) {
@@ -18379,14 +18457,14 @@ export class IconoplasmVoteCoordinator {
       const symbol = this.ensureSymbol(requestedSymbol)
       try {
         const targetAsset = normalizeSha256(payload?.asset_sha256 || "") || null
+        let eligibilityProjection = null
         if (targetAsset) {
-          const eligibility = await this.requireEligibleCaretakerSupervoteTarget(
+          eligibilityProjection = await this.requireEligibleCaretakerSupervoteTarget(
             symbol,
             targetAsset,
           )
-          this.caretakerSupervotes.projectAssetEligibility(eligibility)
         }
-        const result = await this.caretakerSupervotes.setSelection({
+        const selectionOptions = {
           accountId: payload?.account_id,
           assetSha256: targetAsset,
           direction: targetAsset ? Number(payload?.direction) : null,
@@ -18394,20 +18472,33 @@ export class IconoplasmVoteCoordinator {
           requestSha256: payload?.request_sha256,
           expectedAssignmentVersion: payload?.expected_assignment_version,
           expectedSupervoteVersion: payload?.expected_supervote_version,
-        })
-        const publication = await this.commitAuthorityIntentIfActivated()
-        return Response.json({
-          ...result,
-          symbol,
-          ...(publication
-            ? {
-                publication: {
-                  changed: publication.changed,
-                  pending: publication.state?.pending === true,
-                },
-              }
-            : {}),
-        })
+        }
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Eligibility, supervote state and publication intent commit in one
+          // storage transaction, so a failed intent cannot leave a committed
+          // supervote change behind while publication stays clean.
+          let result = null
+          const publication = await this.publication.commitSelection(() => {
+            if (eligibilityProjection) {
+              this.caretakerSupervotes.projectAssetEligibilityInTransaction(eligibilityProjection)
+            }
+            result = this.caretakerSupervotes.setSelectionCore(selectionOptions)
+            return this.authoritativeSelectionIdentity()
+          })
+          return Response.json({
+            ...result,
+            symbol,
+            publication: {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            },
+          })
+        }
+        if (eligibilityProjection) {
+          this.caretakerSupervotes.projectAssetEligibility(eligibilityProjection)
+        }
+        const result = await this.caretakerSupervotes.setSelection(selectionOptions)
+        return Response.json({ ...result, symbol })
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
           return Response.json(
@@ -18614,35 +18705,21 @@ export class IconoplasmVoteCoordinator {
       // Complete-input verification: the local authority must contain every
       // accepted legacy vote with the same voter, candidate and value before
       // the epoch flips. Row counts alone are not evidence of a complete
-      // transfer. Paginated and bounded; part of migration, not a hot path.
+      // transfer. Migration-only, keyset-paginated, double-pass verified and
+      // bounded.
+      const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
       if (this.env?.ICONOPLASM_DB) {
         try {
-          const sourceVotes = new Map()
-          const pageSize = 500
-          let offset = 0
-          for (;;) {
-            const response = await this.env.ICONOPLASM_DB.prepare(
-              `SELECT user_id, asset_sha256, vote_value
-                 FROM icono_image_votes
-                WHERE gene_symbol = ?
-                ORDER BY user_id ASC, asset_sha256 ASC
-                LIMIT ? OFFSET ?`,
+          const snapshot = await this.readLegacyVoteSnapshot(symbol)
+          if (snapshot.changed) {
+            return Response.json(
+              {
+                ok: false,
+                code: "SOURCE_CHANGED",
+                error: "Legacy vote source changed during verification; retry the transfer",
+              },
+              { status: 409 },
             )
-              .bind(symbol, pageSize, offset)
-              .all()
-            const rows = Array.isArray(response?.results) ? response.results : []
-            for (const row of rows) {
-              const userId = normalizeUserId(row?.user_id || "")
-              const assetSha = normalizeSha256(row?.asset_sha256 || "")
-              const voteValue = normalizeVoteValue(row?.vote_value)
-              if (!userId || !assetSha || voteValue == null || voteValue === 0) continue
-              sourceVotes.set(`${userId}\u0000${assetSha}`, voteValue)
-            }
-            if (rows.length < pageSize) break
-            offset += pageSize
-            if (offset > 20000) {
-              throw new Error("Legacy vote source exceeds the bounded migration envelope")
-            }
           }
           const localVotes = new Map(
             this.state.storage.sql
@@ -18653,9 +18730,9 @@ export class IconoplasmVoteCoordinator {
                 Number(row.vote_value),
               ]),
           )
-          let complete = sourceVotes.size === localVotes.size
+          let complete = snapshot.votes.size === localVotes.size
           if (complete) {
-            for (const [key, value] of sourceVotes) {
+            for (const [key, value] of snapshot.votes) {
               if (localVotes.get(key) !== value) {
                 complete = false
                 break
@@ -18667,7 +18744,7 @@ export class IconoplasmVoteCoordinator {
               {
                 ok: false,
                 code: "IMPORT_INCOMPLETE",
-                error: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${sourceVotes.size} source)`,
+                error: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
               },
               { status: 409 },
             )
@@ -18698,11 +18775,56 @@ export class IconoplasmVoteCoordinator {
         )
       }
       try {
-        await this.publication.seedPublished(requestedIdentity, {
-          contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
-          objectKey: sanitizeText(payload?.published?.object_key || "", 512),
-        })
+        await this.publication.seedPublished(
+          requestedIdentity,
+          {
+            contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
+            objectKey: sanitizeText(payload?.published?.object_key || "", 512),
+          },
+          {
+            // Handover fence: revalidate accepted work, the candidate boundary
+            // and the final selection inside the same exclusive transaction
+            // that commits the seed. A concurrent accepted change aborts the
+            // transfer instead of certifying a stale clean identity.
+            guard: () => {
+              if (
+                this.pendingOutboxRows(1).length ||
+                this.caretakerSupervotes.pendingOutboxRows(1).length
+              ) {
+                const moved = new Error("Accepted work arrived during authority transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+              if (
+                (Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision
+              ) {
+                const moved = new Error("Candidate authority changed during transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+              const currentIdentity = this.authoritativeSelectionIdentity({
+                adminOverride: requestedOverride,
+                publishedAssetSha: requestedAsset,
+              })
+              if (currentIdentity.selectionRef !== requestedIdentity.selectionRef) {
+                const moved = new Error("Selected winner changed during authority transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+            },
+          },
+        )
       } catch (error) {
+        if (error?.code === "AUTHORITY_MOVED") {
+          return Response.json(
+            {
+              ok: false,
+              code: "AUTHORITY_MOVED",
+              error: sanitizeText(String(error?.message || error), 300),
+            },
+            { status: 409 },
+          )
+        }
         return Response.json(
           {
             ok: false,
