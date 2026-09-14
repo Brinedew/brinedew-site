@@ -36,6 +36,7 @@ jobs:
             workers/lib/iconoplasm-card-reader-view.test.js \
             workers/iconoplasm.vote-authority-handoff.test.js \
             workers/iconoplasm.reader-view-publication.test.js \
+            workers/iconoplasm/discovery-compact-state.test.js \
             iconoplasm-extension/metadata-delivery.test.js \
             iconoplasm-extension/metadata-delivery-reader-view.test.js \
             scripts/b762-v1-excision-audit.mjs \
