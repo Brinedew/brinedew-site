@@ -23,6 +23,20 @@ Iconoplasm represents each human gene as a humanlike character. Any Iconoplasm u
 **Who can become a caretaker?**
 At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of Brinedew.bio to be a caretaker. This might change in the future.
 
+**Do I need to have a publishing record about this gene to become its caretaker?**
+
+Interest alone is enough! 
+
+To get up to speed after becoming a caretaker, try to get familiar with basics:
+
+- Your gene's protein product, its subcellular location and molecular function
+- Your gene's downstream effects in normal and pathological states
+- Your gene's expression pattern across tissues and developmental stages
+- What others genes are similar to yours in structure and function
+- What other genes interact with yours on both protein level and transcriptional regulation level
+
+My hope is that biology students and field newcomers will first learn the biology of their chosen gene, familiarize themselves with foundational biological concepts through that character, and then use their gene as an anchor to explore other parts of molecular cell biology.
+
 **How long can I stay a caretaker of a single gene?**
 There is no time limit - you can settle on your favorite gene and stay its caretaker for as long as you'd like. A vision for Iconoplasm is to eventually settle down to a state where every gene has had the same caretaker for decades at a time.
 
