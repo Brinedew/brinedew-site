@@ -27,9 +27,15 @@ $intent = [ordered]@{
 }
 $intent | ConvertTo-Json | Set-Content -LiteralPath "$intentPath.tmp" -Encoding utf8
 Move-Item -LiteralPath "$intentPath.tmp" -Destination $intentPath -Force
-$pwshPath = Join-Path $PSHOME 'pwsh.exe'
-$runnerPath = Join-Path $PSScriptRoot 'run-reset-deployer.ps1'
-$action = New-ScheduledTaskAction -Execute $pwshPath -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "{0}"' -f $runnerPath) -WorkingDirectory $repoDirectory
+$wscriptPath = Join-Path $env:WINDIR 'System32\wscript.exe'
+$hiddenRunnerPath = Join-Path $PSScriptRoot 'run-reset-deployer.vbs'
+if (-not (Test-Path -LiteralPath $wscriptPath -PathType Leaf)) {
+    throw "Windows Script Host is unavailable: $wscriptPath"
+}
+if (-not (Test-Path -LiteralPath $hiddenRunnerPath -PathType Leaf)) {
+    throw "Hidden reset dispatcher wrapper is unavailable: $hiddenRunnerPath"
+}
+$action = New-ScheduledTaskAction -Execute $wscriptPath -Argument ('"{0}"' -f $hiddenRunnerPath) -WorkingDirectory $repoDirectory
 $trigger = New-ScheduledTaskTrigger -Daily -At $resetUtc.LocalDateTime
 $repeatingTrigger = New-ScheduledTaskTrigger -Once -At $resetUtc.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Minutes 390)
 $trigger.Repetition = $repeatingTrigger.Repetition
