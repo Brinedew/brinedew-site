@@ -1,0 +1,29 @@
+name: B-762 publication path audit
+on:
+  push:
+    branches: ["audit/b762-publication-path"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture exact source and changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit-evidence
+          git rev-parse HEAD > audit-evidence/audit-head.txt
+          git diff 48408d8ac82de7cc7504749e9e6396af1350d5c3 ee4b3b573a6aefb6f0be0371bbfc08d75baeb7c9 -- workers shared scripts plans > audit-evidence/repair.patch
+          git archive --format=tar.gz --output=audit-evidence/pinned-source.tar.gz ee4b3b573a6aefb6f0be0371bbfc08d75baeb7c9 workers shared scripts docs plans architecture-fences.json cloudflare package.json pnpm-lock.yaml pnpm-workspace.yaml AGENTS.md CLAUDE.md .github/workflows wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b762-publication-source
+          path: audit-evidence
+          retention-days: 7
+          if-no-files-found: error
