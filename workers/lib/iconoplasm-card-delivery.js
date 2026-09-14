@@ -5,7 +5,7 @@ import {
 
 // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: public delivery performs only
 // immutable reads. No D1, publication, storage PUT, or per-reader accounting.
-export function createPublishedCardDeliveryHandlers({ barrier }) {
+export function createPublishedCardDeliveryHandlers({ barrier, readerView = null }) {
   return {
     async current({ env }) {
       const head = await barrier(env)
@@ -17,8 +17,25 @@ export function createPublishedCardDeliveryHandlers({ barrier }) {
             headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
           },
         )
+      // The per-gene delta view is advertised alongside the unchanged base
+      // epoch. It derives from the same publication owner and names its base,
+      // and it is only advertised while that exact base is still current.
+      let view = null
+      if (readerView) {
+        try {
+          const advertised = await readerView(env)
+          if (advertised?.base === head.current) view = advertised.view
+        } catch {
+          view = null
+        }
+      }
       return Response.json(
-        { schema_version: 2, current: head.current, previous: head.previous || null },
+        {
+          schema_version: 2,
+          current: head.current,
+          previous: head.previous || null,
+          ...(view ? { reader_view: view } : {}),
+        },
         {
           headers: {
             // Browser revalidates on the next article load. Bunny shares the

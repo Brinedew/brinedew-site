@@ -5,15 +5,17 @@ import {
   completeCoalesce,
   completeSegmentWrite,
   emptyGeneDeltaState,
+  geneDeltaChainBody,
+  geneDeltaChainFingerprint,
   geneDeltaProjectionHash,
   mergeSegmentEntries,
   pendingSegmentBody,
   planGeneDeltaCoalesce,
+  PUBLIC_GENE_DELTA_PROJECTION_KEY,
 } from "./iconoplasm-card-gene-delta.js"
 import { createPublishedCardObjectStore } from "./iconoplasm-published-card-objects.js"
 
 const PUBLIC_CARD_HEAD_PROJECTION_KEY = "iconoplasm:gallery-version"
-const PUBLIC_GENE_DELTA_PROJECTION_KEY = "iconoplasm:gene-delta"
 
 /**
  * B-762 reader view projection. Change-driven only: the caller passes the last
@@ -182,15 +184,16 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
     /**
      * B-762 reader view: one owner for the shared per-gene projection. The
      * vote authority hands over verified receipts; this step folds the pending
-     * batch into one immutable directory segment, compacts at most one oldest
-     * pair when the bounded chain is exceeded, and advertises (KV write) only
-     * when the canonical view bytes change. Idle wakes write nothing.
+     * batch into one immutable directory segment, compacts one oldest pair when
+     * the bounded chain is exceeded, writes the immutable chain object that the
+     * advertised view id names, and advertises (KV write) only when the
+     * canonical view bytes change. Idle wakes write nothing.
      */
     async projectGeneDeltaStep() {
       return this.deltaExclusive(async () => {
         let state = this.geneDelta
-        let coalesce = state.coalesce || planGeneDeltaCoalesce(state)
-        if (!state.projection_pending && !coalesce) return { skipped: true }
+        let coalesced = false
+        const coalesce = planGeneDeltaCoalesce(state)
         if (coalesce) {
           const bodies = new Map()
           for (const segment of state.segments) {
@@ -206,26 +209,52 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             mergeSeqs: coalesce.mergeSeqs,
             key: written.key,
             hash: written.hash,
+            count: Object.keys(merged.entries).length,
           })
-          state = { ...state, projection_pending: true }
-          this.geneDelta = state
-          this.persistGeneDelta()
-          return {
-            ok: true,
-            coalesced: true,
-            segments: state.segments.length,
-            more: state.segments.length > GENE_DELTA_CHAIN_LIMIT,
-          }
+          coalesced = true
         }
         if (state.projection_pending && Object.keys(state.pending).length) {
           const seq = (Number(state.seq) || 0) + 1
           const written = await this.objectStore.write("indexes", pendingSegmentBody(state, seq))
           state = completeSegmentWrite(state, { seq, key: written.key, hash: written.hash })
         }
+        if (!state.projection_pending && !coalesced) {
+          this.geneDelta = state
+          return { skipped: true, segments: state.segments.length }
+        }
         const baseVersion = this.repo.get("head")?.current?.version || null
+        let chainHash = null
+        if (state.segments.length && baseVersion) {
+          const fingerprint = geneDeltaChainFingerprint(baseVersion, state.segments)
+          if (
+            state.chain &&
+            state.chain.base === baseVersion &&
+            state.chain.fingerprint === fingerprint
+          ) {
+            chainHash = state.chain.hash
+          } else {
+            const written = await this.objectStore.write(
+              "indexes",
+              geneDeltaChainBody(baseVersion, state.segments),
+            )
+            chainHash = written.hash
+            state = {
+              ...state,
+              chain: {
+                key: written.key,
+                hash: written.hash,
+                base: baseVersion,
+                fingerprint,
+              },
+            }
+          }
+        } else {
+          state = { ...state, chain: null }
+        }
         const projection = buildGeneDeltaProjection({
           baseVersion,
           state,
+          chainHash,
           committedAt: new Date().toISOString(),
         })
         const advertised = await projectGeneDelta(
@@ -238,11 +267,15 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           projection_pending: false,
           projected_json: advertised.written ? advertised.json : state.projected_json || null,
         }
-        if (planGeneDeltaCoalesce(state)) state = { ...state, projection_pending: true }
+        const more = Boolean(planGeneDeltaCoalesce(state))
+        if (more) state = { ...state, projection_pending: true }
         this.geneDelta = state
         this.persistGeneDelta()
         return {
           ok: true,
+          coalesced,
+          more,
+          view: projection.view,
           segments: state.segments.length,
           entry_count: projection.entry_count,
           advertised: advertised.written,
@@ -260,7 +293,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             this.projectionDeferred = null
           }
           const result = await this.publisher.step()
-          await this.projectGeneDeltaStep()
+          const delta = await this.projectGeneDeltaStep()
           if (result.committed) {
             const projection = await projectPublicCardHead(this.env, this.repo.get("head"))
             this.projectedHeadVersion = projection?.current || null
@@ -269,7 +302,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             this.repo.reserveWrites(2)
             this.repo.remove("failure")
           }
-          if (result.more) await this.arm(1000)
+          if (result.more || delta.more) await this.arm(1000)
         } catch (error) {
           // At-least-once alarms must not exhaust platform retries and abandon
           // durable work. Retry only an existing job, with bounded backoff.
@@ -325,9 +358,19 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
         })
       }
       if (request.method === "GET" && path === "/gene-delta-status") {
+        let advertisedView = null
+        try {
+          advertisedView = this.geneDelta.projected_json
+            ? JSON.parse(this.geneDelta.projected_json).view || null
+            : null
+        } catch {
+          advertisedView = null
+        }
         return reply({
           ok: true,
           base: this.repo.get("head")?.current?.version || null,
+          view: advertisedView,
+          chain: this.geneDelta.chain?.hash || null,
           seq: this.geneDelta.seq,
           segments: this.geneDelta.segments.length,
           pending: Object.keys(this.geneDelta.pending).length,

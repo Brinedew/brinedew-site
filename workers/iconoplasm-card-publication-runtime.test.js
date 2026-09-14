@@ -336,7 +336,8 @@ test("gene delta projection writes the KV document once and skips unchanged byte
   const projection = {
     schema_version: 1,
     base: "ccv2-" + sha("a"),
-    view: "ccv2-" + sha("a") + ".d1",
+    view: "ccv2-" + sha("a") + ".c" + sha("f"),
+    chain_hash: sha("f"),
     segments: [
       { seq: 1, key: "published-cards/v2/immutable/indexes/x.json", hash: sha("b"), count: 2 },
     ],

@@ -33,7 +33,9 @@ jobs:
             workers/iconoplasm/vote-authority/gene-publication-state.workerd.test.js \
             workers/lib/iconoplasm-card-publication-materialize-symbol.test.js \
             workers/lib/iconoplasm-card-gene-delta.test.js \
+            workers/lib/iconoplasm-card-reader-view.test.js \
             workers/iconoplasm.vote-authority-handoff.test.js \
+            workers/iconoplasm.reader-view-publication.test.js \
             scripts/b762-v1-excision-audit.mjs \
             scripts/b762-publication-path-audit.mjs \
             scripts/b762-cutover-coherence-audit.mjs | tee b762-isolated-tests.txt

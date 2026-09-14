@@ -8,12 +8,16 @@ import {
   completeSegmentWrite,
   deltaViewId,
   emptyGeneDeltaState,
+  geneDeltaChainBody,
+  geneDeltaChainFingerprint,
   GENE_DELTA_CHAIN_LIMIT,
   GENE_DELTA_SEGMENT_ENTRY_CAP,
   mergeSegmentEntries,
   pendingSegmentBody,
   planGeneDeltaCoalesce,
   resolveGeneDeltaEntry,
+  validateGeneDeltaChainBody,
+  validateGeneDeltaSegmentBody,
 } from "./iconoplasm-card-gene-delta.js"
 
 const sha = (char) => char.repeat(64)
@@ -135,26 +139,120 @@ test("planGeneDeltaCoalesce fires only past the chain limit and replaces refs", 
   )
 })
 
-test("view identity changes exactly with the delta and names its base", () => {
+test("view identity is the content-added chain of the exact delta and names its base", () => {
   const empty = emptyGeneDeltaState()
   assert.equal(deltaViewId("ccv2-abc", empty), "ccv2-abc")
   const withDelta = {
     ...empty,
     seq: 2,
-    segments: [{ seq: 2, key: "indexes/a.json", hash: sha("a"), count: 1 }],
+    segments: [
+      {
+        seq: 2,
+        key: `published-cards/v2/immutable/indexes/${sha("a")}.json`,
+        hash: sha("a"),
+        count: 1,
+      },
+    ],
   }
-  const view = deltaViewId("ccv2-abc", withDelta)
-  assert.equal(view, "ccv2-abc.d2")
-  const projection = buildGeneDeltaProjection({ baseVersion: "ccv2-abc", state: withDelta })
+  // A delta with no written chain has no exact view id; the accepted writer
+  // only advertises after the chain object exists.
+  assert.equal(deltaViewId("ccv2-abc", withDelta), "ccv2-abc")
+  const view = deltaViewId("ccv2-abc", withDelta, sha("f"))
+  assert.equal(view, `ccv2-abc.c${sha("f")}`)
+  const projection = buildGeneDeltaProjection({
+    baseVersion: "ccv2-abc",
+    state: withDelta,
+    chainHash: sha("f"),
+  })
   assert.equal(projection.view, view)
   assert.equal(projection.base, "ccv2-abc")
+  assert.equal(projection.chain_hash, sha("f"))
   assert.equal(projection.entry_count, 1)
-  assert.deepEqual(projection.segments[0], {
-    seq: 2,
-    key: "indexes/a.json",
-    hash: sha("a"),
-    count: 1,
-  })
+  assert.deepEqual(projection.segments[0], withDelta.segments[0])
+})
+
+test("chain body names the exact segments and validates against its own base", () => {
+  const segments = [
+    {
+      seq: 1,
+      key: `published-cards/v2/immutable/indexes/${sha("a")}.json`,
+      hash: sha("a"),
+      count: 2,
+    },
+    {
+      seq: 3,
+      key: `published-cards/v2/immutable/indexes/${sha("b")}.json`,
+      hash: sha("b"),
+      count: 1,
+    },
+  ]
+  const body = geneDeltaChainBody("ccv2-abc", segments)
+  assert.equal(body.kind, "gene_delta_chain")
+  assert.deepEqual(body.segments, segments)
+  const validated = validateGeneDeltaChainBody(body, "ccv2-abc")
+  assert.deepEqual(validated.segments, segments)
+  // A chain can never be re-pointed at another catalog epoch.
+  assert.equal(validateGeneDeltaChainBody(body, "ccv2-other"), null)
+  assert.equal(validateGeneDeltaChainBody({ ...body, segments: [] }, "ccv2-abc"), null)
+  assert.equal(
+    validateGeneDeltaChainBody(
+      { ...body, segments: Array.from({ length: GENE_DELTA_CHAIN_LIMIT + 1 }, () => segments[0]) },
+      "ccv2-abc",
+    ),
+    null,
+  )
+  assert.equal(
+    validateGeneDeltaChainBody(
+      {
+        ...body,
+        segments: [
+          { ...segments[0], key: `published-cards/v2/immutable/indexes/${sha("c")}.json` },
+        ],
+      },
+      "ccv2-abc",
+    ),
+    null,
+  )
+  assert.equal(
+    geneDeltaChainFingerprint("ccv2-abc", segments),
+    geneDeltaChainFingerprint("ccv2-abc", segments),
+  )
+  assert.notEqual(
+    geneDeltaChainFingerprint("ccv2-abc", segments),
+    geneDeltaChainFingerprint("ccv2-other", segments),
+  )
+})
+
+test("segment bodies validate exact receipts and reject mismatched symbols", () => {
+  let state = emptyGeneDeltaState()
+  state = applyGeneCommit(state, commit("TP53", 1)).state
+  const body = segmentBody(state, 1)
+  const validated = validateGeneDeltaSegmentBody(body, 1)
+  assert.equal(validated.entries.TP53.version, 1)
+  assert.equal(validated.entries.TP53.gene.hash, sha("c"))
+  assert.equal(validateGeneDeltaSegmentBody(body, 2), null)
+  assert.equal(
+    validateGeneDeltaSegmentBody(
+      { ...body, entries: { TP53: { ...body.entries.TP53, symbol: "BRCA1" } } },
+      1,
+    ),
+    null,
+  )
+  assert.equal(
+    validateGeneDeltaSegmentBody(
+      {
+        ...body,
+        entries: {
+          TP53: {
+            ...body.entries.TP53,
+            gene: { key: `published-cards/v2/immutable/genes/${sha("f")}.json`, hash: sha("c") },
+          },
+        },
+      },
+      1,
+    ),
+    null,
+  )
 })
 
 test("segment entry cap keeps each immutable directory bounded", () => {
