@@ -1,19 +1,11 @@
 import { CardPublicationRepository, createCardPublication } from "./iconoplasm-card-publication.js"
-import {
-  applyGeneCommit,
-  buildGeneDeltaProjection,
-  completeCoalesce,
-  completeSegmentWrite,
-  emptyGeneDeltaState,
-  geneDeltaProjectionHash,
-  mergeSegmentEntries,
-  pendingSegmentBody,
-  planGeneDeltaCoalesce,
-} from "./iconoplasm-card-gene-delta.js"
+import { applyGeneCommit, emptyGeneDeltaState } from "./iconoplasm-card-gene-delta.js"
+import { createGeneDirectory, writeCardReaderView } from "./iconoplasm-card-reader-view.js"
 import { createPublishedCardObjectStore } from "./iconoplasm-published-card-objects.js"
 
 const PUBLIC_CARD_HEAD_PROJECTION_KEY = "iconoplasm:gallery-version"
-const PUBLIC_GENE_DELTA_PROJECTION_KEY = "iconoplasm:gene-delta"
+// One current-view lookup for every reader, including legacy base-only views.
+const PUBLIC_GENE_DELTA_PROJECTION_KEY = PUBLIC_CARD_HEAD_PROJECTION_KEY
 
 /**
  * B-762 reader view projection. Change-driven only: the caller passes the last
@@ -21,7 +13,7 @@ const PUBLIC_GENE_DELTA_PROJECTION_KEY = "iconoplasm:gene-delta"
  * and a repeat commit performs none either.
  */
 export async function projectGeneDelta(env, projection, previousJson = null) {
-  const json = geneDeltaProjectionHash(projection)
+  const json = JSON.stringify(projection)
   if (json === previousJson) return { written: false, deferred: false, json }
   if (!env?.KV) return { written: false, deferred: true, json }
   await env.KV.put(PUBLIC_GENE_DELTA_PROJECTION_KEY, json)
@@ -90,8 +82,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
         this.geneDelta = this.repo.get("gene_delta") || emptyGeneDeltaState()
         this.projectedHeadVersion = null
         try {
-          const projection = await projectPublicCardHead(env, this.repo.get("head"))
-          this.projectedHeadVersion = projection?.current || null
+          await this.projectBaseOrRetainView()
         } catch (error) {
           // A projection outage must not take the canonical head offline. The
           // next alarm retries before doing more publication work.
@@ -104,7 +95,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           !this.repo.get("effects")
         ) {
           try {
-            await this.arm(1000, { control: true })
+            await this.armDelta(1000)
           } catch (error) {
             // A pending reader projection must never take reads offline; the
             // durable state retries on a later wake or restart.
@@ -179,101 +170,189 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       this.repo.put("gene_delta", this.geneDelta)
     }
 
+    async armDelta(delay = 1000) {
+      const retry = Number(this.repo.get("gene_delta_retry")?.retry_at || 0)
+      const due = Math.max(Date.now() + delay, retry)
+      const existing = await this.state.storage.getAlarm()
+      if (!existing || existing <= Date.now() || existing > due) {
+        this.repo.reserveWrites(2, { control: true })
+        await this.state.storage.setAlarm(due)
+      }
+    }
+
+    async deferDelta(error) {
+      const prior = this.repo.get("gene_delta_retry")
+      const attempts = Number(prior?.attempts || 0) + 1
+      const retryAt =
+        Number(error.retryAt) ||
+        Date.now() + Math.min(900000, 1000 * 2 ** Math.min(attempts - 1, 10))
+      this.repo.reserveWrites(2, { control: true })
+      this.repo.put("gene_delta_retry", {
+        attempts,
+        retry_at: retryAt,
+        error: String(error.message || error).slice(0, 500),
+      })
+      await this.armDelta(1)
+    }
+
+    async projectBaseOrRetainView() {
+      const head = this.repo.get("head")
+      const base = head?.current?.version || null
+      if (
+        this.geneDelta.directory_root ||
+        this.geneDelta.segments?.length ||
+        this.geneDelta.projected_json
+      ) {
+        // Rebase by writing a NEW immutable view. Never transiently overwrite an
+        // advertised composite view with the old mutable base-only projection.
+        if (base !== this.geneDelta.projected_base && !this.geneDelta.projection_pending) {
+          this.repo.reserveWrites(2, { control: true })
+          this.geneDelta = { ...this.geneDelta, projection_pending: true }
+          this.persistGeneDelta()
+        }
+        this.projectedHeadVersion = base
+        return
+      }
+      const projection = await projectPublicCardHead(this.env, head)
+      this.projectedHeadVersion = projection?.current || null
+    }
+
     /**
-     * B-762 reader view: one owner for the shared per-gene projection. The
-     * vote authority hands over verified receipts; this step folds the pending
-     * batch into one immutable directory segment, compacts at most one oldest
-     * pair when the bounded chain is exceeded, and advertises (KV write) only
-     * when the canonical view bytes change. Idle wakes write nothing.
+     * Copy-on-write directory pages replace the unbounded oldest-segment merge.
+     * A wake changes at most 120 entries, then persists its exact immutable view
+     * before the shared KV pointer. Historical roots survive every update.
      */
     async projectGeneDeltaStep() {
       return this.deltaExclusive(async () => {
         let state = this.geneDelta
-        let coalesce = state.coalesce || planGeneDeltaCoalesce(state)
-        if (!state.projection_pending && !coalesce) return { skipped: true }
-        if (coalesce) {
-          const bodies = new Map()
-          for (const segment of state.segments) {
-            const object = await this.objectStore.read(segment.key)
-            bodies.set(
-              segment.seq,
-              object?.value || { schema_version: 1, seq: segment.seq, entries: {} },
-            )
+        if (!state.projection_pending) return { skipped: true, more: false }
+        const retryAt = Number(this.repo.get("gene_delta_retry")?.retry_at || 0)
+        if (retryAt > Date.now()) return { more: true, retryAt }
+        const directory = createGeneDirectory(this.objectStore)
+        const base = this.repo.get("head")?.current?.version || null
+        if (!base) {
+          const error = new Error("Reader base manifest is not available yet")
+          error.retryAt = Date.now() + 300000
+          throw error
+        }
+        // Preserve any accepted state written by the preceding, unshipped
+        // segment implementation. Import one bounded chunk per wake; no reads
+        // can see a partially imported replacement root.
+        if (state.segments?.length) {
+          const segment = state.segments[0]
+          const object = await this.objectStore.read(segment.key)
+          if (!object || object.hash !== segment.hash || !object.value?.entries)
+            throw new Error("Retained reader segment unavailable")
+          const entries = Object.values(object.value.entries).sort((a, b) =>
+            a.symbol.localeCompare(b.symbol),
+          )
+          const offset = Number(state.import_offset || 0)
+          const batch = entries.slice(offset, offset + 120)
+          const root = await directory.update(state.directory_root || null, batch)
+          const complete = offset + batch.length >= entries.length
+          this.repo.reserveWrites(2, { control: true })
+          this.geneDelta = {
+            ...state,
+            directory_root: root,
+            segments: complete ? state.segments.slice(1) : state.segments,
+            import_offset: complete ? 0 : offset + batch.length,
+            projection_pending: true,
           }
-          const merged = mergeSegmentEntries(bodies, coalesce.mergeSeqs)
-          const written = await this.objectStore.write("indexes", merged)
-          state = completeCoalesce(state, {
-            mergeSeqs: coalesce.mergeSeqs,
-            key: written.key,
-            hash: written.hash,
-          })
-          state = { ...state, projection_pending: true }
+          this.persistGeneDelta()
+          return { ok: true, importing: true, more: true }
+        }
+        const names = Object.keys(state.pending).sort().slice(0, 120)
+        let root = state.directory_root || null
+        if (names.length) {
+          root = await directory.update(
+            root,
+            names.map((name) => state.pending[name]),
+          )
+          const pending = { ...state.pending }
+          for (const name of names) delete pending[name]
+          state = {
+            ...state,
+            directory_root: root,
+            pending,
+            seq: (Number(state.seq) || 0) + 1,
+            projection_pending: true,
+          }
+          // Persist the completed immutable root before attempting advertisement;
+          // a KV outage retries only the pointer, without rematerializing genes.
+          this.repo.reserveWrites(2, { control: true })
           this.geneDelta = state
           this.persistGeneDelta()
-          return {
-            ok: true,
-            coalesced: true,
-            segments: state.segments.length,
-            more: state.segments.length > GENE_DELTA_CHAIN_LIMIT,
+        }
+        if (!root) return { skipped: true, more: false }
+        let projection = state.prepared_projection
+        if (!projection || projection.base !== base || state.prepared_root !== root.hash) {
+          const view = await writeCardReaderView(this.objectStore, base, root)
+          const prior = state.projected_json ? JSON.parse(state.projected_json) : null
+          projection = {
+            schema_version: 2,
+            current: view.view,
+            previous: prior?.current === view.view ? prior.previous : prior?.current || base,
+            base,
+            directory: view.directory,
+            published_at: new Date().toISOString(),
+            status: "active",
           }
+          state = { ...state, prepared_root: root.hash, prepared_projection: projection }
+          this.repo.reserveWrites(2, { control: true })
+          this.geneDelta = state
+          this.persistGeneDelta()
         }
-        if (state.projection_pending && Object.keys(state.pending).length) {
-          const seq = (Number(state.seq) || 0) + 1
-          const written = await this.objectStore.write("indexes", pendingSegmentBody(state, seq))
-          state = completeSegmentWrite(state, { seq, key: written.key, hash: written.hash })
-        }
-        const baseVersion = this.repo.get("head")?.current?.version || null
-        const projection = buildGeneDeltaProjection({
-          baseVersion,
-          state,
-          committedAt: new Date().toISOString(),
-        })
         const advertised = await projectGeneDelta(
           this.env,
           projection,
           state.projected_json || null,
         )
+        if (advertised.deferred) throw new Error("Reader pointer storage is not configured")
+        const pending = Object.keys(state.pending).length > 0
         state = {
           ...state,
-          projection_pending: false,
-          projected_json: advertised.written ? advertised.json : state.projected_json || null,
+          projected_base: base,
+          projection_pending: pending,
+          projected_json: advertised.json,
         }
-        if (planGeneDeltaCoalesce(state)) state = { ...state, projection_pending: true }
+        this.repo.reserveWrites(2, { control: true })
         this.geneDelta = state
         this.persistGeneDelta()
+        if (this.repo.get("gene_delta_retry")) {
+          this.repo.reserveWrites(2, { control: true })
+          this.repo.remove("gene_delta_retry")
+        }
         return {
           ok: true,
-          segments: state.segments.length,
-          entry_count: projection.entry_count,
           advertised: advertised.written,
+          current: projection.current,
+          more: pending,
         }
       })
     }
 
     async alarm() {
+      // Per-gene reader delivery is independent of legacy finalization and its
+      // D1 pause. Network work for gene materialization remains outside both.
+      let delta
+      try {
+        delta = await this.projectGeneDeltaStep()
+        if (delta.more) await this.armDelta(1000)
+      } catch (error) {
+        await this.deferDelta(error)
+      }
       return this.exclusive(async () => {
         try {
-          const existingHead = this.repo.get("head")
-          if (existingHead?.current?.version !== this.projectedHeadVersion) {
-            const projection = await projectPublicCardHead(this.env, existingHead)
-            this.projectedHeadVersion = projection?.current || null
-            this.projectionDeferred = null
-          }
+          await this.projectBaseOrRetainView()
           const result = await this.publisher.step()
-          await this.projectGeneDeltaStep()
-          if (result.committed) {
-            const projection = await projectPublicCardHead(this.env, this.repo.get("head"))
-            this.projectedHeadVersion = projection?.current || null
-          }
+          if (result.committed) await this.projectBaseOrRetainView()
           if (this.repo.get("failure")) {
             this.repo.reserveWrites(2)
             this.repo.remove("failure")
           }
           if (result.more) await this.arm(1000)
+          if (this.geneDelta.projection_pending) await this.armDelta(1000)
         } catch (error) {
-          // At-least-once alarms must not exhaust platform retries and abandon
-          // durable work. Retry only an existing job, with bounded backoff.
-          // A quiet publication has no recurring alarm and does no row writes.
           await this.scheduleRetry(error)
         }
       })
@@ -345,11 +424,13 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           try {
             const outcome = applyGeneCommit(this.geneDelta, payload)
             if (!outcome.accepted) {
+              if (this.geneDelta.projection_pending) await this.armDelta(1000)
               return reply({ ok: true, accepted: false, replayed: true, seq: this.geneDelta.seq })
             }
+            this.repo.reserveWrites(2, { control: true })
+            this.repo.put("gene_delta", outcome.state)
             this.geneDelta = outcome.state
-            this.persistGeneDelta()
-            await this.arm(1000, { control: true })
+            await this.armDelta(1000)
             return reply({
               ok: true,
               accepted: true,
