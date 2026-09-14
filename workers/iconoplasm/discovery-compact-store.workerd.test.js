@@ -36,6 +36,14 @@ function measuredDb(db, receipts) {
   }
 }
 
+async function installSchema(db) {
+  for (const statement of DISCOVERY_COMPACT_SCHEMA_SQL.split(";")
+    .map((sql) => sql.trim())
+    .filter(Boolean)) {
+    await db.exec(statement)
+  }
+}
+
 test(
   "real D1 compact discovery commits stay row-bounded and conflicts roll back",
   { timeout: 60000 },
@@ -54,7 +62,7 @@ test(
     )
     try {
       const db = await runtime.getD1Database("DB")
-      await db.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+      await installSchema(db)
       const dictionary = createDiscoveryOrdinalDictionary([
         { symbol: "TP53", ordinal: 0 },
         { symbol: "BRCA1", ordinal: 1 },
@@ -157,6 +165,10 @@ test(
           ).n,
         ),
         1,
+      )
+      console.log(
+        "B764_D1_RECEIPT",
+        JSON.stringify({ ten_event_batch: firstWrite, sixty_four_event_chunk_batch: chunkWrite }),
       )
     } finally {
       await runtime.dispose()
