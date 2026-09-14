@@ -36,6 +36,7 @@ jobs:
             workers/lib/iconoplasm-card-reader-view.test.js \
             workers/iconoplasm.vote-authority-handoff.test.js \
             workers/iconoplasm.reader-view-publication.test.js \
+            workers/iconoplasm/discovery-ordinal-dictionary.test.js \
             workers/iconoplasm/discovery-compact-state.test.js \
             workers/iconoplasm/discovery-compact-store.test.js \
             workers/iconoplasm/discovery-compact-admin.test.js \
