@@ -1,0 +1,32 @@
+name: B-762 source snapshot
+on:
+  push:
+    branches: ["work/b762-sysop-v2-state"]
+permissions:
+  contents: read
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Pack exact integration sources
+        run: |
+          tar -czf b762-integration-source.tgz \
+            workers \
+            iconoplasm-extension \
+            migrations-iconoplasm \
+            scripts \
+            package.json \
+            pnpm-lock.yaml \
+            wrangler.toml \
+            .github/workflows/deploy-quartz.yml \
+            .github/workflows/b762-sysop-v2-isolated.yml
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b762-integration-source
+          path: b762-integration-source.tgz
+          if-no-files-found: error
+          retention-days: 1
