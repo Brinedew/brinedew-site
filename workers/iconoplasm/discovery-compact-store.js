@@ -215,4 +215,13 @@ CREATE TABLE icono_discovery_chronology_v2 (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(user_id, chunk_seq)
 ) WITHOUT ROWID;
+CREATE TABLE icono_discovery_shared_delivery_receipts_v2 (
+  delivery_id TEXT PRIMARY KEY CHECK(length(delivery_id) BETWEEN 3 AND 320),
+  user_id TEXT NOT NULL CHECK(length(user_id) BETWEEN 1 AND 160),
+  batch_id TEXT NOT NULL CHECK(length(batch_id) BETWEEN 1 AND 128),
+  user_state_version INTEGER NOT NULL CHECK(user_state_version >= 1),
+  dictionary_version INTEGER NOT NULL CHECK(dictionary_version >= 1),
+  payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256) = 64),
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+) WITHOUT ROWID;
 `
