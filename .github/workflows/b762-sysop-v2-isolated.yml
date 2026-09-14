@@ -33,7 +33,8 @@ jobs:
             workers/iconoplasm/vote-authority/gene-publication-state.workerd.test.js \
             workers/lib/iconoplasm-card-publication-materialize-symbol.test.js \
             scripts/b762-v1-excision-audit.mjs \
-            scripts/b762-publication-path-audit.mjs | tee b762-isolated-tests.txt
+            scripts/b762-publication-path-audit.mjs \
+            scripts/b762-cutover-coherence-audit.mjs | tee b762-isolated-tests.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:

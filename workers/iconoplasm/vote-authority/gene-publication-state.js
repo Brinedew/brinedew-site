@@ -198,7 +198,7 @@ export class IconoplasmGenePublicationState {
   }
 
   /** Explicit migration only: caller has already verified the old public bytes. */
-  async seedPublished(desired, published) {
+  async seedPublished(desired, published, { guard } = {}) {
     // The caller proves the prior public bytes exist; the desired identity is
     // recomputed from live authority here, so the artifact is re-signed to the
     // authority's selectionKey instead of a caller-supplied one.
@@ -212,6 +212,11 @@ export class IconoplasmGenePublicationState {
       valid.selectionKey,
     )
     return this.storage.transaction(async () => {
+      // A synchronous handover fence: the caller revalidates its migration
+      // boundary inside the same exclusive transaction that commits the seed,
+      // so a concurrent accepted change aborts instead of certifying stale
+      // state. Throwing here rolls the seed back.
+      if (typeof guard === "function") guard()
       const prior = this.read()
       if (prior) {
         if (
