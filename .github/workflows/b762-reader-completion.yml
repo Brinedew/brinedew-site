@@ -1,0 +1,49 @@
+name: B-762 reader completion
+on:
+  push:
+    branches: ["work/b762-reader-completion"]
+permissions:
+  contents: read
+jobs:
+  reader-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve exact source for implementation
+        run: |
+          mkdir -p reader-evidence
+          git rev-parse HEAD > reader-evidence/source-head.txt
+          git archive --format=tar.gz --output=reader-evidence/source.tar.gz HEAD workers shared scripts docs plans architecture-fences.json cloudflare package.json pnpm-lock.yaml pnpm-workspace.yaml AGENTS.md CLAUDE.md .github/workflows wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install locked test runtime
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Retained audit checks
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/b762-v1-excision-audit.mjs scripts/b762-publication-path-audit.mjs scripts/b762-cutover-coherence-audit.mjs 2>&1 | tee reader-evidence/audits.txt
+      - name: Reader and owner behavior
+        shell: bash
+        run: |
+          set -o pipefail
+          FILES=(workers/lib/iconoplasm-card-gene-delta.test.js workers/iconoplasm.vote-authority-handoff.test.js workers/iconoplasm.card-publication-coordinator.test.js)
+          for FILE in workers/lib/iconoplasm-card-reader-view.test.js workers/iconoplasm.reader-view-routing.test.js; do
+            if [ -f "$FILE" ]; then FILES+=("$FILE"); fi
+          done
+          node --test "${FILES[@]}" 2>&1 | tee reader-evidence/readers.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b762-reader-evidence
+          path: reader-evidence
+          retention-days: 7
+          if-no-files-found: error
