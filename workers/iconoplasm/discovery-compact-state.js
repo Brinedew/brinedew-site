@@ -1,9 +1,11 @@
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const BATCH_ID = /^[A-Za-z0-9._:-]{1,128}$/
+const SEQUENCED_BATCH_ID = /^([A-Za-z0-9_-]{8,64}):([1-9][0-9]{0,15})$/
 const MAX_ORDINAL = 1_000_000
 export const DISCOVERY_COMPACT_SCHEMA = "iconoplasm.discoveryCompact.v1"
 export const DISCOVERY_CHUNK_EVENTS = 64
 export const DISCOVERY_RECENT_RECEIPTS = 32
+export const DISCOVERY_DEVICE_RECEIPT_LIMIT = 16
 
 function cleanPositiveInt(value, label) {
   const n = Number(value)
@@ -75,6 +77,15 @@ function ensureUint32Length(values, length) {
   return next
 }
 
+function sequencedBatch(value) {
+  const match = String(value || "").match(SEQUENCED_BATCH_ID)
+  if (!match) return null
+  const sequence = Number(match[2])
+  if (!Number.isSafeInteger(sequence) || sequence < 1)
+    throw new TypeError("Invalid discovery batch sequence")
+  return { device_id: match[1], sequence }
+}
+
 export function createDiscoveryOrdinalDictionary(entries, { version = 1 } = {}) {
   const dictionaryVersion = cleanPositiveInt(version, "dictionary version")
   if (dictionaryVersion < 1) throw new TypeError("Invalid dictionary version")
@@ -143,6 +154,15 @@ function normalizeEncounter(raw, dictionary) {
   return { symbol, ordinal, at: normalizeEpochSeconds(raw?.at), source, trigger, dwell_ms: dwell }
 }
 
+function deviceReceiptState(receipts, batch) {
+  if (!batch) return null
+  const matches = receipts
+    .map((receipt) => ({ receipt, batch: sequencedBatch(receipt.batch_id) }))
+    .filter((item) => item.batch?.device_id === batch.device_id)
+    .sort((left, right) => right.batch.sequence - left.batch.sequence)
+  return matches[0] || null
+}
+
 export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters }) {
   if (!BATCH_ID.test(String(batchId || ""))) throw new TypeError("Invalid discovery batch id")
   if (!dictionary?.bySymbol || !Number.isInteger(dictionary.version))
@@ -155,6 +175,45 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
   const replay = state.recent_receipts.find((receipt) => receipt.batch_id === batchId)
   if (replay)
     return { replay: true, state, receipt: { ...replay }, sealed_chunks: [], shared_deltas: [] }
+
+  const sequence = sequencedBatch(batchId)
+  const priorDevice = deviceReceiptState(state.recent_receipts, sequence)
+  if (sequence) {
+    if (priorDevice && sequence.sequence < priorDevice.batch.sequence) {
+      return {
+        replay: true,
+        stale: true,
+        state,
+        receipt: {
+          batch_id: String(batchId),
+          state_version: priorDevice.receipt.state_version,
+          accepted_events: 0,
+          member_count: state.member_count,
+          dictionary_version: state.dictionary_version || dictionary.version,
+          superseded_by: priorDevice.receipt.batch_id,
+        },
+        sealed_chunks: [],
+        shared_deltas: [],
+      }
+    }
+    const expectedSequence = priorDevice ? priorDevice.batch.sequence + 1 : 1
+    if (sequence.sequence !== expectedSequence) {
+      throw Object.assign(new Error("Discovery batch sequence gap"), {
+        code: "DISCOVERY_BATCH_SEQUENCE_GAP",
+        expected_sequence: expectedSequence,
+      })
+    }
+    const knownDevices = new Set(
+      state.recent_receipts
+        .map((receipt) => sequencedBatch(receipt.batch_id)?.device_id)
+        .filter(Boolean),
+    )
+    if (!priorDevice && knownDevices.size >= DISCOVERY_DEVICE_RECEIPT_LIMIT) {
+      throw Object.assign(new Error("Discovery device receipt capacity exceeded"), {
+        code: "DISCOVERY_DEVICE_LIMIT",
+      })
+    }
+  }
 
   const normalized = encounters.map((encounter) => normalizeEncounter(encounter, dictionary))
   const maxOrdinal = Math.max(
@@ -224,11 +283,24 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
     accepted_events: normalized.length,
     member_count: memberCount,
     dictionary_version: dictionary.version,
+    ...(sequence ? { device_id: sequence.device_id, sequence: sequence.sequence } : {}),
   }
-  const recentReceipts = [
-    ...state.recent_receipts.filter((item) => item.batch_id !== batchId),
-    receipt,
-  ].slice(-DISCOVERY_RECENT_RECEIPTS)
+  let recentReceipts
+  if (sequence) {
+    recentReceipts = [
+      ...state.recent_receipts.filter(
+        (item) => sequencedBatch(item.batch_id)?.device_id !== sequence.device_id,
+      ),
+      receipt,
+    ]
+  } else {
+    const sequenced = state.recent_receipts.filter((item) => sequencedBatch(item.batch_id))
+    const generic = state.recent_receipts
+      .filter((item) => !sequencedBatch(item.batch_id) && item.batch_id !== batchId)
+      .concat(receipt)
+      .slice(-DISCOVERY_RECENT_RECEIPTS)
+    recentReceipts = [...sequenced, ...generic]
+  }
   const nextState = {
     schema: DISCOVERY_COMPACT_SCHEMA,
     dictionary_version: dictionary.version,
