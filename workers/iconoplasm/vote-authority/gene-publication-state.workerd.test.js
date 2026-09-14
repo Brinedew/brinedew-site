@@ -12,12 +12,13 @@ test("B-762 publication state in real SQLite Durable Objects", { timeout: 120000
     require.resolve("wrangler/package.json"),
   )("miniflare")
   const source = readFileSync(new URL("./gene-publication-state.js", import.meta.url), "utf8")
-  const runtime = new Miniflare(convertV4MiniflareOptions({
-    modules: true,
-    compatibilityDate: "2025-11-12",
-    compatibilityFlags: ["nodejs_compat"],
-    durableObjects: { PROBE: { className: "Probe", useSQLite: true } },
-    script: `${source}
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: true,
+      compatibilityDate: "2025-11-12",
+      compatibilityFlags: ["nodejs_compat"],
+      durableObjects: { PROBE: { className: "Probe", useSQLite: true } },
+      script: `${source}
       export class Probe {
         constructor(state) {
           this.state = state;
@@ -77,16 +78,31 @@ test("B-762 publication state in real SQLite Durable Objects", { timeout: 120000
         return env.PROBE.get(env.PROBE.idFromName(new URL(request.url).pathname)).fetch(request);
       }}
     `,
-  }))
+    }),
+  )
   t.after(() => runtime.dispose())
-  const call = async (gene, body) => (
-    await runtime.dispatchFetch(`https://test/${gene}`, { method: "POST", body: JSON.stringify(body) })
-  ).json()
-  const selected = (n) => ({ selectionKey: String(n).padStart(64, "0"), selectionRef: `revision:${n}` })
-  const object = (n) => ({ selectionKey: selected(n).selectionKey, contentSha256: "a".repeat(64), objectKey: `cards/${n}.json` })
+  const call = async (gene, body) =>
+    (
+      await runtime.dispatchFetch(`https://test/${gene}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      })
+    ).json()
+  const selected = (n) => ({
+    selectionKey: String(n).padStart(64, "0"),
+    selectionRef: `revision:${n}`,
+  })
+  const object = (n) => ({
+    selectionKey: selected(n).selectionKey,
+    contentSha256: "a".repeat(64),
+    objectKey: `cards/${n}.json`,
+  })
 
   const rolledBack = await call("ROLLBACK", {
-    op: "commit", selection: selected(1), mutateVote: true, failAfterAlarm: true,
+    op: "commit",
+    selection: selected(1),
+    mutateVote: true,
+    failAfterAlarm: true,
   })
   assert.match(rolledBack.error, /AFTER native setAlarm/)
   assert.equal(rolledBack.state, null)
@@ -109,7 +125,11 @@ test("B-762 publication state in real SQLite Durable Objects", { timeout: 120000
   assert.equal(stale.cost.rowsWritten, 0)
   assert.equal(stale.state.pending, true)
   const current = await call("TP53", { op: "begin", consumeAlarm: true })
-  const published = await call("TP53", { op: "complete", ticket: current.result, artifact: object(2) })
+  const published = await call("TP53", {
+    op: "complete",
+    ticket: current.result,
+    artifact: object(2),
+  })
   assert.equal(published.result.applied, true)
   assert.equal(published.cost.rowsWritten, 1)
 
@@ -125,6 +145,15 @@ test("B-762 publication state in real SQLite Durable Objects", { timeout: 120000
   assert.equal(idle.alarm, null)
   assert.equal(idle.cost.rowsWritten, 0)
   assert.equal(idle.cost.alarmWrites, 0)
-  t.diagnostic(JSON.stringify({ first: first.cost, noop: noop.cost, begin: old.cost,
-    stale: stale.cost, published: published.cost, idle: idle.cost, rollback: rolledBack.cost }))
+  t.diagnostic(
+    JSON.stringify({
+      first: first.cost,
+      noop: noop.cost,
+      begin: old.cost,
+      stale: stale.cost,
+      published: published.cost,
+      idle: idle.cost,
+      rollback: rolledBack.cost,
+    }),
+  )
 })

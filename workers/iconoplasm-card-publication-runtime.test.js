@@ -349,7 +349,7 @@ test("gene delta projection writes the KV document once and skips unchanged byte
   assert.equal(repeat.written, false)
   assert.equal(writes, 1)
   assert.deepEqual(
-    JSON.parse(values.get("iconoplasm:gene-delta")).segments[0].key,
+    JSON.parse(values.get("iconoplasm:gallery-version")).segments[0].key,
     projection.segments[0].key,
   )
 })

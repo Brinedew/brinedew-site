@@ -1,5 +1,12 @@
 # Website project rules
 
+B-762 reader implementation: before editing current card views, read the
+immutable-reader-view section of `docs/ICONOPLASM_CARD_PUBLICATION_V2.md`.
+The existing KV current key can name a self-locating base-plus-directory view.
+Historical view IDs keep their original contents; the per-gene owner and bounded
+copy-on-write directory share the existing publication authority. Source-only
+reader progress does not close B-762 or authorize production/extension release.
+
 ## Recovery ownership fence: RECOVERY-001
 
 Read [Recovery Ownership Contract](docs/RECOVERY_OWNERSHIP_CONTRACT.md) before incident, capacity,

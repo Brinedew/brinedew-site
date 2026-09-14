@@ -9,6 +9,7 @@ const IMMUTABLE = "public, max-age=31536000, immutable"
 
 export function createHoverDeliveryHandlers({
   barrier,
+  readerView = null,
   manifest,
   shard,
   object,
@@ -73,6 +74,18 @@ export function createHoverDeliveryHandlers({
   return {
     async index({ env, match }) {
       const version = match.params.snapshot
+      if (readerView?.parse(version)) {
+        await readerView.read(env, version)
+        return json(
+          {
+            schema_version: 1,
+            snapshot_version: version,
+            ranges: [["0", "Z".repeat(64), readerView.parse(version).hash]],
+          },
+          200,
+          { "Cache-Control": IMMUTABLE },
+        )
+      }
       if (!(await versions(env)).includes(version)) return failure("card_snapshot_retired", 410)
       const refs = ranges(await manifest(env, version))
       if (!refs) return failure("card_delivery_index_unavailable")
@@ -99,12 +112,36 @@ export function createHoverDeliveryHandlers({
       const key = new Request(url, { method: "GET" })
       const cached = await cache?.match(key)
       if (cached) return cached
+      let viewVersion = null
+      const admittedVersions = await versions(env)
+      for (const version of admittedVersions) {
+        if (readerView?.parse(version)?.hash === hash) {
+          viewVersion = version
+          break
+        }
+      }
+      if (viewVersion) {
+        const record = await readerView.record(env, viewVersion, symbol, lane)
+        if (!record || (lane === "portraits" && !HASH.test(record.portrait?.asset_sha256 || "")))
+          return failure("card_content_missing", 404)
+        const response = json(
+          { schema_version: 1, content_hash: hash, symbol, lane, record },
+          200,
+          {
+            "Cache-Control": IMMUTABLE,
+            ETag: `"hover-v1-${hash}-${lane}-${symbol}"`,
+            "X-Iconoplasm-Data-Source": "published-card-content",
+          },
+        )
+        if (cache) ctx?.waitUntil?.(cache.put(key, response.clone()))
+        return response
+      }
       // Only published hashes can fill a cache. An immutable cached response
       // remains valid as historical content, just like the browser HTTP cache.
       let selected = null
       let selectedVersion = null
       let selectedStorage = null
-      for (const version of await versions(env)) {
+      for (const version of admittedVersions) {
         const catalog = await manifest(env, version)
         const refs = ranges(catalog)
         const ref = refs?.find(
@@ -116,6 +153,31 @@ export function createHoverDeliveryHandlers({
           selectedVersion = version
           selectedStorage = catalog.storage
           break
+        }
+      }
+      if (!selected && readerView) {
+        // Historical composite views are self-locating even after the mutable
+        // current head changes. A legacy shard does not use this descriptor.
+        try {
+          viewVersion = await readerView.fromHash(env, hash)
+        } catch {
+          /* not a view */
+        }
+        if (viewVersion) {
+          const record = await readerView.record(env, viewVersion, symbol, lane)
+          if (!record || (lane === "portraits" && !HASH.test(record.portrait?.asset_sha256 || "")))
+            return failure("card_content_missing", 404)
+          const response = json(
+            { schema_version: 1, content_hash: hash, symbol, lane, record },
+            200,
+            {
+              "Cache-Control": IMMUTABLE,
+              ETag: `"hover-v1-${hash}-${lane}-${symbol}"`,
+              "X-Iconoplasm-Data-Source": "published-card-content",
+            },
+          )
+          if (cache) ctx?.waitUntil?.(cache.put(key, response.clone()))
+          return response
         }
       }
       if (!selected) return failure("card_snapshot_retired", 410)
