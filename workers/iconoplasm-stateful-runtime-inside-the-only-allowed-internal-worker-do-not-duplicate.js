@@ -17178,6 +17178,13 @@ export class IconoplasmVoteCoordinator {
       if (this.getMeta("authority_epoch") === "v2" && this.publication.read()?.pending) {
         await this.publication.recoverWakeup()
       }
+      // Durable reader-projection handoff survives a crash between local
+      // publication and the shared view: re-enqueue from the published artifact
+      // and wake the shared alarm, which drains it.
+      const recoveredHandoff = this.ensureReaderHandoffFromPublished()
+      if (recoveredHandoff && !this.getMeta("outbox_budget_retry_at")) {
+        await this.armOutboxAlarm(1000)
+      }
     })
   }
 
@@ -17192,6 +17199,15 @@ export class IconoplasmVoteCoordinator {
         created_at TEXT NOT NULL DEFAULT '',
         revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS publication_handoffs (
+        symbol TEXT PRIMARY KEY,
+        version INTEGER NOT NULL,
+        selection_key TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL DEFAULT 0,
+        delivered_at TEXT
       );
     `)
     this.publication.install()
@@ -17531,6 +17547,7 @@ export class IconoplasmVoteCoordinator {
       if (outcome.applied) {
         const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
         if (assetSha) this.setMeta("published_asset_sha256", assetSha)
+        this.recordReaderHandoff(ticket, published)
       }
       return { ok: true, pending: false, ...outcome }
     } catch (error) {
@@ -17543,6 +17560,147 @@ export class IconoplasmVoteCoordinator {
         error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
       }
     }
+  }
+
+  /**
+   * Durable handover to the shared reader-view owner. The verified receipts are
+   * persisted locally first, so a crash between local publication and the KV
+   * projection is recovered on restart and retried with bounded backoff.
+   */
+  recordReaderHandoff(ticket, published) {
+    const artifacts = published?.projections
+    if (!artifacts) return null
+    const symbol = normalizeSymbol(this.getMeta("symbol"))
+    const version = Number(ticket?.desiredVersion || 0)
+    const selectionKey = normalizeSha256(ticket?.selectionKey || "")
+    if (!symbol || !Number.isSafeInteger(version) || version < 1 || !selectionKey) return null
+    const payload = {
+      symbol,
+      version,
+      selection_key: selectionKey,
+      withdrawn: !winnerAssetShaFromSelectionReference(ticket.selectionRef),
+      card: { key: published.objectKey, hash: published.contentSha256 },
+      gene: { key: artifacts.gene.key, hash: artifacts.gene.hash },
+      portrait: { key: artifacts.portrait.key, hash: artifacts.portrait.hash },
+    }
+    return this.state.storage.transactionSync(() => {
+      this.state.storage.sql.exec(
+        `INSERT INTO publication_handoffs (
+           symbol, version, selection_key, payload_json, attempts, next_attempt_at, delivered_at
+         ) VALUES (?, ?, ?, ?, 0, 0, NULL)
+         ON CONFLICT(symbol) DO UPDATE SET
+           version = excluded.version,
+           selection_key = excluded.selection_key,
+           payload_json = excluded.payload_json,
+           attempts = 0,
+           next_attempt_at = 0,
+           delivered_at = NULL
+         WHERE excluded.version >= publication_handoffs.version`,
+        symbol,
+        version,
+        selectionKey,
+        JSON.stringify(payload),
+      )
+      return payload
+    })
+  }
+
+  ensureReaderHandoffFromPublished() {
+    if (this.getMeta("authority_epoch") !== "v2") return null
+    const state = this.publication.read()
+    if (!state?.publishedArtifact?.projections) return null
+    const symbol = normalizeSymbol(this.getMeta("symbol"))
+    if (!symbol) return null
+    const existing = this.sqlFirst(
+      `SELECT version, delivered_at FROM publication_handoffs WHERE symbol = ?`,
+      symbol,
+    )
+    if (existing && Number(existing.version) >= state.publishedVersion && existing.delivered_at) {
+      return null
+    }
+    return this.recordReaderHandoff(
+      {
+        desiredVersion: state.publishedVersion,
+        selectionKey: state.publishedArtifact.selectionKey,
+        selectionRef: state.selectionRef,
+      },
+      state.publishedArtifact,
+    )
+  }
+
+  async drainReaderHandoffs(env = this.env) {
+    const rows = this.state.storage.sql
+      .exec(
+        `SELECT symbol, version, payload_json, attempts
+           FROM publication_handoffs
+          WHERE delivered_at IS NULL
+            AND next_attempt_at <= ?
+          ORDER BY version ASC
+          LIMIT 4`,
+        Date.now(),
+      )
+      .toArray()
+    if (!rows.length) {
+      const pending = Number(
+        this.state.storage.sql
+          .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
+          .toArray()[0]?.n || 0,
+      )
+      return { ok: true, delivered: 0, pending }
+    }
+    const binding = env?.ICONOPLASM_CARD_PUBLICATION
+    if (!binding) {
+      return {
+        ok: true,
+        delivered: 0,
+        pending: rows.length,
+        reason: "card_publication_binding_missing",
+      }
+    }
+    let delivered = 0
+    for (const row of rows) {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      const version = Number(row?.version || 0)
+      try {
+        const stub = binding.get(binding.idFromName("canonical-cards-v2"))
+        const response = await stub.fetch("https://card-publication.internal/commit-gene-version", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: String(row.payload_json || "{}"),
+        })
+        const data = await response.json().catch(() => null)
+        if (!response.ok || data?.ok !== true) {
+          throw new Error(String(data?.error || `Gene commit rejected (${response.status})`))
+        }
+        this.state.storage.sql.exec(
+          `UPDATE publication_handoffs
+              SET delivered_at = CURRENT_TIMESTAMP, attempts = 0, next_attempt_at = 0
+            WHERE symbol = ? AND version = ?`,
+          symbol,
+          version,
+        )
+        delivered += 1
+      } catch (error) {
+        const attempts = Number(row?.attempts || 0) + 1
+        const delay = Math.min(3600000, 1000 * 2 ** Math.min(attempts - 1, 12))
+        this.state.storage.sql.exec(
+          `UPDATE publication_handoffs
+              SET attempts = ?, next_attempt_at = ?
+            WHERE symbol = ? AND version = ?`,
+          attempts,
+          Date.now() + delay,
+          symbol,
+          version,
+        )
+      }
+    }
+    const pending = Number(
+      this.state.storage.sql
+        .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
+        .toArray()[0]?.n || 0,
+    )
+    if (pending) await this.armOutboxAlarm(1000)
+    return { ok: true, delivered, pending }
   }
 
   /**
@@ -17763,6 +17921,18 @@ export class IconoplasmVoteCoordinator {
         error: sanitizeText(String(error?.message || error || "publication failed"), 500),
       }
     }
+    // The durable reader-view handoff is D1-free and must drain even when no
+    // legacy outbox work exists, so a crash between local publication and the
+    // shared projection recovers.
+    let handoffResult
+    try {
+      handoffResult = await this.drainReaderHandoffs(this.env)
+    } catch (error) {
+      handoffResult = {
+        ok: false,
+        error: sanitizeText(String(error?.message || error || "reader handoff failed"), 500),
+      }
+    }
     if (
       !this.pendingOutboxRows(1).length &&
       !this.caretakerSupervotes.pendingOutboxRows(1).length
@@ -17770,12 +17940,19 @@ export class IconoplasmVoteCoordinator {
       return {
         ok: true,
         publication: publicationResult,
+        handoff: handoffResult,
         vote: { ok: true, delivered: 0, pending: 0 },
       }
     }
     if (retryAt > Date.now()) {
       await this.armOutboxAlarm(1)
-      return { ok: true, deferred: true, retry_at: retryAt, publication: publicationResult }
+      return {
+        ok: true,
+        deferred: true,
+        retry_at: retryAt,
+        publication: publicationResult,
+        handoff: handoffResult,
+      }
     }
     // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
     if (String(this.env.ICONOPLASM_SCHEMA_TRANSITION || "") === "1") {
@@ -17785,6 +17962,7 @@ export class IconoplasmVoteCoordinator {
         deferred: true,
         reason: "schema_transition",
         publication: publicationResult,
+        handoff: handoffResult,
       }
     }
     let env
@@ -17813,6 +17991,7 @@ export class IconoplasmVoteCoordinator {
       if (dailyError) throw dailyError
       return {
         publication: publicationResult,
+        handoff: handoffResult,
         vote: voteResult,
         caretaker_supervote: caretakerResult,
       }
@@ -17839,6 +18018,7 @@ export class IconoplasmVoteCoordinator {
         deferred: true,
         reason: "outbox_alarm_failed",
         publication: publicationResult,
+        handoff: handoffResult,
       }
     } finally {
       if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
