@@ -655,7 +655,19 @@ export class CaretakerSupervoteLedger {
     return this.storage.transactionSync(() => this.projectAssignmentCore(rawEvent))
   }
 
-  async setSelection({
+  async setSelection(options = {}) {
+    await this.armAlarm(1)
+    return this.storage.transactionSync(() => this.setSelectionCore(options))
+  }
+
+  /**
+   * Synchronous supervote mutation core. Callers that must commit this state
+   * together with the per-gene publication intent run it inside the shared
+   * storage transaction, so entitlement/version checks and command receipts
+   * are preserved while a failed intent can no longer leave a committed
+   * supervote change behind.
+   */
+  setSelectionCore({
     accountId,
     assetSha256 = null,
     direction = null,
@@ -678,8 +690,7 @@ export class CaretakerSupervoteLedger {
       expectedSupervoteVersion,
       "expected_supervote_version",
     )
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => {
+    {
       const receipt = first(
         this.sql,
         `SELECT request_sha256, response_json
@@ -823,7 +834,7 @@ export class CaretakerSupervoteLedger {
       )
       this.compactHistory()
       return response
-    })
+    }
   }
 
   projectAssetEligibilityInTransaction(rawEvent) {
