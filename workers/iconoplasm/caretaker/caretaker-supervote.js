@@ -489,14 +489,18 @@ export class CaretakerSupervoteLedger {
     })
   }
 
-  async projectAssignment(rawEvent) {
+  /**
+   * Synchronous assignment projection core. Callers that must commit this
+   * state together with another authority change (for example the per-gene
+   * publication intent) run it inside their own storage transaction.
+   */
+  projectAssignmentCore(rawEvent) {
     const event = normalizeAssignmentEvent(rawEvent)
     const coordinatorSymbol = normalizeSymbol(this.getSymbol() || event.gene_symbol)
     if (coordinatorSymbol !== event.gene_symbol) {
       fail("ASSIGNMENT_GENE_MISMATCH", "Assignment event belongs to another gene", 409)
     }
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => {
+    {
       const current = this.readAssignment()
       const head = this.readHead()
       if (current) {
@@ -643,7 +647,12 @@ export class CaretakerSupervoteLedger {
       )
       this.compactHistory()
       return { ok: true, changed: true, replayed: false, snapshot: this.snapshot() }
-    })
+    }
+  }
+
+  async projectAssignment(rawEvent) {
+    await this.armAlarm(1)
+    return this.storage.transactionSync(() => this.projectAssignmentCore(rawEvent))
   }
 
   async setSelection({
