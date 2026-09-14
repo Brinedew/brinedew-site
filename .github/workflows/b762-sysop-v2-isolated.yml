@@ -31,6 +31,7 @@ jobs:
             workers/iconoplasm.vote-coordinator-routing.test.js \
             workers/iconoplasm.vote-hot-path-cost.test.js \
             workers/iconoplasm/vote-authority/gene-publication-state.workerd.test.js \
+            workers/lib/iconoplasm-card-publication-materialize-symbol.test.js \
             scripts/b762-v1-excision-audit.mjs | tee b762-isolated-tests.txt
       - uses: actions/upload-artifact@v7
         if: always()

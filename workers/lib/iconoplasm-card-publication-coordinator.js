@@ -203,6 +203,17 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       if (request.method !== "POST") return reply({ error: "Not found" }, 404)
       try {
         return await this.exclusive(async () => {
+          if (path === "/materialize-symbol") {
+            const payload = await request.json().catch(() => ({}))
+            const result = await this.publisher.materializeSymbol(payload?.symbol, {
+              portraitAssetSha256: payload?.portrait_asset_sha256 || null,
+              withdraw: payload?.withdraw === true,
+            })
+            // Per-gene publication completes when its immutable objects are
+            // written and verified. The global head, watermark and job are
+            // deliberately untouched, so one gene never waits for others.
+            return reply({ ok: true, ...result })
+          }
           if (path === "/bootstrap") await this.publisher.bootstrap()
           else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
