@@ -14,17 +14,35 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Pack exact integration sources and repository contracts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install only the repository-locked test dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Pack exact integration sources and locked dependencies
         shell: bash
         run: |
           set -euo pipefail
           git ls-files -z workers iconoplasm-extension migrations-iconoplasm migrations-iconoplasm-authoring scripts shared quartz cloudflare docs .github AGENTS.md CLAUDE.md architecture-fences.json package.json pnpm-lock.yaml pnpm-workspace.yaml wrangler.toml 'wrangler*.toml' '.prettier*' | tar --null -T - -czf b762-integration-source.tgz
           git rev-parse HEAD > b762-integration-source.sha
+          tar -czf b762-locked-test-dependencies.tgz node_modules
+          sha256sum pnpm-lock.yaml b762-locked-test-dependencies.tgz > b762-locked-test-dependencies.sha256
       - uses: actions/upload-artifact@v7
         with:
           name: b762-integration-source
           path: |
             b762-integration-source.tgz
             b762-integration-source.sha
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b762-locked-test-dependencies
+          path: |
+            b762-locked-test-dependencies.tgz
+            b762-locked-test-dependencies.sha256
           if-no-files-found: error
           retention-days: 1
