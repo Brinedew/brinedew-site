@@ -64,6 +64,12 @@ import {
   createCardPublicationCoordinatorClass,
 } from "./lib/iconoplasm-card-publication-coordinator.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
+import {
+  parsePublishedViewId,
+  readAdvertisedGeneDeltaView,
+  readPublishedViewEntry,
+  resetPublishedViewReaderCachesForTest,
+} from "./lib/iconoplasm-card-reader-view.js"
 import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
@@ -26948,6 +26954,7 @@ export function resetIconoplasmRuntimeCachesForTest() {
   cardCatalogParsedManifestReadPromises.clear()
   cardCatalogParsedShardCache.clear()
   cardCatalogParsedShardReadPromises.clear()
+  resetPublishedViewReaderCachesForTest()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
@@ -30419,10 +30426,11 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
-const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
+export const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
   barrier: currentGalleryVersionBarrier,
+  readerView: readAdvertisedGeneDeltaView,
 })
-const hoverDeliveryHandlers = createHoverDeliveryHandlers({
+export const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   barrier: currentMobileCardSnapshotVersion,
   manifest: readPublishedCardCatalogManifest,
   shard: readPublishedCardCatalogShard,
@@ -30434,7 +30442,46 @@ const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   json,
 })
 
-async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
+/**
+ * B-762 exact resolution for a snapshot-addressed reader. The view id is an
+ * exact immutable identity: base epoch plus the content hash of the chain
+ * object that names the exact segment set. `committed` carries the verified
+ * immutable record, `withdrawn` is a tombstone that must stay missing,
+ * `absent` means the symbol is untouched and must resolve from the view's own
+ * base epoch, and `unavailable` fails closed instead of reading newer state.
+ */
+async function readPublishedViewRecord(env, view, kind, symbol) {
+  let resolved
+  try {
+    resolved = await readPublishedViewEntry({
+      readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
+      chainHash: view.chainHash,
+      base: view.base,
+      symbol,
+    })
+  } catch {
+    return { status: "unavailable", code: "VIEW_READ_FAILED" }
+  }
+  if (!resolved.ok) return { status: "unavailable", code: resolved.code }
+  if (!resolved.entry) return { status: "absent" }
+  if (resolved.entry.status === "withdrawn") return { status: "withdrawn" }
+  const receipt = resolved.entry[kind]
+  if (!receipt) return { status: "unavailable", code: "ENTRY_RECEIPT_MISSING" }
+  let record = null
+  try {
+    record = await readPublishedBunnyCardObject(
+      env,
+      receipt.key,
+      (value) => value?.symbol === symbol,
+    )
+  } catch {
+    record = null
+  }
+  if (!record) return { status: "unavailable", code: "ENTRY_RECORD_UNAVAILABLE" }
+  return { status: "committed", record }
+}
+
+export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
   if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
@@ -30446,11 +30493,14 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
   // ARCHITECTURE FENCE [IPD-008]: the version is part of the URL, so this read
   // is immutable and can be cached by the browser and CDN. It reads only the
   // published card artifact selected by that version; D1 is never a fallback.
+  const view = parsePublishedViewId(snapshotVersion)
   const barrier = await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
-  if (!publishedVersions.has(snapshotVersion)) {
+  // A delta view names its exact base epoch. That base must still be published
+  // and the view never resolves against a newer epoch.
+  if (!publishedVersions.has(view.base)) {
     return json(
       {
         error: "Published card snapshot is retired",
@@ -30477,17 +30527,56 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
     })
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
-  if (!artifact) {
-    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-Data-Source": "artifact-unavailable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-    })
+  let deltaRecord = null
+  if (view.chainHash) {
+    const resolved = await readPublishedViewRecord(env, view, "gene", symbol)
+    if (resolved.status === "unavailable") {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    if (resolved.status === "withdrawn") {
+      const withdrawn = json(
+        {
+          api_version: PUBLIC_API_VERSION,
+          schema_version: API_SCHEMA_VERSION,
+          snapshot_version: snapshotVersion,
+          canonical_key: "symbol",
+          gene: null,
+          missing: [symbol],
+        },
+        404,
+        {
+          "Cache-Control": "public, max-age=31536000, immutable",
+          ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
+          "X-Iconoplasm-Data-Source": "published-card-catalog",
+          "X-Iconoplasm-Detail-Cache": "MISS",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        },
+      )
+      if (cache) ctx?.waitUntil?.(cache.put(cacheKey, withdrawn.clone()))
+      return withdrawn
+    }
+    if (resolved.status === "committed") deltaRecord = resolved.record
   }
 
-  const card = artifact.bySymbol.get(symbol)
-  const record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  let record = null
+  if (deltaRecord) {
+    record = projectGeneRecord(deltaRecord, null)
+  } else {
+    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+    if (!artifact) {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    const card = artifact.bySymbol.get(symbol)
+    record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  }
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -30535,7 +30624,13 @@ function publishedPortraitLocatorFromCard(card, snapshotVersion) {
   }
 }
 
-async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, symbolFromPath) {
+export async function handlePublicPortraitLocator(
+  request,
+  env,
+  ctx,
+  snapshotFromPath,
+  symbolFromPath,
+) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
   if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
@@ -30551,11 +30646,14 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
   // A byte-equivalent Bunny cache of this response is permitted. "One canon"
   // forbids independent selection/pointers, not caching. Worker Cache API hits
   // still consume a Worker invocation; do not mistake them for direct CDN hits.
+  const view = parsePublishedViewId(snapshotVersion)
   const barrier = await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
-  if (!publishedVersions.has(snapshotVersion)) {
+  // A delta view names its exact base epoch. That base must still be published
+  // and the view never resolves against a newer epoch.
+  if (!publishedVersions.has(view.base)) {
     return json(
       {
         error: "Published card snapshot is retired",
@@ -30583,15 +30681,49 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
     })
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
-  if (!artifact) {
-    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-Data-Source": "artifact-unavailable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-    })
+  let locator = null
+  if (view.chainHash) {
+    const resolved = await readPublishedViewRecord(env, view, "portrait", symbol)
+    if (resolved.status === "unavailable") {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    if (resolved.status === "committed") {
+      locator = publishedPortraitLocatorFromCard({ payload: resolved.record }, snapshotVersion)
+      // A committed tombstone is a real missing result; an unprojectable
+      // committed record is a broken publication invariant and fails closed.
+      if (!locator) {
+        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+          "Cache-Control": "no-store",
+          "X-Iconoplasm-Data-Source": "artifact-unavailable",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        })
+      }
+    } else if (resolved.status === "absent") {
+      const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+      if (!artifact) {
+        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+          "Cache-Control": "no-store",
+          "X-Iconoplasm-Data-Source": "artifact-unavailable",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        })
+      }
+      locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
+    }
+  } else {
+    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+    if (!artifact) {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
   }
-  const locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,

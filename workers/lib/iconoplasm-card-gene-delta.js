@@ -18,6 +18,11 @@ const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
 export const GENE_DELTA_SEGMENT_ENTRY_CAP = 120
 export const GENE_DELTA_CHAIN_LIMIT = 6
 export const GENE_DELTA_SCHEMA_VERSION = 1
+export const GENE_DELTA_CHAIN_KIND = "gene_delta_chain"
+export const PUBLIC_GENE_DELTA_PROJECTION_KEY = "iconoplasm:gene-delta"
+
+const PUBLISHED_OBJECT_KEY =
+  /^published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|manifests)\/([a-f0-9]{64})\.json$/
 
 export function emptyGeneDeltaState() {
   return {
@@ -29,6 +34,7 @@ export function emptyGeneDeltaState() {
     projection_pending: false,
     projected_hash: null,
     coalesce: null,
+    chain: null,
   }
 }
 
@@ -48,6 +54,15 @@ function storedKey(value, name) {
     throw new TypeError(`${name} must be a relative immutable Storage key`)
   }
   return value
+}
+
+function provenReceipt(value, name) {
+  const proven = receipt(value, name)
+  const match = PUBLISHED_OBJECT_KEY.exec(proven.key)
+  if (!match || match[2] !== proven.hash) {
+    throw new TypeError(`${name} must be a published immutable object key`)
+  }
+  return proven
 }
 
 function receipt(value, name) {
@@ -73,9 +88,9 @@ export function normalizeGeneCommit(raw) {
     version,
     selectionKey,
     withdrawn: raw?.withdrawn === true,
-    card: receipt(raw?.card, "card"),
-    gene: receipt(raw?.gene, "gene"),
-    portrait: receipt(raw?.portrait, "portrait"),
+    card: provenReceipt(raw?.card, "card"),
+    gene: provenReceipt(raw?.gene, "gene"),
+    portrait: provenReceipt(raw?.portrait, "portrait"),
   }
 }
 
@@ -198,37 +213,171 @@ export function mergeSegmentEntries(segmentBodies, mergeSeqs) {
   return { schema_version: GENE_DELTA_SCHEMA_VERSION, seq: Math.max(...mergeSeqs), entries }
 }
 
-export function completeCoalesce(state, { mergeSeqs, key, hash }) {
+export function completeCoalesce(state, { mergeSeqs, key, hash, count }) {
   const merged = new Set(mergeSeqs)
   const survivors = state.segments.filter((segment) => !merged.has(segment.seq))
-  const count = Object.keys(state.pending).length
   return {
     ...state,
-    segments: [{ seq: Math.max(...mergeSeqs), key, hash, count }, ...survivors].sort(
-      (left, right) => left.seq - right.seq,
-    ),
+    segments: [
+      { seq: Math.max(...mergeSeqs), key, hash, count: Math.max(0, Number(count) || 0) },
+      ...survivors,
+    ].sort((left, right) => left.seq - right.seq),
     coalesce: null,
   }
 }
 
-export function deltaViewId(baseVersion, state) {
-  const base = String(baseVersion || "").trim()
-  const seq = Math.max(0, Number(state?.seq) || 0)
-  return seq > 0 && state?.segments?.length ? `${base}.d${seq}` : base
+function normalizedSegments(segments) {
+  return (Array.isArray(segments) ? segments : []).map((segment) => ({
+    seq: Number(segment.seq),
+    key: String(segment.key || ""),
+    hash: String(segment.hash || ""),
+    count: Number(segment.count || 0),
+  }))
 }
 
-export function buildGeneDeltaProjection({ baseVersion, state, committedAt = null }) {
+/**
+ * The immutable chain object is the exact resolution document for a delta view
+ * id: `indexes/<its own content hash>.json` carries the base artifact version
+ * and the exact ordered segment references. Compaction replaces references in
+ * live state, never in a written chain, so every advertised view id remains
+ * resolvable from immutable objects alone.
+ */
+export function geneDeltaChainBody(baseVersion, segments) {
+  return {
+    schema_version: GENE_DELTA_SCHEMA_VERSION,
+    kind: GENE_DELTA_CHAIN_KIND,
+    base: String(baseVersion || "").trim(),
+    segments: normalizedSegments(segments).map(({ seq, key, hash, count }) => ({
+      seq,
+      key,
+      hash,
+      count,
+    })),
+  }
+}
+
+export function geneDeltaChainFingerprint(baseVersion, segments) {
+  const normalized = normalizedSegments(segments)
+  return JSON.stringify([
+    String(baseVersion || "").trim(),
+    normalized.map(({ seq, key, hash, count }) => [seq, key, hash, count]),
+  ])
+}
+
+/**
+ * Reader-side validation of a chain object. The base must match the base named
+ * by the requested view id, so a chain can never be re-pointed at another
+ * catalog epoch.
+ */
+export function validateGeneDeltaChainBody(value, baseVersion) {
   const base = String(baseVersion || "").trim()
-  const segments = (state?.segments || []).map((segment) => ({
-    seq: segment.seq,
-    key: segment.key,
-    hash: segment.hash,
-    count: segment.count,
-  }))
+  if (!value || typeof value !== "object") return null
+  if (value.schema_version !== GENE_DELTA_SCHEMA_VERSION) return null
+  if (value.kind !== GENE_DELTA_CHAIN_KIND) return null
+  if (String(value.base || "").trim() !== base || !base) return null
+  if (!Array.isArray(value.segments)) return null
+  if (!value.segments.length || value.segments.length > GENE_DELTA_CHAIN_LIMIT) return null
+  const segments = []
+  let previous = 0
+  for (const raw of value.segments) {
+    const seq = Number(raw?.seq)
+    const key = String(raw?.key || "")
+    const hash = String(raw?.hash || "")
+    const count = Number(raw?.count)
+    const match = PUBLISHED_OBJECT_KEY.exec(key)
+    if (
+      !Number.isSafeInteger(seq) ||
+      seq <= previous ||
+      !match ||
+      match[1] !== "indexes" ||
+      match[2] !== hash ||
+      !SHA256.test(hash) ||
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      count > GENE_DELTA_SEGMENT_ENTRY_CAP
+    )
+      return null
+    previous = seq
+    segments.push({ seq, key, hash, count })
+  }
+  return { schema_version: GENE_DELTA_SCHEMA_VERSION, kind: GENE_DELTA_CHAIN_KIND, base, segments }
+}
+
+/** Reader-side validation of one immutable segment object at its exact seq. */
+export function validateGeneDeltaSegmentBody(value, seq) {
+  const expectedSeq = Number(seq)
+  if (!value || typeof value !== "object") return null
+  if (value.schema_version !== GENE_DELTA_SCHEMA_VERSION) return null
+  if (Number(value.seq) !== expectedSeq || !Number.isSafeInteger(expectedSeq)) return null
+  if (!value.entries || typeof value.entries !== "object" || Array.isArray(value.entries))
+    return null
+  const entries = {}
+  const symbols = Object.keys(value.entries)
+  if (symbols.length > GENE_DELTA_SEGMENT_ENTRY_CAP) return null
+  for (const symbol of symbols) {
+    const raw = value.entries[symbol]
+    if (!SYMBOL.test(symbol) || raw?.symbol !== symbol) return null
+    const version = Number(raw?.version)
+    const entrySeq = Number(raw?.seq)
+    if (!Number.isSafeInteger(version) || version < 1) return null
+    if (!Number.isSafeInteger(entrySeq) || entrySeq < 0) return null
+    if (raw.status !== "committed" && raw.status !== "withdrawn") return null
+    let card
+    let gene
+    let portrait
+    try {
+      card = provenReceipt(raw.card, `entries.${symbol}.card`)
+      gene = provenReceipt(raw.gene, `entries.${symbol}.gene`)
+      portrait = provenReceipt(raw.portrait, `entries.${symbol}.portrait`)
+    } catch {
+      return null
+    }
+    const entry = {
+      symbol,
+      version,
+      selection_key: String(raw.selection_key || ""),
+      seq: entrySeq,
+      status: raw.status,
+      card,
+      gene,
+      portrait,
+    }
+    if (!SHA256.test(entry.selection_key)) return null
+    entries[symbol] = entry
+  }
+  return { schema_version: GENE_DELTA_SCHEMA_VERSION, seq: expectedSeq, entries }
+}
+
+/**
+ * Exact immutable view id. The chain hash is the content hash of the chain
+ * object, so the id resolves to base + the exact segment set, even after later
+ * compaction rewrites live references. A base version with no delta stays the
+ * plain base version.
+ */
+export function deltaViewId(baseVersion, state, chainHash = null) {
+  const base = String(baseVersion || "").trim()
+  const seq = Math.max(0, Number(state?.seq) || 0)
+  const segments = Array.isArray(state?.segments) ? state.segments.length : 0
+  if (seq > 0 && segments && SHA256.test(String(chainHash || ""))) {
+    return `${base}.c${chainHash}`
+  }
+  return base
+}
+
+export function buildGeneDeltaProjection({
+  baseVersion,
+  state,
+  chainHash = null,
+  committedAt = null,
+}) {
+  const base = String(baseVersion || "").trim()
+  const segments = normalizedSegments(state?.segments)
+  const view = deltaViewId(base, state, chainHash)
   return {
     schema_version: GENE_DELTA_SCHEMA_VERSION,
     base,
-    view: deltaViewId(base, state),
+    view,
+    chain_hash: segments.length ? chainHash || null : null,
     segments,
     entry_count: segments.reduce((sum, segment) => sum + Number(segment.count || 0), 0),
     committed_at: committedAt,
