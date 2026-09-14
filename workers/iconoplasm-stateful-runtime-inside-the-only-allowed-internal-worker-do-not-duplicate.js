@@ -17231,10 +17231,19 @@ export class IconoplasmVoteCoordinator {
    * never run a cold full-history import. Unchanged rows do not write, and a
    * replaced (withdrawn) candidate disappears from the election.
    */
-  importGeneCandidateAuthority(rawItems, { replace = true } = {}) {
-    const items = Array.isArray(rawItems) ? rawItems.slice(0, 64) : []
+  importGeneCandidateAuthority(rawItems, options = {}) {
+    return this.state.storage.transactionSync(() =>
+      this.applyCandidateAuthorityCore(rawItems, options),
+    )
+  }
+
+  applyCandidateAuthorityCore(rawItems, { replace = true } = {}) {
+    if (!Array.isArray(rawItems))
+      throw new Error("Candidate authority items are required; refusing to clear candidates")
+    if (rawItems.length > 64)
+      throw new Error("Candidate authority batch exceeds the 64-candidate bound")
     const incoming = new Map()
-    for (const raw of items) {
+    for (const raw of rawItems) {
       const assetSha = normalizeSha256(raw?.asset_sha256 || "")
       if (!assetSha || incoming.has(assetSha)) continue
       incoming.set(assetSha, {
@@ -17249,40 +17258,39 @@ export class IconoplasmVoteCoordinator {
         created_at: sanitizeText(raw?.created_at || "", 64) || "",
       })
     }
-    return this.state.storage.transactionSync(() => {
-      const existing = new Map(
-        this.state.storage.sql
-          .exec(`SELECT * FROM gene_candidate_authority`)
-          .toArray()
-          .map((row) => [String(row.asset_sha256), row]),
-      )
-      let changed = false
-      for (const item of incoming.values()) {
-        const prior = existing.get(item.asset_sha256)
-        if (!prior) {
-          this.state.storage.sql.exec(
-            `INSERT INTO gene_candidate_authority (
+    const existing = new Map(
+      this.state.storage.sql
+        .exec(`SELECT * FROM gene_candidate_authority`)
+        .toArray()
+        .map((row) => [String(row.asset_sha256), row]),
+    )
+    let changed = false
+    for (const item of incoming.values()) {
+      const prior = existing.get(item.asset_sha256)
+      if (!prior) {
+        this.state.storage.sql.exec(
+          `INSERT INTO gene_candidate_authority (
                asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at, revision
              ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
-            item.asset_sha256,
-            item.status,
-            item.autopick_eligible,
-            item.is_stale,
-            item.is_legacy,
-            item.created_at,
-          )
-          changed = true
-          continue
-        }
-        const unchanged =
-          String(prior.status || "") === item.status &&
-          Number(prior.autopick_eligible) === item.autopick_eligible &&
-          Number(prior.is_stale) === item.is_stale &&
-          Number(prior.is_legacy) === item.is_legacy &&
-          String(prior.created_at || "") === item.created_at
-        if (unchanged) continue
-        this.state.storage.sql.exec(
-          `UPDATE gene_candidate_authority
+          item.asset_sha256,
+          item.status,
+          item.autopick_eligible,
+          item.is_stale,
+          item.is_legacy,
+          item.created_at,
+        )
+        changed = true
+        continue
+      }
+      const unchanged =
+        String(prior.status || "") === item.status &&
+        Number(prior.autopick_eligible) === item.autopick_eligible &&
+        Number(prior.is_stale) === item.is_stale &&
+        Number(prior.is_legacy) === item.is_legacy &&
+        String(prior.created_at || "") === item.created_at
+      if (unchanged) continue
+      this.state.storage.sql.exec(
+        `UPDATE gene_candidate_authority
               SET status = ?,
                   autopick_eligible = ?,
                   is_stale = ?,
@@ -17291,30 +17299,45 @@ export class IconoplasmVoteCoordinator {
                   revision = revision + 1,
                   updated_at = CURRENT_TIMESTAMP
             WHERE asset_sha256 = ?`,
-          item.status,
-          item.autopick_eligible,
-          item.is_stale,
-          item.is_legacy,
-          item.created_at,
-          item.asset_sha256,
+        item.status,
+        item.autopick_eligible,
+        item.is_stale,
+        item.is_legacy,
+        item.created_at,
+        item.asset_sha256,
+      )
+      changed = true
+    }
+    if (replace) {
+      for (const assetSha of existing.keys()) {
+        if (incoming.has(assetSha)) continue
+        this.state.storage.sql.exec(
+          `DELETE FROM gene_candidate_authority WHERE asset_sha256 = ?`,
+          assetSha,
         )
         changed = true
       }
-      if (replace) {
-        for (const assetSha of existing.keys()) {
-          if (incoming.has(assetSha)) continue
-          this.state.storage.sql.exec(
-            `DELETE FROM gene_candidate_authority WHERE asset_sha256 = ?`,
-            assetSha,
-          )
-          changed = true
-        }
-      }
-      return {
-        changed,
-        candidate_count: incoming.size,
-      }
-    })
+    }
+    return {
+      changed,
+      candidate_count: incoming.size,
+    }
+  }
+
+  /**
+   * Only the bounded candidate set participates in the election, so a gene
+   * with a large historical asset_summary never exports its whole history on
+   * the hot path. Scores for non-candidates cannot affect the winner.
+   */
+  geneAuthoritySummaries() {
+    return this.state.storage.sql
+      .exec(
+        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
+           FROM asset_summary
+          WHERE asset_sha256 IN (SELECT asset_sha256 FROM gene_candidate_authority)`,
+      )
+      .toArray()
+      .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }))
   }
 
   geneAuthorityWinner() {
@@ -17329,7 +17352,7 @@ export class IconoplasmVoteCoordinator {
       }))
     return electGeneAuthorityWinner({
       candidates,
-      summaries: this.exportAssetSummaries(),
+      summaries: this.geneAuthoritySummaries(),
       caretaker: this.caretakerSupervotes.snapshot(),
       currentAssetSha: normalizeSha256(this.getMeta("published_asset_sha256")) || null,
       adminOverride: this.getMeta("admin_override") === "1",
@@ -17361,19 +17384,12 @@ export class IconoplasmVoteCoordinator {
     if (this.getMeta("authority_epoch") !== "v2") {
       return { authority: "legacy", publication: null, vote: this.applyVoteMutation(options) }
     }
-    const election = this.geneAuthorityWinner()
-    if (!election?.winner && this.getMeta("admin_override") !== "1") {
-      // A v2 gene without an eligible authority winner keeps accepting votes
-      // but does not invent a selection or a publication.
-      return {
-        authority: "legacy_no_authority",
-        publication: null,
-        vote: this.applyVoteMutation(options),
-      }
-    }
+    // An activated v2 gene never falls back to legacy execution, including
+    // when its eligible set is empty: the selection becomes an explicit
+    // empty/tombstone identity and local recovery owns the next step.
     let vote = null
     const publication = await this.publication.commitSelection(() => {
-      vote = this.applyVoteMutationCore(options)
+      vote = this.applyVoteStateMutationCore(options)
       return this.authoritativeSelectionIdentity()
     })
     return { authority: "v2", publication, vote }
@@ -17418,6 +17434,16 @@ export class IconoplasmVoteCoordinator {
         error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
       }
     }
+  }
+
+  /**
+   * Any canonical-affecting mutation on an activated gene must update the
+   * publication intent in the same storage transaction. Returns null on the
+   * legacy epoch so v1 callers keep their exact behavior.
+   */
+  async commitAuthorityIntentIfActivated() {
+    if (this.getMeta("authority_epoch") !== "v2") return null
+    return this.publication.commitSelection(() => this.authoritativeSelectionIdentity())
   }
 
   pendingOutboxRows(limit = 50) {
@@ -17534,16 +17560,53 @@ export class IconoplasmVoteCoordinator {
 
   async alarm() {
     const retryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
+    // B-762: publication uses only this coordinator's SQLite state and the
+    // immutable object store. A legacy D1 pause must never block it, so the
+    // D1-free publication runs first and independently of legacy duties.
+    let publicationResult
+    try {
+      publicationResult = await this.drainGenePublication(this.env)
+    } catch (error) {
+      if (isIconoplasmDailyBudgetError(error)) {
+        const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+        this.setMeta("outbox_budget_retry_at", String(nextReset))
+        await this.armOutboxAlarm(1)
+        return {
+          ok: true,
+          deferred: true,
+          retry_at: nextReset,
+          reason: "daily_d1_budget",
+          publication: { ok: false, deferred: true },
+        }
+      }
+      publicationResult = {
+        ok: false,
+        error: sanitizeText(String(error?.message || error || "publication failed"), 500),
+      }
+    }
+    if (
+      !this.pendingOutboxRows(1).length &&
+      !this.caretakerSupervotes.pendingOutboxRows(1).length
+    ) {
+      return {
+        ok: true,
+        publication: publicationResult,
+        vote: { ok: true, delivered: 0, pending: 0 },
+      }
+    }
     if (retryAt > Date.now()) {
       await this.armOutboxAlarm(1)
-      return { ok: true, deferred: true, retry_at: retryAt }
+      return { ok: true, deferred: true, retry_at: retryAt, publication: publicationResult }
     }
-    if (!this.pendingOutboxRows(1).length && !this.caretakerSupervotes.pendingOutboxRows(1).length)
-      return { ok: true, delivered: 0, pending: 0 }
     // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
     if (String(this.env.ICONOPLASM_SCHEMA_TRANSITION || "") === "1") {
       await this.armOutboxAlarm(300000)
-      return { ok: true, deferred: true, reason: "schema_transition" }
+      return {
+        ok: true,
+        deferred: true,
+        reason: "schema_transition",
+        publication: publicationResult,
+      }
     }
     let env
     try {
@@ -17553,10 +17616,6 @@ export class IconoplasmVoteCoordinator {
       })
       env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
       if (retryAt) this.setMeta("outbox_budget_retry_at", "")
-      // One shared alarm serves every duty of this coordinator: its own gene's
-      // publication first, then the legacy outbox projections and caretaker
-      // delivery. A missing/unwired publication adapter never blocks them.
-      const publicationResult = await this.drainGenePublication(env)
       // Four ordinary outbox records plus two caretaker records share one
       // provider statement envelope, including enqueue and failure handling.
       const voteResult = await this.drainVoteOutbox(env, 4)
@@ -17583,14 +17642,25 @@ export class IconoplasmVoteCoordinator {
         const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
         this.setMeta("outbox_budget_retry_at", String(nextReset))
         await this.armOutboxAlarm(1)
-        return { ok: true, deferred: true, retry_at: nextReset, reason: "daily_d1_budget" }
+        return {
+          ok: true,
+          deferred: true,
+          retry_at: nextReset,
+          reason: "daily_d1_budget",
+          publication: publicationResult,
+        }
       }
       await this.armOutboxAlarm(900000)
       console.error(
         "Iconoplasm vote outbox alarm deferred after failure",
         String(error?.message || error),
       )
-      return { ok: false, deferred: true, reason: "outbox_alarm_failed" }
+      return {
+        ok: false,
+        deferred: true,
+        reason: "outbox_alarm_failed",
+        publication: publicationResult,
+      }
     } finally {
       if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
     }
@@ -17744,17 +17814,45 @@ export class IconoplasmVoteCoordinator {
   }
 
   applyVoteMutation(options = {}) {
-    return this.state.storage.transactionSync(() => this.applyVoteMutationCore(options))
+    return this.state.storage.transactionSync(() => {
+      const result = this.applyVoteStateMutationCore(options)
+      if (!result.changed) return result
+      const reason = voteProjectionRefreshJobReason(options?.reason || "vote_auto_promote")
+      this.state.storage.sql.exec(
+        `INSERT INTO vote_outbox (
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           reason,
+           created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        normalizeSha256(options?.assetSha256),
+        result.resolved_vision_id,
+        result.candidate_image_id,
+        normalizeUserId(options?.userId || ""),
+        result.final_vote_value,
+        reason,
+      )
+      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
+      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
+      this.state.storage.sql.exec(
+        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
+        mutationId,
+        outboxId,
+      )
+      return { ...result, mutation_id: mutationId }
+    })
   }
 
-  applyVoteMutationCore({
+  applyVoteStateMutationCore({
     assetSha256,
     userId,
     requestedVoteValue,
     visionId = "",
     candidateImageId = null,
     ensuredAsset = null,
-    reason = "vote_auto_promote",
   } = {}) {
     const safeAssetSha = normalizeSha256(assetSha256)
     const safeUserId = normalizeUserId(userId || "")
@@ -17829,31 +17927,6 @@ export class IconoplasmVoteCoordinator {
         )
       }
 
-      this.state.storage.sql.exec(
-        `INSERT INTO vote_outbox (
-           asset_sha256,
-           vision_id,
-           candidate_image_id,
-           user_id,
-           vote_value,
-           reason,
-           created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        safeAssetSha,
-        resolvedVisionId,
-        resolvedCandidateImageId,
-        safeUserId,
-        finalVoteValue,
-        voteProjectionRefreshJobReason(reason),
-      )
-      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
-      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
-      this.state.storage.sql.exec(
-        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
-        mutationId,
-        outboxId,
-      )
-
       const assetDelta = voteDeltaFromTransition(currentVoteValue, finalVoteValue)
       this.ensureAssetSummaryRow(safeAssetSha, {
         visionId: resolvedVisionId,
@@ -17909,7 +17982,7 @@ export class IconoplasmVoteCoordinator {
 
       return {
         changed: true,
-        mutation_id: mutationId,
+        mutation_id: null,
         current_vote_value: currentVoteValue,
         final_vote_value: finalVoteValue,
         resolved_vision_id: resolvedVisionId,
@@ -18147,7 +18220,19 @@ export class IconoplasmVoteCoordinator {
       // coordinator. None needs to import all historical ordinary votes.
       this.ensureSymbol(requestedSymbol)
       try {
-        return Response.json(await this.caretakerSupervotes.projectAssignment(payload?.event))
+        const result = await this.caretakerSupervotes.projectAssignment(payload?.event)
+        const publication = await this.commitAuthorityIntentIfActivated()
+        return Response.json({
+          ...result,
+          ...(publication
+            ? {
+                publication: {
+                  changed: publication.changed,
+                  pending: publication.state?.pending === true,
+                },
+              }
+            : {}),
+        })
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
           return Response.json(
@@ -18198,7 +18283,19 @@ export class IconoplasmVoteCoordinator {
           expectedAssignmentVersion: payload?.expected_assignment_version,
           expectedSupervoteVersion: payload?.expected_supervote_version,
         })
-        return Response.json({ ...result, symbol })
+        const publication = await this.commitAuthorityIntentIfActivated()
+        return Response.json({
+          ...result,
+          symbol,
+          ...(publication
+            ? {
+                publication: {
+                  changed: publication.changed,
+                  pending: publication.state?.pending === true,
+                },
+              }
+            : {}),
+        })
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
           return Response.json(
@@ -18253,21 +18350,69 @@ export class IconoplasmVoteCoordinator {
     }
 
     if (path === "/authority/candidates" && request.method === "POST") {
-      const payload = await request.json()
+      const payload = await request.json().catch(() => ({}))
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
       const symbol = this.ensureSymbol(requestedSymbol)
-      const imported = this.importGeneCandidateAuthority(payload?.items, {
-        replace: payload?.replace !== false,
-      })
+      if (!Array.isArray(payload?.items)) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_ITEMS_REQUIRED",
+            error: "Candidate authority requires a complete items array; refusing to clear",
+          },
+          { status: 400 },
+        )
+      }
+      if (payload.items.length > 64) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_BATCH_TOO_LARGE",
+            error: "Candidate authority batch exceeds the 64-candidate bound",
+          },
+          { status: 400 },
+        )
+      }
+      const replace = payload?.replace !== false
+      let imported = null
+      let publication = null
+      try {
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Candidate changes are canonical-affecting: one transaction updates
+          // the candidate authority and the publication intent, so a withdrawal
+          // of the current winner can never leave a stale clean pointer.
+          publication = await this.publication.commitSelection(() => {
+            imported = this.applyCandidateAuthorityCore(payload.items, { replace })
+            return this.authoritativeSelectionIdentity()
+          })
+        } else {
+          imported = this.importGeneCandidateAuthority(payload.items, { replace })
+        }
+      } catch (error) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_IMPORT_REJECTED",
+            error: sanitizeText(String(error?.message || error), 300),
+          },
+          { status: 400 },
+        )
+      }
       const election = this.geneAuthorityWinner()
       return Response.json({
         ok: true,
         symbol,
         ...imported,
         winner_asset_sha256: election?.winner?.asset_sha256 || null,
+        publication: publication
+          ? {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            }
+          : null,
       })
     }
 
@@ -18292,6 +18437,14 @@ export class IconoplasmVoteCoordinator {
           },
           { status: 409 },
         )
+      }
+      // The final policy state (published asset + administrator override) must
+      // exist before the seeded identity is computed, or the clean pointer
+      // would name the pre-override election.
+      const publishedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
+      if (publishedAsset) this.setMeta("published_asset_sha256", publishedAsset)
+      if (payload?.admin_override !== undefined) {
+        this.setMeta("admin_override", payload.admin_override ? "1" : "0")
       }
       const election = this.geneAuthorityWinner()
       if (!election?.winner) {
@@ -18318,11 +18471,6 @@ export class IconoplasmVoteCoordinator {
           },
           { status: 409 },
         )
-      }
-      const publishedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
-      if (publishedAsset) this.setMeta("published_asset_sha256", publishedAsset)
-      if (payload?.admin_override !== undefined) {
-        this.setMeta("admin_override", payload.admin_override ? "1" : "0")
       }
       this.setMeta("authority_epoch", "v2")
       return Response.json({
