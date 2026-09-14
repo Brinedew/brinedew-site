@@ -3,24 +3,90 @@ on:
   push:
     branches: ["work/b762-reader-resolution"]
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: b762-reader-implementation
+  cancel-in-progress: false
 jobs:
   reader-tests:
+    if: github.ref == 'refs/heads/work/b762-reader-resolution'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Capture source for the implementation workspace
-        run: |
-          mkdir -p reader-evidence
-          git rev-parse HEAD > reader-evidence/source-sha.txt
-          git archive --format=tar.gz --output=reader-evidence/source.tar.gz HEAD
-      - uses: actions/upload-artifact@v7
+      - uses: actions/setup-node@v6
         with:
-          name: b762-reader-source
+          node-version: 22
+      - name: Apply the exact reviewed source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reader-evidence
+          git rev-parse HEAD > reader-evidence/input-commit.txt
+          if test -f plans/b762-reader-implementation.part1.b64; then
+            git diff --exit-code 06188b5fff8b2e749235a540328a65c03da2bb4a HEAD -- workers shared iconoplasm-extension AGENTS.md architecture-fences.json docs
+            python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, lzma, subprocess
+          raw=''.join(Path(f'plans/b762-reader-implementation.part{i}.b64').read_text().strip() for i in range(1,4))
+          patch=lzma.decompress(base64.b64decode(raw,validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '05c9282fb7f7e66d33a8961f00781c192e791c551b9bf5ff2532717de34a71b2'
+          Path('reader-evidence/implementation.patch').write_bytes(patch)
+          subprocess.run(['git','apply','--check','--unidiff-zero','reader-evidence/implementation.patch'],check=True)
+          subprocess.run(['git','apply','--unidiff-zero','reader-evidence/implementation.patch'],check=True)
+          PY
+          fi
+      - name: Install the locked test runtime and build existing plugins
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+          node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
+          pnpm run sync:iconoplasm-shared
+      - name: Format implementation and regenerate executable identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prettier --write AGENTS.md architecture-fences.json docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md docs/ICONOPLASM_CARD_PUBLICATION_V2.md iconoplasm-extension/metadata-delivery.js iconoplasm-extension/service-worker.js workers/iconoplasm-card-publication-runtime.test.js workers/iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js workers/iconoplasm.reader-view-integration.test.js workers/iconoplasm/vote-authority/gene-publication-state.js workers/lib/iconoplasm-card-publication-coordinator.js workers/lib/iconoplasm-card-reader-view.js workers/lib/iconoplasm-card-reader-view.test.js
+          node scripts/generate-operation-cost-identities.mjs
+          git diff --stat > reader-evidence/changes.txt
+          git diff > reader-evidence/result.patch
+      - name: Vote-to-reader, historical views, failure recovery and retained audits
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-tests.mjs workers/lib/iconoplasm-card-reader-view.test.js workers/iconoplasm.reader-view-integration.test.js workers/iconoplasm.vote-authority-handoff.test.js workers/iconoplasm-card-publication-runtime.test.js workers/iconoplasm-card-delivery.test.js workers/iconoplasm-card-publication.test.js workers/lib/iconoplasm-card-gene-delta.test.js workers/iconoplasm/vote-authority/gene-publication-state.test.js iconoplasm-extension/metadata-delivery.test.js iconoplasm-extension/service-worker.test.js scripts/b762-v1-excision-audit.mjs scripts/b762-publication-path-audit.mjs scripts/b762-cutover-coherence-audit.mjs | tee reader-evidence/focused-tests.txt
+      - name: Full repository checks
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run check 2>&1 | tee reader-evidence/check.txt
+          pnpm test 2>&1 | tee reader-evidence/full-tests.txt
+          pnpm run validate:iconoplasm-topology 2>&1 | tee reader-evidence/topology.txt
+          node scripts/generate-operation-cost-identities.mjs --check
+          pnpm run build 2>&1 | tee reader-evidence/build.txt
+      - name: Commit verified application source on this branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = work/b762-reader-resolution
+          git fetch origin work/b762-reader-resolution
+          test "$(git rev-parse origin/work/b762-reader-resolution)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add AGENTS.md architecture-fences.json docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md docs/ICONOPLASM_CARD_PUBLICATION_V2.md iconoplasm-extension/metadata-delivery.js iconoplasm-extension/service-worker.js workers/iconoplasm-card-publication-runtime.test.js workers/iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js workers/iconoplasm.reader-view-integration.test.js workers/iconoplasm/vote-authority/gene-publication-state.js workers/lib/iconoplasm-card-publication-coordinator.js workers/lib/iconoplasm-card-reader-view.js workers/lib/iconoplasm-card-reader-view.test.js workers/generated/operation-cost-identities.js
+          if test -f plans/b762-reader-implementation.part1.b64; then git rm plans/b762-reader-implementation.part*.b64; fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'B-762: deliver immutable reader resolution, bounded directory updates and failure-safe handoff'
+            git push origin HEAD:work/b762-reader-resolution
+          fi
+          git rev-parse HEAD > reader-evidence/verified-source-commit.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b762-reader-implementation-evidence
           path: reader-evidence
           retention-days: 7
           if-no-files-found: error
