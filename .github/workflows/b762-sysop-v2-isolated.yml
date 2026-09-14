@@ -1,0 +1,34 @@
+name: B-762 isolated state tests
+on:
+  push:
+    branches: ["work/b762-sysop-v2-state"]
+permissions:
+  contents: read
+jobs:
+  isolated-state-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install the repository's locked local test runtime
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: SQLite and native workerd proofs (no deployment credentials)
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test workers/iconoplasm/vote-authority/gene-publication-state.test.js workers/iconoplasm/vote-authority/gene-publication-state.workerd.test.js | tee b762-isolated-tests.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b762-isolated-state-evidence
+          path: b762-isolated-tests.txt
+          if-no-files-found: warn
+          retention-days: 7
