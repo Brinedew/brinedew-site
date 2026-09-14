@@ -20,7 +20,7 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.0.9 --activate
           pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
-      - name: SQLite, routing and native workerd proofs (no deployment credentials)
+      - name: SQLite, routing, installed-reader and native workerd proofs (no deployment credentials)
         shell: bash
         run: |
           set -o pipefail
@@ -36,6 +36,8 @@ jobs:
             workers/lib/iconoplasm-card-reader-view.test.js \
             workers/iconoplasm.vote-authority-handoff.test.js \
             workers/iconoplasm.reader-view-publication.test.js \
+            iconoplasm-extension/metadata-delivery.test.js \
+            iconoplasm-extension/metadata-delivery-reader-view.test.js \
             scripts/b762-v1-excision-audit.mjs \
             scripts/b762-publication-path-audit.mjs \
             scripts/b762-cutover-coherence-audit.mjs | tee b762-isolated-tests.txt
