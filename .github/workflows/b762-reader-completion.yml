@@ -37,6 +37,8 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.0.9 --activate
           pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Initialize repository plugin dependencies
+        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
       - name: Format changed source and bind executable identity
         shell: bash
         run: |
@@ -75,12 +77,13 @@ jobs:
             workers/iconoplasm-card-publication-runtime.test.js \
             workers/lib/iconoplasm-card-publication-materialize-symbol.test.js \
             2>&1 | tee reader-evidence/readers.txt
-      - name: Architecture and type checks
+      - name: Architecture, types and full repository tests
         shell: bash
         run: |
           set -o pipefail
           pnpm run validate:iconoplasm-topology 2>&1 | tee reader-evidence/topology.txt
           pnpm exec tsc --noEmit 2>&1 | tee reader-evidence/types.txt
+          pnpm test 2>&1 | tee reader-evidence/full-tests.txt
       - name: Commit verified application files to this branch only
         env:
           SOURCE_WRITE_TOKEN: ${{ github.token }}
