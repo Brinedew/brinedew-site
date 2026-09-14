@@ -117,3 +117,46 @@ operator for routine commands or scheduled wakeups; do not substitute another ET
 Platform contract used:
 https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/
 https://developers.cloudflare.com/durable-objects/api/alarms/
+
+## Progress after the first integration (2026-09-14, branch head `158985c2`)
+
+Completed on the branch:
+
+- `IconoplasmGenePublicationState` is installed inside the existing
+  `IconoplasmVoteCoordinator`; the vote mutation, the canonical selection
+  reference and the shared alarm wake commit in one SQLite storage
+  transaction. Reference-only selection identities are hashed inside that
+  transaction, so the mutation stays synchronous. Duplicate and
+  content-neutral votes open no attempt and write nothing.
+- One authority epoch per gene: bounded idempotent candidate import
+  (`POST /authority/candidates`), explicit activation
+  (`POST /authority/activate`) that refuses while the legacy vote/caretaker
+  outbox is unsettled, then seeds the verified published pointer and flips
+  `authority_epoch=v2`. `POST /publication/state` is the read-only observer.
+- Winner/tie rules are copied exactly from `compareAdminLeaderRows` into
+  `workers/iconoplasm/vote-authority/gene-authority-election.js`; administrator
+  override pins the published asset.
+- One alarm drains this gene's publication first, then the legacy outbox and
+  caretaker duties, preserving budget deferrals and earlier wakes.
+
+Evidence: isolated CI run 34839727085; focused suites 57/57; affected vote and
+caretaker suites 39/39 plus the caretaker cold-cost test; full local suite
+2,132/2,133 (the single miss is a worktree-only missing prebuilt `.quartz`
+plugin artifact, green in the main checkout).
+
+### What the next slice must solve first
+
+`cardCatalogRecordsForArtifact` derives the published portrait from
+`icono_publish_state.current_asset_sha256` (runtime snapshot line ~28046), and
+fresh readers resolve genes through the global directory/manifest. Therefore:
+
+1. Thread an explicit selection override through
+   `cardCatalogRecordsForArtifact` / `createCardPublication.materialize` so the
+   card VM is built for the coordinator's winner instead of D1 canon, bounded
+   to the requested symbol.
+2. Add a per-gene read pointer that fresh readers check before the global
+   directory/manifest; otherwise a materialized object is not reader-visible
+   until the global flip, which is the barrier B-762 removes.
+
+Do not wire `genePublicationAdapter` to any upload until both exist: uploading
+a D1-canon card would republish the old election under a new key.
