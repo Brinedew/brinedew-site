@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   DISCOVERY_CHUNK_EVENTS,
+  DISCOVERY_DEVICE_RECEIPT_LIMIT,
   applyDiscoveryBatch,
   applySharedDiscoveryDeltas,
   createDiscoveryOrdinalDictionary,
@@ -46,6 +47,68 @@ test("batch merges membership, preserves repeat chronology and is idempotent by 
   assert.equal(replay.replay, true)
   assert.deepEqual(replay.state, first.state)
   assert.equal(replay.shared_deltas.length, 0)
+})
+
+test("serialized device receipts survive other-device traffic without an eviction replay hole", () => {
+  let state = applyDiscoveryBatch(null, {
+    batchId: "device-a:1",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 1 }],
+  }).state
+  for (let index = 1; index < DISCOVERY_DEVICE_RECEIPT_LIMIT; index++) {
+    state = applyDiscoveryBatch(state, {
+      batchId: `device-${String(index).padStart(2, "0")}:1`,
+      dictionary,
+      encounters: [{ symbol: "BRCA1", at: 10 + index }],
+    }).state
+  }
+  assert.equal(state.recent_receipts.length, DISCOVERY_DEVICE_RECEIPT_LIMIT)
+  const replay = applyDiscoveryBatch(state, {
+    batchId: "device-a:1",
+    dictionary,
+    encounters: [{ symbol: "EGFR", at: 999 }],
+  })
+  assert.equal(replay.replay, true)
+  assert.equal(replay.stale, undefined)
+
+  assert.throws(
+    () =>
+      applyDiscoveryBatch(state, {
+        batchId: "device-xx:1",
+        dictionary,
+        encounters: [{ symbol: "TP53", at: 1000 }],
+      }),
+    { code: "DISCOVERY_DEVICE_LIMIT" },
+  )
+  assert.throws(
+    () =>
+      applyDiscoveryBatch(state, {
+        batchId: "device-a:3",
+        dictionary,
+        encounters: [{ symbol: "TP53", at: 1001 }],
+      }),
+    { code: "DISCOVERY_BATCH_SEQUENCE_GAP", expected_sequence: 2 },
+  )
+
+  const second = applyDiscoveryBatch(state, {
+    batchId: "device-a:2",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 1002 }],
+  })
+  assert.equal(second.state.recent_receipts.length, DISCOVERY_DEVICE_RECEIPT_LIMIT)
+  assert.equal(
+    second.state.recent_receipts.filter((receipt) => receipt.device_id === "device-a").length,
+    1,
+  )
+  const stale = applyDiscoveryBatch(second.state, {
+    batchId: "device-a:1",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 1003 }],
+  })
+  assert.equal(stale.replay, true)
+  assert.equal(stale.stale, true)
+  assert.equal(stale.receipt.superseded_by, "device-a:2")
+  assert.equal(stale.shared_deltas.length, 0)
 })
 
 test("later batches set new bits without moving earlier ordinals", () => {
