@@ -55,6 +55,13 @@ async function selection(value) {
   return { selectionKey: value.selectionKey, selectionRef }
 }
 
+function projectionReceipt(value, name) {
+  if (!value || typeof value !== "object") throw new TypeError(`${name} is invalid`)
+  const key = reference(value.key, `${name}.key`)
+  if (!SHA256.test(String(value.hash || ""))) throw new TypeError(`${name}.hash is invalid`)
+  return { key, hash: value.hash }
+}
+
 function artifact(value, expectedSelectionKey) {
   if (!value || value.selectionKey !== expectedSelectionKey || !SHA256.test(value.contentSha256))
     throw new TypeError("artifact must identify the exact selected immutable content")
@@ -69,7 +76,24 @@ function artifact(value, expectedSelectionKey) {
     objectKey.split("/").some((part) => !part || part === "." || part === "..")
   )
     throw new TypeError("objectKey must be a relative immutable Storage key")
-  return { selectionKey: expectedSelectionKey, contentSha256: value.contentSha256, objectKey }
+  const verified = {
+    selectionKey: expectedSelectionKey,
+    contentSha256: value.contentSha256,
+    objectKey,
+  }
+  if (value.projections !== undefined) {
+    if (
+      !value.projections ||
+      typeof value.projections !== "object" ||
+      Array.isArray(value.projections)
+    )
+      throw new TypeError("projections is invalid")
+    verified.projections = {
+      gene: projectionReceipt(value.projections.gene, "projections.gene"),
+      portrait: projectionReceipt(value.projections.portrait, "projections.portrait"),
+    }
+  }
+  return verified
 }
 
 export class IconoplasmGenePublicationState {

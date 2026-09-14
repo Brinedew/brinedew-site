@@ -288,6 +288,49 @@ test("concurrent begin calls produce a single live attempt", async (t) => {
   assert.equal(tickets.filter(Boolean).length, 1)
 })
 
+test("verified completion stores projection receipts for the reader plane", async (t) => {
+  const f = fixture(t)
+  await commit(f.store, 1)
+  const ticket = await f.store.beginAttempt()
+  const projections = {
+    gene: {
+      key: `published-cards/v2/immutable/genes/${"b".repeat(64)}.json`,
+      hash: "b".repeat(64),
+    },
+    portrait: {
+      key: `published-cards/v2/immutable/portraits/${"c".repeat(64)}.json`,
+      hash: "c".repeat(64),
+    },
+  }
+  assert.deepEqual(await f.store.completeAttempt(ticket, { ...uploaded(1), projections }), {
+    applied: true,
+  })
+  assert.deepEqual(f.store.read().publishedArtifact.projections, projections)
+})
+
+test("corrupt projection receipts are rejected without completing the attempt", async (t) => {
+  const f = fixture(t)
+  await commit(f.store, 1)
+  const ticket = await f.store.beginAttempt()
+  for (const projections of [
+    {
+      gene: { key: "genes/x.json", hash: "bad" },
+      portrait: { key: "portraits/x.json", hash: "c".repeat(64) },
+    },
+    {
+      gene: { key: "../escape.json", hash: "b".repeat(64) },
+      portrait: { key: "portraits/x.json", hash: "c".repeat(64) },
+    },
+    { gene: { key: "genes/x.json", hash: "b".repeat(64) } },
+  ]) {
+    await assert.rejects(
+      f.store.completeAttempt(ticket, { ...uploaded(1), projections }),
+      /projections/,
+    )
+  }
+  assert.equal(f.store.read().pending, true)
+})
+
 test("invalid selection, source rebinding, async mutations and corrupt receipts are rejected", async (t) => {
   const f = fixture(t)
   await assert.rejects(
