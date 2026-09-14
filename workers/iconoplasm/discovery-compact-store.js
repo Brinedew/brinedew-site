@@ -8,7 +8,11 @@ const SHARED_SELECT_SQL = `SELECT
   first_at_b64, latest_at_b64
 FROM icono_discovery_shared_state_v2 WHERE singleton = 1`
 
-const CAS_GUARD_SQL = `INSERT INTO icono_discovery_cas_guard(ok)
+const USER_CAS_GUARD_SQL = `INSERT INTO icono_discovery_cas_guard(ok)
+SELECT 0 WHERE
+  COALESCE((SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = ?), 0) <> ?`
+
+const USER_SHARED_CAS_GUARD_SQL = `INSERT INTO icono_discovery_cas_guard(ok)
 SELECT 0 WHERE
   COALESCE((SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = ?), 0) <> ?
   OR (SELECT state_version FROM icono_discovery_shared_state_v2 WHERE singleton = 1) <> ?`
@@ -109,8 +113,11 @@ export async function commitCompactDiscoveryBatch(
 ) {
   if (!nextUserState || !batchId) throw new TypeError("Compact discovery commit is incomplete")
   if (includeShared && !nextSharedState) throw new TypeError("Shared compact state is required")
+  const guard = includeShared
+    ? db.prepare(USER_SHARED_CAS_GUARD_SQL).bind(userId, expectedUserVersion, expectedSharedVersion)
+    : db.prepare(USER_CAS_GUARD_SQL).bind(userId, expectedUserVersion)
   const statements = [
-    db.prepare(CAS_GUARD_SQL).bind(userId, expectedUserVersion, expectedSharedVersion),
+    guard,
     db
       .prepare(USER_UPSERT_SQL)
       .bind(
