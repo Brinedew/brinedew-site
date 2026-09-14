@@ -38,7 +38,7 @@ function measuredDb(db, receipts) {
 
 async function installSchema(db) {
   for (const statement of DISCOVERY_COMPACT_SCHEMA_SQL.split(";")
-    .map((sql) => sql.trim())
+    .map((sql) => sql.trim().replace(/\s+/g, " "))
     .filter(Boolean)) {
     await db.exec(statement)
   }
