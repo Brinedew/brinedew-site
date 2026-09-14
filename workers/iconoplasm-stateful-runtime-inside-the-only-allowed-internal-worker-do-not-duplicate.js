@@ -113,6 +113,12 @@ import {
   caretakerWeightedScore,
   compareCaretakerWeightedCandidates,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
+import { IconoplasmGenePublicationState } from "./iconoplasm/vote-authority/gene-publication-state.js"
+import {
+  composeGeneSelectionReference,
+  electGeneAuthorityWinner,
+  winnerAssetShaFromSelectionReference,
+} from "./iconoplasm/vote-authority/gene-authority-election.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
@@ -17084,6 +17090,11 @@ export class IconoplasmVoteCoordinator {
   constructor(state, env) {
     this.state = state
     this.env = env
+    // B-762: the per-gene publication state is a storage helper inside this
+    // existing coordinator. It is not a second Durable Object or canon owner.
+    this.publication = new IconoplasmGenePublicationState(this.state.storage, {
+      clock: () => Date.now(),
+    })
     this.caretakerSupervotes = new CaretakerSupervoteLedger({
       storage: this.state.storage,
       getSymbol: () => this.getMeta("symbol"),
@@ -17155,13 +17166,35 @@ export class IconoplasmVoteCoordinator {
         "idx_asset_summary_vision",
       ])
         this.state.storage.sql.exec(`DROP INDEX IF EXISTS ${index}`)
+      this.installGeneAuthorityTables()
       this.caretakerSupervotes.install()
       const pendingOutbox = this.state.storage.sql
         .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
         .toArray()[0]
       const pendingCaretakerSupervoteOutbox = this.caretakerSupervotes.pendingOutboxRows(1)[0]
       if (pendingOutbox || pendingCaretakerSupervoteOutbox) await this.armOutboxAlarm(1)
+      // A v2 gene with unfinished publication intent repairs its own wake after
+      // a restart. This never reads or repairs another gene.
+      if (this.getMeta("authority_epoch") === "v2" && this.publication.read()?.pending) {
+        await this.publication.recoverWakeup()
+      }
     })
+  }
+
+  installGeneAuthorityTables() {
+    this.state.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS gene_candidate_authority (
+        asset_sha256 TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'draft',
+        autopick_eligible INTEGER NOT NULL DEFAULT 0 CHECK (autopick_eligible IN (0, 1)),
+        is_stale INTEGER NOT NULL DEFAULT 0 CHECK (is_stale IN (0, 1)),
+        is_legacy INTEGER NOT NULL DEFAULT 0 CHECK (is_legacy IN (0, 1)),
+        created_at TEXT NOT NULL DEFAULT '',
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+    this.publication.install()
   }
 
   sqlFirst(query, ...bindings) {
@@ -17185,7 +17218,206 @@ export class IconoplasmVoteCoordinator {
     const delay = Math.max(1, Number(delayMs || 1) || 1)
     // A new vote or a coordinator restart must not erase a known daily pause.
     const budgetRetryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
-    await this.state.storage.setAlarm(Math.max(Date.now() + delay, budgetRetryAt))
+    const due = Math.max(Date.now() + delay, budgetRetryAt)
+    // One DO owns one alarm for publication, outbox and caretaker duties.
+    // Never erase an earlier wake; only bring the shared alarm forward.
+    const existing = await this.state.storage.getAlarm()
+    if (existing === null || existing > due) await this.state.storage.setAlarm(due)
+  }
+
+  /**
+   * B-762 migration: bounded, idempotent candidate authority for one gene.
+   * The caller supplies the complete candidate set from D1; ordinary reads
+   * never run a cold full-history import. Unchanged rows do not write, and a
+   * replaced (withdrawn) candidate disappears from the election.
+   */
+  importGeneCandidateAuthority(rawItems, { replace = true } = {}) {
+    const items = Array.isArray(rawItems) ? rawItems.slice(0, 64) : []
+    const incoming = new Map()
+    for (const raw of items) {
+      const assetSha = normalizeSha256(raw?.asset_sha256 || "")
+      if (!assetSha || incoming.has(assetSha)) continue
+      incoming.set(assetSha, {
+        asset_sha256: assetSha,
+        status:
+          sanitizeText(raw?.status || "draft", 32)
+            .trim()
+            .toLowerCase() || "draft",
+        autopick_eligible: Number(raw?.autopick_eligible) > 0 ? 1 : 0,
+        is_stale: Number(raw?.is_stale) > 0 ? 1 : 0,
+        is_legacy: Number(raw?.is_legacy) > 0 ? 1 : 0,
+        created_at: sanitizeText(raw?.created_at || "", 64) || "",
+      })
+    }
+    return this.state.storage.transactionSync(() => {
+      const existing = new Map(
+        this.state.storage.sql
+          .exec(`SELECT * FROM gene_candidate_authority`)
+          .toArray()
+          .map((row) => [String(row.asset_sha256), row]),
+      )
+      let changed = false
+      for (const item of incoming.values()) {
+        const prior = existing.get(item.asset_sha256)
+        if (!prior) {
+          this.state.storage.sql.exec(
+            `INSERT INTO gene_candidate_authority (
+               asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at, revision
+             ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
+            item.asset_sha256,
+            item.status,
+            item.autopick_eligible,
+            item.is_stale,
+            item.is_legacy,
+            item.created_at,
+          )
+          changed = true
+          continue
+        }
+        const unchanged =
+          String(prior.status || "") === item.status &&
+          Number(prior.autopick_eligible) === item.autopick_eligible &&
+          Number(prior.is_stale) === item.is_stale &&
+          Number(prior.is_legacy) === item.is_legacy &&
+          String(prior.created_at || "") === item.created_at
+        if (unchanged) continue
+        this.state.storage.sql.exec(
+          `UPDATE gene_candidate_authority
+              SET status = ?,
+                  autopick_eligible = ?,
+                  is_stale = ?,
+                  is_legacy = ?,
+                  created_at = ?,
+                  revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE asset_sha256 = ?`,
+          item.status,
+          item.autopick_eligible,
+          item.is_stale,
+          item.is_legacy,
+          item.created_at,
+          item.asset_sha256,
+        )
+        changed = true
+      }
+      if (replace) {
+        for (const assetSha of existing.keys()) {
+          if (incoming.has(assetSha)) continue
+          this.state.storage.sql.exec(
+            `DELETE FROM gene_candidate_authority WHERE asset_sha256 = ?`,
+            assetSha,
+          )
+          changed = true
+        }
+      }
+      return {
+        changed,
+        candidate_count: incoming.size,
+      }
+    })
+  }
+
+  geneAuthorityWinner() {
+    const candidates = this.state.storage.sql
+      .exec(`SELECT * FROM gene_candidate_authority ORDER BY asset_sha256 ASC`)
+      .toArray()
+      .map((row) => ({
+        ...row,
+        autopick_eligible: Number(row.autopick_eligible) === 1,
+        is_stale: Number(row.is_stale) === 1,
+        is_legacy: Number(row.is_legacy) === 1,
+      }))
+    return electGeneAuthorityWinner({
+      candidates,
+      summaries: this.exportAssetSummaries(),
+      caretaker: this.caretakerSupervotes.snapshot(),
+      currentAssetSha: normalizeSha256(this.getMeta("published_asset_sha256")) || null,
+      adminOverride: this.getMeta("admin_override") === "1",
+    })
+  }
+
+  /**
+   * Synchronous canonical identity for the current winner. Runs inside the vote
+   * storage transaction; hashing happens in IconoplasmGenePublicationState.
+   */
+  authoritativeSelectionIdentity() {
+    const caretaker = this.caretakerSupervotes.snapshot()
+    const winner = this.geneAuthorityWinner().winner
+    return {
+      selectionRef: composeGeneSelectionReference({
+        symbol: normalizeSymbol(this.getMeta("symbol")),
+        winner,
+        caretakerSupervoteVersion: Number(caretaker?.supervote_version || 0),
+        caretakerDirection:
+          caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
+            ? Number(caretaker.direction || 0)
+            : 0,
+        adminOverride: this.getMeta("admin_override") === "1",
+      }),
+    }
+  }
+
+  async applyAuthoritativeVoteMutation(options = {}) {
+    if (this.getMeta("authority_epoch") !== "v2") {
+      return { authority: "legacy", publication: null, vote: this.applyVoteMutation(options) }
+    }
+    const election = this.geneAuthorityWinner()
+    if (!election?.winner && this.getMeta("admin_override") !== "1") {
+      // A v2 gene without an eligible authority winner keeps accepting votes
+      // but does not invent a selection or a publication.
+      return {
+        authority: "legacy_no_authority",
+        publication: null,
+        vote: this.applyVoteMutation(options),
+      }
+    }
+    let vote = null
+    const publication = await this.publication.commitSelection(() => {
+      vote = this.applyVoteMutationCore(options)
+      return this.authoritativeSelectionIdentity()
+    })
+    return { authority: "v2", publication, vote }
+  }
+
+  /**
+   * B-762 step 4 seam. The immutable Bunny adapter (card-publication-v2
+   * primitives, verify-before-commit) is not wired into this coordinator yet;
+   * until then desired selections stay durable and no attempt is opened, so an
+   * unwired gene costs zero publication writes. Tests inject an adapter here.
+   */
+  genePublicationAdapter(_env) {
+    return null
+  }
+
+  async drainGenePublication(env = this.env) {
+    if (this.getMeta("authority_epoch") !== "v2")
+      return { ok: true, skipped: true, reason: "legacy_epoch" }
+    const current = this.publication.read()
+    if (!current?.pending) return { ok: true, pending: false }
+    const adapter = this.genePublicationAdapter(env)
+    if (typeof adapter !== "function") {
+      return { ok: true, pending: true, reason: "publication_adapter_pending" }
+    }
+    const ticket = await this.publication.beginAttempt()
+    if (!ticket) return { ok: true, pending: true, reason: "retry_not_due" }
+    try {
+      const published = await adapter(ticket, { symbol: normalizeSymbol(this.getMeta("symbol")) })
+      const outcome = await this.publication.completeAttempt(ticket, published)
+      if (outcome.applied) {
+        const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
+        if (assetSha) this.setMeta("published_asset_sha256", assetSha)
+      }
+      return { ok: true, pending: false, ...outcome }
+    } catch (error) {
+      if (isIconoplasmDailyBudgetError(error)) throw error
+      const failed = await this.publication.failAttempt(ticket, { retryAt: error?.retryAt })
+      return {
+        ok: false,
+        pending: true,
+        retry_at: failed.retryAt,
+        error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
+      }
+    }
   }
 
   pendingOutboxRows(limit = 50) {
@@ -17321,6 +17553,10 @@ export class IconoplasmVoteCoordinator {
       })
       env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
       if (retryAt) this.setMeta("outbox_budget_retry_at", "")
+      // One shared alarm serves every duty of this coordinator: its own gene's
+      // publication first, then the legacy outbox projections and caretaker
+      // delivery. A missing/unwired publication adapter never blocks them.
+      const publicationResult = await this.drainGenePublication(env)
       // Four ordinary outbox records plus two caretaker records share one
       // provider statement envelope, including enqueue and failure handling.
       const voteResult = await this.drainVoteOutbox(env, 4)
@@ -17337,7 +17573,11 @@ export class IconoplasmVoteCoordinator {
         { limit: 2 },
       )
       if (dailyError) throw dailyError
-      return { vote: voteResult, caretaker_supervote: caretakerResult }
+      return {
+        publication: publicationResult,
+        vote: voteResult,
+        caretaker_supervote: caretakerResult,
+      }
     } catch (error) {
       if (isIconoplasmDailyBudgetError(error)) {
         const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
@@ -17503,7 +17743,11 @@ export class IconoplasmVoteCoordinator {
     })
   }
 
-  applyVoteMutation({
+  applyVoteMutation(options = {}) {
+    return this.state.storage.transactionSync(() => this.applyVoteMutationCore(options))
+  }
+
+  applyVoteMutationCore({
     assetSha256,
     userId,
     requestedVoteValue,
@@ -17519,7 +17763,7 @@ export class IconoplasmVoteCoordinator {
       throw new Error("Missing or invalid vote payload")
     }
 
-    return this.state.storage.transactionSync(() => {
+    {
       const currentRow =
         this.sqlFirst(
           `SELECT vote_value, vision_id, candidate_image_id, created_at
@@ -17672,7 +17916,7 @@ export class IconoplasmVoteCoordinator {
         candidate_image_id: resolvedCandidateImageId,
         snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
       }
-    })
+    }
   }
 
   snapshotForAsset(assetSha256, userId, requestedVisionId = "") {
@@ -18008,6 +18252,111 @@ export class IconoplasmVoteCoordinator {
       }
     }
 
+    if (path === "/authority/candidates" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      const imported = this.importGeneCandidateAuthority(payload?.items, {
+        replace: payload?.replace !== false,
+      })
+      const election = this.geneAuthorityWinner()
+      return Response.json({
+        ok: true,
+        symbol,
+        ...imported,
+        winner_asset_sha256: election?.winner?.asset_sha256 || null,
+      })
+    }
+
+    if (path === "/authority/activate" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      // Authority transfer requires the old writers to be settled first; an
+      // unsettled outbox would lose accepted changes after the epoch flips.
+      if (
+        this.pendingOutboxRows(1).length ||
+        this.caretakerSupervotes.pendingOutboxRows(1).length
+      ) {
+        return Response.json(
+          {
+            ok: false,
+            code: "OUTBOX_NOT_SETTLED",
+            error: "Legacy vote/caretaker outbox must settle before authority transfer",
+          },
+          { status: 409 },
+        )
+      }
+      const election = this.geneAuthorityWinner()
+      if (!election?.winner) {
+        return Response.json(
+          {
+            ok: false,
+            code: "NO_AUTHORITY_WINNER",
+            error: "Candidate authority has no eligible winner to seed",
+          },
+          { status: 409 },
+        )
+      }
+      try {
+        await this.publication.seedPublished(this.authoritativeSelectionIdentity(), {
+          contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
+          objectKey: sanitizeText(payload?.published?.object_key || "", 512),
+        })
+      } catch (error) {
+        return Response.json(
+          {
+            ok: false,
+            code: "SEED_REJECTED",
+            error: sanitizeText(String(error?.message || error), 500),
+          },
+          { status: 409 },
+        )
+      }
+      const publishedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
+      if (publishedAsset) this.setMeta("published_asset_sha256", publishedAsset)
+      if (payload?.admin_override !== undefined) {
+        this.setMeta("admin_override", payload.admin_override ? "1" : "0")
+      }
+      this.setMeta("authority_epoch", "v2")
+      return Response.json({
+        ok: true,
+        symbol,
+        authority_epoch: "v2",
+        winner_asset_sha256: election.winner.asset_sha256,
+      })
+    }
+
+    if (path === "/publication/state" && request.method === "POST") {
+      const payload = await request.json().catch(() => ({}))
+      const requestedSymbol = normalizeSymbol(payload?.symbol || this.getMeta("symbol") || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      const election = this.geneAuthorityWinner()
+      return Response.json({
+        ok: true,
+        symbol,
+        authority_epoch: this.getMeta("authority_epoch") || "legacy",
+        admin_override: this.getMeta("admin_override") === "1",
+        publication: this.publication.read(),
+        winner_asset_sha256: election?.winner?.asset_sha256 || null,
+        candidate_count:
+          Number(
+            this.state.storage.sql
+              .exec(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)
+              .toArray()[0]?.n || 0,
+          ) || 0,
+      })
+    }
+
     if (path === "/vote/set" && request.method === "POST") {
       const payload = await request.json()
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
@@ -18027,11 +18376,11 @@ export class IconoplasmVoteCoordinator {
         payload?.vision_id || "",
         payload?.candidate_image_id,
       )
-      // Schedule durable delivery before committing the vote/outbox transaction.
-      // Durable Objects serialize the alarm behind this request, so it cannot
-      // observe the outbox until the transaction below has settled.
-      await this.armOutboxAlarm(1)
-      const result = this.applyVoteMutation({
+      // The v2 path commits the vote, the new selection intent and its wakeup
+      // in one storage transaction. The legacy path keeps scheduling durable
+      // delivery before the vote/outbox transaction exactly as before.
+      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
+      const outcome = await this.applyAuthoritativeVoteMutation({
         assetSha256: assetSha,
         userId,
         requestedVoteValue: requested,
@@ -18040,12 +18389,20 @@ export class IconoplasmVoteCoordinator {
         ensuredAsset,
         reason: payload?.reason || "vote_auto_promote",
       })
+      const result = outcome.vote
       return Response.json({
         ok: true,
         symbol,
         asset_sha256: assetSha,
         ...result,
         snapshot: this.caretakerSupervotes.decorateSnapshot(result.snapshot),
+        authority: outcome.authority,
+        publication: outcome.publication
+          ? {
+              changed: outcome.publication.changed,
+              pending: outcome.publication.state?.pending === true,
+            }
+          : null,
       })
     }
 
@@ -18061,7 +18418,7 @@ export class IconoplasmVoteCoordinator {
       let upserted = 0
       let deleted = 0
       let invalid = 0
-      await this.armOutboxAlarm(1)
+      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
 
       for (const raw of items) {
         const assetSha = normalizeSha256(raw?.asset_sha256 || "")
@@ -18077,7 +18434,7 @@ export class IconoplasmVoteCoordinator {
           raw?.vision_id || "",
           raw?.candidate_image_id,
         )
-        const result = this.applyVoteMutation({
+        const outcome = await this.applyAuthoritativeVoteMutation({
           assetSha256: assetSha,
           userId,
           requestedVoteValue: requested,
@@ -18086,6 +18443,7 @@ export class IconoplasmVoteCoordinator {
           ensuredAsset,
           reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
         })
+        const result = outcome.vote
         if (result.final_vote_value === 0) {
           deleted += 1
         } else {
@@ -18102,6 +18460,7 @@ export class IconoplasmVoteCoordinator {
           final_vote_value: result.final_vote_value,
           changed: result.changed,
           mutation_id: result.mutation_id,
+          authority: outcome.authority,
         })
       }
 

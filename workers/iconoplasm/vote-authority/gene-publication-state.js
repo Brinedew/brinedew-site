@@ -14,6 +14,12 @@
 const TABLE = "iconoplasm_gene_publication_state_v2"
 const SHA256 = /^[a-f0-9]{64}$/
 const MAX_REFERENCE_BYTES = 2048
+const TEXT_ENCODER = new TextEncoder()
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", TEXT_ENCODER.encode(value))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+}
 
 function integer(value, name, minimum = 0) {
   if (!Number.isSafeInteger(value) || value < minimum) throw new TypeError(`${name} is invalid`)
@@ -31,12 +37,22 @@ function reference(value, name) {
   return value
 }
 
-function selection(value) {
-  if (!value || !SHA256.test(value.selectionKey)) throw new TypeError("selectionKey is invalid")
-  return {
-    selectionKey: value.selectionKey,
-    selectionRef: reference(value.selectionRef, "selectionRef"),
+/**
+ * A caller may supply an explicit selectionKey or only the canonical
+ * selectionRef. The reference is the full public-card-affecting identity
+ * (every revision that can change the rendered card), so hashing it yields the
+ * same identity the host would otherwise precompute asynchronously. This keeps
+ * commitSelection's mutation synchronous while the digest happens inside the
+ * same storage transaction.
+ */
+async function selection(value) {
+  if (!value || typeof value !== "object") throw new TypeError("selection identity is required")
+  const selectionRef = reference(value.selectionRef, "selectionRef")
+  if (value.selectionKey === undefined) {
+    return { selectionKey: await sha256Hex(selectionRef), selectionRef }
   }
+  if (!SHA256.test(value.selectionKey)) throw new TypeError("selectionKey is invalid")
+  return { selectionKey: value.selectionKey, selectionRef }
 }
 
 function artifact(value, expectedSelectionKey) {
@@ -89,7 +105,9 @@ export class IconoplasmGenePublicationState {
       selectionKey: row.selection_key,
       selectionRef: row.selection_ref,
       publishedVersion: row.published_version,
-      publishedArtifact: row.published_artifact_json ? JSON.parse(row.published_artifact_json) : null,
+      publishedArtifact: row.published_artifact_json
+        ? JSON.parse(row.published_artifact_json)
+        : null,
       attemptId: row.attempt_id,
       attemptOpen: row.attempt_open === 1,
       failures: row.failures,
@@ -119,7 +137,7 @@ export class IconoplasmGenePublicationState {
       const result = mutate()
       if (result && typeof result.then === "function")
         throw new TypeError("mutation must complete synchronously")
-      const desired = selection(result)
+      const desired = await selection(result)
       const prior = this.read()
       if (prior?.selectionKey === desired.selectionKey) {
         if (prior.selectionRef !== desired.selectionRef)
@@ -152,8 +170,18 @@ export class IconoplasmGenePublicationState {
 
   /** Explicit migration only: caller has already verified the old public bytes. */
   async seedPublished(desired, published) {
-    const valid = selection(desired)
-    const verified = artifact(published, valid.selectionKey)
+    // The caller proves the prior public bytes exist; the desired identity is
+    // recomputed from live authority here, so the artifact is re-signed to the
+    // authority's selectionKey instead of a caller-supplied one.
+    const valid = await selection(desired)
+    const verified = artifact(
+      {
+        selectionKey: valid.selectionKey,
+        contentSha256: published?.contentSha256,
+        objectKey: published?.objectKey,
+      },
+      valid.selectionKey,
+    )
     return this.storage.transaction(async () => {
       const prior = this.read()
       if (prior) {
