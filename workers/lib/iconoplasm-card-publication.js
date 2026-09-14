@@ -469,6 +469,7 @@ export function createCardPublication({
     return {
       symbol: cleanSymbol,
       withdrawn: false,
+      selected_asset_sha256: cleanAssetSha ? cleanAssetSha.toLowerCase() : null,
       receipts: { card: full, gene, portrait },
     }
   }

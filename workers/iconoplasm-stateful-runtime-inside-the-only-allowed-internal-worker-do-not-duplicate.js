@@ -17243,9 +17243,19 @@ export class IconoplasmVoteCoordinator {
     if (rawItems.length > 64)
       throw new Error("Candidate authority batch exceeds the 64-candidate bound")
     const incoming = new Map()
-    for (const raw of rawItems) {
+    for (let index = 0; index < rawItems.length; index += 1) {
+      const raw = rawItems[index]
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error(`Candidate at index ${index} must be an object`)
+      }
       const assetSha = normalizeSha256(raw?.asset_sha256 || "")
-      if (!assetSha || incoming.has(assetSha)) continue
+      // Validate every member before any destructive replacement: an invalid
+      // member must reject the whole batch instead of silently dropping a
+      // candidate and then deleting the stored set.
+      if (!assetSha) {
+        throw new Error(`Candidate at index ${index} has an invalid asset_sha256`)
+      }
+      if (incoming.has(assetSha)) continue
       incoming.set(assetSha, {
         asset_sha256: assetSha,
         status:
@@ -17340,7 +17350,7 @@ export class IconoplasmVoteCoordinator {
       .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }))
   }
 
-  geneAuthorityWinner() {
+  geneAuthorityWinner({ currentAssetSha, adminOverride } = {}) {
     const candidates = this.state.storage.sql
       .exec(`SELECT * FROM gene_candidate_authority ORDER BY asset_sha256 ASC`)
       .toArray()
@@ -17354,8 +17364,14 @@ export class IconoplasmVoteCoordinator {
       candidates,
       summaries: this.geneAuthoritySummaries(),
       caretaker: this.caretakerSupervotes.snapshot(),
-      currentAssetSha: normalizeSha256(this.getMeta("published_asset_sha256")) || null,
-      adminOverride: this.getMeta("admin_override") === "1",
+      currentAssetSha:
+        currentAssetSha === undefined
+          ? normalizeSha256(this.getMeta("published_asset_sha256")) || null
+          : normalizeSha256(currentAssetSha) || null,
+      adminOverride:
+        adminOverride === undefined
+          ? this.getMeta("admin_override") === "1"
+          : Boolean(adminOverride),
     })
   }
 
@@ -17363,9 +17379,12 @@ export class IconoplasmVoteCoordinator {
    * Synchronous canonical identity for the current winner. Runs inside the vote
    * storage transaction; hashing happens in IconoplasmGenePublicationState.
    */
-  authoritativeSelectionIdentity() {
+  authoritativeSelectionIdentity({ adminOverride, publishedAssetSha } = {}) {
     const caretaker = this.caretakerSupervotes.snapshot()
-    const winner = this.geneAuthorityWinner().winner
+    const winner = this.geneAuthorityWinner({
+      currentAssetSha: publishedAssetSha,
+      adminOverride,
+    }).winner
     return {
       selectionRef: composeGeneSelectionReference({
         symbol: normalizeSymbol(this.getMeta("symbol")),
@@ -17375,7 +17394,10 @@ export class IconoplasmVoteCoordinator {
           caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
             ? Number(caretaker.direction || 0)
             : 0,
-        adminOverride: this.getMeta("admin_override") === "1",
+        adminOverride:
+          adminOverride === undefined
+            ? this.getMeta("admin_override") === "1"
+            : Boolean(adminOverride),
       }),
     }
   }
@@ -17428,7 +17450,27 @@ export class IconoplasmVoteCoordinator {
         const failure = new Error(
           `Card materialization failed (${Number(response.status || 0) || "no"} status)`,
         )
-        failure.code = "CARD_MATERIALIZATION_FAILED"
+        failure.code = String(data?.code || "CARD_MATERIALIZATION_FAILED")
+        // Resource-specific deferral: a schema transition or admission pause
+        // carries its own retry deadline instead of becoming a blind 1s loop.
+        const retryAfterMs = Number(data?.retry_after_ms)
+        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+          failure.retryAt = Date.now() + retryAfterMs
+        }
+        throw failure
+      }
+      // Bind the receipt to the requested gene and exact source selection: a
+      // correctly shaped receipt for another gene must never clear this gene's
+      // pending publication.
+      if (normalizeSymbol(data?.symbol || "") !== cleanSymbol) {
+        const failure = new Error("Card materialization receipt names another gene")
+        failure.code = "CARD_RECEIPT_WRONG_GENE"
+        throw failure
+      }
+      const echoedAsset = normalizeSha256(data?.selected_asset_sha256 || "") || null
+      if ((echoedAsset || null) !== (winnerAssetSha || null)) {
+        const failure = new Error("Card materialization receipt names another source selection")
+        failure.code = "CARD_RECEIPT_WRONG_SELECTION"
         throw failure
       }
       const receipt = data?.receipts?.card
@@ -17439,7 +17481,28 @@ export class IconoplasmVoteCoordinator {
         failure.code = "CARD_RECEIPT_MISSING"
         throw failure
       }
-      return { selectionKey: ticket.selectionKey, contentSha256, objectKey }
+      // Preserve the projection references the reader plane needs alongside the
+      // exact card receipt. The object store already verified every hash before
+      // this receipt was returned.
+      const geneReceipt = data?.receipts?.gene
+      const portraitReceipt = data?.receipts?.portrait
+      const projections = {}
+      for (const [kind, value] of [
+        ["gene", geneReceipt],
+        ["portrait", portraitReceipt],
+      ]) {
+        const projectionKey = sanitizeText(value?.key || "", 512)
+        const projectionHash = normalizeSha256(value?.hash || "")
+        if (!projectionKey || !projectionHash) {
+          const failure = new Error(
+            `Card materialization is missing the ${kind} projection receipt`,
+          )
+          failure.code = "CARD_RECEIPT_INCOMPLETE"
+          throw failure
+        }
+        projections[kind] = { key: projectionKey, hash: projectionHash }
+      }
+      return { selectionKey: ticket.selectionKey, contentSha256, objectKey, projections }
     }
   }
 
@@ -18263,19 +18326,25 @@ export class IconoplasmVoteCoordinator {
       // coordinator. None needs to import all historical ordinary votes.
       this.ensureSymbol(requestedSymbol)
       try {
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Caretaker authority and publication intent commit in one storage
+          // transaction, so a failed intent can never leave the assignment
+          // ahead of the canonical selection it implies.
+          let result = null
+          const publication = await this.publication.commitSelection(() => {
+            result = this.caretakerSupervotes.projectAssignmentCore(payload?.event)
+            return this.authoritativeSelectionIdentity()
+          })
+          return Response.json({
+            ...result,
+            publication: {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            },
+          })
+        }
         const result = await this.caretakerSupervotes.projectAssignment(payload?.event)
-        const publication = await this.commitAuthorityIntentIfActivated()
-        return Response.json({
-          ...result,
-          ...(publication
-            ? {
-                publication: {
-                  changed: publication.changed,
-                  pending: publication.state?.pending === true,
-                },
-              }
-            : {}),
-        })
+        return Response.json(result)
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
           return Response.json(
@@ -18481,28 +18550,124 @@ export class IconoplasmVoteCoordinator {
           { status: 409 },
         )
       }
-      // Complete-input verification: the local authority must already contain
-      // every accepted legacy vote for this gene before the epoch flips, or the
-      // transfer would drop accepted votes. Run it before any policy meta so a
-      // refused transfer cannot leave a half-applied override behind.
+      // Replay/conflict is decided before any mutation. A rejected activation
+      // must not change an active policy, and an identical repeated activation
+      // is an idempotent replay.
+      const requestedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
+      const requestedOverride =
+        payload?.admin_override === undefined
+          ? this.getMeta("admin_override") === "1"
+          : Boolean(payload.admin_override)
+      const requestedIdentity = this.authoritativeSelectionIdentity({
+        adminOverride: requestedOverride,
+        publishedAssetSha: requestedAsset,
+      })
+      const existingPublication = this.publication.read()
+      if (existingPublication) {
+        const currentAsset = normalizeSha256(this.getMeta("published_asset_sha256") || "")
+        const currentOverride = this.getMeta("admin_override") === "1"
+        const samePolicy = requestedOverride === currentOverride && requestedAsset === currentAsset
+        if (
+          this.getMeta("authority_epoch") === "v2" &&
+          samePolicy &&
+          !existingPublication.pending
+        ) {
+          return Response.json({
+            ok: true,
+            symbol,
+            replayed: true,
+            authority_epoch: "v2",
+            winner_asset_sha256: winnerAssetShaFromSelectionReference(
+              existingPublication.selectionRef,
+            ),
+          })
+        }
+        if (
+          this.getMeta("authority_epoch") !== "v2" &&
+          !existingPublication.pending &&
+          existingPublication.selectionRef === requestedIdentity.selectionRef
+        ) {
+          // Crash window recovery: the seed committed but the epoch flip did
+          // not. Finish the coherent commit without rewriting the selection.
+          if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
+          this.setMeta("admin_override", requestedOverride ? "1" : "0")
+          this.setMeta("authority_epoch", "v2")
+          return Response.json({
+            ok: true,
+            symbol,
+            recovered: true,
+            authority_epoch: "v2",
+            winner_asset_sha256: winnerAssetShaFromSelectionReference(
+              existingPublication.selectionRef,
+            ),
+          })
+        }
+        return Response.json(
+          {
+            ok: false,
+            code: "ALREADY_ACTIVATED",
+            error: "Gene authority is already activated with a different policy",
+          },
+          { status: 409 },
+        )
+      }
+      // Complete-input verification: the local authority must contain every
+      // accepted legacy vote with the same voter, candidate and value before
+      // the epoch flips. Row counts alone are not evidence of a complete
+      // transfer. Paginated and bounded; part of migration, not a hot path.
       if (this.env?.ICONOPLASM_DB) {
         try {
-          const row = await this.env.ICONOPLASM_DB.prepare(
-            `SELECT COUNT(*) AS n FROM icono_image_votes WHERE gene_symbol = ?`,
+          const sourceVotes = new Map()
+          const pageSize = 500
+          let offset = 0
+          for (;;) {
+            const response = await this.env.ICONOPLASM_DB.prepare(
+              `SELECT user_id, asset_sha256, vote_value
+                 FROM icono_image_votes
+                WHERE gene_symbol = ?
+                ORDER BY user_id ASC, asset_sha256 ASC
+                LIMIT ? OFFSET ?`,
+            )
+              .bind(symbol, pageSize, offset)
+              .all()
+            const rows = Array.isArray(response?.results) ? response.results : []
+            for (const row of rows) {
+              const userId = normalizeUserId(row?.user_id || "")
+              const assetSha = normalizeSha256(row?.asset_sha256 || "")
+              const voteValue = normalizeVoteValue(row?.vote_value)
+              if (!userId || !assetSha || voteValue == null || voteValue === 0) continue
+              sourceVotes.set(`${userId}\u0000${assetSha}`, voteValue)
+            }
+            if (rows.length < pageSize) break
+            offset += pageSize
+            if (offset > 20000) {
+              throw new Error("Legacy vote source exceeds the bounded migration envelope")
+            }
+          }
+          const localVotes = new Map(
+            this.state.storage.sql
+              .exec(`SELECT user_id, asset_sha256, vote_value FROM vote_by_user_asset`)
+              .toArray()
+              .map((row) => [
+                `${String(row.user_id)}\u0000${String(row.asset_sha256)}`,
+                Number(row.vote_value),
+              ]),
           )
-            .bind(symbol)
-            .first()
-          const legacyCount = Math.max(0, Number(row?.n || 0) || 0)
-          const localCount = Number(
-            this.state.storage.sql.exec(`SELECT COUNT(*) AS n FROM vote_by_user_asset`).toArray()[0]
-              ?.n || 0,
-          )
-          if (legacyCount !== localCount) {
+          let complete = sourceVotes.size === localVotes.size
+          if (complete) {
+            for (const [key, value] of sourceVotes) {
+              if (localVotes.get(key) !== value) {
+                complete = false
+                break
+              }
+            }
+          }
+          if (!complete) {
             return Response.json(
               {
                 ok: false,
                 code: "IMPORT_INCOMPLETE",
-                error: `Legacy vote import is incomplete (${localCount}/${legacyCount})`,
+                error: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${sourceVotes.size} source)`,
               },
               { status: 409 },
             )
@@ -18518,15 +18683,10 @@ export class IconoplasmVoteCoordinator {
           )
         }
       }
-      // The final policy state (published asset + administrator override) must
-      // exist before the seeded identity is computed, or the clean pointer
-      // would name the pre-override election.
-      const publishedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
-      if (publishedAsset) this.setMeta("published_asset_sha256", publishedAsset)
-      if (payload?.admin_override !== undefined) {
-        this.setMeta("admin_override", payload.admin_override ? "1" : "0")
-      }
-      const election = this.geneAuthorityWinner()
+      const election = this.geneAuthorityWinner({
+        currentAssetSha: requestedAsset,
+        adminOverride: requestedOverride,
+      })
       if (!election?.winner) {
         return Response.json(
           {
@@ -18538,7 +18698,7 @@ export class IconoplasmVoteCoordinator {
         )
       }
       try {
-        await this.publication.seedPublished(this.authoritativeSelectionIdentity(), {
+        await this.publication.seedPublished(requestedIdentity, {
           contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
           objectKey: sanitizeText(payload?.published?.object_key || "", 512),
         })
@@ -18552,6 +18712,10 @@ export class IconoplasmVoteCoordinator {
           { status: 409 },
         )
       }
+      // Persist policy + epoch only after the verified published identity is
+      // committed. A crash before this leaves the seed recoverable by replay.
+      if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
+      this.setMeta("admin_override", requestedOverride ? "1" : "0")
       this.setMeta("authority_epoch", "v2")
       return Response.json({
         ok: true,
