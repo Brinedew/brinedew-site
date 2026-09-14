@@ -18100,6 +18100,11 @@ export class IconoplasmVoteCoordinator {
     // mirror, or declare paging elsewhere sufficient: this cold read/write set
     // still needs bounded, resumable admission including Durable Object cost.
     const safeSymbol = this.ensureSymbol(symbol)
+    // An activated v2 gene is locally authoritative and D1-free: a cold
+    // bootstrap or any later fallback must never reimport legacy D1 vote
+    // history or clear the votes, caretaker state and publication intent
+    // accepted under v2.
+    if (this.getMeta("authority_epoch") === "v2") return safeSymbol
     if (!this.env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
     if (this.getMeta("bootstrapped") === "1") return safeSymbol
     await this.state.blockConcurrencyWhile(async () => {
@@ -18475,6 +18480,43 @@ export class IconoplasmVoteCoordinator {
           },
           { status: 409 },
         )
+      }
+      // Complete-input verification: the local authority must already contain
+      // every accepted legacy vote for this gene before the epoch flips, or the
+      // transfer would drop accepted votes. Run it before any policy meta so a
+      // refused transfer cannot leave a half-applied override behind.
+      if (this.env?.ICONOPLASM_DB) {
+        try {
+          const row = await this.env.ICONOPLASM_DB.prepare(
+            `SELECT COUNT(*) AS n FROM icono_image_votes WHERE gene_symbol = ?`,
+          )
+            .bind(symbol)
+            .first()
+          const legacyCount = Math.max(0, Number(row?.n || 0) || 0)
+          const localCount = Number(
+            this.state.storage.sql.exec(`SELECT COUNT(*) AS n FROM vote_by_user_asset`).toArray()[0]
+              ?.n || 0,
+          )
+          if (legacyCount !== localCount) {
+            return Response.json(
+              {
+                ok: false,
+                code: "IMPORT_INCOMPLETE",
+                error: `Legacy vote import is incomplete (${localCount}/${legacyCount})`,
+              },
+              { status: 409 },
+            )
+          }
+        } catch (error) {
+          return Response.json(
+            {
+              ok: false,
+              code: "SOURCE_CHECK_FAILED",
+              error: sanitizeText(String(error?.message || error), 300),
+            },
+            { status: 503 },
+          )
+        }
       }
       // The final policy state (published asset + administrator override) must
       // exist before the seeded identity is computed, or the clean pointer
