@@ -13,17 +13,33 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Capture exact source and changes
-        shell: bash
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install locked test runtime
         run: |
-          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Verify the implementation stayed unchanged
+        run: |
           mkdir -p audit-evidence
           git rev-parse HEAD > audit-evidence/audit-head.txt
-          git diff 48408d8ac82de7cc7504749e9e6396af1350d5c3 ee4b3b573a6aefb6f0be0371bbfc08d75baeb7c9 -- workers shared scripts plans > audit-evidence/repair.patch
-          git archive --format=tar.gz --output=audit-evidence/pinned-source.tar.gz ee4b3b573a6aefb6f0be0371bbfc08d75baeb7c9 workers shared scripts docs plans architecture-fences.json cloudflare package.json pnpm-lock.yaml pnpm-workspace.yaml AGENTS.md CLAUDE.md .github/workflows wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+          git diff --exit-code ee4b3b573a6aefb6f0be0371bbfc08d75baeb7c9 HEAD -- workers shared scripts/b762-v1-excision-audit.mjs
+      - name: Previous eleven regression checks
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/b762-v1-excision-audit.mjs 2>&1 | tee audit-evidence/prior-regressions.txt
+      - name: Publication and transfer boundaries
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/b762-publication-path-audit.mjs 2>&1 | tee audit-evidence/publication-regressions.txt
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: b762-publication-source
+          name: b762-publication-regressions
           path: audit-evidence
           retention-days: 7
           if-no-files-found: error
