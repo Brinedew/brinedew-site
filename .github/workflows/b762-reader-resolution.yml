@@ -1,0 +1,26 @@
+name: B-762 reader resolution
+on:
+  push:
+    branches: ["work/b762-reader-resolution"]
+permissions:
+  contents: read
+jobs:
+  reader-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture source for the implementation workspace
+        run: |
+          mkdir -p reader-evidence
+          git rev-parse HEAD > reader-evidence/source-sha.txt
+          git archive --format=tar.gz --output=reader-evidence/source.tar.gz HEAD
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b762-reader-source
+          path: reader-evidence
+          retention-days: 7
+          if-no-files-found: error
