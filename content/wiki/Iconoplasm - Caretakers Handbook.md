@@ -80,7 +80,7 @@ This is the only arrangement in which foundational projects of this scale can ha
 
 It's completely understandable to feel taken advantage of, when you craft a design and someone else gets fame and fortune for putting it on a mug. Money and status are easily observable immediately. What is harder to see are diffuse long-term benefits of working on a large-scale public-benefit project like this:
 - Iconoplasm  
-- Participating in mission-driven online communities builds long-term bonds of trust with people who are interested in similar things as you. Digital spaces are known to spin off into real-world organizations, businesses and movements (see: Lesswrong, Effective altruism)
+- Participating in mission-driven online communities builds long-term bonds of trust with people who are interested in similar things as you. Digital spaces are known to spin off into real-world organizations, businesses and movements (see: Lesswrong, Effective altruism, SCP wiki)
 - In 40 years, the doctor treating you from cancer might not have been there if not for using Iconoplasm characters as a study reference. Looking at your work this way, you're making your own future healthcare cheaper and better quality.
 
 If you're interested in the idea of Iconoplasm, but you need stronger attribution and ownership of your labor, I will be happy to collaborate with you on the distribution side of things.
