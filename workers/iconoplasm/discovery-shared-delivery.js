@@ -29,6 +29,12 @@ SELECT
   json_extract(value, '$.payload_sha256'),
   CURRENT_TIMESTAMP
 FROM json_each(?)`
+const OUTBOX_SELECT_SQL = `SELECT payload_json
+FROM icono_discovery_shared_delivery_outbox_v2
+ORDER BY created_at ASC, delivery_id ASC
+LIMIT ?`
+const OUTBOX_DELETE_SQL = `DELETE FROM icono_discovery_shared_delivery_outbox_v2
+WHERE delivery_id IN (SELECT value FROM json_each(?))`
 
 function rows(result) {
   return Array.isArray(result?.results) ? result.results : []
@@ -42,7 +48,8 @@ function integer(value, label, { min = 0, max = 0xffffffff } = {}) {
 }
 
 function normalizeDelivery(raw) {
-  if (!raw || raw.schema !== DELIVERY_SCHEMA) throw new TypeError("Invalid discovery delivery schema")
+  if (!raw || raw.schema !== DELIVERY_SCHEMA)
+    throw new TypeError("Invalid discovery delivery schema")
   const userId = String(raw.user_id || "")
   const batchId = String(raw.batch_id || "")
   const deliveryId = String(raw.delivery_id || "")
@@ -234,4 +241,37 @@ export async function consumeSharedDiscoveryDeliveries(
     }
   }
   throw new Error(`Shared discovery delivery remained contended after ${attemptsLimit} attempts`)
+}
+
+// Bounded drain of the durable outbox written beside each compact personal
+// batch. Replay after a crash between apply and cleanup is safe because the
+// consumer deduplicates by delivery_id; an unapplied batch stays in the outbox
+// until a later drain succeeds.
+export async function drainSharedDiscoveryDeliveries(
+  db,
+  { limit = 128, maxAttempts = 8, onAttempt = null } = {},
+) {
+  const bounded = Math.max(1, Math.min(128, Number(limit) || 128))
+  const read = await db.prepare(OUTBOX_SELECT_SQL).bind(bounded).all()
+  const pending = rows(read)
+  if (!pending.length) return { ok: true, drained: 0, applied: 0, duplicates: 0 }
+  const deliveries = []
+  for (const row of pending) {
+    try {
+      deliveries.push(JSON.parse(String(row.payload_json || "{}")))
+    } catch {
+      throw new Error("Discovery shared delivery outbox row is not valid JSON")
+    }
+  }
+  const result = await consumeSharedDiscoveryDeliveries(db, deliveries, { maxAttempts, onAttempt })
+  await db
+    .prepare(OUTBOX_DELETE_SQL)
+    .bind(JSON.stringify(deliveries.map((delivery) => delivery.delivery_id)))
+    .run()
+  return {
+    ok: true,
+    drained: deliveries.length,
+    applied: Number(result.applied || 0),
+    duplicates: Number(result.duplicates || 0),
+  }
 }
