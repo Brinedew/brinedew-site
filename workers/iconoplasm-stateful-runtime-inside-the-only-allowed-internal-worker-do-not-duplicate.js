@@ -8283,7 +8283,21 @@ async function callFalImageProvider({ providerRow, apiKey, prompt, sourceUrl = "
   body.enable_safety_checker = true
   if (sourceUrl) {
     const editImageParam = sanitizeText(falOption?.edit_image_param || "", 64) || "image_urls"
-    body[editImageParam] = [sourceUrl]
+    // B-618: the model contract decides how the source URL is wrapped.
+    //   "string"       -> url          (Flux Kontext)
+    //   "object-array" -> [{url, tag}]
+    //   anything else  -> [url]        (Nano Banana, Seedream, GPT Image, …)
+    // Sending an array to a scalar-schema model fails provider validation
+    // before generation, so the shape must never be guessed.
+    const editImageObjectShape = String(falOption?.edit_image_object_shape || "").trim()
+    if (editImageObjectShape === "object-array") {
+      const tag = String(falOption?.edit_reference_tag || "source").trim() || "source"
+      body[editImageParam] = [{ url: sourceUrl, tag }]
+    } else if (editImageObjectShape === "string") {
+      body[editImageParam] = sourceUrl
+    } else {
+      body[editImageParam] = [sourceUrl]
+    }
   }
 
   const submitUrl = `${baseUrl}/${falModel}`
