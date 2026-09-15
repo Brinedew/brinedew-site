@@ -2,9 +2,31 @@ import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import {
-  recordDiscoveryEncounterAtomically,
-  mergeDiscoverySymbolsAtomically,
-} from "./iconoplasm/discovery-encounter.js"
+  createDiscoveryOrdinalDictionary,
+  hasDiscoveryOrdinal,
+} from "./iconoplasm/discovery-compact-state.js"
+import {
+  evolveAndPersistDiscoveryDictionary,
+  loadDiscoveryDictionaryForNames,
+  readCanonicalSymbolsForOrdinals,
+} from "./iconoplasm/discovery-ordinal-store.js"
+import {
+  readCompactDiscoveryChronology,
+  readCompactUserState,
+  readSharedCompactState,
+} from "./iconoplasm/discovery-compact-store.js"
+import { recordCompactDiscoveryBatch } from "./iconoplasm/discovery-compact-service.js"
+import {
+  consumeSharedDiscoveryDeliveries,
+  drainSharedDiscoveryDeliveries,
+} from "./iconoplasm/discovery-shared-delivery.js"
+import { importLegacyDiscoveryUser } from "./iconoplasm/discovery-compact-migrate.js"
+import {
+  compactSharedRowsFromSummaries,
+  compactSharedSummaries,
+  compactShelfRowsFromChronology,
+  sortCompactShelfRows,
+} from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
   fetchMaintainedAssetSummary,
@@ -46,10 +68,7 @@ import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
-import {
-  parseDiscoveryMembershipSymbols,
-  readDiscoveryMembership,
-} from "./iconoplasm-discovery-membership.js"
+import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
@@ -11835,46 +11854,155 @@ export async function fulfillGenerationRequests(
   }
 }
 
-async function recordGeneDiscoveryEncounter(
+// Compact discovery integration. The ordinal dictionary resolves every
+// requested name to one stable bit; the legacy per-hover writer is retired.
+const DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS = 256
+const discoveryCompactImportPromises = new Map()
+
+function discoveryCompactDictionaryFromLookup(lookup) {
+  return createDiscoveryOrdinalDictionary(
+    [...lookup.byOrdinal.entries()].map(([ordinal, symbol]) => ({ symbol, ordinal })),
+    { version: Math.max(1, Number(lookup.version || 0) || 1) },
+  )
+}
+
+async function refreshDiscoveryDictionaryFromCatalog(env) {
+  if (!env.ICONOPLASM_DB) return { version: 0, changed: false, writes: 0 }
+  const result = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, aliases_json FROM icono_gene_catalog ORDER BY gene_symbol ASC`,
+  ).all()
+  const symbols = []
+  const aliases = {}
+  for (const row of Array.isArray(result?.results) ? result.results : []) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    symbols.push(symbol)
+    for (const alias of normalizeCatalogAliases(row?.aliases_json || "[]")) {
+      const aliasNorm = normalizeSymbol(alias)
+      if (aliasNorm && aliasNorm !== symbol) aliases[aliasNorm] = symbol
+    }
+  }
+  return evolveAndPersistDiscoveryDictionary(env.ICONOPLASM_DB, { symbols, aliases })
+}
+
+async function readDiscoveryDictionaryForSymbols(env, names) {
+  const lookup = await loadDiscoveryDictionaryForNames(env.ICONOPLASM_DB, names)
+  return lookup
+}
+
+// A user's compact state is created once. While it is missing, that user's own
+// legacy rows (an exact-key seek, not a corpus scan) are imported in bounded
+// batches and every later read is compact. Concurrent first touches share one
+// import.
+async function readOrImportCompactUserState(
   env,
-  {
-    userId,
-    geneSymbol,
-    source = DISCOVERY_SOURCE_EXTENSION_HOVER,
-    trigger = DISCOVERY_TRIGGER_HOVER_DWELL,
-    dwellMs = null,
-  } = {},
+  { userId, isAdmin = false, allowImport = false } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  if (!env.ICONOPLASM_DB) return null
   const userIdNorm = normalizeUserId(userId || "")
-  const geneSymbolNorm = normalizeSymbol(geneSymbol || "")
-  const sourceNorm = normalizeDiscoverySource(source)
-  const triggerNorm = normalizeDiscoveryTrigger(trigger)
-  const dwellMsNorm = normalizeDiscoveryDwellMs(dwellMs)
-  if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
-  if (!userIdNorm || isGuestUserId(userIdNorm))
-    return { ok: false, error: "Authentication required" }
-  if (!sourceNorm) return { ok: false, error: "Missing or invalid discovery source" }
-  if (!triggerNorm) return { ok: false, error: "Missing or invalid discovery trigger" }
-  if (triggerNorm === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMsNorm == null) {
-    return { ok: false, error: "hover_dwell discovery events must include dwell_ms" }
-  }
-
-  const { row, created } = await recordDiscoveryEncounterAtomically(env.ICONOPLASM_DB, {
-    userId: userIdNorm,
-    geneSymbol: geneSymbolNorm,
-    source: sourceNorm,
-    trigger: triggerNorm,
-    dwellMs: dwellMsNorm,
-    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
-    seedOnly: sourceNorm === DISCOVERY_SOURCE_STARTER_SEED,
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return null
+  const existing = await readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
+  if (existing || !allowImport) return existing
+  const inFlight = discoveryCompactImportPromises.get(userIdNorm)
+  if (inFlight) return inFlight
+  const promise = (async () => {
+    const legacy = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, first_discovered_at, last_encountered_at, encounter_count,
+              first_source, last_source, first_trigger, last_trigger,
+              first_dwell_ms, last_dwell_ms
+       FROM icono_gene_discoveries
+       WHERE user_id = ?`,
+    )
+      .bind(userIdNorm)
+      .all()
+    const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
+    if (!legacyRows.length) return null
+    const importLookup = await loadDiscoveryDictionaryForNames(
+      env.ICONOPLASM_DB,
+      legacyRows.map((row) => row?.gene_symbol),
+    )
+    const importDictionary = discoveryCompactDictionaryFromLookup(importLookup)
+    const resolvable = legacyRows.filter((row) =>
+      importLookup.byName.has(
+        String(row?.gene_symbol || "")
+          .trim()
+          .toUpperCase(),
+      ),
+    )
+    if (!resolvable.length) return null
+    await importLegacyDiscoveryUser({
+      db: env.ICONOPLASM_DB,
+      userId: userIdNorm,
+      dictionary: importDictionary,
+      legacyRows: resolvable,
+      isAdmin,
+    })
+    return readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
+  })().finally(() => {
+    discoveryCompactImportPromises.delete(userIdNorm)
   })
+  discoveryCompactImportPromises.set(userIdNorm, promise)
+  return promise
+}
 
-  return {
-    ok: true,
-    created,
-    discovery: mapGeneDiscoveryRow(row || {}),
+// One compact recorder for hover batches, guest merges and starter seeding.
+// The dictionary is the only name authority; unknown names are reported, never
+// silently invented, and a catalog drift refreshes the dictionary once.
+async function recordCompactDiscoveryEncounters(
+  env,
+  { userId, isAdmin = false, batchId, encounters = [] },
+) {
+  if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  const db = env.ICONOPLASM_DB
+  const names = encounters.map((encounter) => encounter.symbol)
+  let lookup = await loadDiscoveryDictionaryForNames(db, names)
+  if (!lookup.version) {
+    await refreshDiscoveryDictionaryFromCatalog(env)
+    lookup = await loadDiscoveryDictionaryForNames(db, names)
   }
+  let unknown = lookup.names.filter((name) => !lookup.byName.has(name))
+  if (unknown.length) {
+    const catalog = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM icono_gene_catalog
+       WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+      )
+      .bind(JSON.stringify(unknown))
+      .first()
+    if (Number(catalog?.n || 0) > 0) {
+      await refreshDiscoveryDictionaryFromCatalog(env)
+      lookup = await loadDiscoveryDictionaryForNames(db, names)
+      unknown = lookup.names.filter((name) => !lookup.byName.has(name))
+    }
+  }
+  const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
+  if (!known.length) {
+    return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
+  }
+  const dictionary = discoveryCompactDictionaryFromLookup(lookup)
+  await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  const result = await recordCompactDiscoveryBatch(db, {
+    userId,
+    isAdmin,
+    batchId,
+    dictionary,
+    encounters: known,
+  })
+  return { ...result, recorded: known.length, dropped: unknown }
+}
+
+async function readCompactDiscoveryMembership(env, { userId, symbols, isAdmin = false }) {
+  const discovered = []
+  if (!symbols.length) return discovered
+  const lookup = await readDiscoveryDictionaryForSymbols(env, symbols)
+  const state = await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  const membership = String(state?.membership_b64 || "")
+  for (const symbol of symbols) {
+    const ordinal = lookup.byName.get(symbol)
+    if (ordinal == null) continue
+    if (hasDiscoveryOrdinal(membership, ordinal)) discovered.push(symbol)
+  }
+  return discovered.sort(compareNullableTextAsc)
 }
 
 function iconoplasmConfiguredAdminUserId(env) {
@@ -11905,18 +12033,12 @@ async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {})
     1,
     Math.min(20000, Number.parseInt(String(limit || "20000"), 10) || 20000),
   )
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-     FROM icono_shared_gene_discoveries
-     WHERE non_admin_discoverer_count > 0
-     ORDER BY gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
-  return normalizeSharedDiscoverySymbolList(
-    (Array.isArray(rows?.results) ? rows.results : []).map((row) => row?.gene_symbol),
-  )
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const ordinals = compactSharedSummaries(shared)
+    .map((summary) => summary.ordinal)
+    .slice(0, cleanedLimit)
+  const symbols = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, ordinals)
+  return normalizeSharedDiscoverySymbolList([...symbols.values()])
 }
 
 async function writeSharedGeneDiscoverySymbolCache(env, symbols) {
@@ -11967,32 +12089,85 @@ export async function publishSharedGeneDiscoverySymbols(env) {
   return { ok: true, changed: true, symbol_count: nextSymbols.length }
 }
 
+// Repair path: rebuild the compact shared aggregate from the durable per-user
+// chronology, excluding the configured admin account. The exact consumer
+// primitive applies the rebuilt deltas with idempotency receipts, so a rerun
+// after a crash converges instead of double-counting.
 async function rebuildSharedGeneDiscoveryRollup(env) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const db = env.ICONOPLASM_DB
   const adminUserId = iconoplasmConfiguredAdminUserId(env)
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_shared_gene_discoveries`).run()
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_shared_gene_discoveries (
-       gene_symbol,
-       first_non_admin_discovered_at,
-       latest_non_admin_encountered_at,
-       non_admin_discoverer_count,
-       non_admin_encounter_count,
-       updated_at
-     )
-     SELECT
-       gene_symbol,
-       MIN(first_discovered_at) AS first_non_admin_discovered_at,
-       MAX(last_encountered_at) AS latest_non_admin_encountered_at,
-       COUNT(*) AS non_admin_discoverer_count,
-       COALESCE(SUM(encounter_count), 0) AS non_admin_encounter_count,
-       CURRENT_TIMESTAMP AS updated_at
-     FROM icono_gene_discoveries
-     WHERE (? = '' OR user_id <> ?)
-     GROUP BY gene_symbol`,
-  )
-    .bind(adminUserId, adminUserId)
-    .run()
+  const deliveries = []
+  let cursor = ""
+  for (;;) {
+    const page = await db
+      .prepare(
+        `SELECT user_id FROM icono_discovery_user_state_v2
+       WHERE user_id > ? ORDER BY user_id ASC LIMIT 100`,
+      )
+      .bind(cursor)
+      .all()
+    const users = (Array.isArray(page?.results) ? page.results : []).map((row) =>
+      String(row.user_id),
+    )
+    if (!users.length) break
+    for (const user of users) {
+      if (adminUserId && user === adminUserId) continue
+      const chronology = await readCompactDiscoveryChronology(db, user)
+      const byOrdinal = new Map()
+      const collect = (event) => {
+        const ordinal = Number(event?.ordinal)
+        if (!Number.isInteger(ordinal) || ordinal < 0) return
+        const at = Math.max(0, Math.floor(Number(event?.at) || 0))
+        const prior = byOrdinal.get(ordinal)
+        if (!prior) {
+          byOrdinal.set(ordinal, { ordinal, encounters: 1, first_at: at, latest_at: at })
+          return
+        }
+        prior.encounters += 1
+        prior.first_at = Math.min(prior.first_at, at)
+        prior.latest_at = Math.max(prior.latest_at, at)
+      }
+      for (const chunk of chronology.chunks) for (const event of chunk.events) collect(event)
+      for (const event of chronology.active_events) collect(event)
+      const deltas = [...byOrdinal.values()]
+      if (!deltas.length) continue
+      const userState = await readCompactUserState(db, user)
+      const dictionaryVersion = Math.max(1, Number(chronology.dictionary_version || 1))
+      for (let offset = 0; offset < deltas.length; offset += 128) {
+        const slice = deltas.slice(offset, offset + 128)
+        const pageIndex = offset / 128
+        deliveries.push({
+          schema: "iconoplasm.discoverySharedDelivery.v1",
+          delivery_id: `${user}:rebuild.${pageIndex}`,
+          user_id: user,
+          batch_id: `rebuild.${pageIndex}`,
+          user_state_version: Math.max(1, Number(userState?.state_version || 1)),
+          dictionary_version: dictionaryVersion,
+          deltas: slice.map((delta) => [
+            delta.ordinal,
+            1,
+            delta.encounters,
+            delta.first_at,
+            delta.latest_at,
+          ]),
+        })
+      }
+    }
+    cursor = users[users.length - 1]
+  }
+  await db.batch([
+    db.prepare(
+      `UPDATE icono_discovery_shared_state_v2 SET
+         discoverer_counts_b64 = '', encounter_counts_b64 = '',
+         first_at_b64 = '', latest_at_b64 = '', updated_at = CURRENT_TIMESTAMP
+       WHERE singleton = 1`,
+    ),
+    db.prepare(`DELETE FROM icono_discovery_shared_delivery_receipts_v2`),
+  ])
+  for (let offset = 0; offset < deliveries.length; offset += 128) {
+    await consumeSharedDiscoveryDeliveries(db, deliveries.slice(offset, offset + 128))
+  }
   const discoveredCount = await countSharedGeneDiscoveries(env)
   const symbols = await readSharedGeneDiscoverySymbolsFromD1(env)
   await writeSharedGeneDiscoverySymbolCache(env, symbols)
@@ -12000,6 +12175,7 @@ async function rebuildSharedGeneDiscoveryRollup(env) {
     ok: true,
     admin_user_excluded: Boolean(adminUserId),
     discovered_count: discoveredCount,
+    rebuilt_deliveries: deliveries.length,
   }
 }
 
@@ -12009,39 +12185,93 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
     return { ok: false, error: "Authentication required" }
   }
-  const createdSymbols = []
-  // Starter genes are part of the signed-in shelf contract. Backfill them lazily on
-  // shelf/bootstrap endpoints so legacy accounts and brand-new logins stop showing a
-  // literal zero-state shelf.
-  //
-  // Cost fence: do not call this from extension hover dwell writes. Even with raw
-  // key predicates, three existence probes on every hover would still multiply into
-  // absurd D1 traffic.
-  for (const geneSymbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
-    const existing = await env.ICONOPLASM_DB.prepare(
-      `SELECT 1
-       FROM icono_gene_discoveries
-       WHERE user_id = ?
-         AND gene_symbol = ?
-       LIMIT 1`,
-    )
-      .bind(userIdNorm, geneSymbol)
-      .first()
-    if (existing) continue
-    const result = await recordGeneDiscoveryEncounter(env, {
-      userId: userIdNorm,
-      geneSymbol,
+  // Starter genes are part of the signed-in shelf contract. They are compact
+  // membership bits; a user who already has them performs no write at all.
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const lookup = await readDiscoveryDictionaryForSymbols(env, ICONOPLASM_STARTER_GENE_SYMBOLS)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  const membership = String(state?.membership_b64 || "")
+  const missing = ICONOPLASM_STARTER_GENE_SYMBOLS.filter((symbol) => {
+    const ordinal = lookup.byName.get(symbol)
+    return ordinal == null || !hasDiscoveryOrdinal(membership, ordinal)
+  })
+  if (!missing.length) return { ok: true, created: 0, symbols: [] }
+  const at = Math.floor(Date.now() / 1000)
+  const seedBatchId = `starter.seed.${(await sha256Hex(`starter:${userIdNorm}`)).slice(0, 32)}`
+  await recordCompactDiscoveryEncounters(env, {
+    userId: userIdNorm,
+    isAdmin,
+    batchId: seedBatchId,
+    encounters: missing.map((symbol) => ({
+      symbol,
+      at,
       source: DISCOVERY_SOURCE_STARTER_SEED,
       trigger: DISCOVERY_TRIGGER_STARTER_SEED,
-      dwellMs: null,
-    })
-    if (result.ok && result.created) createdSymbols.push(geneSymbol)
+      dwell_ms: null,
+    })),
+  })
+  return { ok: true, created: missing.length, symbols: missing }
+}
+
+// Card metadata for compact shelf rows. Discovery fields stay in charge; the
+// catalog/essence/rollup joins only fill identity, measurements and live votes.
+async function enrichGeneDiscoveryRows(env, rows) {
+  if (!rows.length) return []
+  const requested = [...new Set(rows.map((row) => row.gene_symbol))].sort()
+  const metadata = new Map()
+  for (let offset = 0; offset < requested.length; offset += 250) {
+    const chunk = requested.slice(offset, offset + 250)
+    const result = await env.ICONOPLASM_DB.prepare(
+      `SELECT
+         gc.gene_symbol,
+         COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
+         ge.weight_kg,
+         ge.age_years,
+         ge.leakage_percent AS uniqueness_rank,
+         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+         COALESCE(gr.live_score, 0) AS image_score,
+         gr.live_created_at AS published_at,
+         gr.live_created_at AS asset_created_at,
+         gr.current_asset_sha256 AS asset_sha256,
+         384 AS image_width,
+         512 AS image_height
+       FROM icono_gene_catalog gc
+       LEFT JOIN icono_gene_essence ge
+         ON ge.gene_symbol = gc.gene_symbol
+       LEFT JOIN icono_admin_gene_rollup gr
+         ON gr.gene_symbol = gc.gene_symbol
+       WHERE gc.gene_symbol IN (SELECT value FROM json_each(?))`,
+    )
+      .bind(JSON.stringify(chunk))
+      .all()
+    for (const row of Array.isArray(result?.results) ? result.results : []) {
+      metadata.set(String(row.gene_symbol || ""), row)
+    }
   }
-  return {
-    ok: true,
-    created: createdSymbols.length,
-    symbols: createdSymbols,
-  }
+  return rows.map((row) =>
+    mapGeneDiscoveryRow({ ...(metadata.get(row.gene_symbol) || {}), ...row }),
+  )
+}
+
+async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+  const state = await readOrImportCompactUserState(env, {
+    userId,
+    isAdmin,
+    allowImport: true,
+  })
+  if (!state) return []
+  const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
+  const rows = compactShelfRowsFromChronology(chronology)
+  const bounded =
+    limit == null
+      ? rows
+      : rows.slice(0, Math.max(1, Math.min(10000, Number.parseInt(String(limit), 10) || 5000)))
+  return enrichGeneDiscoveryRows(env, bounded)
 }
 
 async function listUserGeneDiscoveries(
@@ -12051,46 +12281,9 @@ async function listUserGeneDiscoveries(
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000),
-  )
-  // These runtime tables already store canonical gene_symbol primary keys.
-  // Keep the joins/order on the raw key so SQLite can use the indexes instead
-  // of scanning and temp-sorting the whole shelf query.
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       d.*,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at,
-       gr.current_asset_sha256 AS asset_sha256,
-       384 AS image_width,
-       512 AS image_height
-     FROM icono_gene_discoveries d
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = d.gene_symbol
-     WHERE d.user_id = ?
-     ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(userIdNorm, cleanedLimit)
-    .all()
-  return sortDiscoveryRowsForOrder(
-    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
-    normalizeIconoplasmHomeOrder(order, "newest"),
-    seed,
-  )
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const rows = await compactShelfRows(env, { userId: userIdNorm, isAdmin, limit })
+  return sortDiscoveryRowsForOrder(rows, normalizeIconoplasmHomeOrder(order, "newest"), seed)
 }
 
 const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
@@ -12169,6 +12362,69 @@ function validateAccountGalleryCursor(raw, order, scope) {
   return { ok: true, value: { ...value, symbol, first_discovered_at: time } }
 }
 
+function paginateCompactDiscoveryRows({
+  decorated,
+  limit,
+  order,
+  scope,
+  after,
+  before,
+  cursorValue,
+}) {
+  const backward = Boolean(before)
+  const sorted = [...decorated]
+  if (order === "symbol") {
+    sorted.sort((left, right) =>
+      backward
+        ? right.gene_symbol.localeCompare(left.gene_symbol)
+        : left.gene_symbol.localeCompare(right.gene_symbol),
+    )
+  } else {
+    sorted.sort((left, right) => {
+      const timeCompare = backward
+        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "")
+        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "")
+      return timeCompare || left.gene_symbol.localeCompare(right.gene_symbol)
+    })
+  }
+  let filtered = sorted
+  if (cursorValue) {
+    const cursorSymbol = normalizeSymbol(cursorValue.symbol || "")
+    if (order === "symbol") {
+      filtered = sorted.filter((row) =>
+        backward ? row.gene_symbol < cursorSymbol : row.gene_symbol > cursorSymbol,
+      )
+    } else {
+      const cursorTime = sanitizeText(cursorValue.first_discovered_at || "", 64)
+      filtered = sorted.filter((row) => {
+        const time = row.first_discovered_at || ""
+        return backward
+          ? time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
+          : time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
+      })
+    }
+  }
+  const pageRows = filtered.slice(0, limit)
+  if (backward) pageRows.reverse()
+  const hasRequestedMore = filtered.length > limit
+  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
+  const hasMore = backward ? Boolean(before) : hasRequestedMore
+  const firstRow = pageRows[0] || null
+  const lastRow = pageRows[pageRows.length - 1] || null
+  return {
+    rows: pageRows,
+    hasPrevious,
+    hasMore,
+    previousCursor: hasPrevious
+      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(firstRow, order, scope))
+      : "",
+    nextCursor: hasMore
+      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, order, scope))
+      : "",
+    unsupportedOrder: "",
+  }
+}
+
 async function listUserGeneDiscoveryWindow(
   env,
   { userId, limit = 24, order = "newest", after = "", before = "", cursorValue = null } = {},
@@ -12193,89 +12449,17 @@ async function listUserGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const fetchLimit = cleanedLimit + 1
-  const decodedCursor = cursorValue
-  const backward = Boolean(before)
-  const selectSql = `SELECT
-       d.*,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
-     FROM icono_gene_discoveries d
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = d.gene_symbol
-     WHERE d.user_id = ?`
-  let rowsResult
-  if (resolvedOrder === "symbol") {
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor = cursorSymbol
-      ? backward
-        ? " AND d.gene_symbol < ?"
-        : " AND d.gene_symbol > ?"
-      : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY d.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult = cursorSymbol
-      ? await statement.bind(userIdNorm, cursorSymbol, fetchLimit).all()
-      : await statement.bind(userIdNorm, fetchLimit).all()
-  } else {
-    const cursorTime = decodedCursor
-      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
-      : ""
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor =
-      cursorTime && cursorSymbol
-        ? backward
-          ? " AND (d.first_discovered_at > ? OR (d.first_discovered_at = ? AND d.gene_symbol < ?))"
-          : " AND (d.first_discovered_at < ? OR (d.first_discovered_at = ? AND d.gene_symbol > ?))"
-        : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY d.first_discovered_at ${backward ? "ASC" : "DESC"}, d.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult =
-      cursorTime && cursorSymbol
-        ? await statement.bind(userIdNorm, cursorTime, cursorTime, cursorSymbol, fetchLimit).all()
-        : await statement.bind(userIdNorm, fetchLimit).all()
-  }
-  const allRows = (Array.isArray(rowsResult?.results) ? rowsResult.results : []).map(
-    mapGeneDiscoveryRow,
-  )
-  const pageRows = allRows.slice(0, cleanedLimit)
-  if (backward) pageRows.reverse()
-  const hasRequestedMore = allRows.length > cleanedLimit
-  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
-  const hasMore = backward ? Boolean(before) : hasRequestedMore
-  const firstRow = pageRows[0] || null
-  const lastRow = pageRows[pageRows.length - 1] || null
-  return {
-    rows: pageRows,
-    hasPrevious,
-    hasMore,
-    previousCursor: hasPrevious
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "personal"),
-        )
-      : "",
-    nextCursor: hasMore
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "personal"),
-        )
-      : "",
-    unsupportedOrder: "",
-  }
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const decorated = await compactShelfRows(env, { userId: userIdNorm, isAdmin })
+  return paginateCompactDiscoveryRows({
+    decorated,
+    limit: cleanedLimit,
+    order: resolvedOrder,
+    scope: "personal",
+    after,
+    before,
+    cursorValue,
+  })
 }
 
 async function listSharedGeneDiscoveryWindow(
@@ -12298,122 +12482,44 @@ async function listSharedGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const fetchLimit = cleanedLimit + 1
-  const decodedCursor = cursorValue
-  const backward = Boolean(before)
-  const selectSql = `SELECT
-       r.gene_symbol,
-       r.first_non_admin_discovered_at AS first_discovered_at,
-       r.latest_non_admin_encountered_at AS last_encountered_at,
-       r.non_admin_encounter_count AS encounter_count,
-       'shared' AS first_source,
-       'shared' AS last_source,
-       'shared' AS first_trigger,
-       'shared' AS last_trigger,
-       NULL AS first_dwell_ms,
-       NULL AS last_dwell_ms,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(r.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
-     FROM icono_shared_gene_discoveries r
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = r.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = r.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = r.gene_symbol
-     WHERE r.non_admin_discoverer_count > 0`
-  let rowsResult
-  if (resolvedOrder === "symbol") {
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor = cursorSymbol
-      ? backward
-        ? " AND r.gene_symbol < ?"
-        : " AND r.gene_symbol > ?"
-      : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY r.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult = cursorSymbol
-      ? await statement.bind(cursorSymbol, fetchLimit).all()
-      : await statement.bind(fetchLimit).all()
-  } else {
-    const cursorTime = decodedCursor
-      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
-      : ""
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor =
-      cursorTime && cursorSymbol
-        ? backward
-          ? " AND (r.first_non_admin_discovered_at > ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol < ?))"
-          : " AND (r.first_non_admin_discovered_at < ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol > ?))"
-        : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY r.first_non_admin_discovered_at ${backward ? "ASC" : "DESC"}, r.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult =
-      cursorTime && cursorSymbol
-        ? await statement.bind(cursorTime, cursorTime, cursorSymbol, fetchLimit).all()
-        : await statement.bind(fetchLimit).all()
-  }
-  const allRows = (Array.isArray(rowsResult?.results) ? rowsResult.results : []).map(
-    mapGeneDiscoveryRow,
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const summaries = compactSharedSummaries(shared)
+  const symbols = await readCanonicalSymbolsForOrdinals(
+    env.ICONOPLASM_DB,
+    summaries.map((summary) => summary.ordinal),
   )
-  const pageRows = allRows.slice(0, cleanedLimit)
-  if (backward) pageRows.reverse()
-  const hasRequestedMore = allRows.length > cleanedLimit
-  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
-  const hasMore = backward ? Boolean(before) : hasRequestedMore
-  const firstRow = pageRows[0] || null
-  const lastRow = pageRows[pageRows.length - 1] || null
-  return {
-    rows: pageRows,
-    hasPrevious,
-    hasMore,
-    previousCursor: hasPrevious
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "shared"),
-        )
-      : "",
-    nextCursor: hasMore
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "shared"),
-        )
-      : "",
-    unsupportedOrder: "",
-  }
+  const decorated = await enrichGeneDiscoveryRows(
+    env,
+    compactSharedRowsFromSummaries(summaries, symbols),
+  )
+  return paginateCompactDiscoveryRows({
+    decorated,
+    limit: cleanedLimit,
+    order: resolvedOrder,
+    scope: "shared",
+    after,
+    before,
+    cursorValue,
+  })
 }
 
 async function countUserGeneDiscoveries(env, { userId } = {}) {
   if (!env.ICONOPLASM_DB) return 0
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS discovered_count
-     FROM icono_gene_discoveries
-     WHERE user_id = ?`,
-  )
-    .bind(userIdNorm)
-    .first()
-  return Math.max(0, Number(row?.discovered_count || 0) || 0)
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  return Math.max(0, Number(state?.member_count || 0) || 0)
 }
 
 async function countSharedGeneDiscoveries(env) {
   if (!env.ICONOPLASM_DB) return 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS discovered_count
-     FROM icono_shared_gene_discoveries
-     WHERE non_admin_discoverer_count > 0`,
-  ).first()
-  return Math.max(0, Number(row?.discovered_count || 0) || 0)
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  return compactSharedSummaries(shared).length
 }
 
 async function listAllCatalogGeneDiscoveriesForAdmin(
@@ -12434,15 +12540,6 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
     `SELECT
        gc.gene_symbol,
        COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
-       d.first_discovered_at,
-       d.last_encountered_at,
-       COALESCE(d.encounter_count, 0) AS encounter_count,
-       COALESCE(d.first_source, '') AS first_source,
-       COALESCE(d.last_source, '') AS last_source,
-       COALESCE(d.first_trigger, '') AS first_trigger,
-       COALESCE(d.last_trigger, '') AS last_trigger,
-       d.first_dwell_ms,
-       d.last_dwell_ms,
        ge.weight_kg,
        ge.age_years,
        ge.leakage_percent AS uniqueness_rank,
@@ -12450,27 +12547,44 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
        COALESCE(gr.live_downvotes, 0) AS image_downvotes,
        COALESCE(gr.live_score, 0) AS image_score,
        gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
+       gr.live_created_at AS asset_created_at,
+       gr.current_asset_sha256 AS asset_sha256
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
-     LEFT JOIN icono_gene_discoveries d
-       ON d.user_id = ?
-      AND d.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_admin_gene_rollup gr
        ON gr.gene_symbol = gc.gene_symbol
      ORDER BY gc.gene_symbol ASC
      LIMIT ?`,
   )
-    .bind(userIdNorm, cleanedLimit)
+    .bind(cleanedLimit)
     .all()
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  const discovered = new Map()
+  if (state) {
+    const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
+    for (const row of compactShelfRowsFromChronology(chronology)) {
+      discovered.set(row.gene_symbol, row)
+    }
+  }
   return sortDiscoveryRowsForOrder(
-    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
+    (Array.isArray(rows?.results) ? rows.results : []).map((row) =>
+      mapGeneDiscoveryRow({ ...(discovered.get(String(row.gene_symbol || "")) || {}), ...row }),
+    ),
     normalizeIconoplasmHomeOrder(order, "newest"),
     seed,
   )
 }
 
+// Guest storage keeps membership symbols, not events. A merge converges into
+// the same compact representation: only symbols the user does not already have
+// become one new-member encounter. The deterministic batch id makes retries
+// exact, so a lost response never duplicates or drops a merge.
 async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
@@ -12486,11 +12600,36 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     symbols,
     WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
   )
-  await mergeDiscoverySymbolsAtomically(env.ICONOPLASM_DB, {
-    userId: userIdNorm,
-    symbols: requestedSymbols,
-    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
-  })
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  if (requestedSymbols.length) {
+    const lookup = await readDiscoveryDictionaryForSymbols(env, requestedSymbols)
+    const state = await readOrImportCompactUserState(env, {
+      userId: userIdNorm,
+      isAdmin,
+      allowImport: true,
+    })
+    const membership = String(state?.membership_b64 || "")
+    const fresh = requestedSymbols.filter((symbol) => {
+      const ordinal = lookup.byName.get(symbol)
+      return ordinal != null && !hasDiscoveryOrdinal(membership, ordinal)
+    })
+    if (fresh.length) {
+      const at = Math.floor(Date.now() / 1000)
+      const digest = await sha256Hex(`guest-merge:${userIdNorm}:${requestedSymbols.join(",")}`)
+      await recordCompactDiscoveryEncounters(env, {
+        userId: userIdNorm,
+        isAdmin,
+        batchId: `guest.merge.${digest.slice(0, 48)}`,
+        encounters: fresh.map((symbol) => ({
+          symbol,
+          at,
+          source: DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE,
+          trigger: DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE,
+          dwell_ms: null,
+        })),
+      })
+    }
+  }
   return {
     ok: true,
     merged_count: requestedSymbols.length,
@@ -24732,6 +24871,23 @@ export async function recoverDueIconoplasmGeneCardMaterializationsForScheduled(e
   return recoverDueIconoplasmGeneCardMaterializations(env, { limit: 8 })
 }
 
+// Bounded shared-aggregate drain. Four passes per wake keep a day of ordinary
+// batches flowing while never letting one invocation run unbounded.
+export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  let drained = 0
+  let applied = 0
+  let duplicates = 0
+  for (let pass = 0; pass < 4; pass++) {
+    const result = await drainSharedDiscoveryDeliveries(env.ICONOPLASM_DB, { limit: 128 })
+    drained += result.drained
+    applied += result.applied
+    duplicates += result.duplicates
+    if (result.drained < 128) break
+  }
+  return { ok: true, drained, applied, duplicates }
+}
+
 async function processPendingSyncFinalizationJobs(
   env,
   ctx,
@@ -32777,22 +32933,17 @@ async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}
     1,
     Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
   )
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT d.gene_symbol
-       FROM icono_gene_discoveries d
-      WHERE d.user_id = ?
-      ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-      LIMIT ?`,
-  )
-    .bind(userIdNorm, cleanedLimit)
-    .all()
-  return Array.from(
-    new Set(
-      (Array.isArray(rows?.results) ? rows.results : [])
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter(Boolean),
-    ),
-  )
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  if (!state) return []
+  const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
+  return compactShelfRowsFromChronology(chronology)
+    .slice(0, cleanedLimit)
+    .map((row) => row.gene_symbol)
 }
 
 async function handlePublicGeneSearch(request, env) {
@@ -34193,104 +34344,159 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
+    // The per-hover personal writer is retired. The activated replacement is
+    // POST /api/iconoplasm/discoveries/batch with a client-durable queue. Older
+    // installed clients fall back to their local guest buffer on this 410 and
+    // converge through the idempotent merge route, so no encounter is lost.
     if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST") {
+      return done(
+        "discoveries_encounter_retired",
+        json(
+          {
+            ok: false,
+            code: "LEGACY_DISCOVERY_WRITER_RETIRED",
+            error: "This client must batch discoveries through /api/iconoplasm/discoveries/batch.",
+          },
+          410,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST") {
       if (!env.ICONOPLASM_DB) {
         return done(
-          "discoveries_encounter_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+          "discoveries_batch_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500, { "Cache-Control": "no-store" }),
         )
       }
       const payload = await parseJsonBody(request)
-      const symbol = normalizeSymbol(payload?.symbol || payload?.gene_symbol || "")
-      const source = normalizeDiscoverySource(payload?.source || DISCOVERY_SOURCE_EXTENSION_HOVER)
-      const trigger = normalizeDiscoveryTrigger(payload?.trigger || DISCOVERY_TRIGGER_HOVER_DWELL)
-      const dwellMs = normalizeDiscoveryDwellMs(payload?.dwell_ms ?? payload?.dwellMs)
-      if (!symbol) {
+      const batchId = String(payload?.batch_id || "").trim()
+      if (!/^[A-Za-z0-9._:-]{1,128}$/.test(batchId)) {
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid gene symbol" }, 400, {
+          "discoveries_batch_400",
+          json({ ok: false, error: "Missing or invalid discovery batch id" }, 400, {
             "Cache-Control": "no-store",
           }),
         )
       }
-      if (!source) {
+      const rawEncounters = Array.isArray(payload?.encounters) ? payload.encounters : []
+      if (!rawEncounters.length || rawEncounters.length > DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS) {
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid discovery source" }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          "discoveries_batch_400",
+          json(
+            {
+              ok: false,
+              error: `Discovery batches must contain 1-${DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS} encounters`,
+            },
+            400,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
-      if (!trigger) {
-        return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid discovery trigger" }, 400, {
-            "Cache-Control": "no-store",
-          }),
-        )
-      }
-      if (trigger === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMs == null) {
-        return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "hover_dwell discovery events must include dwell_ms" }, 400, {
-            "Cache-Control": "no-store",
-          }),
-        )
+      const nowSeconds = Math.floor(Date.now() / 1000)
+      const encounters = []
+      for (const raw of rawEncounters) {
+        const symbol = normalizeSymbol(raw?.symbol || "")
+        const source = normalizeDiscoverySource(raw?.source || DISCOVERY_SOURCE_EXTENSION_HOVER)
+        const trigger = normalizeDiscoveryTrigger(raw?.trigger || DISCOVERY_TRIGGER_HOVER_DWELL)
+        const dwellMs = normalizeDiscoveryDwellMs(raw?.dwell_ms ?? raw?.dwellMs)
+        if (!symbol || !source || !trigger) {
+          return done(
+            "discoveries_batch_400",
+            json({ ok: false, error: "Invalid discovery encounter in batch" }, 400, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        if (trigger === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMs == null) {
+          return done(
+            "discoveries_batch_400",
+            json({ ok: false, error: "hover_dwell discovery events must include dwell_ms" }, 400, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        const at = Number(raw?.at)
+        encounters.push({
+          symbol,
+          at: Number.isFinite(at) && at >= 0 && at <= 0xffffffff ? Math.floor(at) : nowSeconds,
+          source,
+          trigger,
+          dwell_ms: dwellMs,
+        })
       }
 
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
-          "discoveries_encounter_guest",
+          "discoveries_batch_guest",
           json(
             {
               ok: true,
               authenticated: false,
-              recorded: false,
-              symbol,
+              persisted: false,
+              batch_id: batchId,
             },
             200,
             { "Cache-Control": "no-store" },
           ),
         )
       }
-
       const userId = normalizeUserId(sessionUser.user_id)
-      // Cost fence: this hover-dwell route can fire at browser-hover cadence.
-      // Starter seeding belongs on shelf/bootstrap endpoints like discoveries/me,
-      // not here.
-
-      const result = await recordGeneDiscoveryEncounter(env, {
-        userId,
-        geneSymbol: symbol,
-        source,
-        trigger,
-        dwellMs,
-      })
-      if (!result.ok) {
+      try {
+        const result = await recordCompactDiscoveryEncounters(env, {
+          userId,
+          isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+          batchId,
+          encounters,
+        })
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: String(result.error || "Could not record discovery") }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          "discoveries_batch",
+          json(
+            {
+              ok: true,
+              authenticated: true,
+              batch_id: batchId,
+              replay: Boolean(result.replay),
+              recorded: Number(result.recorded || 0),
+              dropped_symbols: result.dropped || [],
+              state_version: Number(result.state_version || 0),
+              attempts: Number(result.attempts || 0),
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      } catch (error) {
+        const code = String(error?.code || "")
+        if (code === "DISCOVERY_COMPACT_CONFLICT") {
+          return done(
+            "discoveries_batch_retry",
+            json(
+              {
+                ok: false,
+                code,
+                error: "Discovery batch stayed contended; retry with the same batch id.",
+              },
+              503,
+              { "Cache-Control": "no-store", "Retry-After": "1" },
+            ),
+          )
+        }
+        return done(
+          "discoveries_batch_400",
+          json(
+            {
+              ok: false,
+              code: code || "DISCOVERY_BATCH_REJECTED",
+              error: String(error?.message || "Could not record discovery batch"),
+            },
+            400,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
-
-      return done(
-        "discoveries_encounter",
-        json(
-          {
-            ok: true,
-            authenticated: true,
-            recorded: true,
-            created: Boolean(result.created),
-            symbol,
-            discovery: result.discovery,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
     }
 
     if (path === "/api/iconoplasm/discoveries/membership" && request.method === "GET") {
@@ -34310,12 +34516,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "discoveries_membership_503",
           json({ error: "Discovery storage unavailable" }, 503, { "Cache-Control": "no-store" }),
         )
+      const userId = authenticated ? normalizeUserId(sessionUser.user_id) : ""
       const discovered = authenticated
-        ? await readDiscoveryMembership(
-            env.ICONOPLASM_DB,
-            normalizeUserId(sessionUser.user_id),
+        ? await readCompactDiscoveryMembership(env, {
+            userId,
             symbols,
-          )
+            isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+          })
         : []
       return done(
         "discoveries_membership",

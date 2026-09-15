@@ -73,6 +73,16 @@ test("background schedules retain bounded cadence and never repeat nightly work 
       )
       continue
     }
+    if (job === "sharedDelivery") {
+      // Aggregate drains are cheap and tolerate a slightly wider wake gap than
+      // the 15-minute chains, but still wake several times per hour.
+      minutes.forEach((minute, i) =>
+        assert.ok(
+          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 24,
+        ),
+      )
+      continue
+    }
     const expectedGap =
       job === "sharedDiscovery"
         ? 60

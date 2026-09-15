@@ -284,7 +284,7 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # as does supervote delivery with five 16-message batches/hour.
 # Vote recovery runs six times hourly; nightly archive, canon repair and gallery run at 23:56/58/59
 # in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,6,7,8,11,13,14,15,17,18,19,20,23,24,26,27,29,30,31,32,34,35,38,39,41,42,43,44,45,47,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,6,7,8,10,11,13,14,15,17,18,19,20,23,24,26,27,28,29,30,31,32,34,35,38,39,41,42,43,44,45,46,47,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
