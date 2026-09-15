@@ -1,404 +1,142 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { DatabaseSync } from "node:sqlite"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
+  drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
+import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
-function sortSymbols(values) {
-  return (Array.isArray(values) ? values : []).slice().sort()
+// Real SQLite behind a D1-shaped adapter: route behavior is exercised through
+// the actual handlers with the actual compact SQL, not a SQL-string mock.
+
+const CATALOG = [
+  ["INS", "Insulin"],
+  ["RHO", "Rhodopsin"],
+  ["PRL", "Prolactin"],
+  ["TP53", "Tumor protein p53"],
+  ["BRCA1", "BRCA1 DNA repair associated"],
+  ["EGFR", "Epidermal growth factor receptor"],
+  ["FURIN", "Furin"],
+  ["NRM", "Nurim"],
+]
+
+class Result {
+  constructor(rows) {
+    this.results = rows
+  }
+  first() {
+    return this.results[0] ?? null
+  }
 }
 
-class FakeDiscoveryStatement {
-  constructor(db, sql) {
-    this.db = db
-    this.sql = String(sql || "")
-    this.args = []
-  }
-
-  bind(...args) {
+class Bound {
+  constructor(raw, sql, args = []) {
+    this.raw = raw
+    this.sql = sql
     this.args = args
-    return this
   }
-
-  async first() {
-    this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
-    if (this.sql.includes("FROM icono_gene_discoveries")) {
-      const [userId, geneSymbol] = this.args
-      return this.db.getDiscovery(userId, geneSymbol)
-    }
-    throw new Error(`Unexpected SQL in fake discovery DB first(): ${this.sql}`)
+  bind(...args) {
+    return new Bound(this.raw, this.sql, args)
   }
-
-  async run() {
-    this.db.calls.push({ method: "run", sql: this.sql, args: this.args })
-    if (this.sql.includes("INSERT INTO icono_gene_discoveries")) {
-      this.db.insertDiscovery(this.args)
-      return { success: true, meta: { changes: 1 } }
-    }
-    if (this.sql.includes("UPDATE icono_gene_discoveries")) {
-      this.db.updateDiscovery(this.args)
-      return { success: true, meta: { changes: 1 } }
-    }
-    if (this.sql.includes("DELETE FROM icono_shared_gene_discoveries")) {
-      this.db.deleteSharedDiscovery(this.args[0])
-      return { success: true, meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_shared_gene_discoveries")) {
-      if (this.sql.includes("VALUES (?, CURRENT_TIMESTAMP")) {
-        this.db.recordSharedDiscoveryEncounter(this.args)
-      } else {
-        this.db.upsertSharedDiscovery(this.args)
-      }
-      return { success: true, meta: { changes: 1 } }
-    }
-    throw new Error(`Unexpected SQL in fake discovery DB run(): ${this.sql}`)
-  }
-
   async all() {
-    this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
-    if (this.sql.includes("json_each(?)")) {
-      const [userId, rawSymbols] = this.args
-      return {
-        results: JSON.parse(rawSymbols)
-          .filter((symbol) => this.db.getDiscovery(userId, symbol))
-          .map((gene_symbol) => ({ gene_symbol })),
-      }
-    }
-    if (this.sql.includes("FROM icono_shared_gene_discoveries")) {
-      return {
-        results: this.db.listSharedDiscoveries(),
-      }
-    }
-    if (this.sql.includes("FROM icono_gene_catalog gc")) {
-      const [userId] = this.args
-      return {
-        results: this.db.listAllCatalogDiscoveries(userId),
-      }
-    }
-    if (this.sql.includes("FROM icono_gene_discoveries d")) {
-      const [userId] = this.args
-      return {
-        results: this.db.listDiscoveries(userId),
-      }
-    }
-    throw new Error(`Unexpected SQL in fake discovery DB all(): ${this.sql}`)
+    return new Result(this.raw.prepare(this.sql).all(...this.args))
+  }
+  async first() {
+    return this.raw.prepare(this.sql).get(...this.args) ?? null
+  }
+  async run() {
+    const info = this.raw.prepare(this.sql).run(...this.args)
+    return { success: true, meta: { changes: Number(info.changes || 0) } }
   }
 }
 
-class FakeDiscoveryDb {
+class D1Like {
   constructor() {
-    this.calls = []
-    this.rows = new Map()
-    this.sharedRows = new Map()
-    this.tick = 0
-    this.geneNames = new Map([
-      ["INS", "Insulin"],
-      ["RHO", "Rhodopsin"],
-      ["PRL", "Prolactin"],
-      ["TP53", "Tumor protein p53"],
-      ["BRCA1", "BRCA1 DNA repair associated"],
-      ["EGFR", "Epidermal growth factor receptor"],
-      ["FURIN", "Furin"],
-      ["NRM", "Nurim"],
-    ])
-    this.geneMetrics = new Map([
-      [
-        "INS",
-        {
-          weight_kg: 5.1,
-          age_years: 2.4,
-          uniqueness_rank: 7,
-          image_upvotes: 2,
-          image_downvotes: 0,
-          image_score: 2,
-          published_at: "2025-04-01T00:00:01Z",
-          asset_created_at: "2025-04-01T00:00:01Z",
-        },
-      ],
-      [
-        "RHO",
-        {
-          weight_kg: 6.3,
-          age_years: 3.8,
-          uniqueness_rank: 4,
-          image_upvotes: 8,
-          image_downvotes: 1,
-          image_score: 7,
-          published_at: "2025-04-01T00:00:02Z",
-          asset_created_at: "2025-04-01T00:00:02Z",
-        },
-      ],
-      [
-        "PRL",
-        {
-          weight_kg: 4.4,
-          age_years: 1.9,
-          uniqueness_rank: 10,
-          image_upvotes: 1,
-          image_downvotes: 0,
-          image_score: 1,
-          published_at: "2025-04-01T00:00:03Z",
-          asset_created_at: "2025-04-01T00:00:03Z",
-        },
-      ],
-      [
-        "TP53",
-        {
-          weight_kg: 9.9,
-          age_years: 12.2,
-          uniqueness_rank: 2,
-          image_upvotes: 20,
-          image_downvotes: 2,
-          image_score: 18,
-          published_at: "2025-04-01T00:00:04Z",
-          asset_created_at: "2025-04-01T00:00:04Z",
-        },
-      ],
-      [
-        "BRCA1",
-        {
-          weight_kg: 7.7,
-          age_years: 8.1,
-          uniqueness_rank: 5,
-          image_upvotes: 14,
-          image_downvotes: 3,
-          image_score: 11,
-          published_at: "2025-04-01T00:00:05Z",
-          asset_created_at: "2025-04-01T00:00:05Z",
-        },
-      ],
-      [
-        "EGFR",
-        {
-          weight_kg: 3.6,
-          age_years: 6.5,
-          uniqueness_rank: 8,
-          image_upvotes: 4,
-          image_downvotes: 1,
-          image_score: 3,
-          published_at: "2025-04-01T00:00:06Z",
-          asset_created_at: "2025-04-01T00:00:06Z",
-        },
-      ],
-      [
-        "FURIN",
-        {
-          weight_kg: 8.4,
-          age_years: 4.5,
-          uniqueness_rank: 3,
-          image_upvotes: 17,
-          image_downvotes: 1,
-          image_score: 16,
-          published_at: "2025-04-01T00:00:07Z",
-          asset_created_at: "2025-04-01T00:00:07Z",
-        },
-      ],
-      [
-        "NRM",
-        {
-          weight_kg: 2.8,
-          age_years: 9.4,
-          uniqueness_rank: 6,
-          image_upvotes: 6,
-          image_downvotes: 0,
-          image_score: 6,
-          published_at: "2025-04-01T00:00:08Z",
-          asset_created_at: "2025-04-01T00:00:08Z",
-        },
-      ],
-    ])
+    this.raw = new DatabaseSync(":memory:")
+    this.raw.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+    this.raw.exec(`
+      CREATE TABLE icono_gene_catalog (
+        gene_symbol TEXT PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        uniprot TEXT,
+        color_hex TEXT,
+        tmh INTEGER NOT NULL DEFAULT 0,
+        source TEXT,
+        updated_by TEXT,
+        aliases_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE icono_gene_essence (
+        gene_symbol TEXT PRIMARY KEY,
+        full_name TEXT,
+        weight_kg REAL,
+        age_years REAL,
+        leakage_percent REAL
+      );
+      CREATE TABLE icono_admin_gene_rollup (
+        gene_symbol TEXT PRIMARY KEY,
+        live_upvotes INTEGER NOT NULL DEFAULT 0,
+        live_downvotes INTEGER NOT NULL DEFAULT 0,
+        live_score INTEGER NOT NULL DEFAULT 0,
+        live_created_at TEXT,
+        current_asset_sha256 TEXT
+      );
+      CREATE TABLE icono_gene_discoveries (
+        user_id TEXT NOT NULL,
+        gene_symbol TEXT NOT NULL,
+        first_discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_encountered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        encounter_count INTEGER NOT NULL DEFAULT 1,
+        first_source TEXT,
+        last_source TEXT,
+        first_trigger TEXT,
+        last_trigger TEXT,
+        first_dwell_ms INTEGER,
+        last_dwell_ms INTEGER,
+        PRIMARY KEY (user_id, gene_symbol)
+      );
+    `)
   }
-
   prepare(sql) {
-    return new FakeDiscoveryStatement(this, sql)
+    return new Bound(this.raw, sql)
   }
-
   async batch(statements) {
-    if (statements.at(-1).sql.includes("FROM json_each(?) WHERE 1")) {
-      this.calls.push(...statements.map((s) => ({ method: "batch", sql: s.sql, args: s.args })))
-      const [user, encoded] = statements.at(-1).args
-      for (const gene of JSON.parse(encoded)) {
-        if (this.getDiscovery(user, gene)) continue
-        if (statements.length === 2) this.recordSharedDiscoveryEncounter([gene, 1])
-        this.insertDiscovery([
-          user,
-          gene,
-          "extension_guest_merge",
-          "extension_guest_merge",
-          "guest_buffer_merge",
-          "guest_buffer_merge",
-          null,
-          null,
-        ])
-      }
-      return statements.map(() => ({ results: [], meta: { changes: 1 } }))
-    }
-    const [personal, shared] = statements
-    this.calls.push(...statements.map((s) => ({ method: "batch", sql: s.sql, args: s.args })))
-    const [user, gene, , source, , trigger, , dwell, seedOnly] = personal.args
-    const existing = this.getDiscovery(user, gene)
-    if (existing && seedOnly) return statements.map(() => ({ results: [], meta: { changes: 0 } }))
-    if (existing) this.updateDiscovery([source, trigger, dwell, user, gene])
-    else this.insertDiscovery(personal.args)
-    const row = this.getDiscovery(user, gene)
-    if (shared) this.recordSharedDiscoveryEncounter([gene, existing ? 0 : 1])
-    return [
-      { results: [row], meta: { changes: 1 } },
-      ...(shared ? [{ results: [], meta: { changes: 1 } }] : []),
-    ]
-  }
-
-  key(userId, geneSymbol) {
-    return `${String(userId)}|${String(geneSymbol).toUpperCase()}`
-  }
-
-  now() {
-    this.tick += 1
-    return `2025-04-01T00:00:${String(this.tick).padStart(2, "0")}Z`
-  }
-
-  getDiscovery(userId, geneSymbol) {
-    const row = this.rows.get(this.key(userId, geneSymbol))
-    return row ? this.enrichDiscoveryRow(row) : null
-  }
-
-  deleteSharedDiscovery(geneSymbol) {
-    if (geneSymbol == null) {
-      this.sharedRows.clear()
-      return
-    }
-    this.sharedRows.delete(String(geneSymbol || "").toUpperCase())
-  }
-
-  upsertSharedDiscovery(args) {
-    const [
-      geneSymbol,
-      firstNonAdminDiscoveredAt,
-      latestNonAdminEncounteredAt,
-      nonAdminDiscovererCount,
-      nonAdminEncounterCount,
-    ] = args
-    const symbol = String(geneSymbol || "").toUpperCase()
-    if (!symbol) return
-    this.sharedRows.set(symbol, {
-      gene_symbol: symbol,
-      first_non_admin_discovered_at: String(firstNonAdminDiscoveredAt || ""),
-      latest_non_admin_encountered_at: String(latestNonAdminEncounteredAt || ""),
-      non_admin_discoverer_count: Number(nonAdminDiscovererCount || 0) || 0,
-      non_admin_encounter_count: Number(nonAdminEncounterCount || 0) || 0,
-    })
-  }
-
-  recordSharedDiscoveryEncounter(args) {
-    const [geneSymbol, discovererIncrement] = args
-    const symbol = String(geneSymbol || "").toUpperCase()
-    const existing = this.sharedRows.get(symbol)
-    const timestamp = this.now()
-    const increment = existing ? Math.max(0, Number(discovererIncrement || 0) || 0) : 1
-    this.sharedRows.set(symbol, {
-      gene_symbol: symbol,
-      first_non_admin_discovered_at: existing?.first_non_admin_discovered_at || timestamp,
-      latest_non_admin_encountered_at: timestamp,
-      non_admin_discoverer_count: Number(existing?.non_admin_discoverer_count || 0) + increment,
-      non_admin_encounter_count: Number(existing?.non_admin_encounter_count || 0) + 1,
-    })
-  }
-
-  listSharedDiscoveries() {
-    return Array.from(this.sharedRows.values())
-      .filter((row) => Number(row.non_admin_discoverer_count || 0) > 0)
-      .sort((left, right) => String(left.gene_symbol).localeCompare(String(right.gene_symbol)))
-  }
-
-  enrichDiscoveryRow(row) {
-    const symbol = String(row?.gene_symbol || "").toUpperCase()
-    return {
-      ...row,
-      full_name: this.geneNames.get(symbol) || symbol,
-      ...(this.geneMetrics.get(symbol) || {}),
-    }
-  }
-
-  listDiscoveries(userId) {
-    return Array.from(this.rows.values())
-      .filter((row) => row.user_id === String(userId))
-      .sort((left, right) => {
-        return (
-          String(left.first_discovered_at || "").localeCompare(
-            String(right.first_discovered_at || ""),
-          ) || String(left.gene_symbol || "").localeCompare(String(right.gene_symbol || ""))
-        )
-      })
-      .map((row) => this.enrichDiscoveryRow(row))
-  }
-
-  listAllCatalogDiscoveries(userId) {
-    return Array.from(this.geneNames.entries())
-      .sort((left, right) => String(left[0] || "").localeCompare(String(right[0] || "")))
-      .map(([geneSymbol, fullName]) => {
-        const existing = this.getDiscovery(userId, geneSymbol)
-        return {
-          gene_symbol: geneSymbol,
-          full_name: fullName,
-          first_discovered_at: existing?.first_discovered_at || "",
-          last_encountered_at: existing?.last_encountered_at || "",
-          encounter_count: existing?.encounter_count || 0,
-          first_source: existing?.first_source || "",
-          last_source: existing?.last_source || "",
-          first_trigger: existing?.first_trigger || "",
-          last_trigger: existing?.last_trigger || "",
-          first_dwell_ms: existing?.first_dwell_ms ?? null,
-          last_dwell_ms: existing?.last_dwell_ms ?? null,
-          ...(this.geneMetrics.get(geneSymbol) || {}),
+    this.raw.exec("BEGIN IMMEDIATE")
+    try {
+      const results = statements.map((statement) => {
+        const prepared = this.raw.prepare(statement.sql)
+        if (
+          /^\s*(SELECT|WITH|PRAGMA)/i.test(statement.sql) ||
+          /\bRETURNING\b/i.test(statement.sql)
+        ) {
+          return { results: prepared.all(...statement.args) }
         }
+        const info = prepared.run(...statement.args)
+        return { results: [], meta: { changes: Number(info.changes || 0) } }
       })
-  }
-
-  insertDiscovery(args) {
-    const [
-      userId,
-      geneSymbol,
-      firstSource,
-      lastSource,
-      firstTrigger,
-      lastTrigger,
-      firstDwellMs,
-      lastDwellMs,
-    ] = args
-    const timestamp = this.now()
-    this.rows.set(this.key(userId, geneSymbol), {
-      user_id: String(userId),
-      gene_symbol: String(geneSymbol).toUpperCase(),
-      first_discovered_at: timestamp,
-      last_encountered_at: timestamp,
-      encounter_count: 1,
-      first_source: String(firstSource),
-      last_source: String(lastSource),
-      first_trigger: String(firstTrigger),
-      last_trigger: String(lastTrigger),
-      first_dwell_ms: Number(firstDwellMs),
-      last_dwell_ms: Number(lastDwellMs),
-    })
-  }
-
-  updateDiscovery(args) {
-    const [lastSource, lastTrigger, lastDwellMs, userId, geneSymbol] = args
-    const key = this.key(userId, geneSymbol)
-    const existing = this.rows.get(key)
-    if (!existing) {
-      throw new Error(`Cannot update missing discovery row for ${key}`)
+      this.raw.exec("COMMIT")
+      return results
+    } catch (error) {
+      this.raw.exec("ROLLBACK")
+      throw error
     }
-    this.rows.set(key, {
-      ...existing,
-      last_encountered_at: this.now(),
-      encounter_count: Number(existing.encounter_count || 0) + 1,
-      last_source: String(lastSource),
-      last_trigger: String(lastTrigger),
-      last_dwell_ms: Number(lastDwellMs),
-    })
+  }
+}
+
+class FakeKv {
+  constructor() {
+    this.store = new Map()
+  }
+  async get(key) {
+    return this.store.has(key) ? this.store.get(key) : null
+  }
+  async put(key, value) {
+    this.store.set(key, String(value))
   }
 }
 
@@ -406,598 +144,414 @@ class FakeGameSessions {
   constructor(sessions = {}) {
     this.sessions = sessions
   }
-
   idFromName(name) {
     return String(name || "")
   }
-
   get(id) {
     const session = this.sessions[String(id || "")]
     return {
-      fetch: async () => {
-        if (!session) {
-          return new Response("missing", { status: 404 })
-        }
-        return Response.json(session)
-      },
+      fetch: async () =>
+        session ? Response.json(session) : new Response("missing", { status: 404 }),
     }
   }
 }
 
-function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
-  if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
-    env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
-      fetch(request) {
-        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-          request,
-          gatewayEnv,
-          ctx,
-        )
-      },
-    }
-  }
-  return env
-}
-
-function buildEnv({ sessions } = {}, { bindGateway = true } = {}) {
-  const gatewayDb = new FakeDiscoveryDb()
+async function buildEnv({ sessions } = {}) {
+  const db = new D1Like()
+  const insertCatalog = db.raw.prepare(
+    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)",
+  )
+  for (const [symbol, name] of CATALOG) insertCatalog.run(symbol, name)
+  db.raw
+    .prepare(
+      "INSERT INTO icono_gene_essence (gene_symbol, full_name, weight_kg, age_years, leakage_percent) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run("TP53", "Tumor protein p53", 53.1, 44, 12)
+  db.raw
+    .prepare(
+      "INSERT INTO icono_admin_gene_rollup (gene_symbol, live_upvotes, live_score, live_created_at, current_asset_sha256) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run("TP53", 3, 3, "2025-04-01T00:00:01Z", "a".repeat(64))
+  await evolveAndPersistDiscoveryDictionary(db, { symbols: CATALOG.map(([symbol]) => symbol) })
   const gatewayEnv = {
-    ICONOPLASM_DB: gatewayDb,
+    ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
+    KV: new FakeKv(),
   }
   const env = {
     ...gatewayEnv,
     ICONOPLASM_DB: null,
-    gatewayDb,
+    gatewayDb: db,
+    gatewayEnv,
+    THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: {
+      fetch(request) {
+        return handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+          request,
+          gatewayEnv,
+          { waitUntil() {} },
+        )
+      },
+    },
   }
-  return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
+  return env
 }
 
-function buildEncounterRequest({ cookie = "", symbol = "TP53", dwellMs = 900 } = {}) {
-  return new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/encounter", {
+function post(path, { cookie = "", body = null } = {}) {
+  return new Request(`https://iconoplasm.brinedew.bio${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(cookie ? { Cookie: cookie } : {}),
     },
-    body: JSON.stringify({
-      symbol,
-      source: "extension_hover",
-      trigger: "hover_dwell",
-      dwell_ms: dwellMs,
-    }),
+    body: body == null ? undefined : JSON.stringify(body),
   })
 }
 
-test("discovery encounter quietly skips writes for signed-out visitors", async () => {
-  const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildEncounterRequest(),
-      env,
-      {},
-    )
-  const payload = await response.json()
+function get(path, { cookie = "" } = {}) {
+  return new Request(`https://iconoplasm.brinedew.bio${path}`, {
+    method: "GET",
+    headers: cookie ? { Cookie: cookie } : {},
+  })
+}
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.authenticated, false)
-  assert.equal(payload?.recorded, false)
-  assert.equal(env.gatewayDb.rows.size, 0)
+async function invoke(request, env) {
+  return handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    request,
+    env,
+    {},
+  )
+}
+
+function sessionFor(userId) {
+  return { "session:abc": { user_id: userId, username: userId } }
+}
+
+async function postBatch(env, { userId, batchId, encounters }) {
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/batch", {
+      cookie: "session=abc",
+      body: { batch_id: batchId, encounters },
+    }),
+    env,
+  )
+  return { response, payload: await response.json() }
+}
+
+function hoverEncounter(symbol, at, overrides = {}) {
+  return {
+    symbol,
+    at,
+    source: "extension_hover",
+    trigger: "hover_dwell",
+    dwell_ms: 900,
+    ...overrides,
+  }
+}
+
+async function compactRowCount(env) {
+  return Number(
+    (await env.gatewayDb.prepare("SELECT COUNT(*) AS n FROM icono_discovery_user_state_v2").first())
+      .n,
+  )
+}
+
+test("the retired per-hover encounter writer is a write-free 410", async () => {
+  const env = await buildEnv()
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/encounter", {
+      cookie: "session=abc",
+      body: { symbol: "TP53", source: "extension_hover", trigger: "hover_dwell", dwell_ms: 900 },
+    }),
+    env,
+  )
+  assert.equal(response.status, 410)
+  const payload = await response.json()
+  assert.equal(payload.code, "LEGACY_DISCOVERY_WRITER_RETIRED")
+  assert.equal(await compactRowCount(env), 0)
 })
 
-test("private membership uses requested keys only, no full gallery or starter writes", async () => {
-  const env = buildEnv({ sessions: { "session:abc": { user_id: "reader", username: "reader" } } })
-  env.gatewayDb.insertDiscovery([
-    "reader",
+test("signed-out batches are acknowledged without touching storage", async () => {
+  const env = await buildEnv()
+  const guestResponse = await invoke(
+    post("/api/iconoplasm/discoveries/batch", {
+      body: { batch_id: "device-a:1", encounters: [hoverEncounter("TP53", 100)] },
+    }),
+    env,
+  )
+  assert.equal(guestResponse.status, 200)
+  const guestPayload = await guestResponse.json()
+  assert.equal(guestPayload.authenticated, false)
+  assert.equal(guestPayload.persisted, false)
+  assert.equal(await compactRowCount(env), 0)
+})
+
+test("a ten-hover batch commits one compact state and replays without duplicates", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const encounters = [
     "TP53",
-    "extension_hover",
-    "extension_hover",
-    "hover_dwell",
-    "hover_dwell",
-    900,
-    900,
-  ])
-  env.gatewayDb.insertDiscovery([
-    "other",
     "BRCA1",
-    "extension_hover",
-    "extension_hover",
-    "hover_dwell",
-    "hover_dwell",
-    900,
-    900,
-  ])
-  const url =
-    "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/membership?symbols=" +
-    encodeURIComponent(JSON.stringify(["TP53", "BRCA1"]))
-  for (const cookie of ["", "session=abc"]) {
-    env.gatewayDb.calls.length = 0
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(url, { headers: { Cookie: cookie } }),
-        env,
-        {},
-      )
-    assert.equal(response.status, 200)
-    assert.equal(response.headers.get("Cache-Control"), "no-store")
-    const payload = await response.json()
-    assert.deepEqual(payload.checked_symbols, ["TP53", "BRCA1"])
-    assert.deepEqual(payload.discovered_symbols, cookie ? ["TP53"] : [])
-    assert.equal(env.gatewayDb.calls.filter((call) => call.method === "run").length, 0)
-    assert.equal(env.gatewayDb.calls.length, cookie ? 1 : 0)
-  }
-})
-
-test("votes me quietly reports signed-out visitors without a discovery scope", async () => {
-  const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/votes/me"),
-      env,
-      {},
+    "EGFR",
+    "TP53",
+    "INS",
+    "TP53",
+    "BRCA1",
+    "RHO",
+    "PRL",
+    "NRM",
+  ].map((symbol, index) => hoverEncounter(symbol, 1000 + index))
+  const first = await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters,
+  })
+  assert.equal(first.payload.ok, true)
+  assert.equal(first.payload.authenticated, true)
+  assert.equal(first.payload.replay, false)
+  assert.equal(first.payload.attempts, 1)
+  assert.equal(first.payload.recorded, 10)
+  const state = await env.gatewayDb
+    .prepare(
+      "SELECT member_count, state_version, active_events_json FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'",
     )
-  const payload = await response.json()
+    .first()
+  assert.equal(Number(state.member_count), 7)
+  assert.equal(JSON.parse(state.active_events_json).length, 10)
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.authenticated, false)
-  assert.equal(payload?.user, null)
-})
-
-test("discovery encounter inserts the first authenticated gene discovery", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
+  // The exact same batch id replays: no second state version, no new events.
+  const replay = await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("TP53", 9999)],
   })
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildEncounterRequest({ cookie: "session=abc" }),
-      env,
-      {},
+  assert.equal(replay.payload.replay, true)
+  assert.equal(replay.payload.recorded, 1)
+  const afterReplay = await env.gatewayDb
+    .prepare(
+      "SELECT member_count, state_version, active_events_json FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'",
     )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.authenticated, true)
-  assert.equal(payload?.recorded, true)
-  assert.equal(payload?.created, true)
-  assert.equal(payload?.discovery?.gene_symbol, "TP53")
-  assert.equal(payload?.discovery?.encounter_count, 1)
-
-  const stored = env.gatewayDb.getDiscovery("user-123", "TP53")
-  assert.ok(stored)
-  assert.equal(stored?.first_source, "extension_hover")
-  assert.equal(stored?.first_trigger, "hover_dwell")
-  assert.equal(stored?.first_dwell_ms, 900)
-  assert.equal(env.gatewayDb.rows.size, 1)
-  assert.ok(!env.gatewayDb.getDiscovery("user-123", "INS"))
-  assert.ok(!env.gatewayDb.getDiscovery("user-123", "RHO"))
-  assert.ok(!env.gatewayDb.getDiscovery("user-123", "PRL"))
-  const discoveryWriteCalls = env.gatewayDb.calls.filter(
-    (call) =>
-      call.sql.includes("FROM icono_gene_discoveries") ||
-      call.sql.includes("UPDATE icono_gene_discoveries"),
-  )
-  assert.ok(discoveryWriteCalls.length > 0)
-  assert.ok(discoveryWriteCalls.every((call) => !call.sql.includes("upper(gene_symbol) = ?")))
-})
-
-test("discovery encounter increments count instead of duplicating the row", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-
-  const firstResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildEncounterRequest({ cookie: "session=abc", dwellMs: 900 }),
-      env,
-      {},
-    )
-  const firstPayload = await firstResponse.json()
-
-  const secondResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildEncounterRequest({ cookie: "session=abc", dwellMs: 1200 }),
-      env,
-      {},
-    )
-  const secondPayload = await secondResponse.json()
-
-  assert.equal(firstPayload?.created, true)
-  assert.equal(secondResponse.status, 200)
-  assert.equal(secondPayload?.ok, true)
-  assert.equal(secondPayload?.authenticated, true)
-  assert.equal(secondPayload?.created, false)
-  assert.equal(secondPayload?.discovery?.encounter_count, 2)
-  assert.equal(secondPayload?.discovery?.first_dwell_ms, 900)
-  assert.equal(secondPayload?.discovery?.last_dwell_ms, 1200)
-
-  const stored = env.gatewayDb.getDiscovery("user-123", "TP53")
-  assert.ok(stored)
-  assert.equal(stored?.encounter_count, 2)
-  assert.equal(stored?.first_discovered_at, firstPayload?.discovery?.first_discovered_at)
-  assert.equal(stored?.last_dwell_ms, 1200)
-  assert.deepEqual(env.gatewayDb.sharedRows.get("TP53"), {
-    gene_symbol: "TP53",
-    first_non_admin_discovered_at: "2025-04-01T00:00:02Z",
-    latest_non_admin_encountered_at: "2025-04-01T00:00:04Z",
-    non_admin_discoverer_count: 1,
-    non_admin_encounter_count: 2,
-  })
-  assert.equal(
-    env.gatewayDb.calls.filter((call) =>
-      call.sql.includes("COUNT(*) AS non_admin_discoverer_count"),
-    ).length,
-    0,
-  )
-})
-
-test("popular-gene discovery rollup increments without rescanning earlier discoverers", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:first": { user_id: "user-first", username: "first" },
-      "session:second": { user_id: "user-second", username: "second" },
-    },
-  })
-
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=first", symbol: "TP53" }),
-    env,
-    {},
-  )
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=second", symbol: "TP53" }),
-    env,
-    {},
-  )
-
-  const shared = env.gatewayDb.sharedRows.get("TP53")
-  assert.equal(shared?.non_admin_discoverer_count, 2)
-  assert.equal(shared?.non_admin_encounter_count, 2)
-  assert.equal(
-    env.gatewayDb.calls.some((call) => call.sql.includes("COUNT(*) AS non_admin_discoverer_count")),
-    false,
-  )
-})
-
-test("shared discovery symbols publish once per changed snapshot", async () => {
-  const db = new FakeDiscoveryDb()
-  db.sharedRows.set("BRCA1", {
-    gene_symbol: "BRCA1",
-    non_admin_discoverer_count: 1,
-  })
-  db.sharedRows.set("TP53", {
-    gene_symbol: "TP53",
-    non_admin_discoverer_count: 2,
-  })
-  const values = new Map()
-  const writes = []
-  const env = {
-    ICONOPLASM_DB: db,
-    KV: {
-      async get(key) {
-        return values.get(String(key)) || null
-      },
-      async put(key, value) {
-        values.set(String(key), String(value))
-        writes.push({ key: String(key), value: String(value) })
-      },
-    },
-  }
-
-  const first = await publishSharedGeneDiscoverySymbols(env)
-  const second = await publishSharedGeneDiscoverySymbols(env)
-
-  assert.deepEqual(first, { ok: true, changed: true, symbol_count: 2 })
-  assert.deepEqual(second, { ok: true, changed: false, symbol_count: 2 })
-  assert.equal(writes.length, 1)
-  assert.deepEqual(JSON.parse(writes[0].value).symbols, ["BRCA1", "TP53"])
-})
-
-test("hourly publisher initializes a genuinely empty overlay and repairs invalid publications once", async () => {
-  for (const initial of [
-    null,
-    "broken-json",
-    JSON.stringify({ symbols: [] }),
-    JSON.stringify({ schema: "wrong", symbols: [] }),
-  ]) {
-    let value = initial
-    let writes = 0
-    const env = {
-      ICONOPLASM_DB: new FakeDiscoveryDb(),
-      KV: {
-        async get() {
-          return value
-        },
-        async put(key, next) {
-          value = next
-          writes++
-        },
-      },
-    }
-    assert.deepEqual(await publishSharedGeneDiscoverySymbols(env), {
-      ok: true,
-      changed: true,
-      symbol_count: 0,
-    })
-    assert.deepEqual(await publishSharedGeneDiscoverySymbols(env), {
-      ok: true,
-      changed: false,
-      symbol_count: 0,
-    })
-    assert.equal(writes, 1)
-    assert.deepEqual(JSON.parse(value).symbols, [])
-  }
-})
-
-test("discoveries me returns the signed-in user's discovered symbols", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }),
-    env,
-    {},
-  )
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }),
-    env,
-    {},
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
-        method: "GET",
-        headers: { Cookie: "session=abc" },
-      }),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.authenticated, true)
-  assert.equal(payload?.order, "newest")
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["BRCA1", "INS", "PRL", "RHO", "TP53"])
-  assert.equal(payload?.discovered_count, 5)
-  assert.equal(
-    payload?.discoveries?.find((row) => row.gene_symbol === "TP53")?.full_name,
-    "Tumor protein p53",
-  )
-  assert.equal(payload?.show_all_applied, false)
-})
-
-test("discoveries me honors gallery-style sort orders on the shelf", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }),
-    env,
-    {},
-  )
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "BRCA1" }),
-    env,
-    {},
-  )
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "EGFR" }),
-    env,
-    {},
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?order=heaviest", {
-        method: "GET",
-        headers: { Cookie: "session=abc" },
-      }),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.order, "heaviest")
+    .first()
   assert.deepEqual(
-    payload?.discoveries?.map((row) => row.gene_symbol),
-    ["TP53", "BRCA1", "RHO", "INS", "PRL", "EGFR"],
+    [
+      Number(afterReplay.member_count),
+      Number(afterReplay.state_version),
+      JSON.parse(afterReplay.active_events_json).length,
+    ],
+    [7, Number(state.state_version), 10],
+  )
+  console.log(
+    "B764_ROUTE_BATCH_RECEIPT",
+    JSON.stringify({ member_count: 7, events: 10, state_version: Number(state.state_version) }),
   )
 })
 
-test("discoveries me seeds the starter trio for an empty signed-in shelf", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me", {
-        method: "GET",
-        headers: { Cookie: "session=abc" },
-      }),
-      env,
-      {},
+test("membership reads compact state and imports legacy rows exactly once", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  env.gatewayDb.raw
+    .prepare(
+      `INSERT INTO icono_gene_discoveries
+       (user_id, gene_symbol, first_discovered_at, last_encountered_at, encounter_count,
+        first_source, last_source, first_trigger, last_trigger, first_dwell_ms, last_dwell_ms)
+       VALUES ('reader', 'TP53', '2026-01-03 04:05:06', '2026-01-04 05:06:07', 3,
+        'extension_hover', 'extension_hover', 'hover_dwell', 'hover_dwell', 900, 1200)`,
     )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.authenticated, true)
-  assert.equal(payload?.discovered_count, 3)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["INS", "PRL", "RHO"])
-  assert.ok(payload?.discoveries?.every((row) => row.first_source === "starter_seed"))
-  assert.ok(payload?.discoveries?.every((row) => row.first_trigger === "starter_seed"))
+    .run()
+  const request = get(
+    `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
+    { cookie: "session=abc" },
+  )
+  const payload = await (await invoke(request, env)).json()
+  assert.deepEqual(payload.discovered_symbols, ["TP53"])
+  assert.equal(await compactRowCount(env), 1)
+  // Legacy rows vanish; membership must still answer from compact state.
+  env.gatewayDb.raw.exec("DELETE FROM icono_gene_discoveries")
+  const again = await (
+    await invoke(
+      get(
+        `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
+        { cookie: "session=abc" },
+      ),
+      env,
+    )
+  ).json()
+  assert.deepEqual(again.discovered_symbols, ["TP53"])
 })
 
-test("discoveries me ignores show-all requests from non-admin users", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
+test("shared aggregates stay exact through the durable deferred delivery drain", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [
+      hoverEncounter("TP53", 1000),
+      hoverEncounter("TP53", 1005),
+      hoverEncounter("EGFR", 1010),
+    ],
   })
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }),
-    env,
-    {},
-  )
+  const beforeDrain = await env.gatewayDb
+    .prepare("SELECT discoverer_counts_b64 FROM icono_discovery_shared_state_v2")
+    .first()
+  assert.equal(String(beforeDrain.discoverer_counts_b64), "")
+  const outbox = await env.gatewayDb
+    .prepare("SELECT COUNT(*) AS n FROM icono_discovery_shared_delivery_outbox_v2")
+    .first()
+  assert.equal(Number(outbox.n), 1)
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
-        method: "GET",
-        headers: { Cookie: "session=abc" },
-      }),
-      env,
-      {},
+  const drain = await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  assert.deepEqual(
+    { drained: drain.drained, applied: drain.applied, duplicates: drain.duplicates },
+    { drained: 1, applied: 1, duplicates: 0 },
+  )
+  const rows = await env.gatewayDb
+    .prepare(`SELECT name, ordinal FROM icono_discovery_ordinals_v2 WHERE active = 1 ORDER BY name`)
+    .all()
+  const ordinalBySymbol = new Map(rows.results.map((row) => [row.name, Number(row.ordinal)]))
+  const shared = await env.gatewayDb
+    .prepare(
+      "SELECT discoverer_counts_b64, encounter_counts_b64, first_at_b64, latest_at_b64 FROM icono_discovery_shared_state_v2",
     )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.show_all_requested, true)
-  assert.equal(payload?.show_all_applied, false)
-  assert.deepEqual(sortSymbols(payload?.discovered_symbols), ["INS", "PRL", "RHO", "TP53"])
-})
-
-test("discoveries me lets admins override their shelf with the full catalog", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }),
-    env,
-    {},
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1", {
-        method: "GET",
-        headers: {
-          Cookie: "session=abc",
-          "x-iconoplasm-admin-token": "admin-token",
-        },
-      }),
-      env,
-      {},
+    .first()
+  const decode = (b64) => {
+    const bytes = Buffer.from(String(b64), "base64")
+    return new Uint32Array(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
     )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.show_all_requested, true)
-  assert.equal(payload?.show_all_applied, true)
-  assert.equal(payload?.discovered_count, 8)
-  assert.ok(payload?.discovered_symbols.includes("FURIN"))
-  assert.ok(payload?.discovered_symbols.includes("INS"))
-  assert.equal(
-    payload?.discoveries?.find((row) => row.gene_symbol === "TP53")?.full_name,
-    "Tumor protein p53",
-  )
-})
-
-test("discoveries merge upserts guest-local symbols into the signed-in account", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    buildEncounterRequest({ cookie: "session=abc", symbol: "TP53" }),
-    env,
-    {},
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
-        method: "POST",
-        headers: {
-          Cookie: "session=abc",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ symbols: ["BRCA1", "TP53", "BRCA1", "EGFR"] }),
-      }),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.ok, true)
-  assert.equal(payload?.authenticated, true)
-  assert.equal(payload?.merged_count, 3)
-  assert.equal(payload?.schema, "iconoplasm.discoveryMerge.v2")
-  assert.deepEqual(sortSymbols(payload?.merged_symbols), ["BRCA1", "EGFR", "TP53"])
-  assert.deepEqual(payload?.discovered_symbols, payload?.merged_symbols)
-  assert.equal(payload?.discoveries, undefined)
-  assert.equal(payload?.discovered_count, undefined)
-
-  const stored = env.gatewayDb.listDiscoveries("user-123")
-  assert.equal(stored.length, 3)
-  assert.equal(stored.find((row) => row.gene_symbol === "TP53").encounter_count, 1)
-  assert.equal(
-    env.gatewayDb.calls.some((call) => call.sql.includes("FROM icono_gene_discoveries d")),
-    false,
-  )
-})
-
-test("discoveries merge enforces the same 200-symbol ceiling as the browser client", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
-  const symbols = Array.from({ length: 250 }, (_value, index) => `GENE${index}`)
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
-        method: "POST",
-        headers: {
-          Cookie: "session=abc",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ symbols }),
-      }),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 400)
-  assert.equal(payload?.ok, false)
-  assert.equal(env.gatewayDb.listDiscoveries("user-123").length, 0)
-  const request = () =>
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge", {
-      method: "POST",
-      headers: { Cookie: "session=abc", "Content-Type": "application/json" },
-      body: JSON.stringify({ symbols: symbols.slice(0, 200) }),
-    })
-  for (let i = 0; i < 2; i++) {
-    const accepted =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request(),
-        env,
-        {},
-      )
-    assert.equal(accepted.status, 200)
-    assert.equal((await accepted.json()).merged_symbols.length, 200)
   }
-  const stored = env.gatewayDb.listDiscoveries("user-123")
-  assert.equal(stored.length, 200)
-  assert.ok(stored.every((row) => row.encounter_count === 1))
+  const tp53 = ordinalBySymbol.get("TP53")
+  const egfr = ordinalBySymbol.get("EGFR")
+  assert.equal(decode(shared.discoverer_counts_b64)[tp53], 1)
+  assert.equal(decode(shared.encounter_counts_b64)[tp53], 2)
+  assert.equal(decode(shared.first_at_b64)[tp53], 1000)
+  assert.equal(decode(shared.latest_at_b64)[tp53], 1005)
+  assert.equal(decode(shared.encounter_counts_b64)[egfr], 1)
+  console.log(
+    "B764_SHARED_DRAIN_RECEIPT",
+    JSON.stringify({ drained: drain.drained, applied: drain.applied }),
+  )
+})
+
+test("guest merge converges into compact membership without double counting", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const first = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53", "BRCA1"] },
+    }),
+    env,
+  )
+  const firstPayload = await first.json()
+  assert.equal(firstPayload.ok, true)
+  assert.deepEqual(firstPayload.merged_symbols, ["TP53", "BRCA1"])
+  const state = await env.gatewayDb
+    .prepare(
+      "SELECT member_count, active_events_json FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'",
+    )
+    .first()
+  assert.equal(Number(state.member_count), 2)
+  assert.equal(JSON.parse(state.active_events_json).length, 2)
+
+  const replay = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53", "BRCA1"] },
+    }),
+    env,
+  )
+  assert.equal((await replay.json()).ok, true)
+  const after = await env.gatewayDb
+    .prepare(
+      "SELECT member_count, active_events_json FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'",
+    )
+    .first()
+  assert.equal(Number(after.member_count), 2)
+  assert.equal(JSON.parse(after.active_events_json).length, 2)
+})
+
+test("discoveries me returns the compact shelf with exact first/last and counts", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [
+      hoverEncounter("TP53", 1000),
+      hoverEncounter("TP53", 1010),
+      hoverEncounter("EGFR", 1020),
+    ],
+  })
+  const response = await invoke(
+    get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }),
+    env,
+  )
+  const payload = await response.json()
+  assert.equal(payload.authenticated, true)
+  const tp53 = payload.discoveries.find((row) => row.gene_symbol === "TP53")
+  assert.equal(tp53.encounter_count, 2)
+  assert.equal(tp53.first_discovered_at, "1970-01-01T00:16:40Z")
+  assert.equal(tp53.last_encountered_at, "1970-01-01T00:16:50Z")
+  assert.equal(tp53.full_name, "Tumor protein p53")
+  const egfr = payload.discoveries.find((row) => row.gene_symbol === "EGFR")
+  assert.equal(egfr.encounter_count, 1)
+})
+
+test("starter seeding adds only missing membership bits and is write-free afterwards", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
+  const firstPayload = await first.json()
+  assert.deepEqual(firstPayload.discovered_symbols.slice().sort(), ["INS", "PRL", "RHO"])
+  const versionAfterSeed = Number(
+    (
+      await env.gatewayDb
+        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+        .first()
+    ).state_version,
+  )
+  await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
+  const versionAfterSecond = Number(
+    (
+      await env.gatewayDb
+        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+        .first()
+    ).state_version,
+  )
+  assert.equal(versionAfterSecond, versionAfterSeed)
+})
+
+test("the hourly symbol publisher reads compact shared state", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("TP53", 1000)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  const first = await publishSharedGeneDiscoverySymbols(env.gatewayEnv)
+  assert.equal(first.ok, true)
+  assert.equal(first.changed, true)
+  assert.deepEqual(first.symbol_count, 1)
+  const second = await publishSharedGeneDiscoverySymbols(env.gatewayEnv)
+  assert.equal(second.changed, false)
+  const published = JSON.parse(
+    await env.gatewayEnv.KV.get("iconoplasm:shared-gene-discovery-symbols:v1"),
+  )
+  assert.deepEqual(published.symbols, ["TP53"])
+})
+
+test("admins may show the full catalog while non-admins cannot", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const adminRequest = new Request(
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1",
+    {
+      method: "GET",
+      headers: { Cookie: "session=abc", "x-iconoplasm-admin-token": "admin-token" },
+    },
+  )
+  const payload = await (await invoke(adminRequest, env)).json()
+  assert.equal(payload.show_all_requested, true)
+  assert.equal(payload.show_all_applied, true)
+  assert.equal(payload.discoveries.length, CATALOG.length)
+  assert.ok(payload.discovered_symbols.includes("FURIN"))
+  const nonAdmin = await (
+    await invoke(get("/api/iconoplasm/discoveries/me?show_all=1", { cookie: "session=abc" }), env)
+  ).json()
+  assert.equal(nonAdmin.show_all_applied, false)
 })

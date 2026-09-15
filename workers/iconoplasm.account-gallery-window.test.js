@@ -1,12 +1,14 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
+import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
 
 const source = readFileSync(
   new URL(
@@ -16,155 +18,101 @@ const source = readFileSync(
   "utf8",
 )
 
+// Real SQLite under the route handlers. Discovery fixtures are seeded into the
+// compact representation (membership bitmap, chronology events, shared arrays)
+// exactly as a migrated account would look.
+function epochSeconds(value) {
+  const ms = Date.parse(String(value || ""))
+  return Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0
+}
+
+function base64Bytes(bytes) {
+  return Buffer.from(bytes).toString("base64")
+}
+
 class FakeStatement {
-  constructor(db, sql) {
+  constructor(db, sql, args = []) {
     this.db = db
     this.sql = String(sql || "")
-    this.args = []
+    this.args = args
   }
 
   bind(...args) {
-    this.args = args
-    return this
+    return new FakeStatement(this.db, this.sql, args)
   }
 
   async first() {
     this.db.calls.push({ method: "first", sql: this.sql, args: this.args })
-    if (this.sql.includes("FROM icono_shared_gene_discoveries")) {
-      return { discovered_count: this.db.sharedRows().length }
-    }
-    if (this.sql.includes("COUNT(*) AS discovered_count")) {
-      const [userId] = this.args
-      return {
-        discovered_count: this.db.rows.filter((row) => row.user_id === String(userId)).length,
-      }
-    }
-    if (this.sql.includes("FROM icono_gene_discoveries")) {
-      const [userId, symbol] = this.args
-      return this.db.discovery(userId, symbol)
-    }
-    return null
+    return this.db.raw.prepare(this.sql).get(...this.args) ?? null
   }
 
   async run() {
     this.db.calls.push({ method: "run", sql: this.sql, args: this.args })
-    if (
-      this.sql.includes("DELETE FROM icono_shared_gene_discoveries") ||
-      this.sql.includes("INSERT INTO icono_shared_gene_discoveries")
-    ) {
-      return { success: true, meta: { changes: this.db.sharedRows().length } }
-    }
-    throw new Error(`Unexpected write in account gallery window test: ${this.sql}`)
+    const info = this.db.raw.prepare(this.sql).run(...this.args)
+    return { success: true, meta: { changes: Number(info.changes || 0) } }
   }
 
   async all() {
     this.db.calls.push({ method: "all", sql: this.sql, args: this.args })
-    if (this.sql.includes("FROM icono_shared_gene_discoveries") && !this.sql.includes(" r")) {
-      const limit = Number(this.args[this.args.length - 1] || 10000)
-      return {
-        results: this.db.sharedRows().slice(0, limit),
-      }
-    }
-    if (this.sql.includes("FROM icono_shared_gene_discoveries r")) {
-      const limit = Number(this.args[this.args.length - 1] || 24)
-      let rows = this.db.sharedRows().map((row) => this.db.enrich(row))
-      if (this.sql.includes("ORDER BY r.gene_symbol")) {
-        const cursor = this.args.length === 2 ? String(this.args[0] || "").toUpperCase() : ""
-        const backward = this.sql.includes("ORDER BY r.gene_symbol DESC")
-        rows = rows
-          .filter(
-            (row) => !cursor || (backward ? row.gene_symbol < cursor : row.gene_symbol > cursor),
-          )
-          .sort((left, right) =>
-            backward
-              ? String(right.gene_symbol).localeCompare(String(left.gene_symbol))
-              : String(left.gene_symbol).localeCompare(String(right.gene_symbol)),
-          )
-      } else {
-        const hasCursor = this.args.length === 4
-        const cursorTime = hasCursor ? String(this.args[0] || "") : ""
-        const cursorSymbol = hasCursor ? String(this.args[2] || "").toUpperCase() : ""
-        const backward = this.sql.includes("first_non_admin_discovered_at ASC")
-        rows = rows
-          .filter((row) => {
-            if (!hasCursor) return true
-            const time = String(row.first_discovered_at || "")
-            if (backward)
-              return time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
-            return time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
-          })
-          .sort((left, right) => {
-            if (backward) {
-              return (
-                String(left.first_discovered_at || "").localeCompare(
-                  String(right.first_discovered_at || ""),
-                ) || String(right.gene_symbol).localeCompare(String(left.gene_symbol))
-              )
-            }
-            return (
-              String(right.first_discovered_at || "").localeCompare(
-                String(left.first_discovered_at || ""),
-              ) || String(left.gene_symbol).localeCompare(String(right.gene_symbol))
-            )
-          })
-      }
-      return { results: rows.slice(0, limit) }
-    }
-    if (!this.sql.includes("FROM icono_gene_discoveries d")) {
-      throw new Error(`Unexpected SQL in account gallery window test: ${this.sql}`)
-    }
-    const userId = String(this.args[0] || "")
-    const limit = Number(this.args[this.args.length - 1] || 24)
-    let rows = this.db.rows
-      .filter((row) => row.user_id === userId)
-      .map((row) => this.db.enrich(row))
-    if (this.sql.includes("ORDER BY d.gene_symbol")) {
-      const cursor = this.args.length === 3 ? String(this.args[1] || "").toUpperCase() : ""
-      const backward = this.sql.includes("ORDER BY d.gene_symbol DESC")
-      rows = rows
-        .filter(
-          (row) => !cursor || (backward ? row.gene_symbol < cursor : row.gene_symbol > cursor),
-        )
-        .sort((left, right) =>
-          backward
-            ? String(right.gene_symbol).localeCompare(String(left.gene_symbol))
-            : String(left.gene_symbol).localeCompare(String(right.gene_symbol)),
-        )
-    } else {
-      const hasCursor = this.args.length === 5
-      const cursorTime = hasCursor ? String(this.args[1] || "") : ""
-      const cursorSymbol = hasCursor ? String(this.args[3] || "").toUpperCase() : ""
-      const backward = this.sql.includes("d.first_discovered_at ASC")
-      rows = rows
-        .filter((row) => {
-          if (!hasCursor) return true
-          const time = String(row.first_discovered_at || "")
-          if (backward)
-            return time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
-          return time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
-        })
-        .sort((left, right) => {
-          if (backward) {
-            return (
-              String(left.first_discovered_at || "").localeCompare(
-                String(right.first_discovered_at || ""),
-              ) || String(right.gene_symbol).localeCompare(String(left.gene_symbol))
-            )
-          }
-          return (
-            String(right.first_discovered_at || "").localeCompare(
-              String(left.first_discovered_at || ""),
-            ) || String(left.gene_symbol).localeCompare(String(right.gene_symbol))
-          )
-        })
-    }
-    return { results: rows.slice(0, limit) }
+    return { results: this.db.raw.prepare(this.sql).all(...this.args) }
   }
 }
 
 class FakeDb {
   constructor() {
     this.calls = []
+    this.raw = new DatabaseSync(":memory:")
+    this.raw.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+    this.raw.exec(`
+      CREATE TABLE icono_gene_catalog (
+        gene_symbol TEXT PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        uniprot TEXT,
+        color_hex TEXT,
+        tmh INTEGER NOT NULL DEFAULT 0,
+        source TEXT,
+        updated_by TEXT,
+        aliases_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE icono_gene_essence (
+        gene_symbol TEXT PRIMARY KEY,
+        full_name TEXT,
+        weight_kg REAL,
+        age_years REAL,
+        leakage_percent REAL
+      );
+      CREATE TABLE icono_admin_gene_rollup (
+        gene_symbol TEXT PRIMARY KEY,
+        live_upvotes INTEGER NOT NULL DEFAULT 0,
+        live_downvotes INTEGER NOT NULL DEFAULT 0,
+        live_score INTEGER NOT NULL DEFAULT 0,
+        live_created_at TEXT,
+        current_asset_sha256 TEXT
+      );
+      CREATE TABLE icono_shared_gene_discoveries (
+        gene_symbol TEXT PRIMARY KEY,
+        first_non_admin_discovered_at TEXT,
+        latest_non_admin_encountered_at TEXT,
+        non_admin_discoverer_count INTEGER NOT NULL DEFAULT 0,
+        non_admin_encounter_count INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT
+      );
+      CREATE TABLE icono_gene_discoveries (
+        user_id TEXT NOT NULL,
+        gene_symbol TEXT NOT NULL,
+        first_discovered_at TEXT NOT NULL,
+        last_encountered_at TEXT NOT NULL,
+        encounter_count INTEGER NOT NULL DEFAULT 1,
+        first_source TEXT,
+        last_source TEXT,
+        first_trigger TEXT,
+        last_trigger TEXT,
+        first_dwell_ms INTEGER,
+        last_dwell_ms INTEGER,
+        PRIMARY KEY (user_id, gene_symbol)
+      );
+    `)
     this.rows = [
       this.row("user-123", "INS", "2026-01-03T00:00:00Z", 2),
       this.row("user-123", "PRL", "2026-01-02T00:00:00Z", 1),
@@ -172,6 +120,15 @@ class FakeDb {
       this.row("user-123", "TP53", "2026-01-05T00:00:00Z", 18),
       this.row("user-123", "BRCA1", "2026-01-04T00:00:00Z", 11),
     ]
+  }
+
+  get rows() {
+    return this._rows
+  }
+
+  set rows(value) {
+    this._rows = Array.isArray(value) ? value : []
+    this.syncCompactState()
   }
 
   row(userId, symbol, lastEncounteredAt, score, firstDiscoveredAt = lastEncounteredAt) {
@@ -191,6 +148,28 @@ class FakeDb {
 
   prepare(sql) {
     return new FakeStatement(this, sql)
+  }
+
+  async batch(statements) {
+    this.raw.exec("BEGIN IMMEDIATE")
+    try {
+      const results = statements.map((statement) => {
+        const prepared = this.raw.prepare(statement.sql)
+        if (
+          /^\s*(SELECT|WITH|PRAGMA)/i.test(statement.sql) ||
+          /\bRETURNING\b/i.test(statement.sql)
+        ) {
+          return { results: prepared.all(...statement.args) }
+        }
+        const info = prepared.run(...statement.args)
+        return { results: [], meta: { changes: Number(info.changes || 0) } }
+      })
+      this.raw.exec("COMMIT")
+      return results
+    } catch (error) {
+      this.raw.exec("ROLLBACK")
+      throw error
+    }
   }
 
   discovery(userId, symbol) {
@@ -239,6 +218,119 @@ class FakeDb {
       existing.encounter_count += Number(row.encounter_count || 0) || 0
     }
     return Array.from(bySymbol.values())
+  }
+
+  syncCompactState() {
+    this.raw.exec(`
+      DELETE FROM icono_discovery_user_state_v2;
+      DELETE FROM icono_discovery_ordinals_v2;
+      DELETE FROM icono_discovery_dictionary_meta_v2;
+      DELETE FROM icono_gene_catalog;
+      DELETE FROM icono_gene_essence;
+      DELETE FROM icono_admin_gene_rollup;
+    `)
+    const symbols = [...new Set(this.rows.map((row) => String(row.gene_symbol).toUpperCase()))]
+      .filter(Boolean)
+      .sort()
+    const ordinalBySymbol = new Map(symbols.map((symbol, index) => [symbol, index]))
+    const insertOrdinal = this.raw.prepare(
+      "INSERT INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active) VALUES (?, ?, ?, 1)",
+    )
+    const insertCatalog = this.raw.prepare(
+      "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)",
+    )
+    for (const symbol of symbols) {
+      insertOrdinal.run(symbol, ordinalBySymbol.get(symbol), symbol)
+      insertCatalog.run(symbol, `${symbol} full name`)
+    }
+    this.raw
+      .prepare(
+        "INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at) VALUES (1, 1, CURRENT_TIMESTAMP)",
+      )
+      .run()
+
+    const userRows = new Map()
+    const maxOrdinal = Math.max(0, symbols.length - 1)
+    const byteLength = Math.ceil((maxOrdinal + 1) / 8)
+    for (const row of this.rows) {
+      const userId = String(row.user_id)
+      const symbol = String(row.gene_symbol).toUpperCase()
+      const ordinal = ordinalBySymbol.get(symbol)
+      if (ordinal == null) continue
+      let user = userRows.get(userId)
+      if (!user) {
+        user = {
+          membership: new Uint8Array(byteLength),
+          memberCount: 0,
+          events: [],
+          nextEventSeq: 1,
+        }
+        userRows.set(userId, user)
+      }
+      const byte = ordinal >> 3
+      const mask = 1 << (ordinal & 7)
+      if (!(user.membership[byte] & mask)) {
+        user.membership[byte] |= mask
+        user.memberCount += 1
+      }
+      const count = Math.max(1, Number(row.encounter_count) || 1)
+      for (let index = 0; index < count; index++) {
+        user.events.push({
+          seq: user.nextEventSeq++,
+          ordinal,
+          symbol,
+          at:
+            index === 0
+              ? epochSeconds(row.first_discovered_at)
+              : epochSeconds(row.last_encountered_at),
+          source: index === 0 ? String(row.first_source || "") : String(row.last_source || ""),
+          trigger: index === 0 ? String(row.first_trigger || "") : String(row.last_trigger || ""),
+          dwell_ms: null,
+        })
+      }
+    }
+    const insertUser = this.raw.prepare(
+      `INSERT INTO icono_discovery_user_state_v2 (
+        user_id, dictionary_version, state_version, membership_b64, member_count,
+        next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id
+      ) VALUES (?, 1, 1, ?, ?, ?, 1, ?, '[]', 'migrated')`,
+    )
+    for (const [userId, user] of userRows) {
+      insertUser.run(
+        userId,
+        base64Bytes(user.membership),
+        user.memberCount,
+        user.nextEventSeq,
+        JSON.stringify(user.events),
+      )
+    }
+
+    const arrayLength = maxOrdinal + 1
+    const discoverers = new Uint32Array(arrayLength)
+    const encounters = new Uint32Array(arrayLength)
+    const firstAt = new Uint32Array(arrayLength)
+    const latestAt = new Uint32Array(arrayLength)
+    for (const row of this.sharedRows()) {
+      const ordinal = ordinalBySymbol.get(String(row.gene_symbol).toUpperCase())
+      if (ordinal == null) continue
+      discoverers[ordinal] = Number(row.encounter_count ? 1 : 0) || 1
+      encounters[ordinal] = Number(row.encounter_count || 0) || 1
+      firstAt[ordinal] = epochSeconds(row.first_discovered_at)
+      latestAt[ordinal] = epochSeconds(row.last_encountered_at)
+    }
+    this.raw
+      .prepare(
+        `UPDATE icono_discovery_shared_state_v2 SET
+          dictionary_version = 1, state_version = 1,
+          discoverer_counts_b64 = ?, encounter_counts_b64 = ?,
+          first_at_b64 = ?, latest_at_b64 = ?`,
+      )
+      .run(
+        base64Bytes(new Uint8Array(discoverers.buffer)),
+        base64Bytes(new Uint8Array(encounters.buffer)),
+        base64Bytes(new Uint8Array(firstAt.buffer)),
+        base64Bytes(new Uint8Array(latestAt.buffer)),
+      )
   }
 }
 
@@ -389,27 +481,33 @@ test("account gallery window returns strict rich cards for newest without full s
   assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
   assert.equal(payload.missing.length, 0)
   assert.equal(payload.items[0]?.card, undefined)
-  assert.match(
-    response.headers.get("Server-Timing") || "",
-    /acct_session;dur=.*acct_starter;dur=.*acct_window;dur=.*acct_count;dur=.*acct_version;dur=.*acct_catalog;dur=/,
-  )
-  assert.ok(
-    db.calls.some(
-      (call) =>
-        call.method === "all" &&
-        call.sql.includes("ORDER BY d.first_discovered_at DESC, d.gene_symbol ASC") &&
-        call.sql.includes("LIMIT ?"),
-    ),
+  const serverTiming = response.headers.get("Server-Timing") || ""
+  for (const stage of [
+    "acct_session",
+    "acct_starter",
+    "acct_window",
+    "acct_count",
+    "acct_version",
+    "acct_catalog",
+  ]) {
+    assert.match(serverTiming, new RegExp(`${stage};dur=`))
+  }
+  assert.equal(
+    db.calls.some((call) => call.sql.includes("FROM icono_gene_discoveries")),
+    false,
+    "the personal window must read compact state, never legacy discovery rows",
   )
 })
 
 test("account gallery newest window orders by first discovery, not repeat encounters", async () => {
   const db = new FakeDb()
+  const oldHover = db.row("user-123", "OLDHOVER", "2026-05-02T00:00:00Z", 4, "2026-04-01T00:00:00Z")
+  oldHover.encounter_count = 2
   db.rows = [
     db.row("user-123", "INS", "2026-01-03T00:00:00Z", 2),
     db.row("user-123", "PRL", "2026-01-02T00:00:00Z", 1),
     db.row("user-123", "RHO", "2026-01-01T00:00:00Z", 7),
-    db.row("user-123", "OLDHOVER", "2026-05-02T00:00:00Z", 4, "2026-04-01T00:00:00Z"),
+    oldHover,
     db.row("user-123", "NEWDISC", "2026-05-01T00:00:00Z", 5, "2026-05-01T00:00:00Z"),
     db.row("user-123", "MIDDISC", "2026-04-15T00:00:00Z", 3, "2026-04-15T00:00:00Z"),
   ]
@@ -457,7 +555,7 @@ test("account gallery newest window puts the newly discovered 101st gene first",
       return db.row("user-123", `G${number}`, `2026-04-29T00:${number.slice(1)}:00Z`, index)
     }),
   )
-  db.rows.push(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
+  db.rows = db.rows.concat(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
   resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv({ db, version: "test-vm-version-101" })
   const allSymbols = db.rows.map((row) => row.gene_symbol)
@@ -522,13 +620,10 @@ test("shared account gallery window pages non-admin discoveries from the shared 
   assert.ok(!payload.cards.some((card) => card.symbol === "ADMINONLY"))
   assert.match(response.headers.get("Server-Timing") || "", /acct_shared_window;dur=/)
   assert.doesNotMatch(response.headers.get("Server-Timing") || "", /acct_starter;dur=/)
-  assert.ok(
-    db.calls.some(
-      (call) =>
-        call.method === "all" &&
-        call.sql.includes("FROM icono_shared_gene_discoveries r") &&
-        call.sql.includes("ORDER BY r.first_non_admin_discovered_at DESC, r.gene_symbol ASC"),
-    ),
+  assert.equal(
+    db.calls.some((call) => call.sql.includes("FROM icono_shared_gene_discoveries")),
+    false,
+    "the shared window must read compact shared state, never the legacy rollup table",
   )
 })
 
@@ -596,13 +691,11 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
   assert.equal(payload.ok, true)
   assert.equal(payload.admin_user_excluded, true)
   assert.equal(payload.discovered_count, 2)
-  assert.ok(db.calls.some((call) => call.sql.includes("DELETE FROM icono_shared_gene_discoveries")))
-  assert.ok(
-    db.calls.some(
-      (call) =>
-        call.sql.includes("INSERT INTO icono_shared_gene_discoveries") &&
-        call.sql.includes("WHERE (? = '' OR user_id <> ?)"),
-    ),
+  assert.ok(Number(payload.rebuilt_deliveries) >= 2)
+  assert.equal(
+    db.calls.some((call) => call.sql.includes("icono_shared_gene_discoveries")),
+    false,
+    "the repair must rebuild compact shared state without the legacy rollup table",
   )
 })
 
