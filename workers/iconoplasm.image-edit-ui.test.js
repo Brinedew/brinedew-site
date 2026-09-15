@@ -496,3 +496,74 @@ test("B-517 live Shoelace components can load icons under the production CSP", (
     /allowIconoplasmShoelaceDataIcons\s*\?\s*"connect-src 'self' data: blob:/,
   )
 })
+
+test("B-612 guests never see or load authenticated image-edit provider state", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+  const sliceBetween = (startMarker, endMarker) => {
+    const start = app.indexOf(startMarker)
+    const end = app.indexOf(endMarker, start)
+    assert.notEqual(start, -1, `missing ${startMarker}`)
+    assert.notEqual(end, -1, `missing ${endMarker}`)
+    return app.slice(start, end)
+  }
+
+  // The visible edit entry must not render for guests, and the signed-in
+  // refresh path re-renders the rail when auth resolves.
+  const editAction = sliceBetween(
+    "function renderEditImageActionMarkup",
+    "var imageEditDialogState",
+  )
+  assert.match(editAction, /if \(!currentUser\) return ""/)
+
+  // The candidate-gallery edit entry is gated on the same session state.
+  assert.match(
+    app,
+    /var editMarkup = currentUser\s*\n\s*\? '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open"/,
+  )
+
+  // The dialog cannot be constructed for a guest.
+  const openDialog = sliceBetween("function openImageEditDialog", "function sourceFromEditButton")
+  assert.match(openDialog, /function openImageEditDialog\(source\) \{\s*if \(!currentUser\) return/)
+
+  // The provider endpoint is never fetched for a guest: the auth guard must
+  // precede any network call inside the single provider-loading choke point.
+  const fetchProviders = sliceBetween(
+    "function fetchImageEditProviders",
+    "function hydrateGridPortrait",
+  )
+  const guardIndex = fetchProviders.indexOf("if (!currentUser)")
+  const networkIndex = fetchProviders.indexOf("fetchAuthedJSON")
+  assert.notEqual(guardIndex, -1, "fetchImageEditProviders needs a currentUser guard")
+  assert.notEqual(networkIndex, -1)
+  assert.ok(
+    guardIndex < networkIndex,
+    "the guest guard must run before the provider network request",
+  )
+
+  const loadProviders = sliceBetween(
+    "function loadImageEditProviders",
+    "function collectImageEditAdjustments",
+  )
+  assert.match(loadProviders, /function loadImageEditProviders\(\) \{\s*if \(!currentUser\)/)
+
+  // A sign-out or account switch drops the remembered provider state and
+  // closes the dialog before it can render for the next viewer.
+  const resetState = sliceBetween(
+    "function resetImageEditDialogState",
+    "function renderImageEditDialogMarkup",
+  )
+  assert.match(resetState, /imageEditDialogState\.providers = \[\]/)
+  assert.match(resetState, /imageEditDialogState\.lastUsed = null/)
+  assert.match(resetState, /imageEditDialogState\.supportedProviders = \[\]/)
+  assert.match(resetState, /dialog\.hide\(\)/)
+  assert.match(resetState, /renderImageEditProviders\(\)/)
+
+  const authTransition = sliceBetween(
+    "function updateSharedUserState",
+    "function refreshSharedUserState",
+  )
+  assert.match(
+    authTransition,
+    /if \(previousHadUser !== !!currentUser\) \{\s*invalidateImageEditProviders\(\)\s*resetImageEditDialogState\(\)/,
+  )
+})
