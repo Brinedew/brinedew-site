@@ -20,8 +20,7 @@ test("installed reader keeps legacy base-only card-current behavior", async () =
 
 test("installed reader adopts an exact reader_view without changing the server base head", async () => {
   const delivery = createMetadataDelivery({
-    fetchImpl: async () =>
-      json({ schema_version: 2, current: base, reader_view: readerView }),
+    fetchImpl: async () => json({ schema_version: 2, current: base, reader_view: readerView }),
   })
 
   const head = await delivery.current(1)
