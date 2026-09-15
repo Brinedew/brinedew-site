@@ -30,6 +30,7 @@
   const IconoContentVoteBridge = globalThis.IconoplasmContentVoteBridge
   const IconoHighlightRuntime = globalThis.IconoplasmHighlightRuntime
   const IconoReadingSession = globalThis.IconoplasmReadingSession
+  const IconoDiscoveryBatchQueue = globalThis.IconoplasmDiscoveryBatchQueue
   if (!IconoCardShared) {
     console.error(
       "[Iconoplasm] shared card runtime missing: load generated/shared-card-runtime.js first",
@@ -94,6 +95,13 @@
     return
   }
   if (
+    !IconoDiscoveryBatchQueue ||
+    typeof IconoDiscoveryBatchQueue.createDiscoveryBatchQueue !== "function"
+  ) {
+    console.error("[Iconoplasm] discovery batch queue missing: load discovery-batch-queue.js first")
+    return
+  }
+  if (
     !IconoHighlightRuntime ||
     typeof IconoHighlightRuntime.createHighlightRuntime !== "function"
   ) {
@@ -119,8 +127,7 @@
   const ICONOPLASM_GENE_BATCH_URL = ICONOPLASM_API_BASE + "/api/public/v1/genes/batch"
   const ICONOPLASM_GENE_DETAIL_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
   const ICONOPLASM_PORTRAIT_LOCATOR_PREFIX = ICONOPLASM_API_BASE + "/api/public/v1/card-snapshots/"
-  const ICONOPLASM_DISCOVERY_ENCOUNTER_URL =
-    ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/encounter"
+  const ICONOPLASM_DISCOVERY_BATCH_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/batch"
   const ICONOPLASM_DISCOVERY_STATE_URL =
     ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/membership"
   const ICONOPLASM_DISCOVERY_MERGE_URL = ICONOPLASM_API_BASE + "/api/iconoplasm/discoveries/merge"
@@ -1023,6 +1030,68 @@
     await persistGuestDiscoverySymbols()
   }
 
+  // Qualified encounters are durable in extension-origin storage before any
+  // network I/O. The queue owns batch identity and restart replay; this sender
+  // only reports the exact receipt the queue must see.
+  async function sendDiscoveryBatch(batch) {
+    const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_BATCH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batch_id: batch.batch_id,
+        encounters: batch.encounters.map((encounter) => ({
+          symbol: encounter.symbol,
+          at: encounter.at,
+          source: encounter.source,
+          trigger: encounter.trigger,
+          dwell_ms: encounter.dwell_ms,
+        })),
+      }),
+      credentials: "include",
+    })
+    if (!response.ok) throw new Error(`Discovery batch failed with HTTP ${response.status}`)
+    const payload = await response.json().catch(() => null)
+    if (!payload || payload.batch_id !== batch.batch_id)
+      throw new Error("Discovery batch receipt identity mismatch")
+    const symbols = batch.encounters.map((encounter) => encounter.symbol)
+    if (payload.authenticated === false) {
+      // Guest browsing keeps the same durable local buffer and converges
+      // through the idempotent merge route on the next signed-in page.
+      for (const symbol of symbols) await rememberGuestDiscovery(symbol)
+      rememberDiscoveryAuthState({ authenticated: false })
+      return { ok: true, batch_id: batch.batch_id, authenticated: false }
+    }
+    if (payload.ok !== true) throw new Error("Discovery batch was rejected")
+    rememberDiscoveryAuthState({
+      authenticated: true,
+      checked_symbols: symbols,
+      discovered_symbols: symbols,
+    })
+    return { ok: true, batch_id: batch.batch_id, authenticated: true }
+  }
+
+  const discoveryBatchQueue = IconoDiscoveryBatchQueue.createDiscoveryBatchQueue({
+    storage: chrome.storage.local,
+    sendBatch: sendDiscoveryBatch,
+    maxBatchSize: 64,
+  })
+
+  let discoveryBatchFlushPromise = null
+  function flushDiscoveryBatchQueue() {
+    if (runtimeDisconnected) return Promise.resolve(null)
+    if (discoveryBatchFlushPromise) return discoveryBatchFlushPromise
+    discoveryBatchFlushPromise = discoveryBatchQueue
+      .flush({ maxBatches: 2 })
+      .catch((err) => {
+        if (!runtimeDisconnected) console.warn("[Iconoplasm] discovery batch flush deferred:", err)
+        return null
+      })
+      .finally(() => {
+        discoveryBatchFlushPromise = null
+      })
+    return discoveryBatchFlushPromise
+  }
+
   function rememberDiscoveryAuthState(payload) {
     const authenticated = !!(payload && payload.authenticated)
     discoveryAuthState = {
@@ -1194,7 +1263,10 @@
     IconoContentLifecycle.runAfterHostLoad({
       task: () => {
         discoveryBufferFlushScheduled = false
-        mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+        flushDiscoveryBatchQueue().catch(() => null)
+        if (guestDiscoverySymbols.size > 0) {
+          mergeGuestDiscoveriesIfSignedIn().catch(() => null)
+        }
       },
     })
   }
@@ -1244,48 +1316,28 @@
     try {
       const authState = await ensureDiscoveryStateFresh(normalizedSymbol)
       // The awaited membership load can discover that this gene was already
-      // saved. Recheck after it completes: the pre-await check alone records
-      // one redundant encounter per article and amplifies database writes.
+      // saved. Recheck after it completes so no redundant encounter is queued.
       if (discoveredPageSymbols.has(normalizedSymbol)) return
       if (authState && authState.authenticated === false) {
         await rememberGuestDiscovery(normalizedSymbol)
         return
       }
-      const response = await extensionApiFetch(ICONOPLASM_DISCOVERY_ENCOUNTER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: normalizedSymbol,
-          source: "extension_hover",
-          trigger: "hover_dwell",
-          dwell_ms: DISCOVERY_HOVER_DWELL_MS,
-        }),
-        credentials: "include",
+      // The symbol is committed to this session's discovery set at enqueue
+      // time; the durable queue owns delivery from here.
+      discoveredPageSymbols.add(normalizedSymbol)
+      await discoveryBatchQueue.enqueue({
+        symbol: normalizedSymbol,
+        at: Math.floor(Date.now() / 1000),
+        source: "extension_hover",
+        trigger: "hover_dwell",
+        dwell_ms: DISCOVERY_HOVER_DWELL_MS,
       })
-      if (!response.ok) {
-        console.warn(
-          "[Iconoplasm] discovery encounter write failed for",
-          normalizedSymbol,
-          "with HTTP",
-          response.status,
-        )
-        await rememberGuestDiscovery(normalizedSymbol)
-        return
-      }
-      const payload = await response.json().catch(() => null)
-      if (payload && payload.authenticated && payload.recorded) {
-        rememberDiscoveryAuthState(payload)
-        discoveredPageSymbols.add(normalizedSymbol)
-        if (guestDiscoverySymbols.size > 0) {
-          scheduleDiscoveryBufferFlush()
-        }
-      } else if (payload && payload.authenticated === false) {
-        rememberDiscoveryAuthState(payload)
-        await rememberGuestDiscovery(normalizedSymbol)
-      }
+      scheduleDiscoveryBufferFlush()
     } catch (err) {
       if (runtimeDisconnected) return
-      console.error("[Iconoplasm] discovery encounter write error:", err)
+      console.error("[Iconoplasm] discovery encounter enqueue error:", err)
+      // Offline or membership failure keeps the encounter in the durable local
+      // guest buffer, exactly like the signed-out path.
       await rememberGuestDiscovery(normalizedSymbol)
     } finally {
       discoveryInFlightSymbols.delete(normalizedSymbol)
@@ -1445,6 +1497,9 @@
     quietDelayMs: 0,
     task: () => readingSession.startSpeculation(),
   })
+  // Restart-safe replay: pending/inflight encounters survive a browser restart
+  // and are re-sent with their original batch identity after host load.
+  scheduleDiscoveryBufferFlush()
 
   // ARCHITECTURE FENCE [IPD-008]: observe readiness BEFORE pointer entry. Waiting
   // for a warm cache before timing a hover hides the recurring first-hover bug.
