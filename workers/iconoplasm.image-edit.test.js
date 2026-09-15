@@ -3226,7 +3226,7 @@ test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal mode
       )
     assert.equal(response.status, 200, "provider save status for " + model)
   }
-  const runJob = async (model) => {
+  const runJob = async (model, adjustments = { remove_ai_generation_errors: true }) => {
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
@@ -3239,7 +3239,7 @@ test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal mode
               model,
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
+              adjustments,
             }),
           },
         ),
@@ -3257,10 +3257,91 @@ test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal mode
     assert.equal(typeof seen.kontextUrl, "string")
 
     await saveProvider("fal-ai/nano-banana-pro/edit")
-    const nano = await runJob("fal-ai/nano-banana-pro/edit")
+    // B-617 blocks the remove-ai-errors adjustment for Nano Banana models, so
+    // this shape regression uses a compatible adjustment (Age). The blocked
+    // combination itself is pinned by the dedicated B-617 test below.
+    const nano = await runJob("fal-ai/nano-banana-pro/edit", { age_years: 30 })
     assert.equal(nano.status, 200, "nano create status: " + JSON.stringify(nano.body))
     assert.equal(nano.body.job.status, "succeeded")
     assert.ok(Array.isArray(seen.nanoUrls))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("B-617 Fal Nano Banana edits refuse the remove-AI-errors adjustment before any provider call", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  let providerCalled = false
+  globalThis.fetch = async () => {
+    providerCalled = true
+    throw new Error("provider should not be called for a blocked adjustment")
+  }
+
+  try {
+    const saveResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              api_key: "fal-test-secret",
+              model: "fal-ai/nano-banana-2/edit",
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    assert.equal(saveResponse.status, 200, "fal provider save status")
+
+    const blockedResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              model: "fal-ai/nano-banana-2/edit",
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const blocked = await blockedResponse.json()
+    assert.equal(blockedResponse.status, 400, "blocked combination must answer 400")
+    assert.equal(blocked.ok, false)
+    assert.match(blocked.error, /Nano Banana 2 Edit/)
+    assert.match(blocked.error, /cannot run this adjustment: Remove visible AI errors/)
+    assert.equal(providerCalled, false, "no provider request may be spent")
+
+    const providersResponse =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+          { method: "GET", headers: { Cookie: "session=abc123" } },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    const providers = await providersResponse.json()
+    const fal = providers.supported_providers.find((provider) => provider.provider_id === "fal")
+    const nano = fal.model_options.find((option) => option.model === "fal-ai/nano-banana-2/edit")
+    const kontext = fal.model_options.find((option) => option.model === "fal-ai/flux-pro/kontext")
+    assert.deepEqual(nano.incompatible_adjustments, ["remove_ai_generation_errors"])
+    assert.deepEqual(kontext.incompatible_adjustments, [])
+    const luma = providers.supported_providers.find((provider) => provider.provider_id === "luma")
+    assert.deepEqual(luma.model_options[0].incompatible_adjustments, [])
   } finally {
     globalThis.fetch = originalFetch
   }
