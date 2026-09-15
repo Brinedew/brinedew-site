@@ -5974,11 +5974,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (select.updateComplete && typeof select.updateComplete.then === "function") {
         select.updateComplete.then(function () {
           select.value = selectedProviderId
-          updateImageEditButtons()
+          applyImageEditModelConstraints()
         })
         return
       }
-      updateImageEditButtons()
+      applyImageEditModelConstraints()
     })
   }
 
@@ -6132,6 +6132,66 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     updateImageEditButtons()
   }
 
+  // B-617: some models declare adjustments their provider rejects outright
+  // (Fal Nano Banana + remove_ai_generation_errors). The dialog disables those
+  // rows for the selected model with a clear reason so the combination cannot
+  // be submitted, and restores them when a compatible model is selected.
+  function imageEditModelIncompatibleAdjustments() {
+    var raw = imageEditSelectedProvider()
+    var parts = raw.split(":")
+    var providerId = parts[0] || ""
+    var model = parts.slice(1).join(":") || ""
+    if (!providerId || !model) return []
+    var supported = imageEditDialogState.supportedProviders || []
+    for (var i = 0; i < supported.length; i++) {
+      var provider = supported[i] || {}
+      if (provider.provider_id !== providerId) continue
+      var options = Array.isArray(provider.model_options) ? provider.model_options : []
+      for (var j = 0; j < options.length; j++) {
+        var option = options[j] || {}
+        if (String(option.model || "") !== model) continue
+        return Array.isArray(option.incompatible_adjustments) ? option.incompatible_adjustments : []
+      }
+    }
+    return []
+  }
+
+  function applyImageEditModelConstraints() {
+    var dialog = ensureImageEditDialog()
+    var blocked = imageEditModelIncompatibleAdjustments()
+    var context = (imageEditDialogState.source && imageEditDialogState.source.adjustments) || {}
+    var rows = dialog.querySelectorAll("[data-icono-image-edit-adjustment-row]")
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i]
+      var kind = row.getAttribute("data-icono-image-edit-adjustment-row") || ""
+      var checkbox = row.querySelector("[data-icono-image-edit-adjustment]")
+      var valueEl = row.querySelector("[data-icono-image-edit-adjustment-value]")
+      var blockedByModel = blocked.indexOf(kind) >= 0
+      var wasBlockedByModel = row.getAttribute("data-icono-image-edit-model-blocked") === "true"
+      row.setAttribute("data-icono-image-edit-model-blocked", blockedByModel ? "true" : "false")
+      if (blockedByModel) {
+        if (checkbox) {
+          checkbox.checked = false
+          checkbox.disabled = true
+        }
+        row.classList.add("icono-image-edit-adjustment-row--unavailable")
+        if (valueEl) valueEl.textContent = "Not supported by this model"
+        continue
+      }
+      if (!wasBlockedByModel) continue
+      var value = imageEditContextValue(kind, context)
+      var available = imageEditContextValueAvailable(kind, value)
+      if (checkbox) checkbox.disabled = !available
+      row.classList.toggle("icono-image-edit-adjustment-row--unavailable", !available)
+      if (valueEl) {
+        valueEl.textContent = available
+          ? imageEditContextValueLabel(kind, value, context)
+          : "Unavailable from gene data"
+      }
+    }
+    updateImageEditButtons()
+  }
+
   function openImageEditDialog(source) {
     if (!currentUser) return
     var dialog = ensureImageEditDialog()
@@ -6158,6 +6218,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (result) result.hidden = true
     imageEditSetStatus("", "")
     renderImageEditContext(source)
+    applyImageEditModelConstraints()
     updateImageEditButtons()
     loadImageEditProviders()
     if (typeof dialog.show === "function") dialog.show()
@@ -6351,20 +6412,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function wireImageEditDialog(dialog) {
     dialog.addEventListener("change", function (event) {
-      if (
-        event.target &&
-        (event.target.matches("[data-icono-image-edit-adjustment]") ||
-          event.target.matches("[data-icono-image-edit-provider]"))
-      ) {
+      if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
+        applyImageEditModelConstraints()
+        return
+      }
+      if (event.target && event.target.matches("[data-icono-image-edit-adjustment]")) {
         updateImageEditButtons()
       }
     })
     dialog.addEventListener("sl-change", function (event) {
-      if (
-        event.target &&
-        (event.target.matches("[data-icono-image-edit-adjustment]") ||
-          event.target.matches("[data-icono-image-edit-provider]"))
-      ) {
+      if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
+        applyImageEditModelConstraints()
+        return
+      }
+      if (event.target && event.target.matches("[data-icono-image-edit-adjustment]")) {
         updateImageEditButtons()
       }
     })
