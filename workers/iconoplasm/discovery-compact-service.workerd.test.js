@@ -5,7 +5,10 @@ import {
   createDiscoveryOrdinalDictionary,
   readSharedDiscoveryOrdinal,
 } from "./discovery-compact-state.js"
-import { DISCOVERY_COMPACT_SCHEMA_SQL, readCompactDiscoveryState } from "./discovery-compact-store.js"
+import {
+  DISCOVERY_COMPACT_SCHEMA_SQL,
+  readCompactDiscoveryState,
+} from "./discovery-compact-store.js"
 import { recordCompactDiscoveryBatch } from "./discovery-compact-service.js"
 
 async function installSchema(db) {
@@ -66,7 +69,10 @@ test(
       assert.ok(results.every((result) => result.ok && !result.replay))
       const attempts = results.map((result) => result.attempts)
       assert.deepEqual(attempts, Array(users).fill(1))
-      assert.equal(new Set(results.map((result) => result.shared_delivery?.delivery_id)).size, users)
+      assert.equal(
+        new Set(results.map((result) => result.shared_delivery?.delivery_id)).size,
+        users,
+      )
       assert.ok(
         results.every(
           (result) =>
@@ -125,7 +131,12 @@ test(
       })
       console.log(
         "B764_ATOMIC_CONCURRENCY_RECEIPT",
-        JSON.stringify({ users, total_attempts: totalAttempts, max_attempts: maxAttempts, attempts }),
+        JSON.stringify({
+          users,
+          total_attempts: totalAttempts,
+          max_attempts: maxAttempts,
+          attempts,
+        }),
       )
     })
   },

@@ -78,7 +78,11 @@ function signature(entries) {
   return JSON.stringify(entries.map(stableEntry))
 }
 
-export function evolveDiscoveryOrdinalDictionary({ previous = null, symbols = [], aliases = {} } = {}) {
+export function evolveDiscoveryOrdinalDictionary({
+  previous = null,
+  symbols = [],
+  aliases = {},
+} = {}) {
   const prior = normalizedPrevious(previous)
   const current = new Set((Array.isArray(symbols) ? symbols : []).map(symbol))
   const redirects = aliasMap(aliases)
@@ -113,9 +117,7 @@ export function evolveDiscoveryOrdinalDictionary({ previous = null, symbols = []
     }
   })
 
-  let nextOrdinal = entries.length
-    ? Math.max(...entries.map((entry) => entry.ordinal)) + 1
-    : 0
+  let nextOrdinal = entries.length ? Math.max(...entries.map((entry) => entry.ordinal)) + 1 : 0
   for (const currentSymbol of [...current].sort()) {
     if (claimedCurrent.has(currentSymbol)) continue
     const oldEntry = entries.find(
