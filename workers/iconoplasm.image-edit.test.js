@@ -3102,6 +3102,170 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
   }
 })
 
+test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal models keep image_urls", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const seen = {}
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://queue.fal.run/fal-ai/flux-pro/kontext") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // Flux Kontext declares edit_image_object_shape "string": the source is
+      // a scalar URL. Sending [url] fails provider validation before any
+      // generation (B-618).
+      assert.equal(typeof body.image_url, "string", "kontext image_url should be a string")
+      assert.equal(Array.isArray(body.image_url), false, "kontext image_url must not be an array")
+      assert.ok(
+        body.image_url.includes("/portraits/"),
+        "kontext image_url should be the source URL",
+      )
+      assert.equal("image_urls" in body, false)
+      seen.kontextUrl = body.image_url
+      return new Response(
+        JSON.stringify({
+          request_id: "fal-kontext-1",
+          status_url: "https://queue.fal.run/fal-ai/flux/requests/fal-kontext-1/status",
+          response_url: "https://queue.fal.run/fal-ai/flux/requests/fal-kontext-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/fal-ai/nano-banana-pro/edit") {
+      const body = JSON.parse(String(init.body || "{}"))
+      // Array-schema Fal models keep the existing one-element array wrapping.
+      assert.ok(Array.isArray(body.image_urls), "nano-banana image_urls should stay an array")
+      assert.equal(body.image_urls.length, 1)
+      assert.ok(body.image_urls[0].includes("/portraits/"))
+      assert.equal("image_url" in body, false)
+      seen.nanoUrls = body.image_urls
+      return new Response(
+        JSON.stringify({
+          request_id: "fal-nano-1",
+          status_url: "https://queue.fal.run/fal-ai/nano-banana/requests/fal-nano-1/status",
+          response_url: "https://queue.fal.run/fal-ai/nano-banana/requests/fal-nano-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/fal-ai/flux/requests/fal-kontext-1/status") {
+      return new Response(
+        JSON.stringify({
+          status: "COMPLETED",
+          request_id: "fal-kontext-1",
+          response_url: "https://queue.fal.run/fal-ai/flux/requests/fal-kontext-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/fal-ai/flux/requests/fal-kontext-1") {
+      return new Response(
+        JSON.stringify({ images: [{ url: "https://fal.example/kontext-output.png" }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/fal-ai/nano-banana/requests/fal-nano-1/status") {
+      return new Response(
+        JSON.stringify({
+          status: "COMPLETED",
+          request_id: "fal-nano-1",
+          response_url: "https://queue.fal.run/fal-ai/nano-banana/requests/fal-nano-1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (url === "https://queue.fal.run/fal-ai/nano-banana/requests/fal-nano-1") {
+      return new Response(
+        JSON.stringify({ images: [{ url: "https://fal.example/nano-output.png" }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    if (
+      url === "https://fal.example/kontext-output.png" ||
+      url === "https://fal.example/nano-output.png"
+    ) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
+    if (url.includes("/portraits/") || url.includes("/portrait/")) {
+      return new Response("source-portrait-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+
+  const saveProvider = async (model) => {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              api_key: "fal-test-secret",
+              model,
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    assert.equal(response.status, 200, "provider save status for " + model)
+  }
+  const runJob = async (model) => {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            body: JSON.stringify({
+              provider_id: "fal",
+              model,
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { remove_ai_generation_errors: true },
+            }),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    return { status: response.status, body: await response.json() }
+  }
+
+  try {
+    await saveProvider("fal-ai/flux-pro/kontext")
+    const kontext = await runJob("fal-ai/flux-pro/kontext")
+    assert.equal(kontext.status, 200, "kontext create status: " + JSON.stringify(kontext.body))
+    assert.equal(kontext.body.job.status, "succeeded")
+    assert.equal(typeof seen.kontextUrl, "string")
+
+    await saveProvider("fal-ai/nano-banana-pro/edit")
+    const nano = await runJob("fal-ai/nano-banana-pro/edit")
+    assert.equal(nano.status, 200, "nano create status: " + JSON.stringify(nano.body))
+    assert.equal(nano.body.job.status, "succeeded")
+    assert.ok(Array.isArray(seen.nanoUrls))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("image edit jobs can use Gemini API models", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
