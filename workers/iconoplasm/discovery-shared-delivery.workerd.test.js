@@ -5,9 +5,15 @@ import {
   createDiscoveryOrdinalDictionary,
   readSharedDiscoveryOrdinal,
 } from "./discovery-compact-state.js"
-import { DISCOVERY_COMPACT_SCHEMA_SQL, readCompactDiscoveryState } from "./discovery-compact-store.js"
+import {
+  DISCOVERY_COMPACT_SCHEMA_SQL,
+  readCompactDiscoveryState,
+} from "./discovery-compact-store.js"
 import { recordCompactDiscoveryBatch } from "./discovery-compact-service.js"
-import { consumeSharedDiscoveryDeliveries } from "./discovery-shared-delivery.js"
+import {
+  consumeSharedDiscoveryDeliveries,
+  drainSharedDiscoveryDeliveries,
+} from "./discovery-shared-delivery.js"
 
 async function installSchema(db) {
   for (const statement of DISCOVERY_COMPACT_SCHEMA_SQL.split(";")
@@ -163,6 +169,82 @@ test(
         first_at: 1000,
         latest_at: 2000,
       })
+    })
+  },
+)
+
+test(
+  "personal batch commits its exact derived delivery into the durable outbox in the same transaction",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await personalDelivery(db, "u1", 1, 1000)
+      await personalDelivery(db, "u2", 1, 1100)
+      const beforeDrain = await readCompactDiscoveryState(db, "u1")
+      assert.deepEqual(readSharedDiscoveryOrdinal(beforeDrain.shared, 0), {
+        discoverer_count: 0,
+        encounter_count: 0,
+        first_at: 0,
+        latest_at: 0,
+      })
+      const outbox = await db
+        .prepare(
+          "SELECT delivery_id, payload_json FROM icono_discovery_shared_delivery_outbox_v2 ORDER BY delivery_id",
+        )
+        .all()
+      assert.equal(outbox.results.length, 2)
+      for (const row of outbox.results) {
+        const payload = JSON.parse(row.payload_json)
+        assert.equal(payload.schema, "iconoplasm.discoverySharedDelivery.v1")
+        assert.ok(["u1", "u2"].includes(payload.user_id))
+        assert.equal(payload.delivery_id, row.delivery_id)
+      }
+
+      const drained = await drainSharedDiscoveryDeliveries(db, { limit: 8 })
+      assert.deepEqual(drained, { ok: true, drained: 2, applied: 2, duplicates: 0 })
+      const afterDrain = await readCompactDiscoveryState(db, "u1")
+      assert.deepEqual(readSharedDiscoveryOrdinal(afterDrain.shared, 0), {
+        discoverer_count: 2,
+        encounter_count: 2,
+        first_at: 1000,
+        latest_at: 1100,
+      })
+      const remaining = await db
+        .prepare("SELECT COUNT(*) AS n FROM icono_discovery_shared_delivery_outbox_v2")
+        .first()
+      assert.equal(Number(remaining.n), 0)
+      console.log(
+        "B764_DURABLE_DELIVERY_RECEIPT",
+        JSON.stringify({ outbox_rows: outbox.results.length, drained }),
+      )
+    })
+  },
+)
+
+test(
+  "a crash between shared apply and outbox cleanup replays once and then clears",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      const delivery = await personalDelivery(db, "u1", 1, 1000)
+      // The outbox row is still present; the consumer applied the same delivery
+      // before the crash, so the drain must treat it as a duplicate and stop
+      // without changing counts.
+      const applied = await consumeSharedDiscoveryDeliveries(db, [delivery])
+      assert.equal(applied.applied, 1)
+      const replay = await drainSharedDiscoveryDeliveries(db, { limit: 8 })
+      assert.deepEqual(replay, { ok: true, drained: 1, applied: 0, duplicates: 1 })
+      const state = await readCompactDiscoveryState(db, "u1")
+      assert.deepEqual(readSharedDiscoveryOrdinal(state.shared, 0), {
+        discoverer_count: 1,
+        encounter_count: 1,
+        first_at: 1000,
+        latest_at: 1000,
+      })
+      const remaining = await db
+        .prepare("SELECT COUNT(*) AS n FROM icono_discovery_shared_delivery_outbox_v2")
+        .first()
+      assert.equal(Number(remaining.n), 0)
     })
   },
 )
