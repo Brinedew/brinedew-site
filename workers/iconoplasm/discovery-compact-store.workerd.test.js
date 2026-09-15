@@ -160,9 +160,7 @@ test(
       assert.ok(chunkWrite.writes <= 6, `64-event chunk batch wrote ${chunkWrite.writes} D1 rows`)
       assert.equal(
         Number(
-          (
-            await db.prepare("SELECT COUNT(*) AS n FROM icono_discovery_chronology_v2").first()
-          ).n,
+          (await db.prepare("SELECT COUNT(*) AS n FROM icono_discovery_chronology_v2").first()).n,
         ),
         1,
       )

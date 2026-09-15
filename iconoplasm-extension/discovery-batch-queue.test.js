@@ -11,7 +11,8 @@ class MemoryStorage {
   }
   async get(keys) {
     const result = {}
-    for (const key of keys || []) if (key in this.state) result[key] = structuredClone(this.state[key])
+    for (const key of keys || [])
+      if (key in this.state) result[key] = structuredClone(this.state[key])
     return result
   }
   async set(values) {

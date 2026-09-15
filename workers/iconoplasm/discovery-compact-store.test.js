@@ -92,10 +92,7 @@ test("atomic commit writes one user state and one shared compact state", async (
   assert.equal(stored.user.member_count, 2)
   assert.equal(stored.user.state_version, 1)
   assert.equal(stored.shared.state_version, 1)
-  assert.equal(
-    db.raw.prepare("SELECT COUNT(*) AS n FROM icono_discovery_user_state_v2").get().n,
-    1,
-  )
+  assert.equal(db.raw.prepare("SELECT COUNT(*) AS n FROM icono_discovery_user_state_v2").get().n, 1)
   assert.equal(
     db.raw.prepare("SELECT COUNT(*) AS n FROM icono_discovery_shared_state_v2").get().n,
     1,
@@ -219,10 +216,7 @@ test("sealed chronology chunks commit in the same transaction and replay is harm
     ).committed,
     true,
   )
-  assert.equal(
-    db.raw.prepare("SELECT COUNT(*) AS n FROM icono_discovery_chronology_v2").get().n,
-    1,
-  )
+  assert.equal(db.raw.prepare("SELECT COUNT(*) AS n FROM icono_discovery_chronology_v2").get().n, 1)
   const storedChunk = db.raw.prepare("SELECT * FROM icono_discovery_chronology_v2").get()
   assert.equal(JSON.parse(storedChunk.events_json).length, 64)
 
