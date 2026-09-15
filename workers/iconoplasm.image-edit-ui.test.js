@@ -567,3 +567,34 @@ test("B-612 guests never see or load authenticated image-edit provider state", (
     /if \(previousHadUser !== !!currentUser\) \{\s*invalidateImageEditProviders\(\)\s*resetImageEditDialogState\(\)/,
   )
 })
+
+test("B-617 model-incompatible adjustments are disabled with a clear reason", () => {
+  const app = readFileSync(new URL("../quartz/static/iconoplasm/app.js", import.meta.url), "utf8")
+
+  // The dialog learns each model's blocked adjustments from the providers
+  // projection and disables exactly those rows with a visible reason.
+  assert.match(app, /function imageEditModelIncompatibleAdjustments\(\)/)
+  assert.match(app, /function applyImageEditModelConstraints\(\)/)
+  assert.match(app, /incompatible_adjustments/)
+  assert.match(app, /Not supported by this model/)
+
+  const applyStart = app.indexOf("function applyImageEditModelConstraints()")
+  const applyEnd = app.indexOf("function openImageEditDialog", applyStart)
+  assert.ok(applyStart > 0 && applyEnd > applyStart)
+  const applyBody = app.slice(applyStart, applyEnd)
+  assert.match(applyBody, /checkbox\.checked = false/)
+  assert.match(applyBody, /checkbox\.disabled = true/)
+  assert.match(applyBody, /updateImageEditButtons\(\)/)
+
+  // Applied when the dialog opens, after providers load, and on model change.
+  assert.match(app, /renderImageEditContext\(source\)\s*applyImageEditModelConstraints\(\)/)
+  assert.match(app, /applyImageEditModelConstraints\(\)\s*updateImageEditButtons\(\)/)
+  assert.match(
+    app,
+    /event\.target\.matches\("\[data-icono-image-edit-provider\]"\)\) \{\s*applyImageEditModelConstraints\(\)/,
+  )
+  assert.doesNotMatch(
+    app,
+    /event\.target\.matches\("\[data-icono-image-edit-provider\]"\)\) \{\s*updateImageEditButtons\(\)/,
+  )
+})

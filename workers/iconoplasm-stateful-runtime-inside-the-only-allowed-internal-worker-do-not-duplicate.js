@@ -891,6 +891,11 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         output_format: "png",
+        // B-617: Fal's Nano Banana edit models answer the
+        // remove_ai_generation_errors operation with no_media_generated /
+        // content_policy_violation, so never submit a request that
+        // predictably fails. The dialog hides the adjustment for this model.
+        incompatible_adjustments: Object.freeze(["remove_ai_generation_errors"]),
       }),
       Object.freeze({
         model: "fal-ai/nano-banana-2/edit",
@@ -903,6 +908,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
         output_format: "png",
+        // B-617: same Nano Banana moderation behavior as the Pro edit model.
+        incompatible_adjustments: Object.freeze(["remove_ai_generation_errors"]),
       }),
       Object.freeze({
         model: "fal-ai/flux-pro/kontext",
@@ -5675,6 +5682,12 @@ function mapImageEditModelOption(option) {
     edit_capable: editCapable,
     generate_capable: generateCapable,
     edit_image_object_shape: sanitizeText(option.edit_image_object_shape || "", 32) || "",
+    // B-617: adjustment kinds this exact model rejects at the provider. The
+    // dialog disables them and the jobs route refuses the combination before
+    // spending a provider request.
+    incompatible_adjustments: Array.isArray(option.incompatible_adjustments)
+      ? option.incompatible_adjustments.map((kind) => sanitizeText(kind || "", 64)).filter(Boolean)
+      : [],
     edit_strength_param: sanitizeText(option.edit_strength_param || "", 64) || "",
     edit_reference_tag: sanitizeText(option.edit_reference_tag || "", 32) || "",
     edit_requires_image: option.edit_requires_image === true,
@@ -6859,6 +6872,36 @@ function normalizeImageEditAdjustments(raw) {
   }
   if (!items.length) return { ok: false, error: "Select at least one edit adjustment" }
   return { ok: true, items: materializeImageEditAdjustments(items) }
+}
+
+// B-617: a model option can declare adjustment kinds its provider rejects
+// outright. Fal's Nano Banana edit models answer the remove-ai-errors
+// operation with no_media_generated / content_policy_violation, so the
+// product refuses that combination with a clear explanation instead of
+// spending a request that predictably fails. Returns "" when compatible.
+function imageEditAdjustmentIncompatibility({ providerId, model, items }) {
+  const providerDef = imageEditProviderDefinition(providerId)
+  if (!providerDef) return ""
+  const option = imageEditProviderModelOption(
+    providerDef,
+    resolveImageEditProviderModel(model, providerDef),
+  )
+  const blockedKinds = Array.isArray(option?.incompatible_adjustments)
+    ? option.incompatible_adjustments
+        .map((kind) => normalizeImageEditPromptKind(kind))
+        .filter(Boolean)
+    : []
+  if (!blockedKinds.length) return ""
+  const selectedKinds = (Array.isArray(items) ? items : [])
+    .map((item) => normalizeImageEditPromptKind(item?.kind || ""))
+    .filter(Boolean)
+  const rejected = selectedKinds.filter((kind) => blockedKinds.includes(kind))
+  if (!rejected.length) return ""
+  const labels = rejected.map(
+    (kind) => IMAGE_EDIT_PROMPT_DEFINITION_BY_KIND.get(kind)?.label || kind,
+  )
+  const modelLabel = sanitizeText(option?.label || model, 160) || "The selected model"
+  return `"${modelLabel}" cannot run this adjustment: ${labels.join(", ")}. Fal rejects that operation for its Nano Banana models, so choose another adjustment or a different model.`
 }
 
 function buildImageEditPrompt(adjustments, sharedSuffixTemplate = "", sharedPrefixTemplate = "") {
@@ -34865,6 +34908,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const adjustmentsResult = normalizeImageEditAdjustments(p?.adjustments || p || {})
       if (!adjustmentsResult.ok) {
         return done("image_edit_jobs_400", json({ ok: false, error: adjustmentsResult.error }, 400))
+      }
+      // B-617: refuse a model/adjustment combination the provider has been
+      // demonstrated to reject, before creating a job row or calling anyone.
+      const adjustmentIncompatibility = imageEditAdjustmentIncompatibility({
+        providerId,
+        model: providerRow.model,
+        items: adjustmentsResult.items,
+      })
+      if (adjustmentIncompatibility) {
+        return done(
+          "image_edit_jobs_400",
+          json({ ok: false, error: adjustmentIncompatibility }, 400),
+        )
       }
       const sourceRow = await sourceImageEditAssetRow(env, { symbol, assetSha256: assetSha })
       if (!sourceRow?.asset_sha256) {
