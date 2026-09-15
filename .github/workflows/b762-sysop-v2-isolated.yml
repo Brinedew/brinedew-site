@@ -1,0 +1,69 @@
+name: B-762 isolated state tests
+on:
+  push:
+    branches: ["work/b762-sysop-v2-state"]
+permissions:
+  contents: read
+jobs:
+  isolated-state-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install the repository's locked local test runtime
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: SQLite, routing, installed-reader and native workerd proofs (no deployment credentials)
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-tests.mjs \
+            workers/iconoplasm/vote-authority/gene-publication-state.test.js \
+            workers/iconoplasm/vote-authority/gene-authority-election.test.js \
+            workers/iconoplasm.vote-authority-slice.test.js \
+            workers/iconoplasm.vote-coordinator-routing.test.js \
+            workers/iconoplasm.vote-hot-path-cost.test.js \
+            workers/iconoplasm/vote-authority/gene-publication-state.workerd.test.js \
+            workers/lib/iconoplasm-card-publication-materialize-symbol.test.js \
+            workers/lib/iconoplasm-card-gene-delta.test.js \
+            workers/lib/iconoplasm-card-reader-view.test.js \
+            workers/iconoplasm.vote-authority-handoff.test.js \
+            workers/iconoplasm.reader-view-publication.test.js \
+            workers/iconoplasm/discovery-ordinal-dictionary.test.js \
+            workers/iconoplasm/discovery-ordinal-store.test.js \
+            workers/iconoplasm/discovery-compact-state.test.js \
+            workers/iconoplasm/discovery-compact-read.test.js \
+            workers/iconoplasm/discovery-compact-migrate.test.js \
+            workers/iconoplasm/discovery-compact-store.test.js \
+            workers/iconoplasm/discovery-compact-admin.test.js \
+            workers/iconoplasm/discovery-compact-store.workerd.test.js \
+            workers/iconoplasm/discovery-compact-service.workerd.test.js \
+            workers/iconoplasm/discovery-shared-delivery.workerd.test.js \
+            workers/iconoplasm/discovery-compact-migration.workerd.test.js \
+            workers/iconoplasm/discovery-workload.workerd.test.js \
+            workers/iconoplasm.discovery.test.js \
+            workers/iconoplasm-background-schedule.test.js \
+            workers/iconoplasm.d1-hot-query-guard.test.js \
+            iconoplasm-extension/discovery-batch-queue.test.js \
+            iconoplasm-extension/discovery-queue-integration.test.js \
+            iconoplasm-extension/content-discovery.test.js \
+            iconoplasm-extension.module-contract.test.js \
+            iconoplasm-extension/metadata-delivery.test.js \
+            iconoplasm-extension/metadata-delivery-reader-view.test.js \
+            scripts/b762-v1-excision-audit.mjs \
+            scripts/b762-publication-path-audit.mjs \
+            scripts/b762-cutover-coherence-audit.mjs | tee b762-isolated-tests.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: b762-isolated-state-evidence
+          path: b762-isolated-tests.txt
+          if-no-files-found: warn
+          retention-days: 7

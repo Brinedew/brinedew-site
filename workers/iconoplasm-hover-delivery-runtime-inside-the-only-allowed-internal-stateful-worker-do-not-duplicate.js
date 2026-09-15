@@ -1,4 +1,5 @@
 import { publishedCardObjectKey } from "./lib/iconoplasm-published-card-objects.js"
+import { parsePublishedViewId, readGeneDeltaChain } from "./lib/iconoplasm-card-reader-view.js"
 
 // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: transport projections, not a
 // publisher. The existing gallery barrier admits hashes; unchanged hashes
@@ -23,6 +24,8 @@ export function createHoverDeliveryHandlers({
     const value = await barrier(env)
     return [...new Set([value.current, value.previous].filter(Boolean))]
   }
+  const readObject = (env) => (key, validate) => object(env, key, validate)
+  const laneReceipt = { genes: "gene", portraits: "portrait" }
   function ranges(value) {
     if (
       !["kv_card_catalog_content_addressed_shards", "bunny_card_catalog_v2"].includes(
@@ -70,10 +73,57 @@ export function createHoverDeliveryHandlers({
     if (entry?.length !== 4 || !HASH.test(hash || "")) return null
     return object(env, publishedCardObjectKey(lane, hash), (value) => value?.symbol === symbol)
   }
+  async function baseRecord(env, version, catalog, ref, lane, symbol) {
+    if (catalog.storage === "bunny_card_catalog_v2") {
+      return bunnyRecord(env, ref, lane, symbol)
+    }
+    const raw = await shard(env, version, ref, true)
+    const card = raw?.cards?.find((card) => card.symbol === symbol)
+    if (!card || !complete(card)) return null
+    // The shard hash excludes publication epochs; so must its projection.
+    const value = stable(card)
+    return lane === "genes" ? project(value.payload, null) : stable(locator(value, ""))
+  }
+
+  async function baseRefFor(env, version, symbol) {
+    const catalog = await manifest(env, version)
+    const refs = ranges(catalog)
+    const ref = refs?.find((ref) => symbol >= ref.first_symbol && symbol <= ref.last_symbol)
+    return ref ? { catalog, ref } : null
+  }
+
   return {
     async index({ env, match }) {
       const version = match.params.snapshot
-      if (!(await versions(env)).includes(version)) return failure("card_snapshot_retired", 410)
+      const view = parsePublishedViewId(version)
+      const published = await versions(env)
+      if (view.chainHash) {
+        // A delta view's ranges all carry the exact chain hash: per-symbol
+        // content resolution server-side, never a second selection pointer.
+        const chain = await readGeneDeltaChain({
+          readObject: readObject(env),
+          chainHash: view.chainHash,
+          base: view.base,
+        })
+        if (!chain.ok) {
+          return chain.code === "CHAIN_READ_FAILED" || chain.code === "SEGMENT_READ_FAILED"
+            ? failure("card_delivery_index_unavailable")
+            : failure("card_snapshot_retired", 410)
+        }
+        if (!published.includes(chain.chain.base)) return failure("card_snapshot_retired", 410)
+        const refs = ranges(await manifest(env, chain.chain.base))
+        if (!refs) return failure("card_delivery_index_unavailable")
+        return json(
+          {
+            schema_version: 1,
+            snapshot_version: version,
+            ranges: refs.map((ref) => [ref.first_symbol, ref.last_symbol, view.chainHash]),
+          },
+          200,
+          { "Cache-Control": IMMUTABLE },
+        )
+      }
+      if (!published.includes(version)) return failure("card_snapshot_retired", 410)
       const refs = ranges(await manifest(env, version))
       if (!refs) return failure("card_delivery_index_unavailable")
       // Separate from the <=4 KiB scanner manifest; fetched only on demand,
@@ -101,10 +151,12 @@ export function createHoverDeliveryHandlers({
       if (cached) return cached
       // Only published hashes can fill a cache. An immutable cached response
       // remains valid as historical content, just like the browser HTTP cache.
+      const published = await versions(env)
+      let record = null
       let selected = null
       let selectedVersion = null
-      let selectedStorage = null
-      for (const version of await versions(env)) {
+      let selectedCatalog = null
+      for (const version of published) {
         const catalog = await manifest(env, version)
         const refs = ranges(catalog)
         const ref = refs?.find(
@@ -114,21 +166,43 @@ export function createHoverDeliveryHandlers({
         if (ref) {
           selected = ref
           selectedVersion = version
-          selectedStorage = catalog.storage
+          selectedCatalog = catalog
           break
         }
       }
-      if (!selected) return failure("card_snapshot_retired", 410)
-      let record
-      if (selectedStorage === "bunny_card_catalog_v2") {
-        record = await bunnyRecord(env, selected, lane, symbol)
+      if (selected) {
+        record = await baseRecord(env, selectedVersion, selectedCatalog, selected, lane, symbol)
       } else {
-        const raw = await shard(env, selectedVersion, selected, true)
-        const card = raw?.cards?.find((card) => card.symbol === symbol)
-        if (!card || !complete(card)) return failure("card_content_unavailable")
-        // The shard hash excludes publication epochs; so must its projection.
-        const value = stable(card)
-        record = lane === "genes" ? project(value.payload, null) : stable(locator(value, ""))
+        // The hash is not a published base shard hash, so it must name this
+        // view's exact immutable chain. Newer-wins wins over segments and
+        // tombstones survive; untouched symbols keep the exact base content of
+        // the chain's named base epoch.
+        const chain = await readGeneDeltaChain({
+          readObject: readObject(env),
+          chainHash: hash,
+          base: null,
+        })
+        if (!chain.ok) {
+          return chain.code === "CHAIN_READ_FAILED" || chain.code === "SEGMENT_READ_FAILED"
+            ? failure("card_content_unavailable")
+            : failure("card_snapshot_retired", 410)
+        }
+        if (!published.includes(chain.chain.base)) return failure("card_snapshot_retired", 410)
+        const entry = chain.entries.get(symbol)
+        if (entry?.status === "committed") {
+          record = await object(
+            env,
+            publishedCardObjectKey(lane, entry[laneReceipt[lane]].hash),
+            (value) => value?.symbol === symbol,
+          )
+        } else if (entry?.status === "withdrawn") {
+          return failure("card_content_unavailable")
+        } else {
+          const base = await baseRefFor(env, chain.chain.base, symbol)
+          if (base) {
+            record = await baseRecord(env, chain.chain.base, base.catalog, base.ref, lane, symbol)
+          }
+        }
       }
       if (!record) return failure("card_content_unavailable")
       const response = json({ schema_version: 1, content_hash: hash, symbol, lane, record }, 200, {

@@ -106,6 +106,7 @@ for (const client of ["extension", "website"]) {
 for (const scenario of ["already saved", "new signed-in", "guest", "offline"]) {
   test(`discovery after asynchronous membership resolution: ${scenario}`, async () => {
     let posts = 0
+    const queued = []
     const guests = []
     const context = {
       runtimeDisconnected: false,
@@ -120,6 +121,11 @@ for (const scenario of ["already saved", "new signed-in", "guest", "offline"]) {
         if (scenario === "offline") throw new Error("offline")
         return { authenticated: scenario !== "guest" }
       },
+      discoveryBatchQueue: {
+        async enqueue(encounter) {
+          queued.push(encounter)
+        },
+      },
       async extensionApiFetch() {
         posts++
         return { ok: true, json: async () => ({ authenticated: true, recorded: true }) }
@@ -129,14 +135,15 @@ for (const scenario of ["already saved", "new signed-in", "guest", "offline"]) {
       },
       rememberDiscoveryAuthState() {},
       scheduleDiscoveryBufferFlush() {},
-      ICONOPLASM_DISCOVERY_ENCOUNTER_URL: "/api/iconoplasm/discoveries/encounter",
       DISCOVERY_HOVER_DWELL_MS: 900,
       console: { error() {}, warn() {} },
     }
     vm.createContext(context)
     vm.runInContext(functionSource, context)
     await context.postDiscoveryEncounter("ezh2")
-    assert.equal(posts, scenario === "new signed-in" ? 1 : 0)
+    assert.equal(posts, 0, "the hover path must never await network I/O directly")
+    assert.equal(queued.length, scenario === "new signed-in" ? 1 : 0)
+    if (queued.length) assert.equal(queued[0].symbol, "EZH2")
     assert.deepEqual(guests, ["guest", "offline"].includes(scenario) ? ["EZH2"] : [])
     assert.equal(
       context.discoveryInFlightSymbols.size,

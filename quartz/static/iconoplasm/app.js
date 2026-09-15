@@ -17,6 +17,7 @@ import {
 import { createCollectionFeedController } from "./collection-feed.js?v=20260730-module-cache"
 import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=20260801-clean-visible-url"
 import {
+  createWebsiteDiscoveryBatchQueue,
   createWebsiteGuestDiscoveryStore,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
@@ -1643,6 +1644,53 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
+  function sendWebsiteDiscoveryBatch(batch) {
+    return fetchAuthedJSON("/api/iconoplasm/discoveries/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batch_id: batch.batch_id,
+        encounters: batch.encounters,
+      }),
+    }).then(function (payload) {
+      if (!payload || payload.batch_id !== batch.batch_id)
+        throw new Error("Discovery batch receipt identity mismatch")
+      if (payload.authenticated === false) {
+        // The session ended between enqueue and flush; keep the encounter in
+        // the durable guest shelf so the next signed-in merge converges it.
+        batch.encounters.forEach(function (encounter) {
+          websiteGuestDiscoveries.remember(encounter.symbol)
+        })
+        return { ok: true, batch_id: batch.batch_id }
+      }
+      if (payload.ok !== true) throw new Error("Discovery batch was rejected")
+      return { ok: true, batch_id: batch.batch_id }
+    })
+  }
+
+  var websiteDiscoveryQueue = createWebsiteDiscoveryBatchQueue({
+    storage: (function () {
+      try {
+        return window.localStorage
+      } catch (_error) {
+        return null
+      }
+    })(),
+    sendBatch: sendWebsiteDiscoveryBatch,
+  })
+  var websiteDiscoveryQueueFlushScheduled = false
+
+  function scheduleWebsiteDiscoveryQueueFlush() {
+    if (websiteDiscoveryQueueFlushScheduled) return
+    websiteDiscoveryQueueFlushScheduled = true
+    window.setTimeout(function () {
+      websiteDiscoveryQueueFlushScheduled = false
+      websiteDiscoveryQueue.flush(2).catch(function () {})
+    }, 0)
+  }
+  // Restart-safe replay of a previously persisted inflight batch.
+  scheduleWebsiteDiscoveryQueueFlush()
+
   function recordGenePageVisitDiscovery(symbol) {
     var key = normalizedSymbol(symbol)
     if (!key) return
@@ -1657,17 +1705,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       websiteGuestDiscoveries.remember(key)
       return
     }
-    window.setTimeout(function () {
-      fetchAuthedJSON("/api/iconoplasm/discoveries/encounter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: key,
-          source: "gene_page_visit",
-          trigger: "gene_page_visit",
-        }),
-      }).catch(function () {})
-    }, 0)
+    // Durable before network: the queue persists the encounter and an exact
+    // batch identity, so a reload or offline retry replays the same batch.
+    websiteDiscoveryQueue
+      .enqueue({
+        symbol: key,
+        at: Math.floor(Date.now() / 1000),
+        source: "gene_page_visit",
+        trigger: "gene_page_visit",
+      })
+      .then(scheduleWebsiteDiscoveryQueueFlush)
   }
 
   function mergeWebsiteGuestDiscoveriesIfSignedIn() {
