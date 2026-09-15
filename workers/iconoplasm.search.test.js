@@ -1,7 +1,9 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import test from "node:test"
+import { DatabaseSync } from "node:sqlite"
 
+import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -105,6 +107,15 @@ class FakeSearchStatement {
         results: this.db.listSharedDiscoverySymbols(),
       }
     }
+    if (
+      this.sql.includes("FROM icono_gene_discoveries") &&
+      !this.sql.includes("FROM icono_gene_discoveries d")
+    ) {
+      const [userId] = this.args
+      return {
+        results: [...this.db.rows.values()].filter((row) => row.user_id === String(userId)),
+      }
+    }
     throw new Error(`Unexpected SQL in fake search DB all(): ${this.sql}`)
   }
 
@@ -129,20 +140,147 @@ class FakeSearchStatement {
   }
 }
 
+class FakeSearchCompactStatement {
+  constructor(db, sql, args = []) {
+    this.db = db
+    this.sql = String(sql || "")
+    this.args = args
+  }
+  bind(...args) {
+    return new FakeSearchCompactStatement(this.db, this.sql, args)
+  }
+  async first() {
+    return this.db.compactRaw.prepare(this.sql).get(...this.args) ?? null
+  }
+  async all() {
+    return { results: this.db.compactRaw.prepare(this.sql).all(...this.args) }
+  }
+  async run() {
+    const info = this.db.compactRaw.prepare(this.sql).run(...this.args)
+    return { success: true, meta: { changes: Number(info.changes || 0) } }
+  }
+}
+
+const SEARCH_STARTER_SYMBOLS = ["INS", "RHO", "PRL"]
+
 class FakeSearchDb {
   constructor({ publishedPortraits = [] } = {}) {
     this.rows = new Map()
     this.sharedRows = new Map()
     this.tick = 0
     this.publishedPortraits = new Map()
+    this.compactRaw = new DatabaseSync(":memory:")
+    this.compactRaw.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+    this.compactDirty = true
     this.setPublishedPortraits(publishedPortraits)
   }
 
+  syncCompactIfDirty() {
+    if (!this.compactDirty) return
+    this.compactDirty = false
+    const raw = this.compactRaw
+    raw.exec(`
+      DELETE FROM icono_discovery_user_state_v2;
+      DELETE FROM icono_discovery_ordinals_v2;
+      DELETE FROM icono_discovery_dictionary_meta_v2;
+    `)
+    const rows = [...this.rows.values()]
+    const symbols = [
+      ...new Set([
+        ...rows.map((row) => String(row.gene_symbol).toUpperCase()),
+        ...SEARCH_STARTER_SYMBOLS,
+      ]),
+    ]
+      .filter(Boolean)
+      .sort()
+    const ordinalBySymbol = new Map(symbols.map((symbol, index) => [symbol, index]))
+    const insertOrdinal = raw.prepare(
+      "INSERT INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active) VALUES (?, ?, ?, 1)",
+    )
+    for (const symbol of symbols) insertOrdinal.run(symbol, ordinalBySymbol.get(symbol), symbol)
+    raw
+      .prepare(
+        "INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at) VALUES (1, 1, CURRENT_TIMESTAMP)",
+      )
+      .run()
+
+    const users = new Map()
+    const byteLength = Math.ceil(symbols.length / 8)
+    for (const row of rows) {
+      const userId = String(row.user_id)
+      const symbol = String(row.gene_symbol).toUpperCase()
+      const ordinal = ordinalBySymbol.get(symbol)
+      if (ordinal == null) continue
+      let user = users.get(userId)
+      if (!user) {
+        user = { membership: new Uint8Array(byteLength), count: 0, events: [], seq: 1 }
+        users.set(userId, user)
+      }
+      const byte = ordinal >> 3
+      const mask = 1 << (ordinal & 7)
+      if (!(user.membership[byte] & mask)) {
+        user.membership[byte] |= mask
+        user.count += 1
+      }
+      user.events.push({
+        seq: user.seq++,
+        ordinal,
+        symbol,
+        at: Math.max(0, Math.floor(Date.parse(String(row.first_discovered_at || "")) / 1000) || 0),
+        source: String(row.first_source || ""),
+        trigger: String(row.first_trigger || ""),
+        dwell_ms: null,
+      })
+    }
+    const insertUser = raw.prepare(
+      `INSERT INTO icono_discovery_user_state_v2 (
+        user_id, dictionary_version, state_version, membership_b64, member_count,
+        next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id
+      ) VALUES (?, 1, 1, ?, ?, ?, 1, ?, '[]', 'migrated')`,
+    )
+    for (const [userId, user] of users) {
+      insertUser.run(
+        userId,
+        Buffer.from(user.membership).toString("base64"),
+        user.count,
+        user.seq,
+        JSON.stringify(user.events),
+      )
+    }
+  }
+
   prepare(sql) {
+    if (String(sql || "").includes("icono_discovery_")) {
+      this.syncCompactIfDirty()
+      return new FakeSearchCompactStatement(this, sql)
+    }
     return new FakeSearchStatement(this, sql)
   }
 
   async batch(statements) {
+    if (statements.some((statement) => String(statement.sql || "").includes("icono_discovery_"))) {
+      this.syncCompactIfDirty()
+      const raw = this.compactRaw
+      raw.exec("BEGIN IMMEDIATE")
+      try {
+        const results = statements.map((statement) => {
+          const prepared = raw.prepare(statement.sql)
+          if (
+            /^\s*(SELECT|WITH|PRAGMA)/i.test(statement.sql) ||
+            /\bRETURNING\b/i.test(statement.sql)
+          ) {
+            return { results: prepared.all(...statement.args) }
+          }
+          const info = prepared.run(...statement.args)
+          return { results: [], meta: { changes: Number(info.changes || 0) } }
+        })
+        raw.exec("COMMIT")
+        return results
+      } catch (error) {
+        raw.exec("ROLLBACK")
+        throw error
+      }
+    }
     const [personal, shared] = statements
     const [user, gene, , source, , trigger, , dwell, seedOnly] = personal.args
     const existing = this.getDiscovery(user, gene)
@@ -183,6 +321,21 @@ class FakeSearchDb {
   }
 
   listDiscoverySymbols(userId) {
+    this.syncCompactIfDirty()
+    const compact = this.compactRaw
+      .prepare("SELECT active_events_json FROM icono_discovery_user_state_v2 WHERE user_id = ?")
+      .get(String(userId))
+    if (compact) {
+      const seen = new Set()
+      const rows = []
+      for (const event of JSON.parse(compact.active_events_json)) {
+        const symbol = String(event.symbol || "")
+        if (!symbol || seen.has(symbol)) continue
+        seen.add(symbol)
+        rows.push({ gene_symbol: symbol })
+      }
+      return rows
+    }
     return Array.from(this.rows.values())
       .filter((row) => row.user_id === String(userId))
       .sort((left, right) => {
@@ -273,6 +426,7 @@ class FakeSearchDb {
       firstDwellMs,
       lastDwellMs,
     ] = args
+    this.compactDirty = true
     const timestamp = this.now()
     this.rows.set(this.key(userId, geneSymbol), {
       user_id: String(userId),
@@ -293,6 +447,7 @@ class FakeSearchDb {
 
   updateDiscovery(args) {
     const [lastSource, lastTrigger, lastDwellMs, userId, geneSymbol] = args
+    this.compactDirty = true
     const key = this.key(userId, geneSymbol)
     const existing = this.rows.get(key)
     if (!existing) {

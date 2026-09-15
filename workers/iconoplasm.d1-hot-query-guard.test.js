@@ -36,35 +36,50 @@ function DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(haystack, before, after, me
   assert.ok(beforeIndex < afterIndex, message)
 }
 
-test("DO NOT DELETE: discovery hover path keeps canonical discovery keys raw", () => {
-  const discoveryEntry = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function recordGeneDiscoveryEncounter",
-    "async function ensureStarterGeneDiscoveries",
-  )
-  assert.match(discoveryEntry, /recordDiscoveryEncounterAtomically\(env\.ICONOPLASM_DB/)
-  const discoveryFn = readFileSync(
-    new URL("./iconoplasm/discovery-encounter.js", import.meta.url),
-    "utf8",
-  )
-  assert.match(
-    discoveryFn,
-    /WHERE user_id = \?[\s\S]*AND gene_symbol = \?/,
-    "discovery writes should use raw primary-key equality",
-  )
-  assert.doesNotMatch(
-    discoveryFn,
-    /AND upper\(gene_symbol\) = \?/,
-    "discovery hover writes must not wrap canonical gene keys",
-  )
-
+test("DO NOT DELETE: discovery hover path is tombstoned and the compact batch route owns writes", () => {
   const encounterRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST")',
-    'if (path === "/api/iconoplasm/discoveries/me" && request.method === "GET")',
+    'if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST")',
+  )
+  assert.match(
+    encounterRoute,
+    /LEGACY_DISCOVERY_WRITER_RETIRED/,
+    "the retired per-hover writer must stay a loud, write-free tombstone",
   )
   assert.doesNotMatch(
     encounterRoute,
+    /recordDiscoveryEncounterAtomically\(|recordCompactDiscoveryEncounters\(|ICONOPLASM_DB\.prepare/,
+    "the retired per-hover route must not touch discovery storage",
+  )
+
+  const batchRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    'if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST")',
+    'if (path === "/api/iconoplasm/discoveries/membership" && request.method === "GET")',
+  )
+  assert.match(
+    batchRoute,
+    /recordCompactDiscoveryEncounters\(env, \{/,
+    "signed-in hover batches must commit compact personal state",
+  )
+  assert.doesNotMatch(
+    batchRoute,
     /ensureStarterGeneDiscoveries\(/,
-    "hover encounter route must not starter-seed on every hover",
+    "hover batches must not starter-seed",
+  )
+
+  const compactWriter = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function recordCompactDiscoveryEncounters",
+    "async function readCompactDiscoveryMembership",
+  )
+  assert.match(
+    compactWriter,
+    /recordCompactDiscoveryBatch\(db, \{/,
+    "the compact recorder must go through the reviewed compact batch service",
+  )
+  assert.doesNotMatch(
+    compactWriter,
+    /INSERT INTO icono_gene_discoveries|UPDATE icono_gene_discoveries/,
+    "the compact recorder must never write legacy discovery rows",
   )
 })
 
