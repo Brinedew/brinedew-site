@@ -192,6 +192,7 @@ const requiredContentModules = [
   "content-detail-cache.js",
   "content-vote-bridge.js",
   "content-reading-session.js",
+  "discovery-batch-queue.js",
   "highlight-runtime.js",
 ]
 

@@ -37,13 +37,24 @@ jobs:
             workers/iconoplasm.vote-authority-handoff.test.js \
             workers/iconoplasm.reader-view-publication.test.js \
             workers/iconoplasm/discovery-ordinal-dictionary.test.js \
+            workers/iconoplasm/discovery-ordinal-store.test.js \
             workers/iconoplasm/discovery-compact-state.test.js \
+            workers/iconoplasm/discovery-compact-read.test.js \
+            workers/iconoplasm/discovery-compact-migrate.test.js \
             workers/iconoplasm/discovery-compact-store.test.js \
             workers/iconoplasm/discovery-compact-admin.test.js \
             workers/iconoplasm/discovery-compact-store.workerd.test.js \
             workers/iconoplasm/discovery-compact-service.workerd.test.js \
             workers/iconoplasm/discovery-shared-delivery.workerd.test.js \
+            workers/iconoplasm/discovery-compact-migration.workerd.test.js \
+            workers/iconoplasm/discovery-workload.workerd.test.js \
+            workers/iconoplasm.discovery.test.js \
+            workers/iconoplasm-background-schedule.test.js \
+            workers/iconoplasm.d1-hot-query-guard.test.js \
             iconoplasm-extension/discovery-batch-queue.test.js \
+            iconoplasm-extension/discovery-queue-integration.test.js \
+            iconoplasm-extension/content-discovery.test.js \
+            iconoplasm-extension.module-contract.test.js \
             iconoplasm-extension/metadata-delivery.test.js \
             iconoplasm-extension/metadata-delivery-reader-view.test.js \
             scripts/b762-v1-excision-audit.mjs \
