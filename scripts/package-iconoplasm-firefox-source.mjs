@@ -130,6 +130,7 @@ const includeFiles = [
   "iconoplasm-extension/content-detail-cache.js",
   "iconoplasm-extension/content-vote-bridge.js",
   "iconoplasm-extension/content-reading-session.js",
+  "iconoplasm-extension/discovery-batch-queue.js",
   "iconoplasm-extension/content.css",
   "iconoplasm-extension/content.js",
   "iconoplasm-extension/highlight-runtime.js",
