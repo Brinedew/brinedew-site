@@ -1720,6 +1720,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function fetchImageEditProviders(options) {
+    // B-612: image-edit provider metadata is authenticated account state.
+    // Guests get an empty in-memory projection and no network request, so a
+    // stale caller can never render the provider list or a last-used marker.
+    if (!currentUser) {
+      return Promise.resolve({
+        providers: [],
+        supported_providers: [],
+        last_used: null,
+        encryption_configured: false,
+      })
+    }
     var opts = options || {}
     var op = opts.op === "candidate_generation" ? "candidate_generation" : "image_edit"
     var cacheKey = op
@@ -2803,6 +2814,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     hasResolvedAuthState = true
     if (previousHadUser !== !!currentUser) {
       invalidateImageEditProviders()
+      resetImageEditDialogState()
     }
     if (currentUser) {
       requestInbox.start()
@@ -5685,6 +5697,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function renderEditImageActionMarkup(source, genePayload, item) {
+    // B-612: guest UI must not expose an edit entry that can only lead to
+    // authenticated provider state. The signed-in refresh path re-renders
+    // this rail through refreshCurrentGeneInteractiveIslands().
+    if (!currentUser) return ""
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var sourceItem = item || {}
     var assetSha = String((sourceItem && sourceItem.asset_sha256) || "")
@@ -5751,6 +5767,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     job: null,
     loading: false,
     encryptionConfigured: false,
+  }
+
+  function resetImageEditDialogState() {
+    // B-612: a sign-out or account switch must clear provider state so the
+    // next guest view can never render the previous session's providers or
+    // its "last used" marker.
+    imageEditDialogState.source = null
+    imageEditDialogState.providers = []
+    imageEditDialogState.supportedProviders = []
+    imageEditDialogState.lastUsed = null
+    imageEditDialogState.job = null
+    imageEditDialogState.loading = false
+    imageEditDialogState.encryptionConfigured = false
+    var dialog = imageEditDialogState.dialog
+    if (!dialog) return
+    if (typeof dialog.hide === "function") void dialog.hide()
+    else dialog.removeAttribute("open")
+    renderImageEditProviders()
   }
 
   function renderImageEditDialogMarkup() {
@@ -5949,6 +5983,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function loadImageEditProviders() {
+    if (!currentUser) {
+      // B-612: never load authenticated provider metadata for a guest.
+      imageEditDialogState.providers = []
+      imageEditDialogState.supportedProviders = []
+      imageEditDialogState.lastUsed = null
+      imageEditSetStatus("Sign in to edit blots.", "warn")
+      renderImageEditProviders()
+      return Promise.resolve()
+    }
     imageEditSetStatus("Loading providers...", "")
     return fetchImageEditProviders({ op: "image_edit" })
       .then(function (payload) {
@@ -6090,6 +6133,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function openImageEditDialog(source) {
+    if (!currentUser) return
     var dialog = ensureImageEditDialog()
     imageEditDialogState.source = source
     imageEditDialogState.job = null
@@ -8751,31 +8795,34 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           "</button>" +
           "</div>"
       }
-      var editMarkup =
-        '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
-        esc(genePayload.symbol) +
-        '" data-icono-source-asset-sha256="' +
-        esc(assetSha) +
-        '" data-icono-source-image-url="' +
-        esc(mediumUrl || fullUrl || "") +
-        '" data-icono-source-candidate-image-id="' +
-        esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
-        '" data-icono-source-vision-id="' +
-        esc(visionId) +
-        '" data-icono-source-upvotes="' +
-        esc(String(sourceVoteCount(candidate, "image_upvotes"))) +
-        '" data-icono-source-downvotes="' +
-        esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
-        '" data-icono-source-score="' +
-        esc(String(sourceVoteCount(candidate, "image_score"))) +
-        '"' +
-        imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
-        ' aria-label="Edit candidate blot for ' +
-        esc(genePayload.symbol) +
-        '" title="Edit candidate blot">' +
-        ICONO_EDIT_ICON +
-        '<span class="icono-visually-hidden">Edit candidate blot</span>' +
-        "</button>"
+      // B-612: the candidate edit entry is authenticated-only; guests get no
+      // button and therefore never reach authenticated provider state.
+      var editMarkup = currentUser
+        ? '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
+          esc(genePayload.symbol) +
+          '" data-icono-source-asset-sha256="' +
+          esc(assetSha) +
+          '" data-icono-source-image-url="' +
+          esc(mediumUrl || fullUrl || "") +
+          '" data-icono-source-candidate-image-id="' +
+          esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+          '" data-icono-source-vision-id="' +
+          esc(visionId) +
+          '" data-icono-source-upvotes="' +
+          esc(String(sourceVoteCount(candidate, "image_upvotes"))) +
+          '" data-icono-source-downvotes="' +
+          esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
+          '" data-icono-source-score="' +
+          esc(String(sourceVoteCount(candidate, "image_score"))) +
+          '"' +
+          imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
+          ' aria-label="Edit candidate blot for ' +
+          esc(genePayload.symbol) +
+          '" title="Edit candidate blot">' +
+          ICONO_EDIT_ICON +
+          '<span class="icono-visually-hidden">Edit candidate blot</span>' +
+          "</button>"
+        : ""
       html +=
         '<article class="icono-candidate-card" style="--width:' +
         width +
