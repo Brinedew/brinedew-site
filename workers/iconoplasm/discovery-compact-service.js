@@ -1,5 +1,8 @@
 import { applyDiscoveryBatch, applySharedDiscoveryDeltas } from "./discovery-compact-state.js"
-import { commitCompactDiscoveryBatch, readCompactDiscoveryState } from "./discovery-compact-store.js"
+import {
+  commitCompactDiscoveryBatch,
+  readCompactDiscoveryState,
+} from "./discovery-compact-store.js"
 
 export class DiscoveryCompactConflictError extends Error {
   constructor(attempts) {
@@ -121,6 +124,9 @@ export async function recordCompactDiscoveryBatch(
       nextUserState: applied.state,
       nextSharedState,
       sealedChunks: applied.sealed_chunks,
+      // The exact derived delivery is durable beside the personal commit, so a
+      // crash after this response can never lose the aggregate it implied.
+      pendingDeliveries: delivery ? [delivery] : [],
       batchId,
       includeShared,
     })

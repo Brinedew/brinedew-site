@@ -375,6 +375,29 @@ export function applySharedDiscoveryDeltas(rawState, { dictionaryVersion, deltas
   }
 }
 
+// Full ordinal summaries for read models and repairs. One compact shared row
+// yields every non-zero discoverer entry without touching per-user rows.
+export function readSharedDiscoveryOrdinalSummaries(rawState) {
+  const state = normalizeSharedState(rawState)
+  const discoverers = base64ToUint32(state.discoverer_counts_b64)
+  const encounters = base64ToUint32(state.encounter_counts_b64)
+  const firstAt = base64ToUint32(state.first_at_b64)
+  const latestAt = base64ToUint32(state.latest_at_b64)
+  const length = Math.max(discoverers.length, encounters.length, firstAt.length, latestAt.length)
+  const summaries = []
+  for (let ordinal = 0; ordinal < length; ordinal++) {
+    if (!discoverers[ordinal]) continue
+    summaries.push({
+      ordinal,
+      discoverer_count: discoverers[ordinal],
+      encounter_count: encounters[ordinal] || 0,
+      first_at: firstAt[ordinal] || 0,
+      latest_at: latestAt[ordinal] || 0,
+    })
+  }
+  return summaries
+}
+
 export function readSharedDiscoveryOrdinal(rawState, ordinal) {
   const cleanOrdinal = cleanPositiveInt(ordinal, "discovery ordinal")
   const state = normalizeSharedState(rawState)

@@ -52,6 +52,19 @@ SELECT ?,
   CURRENT_TIMESTAMP
 FROM json_each(?)`
 
+const OUTBOX_INSERT_SQL = `INSERT OR IGNORE INTO icono_discovery_shared_delivery_outbox_v2 (
+  delivery_id, user_id, batch_id, user_state_version, dictionary_version, payload_json, created_at
+)
+SELECT
+  json_extract(value, '$.delivery_id'),
+  json_extract(value, '$.user_id'),
+  json_extract(value, '$.batch_id'),
+  CAST(json_extract(value, '$.user_state_version') AS INTEGER),
+  CAST(json_extract(value, '$.dictionary_version') AS INTEGER),
+  value,
+  CURRENT_TIMESTAMP
+FROM json_each(?)`
+
 function rows(result) {
   return Array.isArray(result?.results) ? result.results : []
 }
@@ -98,6 +111,60 @@ export async function readCompactDiscoveryState(db, userId) {
   }
 }
 
+const CHRONOLOGY_SELECT_SQL = `SELECT chunk_seq, first_event_seq, last_event_seq, events_json
+FROM icono_discovery_chronology_v2 WHERE user_id = ? ORDER BY chunk_seq ASC`
+
+export async function readSharedCompactState(db) {
+  const row = rows(await db.prepare(SHARED_SELECT_SQL).all())[0]
+  if (!row) throw new Error("Compact discovery shared state is not initialized")
+  return {
+    dictionary_version: Number(row.dictionary_version || 0),
+    state_version: Number(row.state_version || 0),
+    discoverer_counts_b64: String(row.discoverer_counts_b64 || ""),
+    encounter_counts_b64: String(row.encounter_counts_b64 || ""),
+    first_at_b64: String(row.first_at_b64 || ""),
+    latest_at_b64: String(row.latest_at_b64 || ""),
+  }
+}
+
+export async function readCompactUserState(db, userId) {
+  const result = await db.prepare(USER_SELECT_SQL).bind(userId).first()
+  if (!result) return null
+  return {
+    dictionary_version: Number(result.dictionary_version || 0),
+    state_version: Number(result.state_version || 0),
+    membership_b64: String(result.membership_b64 || ""),
+    member_count: Number(result.member_count || 0),
+    next_event_seq: Number(result.next_event_seq || 1),
+    next_chunk_seq: Number(result.next_chunk_seq || 1),
+    active_events: parseJsonArray(result.active_events_json),
+    recent_receipts: parseJsonArray(result.recent_receipts_json),
+    last_batch_id: String(result.last_batch_id || ""),
+  }
+}
+
+// Complete per-user event history in stable sequence order: sealed chunks first,
+// then the not-yet-sealed events. Shelf readers and repairs aggregate from this
+// one durable chronology instead of re-deriving membership row by row.
+export async function readCompactDiscoveryChronology(db, userId) {
+  const result = await db.prepare(CHRONOLOGY_SELECT_SQL).bind(userId).all()
+  const chunks = rows(result).map((row) => ({
+    chunk_seq: Number(row.chunk_seq || 0),
+    first_event_seq: Number(row.first_event_seq || 0),
+    last_event_seq: Number(row.last_event_seq || 0),
+    events: parseJsonArray(row.events_json),
+  }))
+  const user = await readCompactUserState(db, userId)
+  return {
+    chunks,
+    active_events: user?.active_events || [],
+    dictionary_version: user?.dictionary_version || 0,
+    member_count: user?.member_count || 0,
+    state_version: user?.state_version || 0,
+    membership_b64: user?.membership_b64 || "",
+  }
+}
+
 export async function commitCompactDiscoveryBatch(
   db,
   {
@@ -107,6 +174,7 @@ export async function commitCompactDiscoveryBatch(
     nextUserState,
     nextSharedState,
     sealedChunks = [],
+    pendingDeliveries = [],
     batchId,
     includeShared = true,
   },
@@ -151,6 +219,12 @@ export async function commitCompactDiscoveryBatch(
   }
   if (sealedChunks.length)
     statements.push(db.prepare(CHUNKS_INSERT_SQL).bind(userId, JSON.stringify(sealedChunks)))
+  // The exact derived shared delivery commits in the same transaction as the
+  // personal state, so a lost hand-off can never separate an accepted personal
+  // batch from the aggregate it implies. The consumer deduplicates by
+  // delivery_id, so a crash after apply but before outbox cleanup is harmless.
+  if (pendingDeliveries.length)
+    statements.push(db.prepare(OUTBOX_INSERT_SQL).bind(JSON.stringify(pendingDeliveries)))
   let result
   try {
     result = await db.batch(statements)
@@ -224,4 +298,28 @@ CREATE TABLE icono_discovery_shared_delivery_receipts_v2 (
   payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256) = 64),
   applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) WITHOUT ROWID;
+CREATE TABLE icono_discovery_shared_delivery_outbox_v2 (
+  delivery_id TEXT PRIMARY KEY CHECK(length(delivery_id) BETWEEN 3 AND 320),
+  user_id TEXT NOT NULL CHECK(length(user_id) BETWEEN 1 AND 160),
+  batch_id TEXT NOT NULL CHECK(length(batch_id) BETWEEN 1 AND 128),
+  user_state_version INTEGER NOT NULL CHECK(user_state_version >= 1),
+  dictionary_version INTEGER NOT NULL CHECK(dictionary_version >= 1),
+  payload_json TEXT NOT NULL CHECK(json_valid(payload_json) AND length(payload_json) <= 262144),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+) WITHOUT ROWID;
+CREATE TABLE icono_discovery_dictionary_meta_v2 (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  version INTEGER NOT NULL CHECK(version >= 1),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE icono_discovery_ordinals_v2 (
+  name TEXT PRIMARY KEY CHECK(length(name) BETWEEN 1 AND 64),
+  ordinal INTEGER NOT NULL CHECK(ordinal >= 0 AND ordinal <= 1000000),
+  canonical TEXT NOT NULL CHECK(length(canonical) BETWEEN 1 AND 64),
+  active INTEGER NOT NULL CHECK(active IN (0, 1))
+) WITHOUT ROWID;
+CREATE INDEX idx_icono_discovery_ordinals_v2_ordinal
+  ON icono_discovery_ordinals_v2(ordinal);
+CREATE INDEX idx_icono_discovery_shared_delivery_outbox_v2_created
+  ON icono_discovery_shared_delivery_outbox_v2(created_at, delivery_id);
 `
