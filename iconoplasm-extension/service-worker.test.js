@@ -7,6 +7,8 @@ import test from "node:test"
 const storageState = new Map()
 const sessionState = new Map()
 const mimeHandlerOptions = []
+const tabsMessages = []
+let tabsQueryResult = []
 let messageListener
 const requestedOverlay = {
   schema_version: 1,
@@ -127,6 +129,16 @@ globalThis.chrome = {
   storage: {
     local: storageArea(storageState),
     session: storageArea(sessionState),
+  },
+  tabs: {
+    onRemoved: { addListener() {} },
+    query(_query, callback) {
+      callback(tabsQueryResult)
+    },
+    sendMessage(tabId, message, callback) {
+      tabsMessages.push({ tabId, message })
+      if (callback) callback()
+    },
   },
 }
 
@@ -778,6 +790,74 @@ test("a shared-blocklist-only manifest revision persists without a scanner downl
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()
+  }
+})
+
+test("an alias-only policy refresh broadcasts one recognition update to open tabs", async () => {
+  const originalFetch = globalThis.fetch
+  const baseGenes = Object.fromEntries(
+    Object.keys({
+      CEBPB: 1,
+      CGAS: 1,
+      IL1A: 1,
+      IL1B: 1,
+      NOTCH1: 1,
+      RELA: 1,
+      TGFB1: 1,
+    }).map((symbol) => [symbol, { n: symbol }]),
+  )
+  storageState.clear()
+  storageState.set("iconoplasm_genes", baseGenes)
+  storageState.set("iconoplasm_hash", "catalog-alias-only")
+  rememberScannerState("scanner-alias-only")
+  storageState.set("iconoplasm_gene_count", 7)
+  storageState.set("iconoplasm_schema_version", 5)
+  storageState.set("iconoplasm_contract_revision", 1)
+  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
+  storageState.set("iconoplasm_alias_overlay_version", "v1-before")
+  storageState.set("iconoplasm_alias_overlay_applied", {})
+
+  globalThis.fetch = async (input) => {
+    const url = String(input || "")
+    if (url.endsWith("/api/public/v1/catalog/manifest")) {
+      return Response.json({
+        build_version: "catalog-alias-only",
+        catalog_hash: "catalog-alias-only",
+        card_snapshot_version: "ccv1-alias-only-broadcast",
+        artifact_url: "https://example.test/catalog.json",
+        artifact_schema_version: 5,
+        artifact_contract_revision: 1,
+        min_extension_version: "1.0.0",
+        gene_count: 7,
+        portrait_delivery: portraitDeliveryPolicy,
+        scanner_artifact: scannerManifest("scanner-alias-only"),
+        publication_aliases: requestedOverlay,
+      })
+    }
+    throw new Error(`Alias-only refresh must not fetch the scanner artifact: ${url}`)
+  }
+
+  tabsQueryResult = [{ id: 11 }, { id: 12 }]
+  try {
+    const result = await hooks.fetchGeneData()
+    assert.equal(result.gene_count, 7)
+    assert.equal(storageState.get("iconoplasm_alias_overlay_version"), requestedOverlay.version)
+    assert.deepEqual(
+      tabsMessages.map((entry) => [entry.tabId, entry.message.type]),
+      [
+        [11, "RECOGNITION_POLICY_UPDATED"],
+        [12, "RECOGNITION_POLICY_UPDATED"],
+      ],
+    )
+    tabsMessages.length = 0
+    const unchanged = await hooks.fetchGeneData()
+    assert.equal(unchanged.gene_count, 7)
+    assert.deepEqual(tabsMessages, [], "an unchanged policy refresh must not broadcast")
+  } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+    tabsQueryResult = []
+    tabsMessages.length = 0
   }
 })
 
