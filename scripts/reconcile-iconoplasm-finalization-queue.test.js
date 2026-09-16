@@ -117,8 +117,13 @@ test("a canonical release accepts and preserves provider quarantine", async () =
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
   for (const call of calls.filter((c) => c.method === "PATCH")) {
     const settings = JSON.parse(call.body).settings
-    assert.equal(settings.delivery_paused, true)
+    const queue = queues.find((candidate) => call.url.endsWith(candidate.queue_id))
+    assert.ok(queue)
     assert.equal(settings.message_retention_period, 86400)
+    // The retention write preserves exactly the delivery state observed for
+    // that queue: a deliberately paused queue stays paused, and a queue that
+    // never carried an explicit pause field must not gain one.
+    assert.equal(settings.delivery_paused, queue.settings.delivery_paused)
   }
 })
 
