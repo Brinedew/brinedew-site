@@ -13,7 +13,11 @@ const RETENTION_SECONDS = 86400
 
 // ARCHITECTURE FENCE [IPD-004]: the provider transport must retain the delayed
 // wakeup. Wrangler owns consumer configuration; this check must not overwrite
-// its reviewed batch/concurrency settings with the CLI's defaults.
+// its reviewed batch/concurrency settings with the CLI's defaults. During a
+// recovery release, provider quarantine may deliberately leave delivery paused;
+// that state is valid and must be preserved until an explicit later release of
+// background work. A canonical code deploy must not require spending the fresh
+// D1 day just to make its transport inspection pass.
 export async function reconcileFinalizationQueue({
   accountId,
   token,
@@ -53,6 +57,9 @@ export async function reconcileFinalizationQueue({
     return matches[0]
   })
   // Validate both complete transports before changing any retention setting.
+  // delivery_paused may be either explicit boolean value: recovery owns the
+  // pause/unpause decision elsewhere, while this function proves the consumer
+  // shape and preserves whichever state it observed.
   const consumers = CONSUMERS.map(({ queue, deadLetterQueue, batchSize }) => {
     const primary = queues.find((item) => item.queue_name === queue)
     const dlq = queues.find((item) => item.queue_name === deadLetterQueue)
@@ -73,12 +80,12 @@ export async function reconcileFinalizationQueue({
     )
       throw new Error(`${queue} consumer does not match the deployed bounded configuration`)
     if (
-      primary.settings?.delivery_paused !== false ||
+      typeof primary.settings?.delivery_paused !== "boolean" ||
       primary.settings?.delivery_delay !== 0 ||
       dlq.consumers?.length !== 0
     )
       throw new Error(`${queue} delivery or dead-letter configuration is invalid`)
-    return { queue, ...expected }
+    return { queue, delivery_paused: primary.settings.delivery_paused, ...expected }
   })
   const results = []
   for (const queue of queues) {
@@ -87,7 +94,7 @@ export async function reconcileFinalizationQueue({
     if (changed) {
       if (!apply)
         throw new Error(`${queue.queue_name} does not retain reset-delayed work for 24 hours`)
-      // PATCH only the owned retention setting; never unpause or purge a queue.
+      // PATCH only the owned retention setting; never unpause, pause or purge a queue.
       await api(`/${queue.queue_id}`, "PATCH", {
         settings: { ...queue.settings, message_retention_period: RETENTION_SECONDS },
       })
@@ -102,7 +109,12 @@ export async function reconcileFinalizationQueue({
       if (Object.hasOwn(queue.settings, key) && current.settings[key] !== queue.settings[key])
         throw new Error(`Finalization Queue ${key} changed unexpectedly`)
     }
-    results.push({ queue: queue.queue_name, retention_seconds: RETENTION_SECONDS, changed })
+    results.push({
+      queue: queue.queue_name,
+      retention_seconds: RETENTION_SECONDS,
+      delivery_paused: current.settings?.delivery_paused ?? null,
+      changed,
+    })
   }
   return { ok: true, consumers, queues: results }
 }
