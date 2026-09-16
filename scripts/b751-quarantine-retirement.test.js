@@ -59,7 +59,10 @@ test("the temporary B-742 hard quarantine is narrowly reactivated without undoin
 
   assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
   assert.ok(workflow.on.schedule.length > 0)
-  assert.equal(job.if, "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'")
+  assert.equal(
+    job.if,
+    "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'",
+  )
   assert.match(source, /2026-09-16/)
   assert.match(source, /One-shot Sep 17 pre-reset quarantine has expired/)
   assert.equal(job["runs-on"], "ubuntu-latest")
