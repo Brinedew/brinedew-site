@@ -1,0 +1,41 @@
+name: Independent v2 reset-chain audit
+on:
+  push:
+    branches: ["audit/v2-reset-chain-20260916"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Confirm application source is unchanged from the reviewed merge
+        run: |
+          git fetch --no-tags --depth=1 https://github.com/Brinedew/brinedew-site.git 25625563e479d0ad2354953b1d3c9e909b35bb89
+          git diff --exit-code 25625563e479d0ad2354953b1d3c9e909b35bb89 -- workers shared migrations-iconoplasm cloudflare scripts/run-admitted-d1-migrations.mjs scripts/operation-cost-release-plan.mjs
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install locked repository test runtime
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Run independent admission and native migration regressions
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/v2-reset-chain-independent-audit.mjs | tee v2-reset-chain-audit.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v2-reset-chain-independent-evidence
+          path: |
+            v2-reset-chain-audit.txt
+            v2-reset-chain-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
