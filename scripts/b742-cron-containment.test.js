@@ -45,9 +45,12 @@ test("the recovery controller can only tighten background containment and recurs
   assert.match(workflow, /utc_minute_of_day > 390 && utc_minute_of_day < 1435/)
 })
 
-test("the hard pre-reset quarantine cannot expire on a calendar date", () => {
+test("the Sep 17 hard pre-reset quarantine is one-shot, early and self-expiring", () => {
   const workflow = readWorkflow("b742-hard-pre-reset-d1-quarantine.yml")
   assert.doesNotMatch(workflow, /RECOVERY_DEADLINE_UTC/)
-  assert.match(workflow, /utc_minute_of_day > 5 && utc_minute_of_day < 1435/)
-  assert.match(workflow, /cron: "58 23 \* \* \*"/)
+  assert.match(workflow, /utc_day.*2026-09-16/)
+  assert.match(workflow, /One-shot Sep 17 pre-reset quarantine has expired/)
+  assert.match(workflow, /utc_minute_of_day > 5 && utc_minute_of_day < 1375/)
+  assert.match(workflow, /cron: "0 23 \* \* \*"/)
+  assert.match(workflow, /SAFE_CONTAINMENT_SHA: d00ae8e39bb5c2115c5a70d42a8ca76fc84127ce/)
 })
