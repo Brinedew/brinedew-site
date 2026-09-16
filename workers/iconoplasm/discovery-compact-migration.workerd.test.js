@@ -11,6 +11,7 @@ import {
 } from "./discovery-compact-store.js"
 import { importLegacyDiscoveryUser } from "./discovery-compact-migrate.js"
 import {
+  ensureDiscoveryDictionaryForNames,
   loadDiscoveryDictionaryForNames,
   readDiscoveryDictionaryMeta,
 } from "./discovery-ordinal-store.js"
@@ -65,11 +66,12 @@ function compactMigrationStatements() {
 }
 
 test(
-  "the committed migration installs the exact compact schema and seeds stable ordinals",
+  "the committed migration installs the exact compact schema and no catalog-sized ordinal seed",
   { timeout: 60000 },
   async () => {
     await withD1(async (db) => {
       await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
       await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
       await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
       await db
@@ -100,7 +102,16 @@ test(
       const shared = await readSharedCompactState(db)
       assert.equal(shared.state_version, 0)
       assert.deepEqual(await readDiscoveryDictionaryMeta(db), { version: 1 })
-      const lookup = await loadDiscoveryDictionaryForNames(db, ["BRCA1", "TP53", "RETIRED1"])
+      const seeded = await loadDiscoveryDictionaryForNames(db, ["BRCA1", "TP53", "RETIRED1"])
+      assert.equal(seeded.byName.size, 0)
+
+      // Bounded transfer: only touched names acquire ordinals, historical
+      // symbols stay resolvable as inactive entries, catalog size is irrelevant.
+      const lookup = await ensureDiscoveryDictionaryForNames(
+        db,
+        ["BRCA1", "TP53", "RETIRED1"],
+        { preserveHistorical: true },
+      )
       assert.equal(lookup.byName.get("BRCA1"), 0)
       assert.equal(lookup.byName.get("TP53"), 1)
       assert.equal(lookup.byName.get("RETIRED1"), 2)
@@ -111,6 +122,10 @@ test(
         .first()
       assert.equal(retired.canonical, "RETIRED1")
       assert.equal(Number(retired.active), 0)
+      const rows = await db
+        .prepare("SELECT COUNT(*) AS total FROM icono_discovery_ordinals_v2")
+        .first("total")
+      assert.equal(Number(rows), 3)
 
       // Migration schema parity with the executable schema used by tests.
       const migratedTables = (await db.prepare(SCHEMA_OBJECT_QUERY).all()).results.map(
@@ -129,7 +144,12 @@ test(
       })
       console.log(
         "B764_MIGRATION_RECEIPT",
-        JSON.stringify({ dictionary_version: 1, ordinals: 3, tables: migratedTables.length }),
+        JSON.stringify({
+          dictionary_version: 1,
+          catalog_seeded_ordinals: Number(seeded.byName.size),
+          touched_ordinals: Number(rows),
+          tables: migratedTables.length,
+        }),
       )
     })
   },
@@ -141,6 +161,7 @@ test(
   async () => {
     await withD1(async (db) => {
       await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
       await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
       await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
       await db
@@ -157,6 +178,7 @@ test(
         )
         .run()
       await applyStatements(db, compactMigrationStatements())
+      await ensureDiscoveryDictionaryForNames(db, ["TP53"], { preserveHistorical: true })
       const lookup = await loadDiscoveryDictionaryForNames(db, ["TP53"])
       const dictionary = createDiscoveryOrdinalDictionary(
         [...lookup.byOrdinal.entries()].map(([ordinal, symbol]) => ({ symbol, ordinal })),

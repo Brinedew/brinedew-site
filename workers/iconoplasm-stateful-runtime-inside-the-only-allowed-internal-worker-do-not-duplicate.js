@@ -6,7 +6,7 @@ import {
   hasDiscoveryOrdinal,
 } from "./iconoplasm/discovery-compact-state.js"
 import {
-  evolveAndPersistDiscoveryDictionary,
+  ensureDiscoveryDictionaryForNames,
   loadDiscoveryDictionaryForNames,
   readCanonicalSymbolsForOrdinals,
 } from "./iconoplasm/discovery-ordinal-store.js"
@@ -11923,25 +11923,6 @@ function discoveryCompactDictionaryFromLookup(lookup) {
   )
 }
 
-async function refreshDiscoveryDictionaryFromCatalog(env) {
-  if (!env.ICONOPLASM_DB) return { version: 0, changed: false, writes: 0 }
-  const result = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, aliases_json FROM icono_gene_catalog ORDER BY gene_symbol ASC`,
-  ).all()
-  const symbols = []
-  const aliases = {}
-  for (const row of Array.isArray(result?.results) ? result.results : []) {
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
-    if (!symbol) continue
-    symbols.push(symbol)
-    for (const alias of normalizeCatalogAliases(row?.aliases_json || "[]")) {
-      const aliasNorm = normalizeSymbol(alias)
-      if (aliasNorm && aliasNorm !== symbol) aliases[aliasNorm] = symbol
-    }
-  }
-  return evolveAndPersistDiscoveryDictionary(env.ICONOPLASM_DB, { symbols, aliases })
-}
-
 async function readDiscoveryDictionaryForSymbols(env, names) {
   const lookup = await loadDiscoveryDictionaryForNames(env.ICONOPLASM_DB, names)
   return lookup
@@ -11974,9 +11955,13 @@ async function readOrImportCompactUserState(
       .all()
     const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
     if (!legacyRows.length) return null
-    const importLookup = await loadDiscoveryDictionaryForNames(
+    // Bounded one-time transfer: only this user's own symbols acquire
+    // ordinals. Historical names that left the catalog stay resolvable as
+    // inactive entries instead of being dropped or bulk-seeded.
+    const importLookup = await ensureDiscoveryDictionaryForNames(
       env.ICONOPLASM_DB,
       legacyRows.map((row) => row?.gene_symbol),
+      { preserveHistorical: true, resolveCatalogAliases: true },
     )
     const importDictionary = discoveryCompactDictionaryFromLookup(importLookup)
     const resolvable = legacyRows.filter((row) =>
@@ -12004,7 +11989,7 @@ async function readOrImportCompactUserState(
 
 // One compact recorder for hover batches, guest merges and starter seeding.
 // The dictionary is the only name authority; unknown names are reported, never
-// silently invented, and a catalog drift refreshes the dictionary once.
+// silently invented, and only the touched names acquire ordinals.
 async function recordCompactDiscoveryEncounters(
   env,
   { userId, isAdmin = false, batchId, encounters = [] },
@@ -12012,26 +11997,8 @@ async function recordCompactDiscoveryEncounters(
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const db = env.ICONOPLASM_DB
   const names = encounters.map((encounter) => encounter.symbol)
-  let lookup = await loadDiscoveryDictionaryForNames(db, names)
-  if (!lookup.version) {
-    await refreshDiscoveryDictionaryFromCatalog(env)
-    lookup = await loadDiscoveryDictionaryForNames(db, names)
-  }
-  let unknown = lookup.names.filter((name) => !lookup.byName.has(name))
-  if (unknown.length) {
-    const catalog = await db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM icono_gene_catalog
-       WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
-      )
-      .bind(JSON.stringify(unknown))
-      .first()
-    if (Number(catalog?.n || 0) > 0) {
-      await refreshDiscoveryDictionaryFromCatalog(env)
-      lookup = await loadDiscoveryDictionaryForNames(db, names)
-      unknown = lookup.names.filter((name) => !lookup.byName.has(name))
-    }
-  }
+  const lookup = await ensureDiscoveryDictionaryForNames(db, names)
+  const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
   const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
   if (!known.length) {
     return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
