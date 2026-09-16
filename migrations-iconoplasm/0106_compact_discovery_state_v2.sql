@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_icono_discovery_shared_delivery_outbox_v2_created
 CREATE TABLE icono_discovery_dictionary_meta_v2 (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   version INTEGER NOT NULL CHECK(version >= 1),
+  writer TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -98,3 +99,10 @@ CREATE TABLE icono_discovery_ordinals_v2 (
 
 CREATE INDEX IF NOT EXISTS idx_icono_discovery_ordinals_v2_ordinal
   ON icono_discovery_ordinals_v2(ordinal);
+
+-- One canonical identity per ordinal is a structural invariant, not a
+-- convention: a lost allocation race must abort inside its own transaction
+-- instead of persisting a duplicate. Aliases (name != canonical) still share
+-- their canonical symbol's ordinal.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_icono_discovery_ordinals_v2_canonical_identity
+  ON icono_discovery_ordinals_v2(ordinal) WHERE name = canonical;
