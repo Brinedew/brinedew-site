@@ -1,0 +1,38 @@
+name: Independent v2 transfer cost
+on:
+  push:
+    branches: ["audit/v2-transfer-batch-cost-20260916"]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Verify unchanged application source
+        run: git diff --exit-code d00ae8e39bb5c2115c5a70d42a8ca76fc84127ce -- . ':!scripts/v2-transfer-batch-cost-audit.mjs' ':!.github/workflows/v2-transfer-batch-cost-audit.yml'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install locked runtime
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Measure real handover routes
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/v2-transfer-batch-cost-audit.mjs | tee v2-transfer-batch-cost-log.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v2-transfer-batch-cost
+          path: |
+            v2-transfer-batch-cost-evidence.json
+            v2-transfer-batch-cost-log.txt
+          retention-days: 14
