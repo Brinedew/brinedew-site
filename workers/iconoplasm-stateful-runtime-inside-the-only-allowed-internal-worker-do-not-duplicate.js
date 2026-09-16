@@ -34143,6 +34143,64 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
+  // Per-gene discovery authority transfer for the v2 cutover. The workstation
+  // replica bearer is the only credential that may drive it; the coordinator
+  // still owns every admission, replay and completeness decision. This route
+  // adds no second state owner and no public read surface.
+  discovery_authority_cutover: async ({ match, request, env, done }) => {
+    const authorization = await authorizeIconoplasmAuthorityReplicaBearer(request, env)
+    if (!authorization.authorized)
+      return done("discovery_authority_cutover_403", json({ error: "Unauthorized" }, 403))
+    const payload = await request.json().catch(() => ({}))
+    const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+    if (!requestedSymbol)
+      return done(
+        "discovery_authority_cutover_400",
+        json({ error: "Missing or invalid symbol" }, 400),
+      )
+    if (match.route.id === "authority_discovery_candidates" && !Array.isArray(payload?.items))
+      return done(
+        "discovery_authority_cutover_400",
+        json(
+          {
+            ok: false,
+            code: "CANDIDATE_ITEMS_REQUIRED",
+            error: "Candidate authority requires a complete items array; refusing to clear",
+          },
+          400,
+        ),
+      )
+    const stub = iconoplasmVoteCoordinatorStub(env, requestedSymbol)
+    if (!stub)
+      return done(
+        "discovery_authority_cutover_503",
+        json({ error: "Vote coordinator unavailable" }, 503),
+      )
+    const coordinatorPath =
+      match.route.id === "authority_discovery_candidates"
+        ? "/authority/candidates"
+        : "/authority/activate"
+    try {
+      const result = await iconoplasmVoteCoordinatorJson(stub, coordinatorPath, {
+        ...payload,
+        symbol: requestedSymbol,
+      })
+      return done("discovery_authority_cutover", json(result, 200, { "Cache-Control": "no-store" }))
+    } catch (error) {
+      return done(
+        "discovery_authority_cutover_error",
+        json(
+          {
+            ok: false,
+            code: String(error?.code || "VOTE_COORDINATOR_REQUEST_FAILED").slice(0, 100),
+            error: sanitizeText(String(error?.message || error), 300),
+          },
+          Number.isSafeInteger(error?.status) && error.status >= 400 ? error.status : 503,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+  },
   manifestation_generation_executor: async ({ match, request, env, ctx, done }) => {
     const response = await handleIconoplasmGenerationExecutorRoute({ match, request, env, ctx })
     return done("manifestation_generation_executor", response)
