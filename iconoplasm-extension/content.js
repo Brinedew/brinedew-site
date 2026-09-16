@@ -532,6 +532,7 @@
 
   // -- State ---------------------------------------------------------
   let geneMap = null // { SYMBOL: { c?, n?, u?, a?, p? } }
+  let recognitionRefreshPromise = null
   let geneMatcher = null
   let tooltip = null
   let authToast = null
@@ -896,6 +897,34 @@
     if (rescan) {
       void scanPage(document.body).then(() => refreshHighlightStyles())
     }
+  }
+
+  function refreshRecognitionPolicy() {
+    // B-765: a published alias or blocklist change can arrive while an article
+    // is open. Adopt the updated gene map and rescan in bounded slices. This
+    // changes which labels are recognized only: the card snapshot epoch and any
+    // visible hover stay exactly as they are.
+    if (recognitionRefreshPromise) return recognitionRefreshPromise
+    recognitionRefreshPromise = (async () => {
+      const payload = await IconoContentLifecycle.requestGeneData(chrome, { timeoutMs: 4000 })
+      const nextGenes = payload?.genes
+      if (!nextGenes || typeof nextGenes !== "object" || Object.keys(nextGenes).length === 0) return
+      geneMap = nextGenes
+      rebuildGeneMatcher(await loadEffectiveBlocklist())
+      if (isPdfReaderDocument) {
+        window.dispatchEvent(new CustomEvent("iconoplasm-reader-matcher-changed"))
+        return
+      }
+      await scanPage(document.body)
+      refreshHighlightStyles()
+    })()
+      .catch((error) => {
+        console.error("[Iconoplasm] recognition refresh failed:", error)
+      })
+      .finally(() => {
+        recognitionRefreshPromise = null
+      })
+    return recognitionRefreshPromise
   }
 
   function showVoteLoginPopup() {
@@ -1998,6 +2027,14 @@
         console.error("[Iconoplasm] blocklist refresh failed:", err)
       })
     }
+  })
+
+  // B-765: the background broadcasts one recognition-policy update when a
+  // published alias or blocklist revision advances. Open pages adopt the new
+  // map and rescan in bounded slices; no timer or polling is added.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "RECOGNITION_POLICY_UPDATED") return
+    void refreshRecognitionPolicy()
   })
 
   function archivalTooltipGeneModel(summaryGene, geneDetail, portraitLocator = null) {
