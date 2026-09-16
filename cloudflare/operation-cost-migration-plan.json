@@ -14,7 +14,7 @@
     "iconoplasm/0106_compact_discovery_state_v2.sql": {
       "adapter_id": "iconoplasm-migration-0106",
       "arguments": {},
-      "prediction": { "rows_read": 256, "rows_written": 64, "requests": 1 }
+      "prediction": { "rows_read": 1152, "rows_written": 64, "requests": 1 }
     },
     "iconoplasm/0105_artist_blacklist_lookup.sql": {
       "adapter_id": "iconoplasm-migration-0105",
