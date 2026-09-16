@@ -224,9 +224,7 @@ export async function ensureDiscoveryDictionaryForNames(
     )
     if (resolveCatalogAliases) {
       catalogRows.push(
-        ...rows(
-          await db.prepare(CATALOG_BY_ALIAS_SQL).bind(JSON.stringify(unresolved)).all(),
-        ),
+        ...rows(await db.prepare(CATALOG_BY_ALIAS_SQL).bind(JSON.stringify(unresolved)).all()),
       )
     }
     const maxRow = await db.prepare(MAX_ORDINAL_SELECT_SQL).first()
@@ -260,18 +258,17 @@ export async function ensureDiscoveryDictionaryForNames(
       if (standaloneOrdinals.size > 1)
         throw new TypeError(`Discovery dictionary rename is ambiguous: ${symbol}`)
       const canonicalRow = rows(
-        await db.prepare(NAMES_SELECT_SQL).bind(JSON.stringify([symbol])).all(),
+        await db
+          .prepare(NAMES_SELECT_SQL)
+          .bind(JSON.stringify([symbol]))
+          .all(),
       ).find(
-        (row) =>
-          String(row.name || "").toUpperCase() ===
-          String(row.canonical || "").toUpperCase(),
+        (row) => String(row.name || "").toUpperCase() === String(row.canonical || "").toUpperCase(),
       )
       let ordinal
       if (standaloneOrdinals.size === 1) {
         ordinal = [...standaloneOrdinals][0]
-        for (const nameRow of rows(
-          await db.prepare(ROWS_FOR_ORDINAL_SQL).bind(ordinal).all(),
-        )) {
+        for (const nameRow of rows(await db.prepare(ROWS_FOR_ORDINAL_SQL).bind(ordinal).all())) {
           const name = String(nameRow.name || "")
             .trim()
             .toUpperCase()
@@ -299,16 +296,16 @@ export async function ensureDiscoveryDictionaryForNames(
 
     const plannedNames = [...planned.keys()]
     const current = new Map(
-      rows(
-        await db.prepare(NAMES_SELECT_SQL).bind(JSON.stringify(plannedNames)).all(),
-      ).map((row) => [
-        String(row.name || "").toUpperCase(),
-        {
-          ordinal: Number(row.ordinal),
-          canonical: String(row.canonical || "").toUpperCase(),
-          active: Number(row.active || 0),
-        },
-      ]),
+      rows(await db.prepare(NAMES_SELECT_SQL).bind(JSON.stringify(plannedNames)).all()).map(
+        (row) => [
+          String(row.name || "").toUpperCase(),
+          {
+            ordinal: Number(row.ordinal),
+            canonical: String(row.canonical || "").toUpperCase(),
+            active: Number(row.active || 0),
+          },
+        ],
+      ),
     )
     const statements = []
     for (const [name, entry] of planned) {
@@ -321,9 +318,7 @@ export async function ensureDiscoveryDictionaryForNames(
       )
         continue
       statements.push(
-        db
-          .prepare(ROW_UPSERT_SQL)
-          .bind(name, entry.ordinal, entry.canonical, entry.active),
+        db.prepare(ROW_UPSERT_SQL).bind(name, entry.ordinal, entry.canonical, entry.active),
       )
     }
     const meta = await readDiscoveryDictionaryMeta(db)
