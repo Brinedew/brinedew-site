@@ -7,8 +7,11 @@ import { evolveDiscoveryOrdinalDictionary } from "./discovery-ordinal-dictionary
 // nothing when the catalog is unchanged.
 
 const META_SELECT_SQL = `SELECT version FROM icono_discovery_dictionary_meta_v2 WHERE singleton = 1`
+const META_ENSURE_SQL = `INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at)
+VALUES (1, 1, CURRENT_TIMESTAMP)
+ON CONFLICT(singleton) DO NOTHING`
 const META_CAS_SQL = `UPDATE icono_discovery_dictionary_meta_v2
-SET version = ?, updated_at = CURRENT_TIMESTAMP
+SET version = ?, writer = ?, updated_at = CURRENT_TIMESTAMP
 WHERE singleton = 1 AND version = ?
 RETURNING version`
 const META_INSERT_SQL = `INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at)
@@ -26,6 +29,21 @@ WHERE ordinal IN (SELECT value FROM json_each(?))
 ORDER BY ordinal`
 const ROW_UPSERT_SQL = `INSERT INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active)
 VALUES (?, ?, ?, ?)
+ON CONFLICT(name) DO UPDATE SET
+  ordinal = excluded.ordinal,
+  canonical = excluded.canonical,
+  active = excluded.active`
+// Every ordinal mutation in the on-demand resolver is gated by the same
+// dictionary version AND writer token that its accompanying conditional
+// version update must have installed. A batch whose version update matched
+// nothing therefore writes nothing at all, instead of committing candidate
+// rows and reporting failure afterwards.
+const GUARDED_ROW_UPSERT_SQL = `INSERT INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active)
+SELECT ?, ?, ?, ?
+WHERE EXISTS (
+  SELECT 1 FROM icono_discovery_dictionary_meta_v2
+  WHERE singleton = 1 AND version = ? AND writer = ?
+)
 ON CONFLICT(name) DO UPDATE SET
   ordinal = excluded.ordinal,
   canonical = excluded.canonical,
@@ -160,6 +178,16 @@ export async function evolveAndPersistDiscoveryDictionary(db, { symbols = [], al
       pendingWrites.push([name, entry.ordinal, entry.symbol, active])
     }
   }
+  // A rename moves one ordinal from its old canonical identity to the new
+  // one. The old identity must leave the canonical-identity index before the
+  // new one enters, even though both rows live in the same transaction.
+  const leavesCanonicalIdentity = ([name, _ordinal, canonical]) => {
+    const prior = existing.get(name)
+    return prior && prior.canonical === name && canonical !== name ? 0 : 1
+  }
+  pendingWrites.sort(
+    (left, right) => leavesCanonicalIdentity(left) - leavesCanonicalIdentity(right),
+  )
 
   let writes = 0
   for (let offset = 0; offset < pendingWrites.length; offset += 250) {
@@ -219,6 +247,11 @@ export async function ensureDiscoveryDictionaryForNames(
     const lookup = await loadDiscoveryDictionaryForNames(db, wanted)
     const unresolved = wanted.filter((name) => !lookup.byName.has(name))
     if (!unresolved.length) return lookup
+    if (lookup.version < 1) await db.prepare(META_ENSURE_SQL).run()
+    // The version that protected every allocation input this attempt. It is
+    // never re-read later: a fresh read could pair a stale maximum with a
+    // newer version and validate an already-invalid ordinal.
+    const expectedVersion = Math.max(lookup.version, 1)
     const catalogRows = rows(
       await db.prepare(CATALOG_BY_NAME_SQL).bind(JSON.stringify(unresolved)).all(),
     )
@@ -307,7 +340,7 @@ export async function ensureDiscoveryDictionaryForNames(
         ],
       ),
     )
-    const statements = []
+    const pending = []
     for (const [name, entry] of planned) {
       const prior = current.get(name)
       if (
@@ -317,24 +350,33 @@ export async function ensureDiscoveryDictionaryForNames(
         prior.active === entry.active
       )
         continue
-      statements.push(
-        db.prepare(ROW_UPSERT_SQL).bind(name, entry.ordinal, entry.canonical, entry.active),
-      )
+      pending.push([name, entry])
     }
-    const meta = await readDiscoveryDictionaryMeta(db)
-    if (!statements.length && meta) return lookup
-    let casIndex = -1
-    if (meta) {
-      casIndex = statements.length
-      statements.push(db.prepare(META_CAS_SQL).bind(meta.version + 1, meta.version))
-    } else {
-      statements.push(db.prepare(META_INSERT_SQL).bind(1))
+    if (!pending.length) return lookup
+    // A rename moves one ordinal from its old canonical identity to the new
+    // one; the old identity must leave the index before the new one enters.
+    const leavesCanonicalIdentity = ([name, entry]) => {
+      const prior = current.get(name)
+      return prior && prior.canonical === name && entry.canonical !== name ? 0 : 1
     }
-    const results = await db.batch(statements)
-    if (casIndex >= 0) {
-      const updated = rows(results[casIndex])[0]
-      if (Number(updated?.version) !== meta.version + 1) continue
-    }
+    pending.sort((left, right) => leavesCanonicalIdentity(left) - leavesCanonicalIdentity(right))
+    // One attempt, one writer token. The conditional version update runs first
+    // and every row upsert is gated on the version and token it installs, so a
+    // rejected version aborts all related mutations inside the same database
+    // transaction. A concurrent resolver can never commit a duplicate ordinal,
+    // and this attempt never persists a partial write it did not validate.
+    const writerToken = crypto.randomUUID()
+    const upserts = pending.map(([name, entry]) =>
+      db
+        .prepare(GUARDED_ROW_UPSERT_SQL)
+        .bind(name, entry.ordinal, entry.canonical, entry.active, expectedVersion + 1, writerToken),
+    )
+    const results = await db.batch([
+      db.prepare(META_CAS_SQL).bind(expectedVersion + 1, writerToken, expectedVersion),
+      ...upserts,
+    ])
+    const updated = rows(results[0])[0]
+    if (Number(updated?.version) !== expectedVersion + 1) continue
     return loadDiscoveryDictionaryForNames(db, wanted)
   }
   throw new Error("Discovery dictionary resolution remained contended")
