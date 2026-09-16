@@ -1,0 +1,48 @@
+name: Independent 383c v2 follow-up audit
+on:
+  push:
+    branches: ["audit/v2-383c-concurrency-20260916"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Verify all application source is identical to the reviewed merge
+        run: git diff --exit-code 383c0046e85856ebb3523cc33d4f0e8ad4d84844 -- . ':!scripts/v2-383c-independent-concurrency-audit.mjs' ':!.github/workflows/v2-383c-independent-audit.yml'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install locked test dependencies
+        id: install
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Reproduce the revised six-check migration audit
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/v2-reset-chain-independent-audit.mjs | tee v2-383c-existing-audit.txt
+      - name: Test independent native concurrency and admission bounds
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test scripts/v2-383c-independent-concurrency-audit.mjs | tee v2-383c-independent-audit.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v2-383c-independent-evidence
+          path: |
+            v2-383c-concurrency-evidence.json
+            v2-383c-existing-audit.txt
+            v2-383c-independent-audit.txt
+            artifacts/b762-v2-cutover-20260916/v2-reset-chain-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
