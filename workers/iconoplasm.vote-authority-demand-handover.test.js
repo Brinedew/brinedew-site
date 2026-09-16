@@ -383,6 +383,182 @@ test("a gene with no eligible candidate handovers to an explicit empty state and
   assert.equal(state.winner_asset_sha256, sha("c"))
 })
 
+test("an oversized retained candidate source defers the handover instead of certifying a truncated snapshot", async (t) => {
+  const gene = "TP53"
+  const boundedVotes = [
+    {
+      user_id: "user-1",
+      asset_sha256: sha("a"),
+      vision_id: "anima-v1-9",
+      candidate_image_id: 7,
+      vote_value: 1,
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+    },
+    {
+      user_id: "user-2",
+      asset_sha256: sha("a"),
+      vision_id: "anima-v1-9",
+      candidate_image_id: 7,
+      vote_value: 1,
+      created_at: "2026-09-01T00:00:00Z",
+      updated_at: "2026-09-01T00:00:00Z",
+    },
+  ]
+  // The bootstrap read is bounded, but the migration-only keyset source is
+  // larger than the bounded envelope: every page is full, so the snapshot can
+  // never certify completeness. The handover must refuse rather than truncate.
+  let page = 0
+  const d1 = {
+    prepare(sql) {
+      const source = String(sql || "")
+      return {
+        bind(...bindings) {
+          return {
+            async all() {
+              if (source.includes("FROM icono_portrait_assets")) {
+                return {
+                  results: [
+                    { asset_sha256: sha("a"), vision_id: "anima-v1-9", candidate_image_id: 7 },
+                  ],
+                }
+              }
+              if (source.includes("FROM icono_image_votes")) {
+                if (bindings.length > 1) {
+                  page += 1
+                  return {
+                    results: Array.from({ length: 500 }, (_, index) => ({
+                      user_id: `u${page}x${index}`,
+                      asset_sha256: sha("a"),
+                      vote_value: 1,
+                    })),
+                  }
+                }
+                return { results: boundedVotes }
+              }
+              return { results: [] }
+            },
+            first() {
+              return null
+            },
+            async run() {
+              return { success: true }
+            },
+          }
+        },
+      }
+    },
+  }
+  const { coordinator } = await newCoordinator(t, gene, { ICONOPLASM_DB: d1 })
+
+  const response = await post(coordinator, "/vote/set", {
+    symbol: gene,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(response.status, 409)
+  const body = await response.json()
+  assert.equal(body.code, "SOURCE_CHECK_FAILED")
+  assert.equal(body.retryable, true)
+  // Nothing was truncated, nothing was applied, and the gene was not activated
+  // against a partial snapshot; the same command replays once the source fits.
+  assert.equal(coordinator.getMeta("authority_epoch"), "")
+  assert.equal(coordinator.publication.read(), null)
+  assert.equal(coordinator.pendingOutboxRows(1).length, 0)
+  assert.equal(
+    coordinator.sqlFirst(
+      `SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ?`,
+      "new-user",
+    ).n,
+    0,
+  )
+  assert.equal(
+    coordinator.sqlFirst(`SELECT COUNT(*) AS n FROM vote_by_user_asset`).n,
+    boundedVotes.length,
+    "the retained local votes must stay exactly as imported",
+  )
+})
+
+test("an oversized retained candidate source defers the handover instead of truncating the candidate set", async (t) => {
+  const gene = "TP53"
+  const oversizedAssets = Array.from({ length: 65 }, (_, index) => ({
+    asset_sha256: (index + 1).toString(16).padStart(64, "0"),
+    status: "approved",
+    autopick_eligible: 1,
+    is_stale: 0,
+    is_legacy: 0,
+    created_at: "2026-09-01T00:00:00Z",
+  }))
+  const retainedVote = {
+    user_id: "user-1",
+    asset_sha256: oversizedAssets[0].asset_sha256,
+    vision_id: "anima-v1-9",
+    candidate_image_id: 7,
+    vote_value: 1,
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+  }
+  const d1 = {
+    prepare(sql) {
+      const source = String(sql || "")
+      return {
+        bind(...bindings) {
+          return {
+            async all() {
+              if (source.includes("FROM icono_portrait_assets")) {
+                return { results: oversizedAssets }
+              }
+              if (source.includes("FROM icono_image_votes")) {
+                if (bindings.length > 2) return { results: [] }
+                return { results: [retainedVote] }
+              }
+              return { results: [] }
+            },
+            first() {
+              return null
+            },
+            async run() {
+              return { success: true }
+            },
+          }
+        },
+      }
+    },
+  }
+  const { coordinator } = await newCoordinator(t, gene, { ICONOPLASM_DB: d1 })
+
+  const response = await post(coordinator, "/vote/set", {
+    symbol: gene,
+    asset_sha256: oversizedAssets[0].asset_sha256,
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(response.status, 409)
+  const body = await response.json()
+  assert.equal(body.code, "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE")
+  assert.equal(body.retryable, true)
+  // No truncated candidate set was imported, no epoch flipped and no command
+  // state was applied; the same command replays once the source fits.
+  assert.equal(coordinator.getMeta("authority_epoch"), "")
+  assert.equal(coordinator.publication.read(), null)
+  assert.equal(coordinator.pendingOutboxRows(1).length, 0)
+  assert.equal(
+    coordinator.sqlFirst(`SELECT COUNT(*) AS n FROM gene_candidate_authority`).n,
+    0,
+    "an oversized source must never be truncated into the v2 candidate set",
+  )
+  assert.equal(
+    coordinator.sqlFirst(
+      `SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ?`,
+      "new-user",
+    ).n,
+    0,
+  )
+})
+
 test("an ordinary command never restores the retired legacy write path", async (t) => {
   const gene = "TP53"
   const { coordinator } = await newCoordinator(t, gene, {})
