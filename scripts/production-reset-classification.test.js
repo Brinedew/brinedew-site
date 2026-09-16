@@ -181,9 +181,9 @@ function controller(overrides = {}) {
     input: `set -euo pipefail
       date() {
         case "$*" in
-          "-u +%H") printf 00 ;;
+          "-u +%H") printf '%s' "\${MOCK_HOUR:-00}" ;;
           "-u +%M") printf 07 ;;
-          "-u +%F") printf 2026-09-10 ;;
+          "-u +%F") printf '%s' "\${MOCK_DAY:-2026-09-17}" ;;
           *) return 97 ;;
         esac
       }
@@ -223,6 +223,9 @@ function controller(overrides = {}) {
       REPOSITORY: "test/site",
       DEPLOY_WORKFLOW: "deploy-quartz.yml",
       TEST_SHA: sha,
+      EVENT_NAME: "schedule",
+      MOCK_DAY: "2026-09-17",
+      MOCK_HOUR: "00",
       MOCK_RUNS: JSON.stringify({ workflow_runs: [failed, recovered] }),
       MOCK_READER_JOBS: JSON.stringify(readerJobs),
       MOCK_CHECKS: JSON.stringify({
@@ -254,6 +257,20 @@ test("full controller resumes canonical release after reader-only recovery", () 
   assert.match(output, /CANONICAL_DISPATCH/)
   assert.doesNotMatch(output, /already deployed successfully/)
   assert.match(output, /delivery_paused=true/)
+})
+
+test("the pre-reset tick is containment-only and the one-shot expires without dispatching", () => {
+  const preReset = controller({ MOCK_DAY: "2026-09-16", MOCK_HOUR: "23" })
+  assert.match(preReset, /delivery_paused=true/)
+  assert.match(
+    preReset,
+    /Pre-reset containment complete; canonical release waits for Sep 17 UTC capacity\./,
+  )
+  assert.doesNotMatch(preReset, /CANONICAL_DISPATCH/)
+  const expired = controller({ MOCK_DAY: "2026-09-18" })
+  assert.match(expired, /expired; scheduled run is inert/)
+  assert.doesNotMatch(expired, /CANONICAL_DISPATCH/)
+  assert.doesNotMatch(expired, /delivery_paused=true/)
 })
 
 test("full controller retains exact-CI, active-release and capacity fences", () => {

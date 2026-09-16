@@ -80,7 +80,15 @@ test("reset controller recognizes early refusal while retaining background conta
   assert.ok(recovery.slice(start, end).includes(`"${sentinelName}"`))
   assert.match(recovery, /set_queue_pause_state true/)
   assert.doesNotMatch(recovery, /set_queue_pause_state false/)
-  assert.match(recovery, /Final containment check complete; background quarantine remains in place/)
+  assert.match(
+    recovery,
+    /B-742 quarantine asserted: Iconoplasm Cron jobs disabled and Queue delivery paused\./,
+  )
+  assert.match(
+    recovery,
+    /Pre-reset containment complete; canonical release waits for Sep 17 UTC capacity\./,
+  )
+  assert.match(recovery, /retaining background quarantine/)
 })
 
 test("real sentinel imports load and missing credentials refuse before provider traffic", () => {
