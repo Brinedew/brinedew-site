@@ -1,0 +1,23 @@
+name: Format cold first-use diagnostic
+on:
+  push:
+    branches: ["fix/v2-383c-concurrency"]
+permissions:
+  contents: read
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Print formatter diff
+        run: |
+          pnpm exec prettier workers/iconoplasm.vote-authority-demand-cold-first-use.test.js --write
+          git diff -- workers/iconoplasm.vote-authority-demand-cold-first-use.test.js
