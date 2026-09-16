@@ -2,10 +2,14 @@
 -- shared aggregate row, append-only ordinals, and the durable derived-delivery
 -- outbox written beside each accepted personal batch.
 --
--- The dictionary is seeded from the current catalog plus every legacy symbol
--- that no longer has a catalog row, so historical membership stays resolvable
--- as an inactive ordinal instead of being dropped. Request handlers never run
--- this DDL; it is applied through the admitted migration path.
+-- This migration is schema and singleton state only. Ordinals are appended on
+-- demand by the bounded dictionary resolver for names that actually carry
+-- discovery data, so a first application does not read or write one row per
+-- catalog gene. Existing ordinals are never renumbered or recycled; a symbol
+-- that leaves the catalog keeps its ordinal and simply becomes inactive.
+--
+-- Request handlers never run this DDL; it is applied through the admitted
+-- migration path.
 
 CREATE TABLE icono_discovery_cas_guard (
   ok INTEGER NOT NULL CONSTRAINT DISCOVERY_COMPACT_CAS_CONFLICT CHECK(ok = 1)
@@ -81,6 +85,10 @@ CREATE TABLE icono_discovery_dictionary_meta_v2 (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at)
+SELECT 1, 1, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM icono_discovery_dictionary_meta_v2 WHERE singleton = 1);
+
 CREATE TABLE icono_discovery_ordinals_v2 (
   name TEXT PRIMARY KEY CHECK(length(name) BETWEEN 1 AND 64),
   ordinal INTEGER NOT NULL CHECK(ordinal >= 0 AND ordinal <= 1000000),
@@ -90,19 +98,3 @@ CREATE TABLE icono_discovery_ordinals_v2 (
 
 CREATE INDEX IF NOT EXISTS idx_icono_discovery_ordinals_v2_ordinal
   ON icono_discovery_ordinals_v2(ordinal);
-
-INSERT OR IGNORE INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active)
-SELECT gene_symbol, ROW_NUMBER() OVER (ORDER BY gene_symbol) - 1, gene_symbol, 1
-FROM icono_gene_catalog;
-
-INSERT OR IGNORE INTO icono_discovery_ordinals_v2 (name, ordinal, canonical, active)
-SELECT symbol, (SELECT COALESCE(MAX(ordinal), -1) FROM icono_discovery_ordinals_v2) + ROW_NUMBER() OVER (ORDER BY symbol), symbol, 0
-FROM (
-  SELECT DISTINCT gene_symbol AS symbol FROM icono_gene_discoveries
-  UNION
-  SELECT DISTINCT gene_symbol FROM icono_shared_gene_discoveries
-)
-WHERE symbol NOT IN (SELECT name FROM icono_discovery_ordinals_v2);
-
-INSERT OR IGNORE INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at)
-VALUES (1, 1, CURRENT_TIMESTAMP);
