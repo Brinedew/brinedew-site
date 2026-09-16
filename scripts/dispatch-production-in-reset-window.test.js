@@ -182,6 +182,25 @@ test("unknown or stale usage never becomes zero; readiness mode never mutates", 
   assert.equal(f.writes.length, 0)
 })
 
+test("the reset day has no artificial intra-day dispatch cutoff", async () => {
+  const f = fixture()
+  const late = Date.parse("2026-09-13T18:30:00Z")
+  f.options.now = () => late
+  f.options.readUsage = async () => ({ ...f.usage, measured_at: late })
+  const dispatched = await dispatchResetTick(f.options)
+  assert.equal(dispatched.phase, "dispatched")
+  assert.equal(f.posts.length, 1)
+  const tomorrow = Date.parse("2026-09-14T00:00:10Z")
+  const next = await dispatchResetTick({
+    ...f.options,
+    state: dispatched,
+    now: () => tomorrow,
+    readUsage: async () => ({ ...f.usage, day: "2026-09-14", measured_at: tomorrow }),
+  })
+  assert.equal(next.phase, "failed")
+  assert.equal(f.posts.length, 1)
+})
+
 test("a proven migration checkpoint continues its installed origin once and retains an uncertain dispatch", async () => {
   const f = fixture()
   f.runs = [{ ...run, status: "in_progress", conclusion: null }]

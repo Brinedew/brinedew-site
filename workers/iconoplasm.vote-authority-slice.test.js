@@ -141,15 +141,15 @@ function voteOptions(coordinator, assetSha, { userId = "user-1", value = 1, visi
   }
 }
 
-test("a gene stays on the legacy epoch until an explicit authority transfer", async (t) => {
+test("a legacy gene's first canonical command demand-drives its handover without a legacy outbox write", async (t) => {
   const { coordinator } = await newCoordinator(t)
   const outcome = await coordinator.applyAuthoritativeVoteMutation(
     voteOptions(coordinator, sha("a"), { visionId: "anima-v1-9" }),
   )
-  assert.equal(outcome.authority, "legacy")
-  assert.equal(outcome.publication, null)
-  assert.equal(coordinator.pendingOutboxRows(1).length, 1)
-  assert.equal(coordinator.publication.read(), null)
+  assert.equal(outcome.authority, "v2")
+  assert.equal(outcome.publication.state.pending, true)
+  assert.equal(coordinator.getMeta("authority_epoch"), "v2")
+  assert.equal(coordinator.pendingOutboxRows(1).length, 0)
 })
 
 test("authority transfer refuses while the legacy outbox is unsettled", async (t) => {
@@ -157,9 +157,12 @@ test("authority transfer refuses while the legacy outbox is unsettled", async (t
   importCandidates(coordinator, [
     { asset_sha256: sha("a"), status: "approved", autopick_eligible: 1 },
   ])
-  await coordinator.applyAuthoritativeVoteMutation(
-    voteOptions(coordinator, sha("a"), { visionId: "anima-v1-9" }),
-  )
+  sql.db
+    .prepare(
+      `INSERT INTO vote_outbox (mutation_id, asset_sha256, user_id, vote_value, reason)
+       VALUES (?, ?, ?, 1, ?)`,
+    )
+    .run("retained:1", sha("a"), "user-1", "accepted legacy vote awaiting delivery")
   const activationPayload = {
     symbol: SYMBOL,
     published_asset_sha256: sha("a"),
