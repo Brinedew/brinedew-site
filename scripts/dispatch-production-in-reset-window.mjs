@@ -57,8 +57,7 @@ export async function dispatchResetTick({
   now = Date.now,
   verifyOnly = false,
 }) {
-  const instant = now(),
-    day = new Date(instant).toISOString().slice(0, 10)
+  const day = new Date(now()).toISOString().slice(0, 10)
   if (
     !/^[a-f0-9]{40}$/.test(intent?.required_head_sha || "") ||
     !Number.isFinite(Date.parse(intent?.deadline))
@@ -74,14 +73,17 @@ export async function dispatchResetTick({
     if (!verifyOnly) await persist(state)
     return state
   }
-  const utcMinutes = (instant % 86400000) / 60000
   if (!verifyOnly && day > intent.reset_day && state.phase !== "deployed")
     return save({
       phase: "failed",
       error:
         "The armed reset day has ended. Executor reconciliation is required; no new daily migration lineage is created.",
     })
-  if (!verifyOnly && (utcMinutes > 390 || day < intent.reset_day))
+  // No intra-day cutoff. The reset day is the window: day-scoped accounting,
+  // exact-source validation, the retained dispatch reservation and the
+  // negative-only headroom ceilings already bound every attempt, so safe
+  // remaining capacity later in the UTC day must stay usable.
+  if (!verifyOnly && day < intent.reset_day)
     return {
       phase: "waiting_for_reset",
       reset_day: intent.reset_day,
