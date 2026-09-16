@@ -7,9 +7,10 @@ on:
       - ".github/workflows/b742-hard-pre-reset-d1-quarantine.yml"
       - "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"
   schedule:
-    # Reassert immediately before the 00:00 UTC D1 reset in case any intervening
-    # operator action replaced the transition-only Worker version.
-    - cron: "58 23 * * *"
+    # One-shot Sep 17 incident protection. Install a known-green D1-free
+    # containment source a full hour before reset so a late/red repair head,
+    # GitHub queueing or dependency installation cannot expose the fresh budget.
+    - cron: "0 23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -23,41 +24,61 @@ concurrency:
 
 jobs:
   quarantine:
-    # B-751: full server activation is verified in production run 34509853637.
-    # Retire unattended incident controls without unpausing any background work.
-    # Keep the explicit emergency path; see docs/B751_QUARANTINE_RETIREMENT.md.
-    if: github.event_name == 'workflow_dispatch'
+    # B-742 recurrence: re-enable the existing hard quarantine for the Sep 17
+    # reset only. Scheduled invocations self-expire after Sep 16 UTC; the manual
+    # emergency path remains available inside its narrow reset window.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
       SCRIPT_NAME: geneguessr-api
+      EVENT_NAME: ${{ github.event_name }}
+      # This exact source has green main CI run 35080994110 and already contains
+      # the tested D1-free hard-quarantine entrypoint. Containment intentionally
+      # does not depend on the later cutover implementation being green yet.
+      SAFE_CONTAINMENT_SHA: d00ae8e39bb5c2115c5a70d42a8ca76fc84127ce
+      SAFE_CONTAINMENT_CI_RUN: "35080994110"
     steps:
       - name: Refuse use outside the B-742 incident window
         shell: bash
         run: |
           set -euo pipefail
+          utc_day="$(date -u +%F)"
+          if [[ "${EVENT_NAME:-}" == "schedule" && "${utc_day}" != "2026-09-16" ]]; then
+            echo "One-shot Sep 17 pre-reset quarantine has expired; scheduled run is inert."
+            exit 0
+          fi
           utc_hour="$(date -u +%H)"
           utc_minute="$(date -u +%M)"
           utc_minute_of_day=$((10#${utc_hour} * 60 + 10#${utc_minute}))
-          # The hard quarantine is allowed only across the reset boundary, every day.
-          # An absolute calendar deadline would silently disable the next reset.
-          if (( utc_minute_of_day > 5 && utc_minute_of_day < 1435 )); then
+          # Scheduled containment starts at 23:00 UTC. Manual emergency
+          # reassertion is allowed from 22:55 through 00:05 UTC.
+          if (( utc_minute_of_day > 5 && utc_minute_of_day < 1375 )); then
             echo "B-742 hard quarantine window is closed; refusing to alter production."
             exit 78
           fi
 
-      - name: Checkout exact main
+      - name: Checkout known-green containment source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: d00ae8e39bb5c2115c5a70d42a8ca76fc84127ce
 
-      - name: Require successful protected CI for this exact commit
+      - name: Verify pinned containment source and its recorded CI
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/wait-for-iconoplasm-release-ci.mjs
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${SAFE_CONTAINMENT_SHA}" ]]
+          run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SAFE_CONTAINMENT_CI_RUN}")"
+          [[ "$(jq -r '.head_sha' <<<"${run_json}")" == "${SAFE_CONTAINMENT_SHA}" ]]
+          [[ "$(jq -r '.status' <<<"${run_json}")" == "completed" ]]
+          [[ "$(jq -r '.conclusion' <<<"${run_json}")" == "success" ]]
+          echo "Pinned D1-free containment source has verified green CI."
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -115,7 +136,7 @@ jobs:
             --config "${quarantine_config}" \
             --var "ICONOPLASM_SCHEMA_TRANSITION:1" \
             --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" \
-            --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${GITHUB_SHA}-b742-hard-quarantine"
+            --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:${SAFE_CONTAINMENT_SHA}-b742-hard-quarantine"
 
       - name: Reassert provider-side Cron and Queue quarantine after Wrangler reconciliation
         shell: bash
