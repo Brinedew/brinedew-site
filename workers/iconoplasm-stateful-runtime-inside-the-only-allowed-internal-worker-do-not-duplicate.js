@@ -124,6 +124,7 @@ import {
   completeExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
 import {
+  authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityGenerationBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
@@ -17597,7 +17598,19 @@ export class IconoplasmVoteCoordinator {
 
   async applyAuthoritativeVoteMutation(options = {}) {
     if (this.getMeta("authority_epoch") !== "v2") {
-      return { authority: "legacy", publication: null, vote: this.applyVoteMutation(options) }
+      // B-762 demand-driven handover: an ordinary canonical-affecting command
+      // on a legacy-epoch gene runs this bounded per-gene preparation first.
+      // The original command identity is preserved by the caller and replayed;
+      // a deferred handover mutates nothing and never falls back to the
+      // retired legacy write path.
+      const handover = await this.ensureDemandDrivenHandover({
+        publishedAssetSha: options.publishedAssetSha,
+        adminOverride: options.adminOverride,
+        verifySource: options.verifySource === true,
+      })
+      if (!handover.activated) {
+        return { authority: "deferred", publication: null, vote: null, deferral: handover }
+      }
     }
     // An activated v2 gene never falls back to legacy execution, including
     // when its eligible set is empty: the selection becomes an explicit
@@ -17608,6 +17621,131 @@ export class IconoplasmVoteCoordinator {
       return this.authoritativeSelectionIdentity()
     })
     return { authority: "v2", publication, vote }
+  }
+
+  /**
+   * B-762 demand-driven per-gene handover. Bounded to this gene: the retained
+   * accepted votes are verified against the legacy source, then the retained
+   * candidate/policy state seeds the v2 publication identity before the epoch
+   * flips. No other gene's state is consulted, so an unrelated unmigrated or
+   * stalled gene can never block this one. An explicit empty/tombstone state
+   * is a valid handover for a gene with no eligible candidate: the gene keeps
+   * its coverage and later first-candidate behavior through the normal v2
+   * selection path.
+   */
+  async ensureDemandDrivenHandover({ publishedAssetSha, adminOverride, verifySource } = {}) {
+    if (this.getMeta("authority_epoch") === "v2") return { activated: true, replayed: true }
+    const symbol = normalizeSymbol(this.getMeta("symbol") || "")
+    if (!symbol) return { activated: false, code: "SYMBOL_REQUIRED" }
+    if (this.pendingOutboxRows(1).length || this.caretakerSupervotes.pendingOutboxRows(1).length) {
+      // This gene's own accepted work must reach its retained destination
+      // before the epoch flips; the caller replays the same command after the
+      // outbox settles and nothing is acknowledged early.
+      return { activated: false, code: "OUTBOX_NOT_SETTLED" }
+    }
+    const requestedAsset = normalizeSha256(publishedAssetSha || "") || ""
+    const requestedOverride =
+      adminOverride === undefined ? this.getMeta("admin_override") === "1" : Boolean(adminOverride)
+    const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
+    // Complete-input verification: the local authority must contain every
+    // accepted legacy vote with the same voter, candidate and value before the
+    // epoch flips. Migration-only, keyset-paginated, double-pass verified and
+    // bounded; the same contract as the operator transfer. It runs only for a
+    // coordinator whose retained state was imported in this same request
+    // (cold); a warm coordinator reconciles its retained local authority
+    // without a D1 round trip.
+    if (verifySource === true && this.env?.ICONOPLASM_DB) {
+      let snapshot = null
+      try {
+        snapshot = await this.readLegacyVoteSnapshot(symbol)
+      } catch (error) {
+        return {
+          activated: false,
+          code: "SOURCE_CHECK_FAILED",
+          message: sanitizeText(String(error?.message || error), 300),
+        }
+      }
+      if (snapshot.changed) return { activated: false, code: "SOURCE_CHANGED" }
+      const localVotes = new Map(
+        this.state.storage.sql
+          .exec(`SELECT user_id, asset_sha256, vote_value FROM vote_by_user_asset`)
+          .toArray()
+          .map((row) => [
+            `${String(row.user_id)}\u0000${String(row.asset_sha256)}`,
+            Number(row.vote_value),
+          ]),
+      )
+      let complete = snapshot.votes.size === localVotes.size
+      if (complete) {
+        for (const [key, value] of snapshot.votes) {
+          if (localVotes.get(key) !== value) {
+            complete = false
+            break
+          }
+        }
+      }
+      if (!complete) {
+        return {
+          activated: false,
+          code: "IMPORT_INCOMPLETE",
+          message: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
+        }
+      }
+    }
+    const requestedIdentity = this.authoritativeSelectionIdentity({
+      adminOverride: requestedOverride,
+      publishedAssetSha: requestedAsset,
+    })
+    try {
+      // The retained identity becomes the pending v2 publication intent; the
+      // existing publication adapter materializes the immutable artifact. No
+      // legacy bytes are adopted or fabricated, and a crash before the epoch
+      // flip leaves the seed recoverable by replay.
+      await this.publication.commitSelection(() => {
+        // Handover fence: revalidate accepted work, the candidate boundary and
+        // the final selection inside the same exclusive transaction that
+        // commits the seed. A concurrent accepted change aborts the handover
+        // instead of certifying a stale identity.
+        if (
+          this.pendingOutboxRows(1).length ||
+          this.caretakerSupervotes.pendingOutboxRows(1).length
+        ) {
+          const moved = new Error("Accepted work arrived during demand handover")
+          moved.code = "AUTHORITY_MOVED"
+          throw moved
+        }
+        if ((Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision) {
+          const moved = new Error("Candidate authority changed during demand handover")
+          moved.code = "AUTHORITY_MOVED"
+          throw moved
+        }
+        const currentIdentity = this.authoritativeSelectionIdentity({
+          adminOverride: requestedOverride,
+          publishedAssetSha: requestedAsset,
+        })
+        if (currentIdentity.selectionRef !== requestedIdentity.selectionRef) {
+          const moved = new Error("Selected winner changed during demand handover")
+          moved.code = "AUTHORITY_MOVED"
+          throw moved
+        }
+        return requestedIdentity
+      })
+    } catch (error) {
+      return {
+        activated: false,
+        code: String(error?.code || "SEED_REJECTED").slice(0, 100),
+        message: sanitizeText(String(error?.message || error), 300),
+      }
+    }
+    // Persist policy + epoch only after the verified identity is committed. A
+    // crash before this leaves the seed recoverable by replay.
+    if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
+    this.setMeta("admin_override", requestedOverride ? "1" : "0")
+    this.setMeta("authority_epoch", "v2")
+    return {
+      activated: true,
+      winner_asset_sha256: winnerAssetShaFromSelectionReference(requestedIdentity.selectionRef),
+    }
   }
 
   /**
@@ -19226,6 +19364,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
+      const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const assetSha = normalizeSha256(payload?.asset_sha256 || "")
       const userId = normalizeUserId(payload?.user_id || "")
@@ -19251,7 +19390,29 @@ export class IconoplasmVoteCoordinator {
         candidateImageId: payload?.candidate_image_id,
         ensuredAsset,
         reason: payload?.reason || "vote_auto_promote",
+        // A cold gene just imported its complete retained state from D1 in
+        // this request, so the handover re-verifies that source once. A warm
+        // coordinator reconciles its retained local authority without touching
+        // D1: the settled outbox proves no accepted work is in flight, and the
+        // warm-vote cost fence forbids a D1 round trip.
+        verifySource: !wasWarm,
       })
+      if (outcome.authority === "deferred") {
+        // The demand-driven handover could not safely complete yet. Nothing
+        // was mutated and no legacy write occurred; the caller replays the
+        // same canonical command once the named condition clears.
+        return Response.json(
+          {
+            ok: false,
+            code: String(outcome.deferral?.code || "HANDOVER_DEFERRED").slice(0, 100),
+            error: "The gene handover must complete before the v2 mutation; nothing was applied",
+            retryable: true,
+            symbol,
+            asset_sha256: assetSha,
+          },
+          { status: 409, headers: { "Cache-Control": "no-store" } },
+        )
+      }
       const result = outcome.vote
       return Response.json({
         ok: true,
@@ -19275,6 +19436,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
+      const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const items = Array.isArray(payload?.items) ? payload.items : []
       const results = []
@@ -19305,6 +19467,12 @@ export class IconoplasmVoteCoordinator {
           candidateImageId: raw?.candidate_image_id,
           ensuredAsset,
           reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
+          // A cold gene just imported its complete retained state from D1 in
+          // this request, so the handover re-verifies that source once. A warm
+          // coordinator reconciles its retained local authority without
+          // touching D1: the settled outbox proves no accepted work is in
+          // flight, and the cost fence forbids a D1 round trip on warm votes.
+          verifySource: !wasWarm,
         })
         const result = outcome.vote
         if (result.final_vote_value === 0) {
@@ -34143,6 +34311,67 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
+  // Per-gene retained-work preparation for the v2 cutover. This is
+  // operator-triggered preparation, so it uses the existing cutover
+  // authorization and accounting. A replica credential must not acquire
+  // authority to replace candidate sets or activate policy, and the
+  // coordinator still owns every admission, replay and completeness decision.
+  // Ordinary canonical-affecting user commands do not use this route: they
+  // demand-drive the same handover inside the gene coordinator itself.
+  discovery_authority_cutover: async ({ match, request, env, done }) => {
+    const authorization = await authorizeIconoplasmAuthorityCutoverBearer(request, env)
+    if (!authorization.authorized)
+      return done("discovery_authority_cutover_403", json({ error: "Unauthorized" }, 403))
+    const payload = await request.json().catch(() => ({}))
+    const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+    if (!requestedSymbol)
+      return done(
+        "discovery_authority_cutover_400",
+        json({ error: "Missing or invalid symbol" }, 400),
+      )
+    if (match.route.id === "authority_discovery_candidates" && !Array.isArray(payload?.items))
+      return done(
+        "discovery_authority_cutover_400",
+        json(
+          {
+            ok: false,
+            code: "CANDIDATE_ITEMS_REQUIRED",
+            error: "Candidate authority requires a complete items array; refusing to clear",
+          },
+          400,
+        ),
+      )
+    const stub = iconoplasmVoteCoordinatorStub(env, requestedSymbol)
+    if (!stub)
+      return done(
+        "discovery_authority_cutover_503",
+        json({ error: "Vote coordinator unavailable" }, 503),
+      )
+    const coordinatorPath =
+      match.route.id === "authority_discovery_candidates"
+        ? "/authority/candidates"
+        : "/authority/activate"
+    try {
+      const result = await iconoplasmVoteCoordinatorJson(stub, coordinatorPath, {
+        ...payload,
+        symbol: requestedSymbol,
+      })
+      return done("discovery_authority_cutover", json(result, 200, { "Cache-Control": "no-store" }))
+    } catch (error) {
+      return done(
+        "discovery_authority_cutover_error",
+        json(
+          {
+            ok: false,
+            code: String(error?.code || "VOTE_COORDINATOR_REQUEST_FAILED").slice(0, 100),
+            error: sanitizeText(String(error?.message || error), 300),
+          },
+          Number.isSafeInteger(error?.status) && error.status >= 400 ? error.status : 503,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+  },
   manifestation_generation_executor: async ({ match, request, env, ctx, done }) => {
     const response = await handleIconoplasmGenerationExecutorRoute({ match, request, env, ctx })
     return done("manifestation_generation_executor", response)
