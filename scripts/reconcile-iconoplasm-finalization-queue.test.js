@@ -80,7 +80,7 @@ function fixture() {
   return { queues, calls, options }
 }
 
-test("finalization release corrects retention once, preserves pauses/delay and verifies the existing consumer", async () => {
+test("finalization release corrects retention once and verifies the existing consumer", async () => {
   const { queues, calls, options } = fixture()
   const first = await reconcileFinalizationQueue(options)
   assert.equal(first.ok, true)
@@ -91,6 +91,7 @@ test("finalization release corrects retention once, preserves pauses/delay and v
     [86400, 86400, 86400, 86400],
   )
   assert.equal(queues[0].settings.delivery_paused, false)
+  assert.equal(first.consumers[0].delivery_paused, false)
   assert.equal(queues[0].consumers[0].settings.batch_size, 1)
   assert.equal(first.consumers[1].batch_size, 2)
   assert.equal(first.consumers[1].max_concurrency, 1)
@@ -103,13 +104,31 @@ test("finalization release corrects retention once, preserves pauses/delay and v
   assert.equal(calls.length, 1, "a repeated release makes no configuration writes")
 })
 
-test("old consumer batches, a paused queue and missing inventory fail before mutation", async () => {
+test("a canonical release accepts and preserves provider quarantine", async () => {
+  const { queues, calls, options } = fixture()
+  queues[0].settings.delivery_paused = true
+  queues[2].settings.delivery_paused = true
+  const result = await reconcileFinalizationQueue(options)
+  assert.equal(result.ok, true)
+  assert.equal(result.consumers[0].delivery_paused, true)
+  assert.equal(result.consumers[1].delivery_paused, true)
+  assert.equal(queues[0].settings.delivery_paused, true)
+  assert.equal(queues[2].settings.delivery_paused, true)
+  assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
+  for (const call of calls.filter((c) => c.method === "PATCH")) {
+    const settings = JSON.parse(call.body).settings
+    assert.equal(settings.delivery_paused, true)
+    assert.equal(settings.message_retention_period, 86400)
+  }
+})
+
+test("old consumer batches, invalid pause shape and missing inventory fail before mutation", async () => {
   for (const change of [
     (q) => {
       q[0].consumers[0].settings.batch_size = 100
     },
     (q) => {
-      q[0].settings.delivery_paused = true
+      q[0].settings.delivery_paused = "true"
     },
     (q) => {
       q.pop()
@@ -124,7 +143,7 @@ test("old consumer batches, a paused queue and missing inventory fail before mut
       q[2].consumers[0].settings.batch_size = 25
     },
     (q) => {
-      q[2].settings.delivery_paused = true
+      delete q[2].settings.delivery_paused
     },
   ]) {
     const { queues, calls, options } = fixture()
