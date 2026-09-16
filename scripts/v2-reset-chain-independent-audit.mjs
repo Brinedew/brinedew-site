@@ -150,8 +150,7 @@ async function seedPriorSchema(db, { catalogRows }) {
     "0023_add_gene_discoveries.sql",
     "0041_shared_gene_discovery_rollup.sql",
   ]) {
-    for (const sql of statements(read(`migrations-iconoplasm/${path}`)))
-      await db.prepare(sql).run()
+    for (const sql of statements(read(`migrations-iconoplasm/${path}`))) await db.prepare(sql).run()
   }
   await db
     .prepare(
@@ -287,7 +286,9 @@ test("record tracked production caller references and reset entrypoints for sour
             path,
             line: index + 1,
             pattern,
-            excerpt: lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 6)).join("\n"),
+            excerpt: lines
+              .slice(Math.max(0, index - 3), Math.min(lines.length, index + 6))
+              .join("\n"),
           })
     })
   }
