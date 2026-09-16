@@ -17643,10 +17643,13 @@ export class IconoplasmVoteCoordinator {
       // outbox settles and nothing is acknowledged early.
       return { activated: false, code: "OUTBOX_NOT_SETTLED" }
     }
-    const requestedAsset = normalizeSha256(publishedAssetSha || "") || ""
+    // Retained published selection survives handover even when the caller does
+    // not restate it: the coordinator's own legacy authority pointer is the
+    // fallback incumbent for the seeded identity.
+    const retainedAsset = normalizeSha256(this.getMeta("published_asset_sha256") || "") || ""
+    const requestedAsset = normalizeSha256(publishedAssetSha || "") || retainedAsset
     const requestedOverride =
       adminOverride === undefined ? this.getMeta("admin_override") === "1" : Boolean(adminOverride)
-    const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
     // Complete-input verification: the local authority must contain every
     // accepted legacy vote with the same voter, candidate and value before the
     // epoch flips. Migration-only, keyset-paginated, double-pass verified and
@@ -17691,7 +17694,44 @@ export class IconoplasmVoteCoordinator {
           message: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
         }
       }
+      // Retained candidate/policy reconstruction: the same cold first use seeds
+      // the gene's bounded candidate authority from its own legacy rows, so an
+      // ordinary canonical command never depends on a catalog-wide transfer or
+      // test-side seeding. The operator transfer's 64-candidate envelope
+      // applies here too; a larger retained source defers explicitly instead
+      // of certifying a truncated candidate set.
+      if (!(Number(this.sqlFirst(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)?.n) > 0)) {
+        let retained = null
+        try {
+          retained = await this.readLegacyCandidateAuthorityEnvelope(symbol)
+        } catch (error) {
+          return {
+            activated: false,
+            code: "CANDIDATE_SOURCE_FAILED",
+            message: sanitizeText(String(error?.message || error), 300),
+          }
+        }
+        if (retained.overflow) {
+          return {
+            activated: false,
+            code: "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE",
+            message: "Retained candidate source exceeds the bounded handover envelope",
+          }
+        }
+        try {
+          this.importGeneCandidateAuthority(retained.items)
+        } catch (error) {
+          return {
+            activated: false,
+            code: "CANDIDATE_SOURCE_REJECTED",
+            message: sanitizeText(String(error?.message || error), 300),
+          }
+        }
+      }
     }
+    // Captured after any retained candidate reconstruction so the in-seed
+    // recheck validates the boundary the seed actually uses.
+    const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
     const requestedIdentity = this.authoritativeSelectionIdentity({
       adminOverride: requestedOverride,
       publishedAssetSha: requestedAsset,
@@ -18088,6 +18128,39 @@ export class IconoplasmVoteCoordinator {
       if (second.votes.get(key) !== value) return { changed: true }
     }
     return { changed: false, votes: second.votes }
+  }
+
+  /**
+   * Migration-only bounded candidate read for the demand handover. Reads at
+   * most the operator transfer's 64-candidate envelope plus one overflow
+   * probe; a larger retained source defers the handover explicitly instead of
+   * certifying a truncated candidate set. One gene's own rows only, so no
+   * unrelated gene or catalog-wide state is consulted.
+   */
+  async readLegacyCandidateAuthorityEnvelope(symbol) {
+    const envelope = 64
+    const response = await this.env.ICONOPLASM_DB.prepare(
+      `SELECT asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at
+         FROM icono_portrait_assets
+        WHERE gene_symbol = ?
+        ORDER BY asset_sha256 ASC
+        LIMIT ?`,
+    )
+      .bind(symbol, envelope + 1)
+      .all()
+    const rows = Array.isArray(response?.results) ? response.results : []
+    if (rows.length > envelope) return { overflow: true, items: [] }
+    return {
+      overflow: false,
+      items: rows.map((row) => ({
+        asset_sha256: row?.asset_sha256,
+        status: row?.status,
+        autopick_eligible: row?.autopick_eligible,
+        is_stale: row?.is_stale,
+        is_legacy: row?.is_legacy,
+        created_at: row?.created_at,
+      })),
+    }
   }
 
   pendingOutboxRows(limit = 50) {
