@@ -182,11 +182,14 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_derivative_body",
       "authority_tags_derivative_submit",
       "authority_tags_derivative_select",
+    ],
+    "authority-backup-bearer": ["authority_backups"],
+    "authority-cutover-bearer": [
+      "authority_cutover_status",
+      "authority_cutover_actions",
       "authority_discovery_candidates",
       "authority_discovery_activate",
     ],
-    "authority-backup-bearer": ["authority_backups"],
-    "authority-cutover-bearer": ["authority_cutover_status", "authority_cutover_actions"],
     "authority-maintenance-bearer": [
       "authority_maintenance_retention",
       "authority_maintenance_commands",
