@@ -959,7 +959,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     id: "authority_discovery_candidates",
     match: exact("/api/iconoplasm/authority/discovery/candidates"),
     methods: POST,
-    auth: "authority-replica-bearer",
+    auth: "authority-cutover-bearer",
     budgetFamily: "authority_cutover",
   }),
   iconoplasmApiContract({
@@ -967,7 +967,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     id: "authority_discovery_activate",
     match: exact("/api/iconoplasm/authority/discovery/activate"),
     methods: POST,
-    auth: "authority-replica-bearer",
+    auth: "authority-cutover-bearer",
     budgetFamily: "authority_cutover",
   }),
   iconoplasmApiContract({
