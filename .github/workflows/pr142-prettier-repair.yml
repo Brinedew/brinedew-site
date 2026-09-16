@@ -1,0 +1,42 @@
+name: PR 142 Prettier Repair
+
+on:
+  push:
+    branches:
+      - fix/v2-383c-concurrency
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/v2-383c-concurrency
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Format the two failing files
+        run: pnpm exec prettier scripts/v2-383c-independent-concurrency-audit.mjs workers/iconoplasm/discovery-ordinal-store.js --write
+      - name: Commit formatting if needed
+        shell: bash
+        run: |
+          if git diff --quiet -- scripts/v2-383c-independent-concurrency-audit.mjs workers/iconoplasm/discovery-ordinal-store.js; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/v2-383c-independent-concurrency-audit.mjs workers/iconoplasm/discovery-ordinal-store.js
+          git commit -m "Format v2 concurrency repair"
+          git push origin HEAD:fix/v2-383c-concurrency
