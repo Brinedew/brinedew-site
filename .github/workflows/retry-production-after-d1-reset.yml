@@ -6,14 +6,16 @@ on:
     paths:
       - ".github/workflows/retry-production-after-d1-reset.yml"
   schedule:
-    # Quarantine the known recurring D1 producers before the provider's 00:00 UTC reset.
+    # Reassert provider containment immediately before the Sep 17 UTC reset.
     - cron: "55 23 * * *"
-    # During the incident window, reassert quarantine and retry the canonical release
-    # every five minutes. The quarantine itself makes delay in any one GitHub run safe.
-    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-5 * * *"
-    # Final containment check. A successful release alone cannot certify the
-    # full-day cost of background work and must never unpause it on a timer.
-    - cron: "5 6 * * *"
+    # Dense retry while the fresh day begins. Each tick asserts quarantine first,
+    # then dispatches only an exact-main green release whose prior failure is a
+    # proven pre-mutation capacity gate.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 0-6 * * *"
+    # Continue through the rest of Sep 17 so a source repair completed after the
+    # morning window can still deploy in the SAME fresh UTC day. The hard
+    # quarantine prevents waiting for code from consuming D1 in the meantime.
+    - cron: "2,12,22,32,42,52 7-23 * * *"
   workflow_dispatch:
 
 permissions:
@@ -27,10 +29,10 @@ concurrency:
 
 jobs:
   recover-production:
-    # B-751: full server activation is verified in production run 34509853637.
-    # Retire unattended incident controls without unpausing any background work.
-    # Keep the explicit emergency path; see docs/B751_QUARANTINE_RETIREMENT.md.
-    if: github.event_name == 'workflow_dispatch'
+    # One-shot B-742 recurrence control for Sep 17. Scheduled invocations are
+    # accepted only on Sep 16/17 UTC by the first step and become inert afterward.
+    # Manual emergency containment stays available after this one-shot expires.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -48,19 +50,27 @@ jobs:
         run: |
           set -euo pipefail
 
+          utc_day="$(date -u +%F)"
+          if [[ "${EVENT_NAME:-}" == "schedule" && "${utc_day}" != "2026-09-16" && "${utc_day}" != "2026-09-17" ]]; then
+            echo "One-shot Sep 17 recovery driver has expired; scheduled run is inert."
+            exit 0
+          fi
+
           if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
             echo "Cloudflare credentials are missing; recovery cannot safely change provider controls." >&2
             exit 1
           fi
 
-          utc_hour="$(date -u +%H)"
-          utc_minute="$(date -u +%M)"
-          utc_minute_of_day=$((10#${utc_hour} * 60 + 10#${utc_minute}))
-          # This controller is intentionally live every UTC day from 23:55 through
-          # 06:30. A calendar-date deadline would silently disable the next reset.
-          if (( utc_minute_of_day > 390 && utc_minute_of_day < 1435 )); then
-            echo "B-742 daily recovery window is closed; this workflow is inert."
-            exit 0
+          # The scheduled one-shot covers the complete Sep 17 UTC day. Manual
+          # emergency use outside that day remains containment-only unless the
+          # current day is Sep 17; no calendar rollover creates a new migration
+          # lineage automatically.
+          if [[ "${EVENT_NAME:-}" == "schedule" && "${utc_day}" == "2026-09-16" ]]; then
+            utc_hour="$(date -u +%H)"
+            if [[ "${utc_hour}" != "23" ]]; then
+              echo "Pre-reset scheduled control is only valid during 23:00 UTC on Sep 16."
+              exit 0
+            fi
           fi
 
           SAFE_CRONS='[
@@ -178,21 +188,19 @@ jobs:
             }' <<<"${response}"
           }
 
-          # Quarantine is the fail-safe state for every incident-window invocation,
-          # including this workflow's merge push. This also proves the provider token
-          # can operate the controls before the next UTC reset.
+          # Quarantine is the fail-safe state for every invocation. This proves
+          # provider credentials and keeps fresh capacity available even if the
+          # repair head is red, the laptop is off, or the canonical deploy fails.
           quarantine_background
 
           usage="$(read_d1_usage)"
           reads="$(jq -r '.reads' <<<"${usage}")"
           writes="$(jq -r '.writes' <<<"${usage}")"
-          echo "Fresh UTC-day D1 telemetry: ${reads} reads / ${writes} writes."
+          echo "Current UTC-day D1 telemetry: ${reads} reads / ${writes} writes."
 
-          # B-742: 13:05 in Vietnam is not evidence that background consumers
-          # fit a whole day. This controller can only tighten containment; a
-          # reviewed capacity release must restore the intended jobs explicitly.
-          if [[ "${TRIGGER_SCHEDULE:-}" == "5 6 * * *" ]]; then
-            echo "Final containment check complete; background quarantine remains in place."
+          # Sep 16 is containment-only. Never dispatch before the fresh UTC day.
+          if [[ "${utc_day}" != "2026-09-17" ]]; then
+            echo "Pre-reset containment complete; canonical release waits for Sep 17 UTC capacity."
             exit 0
           fi
 
@@ -211,10 +219,6 @@ jobs:
           runs_json="$(
             gh api "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/runs?branch=main&per_page=100"
           )"
-          # Reader-only recovery shares this workflow but leaves deploy-production
-          # skipped. A workflow-level green result cannot certify restored writes.
-          # Use the latest completed attempt, including reruns, so a later
-          # containment or failed release cannot hide behind an older full success.
           latest_successful_attempt_id="$(
             jq -r --arg sha "${head_sha}" \
               '([.workflow_runs[] | select(.head_sha == $sha and .status == "completed")] | sort_by([(.run_started_at // .created_at), (.run_attempt // 1), .id]) | last | select(.conclusion == "success") | .id) // empty' \
@@ -222,6 +226,7 @@ jobs:
           )"
           successful_run_id=""
           staged_run_id=""
+          completed_jobs_json='{}'
           if [[ -n "${latest_successful_attempt_id}" ]]; then
             completed_jobs_json="$(
               gh api "repos/${REPOSITORY}/actions/runs/${latest_successful_attempt_id}/jobs?filter=latest&per_page=100"
@@ -249,7 +254,7 @@ jobs:
           fi
 
           if [[ -n "${successful_run_id}" ]]; then
-            echo "Current main already deployed successfully in run ${successful_run_id}; retaining background quarantine."
+            echo "Current main already deployed successfully in run ${successful_run_id}; retaining background quarantine until functional acceptance releases it."
             exit 0
           fi
 
@@ -274,10 +279,6 @@ jobs:
             staged_run_id="${latest_successful_attempt_id}"
           fi
 
-          if [[ -n "${staged_run_id}" ]]; then
-            echo "Staged migration run ${staged_run_id} completed under admission; a later canonical run may continue from fresh capacity."
-          fi
-
           if [[ "${ci_conclusion}" != "success" ]]; then
             echo "Exact-main protected CI is ${ci_conclusion:-absent}; quarantine stays active and no deploy is dispatched."
             exit 0
@@ -300,7 +301,7 @@ jobs:
                 <<<"${runs_json}"
             )"
             if [[ -z "${latest_failed_run_id}" ]]; then
-              echo "No admitted staged migration or retry-safe failed canonical deploy exists; the next controller tick will re-evaluate."
+              echo "No retry-safe failed canonical deploy exists yet; the next controller tick will re-evaluate."
               exit 0
             fi
 
@@ -319,21 +320,21 @@ jobs:
                 ;;
               *)
                 echo "Latest canonical deploy failed at '${failed_step:-unknown}'."
-                echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops."
+                echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops until that same failure is repaired on main."
                 exit 0
                 ;;
             esac
           fi
 
-          # The canonical release can require roughly another million reads for the
-          # reviewed migration envelope. Once a quarantined day has already consumed
-          # 1.5M reads, preserving the site is more important than another release attempt.
+          # Preserve enough same-day headroom for the reviewed release. If this
+          # threshold is reached, quarantine remains and engineering continues;
+          # the controller never manufactures a refund or a new day.
           if (( reads >= 1500000 || writes >= 30000 )); then
-            echo "Current D1 usage is already too high for a protected migration attempt; quarantine remains active."
+            echo "Current D1 usage is too high for a protected migration attempt; quarantine remains active."
             exit 0
           fi
 
-          echo "Dispatching canonical production deploy for ${head_sha}; every normal CI, headroom, migration, activation, and smoke gate remains authoritative."
+          echo "Dispatching canonical production deploy for ${head_sha}; normal CI, headroom, migration, activation, and smoke gates remain authoritative."
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/dispatches" \
