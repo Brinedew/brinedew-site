@@ -1907,7 +1907,7 @@
   }
 
   // -- DOM scanning --------------------------------------------------
-  function scanPage(root) {
+  async function scanPage(root) {
     return pageScanner ? pageScanner.scanPageCooperatively(root) : 0
   }
 
