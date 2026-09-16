@@ -107,11 +107,9 @@ test(
 
       // Bounded transfer: only touched names acquire ordinals, historical
       // symbols stay resolvable as inactive entries, catalog size is irrelevant.
-      const lookup = await ensureDiscoveryDictionaryForNames(
-        db,
-        ["BRCA1", "TP53", "RETIRED1"],
-        { preserveHistorical: true },
-      )
+      const lookup = await ensureDiscoveryDictionaryForNames(db, ["BRCA1", "TP53", "RETIRED1"], {
+        preserveHistorical: true,
+      })
       assert.equal(lookup.byName.get("BRCA1"), 0)
       assert.equal(lookup.byName.get("TP53"), 1)
       assert.equal(lookup.byName.get("RETIRED1"), 2)
