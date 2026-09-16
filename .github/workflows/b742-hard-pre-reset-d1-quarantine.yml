@@ -81,7 +81,7 @@ jobs:
           echo "Pinned D1-free containment source has verified green CI."
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
