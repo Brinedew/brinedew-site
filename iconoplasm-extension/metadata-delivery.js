@@ -7,6 +7,8 @@
   const CDN = "https://iconoplasmportraits.b-cdn.net"
   const HASH = /^[a-f0-9]{64}$/
   const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
+  const CARD_HEAD = /^[A-Za-z0-9._:-]{1,100}$/
+  const READER_VIEW = /^ccv2-[a-f0-9]{64}\.c[a-f0-9]{64}$/
 
   function createMetadataDelivery({
     fetchImpl,
@@ -305,15 +307,23 @@
         // newly enabled VPN), but never retried on every hover in that article.
         tabs.delete(tab)
         try {
-          return await fromEitherSource(
+          const head = await fromEitherSource(
             "/api/public/v1/card-current",
             {},
             signal,
             tab,
             (value) =>
-              value?.schema_version === 2 && /^[A-Za-z0-9._:-]{1,100}$/.test(value.current),
+              value?.schema_version === 2 &&
+              CARD_HEAD.test(value.current) &&
+              (value.reader_view == null || READER_VIEW.test(value.reader_view)),
             { limit: 1024 },
           )
+          if (!head?.reader_view) return head
+          // Keep the installed service worker's existing one-version contract:
+          // future articles adopt the exact immutable reader view through the
+          // same `current` property, while the base epoch remains available for
+          // diagnostics and base-only deployments remain byte-for-byte compatible.
+          return { ...head, base_current: head.current, current: head.reader_view }
         } catch {
           return null
         }

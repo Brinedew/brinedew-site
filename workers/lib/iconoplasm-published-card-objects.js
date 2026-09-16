@@ -10,6 +10,10 @@ import {
 // Never overwrite a stable URL with different bytes or repair a miss from D1.
 // Healthy CDN misses end at paid Bunny Storage, not a per-reader Worker build.
 export const PUBLISHED_CARD_OBJECT_PREFIX = "published-cards/v2/immutable"
+// A deployment without immutable object storage cannot hold any published
+// object. Distinguish that definitive absence from a transient read failure so
+// readers can report an unknown identity instead of a retryable outage.
+export const PUBLISHED_OBJECT_STORAGE_UNAVAILABLE = "PUBLISHED_OBJECT_STORAGE_UNAVAILABLE"
 // Publication objects are content-addressed and immutable, so a transient Bunny
 // Storage timeout (the request aborts at portraitStorageRequestTimeout) or a
 // retryable 408/425/429/5xx is safe to retry inside the fetch. The card
@@ -111,7 +115,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     let candidates = externalPortraitReadCandidates(env, key, { accept: "application/json" })
     if (verifyStorageOnly)
       candidates = candidates.filter((c) => c.source === "authenticated_storage")
-    if (!candidates.length) throw new Error("Bunny published-object storage is not configured")
+    if (!candidates.length) {
+      const error = new Error("Bunny published-object storage is not configured")
+      error.code = PUBLISHED_OBJECT_STORAGE_UNAVAILABLE
+      throw error
+    }
     let failure
     let allMissing = true
     for (const candidate of candidates) {

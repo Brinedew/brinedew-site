@@ -1330,6 +1330,7 @@ import {
   drainIconoplasmManifestationAuthorityProjection,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
+  drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
@@ -3283,6 +3284,7 @@ export default {
         gallery: () => runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
+        sharedDelivery: () => drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env),
         materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         recognition: () => reconcileIconoplasmRecognitionPolicies(env),
         accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),

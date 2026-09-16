@@ -2,9 +2,31 @@ import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import {
-  recordDiscoveryEncounterAtomically,
-  mergeDiscoverySymbolsAtomically,
-} from "./iconoplasm/discovery-encounter.js"
+  createDiscoveryOrdinalDictionary,
+  hasDiscoveryOrdinal,
+} from "./iconoplasm/discovery-compact-state.js"
+import {
+  evolveAndPersistDiscoveryDictionary,
+  loadDiscoveryDictionaryForNames,
+  readCanonicalSymbolsForOrdinals,
+} from "./iconoplasm/discovery-ordinal-store.js"
+import {
+  readCompactDiscoveryChronology,
+  readCompactUserState,
+  readSharedCompactState,
+} from "./iconoplasm/discovery-compact-store.js"
+import { recordCompactDiscoveryBatch } from "./iconoplasm/discovery-compact-service.js"
+import {
+  consumeSharedDiscoveryDeliveries,
+  drainSharedDiscoveryDeliveries,
+} from "./iconoplasm/discovery-shared-delivery.js"
+import { importLegacyDiscoveryUser } from "./iconoplasm/discovery-compact-migrate.js"
+import {
+  compactSharedRowsFromSummaries,
+  compactSharedSummaries,
+  compactShelfRowsFromChronology,
+  sortCompactShelfRows,
+} from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
   fetchMaintainedAssetSummary,
@@ -46,10 +68,7 @@ import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
-import {
-  parseDiscoveryMembershipSymbols,
-  readDiscoveryMembership,
-} from "./iconoplasm-discovery-membership.js"
+import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
@@ -64,6 +83,12 @@ import {
   createCardPublicationCoordinatorClass,
 } from "./lib/iconoplasm-card-publication-coordinator.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
+import {
+  parsePublishedViewId,
+  readAdvertisedGeneDeltaView,
+  readPublishedViewEntry,
+  resetPublishedViewReaderCachesForTest,
+} from "./lib/iconoplasm-card-reader-view.js"
 import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
@@ -113,6 +138,12 @@ import {
   caretakerWeightedScore,
   compareCaretakerWeightedCandidates,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
+import { IconoplasmGenePublicationState } from "./iconoplasm/vote-authority/gene-publication-state.js"
+import {
+  composeGeneSelectionReference,
+  electGeneAuthorityWinner,
+  winnerAssetShaFromSelectionReference,
+} from "./iconoplasm/vote-authority/gene-authority-election.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
@@ -11880,46 +11911,155 @@ export async function fulfillGenerationRequests(
   }
 }
 
-async function recordGeneDiscoveryEncounter(
+// Compact discovery integration. The ordinal dictionary resolves every
+// requested name to one stable bit; the legacy per-hover writer is retired.
+const DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS = 256
+const discoveryCompactImportPromises = new Map()
+
+function discoveryCompactDictionaryFromLookup(lookup) {
+  return createDiscoveryOrdinalDictionary(
+    [...lookup.byOrdinal.entries()].map(([ordinal, symbol]) => ({ symbol, ordinal })),
+    { version: Math.max(1, Number(lookup.version || 0) || 1) },
+  )
+}
+
+async function refreshDiscoveryDictionaryFromCatalog(env) {
+  if (!env.ICONOPLASM_DB) return { version: 0, changed: false, writes: 0 }
+  const result = await env.ICONOPLASM_DB.prepare(
+    `SELECT gene_symbol, aliases_json FROM icono_gene_catalog ORDER BY gene_symbol ASC`,
+  ).all()
+  const symbols = []
+  const aliases = {}
+  for (const row of Array.isArray(result?.results) ? result.results : []) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    symbols.push(symbol)
+    for (const alias of normalizeCatalogAliases(row?.aliases_json || "[]")) {
+      const aliasNorm = normalizeSymbol(alias)
+      if (aliasNorm && aliasNorm !== symbol) aliases[aliasNorm] = symbol
+    }
+  }
+  return evolveAndPersistDiscoveryDictionary(env.ICONOPLASM_DB, { symbols, aliases })
+}
+
+async function readDiscoveryDictionaryForSymbols(env, names) {
+  const lookup = await loadDiscoveryDictionaryForNames(env.ICONOPLASM_DB, names)
+  return lookup
+}
+
+// A user's compact state is created once. While it is missing, that user's own
+// legacy rows (an exact-key seek, not a corpus scan) are imported in bounded
+// batches and every later read is compact. Concurrent first touches share one
+// import.
+async function readOrImportCompactUserState(
   env,
-  {
-    userId,
-    geneSymbol,
-    source = DISCOVERY_SOURCE_EXTENSION_HOVER,
-    trigger = DISCOVERY_TRIGGER_HOVER_DWELL,
-    dwellMs = null,
-  } = {},
+  { userId, isAdmin = false, allowImport = false } = {},
 ) {
-  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  if (!env.ICONOPLASM_DB) return null
   const userIdNorm = normalizeUserId(userId || "")
-  const geneSymbolNorm = normalizeSymbol(geneSymbol || "")
-  const sourceNorm = normalizeDiscoverySource(source)
-  const triggerNorm = normalizeDiscoveryTrigger(trigger)
-  const dwellMsNorm = normalizeDiscoveryDwellMs(dwellMs)
-  if (!geneSymbolNorm) return { ok: false, error: "Missing or invalid gene symbol" }
-  if (!userIdNorm || isGuestUserId(userIdNorm))
-    return { ok: false, error: "Authentication required" }
-  if (!sourceNorm) return { ok: false, error: "Missing or invalid discovery source" }
-  if (!triggerNorm) return { ok: false, error: "Missing or invalid discovery trigger" }
-  if (triggerNorm === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMsNorm == null) {
-    return { ok: false, error: "hover_dwell discovery events must include dwell_ms" }
-  }
-
-  const { row, created } = await recordDiscoveryEncounterAtomically(env.ICONOPLASM_DB, {
-    userId: userIdNorm,
-    geneSymbol: geneSymbolNorm,
-    source: sourceNorm,
-    trigger: triggerNorm,
-    dwellMs: dwellMsNorm,
-    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
-    seedOnly: sourceNorm === DISCOVERY_SOURCE_STARTER_SEED,
+  if (!userIdNorm || isGuestUserId(userIdNorm)) return null
+  const existing = await readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
+  if (existing || !allowImport) return existing
+  const inFlight = discoveryCompactImportPromises.get(userIdNorm)
+  if (inFlight) return inFlight
+  const promise = (async () => {
+    const legacy = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, first_discovered_at, last_encountered_at, encounter_count,
+              first_source, last_source, first_trigger, last_trigger,
+              first_dwell_ms, last_dwell_ms
+       FROM icono_gene_discoveries
+       WHERE user_id = ?`,
+    )
+      .bind(userIdNorm)
+      .all()
+    const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
+    if (!legacyRows.length) return null
+    const importLookup = await loadDiscoveryDictionaryForNames(
+      env.ICONOPLASM_DB,
+      legacyRows.map((row) => row?.gene_symbol),
+    )
+    const importDictionary = discoveryCompactDictionaryFromLookup(importLookup)
+    const resolvable = legacyRows.filter((row) =>
+      importLookup.byName.has(
+        String(row?.gene_symbol || "")
+          .trim()
+          .toUpperCase(),
+      ),
+    )
+    if (!resolvable.length) return null
+    await importLegacyDiscoveryUser({
+      db: env.ICONOPLASM_DB,
+      userId: userIdNorm,
+      dictionary: importDictionary,
+      legacyRows: resolvable,
+      isAdmin,
+    })
+    return readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
+  })().finally(() => {
+    discoveryCompactImportPromises.delete(userIdNorm)
   })
+  discoveryCompactImportPromises.set(userIdNorm, promise)
+  return promise
+}
 
-  return {
-    ok: true,
-    created,
-    discovery: mapGeneDiscoveryRow(row || {}),
+// One compact recorder for hover batches, guest merges and starter seeding.
+// The dictionary is the only name authority; unknown names are reported, never
+// silently invented, and a catalog drift refreshes the dictionary once.
+async function recordCompactDiscoveryEncounters(
+  env,
+  { userId, isAdmin = false, batchId, encounters = [] },
+) {
+  if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
+  const db = env.ICONOPLASM_DB
+  const names = encounters.map((encounter) => encounter.symbol)
+  let lookup = await loadDiscoveryDictionaryForNames(db, names)
+  if (!lookup.version) {
+    await refreshDiscoveryDictionaryFromCatalog(env)
+    lookup = await loadDiscoveryDictionaryForNames(db, names)
   }
+  let unknown = lookup.names.filter((name) => !lookup.byName.has(name))
+  if (unknown.length) {
+    const catalog = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM icono_gene_catalog
+       WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+      )
+      .bind(JSON.stringify(unknown))
+      .first()
+    if (Number(catalog?.n || 0) > 0) {
+      await refreshDiscoveryDictionaryFromCatalog(env)
+      lookup = await loadDiscoveryDictionaryForNames(db, names)
+      unknown = lookup.names.filter((name) => !lookup.byName.has(name))
+    }
+  }
+  const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
+  if (!known.length) {
+    return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
+  }
+  const dictionary = discoveryCompactDictionaryFromLookup(lookup)
+  await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  const result = await recordCompactDiscoveryBatch(db, {
+    userId,
+    isAdmin,
+    batchId,
+    dictionary,
+    encounters: known,
+  })
+  return { ...result, recorded: known.length, dropped: unknown }
+}
+
+async function readCompactDiscoveryMembership(env, { userId, symbols, isAdmin = false }) {
+  const discovered = []
+  if (!symbols.length) return discovered
+  const lookup = await readDiscoveryDictionaryForSymbols(env, symbols)
+  const state = await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  const membership = String(state?.membership_b64 || "")
+  for (const symbol of symbols) {
+    const ordinal = lookup.byName.get(symbol)
+    if (ordinal == null) continue
+    if (hasDiscoveryOrdinal(membership, ordinal)) discovered.push(symbol)
+  }
+  return discovered.sort(compareNullableTextAsc)
 }
 
 function iconoplasmConfiguredAdminUserId(env) {
@@ -11950,18 +12090,12 @@ async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {})
     1,
     Math.min(20000, Number.parseInt(String(limit || "20000"), 10) || 20000),
   )
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-     FROM icono_shared_gene_discoveries
-     WHERE non_admin_discoverer_count > 0
-     ORDER BY gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
-  return normalizeSharedDiscoverySymbolList(
-    (Array.isArray(rows?.results) ? rows.results : []).map((row) => row?.gene_symbol),
-  )
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const ordinals = compactSharedSummaries(shared)
+    .map((summary) => summary.ordinal)
+    .slice(0, cleanedLimit)
+  const symbols = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, ordinals)
+  return normalizeSharedDiscoverySymbolList([...symbols.values()])
 }
 
 async function writeSharedGeneDiscoverySymbolCache(env, symbols) {
@@ -12012,32 +12146,85 @@ export async function publishSharedGeneDiscoverySymbols(env) {
   return { ok: true, changed: true, symbol_count: nextSymbols.length }
 }
 
+// Repair path: rebuild the compact shared aggregate from the durable per-user
+// chronology, excluding the configured admin account. The exact consumer
+// primitive applies the rebuilt deltas with idempotency receipts, so a rerun
+// after a crash converges instead of double-counting.
 async function rebuildSharedGeneDiscoveryRollup(env) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  const db = env.ICONOPLASM_DB
   const adminUserId = iconoplasmConfiguredAdminUserId(env)
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_shared_gene_discoveries`).run()
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_shared_gene_discoveries (
-       gene_symbol,
-       first_non_admin_discovered_at,
-       latest_non_admin_encountered_at,
-       non_admin_discoverer_count,
-       non_admin_encounter_count,
-       updated_at
-     )
-     SELECT
-       gene_symbol,
-       MIN(first_discovered_at) AS first_non_admin_discovered_at,
-       MAX(last_encountered_at) AS latest_non_admin_encountered_at,
-       COUNT(*) AS non_admin_discoverer_count,
-       COALESCE(SUM(encounter_count), 0) AS non_admin_encounter_count,
-       CURRENT_TIMESTAMP AS updated_at
-     FROM icono_gene_discoveries
-     WHERE (? = '' OR user_id <> ?)
-     GROUP BY gene_symbol`,
-  )
-    .bind(adminUserId, adminUserId)
-    .run()
+  const deliveries = []
+  let cursor = ""
+  for (;;) {
+    const page = await db
+      .prepare(
+        `SELECT user_id FROM icono_discovery_user_state_v2
+       WHERE user_id > ? ORDER BY user_id ASC LIMIT 100`,
+      )
+      .bind(cursor)
+      .all()
+    const users = (Array.isArray(page?.results) ? page.results : []).map((row) =>
+      String(row.user_id),
+    )
+    if (!users.length) break
+    for (const user of users) {
+      if (adminUserId && user === adminUserId) continue
+      const chronology = await readCompactDiscoveryChronology(db, user)
+      const byOrdinal = new Map()
+      const collect = (event) => {
+        const ordinal = Number(event?.ordinal)
+        if (!Number.isInteger(ordinal) || ordinal < 0) return
+        const at = Math.max(0, Math.floor(Number(event?.at) || 0))
+        const prior = byOrdinal.get(ordinal)
+        if (!prior) {
+          byOrdinal.set(ordinal, { ordinal, encounters: 1, first_at: at, latest_at: at })
+          return
+        }
+        prior.encounters += 1
+        prior.first_at = Math.min(prior.first_at, at)
+        prior.latest_at = Math.max(prior.latest_at, at)
+      }
+      for (const chunk of chronology.chunks) for (const event of chunk.events) collect(event)
+      for (const event of chronology.active_events) collect(event)
+      const deltas = [...byOrdinal.values()]
+      if (!deltas.length) continue
+      const userState = await readCompactUserState(db, user)
+      const dictionaryVersion = Math.max(1, Number(chronology.dictionary_version || 1))
+      for (let offset = 0; offset < deltas.length; offset += 128) {
+        const slice = deltas.slice(offset, offset + 128)
+        const pageIndex = offset / 128
+        deliveries.push({
+          schema: "iconoplasm.discoverySharedDelivery.v1",
+          delivery_id: `${user}:rebuild.${pageIndex}`,
+          user_id: user,
+          batch_id: `rebuild.${pageIndex}`,
+          user_state_version: Math.max(1, Number(userState?.state_version || 1)),
+          dictionary_version: dictionaryVersion,
+          deltas: slice.map((delta) => [
+            delta.ordinal,
+            1,
+            delta.encounters,
+            delta.first_at,
+            delta.latest_at,
+          ]),
+        })
+      }
+    }
+    cursor = users[users.length - 1]
+  }
+  await db.batch([
+    db.prepare(
+      `UPDATE icono_discovery_shared_state_v2 SET
+         discoverer_counts_b64 = '', encounter_counts_b64 = '',
+         first_at_b64 = '', latest_at_b64 = '', updated_at = CURRENT_TIMESTAMP
+       WHERE singleton = 1`,
+    ),
+    db.prepare(`DELETE FROM icono_discovery_shared_delivery_receipts_v2`),
+  ])
+  for (let offset = 0; offset < deliveries.length; offset += 128) {
+    await consumeSharedDiscoveryDeliveries(db, deliveries.slice(offset, offset + 128))
+  }
   const discoveredCount = await countSharedGeneDiscoveries(env)
   const symbols = await readSharedGeneDiscoverySymbolsFromD1(env)
   await writeSharedGeneDiscoverySymbolCache(env, symbols)
@@ -12045,6 +12232,7 @@ async function rebuildSharedGeneDiscoveryRollup(env) {
     ok: true,
     admin_user_excluded: Boolean(adminUserId),
     discovered_count: discoveredCount,
+    rebuilt_deliveries: deliveries.length,
   }
 }
 
@@ -12054,39 +12242,93 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
     return { ok: false, error: "Authentication required" }
   }
-  const createdSymbols = []
-  // Starter genes are part of the signed-in shelf contract. Backfill them lazily on
-  // shelf/bootstrap endpoints so legacy accounts and brand-new logins stop showing a
-  // literal zero-state shelf.
-  //
-  // Cost fence: do not call this from extension hover dwell writes. Even with raw
-  // key predicates, three existence probes on every hover would still multiply into
-  // absurd D1 traffic.
-  for (const geneSymbol of ICONOPLASM_STARTER_GENE_SYMBOLS) {
-    const existing = await env.ICONOPLASM_DB.prepare(
-      `SELECT 1
-       FROM icono_gene_discoveries
-       WHERE user_id = ?
-         AND gene_symbol = ?
-       LIMIT 1`,
-    )
-      .bind(userIdNorm, geneSymbol)
-      .first()
-    if (existing) continue
-    const result = await recordGeneDiscoveryEncounter(env, {
-      userId: userIdNorm,
-      geneSymbol,
+  // Starter genes are part of the signed-in shelf contract. They are compact
+  // membership bits; a user who already has them performs no write at all.
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const lookup = await readDiscoveryDictionaryForSymbols(env, ICONOPLASM_STARTER_GENE_SYMBOLS)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  const membership = String(state?.membership_b64 || "")
+  const missing = ICONOPLASM_STARTER_GENE_SYMBOLS.filter((symbol) => {
+    const ordinal = lookup.byName.get(symbol)
+    return ordinal == null || !hasDiscoveryOrdinal(membership, ordinal)
+  })
+  if (!missing.length) return { ok: true, created: 0, symbols: [] }
+  const at = Math.floor(Date.now() / 1000)
+  const seedBatchId = `starter.seed.${(await sha256Hex(`starter:${userIdNorm}`)).slice(0, 32)}`
+  await recordCompactDiscoveryEncounters(env, {
+    userId: userIdNorm,
+    isAdmin,
+    batchId: seedBatchId,
+    encounters: missing.map((symbol) => ({
+      symbol,
+      at,
       source: DISCOVERY_SOURCE_STARTER_SEED,
       trigger: DISCOVERY_TRIGGER_STARTER_SEED,
-      dwellMs: null,
-    })
-    if (result.ok && result.created) createdSymbols.push(geneSymbol)
+      dwell_ms: null,
+    })),
+  })
+  return { ok: true, created: missing.length, symbols: missing }
+}
+
+// Card metadata for compact shelf rows. Discovery fields stay in charge; the
+// catalog/essence/rollup joins only fill identity, measurements and live votes.
+async function enrichGeneDiscoveryRows(env, rows) {
+  if (!rows.length) return []
+  const requested = [...new Set(rows.map((row) => row.gene_symbol))].sort()
+  const metadata = new Map()
+  for (let offset = 0; offset < requested.length; offset += 250) {
+    const chunk = requested.slice(offset, offset + 250)
+    const result = await env.ICONOPLASM_DB.prepare(
+      `SELECT
+         gc.gene_symbol,
+         COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
+         ge.weight_kg,
+         ge.age_years,
+         ge.leakage_percent AS uniqueness_rank,
+         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
+         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
+         COALESCE(gr.live_score, 0) AS image_score,
+         gr.live_created_at AS published_at,
+         gr.live_created_at AS asset_created_at,
+         gr.current_asset_sha256 AS asset_sha256,
+         384 AS image_width,
+         512 AS image_height
+       FROM icono_gene_catalog gc
+       LEFT JOIN icono_gene_essence ge
+         ON ge.gene_symbol = gc.gene_symbol
+       LEFT JOIN icono_admin_gene_rollup gr
+         ON gr.gene_symbol = gc.gene_symbol
+       WHERE gc.gene_symbol IN (SELECT value FROM json_each(?))`,
+    )
+      .bind(JSON.stringify(chunk))
+      .all()
+    for (const row of Array.isArray(result?.results) ? result.results : []) {
+      metadata.set(String(row.gene_symbol || ""), row)
+    }
   }
-  return {
-    ok: true,
-    created: createdSymbols.length,
-    symbols: createdSymbols,
-  }
+  return rows.map((row) =>
+    mapGeneDiscoveryRow({ ...(metadata.get(row.gene_symbol) || {}), ...row }),
+  )
+}
+
+async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+  const state = await readOrImportCompactUserState(env, {
+    userId,
+    isAdmin,
+    allowImport: true,
+  })
+  if (!state) return []
+  const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
+  const rows = compactShelfRowsFromChronology(chronology)
+  const bounded =
+    limit == null
+      ? rows
+      : rows.slice(0, Math.max(1, Math.min(10000, Number.parseInt(String(limit), 10) || 5000)))
+  return enrichGeneDiscoveryRows(env, bounded)
 }
 
 async function listUserGeneDiscoveries(
@@ -12096,46 +12338,9 @@ async function listUserGeneDiscoveries(
   if (!env.ICONOPLASM_DB) return []
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000),
-  )
-  // These runtime tables already store canonical gene_symbol primary keys.
-  // Keep the joins/order on the raw key so SQLite can use the indexes instead
-  // of scanning and temp-sorting the whole shelf query.
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       d.*,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at,
-       gr.current_asset_sha256 AS asset_sha256,
-       384 AS image_width,
-       512 AS image_height
-     FROM icono_gene_discoveries d
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = d.gene_symbol
-     WHERE d.user_id = ?
-     ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(userIdNorm, cleanedLimit)
-    .all()
-  return sortDiscoveryRowsForOrder(
-    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
-    normalizeIconoplasmHomeOrder(order, "newest"),
-    seed,
-  )
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const rows = await compactShelfRows(env, { userId: userIdNorm, isAdmin, limit })
+  return sortDiscoveryRowsForOrder(rows, normalizeIconoplasmHomeOrder(order, "newest"), seed)
 }
 
 const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
@@ -12214,6 +12419,69 @@ function validateAccountGalleryCursor(raw, order, scope) {
   return { ok: true, value: { ...value, symbol, first_discovered_at: time } }
 }
 
+function paginateCompactDiscoveryRows({
+  decorated,
+  limit,
+  order,
+  scope,
+  after,
+  before,
+  cursorValue,
+}) {
+  const backward = Boolean(before)
+  const sorted = [...decorated]
+  if (order === "symbol") {
+    sorted.sort((left, right) =>
+      backward
+        ? right.gene_symbol.localeCompare(left.gene_symbol)
+        : left.gene_symbol.localeCompare(right.gene_symbol),
+    )
+  } else {
+    sorted.sort((left, right) => {
+      const timeCompare = backward
+        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "")
+        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "")
+      return timeCompare || left.gene_symbol.localeCompare(right.gene_symbol)
+    })
+  }
+  let filtered = sorted
+  if (cursorValue) {
+    const cursorSymbol = normalizeSymbol(cursorValue.symbol || "")
+    if (order === "symbol") {
+      filtered = sorted.filter((row) =>
+        backward ? row.gene_symbol < cursorSymbol : row.gene_symbol > cursorSymbol,
+      )
+    } else {
+      const cursorTime = sanitizeText(cursorValue.first_discovered_at || "", 64)
+      filtered = sorted.filter((row) => {
+        const time = row.first_discovered_at || ""
+        return backward
+          ? time > cursorTime || (time === cursorTime && row.gene_symbol < cursorSymbol)
+          : time < cursorTime || (time === cursorTime && row.gene_symbol > cursorSymbol)
+      })
+    }
+  }
+  const pageRows = filtered.slice(0, limit)
+  if (backward) pageRows.reverse()
+  const hasRequestedMore = filtered.length > limit
+  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
+  const hasMore = backward ? Boolean(before) : hasRequestedMore
+  const firstRow = pageRows[0] || null
+  const lastRow = pageRows[pageRows.length - 1] || null
+  return {
+    rows: pageRows,
+    hasPrevious,
+    hasMore,
+    previousCursor: hasPrevious
+      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(firstRow, order, scope))
+      : "",
+    nextCursor: hasMore
+      ? encodeAccountGalleryCursor(accountGalleryWindowCursorForRow(lastRow, order, scope))
+      : "",
+    unsupportedOrder: "",
+  }
+}
+
 async function listUserGeneDiscoveryWindow(
   env,
   { userId, limit = 24, order = "newest", after = "", before = "", cursorValue = null } = {},
@@ -12238,89 +12506,17 @@ async function listUserGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const fetchLimit = cleanedLimit + 1
-  const decodedCursor = cursorValue
-  const backward = Boolean(before)
-  const selectSql = `SELECT
-       d.*,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(d.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
-     FROM icono_gene_discoveries d
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = d.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = d.gene_symbol
-     WHERE d.user_id = ?`
-  let rowsResult
-  if (resolvedOrder === "symbol") {
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor = cursorSymbol
-      ? backward
-        ? " AND d.gene_symbol < ?"
-        : " AND d.gene_symbol > ?"
-      : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY d.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult = cursorSymbol
-      ? await statement.bind(userIdNorm, cursorSymbol, fetchLimit).all()
-      : await statement.bind(userIdNorm, fetchLimit).all()
-  } else {
-    const cursorTime = decodedCursor
-      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
-      : ""
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor =
-      cursorTime && cursorSymbol
-        ? backward
-          ? " AND (d.first_discovered_at > ? OR (d.first_discovered_at = ? AND d.gene_symbol < ?))"
-          : " AND (d.first_discovered_at < ? OR (d.first_discovered_at = ? AND d.gene_symbol > ?))"
-        : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY d.first_discovered_at ${backward ? "ASC" : "DESC"}, d.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult =
-      cursorTime && cursorSymbol
-        ? await statement.bind(userIdNorm, cursorTime, cursorTime, cursorSymbol, fetchLimit).all()
-        : await statement.bind(userIdNorm, fetchLimit).all()
-  }
-  const allRows = (Array.isArray(rowsResult?.results) ? rowsResult.results : []).map(
-    mapGeneDiscoveryRow,
-  )
-  const pageRows = allRows.slice(0, cleanedLimit)
-  if (backward) pageRows.reverse()
-  const hasRequestedMore = allRows.length > cleanedLimit
-  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
-  const hasMore = backward ? Boolean(before) : hasRequestedMore
-  const firstRow = pageRows[0] || null
-  const lastRow = pageRows[pageRows.length - 1] || null
-  return {
-    rows: pageRows,
-    hasPrevious,
-    hasMore,
-    previousCursor: hasPrevious
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "personal"),
-        )
-      : "",
-    nextCursor: hasMore
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "personal"),
-        )
-      : "",
-    unsupportedOrder: "",
-  }
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const decorated = await compactShelfRows(env, { userId: userIdNorm, isAdmin })
+  return paginateCompactDiscoveryRows({
+    decorated,
+    limit: cleanedLimit,
+    order: resolvedOrder,
+    scope: "personal",
+    after,
+    before,
+    cursorValue,
+  })
 }
 
 async function listSharedGeneDiscoveryWindow(
@@ -12343,122 +12539,44 @@ async function listSharedGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const fetchLimit = cleanedLimit + 1
-  const decodedCursor = cursorValue
-  const backward = Boolean(before)
-  const selectSql = `SELECT
-       r.gene_symbol,
-       r.first_non_admin_discovered_at AS first_discovered_at,
-       r.latest_non_admin_encountered_at AS last_encountered_at,
-       r.non_admin_encounter_count AS encounter_count,
-       'shared' AS first_source,
-       'shared' AS last_source,
-       'shared' AS first_trigger,
-       'shared' AS last_trigger,
-       NULL AS first_dwell_ms,
-       NULL AS last_dwell_ms,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(r.gene_symbol)) AS full_name,
-       ge.weight_kg,
-       ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
-     FROM icono_shared_gene_discoveries r
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = r.gene_symbol
-     LEFT JOIN icono_gene_catalog gc
-       ON gc.gene_symbol = r.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = r.gene_symbol
-     WHERE r.non_admin_discoverer_count > 0`
-  let rowsResult
-  if (resolvedOrder === "symbol") {
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor = cursorSymbol
-      ? backward
-        ? " AND r.gene_symbol < ?"
-        : " AND r.gene_symbol > ?"
-      : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY r.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult = cursorSymbol
-      ? await statement.bind(cursorSymbol, fetchLimit).all()
-      : await statement.bind(fetchLimit).all()
-  } else {
-    const cursorTime = decodedCursor
-      ? sanitizeText(decodedCursor.first_discovered_at || "", 64)
-      : ""
-    const cursorSymbol = decodedCursor ? normalizeSymbol(decodedCursor.symbol || "") : ""
-    const whereCursor =
-      cursorTime && cursorSymbol
-        ? backward
-          ? " AND (r.first_non_admin_discovered_at > ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol < ?))"
-          : " AND (r.first_non_admin_discovered_at < ? OR (r.first_non_admin_discovered_at = ? AND r.gene_symbol > ?))"
-        : ""
-    const sql = `${selectSql}${whereCursor}
-     ORDER BY r.first_non_admin_discovered_at ${backward ? "ASC" : "DESC"}, r.gene_symbol ${backward ? "DESC" : "ASC"}
-     LIMIT ?`
-    const statement = env.ICONOPLASM_DB.prepare(sql)
-    rowsResult =
-      cursorTime && cursorSymbol
-        ? await statement.bind(cursorTime, cursorTime, cursorSymbol, fetchLimit).all()
-        : await statement.bind(fetchLimit).all()
-  }
-  const allRows = (Array.isArray(rowsResult?.results) ? rowsResult.results : []).map(
-    mapGeneDiscoveryRow,
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const summaries = compactSharedSummaries(shared)
+  const symbols = await readCanonicalSymbolsForOrdinals(
+    env.ICONOPLASM_DB,
+    summaries.map((summary) => summary.ordinal),
   )
-  const pageRows = allRows.slice(0, cleanedLimit)
-  if (backward) pageRows.reverse()
-  const hasRequestedMore = allRows.length > cleanedLimit
-  const hasPrevious = backward ? hasRequestedMore : Boolean(after)
-  const hasMore = backward ? Boolean(before) : hasRequestedMore
-  const firstRow = pageRows[0] || null
-  const lastRow = pageRows[pageRows.length - 1] || null
-  return {
-    rows: pageRows,
-    hasPrevious,
-    hasMore,
-    previousCursor: hasPrevious
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(firstRow, resolvedOrder, "shared"),
-        )
-      : "",
-    nextCursor: hasMore
-      ? encodeAccountGalleryCursor(
-          accountGalleryWindowCursorForRow(lastRow, resolvedOrder, "shared"),
-        )
-      : "",
-    unsupportedOrder: "",
-  }
+  const decorated = await enrichGeneDiscoveryRows(
+    env,
+    compactSharedRowsFromSummaries(summaries, symbols),
+  )
+  return paginateCompactDiscoveryRows({
+    decorated,
+    limit: cleanedLimit,
+    order: resolvedOrder,
+    scope: "shared",
+    after,
+    before,
+    cursorValue,
+  })
 }
 
 async function countUserGeneDiscoveries(env, { userId } = {}) {
   if (!env.ICONOPLASM_DB) return 0
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS discovered_count
-     FROM icono_gene_discoveries
-     WHERE user_id = ?`,
-  )
-    .bind(userIdNorm)
-    .first()
-  return Math.max(0, Number(row?.discovered_count || 0) || 0)
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  return Math.max(0, Number(state?.member_count || 0) || 0)
 }
 
 async function countSharedGeneDiscoveries(env) {
   if (!env.ICONOPLASM_DB) return 0
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS discovered_count
-     FROM icono_shared_gene_discoveries
-     WHERE non_admin_discoverer_count > 0`,
-  ).first()
-  return Math.max(0, Number(row?.discovered_count || 0) || 0)
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  return compactSharedSummaries(shared).length
 }
 
 async function listAllCatalogGeneDiscoveriesForAdmin(
@@ -12479,15 +12597,6 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
     `SELECT
        gc.gene_symbol,
        COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
-       d.first_discovered_at,
-       d.last_encountered_at,
-       COALESCE(d.encounter_count, 0) AS encounter_count,
-       COALESCE(d.first_source, '') AS first_source,
-       COALESCE(d.last_source, '') AS last_source,
-       COALESCE(d.first_trigger, '') AS first_trigger,
-       COALESCE(d.last_trigger, '') AS last_trigger,
-       d.first_dwell_ms,
-       d.last_dwell_ms,
        ge.weight_kg,
        ge.age_years,
        ge.leakage_percent AS uniqueness_rank,
@@ -12495,27 +12604,44 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
        COALESCE(gr.live_downvotes, 0) AS image_downvotes,
        COALESCE(gr.live_score, 0) AS image_score,
        gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at
+       gr.live_created_at AS asset_created_at,
+       gr.current_asset_sha256 AS asset_sha256
      FROM icono_gene_catalog gc
      LEFT JOIN icono_gene_essence ge
        ON ge.gene_symbol = gc.gene_symbol
-     LEFT JOIN icono_gene_discoveries d
-       ON d.user_id = ?
-      AND d.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_admin_gene_rollup gr
        ON gr.gene_symbol = gc.gene_symbol
      ORDER BY gc.gene_symbol ASC
      LIMIT ?`,
   )
-    .bind(userIdNorm, cleanedLimit)
+    .bind(cleanedLimit)
     .all()
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  const discovered = new Map()
+  if (state) {
+    const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
+    for (const row of compactShelfRowsFromChronology(chronology)) {
+      discovered.set(row.gene_symbol, row)
+    }
+  }
   return sortDiscoveryRowsForOrder(
-    (Array.isArray(rows?.results) ? rows.results : []).map(mapGeneDiscoveryRow),
+    (Array.isArray(rows?.results) ? rows.results : []).map((row) =>
+      mapGeneDiscoveryRow({ ...(discovered.get(String(row.gene_symbol || "")) || {}), ...row }),
+    ),
     normalizeIconoplasmHomeOrder(order, "newest"),
     seed,
   )
 }
 
+// Guest storage keeps membership symbols, not events. A merge converges into
+// the same compact representation: only symbols the user does not already have
+// become one new-member encounter. The deterministic batch id makes retries
+// exact, so a lost response never duplicates or drops a merge.
 async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) {
@@ -12531,11 +12657,36 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     symbols,
     WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
   )
-  await mergeDiscoverySymbolsAtomically(env.ICONOPLASM_DB, {
-    userId: userIdNorm,
-    symbols: requestedSymbols,
-    isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm),
-  })
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  if (requestedSymbols.length) {
+    const lookup = await readDiscoveryDictionaryForSymbols(env, requestedSymbols)
+    const state = await readOrImportCompactUserState(env, {
+      userId: userIdNorm,
+      isAdmin,
+      allowImport: true,
+    })
+    const membership = String(state?.membership_b64 || "")
+    const fresh = requestedSymbols.filter((symbol) => {
+      const ordinal = lookup.byName.get(symbol)
+      return ordinal != null && !hasDiscoveryOrdinal(membership, ordinal)
+    })
+    if (fresh.length) {
+      const at = Math.floor(Date.now() / 1000)
+      const digest = await sha256Hex(`guest-merge:${userIdNorm}:${requestedSymbols.join(",")}`)
+      await recordCompactDiscoveryEncounters(env, {
+        userId: userIdNorm,
+        isAdmin,
+        batchId: `guest.merge.${digest.slice(0, 48)}`,
+        encounters: fresh.map((symbol) => ({
+          symbol,
+          at,
+          source: DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE,
+          trigger: DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE,
+          dwell_ms: null,
+        })),
+      })
+    }
+  }
   return {
     ok: true,
     merged_count: requestedSymbols.length,
@@ -17141,6 +17292,11 @@ export class IconoplasmVoteCoordinator {
   constructor(state, env) {
     this.state = state
     this.env = env
+    // B-762: the per-gene publication state is a storage helper inside this
+    // existing coordinator. It is not a second Durable Object or canon owner.
+    this.publication = new IconoplasmGenePublicationState(this.state.storage, {
+      clock: () => Date.now(),
+    })
     this.caretakerSupervotes = new CaretakerSupervoteLedger({
       storage: this.state.storage,
       getSymbol: () => this.getMeta("symbol"),
@@ -17212,13 +17368,51 @@ export class IconoplasmVoteCoordinator {
         "idx_asset_summary_vision",
       ])
         this.state.storage.sql.exec(`DROP INDEX IF EXISTS ${index}`)
+      this.installGeneAuthorityTables()
       this.caretakerSupervotes.install()
       const pendingOutbox = this.state.storage.sql
         .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
         .toArray()[0]
       const pendingCaretakerSupervoteOutbox = this.caretakerSupervotes.pendingOutboxRows(1)[0]
       if (pendingOutbox || pendingCaretakerSupervoteOutbox) await this.armOutboxAlarm(1)
+      // A v2 gene with unfinished publication intent repairs its own wake after
+      // a restart. This never reads or repairs another gene.
+      if (this.getMeta("authority_epoch") === "v2" && this.publication.read()?.pending) {
+        await this.publication.recoverWakeup()
+      }
+      // Durable reader-projection handoff survives a crash between local
+      // publication and the shared view: re-enqueue from the published artifact
+      // and wake the shared alarm, which drains it.
+      const recoveredHandoff = this.ensureReaderHandoffFromPublished()
+      if (recoveredHandoff && !this.getMeta("outbox_budget_retry_at")) {
+        await this.armOutboxAlarm(1000)
+      }
     })
+  }
+
+  installGeneAuthorityTables() {
+    this.state.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS gene_candidate_authority (
+        asset_sha256 TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'draft',
+        autopick_eligible INTEGER NOT NULL DEFAULT 0 CHECK (autopick_eligible IN (0, 1)),
+        is_stale INTEGER NOT NULL DEFAULT 0 CHECK (is_stale IN (0, 1)),
+        is_legacy INTEGER NOT NULL DEFAULT 0 CHECK (is_legacy IN (0, 1)),
+        created_at TEXT NOT NULL DEFAULT '',
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS publication_handoffs (
+        symbol TEXT PRIMARY KEY,
+        version INTEGER NOT NULL,
+        selection_key TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL DEFAULT 0,
+        delivered_at TEXT
+      );
+    `)
+    this.publication.install()
   }
 
   sqlFirst(query, ...bindings) {
@@ -17242,7 +17436,553 @@ export class IconoplasmVoteCoordinator {
     const delay = Math.max(1, Number(delayMs || 1) || 1)
     // A new vote or a coordinator restart must not erase a known daily pause.
     const budgetRetryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
-    await this.state.storage.setAlarm(Math.max(Date.now() + delay, budgetRetryAt))
+    const due = Math.max(Date.now() + delay, budgetRetryAt)
+    // One DO owns one alarm for publication, outbox and caretaker duties.
+    // Never erase an earlier wake; only bring the shared alarm forward.
+    const existing = await this.state.storage.getAlarm()
+    if (existing === null || existing > due) await this.state.storage.setAlarm(due)
+  }
+
+  /**
+   * B-762 migration: bounded, idempotent candidate authority for one gene.
+   * The caller supplies the complete candidate set from D1; ordinary reads
+   * never run a cold full-history import. Unchanged rows do not write, and a
+   * replaced (withdrawn) candidate disappears from the election.
+   */
+  importGeneCandidateAuthority(rawItems, options = {}) {
+    return this.state.storage.transactionSync(() =>
+      this.applyCandidateAuthorityCore(rawItems, options),
+    )
+  }
+
+  applyCandidateAuthorityCore(rawItems, { replace = true } = {}) {
+    if (!Array.isArray(rawItems))
+      throw new Error("Candidate authority items are required; refusing to clear candidates")
+    if (rawItems.length > 64)
+      throw new Error("Candidate authority batch exceeds the 64-candidate bound")
+    const incoming = new Map()
+    for (let index = 0; index < rawItems.length; index += 1) {
+      const raw = rawItems[index]
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error(`Candidate at index ${index} must be an object`)
+      }
+      const assetSha = normalizeSha256(raw?.asset_sha256 || "")
+      // Validate every member before any destructive replacement: an invalid
+      // member must reject the whole batch instead of silently dropping a
+      // candidate and then deleting the stored set.
+      if (!assetSha) {
+        throw new Error(`Candidate at index ${index} has an invalid asset_sha256`)
+      }
+      if (incoming.has(assetSha)) continue
+      incoming.set(assetSha, {
+        asset_sha256: assetSha,
+        status:
+          sanitizeText(raw?.status || "draft", 32)
+            .trim()
+            .toLowerCase() || "draft",
+        autopick_eligible: Number(raw?.autopick_eligible) > 0 ? 1 : 0,
+        is_stale: Number(raw?.is_stale) > 0 ? 1 : 0,
+        is_legacy: Number(raw?.is_legacy) > 0 ? 1 : 0,
+        created_at: sanitizeText(raw?.created_at || "", 64) || "",
+      })
+    }
+    const existing = new Map(
+      this.state.storage.sql
+        .exec(`SELECT * FROM gene_candidate_authority`)
+        .toArray()
+        .map((row) => [String(row.asset_sha256), row]),
+    )
+    let changed = false
+    for (const item of incoming.values()) {
+      const prior = existing.get(item.asset_sha256)
+      if (!prior) {
+        this.state.storage.sql.exec(
+          `INSERT INTO gene_candidate_authority (
+               asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at, revision
+             ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
+          item.asset_sha256,
+          item.status,
+          item.autopick_eligible,
+          item.is_stale,
+          item.is_legacy,
+          item.created_at,
+        )
+        changed = true
+        continue
+      }
+      const unchanged =
+        String(prior.status || "") === item.status &&
+        Number(prior.autopick_eligible) === item.autopick_eligible &&
+        Number(prior.is_stale) === item.is_stale &&
+        Number(prior.is_legacy) === item.is_legacy &&
+        String(prior.created_at || "") === item.created_at
+      if (unchanged) continue
+      this.state.storage.sql.exec(
+        `UPDATE gene_candidate_authority
+              SET status = ?,
+                  autopick_eligible = ?,
+                  is_stale = ?,
+                  is_legacy = ?,
+                  created_at = ?,
+                  revision = revision + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE asset_sha256 = ?`,
+        item.status,
+        item.autopick_eligible,
+        item.is_stale,
+        item.is_legacy,
+        item.created_at,
+        item.asset_sha256,
+      )
+      changed = true
+    }
+    if (replace) {
+      for (const assetSha of existing.keys()) {
+        if (incoming.has(assetSha)) continue
+        this.state.storage.sql.exec(
+          `DELETE FROM gene_candidate_authority WHERE asset_sha256 = ?`,
+          assetSha,
+        )
+        changed = true
+      }
+    }
+    if (changed) {
+      // Migration boundary token: authority transfer captures this before
+      // source verification and re-checks it inside the seed transaction, so a
+      // candidate change during transfer aborts instead of certifying stale
+      // state.
+      const revision = Number(this.getMeta("candidate_authority_revision")) || 0
+      this.setMeta("candidate_authority_revision", String(revision + 1))
+    }
+    return {
+      changed,
+      candidate_count: incoming.size,
+    }
+  }
+
+  /**
+   * Only the bounded candidate set participates in the election, so a gene
+   * with a large historical asset_summary never exports its whole history on
+   * the hot path. Scores for non-candidates cannot affect the winner.
+   */
+  geneAuthoritySummaries() {
+    return this.state.storage.sql
+      .exec(
+        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
+           FROM asset_summary
+          WHERE asset_sha256 IN (SELECT asset_sha256 FROM gene_candidate_authority)`,
+      )
+      .toArray()
+      .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }))
+  }
+
+  geneAuthorityWinner({ currentAssetSha, adminOverride } = {}) {
+    const candidates = this.state.storage.sql
+      .exec(`SELECT * FROM gene_candidate_authority ORDER BY asset_sha256 ASC`)
+      .toArray()
+      .map((row) => ({
+        ...row,
+        autopick_eligible: Number(row.autopick_eligible) === 1,
+        is_stale: Number(row.is_stale) === 1,
+        is_legacy: Number(row.is_legacy) === 1,
+      }))
+    return electGeneAuthorityWinner({
+      candidates,
+      summaries: this.geneAuthoritySummaries(),
+      caretaker: this.caretakerSupervotes.snapshot(),
+      currentAssetSha:
+        currentAssetSha === undefined
+          ? normalizeSha256(this.getMeta("published_asset_sha256")) || null
+          : normalizeSha256(currentAssetSha) || null,
+      adminOverride:
+        adminOverride === undefined
+          ? this.getMeta("admin_override") === "1"
+          : Boolean(adminOverride),
+    })
+  }
+
+  /**
+   * Synchronous canonical identity for the current winner. Runs inside the vote
+   * storage transaction; hashing happens in IconoplasmGenePublicationState.
+   */
+  authoritativeSelectionIdentity({ adminOverride, publishedAssetSha } = {}) {
+    const caretaker = this.caretakerSupervotes.snapshot()
+    const winner = this.geneAuthorityWinner({
+      currentAssetSha: publishedAssetSha,
+      adminOverride,
+    }).winner
+    return {
+      selectionRef: composeGeneSelectionReference({
+        symbol: normalizeSymbol(this.getMeta("symbol")),
+        winner,
+        caretakerSupervoteVersion: Number(caretaker?.supervote_version || 0),
+        caretakerDirection:
+          caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
+            ? Number(caretaker.direction || 0)
+            : 0,
+        adminOverride:
+          adminOverride === undefined
+            ? this.getMeta("admin_override") === "1"
+            : Boolean(adminOverride),
+      }),
+    }
+  }
+
+  async applyAuthoritativeVoteMutation(options = {}) {
+    if (this.getMeta("authority_epoch") !== "v2") {
+      return { authority: "legacy", publication: null, vote: this.applyVoteMutation(options) }
+    }
+    // An activated v2 gene never falls back to legacy execution, including
+    // when its eligible set is empty: the selection becomes an explicit
+    // empty/tombstone identity and local recovery owns the next step.
+    let vote = null
+    const publication = await this.publication.commitSelection(() => {
+      vote = this.applyVoteStateMutationCore(options)
+      return this.authoritativeSelectionIdentity()
+    })
+    return { authority: "v2", publication, vote }
+  }
+
+  /**
+   * B-762 immutable publication adapter. It asks the existing card-publication
+   * coordinator to materialize exactly this gene's selected winner version
+   * (three verified immutable objects: card, gene projection, portrait
+   * locator) and returns the verified card receipt. The coordinator route
+   * never touches the global head, watermark or job. Without the binding the
+   * adapter is absent and no attempt is opened, so an unwired gene costs zero
+   * publication writes. Tests may override this method.
+   */
+  genePublicationAdapter(env = this.env) {
+    const binding = env?.ICONOPLASM_CARD_PUBLICATION
+    if (!binding) return null
+    return async (ticket, { symbol } = {}) => {
+      const cleanSymbol = normalizeSymbol(symbol)
+      if (!cleanSymbol) throw new Error("Gene publication requires a symbol")
+      const winnerAssetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
+      const stub = binding.get(binding.idFromName("canonical-cards-v2"))
+      const response = await stub.fetch("https://card-publication.internal/materialize-symbol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: cleanSymbol,
+          portrait_asset_sha256: winnerAssetSha,
+          // An explicit empty selection publishes the gene's portrait-less
+          // tombstone version instead of resurrecting stale D1 canon.
+          withdraw: !winnerAssetSha,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || data?.ok !== true) {
+        const failure = new Error(
+          `Card materialization failed (${Number(response.status || 0) || "no"} status)`,
+        )
+        failure.code = String(data?.code || "CARD_MATERIALIZATION_FAILED")
+        // Resource-specific deferral: a schema transition or admission pause
+        // carries its own retry deadline instead of becoming a blind 1s loop.
+        const retryAfterMs = Number(data?.retry_after_ms)
+        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+          failure.retryAt = Date.now() + retryAfterMs
+        }
+        throw failure
+      }
+      // Bind the receipt to the requested gene and exact source selection: a
+      // correctly shaped receipt for another gene must never clear this gene's
+      // pending publication.
+      if (normalizeSymbol(data?.symbol || "") !== cleanSymbol) {
+        const failure = new Error("Card materialization receipt names another gene")
+        failure.code = "CARD_RECEIPT_WRONG_GENE"
+        throw failure
+      }
+      const echoedAsset = normalizeSha256(data?.selected_asset_sha256 || "") || null
+      if ((echoedAsset || null) !== (winnerAssetSha || null)) {
+        const failure = new Error("Card materialization receipt names another source selection")
+        failure.code = "CARD_RECEIPT_WRONG_SELECTION"
+        throw failure
+      }
+      const receipt = data?.receipts?.card
+      const contentSha256 = normalizeSha256(receipt?.hash || "")
+      const objectKey = sanitizeText(receipt?.key || "", 512)
+      if (!contentSha256 || !objectKey) {
+        const failure = new Error("Card materialization returned no verified card receipt")
+        failure.code = "CARD_RECEIPT_MISSING"
+        throw failure
+      }
+      // Preserve the projection references the reader plane needs alongside the
+      // exact card receipt. The object store already verified every hash before
+      // this receipt was returned.
+      const geneReceipt = data?.receipts?.gene
+      const portraitReceipt = data?.receipts?.portrait
+      const projections = {}
+      for (const [kind, value] of [
+        ["gene", geneReceipt],
+        ["portrait", portraitReceipt],
+      ]) {
+        const projectionKey = sanitizeText(value?.key || "", 512)
+        const projectionHash = normalizeSha256(value?.hash || "")
+        if (!projectionKey || !projectionHash) {
+          const failure = new Error(
+            `Card materialization is missing the ${kind} projection receipt`,
+          )
+          failure.code = "CARD_RECEIPT_INCOMPLETE"
+          throw failure
+        }
+        projections[kind] = { key: projectionKey, hash: projectionHash }
+      }
+      return { selectionKey: ticket.selectionKey, contentSha256, objectKey, projections }
+    }
+  }
+
+  async drainGenePublication(env = this.env) {
+    if (this.getMeta("authority_epoch") !== "v2")
+      return { ok: true, skipped: true, reason: "legacy_epoch" }
+    const current = this.publication.read()
+    if (!current?.pending) return { ok: true, pending: false }
+    const adapter = this.genePublicationAdapter(env)
+    if (typeof adapter !== "function") {
+      return { ok: true, pending: true, reason: "publication_adapter_pending" }
+    }
+    const ticket = await this.publication.beginAttempt()
+    if (!ticket) return { ok: true, pending: true, reason: "retry_not_due" }
+    try {
+      const published = await adapter(ticket, { symbol: normalizeSymbol(this.getMeta("symbol")) })
+      const outcome = await this.publication.completeAttempt(ticket, published)
+      if (outcome.applied) {
+        const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
+        if (assetSha) this.setMeta("published_asset_sha256", assetSha)
+        this.recordReaderHandoff(ticket, published)
+      }
+      return { ok: true, pending: false, ...outcome }
+    } catch (error) {
+      if (isIconoplasmDailyBudgetError(error)) throw error
+      const failed = await this.publication.failAttempt(ticket, { retryAt: error?.retryAt })
+      return {
+        ok: false,
+        pending: true,
+        retry_at: failed.retryAt,
+        error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
+      }
+    }
+  }
+
+  /**
+   * Durable handover to the shared reader-view owner. The verified receipts are
+   * persisted locally first, so a crash between local publication and the KV
+   * projection is recovered on restart and retried with bounded backoff.
+   */
+  recordReaderHandoff(ticket, published) {
+    const artifacts = published?.projections
+    if (!artifacts) return null
+    const symbol = normalizeSymbol(this.getMeta("symbol"))
+    const version = Number(ticket?.desiredVersion || 0)
+    const selectionKey = normalizeSha256(ticket?.selectionKey || "")
+    if (!symbol || !Number.isSafeInteger(version) || version < 1 || !selectionKey) return null
+    const payload = {
+      symbol,
+      version,
+      selection_key: selectionKey,
+      withdrawn: !winnerAssetShaFromSelectionReference(ticket.selectionRef),
+      card: { key: published.objectKey, hash: published.contentSha256 },
+      gene: { key: artifacts.gene.key, hash: artifacts.gene.hash },
+      portrait: { key: artifacts.portrait.key, hash: artifacts.portrait.hash },
+    }
+    return this.state.storage.transactionSync(() => {
+      this.state.storage.sql.exec(
+        `INSERT INTO publication_handoffs (
+           symbol, version, selection_key, payload_json, attempts, next_attempt_at, delivered_at
+         ) VALUES (?, ?, ?, ?, 0, 0, NULL)
+         ON CONFLICT(symbol) DO UPDATE SET
+           version = excluded.version,
+           selection_key = excluded.selection_key,
+           payload_json = excluded.payload_json,
+           attempts = 0,
+           next_attempt_at = 0,
+           delivered_at = NULL
+         WHERE excluded.version >= publication_handoffs.version`,
+        symbol,
+        version,
+        selectionKey,
+        JSON.stringify(payload),
+      )
+      return payload
+    })
+  }
+
+  ensureReaderHandoffFromPublished() {
+    if (this.getMeta("authority_epoch") !== "v2") return null
+    const state = this.publication.read()
+    if (!state?.publishedArtifact?.projections) return null
+    const symbol = normalizeSymbol(this.getMeta("symbol"))
+    if (!symbol) return null
+    const existing = this.sqlFirst(
+      `SELECT version, delivered_at FROM publication_handoffs WHERE symbol = ?`,
+      symbol,
+    )
+    if (existing && Number(existing.version) >= state.publishedVersion && existing.delivered_at) {
+      return null
+    }
+    return this.recordReaderHandoff(
+      {
+        desiredVersion: state.publishedVersion,
+        selectionKey: state.publishedArtifact.selectionKey,
+        selectionRef: state.selectionRef,
+      },
+      state.publishedArtifact,
+    )
+  }
+
+  async drainReaderHandoffs(env = this.env) {
+    const rows = this.state.storage.sql
+      .exec(
+        `SELECT symbol, version, payload_json, attempts
+           FROM publication_handoffs
+          WHERE delivered_at IS NULL
+            AND next_attempt_at <= ?
+          ORDER BY version ASC
+          LIMIT 4`,
+        Date.now(),
+      )
+      .toArray()
+    if (!rows.length) {
+      const pending = Number(
+        this.state.storage.sql
+          .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
+          .toArray()[0]?.n || 0,
+      )
+      return { ok: true, delivered: 0, pending }
+    }
+    const binding = env?.ICONOPLASM_CARD_PUBLICATION
+    if (!binding) {
+      return {
+        ok: true,
+        delivered: 0,
+        pending: rows.length,
+        reason: "card_publication_binding_missing",
+      }
+    }
+    let delivered = 0
+    for (const row of rows) {
+      const symbol = normalizeSymbol(row?.symbol || "")
+      const version = Number(row?.version || 0)
+      try {
+        const stub = binding.get(binding.idFromName("canonical-cards-v2"))
+        const response = await stub.fetch("https://card-publication.internal/commit-gene-version", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: String(row.payload_json || "{}"),
+        })
+        const data = await response.json().catch(() => null)
+        if (!response.ok || data?.ok !== true) {
+          throw new Error(String(data?.error || `Gene commit rejected (${response.status})`))
+        }
+        this.state.storage.sql.exec(
+          `UPDATE publication_handoffs
+              SET delivered_at = CURRENT_TIMESTAMP, attempts = 0, next_attempt_at = 0
+            WHERE symbol = ? AND version = ?`,
+          symbol,
+          version,
+        )
+        delivered += 1
+      } catch (error) {
+        const attempts = Number(row?.attempts || 0) + 1
+        const delay = Math.min(3600000, 1000 * 2 ** Math.min(attempts - 1, 12))
+        this.state.storage.sql.exec(
+          `UPDATE publication_handoffs
+              SET attempts = ?, next_attempt_at = ?
+            WHERE symbol = ? AND version = ?`,
+          attempts,
+          Date.now() + delay,
+          symbol,
+          version,
+        )
+      }
+    }
+    const pending = Number(
+      this.state.storage.sql
+        .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
+        .toArray()[0]?.n || 0,
+    )
+    if (pending) await this.armOutboxAlarm(1000)
+    return { ok: true, delivered, pending }
+  }
+
+  /**
+   * Any canonical-affecting mutation on an activated gene must update the
+   * publication intent in the same storage transaction. Returns null on the
+   * legacy epoch so v1 callers keep their exact behavior.
+   */
+  async commitAuthorityIntentIfActivated() {
+    if (this.getMeta("authority_epoch") !== "v2") return null
+    return this.publication.commitSelection(() => this.authoritativeSelectionIdentity())
+  }
+
+  /**
+   * Migration-only legacy vote read. Keyset pagination (not OFFSET) plus two
+   * complete passes: a row changed between pages makes the passes disagree and
+   * refuses the transfer instead of certifying a torn read. Bounded env, no
+   * hot-path use.
+   */
+  async readLegacyVoteSnapshot(symbol) {
+    const pageSize = 500
+    const maxPages = 40
+    const readPass = async () => {
+      const votes = new Map()
+      let lastUserId = null
+      let lastAssetSha = null
+      for (let page = 0; page < maxPages; page += 1) {
+        const response =
+          lastUserId === null
+            ? await this.env.ICONOPLASM_DB.prepare(
+                `SELECT user_id, asset_sha256, vote_value
+                   FROM icono_image_votes
+                  WHERE gene_symbol = ?
+                  ORDER BY user_id ASC, asset_sha256 ASC
+                  LIMIT ?`,
+              )
+                .bind(symbol, pageSize)
+                .all()
+            : await this.env.ICONOPLASM_DB.prepare(
+                `SELECT user_id, asset_sha256, vote_value
+                   FROM icono_image_votes
+                  WHERE gene_symbol = ?
+                    AND (user_id > ? OR (user_id = ? AND asset_sha256 > ?))
+                  ORDER BY user_id ASC, asset_sha256 ASC
+                  LIMIT ?`,
+              )
+                .bind(symbol, lastUserId, lastUserId, lastAssetSha, pageSize)
+                .all()
+        const rows = Array.isArray(response?.results) ? response.results : []
+        for (const row of rows) {
+          const userId = normalizeUserId(row?.user_id || "")
+          const assetSha = normalizeSha256(row?.asset_sha256 || "")
+          const voteValue = normalizeVoteValue(row?.vote_value)
+          if (!userId || !assetSha || voteValue == null || voteValue === 0) continue
+          votes.set(`${userId}\u0000${assetSha}`, voteValue)
+        }
+        if (rows.length < pageSize) return { complete: true, votes }
+        const last = rows[rows.length - 1]
+        const nextUser = String(last?.user_id ?? "")
+        const nextAsset = normalizeSha256(last?.asset_sha256 || "")
+        if (!nextAsset || (nextUser === lastUserId && nextAsset === lastAssetSha)) {
+          throw new Error("Legacy vote source paging did not advance")
+        }
+        lastUserId = nextUser
+        lastAssetSha = nextAsset
+      }
+      return { complete: false, votes }
+    }
+    const first = await readPass()
+    if (!first.complete) {
+      throw new Error("Legacy vote source exceeds the bounded migration envelope")
+    }
+    const second = await readPass()
+    if (!second.complete) {
+      throw new Error("Legacy vote source exceeds the bounded migration envelope")
+    }
+    if (first.votes.size !== second.votes.size) return { changed: true }
+    for (const [key, value] of first.votes) {
+      if (second.votes.get(key) !== value) return { changed: true }
+    }
+    return { changed: false, votes: second.votes }
   }
 
   pendingOutboxRows(limit = 50) {
@@ -17359,16 +18099,73 @@ export class IconoplasmVoteCoordinator {
 
   async alarm() {
     const retryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
+    // B-762: publication uses only this coordinator's SQLite state and the
+    // immutable object store. A legacy D1 pause must never block it, so the
+    // D1-free publication runs first and independently of legacy duties.
+    let publicationResult
+    try {
+      publicationResult = await this.drainGenePublication(this.env)
+    } catch (error) {
+      if (isIconoplasmDailyBudgetError(error)) {
+        const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+        this.setMeta("outbox_budget_retry_at", String(nextReset))
+        await this.armOutboxAlarm(1)
+        return {
+          ok: true,
+          deferred: true,
+          retry_at: nextReset,
+          reason: "daily_d1_budget",
+          publication: { ok: false, deferred: true },
+        }
+      }
+      publicationResult = {
+        ok: false,
+        error: sanitizeText(String(error?.message || error || "publication failed"), 500),
+      }
+    }
+    // The durable reader-view handoff is D1-free and must drain even when no
+    // legacy outbox work exists, so a crash between local publication and the
+    // shared projection recovers.
+    let handoffResult
+    try {
+      handoffResult = await this.drainReaderHandoffs(this.env)
+    } catch (error) {
+      handoffResult = {
+        ok: false,
+        error: sanitizeText(String(error?.message || error || "reader handoff failed"), 500),
+      }
+    }
+    if (
+      !this.pendingOutboxRows(1).length &&
+      !this.caretakerSupervotes.pendingOutboxRows(1).length
+    ) {
+      return {
+        ok: true,
+        publication: publicationResult,
+        handoff: handoffResult,
+        vote: { ok: true, delivered: 0, pending: 0 },
+      }
+    }
     if (retryAt > Date.now()) {
       await this.armOutboxAlarm(1)
-      return { ok: true, deferred: true, retry_at: retryAt }
+      return {
+        ok: true,
+        deferred: true,
+        retry_at: retryAt,
+        publication: publicationResult,
+        handoff: handoffResult,
+      }
     }
-    if (!this.pendingOutboxRows(1).length && !this.caretakerSupervotes.pendingOutboxRows(1).length)
-      return { ok: true, delivered: 0, pending: 0 }
     // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
     if (String(this.env.ICONOPLASM_SCHEMA_TRANSITION || "") === "1") {
       await this.armOutboxAlarm(300000)
-      return { ok: true, deferred: true, reason: "schema_transition" }
+      return {
+        ok: true,
+        deferred: true,
+        reason: "schema_transition",
+        publication: publicationResult,
+        handoff: handoffResult,
+      }
     }
     let env
     try {
@@ -17394,20 +18191,37 @@ export class IconoplasmVoteCoordinator {
         { limit: 2 },
       )
       if (dailyError) throw dailyError
-      return { vote: voteResult, caretaker_supervote: caretakerResult }
+      return {
+        publication: publicationResult,
+        handoff: handoffResult,
+        vote: voteResult,
+        caretaker_supervote: caretakerResult,
+      }
     } catch (error) {
       if (isIconoplasmDailyBudgetError(error)) {
         const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
         this.setMeta("outbox_budget_retry_at", String(nextReset))
         await this.armOutboxAlarm(1)
-        return { ok: true, deferred: true, retry_at: nextReset, reason: "daily_d1_budget" }
+        return {
+          ok: true,
+          deferred: true,
+          retry_at: nextReset,
+          reason: "daily_d1_budget",
+          publication: publicationResult,
+        }
       }
       await this.armOutboxAlarm(900000)
       console.error(
         "Iconoplasm vote outbox alarm deferred after failure",
         String(error?.message || error),
       )
-      return { ok: false, deferred: true, reason: "outbox_alarm_failed" }
+      return {
+        ok: false,
+        deferred: true,
+        reason: "outbox_alarm_failed",
+        publication: publicationResult,
+        handoff: handoffResult,
+      }
     } finally {
       if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
     }
@@ -17560,14 +18374,46 @@ export class IconoplasmVoteCoordinator {
     })
   }
 
-  applyVoteMutation({
+  applyVoteMutation(options = {}) {
+    return this.state.storage.transactionSync(() => {
+      const result = this.applyVoteStateMutationCore(options)
+      if (!result.changed) return result
+      const reason = voteProjectionRefreshJobReason(options?.reason || "vote_auto_promote")
+      this.state.storage.sql.exec(
+        `INSERT INTO vote_outbox (
+           asset_sha256,
+           vision_id,
+           candidate_image_id,
+           user_id,
+           vote_value,
+           reason,
+           created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        normalizeSha256(options?.assetSha256),
+        result.resolved_vision_id,
+        result.candidate_image_id,
+        normalizeUserId(options?.userId || ""),
+        result.final_vote_value,
+        reason,
+      )
+      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
+      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
+      this.state.storage.sql.exec(
+        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
+        mutationId,
+        outboxId,
+      )
+      return { ...result, mutation_id: mutationId }
+    })
+  }
+
+  applyVoteStateMutationCore({
     assetSha256,
     userId,
     requestedVoteValue,
     visionId = "",
     candidateImageId = null,
     ensuredAsset = null,
-    reason = "vote_auto_promote",
   } = {}) {
     const safeAssetSha = normalizeSha256(assetSha256)
     const safeUserId = normalizeUserId(userId || "")
@@ -17576,7 +18422,7 @@ export class IconoplasmVoteCoordinator {
       throw new Error("Missing or invalid vote payload")
     }
 
-    return this.state.storage.transactionSync(() => {
+    {
       const currentRow =
         this.sqlFirst(
           `SELECT vote_value, vision_id, candidate_image_id, created_at
@@ -17642,31 +18488,6 @@ export class IconoplasmVoteCoordinator {
         )
       }
 
-      this.state.storage.sql.exec(
-        `INSERT INTO vote_outbox (
-           asset_sha256,
-           vision_id,
-           candidate_image_id,
-           user_id,
-           vote_value,
-           reason,
-           created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        safeAssetSha,
-        resolvedVisionId,
-        resolvedCandidateImageId,
-        safeUserId,
-        finalVoteValue,
-        voteProjectionRefreshJobReason(reason),
-      )
-      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
-      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
-      this.state.storage.sql.exec(
-        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
-        mutationId,
-        outboxId,
-      )
-
       const assetDelta = voteDeltaFromTransition(currentVoteValue, finalVoteValue)
       this.ensureAssetSummaryRow(safeAssetSha, {
         visionId: resolvedVisionId,
@@ -17722,14 +18543,14 @@ export class IconoplasmVoteCoordinator {
 
       return {
         changed: true,
-        mutation_id: mutationId,
+        mutation_id: null,
         current_vote_value: currentVoteValue,
         final_vote_value: finalVoteValue,
         resolved_vision_id: resolvedVisionId,
         candidate_image_id: resolvedCandidateImageId,
         snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
       }
-    })
+    }
   }
 
   snapshotForAsset(assetSha256, userId, requestedVisionId = "") {
@@ -17802,6 +18623,11 @@ export class IconoplasmVoteCoordinator {
     // mirror, or declare paging elsewhere sufficient: this cold read/write set
     // still needs bounded, resumable admission including Durable Object cost.
     const safeSymbol = this.ensureSymbol(symbol)
+    // An activated v2 gene is locally authoritative and D1-free: a cold
+    // bootstrap or any later fallback must never reimport legacy D1 vote
+    // history or clear the votes, caretaker state and publication intent
+    // accepted under v2.
+    if (this.getMeta("authority_epoch") === "v2") return safeSymbol
     if (!this.env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
     if (this.getMeta("bootstrapped") === "1") return safeSymbol
     await this.state.blockConcurrencyWhile(async () => {
@@ -17960,7 +18786,25 @@ export class IconoplasmVoteCoordinator {
       // coordinator. None needs to import all historical ordinary votes.
       this.ensureSymbol(requestedSymbol)
       try {
-        return Response.json(await this.caretakerSupervotes.projectAssignment(payload?.event))
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Caretaker authority and publication intent commit in one storage
+          // transaction, so a failed intent can never leave the assignment
+          // ahead of the canonical selection it implies.
+          let result = null
+          const publication = await this.publication.commitSelection(() => {
+            result = this.caretakerSupervotes.projectAssignmentCore(payload?.event)
+            return this.authoritativeSelectionIdentity()
+          })
+          return Response.json({
+            ...result,
+            publication: {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            },
+          })
+        }
+        const result = await this.caretakerSupervotes.projectAssignment(payload?.event)
+        return Response.json(result)
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
           return Response.json(
@@ -17995,14 +18839,14 @@ export class IconoplasmVoteCoordinator {
       const symbol = this.ensureSymbol(requestedSymbol)
       try {
         const targetAsset = normalizeSha256(payload?.asset_sha256 || "") || null
+        let eligibilityProjection = null
         if (targetAsset) {
-          const eligibility = await this.requireEligibleCaretakerSupervoteTarget(
+          eligibilityProjection = await this.requireEligibleCaretakerSupervoteTarget(
             symbol,
             targetAsset,
           )
-          this.caretakerSupervotes.projectAssetEligibility(eligibility)
         }
-        const result = await this.caretakerSupervotes.setSelection({
+        const selectionOptions = {
           accountId: payload?.account_id,
           assetSha256: targetAsset,
           direction: targetAsset ? Number(payload?.direction) : null,
@@ -18010,7 +18854,32 @@ export class IconoplasmVoteCoordinator {
           requestSha256: payload?.request_sha256,
           expectedAssignmentVersion: payload?.expected_assignment_version,
           expectedSupervoteVersion: payload?.expected_supervote_version,
-        })
+        }
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Eligibility, supervote state and publication intent commit in one
+          // storage transaction, so a failed intent cannot leave a committed
+          // supervote change behind while publication stays clean.
+          let result = null
+          const publication = await this.publication.commitSelection(() => {
+            if (eligibilityProjection) {
+              this.caretakerSupervotes.projectAssetEligibilityInTransaction(eligibilityProjection)
+            }
+            result = this.caretakerSupervotes.setSelectionCore(selectionOptions)
+            return this.authoritativeSelectionIdentity()
+          })
+          return Response.json({
+            ...result,
+            symbol,
+            publication: {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            },
+          })
+        }
+        if (eligibilityProjection) {
+          this.caretakerSupervotes.projectAssetEligibility(eligibilityProjection)
+        }
+        const result = await this.caretakerSupervotes.setSelection(selectionOptions)
         return Response.json({ ...result, symbol })
       } catch (error) {
         if (error instanceof CaretakerSupervoteError) {
@@ -18065,6 +18934,325 @@ export class IconoplasmVoteCoordinator {
       }
     }
 
+    if (path === "/authority/candidates" && request.method === "POST") {
+      const payload = await request.json().catch(() => ({}))
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      if (!Array.isArray(payload?.items)) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_ITEMS_REQUIRED",
+            error: "Candidate authority requires a complete items array; refusing to clear",
+          },
+          { status: 400 },
+        )
+      }
+      if (payload.items.length > 64) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_BATCH_TOO_LARGE",
+            error: "Candidate authority batch exceeds the 64-candidate bound",
+          },
+          { status: 400 },
+        )
+      }
+      const replace = payload?.replace !== false
+      let imported = null
+      let publication = null
+      try {
+        if (this.getMeta("authority_epoch") === "v2") {
+          // Candidate changes are canonical-affecting: one transaction updates
+          // the candidate authority and the publication intent, so a withdrawal
+          // of the current winner can never leave a stale clean pointer.
+          publication = await this.publication.commitSelection(() => {
+            imported = this.applyCandidateAuthorityCore(payload.items, { replace })
+            return this.authoritativeSelectionIdentity()
+          })
+        } else {
+          imported = this.importGeneCandidateAuthority(payload.items, { replace })
+        }
+      } catch (error) {
+        return Response.json(
+          {
+            ok: false,
+            code: "CANDIDATE_IMPORT_REJECTED",
+            error: sanitizeText(String(error?.message || error), 300),
+          },
+          { status: 400 },
+        )
+      }
+      const election = this.geneAuthorityWinner()
+      return Response.json({
+        ok: true,
+        symbol,
+        ...imported,
+        winner_asset_sha256: election?.winner?.asset_sha256 || null,
+        publication: publication
+          ? {
+              changed: publication.changed,
+              pending: publication.state?.pending === true,
+            }
+          : null,
+      })
+    }
+
+    if (path === "/authority/activate" && request.method === "POST") {
+      const payload = await request.json()
+      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      // Authority transfer requires the old writers to be settled first; an
+      // unsettled outbox would lose accepted changes after the epoch flips.
+      if (
+        this.pendingOutboxRows(1).length ||
+        this.caretakerSupervotes.pendingOutboxRows(1).length
+      ) {
+        return Response.json(
+          {
+            ok: false,
+            code: "OUTBOX_NOT_SETTLED",
+            error: "Legacy vote/caretaker outbox must settle before authority transfer",
+          },
+          { status: 409 },
+        )
+      }
+      // Replay/conflict is decided before any mutation. A rejected activation
+      // must not change an active policy, and an identical repeated activation
+      // is an idempotent replay.
+      const requestedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
+      const requestedOverride =
+        payload?.admin_override === undefined
+          ? this.getMeta("admin_override") === "1"
+          : Boolean(payload.admin_override)
+      const requestedIdentity = this.authoritativeSelectionIdentity({
+        adminOverride: requestedOverride,
+        publishedAssetSha: requestedAsset,
+      })
+      const existingPublication = this.publication.read()
+      if (existingPublication) {
+        const currentAsset = normalizeSha256(this.getMeta("published_asset_sha256") || "")
+        const currentOverride = this.getMeta("admin_override") === "1"
+        const samePolicy = requestedOverride === currentOverride && requestedAsset === currentAsset
+        if (
+          this.getMeta("authority_epoch") === "v2" &&
+          samePolicy &&
+          !existingPublication.pending
+        ) {
+          return Response.json({
+            ok: true,
+            symbol,
+            replayed: true,
+            authority_epoch: "v2",
+            winner_asset_sha256: winnerAssetShaFromSelectionReference(
+              existingPublication.selectionRef,
+            ),
+          })
+        }
+        if (
+          this.getMeta("authority_epoch") !== "v2" &&
+          !existingPublication.pending &&
+          existingPublication.selectionRef === requestedIdentity.selectionRef
+        ) {
+          // Crash window recovery: the seed committed but the epoch flip did
+          // not. Finish the coherent commit without rewriting the selection.
+          if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
+          this.setMeta("admin_override", requestedOverride ? "1" : "0")
+          this.setMeta("authority_epoch", "v2")
+          return Response.json({
+            ok: true,
+            symbol,
+            recovered: true,
+            authority_epoch: "v2",
+            winner_asset_sha256: winnerAssetShaFromSelectionReference(
+              existingPublication.selectionRef,
+            ),
+          })
+        }
+        return Response.json(
+          {
+            ok: false,
+            code: "ALREADY_ACTIVATED",
+            error: "Gene authority is already activated with a different policy",
+          },
+          { status: 409 },
+        )
+      }
+      // Complete-input verification: the local authority must contain every
+      // accepted legacy vote with the same voter, candidate and value before
+      // the epoch flips. Row counts alone are not evidence of a complete
+      // transfer. Migration-only, keyset-paginated, double-pass verified and
+      // bounded.
+      const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
+      if (this.env?.ICONOPLASM_DB) {
+        try {
+          const snapshot = await this.readLegacyVoteSnapshot(symbol)
+          if (snapshot.changed) {
+            return Response.json(
+              {
+                ok: false,
+                code: "SOURCE_CHANGED",
+                error: "Legacy vote source changed during verification; retry the transfer",
+              },
+              { status: 409 },
+            )
+          }
+          const localVotes = new Map(
+            this.state.storage.sql
+              .exec(`SELECT user_id, asset_sha256, vote_value FROM vote_by_user_asset`)
+              .toArray()
+              .map((row) => [
+                `${String(row.user_id)}\u0000${String(row.asset_sha256)}`,
+                Number(row.vote_value),
+              ]),
+          )
+          let complete = snapshot.votes.size === localVotes.size
+          if (complete) {
+            for (const [key, value] of snapshot.votes) {
+              if (localVotes.get(key) !== value) {
+                complete = false
+                break
+              }
+            }
+          }
+          if (!complete) {
+            return Response.json(
+              {
+                ok: false,
+                code: "IMPORT_INCOMPLETE",
+                error: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
+              },
+              { status: 409 },
+            )
+          }
+        } catch (error) {
+          return Response.json(
+            {
+              ok: false,
+              code: "SOURCE_CHECK_FAILED",
+              error: sanitizeText(String(error?.message || error), 300),
+            },
+            { status: 503 },
+          )
+        }
+      }
+      const election = this.geneAuthorityWinner({
+        currentAssetSha: requestedAsset,
+        adminOverride: requestedOverride,
+      })
+      if (!election?.winner) {
+        return Response.json(
+          {
+            ok: false,
+            code: "NO_AUTHORITY_WINNER",
+            error: "Candidate authority has no eligible winner to seed",
+          },
+          { status: 409 },
+        )
+      }
+      try {
+        await this.publication.seedPublished(
+          requestedIdentity,
+          {
+            contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
+            objectKey: sanitizeText(payload?.published?.object_key || "", 512),
+          },
+          {
+            // Handover fence: revalidate accepted work, the candidate boundary
+            // and the final selection inside the same exclusive transaction
+            // that commits the seed. A concurrent accepted change aborts the
+            // transfer instead of certifying a stale clean identity.
+            guard: () => {
+              if (
+                this.pendingOutboxRows(1).length ||
+                this.caretakerSupervotes.pendingOutboxRows(1).length
+              ) {
+                const moved = new Error("Accepted work arrived during authority transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+              if (
+                (Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision
+              ) {
+                const moved = new Error("Candidate authority changed during transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+              const currentIdentity = this.authoritativeSelectionIdentity({
+                adminOverride: requestedOverride,
+                publishedAssetSha: requestedAsset,
+              })
+              if (currentIdentity.selectionRef !== requestedIdentity.selectionRef) {
+                const moved = new Error("Selected winner changed during authority transfer")
+                moved.code = "AUTHORITY_MOVED"
+                throw moved
+              }
+            },
+          },
+        )
+      } catch (error) {
+        if (error?.code === "AUTHORITY_MOVED") {
+          return Response.json(
+            {
+              ok: false,
+              code: "AUTHORITY_MOVED",
+              error: sanitizeText(String(error?.message || error), 300),
+            },
+            { status: 409 },
+          )
+        }
+        return Response.json(
+          {
+            ok: false,
+            code: "SEED_REJECTED",
+            error: sanitizeText(String(error?.message || error), 500),
+          },
+          { status: 409 },
+        )
+      }
+      // Persist policy + epoch only after the verified published identity is
+      // committed. A crash before this leaves the seed recoverable by replay.
+      if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
+      this.setMeta("admin_override", requestedOverride ? "1" : "0")
+      this.setMeta("authority_epoch", "v2")
+      return Response.json({
+        ok: true,
+        symbol,
+        authority_epoch: "v2",
+        winner_asset_sha256: election.winner.asset_sha256,
+      })
+    }
+
+    if (path === "/publication/state" && request.method === "POST") {
+      const payload = await request.json().catch(() => ({}))
+      const requestedSymbol = normalizeSymbol(payload?.symbol || this.getMeta("symbol") || "")
+      if (!requestedSymbol) {
+        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
+      }
+      const symbol = this.ensureSymbol(requestedSymbol)
+      const election = this.geneAuthorityWinner()
+      return Response.json({
+        ok: true,
+        symbol,
+        authority_epoch: this.getMeta("authority_epoch") || "legacy",
+        admin_override: this.getMeta("admin_override") === "1",
+        publication: this.publication.read(),
+        winner_asset_sha256: election?.winner?.asset_sha256 || null,
+        candidate_count:
+          Number(
+            this.state.storage.sql
+              .exec(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)
+              .toArray()[0]?.n || 0,
+          ) || 0,
+      })
+    }
+
     if (path === "/vote/set" && request.method === "POST") {
       const payload = await request.json()
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
@@ -18084,11 +19272,11 @@ export class IconoplasmVoteCoordinator {
         payload?.vision_id || "",
         payload?.candidate_image_id,
       )
-      // Schedule durable delivery before committing the vote/outbox transaction.
-      // Durable Objects serialize the alarm behind this request, so it cannot
-      // observe the outbox until the transaction below has settled.
-      await this.armOutboxAlarm(1)
-      const result = this.applyVoteMutation({
+      // The v2 path commits the vote, the new selection intent and its wakeup
+      // in one storage transaction. The legacy path keeps scheduling durable
+      // delivery before the vote/outbox transaction exactly as before.
+      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
+      const outcome = await this.applyAuthoritativeVoteMutation({
         assetSha256: assetSha,
         userId,
         requestedVoteValue: requested,
@@ -18097,12 +19285,20 @@ export class IconoplasmVoteCoordinator {
         ensuredAsset,
         reason: payload?.reason || "vote_auto_promote",
       })
+      const result = outcome.vote
       return Response.json({
         ok: true,
         symbol,
         asset_sha256: assetSha,
         ...result,
         snapshot: this.caretakerSupervotes.decorateSnapshot(result.snapshot),
+        authority: outcome.authority,
+        publication: outcome.publication
+          ? {
+              changed: outcome.publication.changed,
+              pending: outcome.publication.state?.pending === true,
+            }
+          : null,
       })
     }
 
@@ -18118,7 +19314,7 @@ export class IconoplasmVoteCoordinator {
       let upserted = 0
       let deleted = 0
       let invalid = 0
-      await this.armOutboxAlarm(1)
+      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
 
       for (const raw of items) {
         const assetSha = normalizeSha256(raw?.asset_sha256 || "")
@@ -18134,7 +19330,7 @@ export class IconoplasmVoteCoordinator {
           raw?.vision_id || "",
           raw?.candidate_image_id,
         )
-        const result = this.applyVoteMutation({
+        const outcome = await this.applyAuthoritativeVoteMutation({
           assetSha256: assetSha,
           userId,
           requestedVoteValue: requested,
@@ -18143,6 +19339,7 @@ export class IconoplasmVoteCoordinator {
           ensuredAsset,
           reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
         })
+        const result = outcome.vote
         if (result.final_vote_value === 0) {
           deleted += 1
         } else {
@@ -18159,6 +19356,7 @@ export class IconoplasmVoteCoordinator {
           final_vote_value: result.final_vote_value,
           changed: result.changed,
           mutation_id: result.mutation_id,
+          authority: outcome.authority,
         })
       }
 
@@ -23730,6 +24928,23 @@ export async function recoverDueIconoplasmGeneCardMaterializationsForScheduled(e
   return recoverDueIconoplasmGeneCardMaterializations(env, { limit: 8 })
 }
 
+// Bounded shared-aggregate drain. Four passes per wake keep a day of ordinary
+// batches flowing while never letting one invocation run unbounded.
+export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
+  let drained = 0
+  let applied = 0
+  let duplicates = 0
+  for (let pass = 0; pass < 4; pass++) {
+    const result = await drainSharedDiscoveryDeliveries(env.ICONOPLASM_DB, { limit: 128 })
+    drained += result.drained
+    applied += result.applied
+    duplicates += result.duplicates
+    if (result.drained < 128) break
+  }
+  return { ok: true, drained, applied, duplicates }
+}
+
 async function processPendingSyncFinalizationJobs(
   env,
   ctx,
@@ -25952,6 +27167,7 @@ export function resetIconoplasmRuntimeCachesForTest() {
   cardCatalogParsedManifestReadPromises.clear()
   cardCatalogParsedShardCache.clear()
   cardCatalogParsedShardReadPromises.clear()
+  resetPublishedViewReaderCachesForTest()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
@@ -26216,11 +27432,12 @@ export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordin
         throughEventAt: through.created_at,
         limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
       }),
-    async materialize(symbols) {
+    async materialize(symbols, { portraitOverrides = null } = {}) {
       const records = await cardCatalogRecordsForArtifact(env, {
         requestUrl: "https://iconoplasm.brinedew.bio/",
         symbols,
         snapshotVersion: "content-addressed",
+        portraitOverrides,
       })
       return records.map((record) =>
         buildMobileCardVMFromGeneRecord(record, {
@@ -27710,7 +28927,10 @@ async function exactReadyGeneBlotsForPublishedCards(env, cardsBySymbol) {
   )
 }
 
-async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, snapshotVersion }) {
+async function cardCatalogRecordsForArtifact(
+  env,
+  { requestUrl, symbols = null, snapshotVersion, portraitOverrides = null },
+) {
   if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
   const symbolList = Array.isArray(symbols)
@@ -27797,7 +29017,79 @@ async function cardCatalogRecordsForArtifact(env, { requestUrl, symbols = null, 
       if (Array.isArray(result?.results)) rows.push(...result.results)
     }
   }
-  const records = rows
+  // B-762: an explicit per-symbol portrait override lets the per-gene vote
+  // authority materialize its selected winner before D1 canon changes. The
+  // override reads only that gene's exact asset row; a missing asset fails the
+  // materialization instead of silently publishing a different candidate.
+  let resolvedRows = rows
+  if (portraitOverrides && typeof portraitOverrides === "object") {
+    const overrideBySymbol = new Map()
+    for (const [key, value] of Object.entries(portraitOverrides)) {
+      const overrideSymbol = normalizeSymbol(key)
+      if (!overrideSymbol) continue
+      const raw = String(value || "")
+        .trim()
+        .toLowerCase()
+      overrideBySymbol.set(overrideSymbol, raw === "none" ? "none" : normalizeSha256(raw) || "")
+    }
+    const overrideRows = []
+    for (const row of rows) {
+      const overrideSymbol = normalizeSymbol(row?.gene_symbol || "")
+      const override = overrideBySymbol.get(overrideSymbol)
+      if (override === undefined) {
+        overrideRows.push(row)
+        continue
+      }
+      const currentSha = normalizeSha256(row?.asset_sha256 || "") || ""
+      if (override === "none" || override === "") {
+        overrideRows.push(
+          currentSha
+            ? {
+                ...row,
+                asset_sha256: null,
+                width: null,
+                height: null,
+                vision_id: null,
+                candidate_image_id: null,
+                emulsion_id: null,
+                workflow_id: null,
+                workflow_label: null,
+                workflow_path: null,
+                prompt_version: null,
+                variant_slot: null,
+                sample_label: null,
+                sample_number: null,
+                sample_text_hash: null,
+              }
+            : row,
+        )
+        continue
+      }
+      if (override === currentSha) {
+        overrideRows.push(row)
+        continue
+      }
+      const assetRow = await env.ICONOPLASM_DB.prepare(
+        `SELECT width, height, vision_id, candidate_image_id, emulsion_id,
+                workflow_id, workflow_label, workflow_path, prompt_version,
+                variant_slot, sample_label, sample_number, sample_text_hash
+           FROM icono_portrait_assets
+          WHERE gene_symbol = ?
+            AND asset_sha256 = ?
+          LIMIT 1`,
+      )
+        .bind(overrideSymbol, override)
+        .first()
+      if (!assetRow) {
+        const error = new Error(`Selected winner asset is unavailable for ${overrideSymbol}`)
+        error.code = "SELECTED_ASSET_UNAVAILABLE"
+        throw error
+      }
+      overrideRows.push({ ...row, ...assetRow, asset_sha256: override })
+    }
+    resolvedRows = overrideRows
+  }
+  const records = resolvedRows
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
   const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)
@@ -29347,10 +30639,11 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
-const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
+export const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
   barrier: currentGalleryVersionBarrier,
+  readerView: readAdvertisedGeneDeltaView,
 })
-const hoverDeliveryHandlers = createHoverDeliveryHandlers({
+export const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   barrier: currentMobileCardSnapshotVersion,
   manifest: readPublishedCardCatalogManifest,
   shard: readPublishedCardCatalogShard,
@@ -29362,7 +30655,46 @@ const hoverDeliveryHandlers = createHoverDeliveryHandlers({
   json,
 })
 
-async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
+/**
+ * B-762 exact resolution for a snapshot-addressed reader. The view id is an
+ * exact immutable identity: base epoch plus the content hash of the chain
+ * object that names the exact segment set. `committed` carries the verified
+ * immutable record, `withdrawn` is a tombstone that must stay missing,
+ * `absent` means the symbol is untouched and must resolve from the view's own
+ * base epoch, and `unavailable` fails closed instead of reading newer state.
+ */
+async function readPublishedViewRecord(env, view, kind, symbol) {
+  let resolved
+  try {
+    resolved = await readPublishedViewEntry({
+      readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
+      chainHash: view.chainHash,
+      base: view.base,
+      symbol,
+    })
+  } catch {
+    return { status: "unavailable", code: "VIEW_READ_FAILED" }
+  }
+  if (!resolved.ok) return { status: "unavailable", code: resolved.code }
+  if (!resolved.entry) return { status: "absent" }
+  if (resolved.entry.status === "withdrawn") return { status: "withdrawn" }
+  const receipt = resolved.entry[kind]
+  if (!receipt) return { status: "unavailable", code: "ENTRY_RECEIPT_MISSING" }
+  let record = null
+  try {
+    record = await readPublishedBunnyCardObject(
+      env,
+      receipt.key,
+      (value) => value?.symbol === symbol,
+    )
+  } catch {
+    record = null
+  }
+  if (!record) return { status: "unavailable", code: "ENTRY_RECORD_UNAVAILABLE" }
+  return { status: "committed", record }
+}
+
+export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
   if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
@@ -29374,11 +30706,14 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
   // ARCHITECTURE FENCE [IPD-008]: the version is part of the URL, so this read
   // is immutable and can be cached by the browser and CDN. It reads only the
   // published card artifact selected by that version; D1 is never a fallback.
+  const view = parsePublishedViewId(snapshotVersion)
   const barrier = await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
-  if (!publishedVersions.has(snapshotVersion)) {
+  // A delta view names its exact base epoch. That base must still be published
+  // and the view never resolves against a newer epoch.
+  if (!publishedVersions.has(view.base)) {
     return json(
       {
         error: "Published card snapshot is retired",
@@ -29405,17 +30740,56 @@ async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbo
     })
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
-  if (!artifact) {
-    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-Data-Source": "artifact-unavailable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-    })
+  let deltaRecord = null
+  if (view.chainHash) {
+    const resolved = await readPublishedViewRecord(env, view, "gene", symbol)
+    if (resolved.status === "unavailable") {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    if (resolved.status === "withdrawn") {
+      const withdrawn = json(
+        {
+          api_version: PUBLIC_API_VERSION,
+          schema_version: API_SCHEMA_VERSION,
+          snapshot_version: snapshotVersion,
+          canonical_key: "symbol",
+          gene: null,
+          missing: [symbol],
+        },
+        404,
+        {
+          "Cache-Control": "public, max-age=31536000, immutable",
+          ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
+          "X-Iconoplasm-Data-Source": "published-card-catalog",
+          "X-Iconoplasm-Detail-Cache": "MISS",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        },
+      )
+      if (cache) ctx?.waitUntil?.(cache.put(cacheKey, withdrawn.clone()))
+      return withdrawn
+    }
+    if (resolved.status === "committed") deltaRecord = resolved.record
   }
 
-  const card = artifact.bySymbol.get(symbol)
-  const record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  let record = null
+  if (deltaRecord) {
+    record = projectGeneRecord(deltaRecord, null)
+  } else {
+    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+    if (!artifact) {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    const card = artifact.bySymbol.get(symbol)
+    record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  }
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -29463,7 +30837,13 @@ function publishedPortraitLocatorFromCard(card, snapshotVersion) {
   }
 }
 
-async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, symbolFromPath) {
+export async function handlePublicPortraitLocator(
+  request,
+  env,
+  ctx,
+  snapshotFromPath,
+  symbolFromPath,
+) {
   const snapshotVersion = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
   if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
@@ -29479,11 +30859,14 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
   // A byte-equivalent Bunny cache of this response is permitted. "One canon"
   // forbids independent selection/pointers, not caching. Worker Cache API hits
   // still consume a Worker invocation; do not mistake them for direct CDN hits.
+  const view = parsePublishedViewId(snapshotVersion)
   const barrier = await currentMobileCardSnapshotVersion(env)
   const publishedVersions = new Set(
     [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
   )
-  if (!publishedVersions.has(snapshotVersion)) {
+  // A delta view names its exact base epoch. That base must still be published
+  // and the view never resolves against a newer epoch.
+  if (!publishedVersions.has(view.base)) {
     return json(
       {
         error: "Published card snapshot is retired",
@@ -29511,15 +30894,49 @@ async function handlePublicPortraitLocator(request, env, ctx, snapshotFromPath, 
     })
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
-  if (!artifact) {
-    return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-Data-Source": "artifact-unavailable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-    })
+  let locator = null
+  if (view.chainHash) {
+    const resolved = await readPublishedViewRecord(env, view, "portrait", symbol)
+    if (resolved.status === "unavailable") {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    if (resolved.status === "committed") {
+      locator = publishedPortraitLocatorFromCard({ payload: resolved.record }, snapshotVersion)
+      // A committed tombstone is a real missing result; an unprojectable
+      // committed record is a broken publication invariant and fails closed.
+      if (!locator) {
+        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+          "Cache-Control": "no-store",
+          "X-Iconoplasm-Data-Source": "artifact-unavailable",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        })
+      }
+    } else if (resolved.status === "absent") {
+      const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+      if (!artifact) {
+        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+          "Cache-Control": "no-store",
+          "X-Iconoplasm-Data-Source": "artifact-unavailable",
+          "X-Iconoplasm-VM-Version": snapshotVersion,
+        })
+      }
+      locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
+    }
+  } else {
+    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
+    if (!artifact) {
+      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
+        "Cache-Control": "no-store",
+        "X-Iconoplasm-Data-Source": "artifact-unavailable",
+        "X-Iconoplasm-VM-Version": snapshotVersion,
+      })
+    }
+    locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
   }
-  const locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -31573,22 +32990,17 @@ async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}
     1,
     Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
   )
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT d.gene_symbol
-       FROM icono_gene_discoveries d
-      WHERE d.user_id = ?
-      ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-      LIMIT ?`,
-  )
-    .bind(userIdNorm, cleanedLimit)
-    .all()
-  return Array.from(
-    new Set(
-      (Array.isArray(rows?.results) ? rows.results : [])
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter(Boolean),
-    ),
-  )
+  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  const state = await readOrImportCompactUserState(env, {
+    userId: userIdNorm,
+    isAdmin,
+    allowImport: true,
+  })
+  if (!state) return []
+  const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
+  return compactShelfRowsFromChronology(chronology)
+    .slice(0, cleanedLimit)
+    .map((row) => row.gene_symbol)
 }
 
 async function handlePublicGeneSearch(request, env) {
@@ -32989,104 +34401,159 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
+    // The per-hover personal writer is retired. The activated replacement is
+    // POST /api/iconoplasm/discoveries/batch with a client-durable queue. Older
+    // installed clients fall back to their local guest buffer on this 410 and
+    // converge through the idempotent merge route, so no encounter is lost.
     if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST") {
+      return done(
+        "discoveries_encounter_retired",
+        json(
+          {
+            ok: false,
+            code: "LEGACY_DISCOVERY_WRITER_RETIRED",
+            error: "This client must batch discoveries through /api/iconoplasm/discoveries/batch.",
+          },
+          410,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST") {
       if (!env.ICONOPLASM_DB) {
         return done(
-          "discoveries_encounter_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+          "discoveries_batch_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500, { "Cache-Control": "no-store" }),
         )
       }
       const payload = await parseJsonBody(request)
-      const symbol = normalizeSymbol(payload?.symbol || payload?.gene_symbol || "")
-      const source = normalizeDiscoverySource(payload?.source || DISCOVERY_SOURCE_EXTENSION_HOVER)
-      const trigger = normalizeDiscoveryTrigger(payload?.trigger || DISCOVERY_TRIGGER_HOVER_DWELL)
-      const dwellMs = normalizeDiscoveryDwellMs(payload?.dwell_ms ?? payload?.dwellMs)
-      if (!symbol) {
+      const batchId = String(payload?.batch_id || "").trim()
+      if (!/^[A-Za-z0-9._:-]{1,128}$/.test(batchId)) {
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid gene symbol" }, 400, {
+          "discoveries_batch_400",
+          json({ ok: false, error: "Missing or invalid discovery batch id" }, 400, {
             "Cache-Control": "no-store",
           }),
         )
       }
-      if (!source) {
+      const rawEncounters = Array.isArray(payload?.encounters) ? payload.encounters : []
+      if (!rawEncounters.length || rawEncounters.length > DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS) {
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid discovery source" }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          "discoveries_batch_400",
+          json(
+            {
+              ok: false,
+              error: `Discovery batches must contain 1-${DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS} encounters`,
+            },
+            400,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
-      if (!trigger) {
-        return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "Missing or invalid discovery trigger" }, 400, {
-            "Cache-Control": "no-store",
-          }),
-        )
-      }
-      if (trigger === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMs == null) {
-        return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: "hover_dwell discovery events must include dwell_ms" }, 400, {
-            "Cache-Control": "no-store",
-          }),
-        )
+      const nowSeconds = Math.floor(Date.now() / 1000)
+      const encounters = []
+      for (const raw of rawEncounters) {
+        const symbol = normalizeSymbol(raw?.symbol || "")
+        const source = normalizeDiscoverySource(raw?.source || DISCOVERY_SOURCE_EXTENSION_HOVER)
+        const trigger = normalizeDiscoveryTrigger(raw?.trigger || DISCOVERY_TRIGGER_HOVER_DWELL)
+        const dwellMs = normalizeDiscoveryDwellMs(raw?.dwell_ms ?? raw?.dwellMs)
+        if (!symbol || !source || !trigger) {
+          return done(
+            "discoveries_batch_400",
+            json({ ok: false, error: "Invalid discovery encounter in batch" }, 400, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        if (trigger === DISCOVERY_TRIGGER_HOVER_DWELL && dwellMs == null) {
+          return done(
+            "discoveries_batch_400",
+            json({ ok: false, error: "hover_dwell discovery events must include dwell_ms" }, 400, {
+              "Cache-Control": "no-store",
+            }),
+          )
+        }
+        const at = Number(raw?.at)
+        encounters.push({
+          symbol,
+          at: Number.isFinite(at) && at >= 0 && at <= 0xffffffff ? Math.floor(at) : nowSeconds,
+          source,
+          trigger,
+          dwell_ms: dwellMs,
+        })
       }
 
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
-          "discoveries_encounter_guest",
+          "discoveries_batch_guest",
           json(
             {
               ok: true,
               authenticated: false,
-              recorded: false,
-              symbol,
+              persisted: false,
+              batch_id: batchId,
             },
             200,
             { "Cache-Control": "no-store" },
           ),
         )
       }
-
       const userId = normalizeUserId(sessionUser.user_id)
-      // Cost fence: this hover-dwell route can fire at browser-hover cadence.
-      // Starter seeding belongs on shelf/bootstrap endpoints like discoveries/me,
-      // not here.
-
-      const result = await recordGeneDiscoveryEncounter(env, {
-        userId,
-        geneSymbol: symbol,
-        source,
-        trigger,
-        dwellMs,
-      })
-      if (!result.ok) {
+      try {
+        const result = await recordCompactDiscoveryEncounters(env, {
+          userId,
+          isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+          batchId,
+          encounters,
+        })
         return done(
-          "discoveries_encounter_400",
-          json({ ok: false, error: String(result.error || "Could not record discovery") }, 400, {
-            "Cache-Control": "no-store",
-          }),
+          "discoveries_batch",
+          json(
+            {
+              ok: true,
+              authenticated: true,
+              batch_id: batchId,
+              replay: Boolean(result.replay),
+              recorded: Number(result.recorded || 0),
+              dropped_symbols: result.dropped || [],
+              state_version: Number(result.state_version || 0),
+              attempts: Number(result.attempts || 0),
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      } catch (error) {
+        const code = String(error?.code || "")
+        if (code === "DISCOVERY_COMPACT_CONFLICT") {
+          return done(
+            "discoveries_batch_retry",
+            json(
+              {
+                ok: false,
+                code,
+                error: "Discovery batch stayed contended; retry with the same batch id.",
+              },
+              503,
+              { "Cache-Control": "no-store", "Retry-After": "1" },
+            ),
+          )
+        }
+        return done(
+          "discoveries_batch_400",
+          json(
+            {
+              ok: false,
+              code: code || "DISCOVERY_BATCH_REJECTED",
+              error: String(error?.message || "Could not record discovery batch"),
+            },
+            400,
+            { "Cache-Control": "no-store" },
+          ),
         )
       }
-
-      return done(
-        "discoveries_encounter",
-        json(
-          {
-            ok: true,
-            authenticated: true,
-            recorded: true,
-            created: Boolean(result.created),
-            symbol,
-            discovery: result.discovery,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
     }
 
     if (path === "/api/iconoplasm/discoveries/membership" && request.method === "GET") {
@@ -33106,12 +34573,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "discoveries_membership_503",
           json({ error: "Discovery storage unavailable" }, 503, { "Cache-Control": "no-store" }),
         )
+      const userId = authenticated ? normalizeUserId(sessionUser.user_id) : ""
       const discovered = authenticated
-        ? await readDiscoveryMembership(
-            env.ICONOPLASM_DB,
-            normalizeUserId(sessionUser.user_id),
+        ? await readCompactDiscoveryMembership(env, {
+            userId,
             symbols,
-          )
+            isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+          })
         : []
       return done(
         "discoveries_membership",
