@@ -110,6 +110,18 @@ export function voteJobVersionMigrationStatements() {
   )
 }
 
+export function compactDiscoveryMigrationStatements() {
+  // B-764: schema and singleton state only. The catalog-sized ordinal seed was
+  // replaced by the bounded on-demand dictionary resolver, so a statement
+  // count that grows with the migration means the seed came back.
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0106_compact_discovery_state_v2.sql",
+    0,
+    12,
+  )
+}
+
 function output() {
   if (
     readFileSync(
@@ -120,6 +132,11 @@ function output() {
     throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
   }
   const migrations = [
+    [
+      "COMPACT_DISCOVERY",
+      "0106_compact_discovery_state_v2.sql",
+      compactDiscoveryMigrationStatements(),
+    ],
     [
       "BLACKLIST_LOOKUP",
       "0105_artist_blacklist_lookup.sql",
