@@ -131,69 +131,62 @@ function post(coordinator, path, body) {
   )
 }
 
-test(
-  "cold ordinary first mutation reconstructs retained candidate authority without test-side seeding",
-  async (t) => {
-    const symbol = "TP53"
-    const { state, sql } = stateFixture()
-    t.after(() => sql.db.close())
-    const coordinator = new IconoplasmVoteCoordinator(state, {
-      ICONOPLASM_DB: retainedLegacyD1(symbol),
-    })
-    await state.ready
-    coordinator.setMeta("symbol", symbol)
-    // This is retained legacy policy, not v2 candidate preparation. Production
-    // first use must reconcile the bounded candidate authority itself.
-    coordinator.setMeta("published_asset_sha256", sha("a"))
+test("cold ordinary first mutation reconstructs retained candidate authority without test-side seeding", async (t) => {
+  const symbol = "TP53"
+  const { state, sql } = stateFixture()
+  t.after(() => sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {
+    ICONOPLASM_DB: retainedLegacyD1(symbol),
+  })
+  await state.ready
+  coordinator.setMeta("symbol", symbol)
+  // This is retained legacy policy, not v2 candidate preparation. Production
+  // first use must reconcile the bounded candidate authority itself.
+  coordinator.setMeta("published_asset_sha256", sha("a"))
 
-    assert.equal(
-      coordinator.sqlFirst("SELECT COUNT(*) AS n FROM gene_candidate_authority").n,
-      0,
-      "setup must not pre-seed v2 candidate authority",
-    )
+  assert.equal(
+    coordinator.sqlFirst("SELECT COUNT(*) AS n FROM gene_candidate_authority").n,
+    0,
+    "setup must not pre-seed v2 candidate authority",
+  )
 
-    const response = await post(coordinator, "/vote/set", {
-      symbol,
-      asset_sha256: sha("a"),
-      user_id: "new-user",
-      vote_value: 1,
-      vision_id: "anima-v1-9",
-    })
-    assert.equal(response.status, 200)
-    const body = await response.json()
-    assert.equal(body.authority, "v2")
+  const response = await post(coordinator, "/vote/set", {
+    symbol,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.authority, "v2")
 
-    const statusResponse = await post(coordinator, "/publication/state", { symbol })
-    assert.equal(statusResponse.status, 200)
-    const status = await statusResponse.json()
-    assert.equal(status.authority_epoch, "v2")
-    assert.equal(
-      status.winner_asset_sha256,
+  const statusResponse = await post(coordinator, "/publication/state", { symbol })
+  assert.equal(statusResponse.status, 200)
+  const status = await statusResponse.json()
+  assert.equal(status.authority_epoch, "v2")
+  assert.equal(status.winner_asset_sha256, sha("a"), "retained published authority was lost")
+  assert.equal(
+    status.candidate_count,
+    1,
+    "cold handover did not reconstruct retained candidate authority",
+  )
+  assert.equal(
+    coordinator.sqlFirst(
+      "SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ? AND asset_sha256 = ?",
+      "legacy-user",
       sha("a"),
-      "retained published authority was lost",
-    )
-    assert.equal(
-      status.candidate_count,
-      1,
-      "cold handover did not reconstruct retained candidate authority",
-    )
-    assert.equal(
-      coordinator.sqlFirst(
-        "SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ? AND asset_sha256 = ?",
-        "legacy-user",
-        sha("a"),
-      ).n,
-      1,
-      "accepted retained vote did not survive handover",
-    )
-    assert.equal(
-      coordinator.sqlFirst(
-        "SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ? AND asset_sha256 = ?",
-        "new-user",
-        sha("a"),
-      ).n,
-      1,
-      "original first command did not execute after handover",
-    )
-  },
-)
+    ).n,
+    1,
+    "accepted retained vote did not survive handover",
+  )
+  assert.equal(
+    coordinator.sqlFirst(
+      "SELECT COUNT(*) AS n FROM vote_by_user_asset WHERE user_id = ? AND asset_sha256 = ?",
+      "new-user",
+      sha("a"),
+    ).n,
+    1,
+    "original first command did not execute after handover",
+  )
+})
