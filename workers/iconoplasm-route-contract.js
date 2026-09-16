@@ -955,6 +955,22 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "authority_cutover",
   }),
   iconoplasmApiContract({
+    apiHandler: "discovery_authority_cutover",
+    id: "authority_discovery_candidates",
+    match: exact("/api/iconoplasm/authority/discovery/candidates"),
+    methods: POST,
+    auth: "authority-cutover-bearer",
+    budgetFamily: "authority_cutover",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "discovery_authority_cutover",
+    id: "authority_discovery_activate",
+    match: exact("/api/iconoplasm/authority/discovery/activate"),
+    methods: POST,
+    auth: "authority-cutover-bearer",
+    budgetFamily: "authority_cutover",
+  }),
+  iconoplasmApiContract({
     apiHandler: "manifestation_authority_service",
     id: "authority_cutover_actions",
     match: pattern(/^\/api\/iconoplasm\/authority\/cutover\/runs\/([^/]+)\/actions$/, ["run_id"]),

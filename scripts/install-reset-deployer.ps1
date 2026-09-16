@@ -37,7 +37,11 @@ if (-not (Test-Path -LiteralPath $hiddenRunnerPath -PathType Leaf)) {
 }
 $action = New-ScheduledTaskAction -Execute $wscriptPath -Argument ('"{0}"' -f $hiddenRunnerPath) -WorkingDirectory $repoDirectory
 $trigger = New-ScheduledTaskTrigger -Daily -At $resetUtc.LocalDateTime
-$repeatingTrigger = New-ScheduledTaskTrigger -Once -At $resetUtc.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Minutes 390)
+# Cover the whole reset day: the dispatcher itself decides readiness from
+# day-scoped accounting, exact-source validation and negative-only headroom,
+# so the task must not stop offering safe remaining capacity at 13:30 Vietnam.
+# Interval stays 5 minutes; duration ends at 23:55 UTC of the reset day.
+$repeatingTrigger = New-ScheduledTaskTrigger -Once -At $resetUtc.LocalDateTime -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Minutes 1435)
 $trigger.Repetition = $repeatingTrigger.Repetition
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 4) -MultipleInstances IgnoreNew
 $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
