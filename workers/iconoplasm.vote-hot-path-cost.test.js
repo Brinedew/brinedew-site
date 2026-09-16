@@ -32,7 +32,7 @@ test(
             this.cost.rows_read+=cursor.rowsRead;this.cost.rows_written+=cursor.rowsWritten;
             return {toArray:()=>rows};
           }};
-          const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),setAlarm:async()=>{}};
+          const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),transaction:fn=>state.storage.transaction(fn),setAlarm:async()=>{},getAlarm:async()=>null};
           this.context={storage,blockConcurrencyWhile:fn=>state.blockConcurrencyWhile(fn)};
           this.env={ICONOPLASM_DB:{prepare(){throw Error('Warm vote unexpectedly queried D1')}}};
           this.coordinator=new Coordinator(this.context,this.env);
