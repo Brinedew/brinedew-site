@@ -6,6 +6,14 @@ import {
   ownManifestation,
 } from "./caretaker-manifestations-model.js?v=20260905-caretaker-categories-v7"
 
+// B-740: attribute payloads must not rely on the mounted escaper covering
+// quotes. The iconoplasm app passes a text-node escaper that leaves raw
+// quotes, which truncated the data-fields-json attribute at its first key and
+// made the tag editor unreachable for caretakers with saved fields.
+function escapeAttributeValue(escapeHtml, value) {
+  return String(escapeHtml(value)).replaceAll('"', "&quot;")
+}
+
 export function diffMarkup(before, after, escapeHtml) {
   if (String(before || "") === String(after || "")) {
     return '<p class="icono-caretaker-diff__unchanged">This version matches the canonical text.</p>'
@@ -317,7 +325,11 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       ' data-fields-json="' +
-      esc(JSON.stringify(dossier.prefill_fields || own?.head_fields || {})) +
+      // B-740: attribute payloads must not trust the mounted escaper to cover
+      // quotes. The iconoplasm app passes a text-node escaper that leaves raw
+      // quotes, which truncated this JSON at the first key and made the tag
+      // editor unreachable for every caretaker with saved fields.
+      escapeAttributeValue(esc, JSON.stringify(dossier.prefill_fields || own?.head_fields || {})) +
       '"' +
       ">" +
       esc(currentTags) +

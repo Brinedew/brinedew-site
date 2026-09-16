@@ -870,3 +870,30 @@ test("an explicitly disabled dossier mounts no authority surface", async () => {
   assert.equal(host.hidden, true)
   assert.equal(host.childNodes.length, 0)
 })
+
+test("B-740 saved tag fields stay parseable under a text-only attribute escaper", async () => {
+  // The live iconoplasm app passes its div-based `esc`, which escapes &, < and
+  // > but leaves raw quotes. A JSON attribute must survive that escaper: a
+  // truncated data-fields-json made readTagFields throw and rendered the whole
+  // caretaker island as temporarily unavailable on production.
+  function textOnlyEscapeHtml(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+  }
+  const { readTagFields } = await import("./caretaker-tag-editor.js")
+  const withFields = dossier()
+  withFields.prefill_fields = {
+    accessories: ["empty_brass_tortoiseshell_gauntlet", "no_headgear"],
+    colors: ["baby_pink_skin", "medical_white_garment"],
+    note: 'quote " and ampersand & stay intact',
+  }
+  const html = renderCaretakerManifestationPanel(withFields, textOnlyEscapeHtml)
+  const { document } = parseHTML('<html><body><div id="host"></div></body></html>')
+  const host = document.getElementById("host")
+  host.innerHTML = html
+  const source = host.querySelector("[data-icono-caretaker-tags]")
+  assert.ok(source, "the tag source textarea must render")
+  assert.deepEqual(readTagFields(source), withFields.prefill_fields)
+})
