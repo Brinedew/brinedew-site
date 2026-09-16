@@ -1767,6 +1767,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function fetchImageEditProviders(options) {
+    // B-612: image-edit provider metadata is authenticated account state.
+    // Guests get an empty in-memory projection and no network request, so a
+    // stale caller can never render the provider list or a last-used marker.
+    if (!currentUser) {
+      return Promise.resolve({
+        providers: [],
+        supported_providers: [],
+        last_used: null,
+        encryption_configured: false,
+      })
+    }
     var opts = options || {}
     var op = opts.op === "candidate_generation" ? "candidate_generation" : "image_edit"
     var cacheKey = op
@@ -2850,6 +2861,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     hasResolvedAuthState = true
     if (previousHadUser !== !!currentUser) {
       invalidateImageEditProviders()
+      resetImageEditDialogState()
     }
     if (currentUser) {
       requestInbox.start()
@@ -5732,6 +5744,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function renderEditImageActionMarkup(source, genePayload, item) {
+    // B-612: guest UI must not expose an edit entry that can only lead to
+    // authenticated provider state. The signed-in refresh path re-renders
+    // this rail through refreshCurrentGeneInteractiveIslands().
+    if (!currentUser) return ""
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var sourceItem = item || {}
     var assetSha = String((sourceItem && sourceItem.asset_sha256) || "")
@@ -5798,6 +5814,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     job: null,
     loading: false,
     encryptionConfigured: false,
+  }
+
+  function resetImageEditDialogState() {
+    // B-612: a sign-out or account switch must clear provider state so the
+    // next guest view can never render the previous session's providers or
+    // its "last used" marker.
+    imageEditDialogState.source = null
+    imageEditDialogState.providers = []
+    imageEditDialogState.supportedProviders = []
+    imageEditDialogState.lastUsed = null
+    imageEditDialogState.job = null
+    imageEditDialogState.loading = false
+    imageEditDialogState.encryptionConfigured = false
+    var dialog = imageEditDialogState.dialog
+    if (!dialog) return
+    if (typeof dialog.hide === "function") void dialog.hide()
+    else dialog.removeAttribute("open")
+    renderImageEditProviders()
   }
 
   function renderImageEditDialogMarkup() {
@@ -5987,15 +6021,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (select.updateComplete && typeof select.updateComplete.then === "function") {
         select.updateComplete.then(function () {
           select.value = selectedProviderId
-          updateImageEditButtons()
+          applyImageEditModelConstraints()
         })
         return
       }
-      updateImageEditButtons()
+      applyImageEditModelConstraints()
     })
   }
 
   function loadImageEditProviders() {
+    if (!currentUser) {
+      // B-612: never load authenticated provider metadata for a guest.
+      imageEditDialogState.providers = []
+      imageEditDialogState.supportedProviders = []
+      imageEditDialogState.lastUsed = null
+      imageEditSetStatus("Sign in to edit blots.", "warn")
+      renderImageEditProviders()
+      return Promise.resolve()
+    }
     imageEditSetStatus("Loading providers...", "")
     return fetchImageEditProviders({ op: "image_edit" })
       .then(function (payload) {
@@ -6136,7 +6179,68 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     updateImageEditButtons()
   }
 
+  // B-617: some models declare adjustments their provider rejects outright
+  // (Fal Nano Banana + remove_ai_generation_errors). The dialog disables those
+  // rows for the selected model with a clear reason so the combination cannot
+  // be submitted, and restores them when a compatible model is selected.
+  function imageEditModelIncompatibleAdjustments() {
+    var raw = imageEditSelectedProvider()
+    var parts = raw.split(":")
+    var providerId = parts[0] || ""
+    var model = parts.slice(1).join(":") || ""
+    if (!providerId || !model) return []
+    var supported = imageEditDialogState.supportedProviders || []
+    for (var i = 0; i < supported.length; i++) {
+      var provider = supported[i] || {}
+      if (provider.provider_id !== providerId) continue
+      var options = Array.isArray(provider.model_options) ? provider.model_options : []
+      for (var j = 0; j < options.length; j++) {
+        var option = options[j] || {}
+        if (String(option.model || "") !== model) continue
+        return Array.isArray(option.incompatible_adjustments) ? option.incompatible_adjustments : []
+      }
+    }
+    return []
+  }
+
+  function applyImageEditModelConstraints() {
+    var dialog = ensureImageEditDialog()
+    var blocked = imageEditModelIncompatibleAdjustments()
+    var context = (imageEditDialogState.source && imageEditDialogState.source.adjustments) || {}
+    var rows = dialog.querySelectorAll("[data-icono-image-edit-adjustment-row]")
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i]
+      var kind = row.getAttribute("data-icono-image-edit-adjustment-row") || ""
+      var checkbox = row.querySelector("[data-icono-image-edit-adjustment]")
+      var valueEl = row.querySelector("[data-icono-image-edit-adjustment-value]")
+      var blockedByModel = blocked.indexOf(kind) >= 0
+      var wasBlockedByModel = row.getAttribute("data-icono-image-edit-model-blocked") === "true"
+      row.setAttribute("data-icono-image-edit-model-blocked", blockedByModel ? "true" : "false")
+      if (blockedByModel) {
+        if (checkbox) {
+          checkbox.checked = false
+          checkbox.disabled = true
+        }
+        row.classList.add("icono-image-edit-adjustment-row--unavailable")
+        if (valueEl) valueEl.textContent = "Not supported by this model"
+        continue
+      }
+      if (!wasBlockedByModel) continue
+      var value = imageEditContextValue(kind, context)
+      var available = imageEditContextValueAvailable(kind, value)
+      if (checkbox) checkbox.disabled = !available
+      row.classList.toggle("icono-image-edit-adjustment-row--unavailable", !available)
+      if (valueEl) {
+        valueEl.textContent = available
+          ? imageEditContextValueLabel(kind, value, context)
+          : "Unavailable from gene data"
+      }
+    }
+    updateImageEditButtons()
+  }
+
   function openImageEditDialog(source) {
+    if (!currentUser) return
     var dialog = ensureImageEditDialog()
     imageEditDialogState.source = source
     imageEditDialogState.job = null
@@ -6161,6 +6265,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (result) result.hidden = true
     imageEditSetStatus("", "")
     renderImageEditContext(source)
+    applyImageEditModelConstraints()
     updateImageEditButtons()
     loadImageEditProviders()
     if (typeof dialog.show === "function") dialog.show()
@@ -6354,20 +6459,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function wireImageEditDialog(dialog) {
     dialog.addEventListener("change", function (event) {
-      if (
-        event.target &&
-        (event.target.matches("[data-icono-image-edit-adjustment]") ||
-          event.target.matches("[data-icono-image-edit-provider]"))
-      ) {
+      if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
+        applyImageEditModelConstraints()
+        return
+      }
+      if (event.target && event.target.matches("[data-icono-image-edit-adjustment]")) {
         updateImageEditButtons()
       }
     })
     dialog.addEventListener("sl-change", function (event) {
-      if (
-        event.target &&
-        (event.target.matches("[data-icono-image-edit-adjustment]") ||
-          event.target.matches("[data-icono-image-edit-provider]"))
-      ) {
+      if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
+        applyImageEditModelConstraints()
+        return
+      }
+      if (event.target && event.target.matches("[data-icono-image-edit-adjustment]")) {
         updateImageEditButtons()
       }
     })
@@ -8798,31 +8903,34 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           "</button>" +
           "</div>"
       }
-      var editMarkup =
-        '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
-        esc(genePayload.symbol) +
-        '" data-icono-source-asset-sha256="' +
-        esc(assetSha) +
-        '" data-icono-source-image-url="' +
-        esc(mediumUrl || fullUrl || "") +
-        '" data-icono-source-candidate-image-id="' +
-        esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
-        '" data-icono-source-vision-id="' +
-        esc(visionId) +
-        '" data-icono-source-upvotes="' +
-        esc(String(sourceVoteCount(candidate, "image_upvotes"))) +
-        '" data-icono-source-downvotes="' +
-        esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
-        '" data-icono-source-score="' +
-        esc(String(sourceVoteCount(candidate, "image_score"))) +
-        '"' +
-        imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
-        ' aria-label="Edit candidate blot for ' +
-        esc(genePayload.symbol) +
-        '" title="Edit candidate blot">' +
-        ICONO_EDIT_ICON +
-        '<span class="icono-visually-hidden">Edit candidate blot</span>' +
-        "</button>"
+      // B-612: the candidate edit entry is authenticated-only; guests get no
+      // button and therefore never reach authenticated provider state.
+      var editMarkup = currentUser
+        ? '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
+          esc(genePayload.symbol) +
+          '" data-icono-source-asset-sha256="' +
+          esc(assetSha) +
+          '" data-icono-source-image-url="' +
+          esc(mediumUrl || fullUrl || "") +
+          '" data-icono-source-candidate-image-id="' +
+          esc(candidateImageId > 0 ? String(Math.round(candidateImageId)) : "") +
+          '" data-icono-source-vision-id="' +
+          esc(visionId) +
+          '" data-icono-source-upvotes="' +
+          esc(String(sourceVoteCount(candidate, "image_upvotes"))) +
+          '" data-icono-source-downvotes="' +
+          esc(String(sourceVoteCount(candidate, "image_downvotes"))) +
+          '" data-icono-source-score="' +
+          esc(String(sourceVoteCount(candidate, "image_score"))) +
+          '"' +
+          imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
+          ' aria-label="Edit candidate blot for ' +
+          esc(genePayload.symbol) +
+          '" title="Edit candidate blot">' +
+          ICONO_EDIT_ICON +
+          '<span class="icono-visually-hidden">Edit candidate blot</span>' +
+          "</button>"
+        : ""
       html +=
         '<article class="icono-candidate-card" style="--width:' +
         width +

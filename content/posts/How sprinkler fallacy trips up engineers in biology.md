@@ -1,5 +1,5 @@
 ---
-title: How sprinkler fallacy trips up engineers in biology
+title: Sacrificial components look like easy repairs
 tags:
   - content/post
 date: 2026-06-13
@@ -7,7 +7,7 @@ draft: true
 aliases:
   -
 ---
-# How sprinkler fallacy trips up engineers in biology
+# Sacrificial components look like easy repairs
 
 The last entry in the handbook *Universal Principles of Design* (available [here](https://people.engr.tamu.edu/pcr/courses/csce431/winter20/UniversalPrinciplesOfDesign.pdf)) is named "Weakest Link". According to authors, it is a design pattern featuring an element whose job is to fail and protect other, more valuable elements.
 
