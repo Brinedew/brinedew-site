@@ -4,10 +4,7 @@ import test from "node:test"
 import { parse } from "yaml"
 
 const manualOnly = "github.event_name == 'workflow_dispatch'"
-const workflows = [
-  ["b742-hard-pre-reset-d1-quarantine.yml", "quarantine"],
-  ["retry-production-after-d1-reset.yml", "recover-production"],
-]
+const retiredWorkflows = [["retry-production-after-d1-reset.yml", "recover-production"]]
 
 function requireRetiredAutomation(workflow, jobName) {
   assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
@@ -15,7 +12,7 @@ function requireRetiredAutomation(workflow, jobName) {
   assert.equal(workflow.jobs[jobName].if, manualOnly)
 }
 
-for (const [filename, jobName] of workflows) {
+for (const [filename, jobName] of retiredWorkflows) {
   const source = readFileSync(new URL(`../.github/workflows/${filename}`, import.meta.url), "utf8")
   const workflow = parse(source)
 
@@ -51,6 +48,30 @@ for (const [filename, jobName] of workflows) {
     assert.doesNotMatch(source, /resume-delivery|set_queue_pause_state false/)
   })
 }
+
+test("the temporary B-742 hard quarantine is narrowly reactivated without undoing B-751", () => {
+  const source = readFileSync(
+    new URL("../.github/workflows/b742-hard-pre-reset-d1-quarantine.yml", import.meta.url),
+    "utf8",
+  )
+  const workflow = parse(source)
+  const job = workflow.jobs.quarantine
+
+  assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
+  assert.ok(workflow.on.schedule.length > 0)
+  assert.equal(
+    job.if,
+    "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'",
+  )
+  assert.match(source, /2026-09-16/)
+  assert.match(source, /One-shot Sep 17 pre-reset quarantine has expired/)
+  assert.equal(job["runs-on"], "ubuntu-latest")
+  assert.match(source, /CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN/)
+  assert.match(source, /iconoplasm-sync-finalization/)
+  assert.match(source, /iconoplasm-vote-projection/)
+  assert.match(source, /iconoplasm-gene-card-materialization/)
+  assert.doesNotMatch(source, /resume-delivery|set_queue_pause_state false/)
+})
 
 test("canonical protected production and D1-free repair paths remain independent", () => {
   const source = readFileSync(
