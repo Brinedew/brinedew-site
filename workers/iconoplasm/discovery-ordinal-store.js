@@ -359,9 +359,7 @@ export async function ensureDiscoveryDictionaryForNames(
       const prior = current.get(name)
       return prior && prior.canonical === name && entry.canonical !== name ? 0 : 1
     }
-    pending.sort(
-      (left, right) => leavesCanonicalIdentity(left) - leavesCanonicalIdentity(right),
-    )
+    pending.sort((left, right) => leavesCanonicalIdentity(left) - leavesCanonicalIdentity(right))
     // One attempt, one writer token. The conditional version update runs first
     // and every row upsert is gated on the version and token it installs, so a
     // rejected version aborts all related mutations inside the same database
