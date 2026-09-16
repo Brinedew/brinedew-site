@@ -1836,10 +1836,27 @@ test("gene page visits stay in a private guest merge buffer until auth", async (
     "only a validated merge acknowledgement may clear local data",
   )
   assert.match(app, /lastGenePageDiscoveryVisitKey/)
-  assert.match(app, /\/api\/iconoplasm\/discoveries\/encounter/)
+  // Signed-in gene-page visits are durably queued before any network I/O and
+  // sent through the batched compact writer; the per-hover legacy writer is gone.
+  assert.match(app, /createWebsiteDiscoveryBatchQueue\(/)
+  assert.match(app, /\/api\/iconoplasm\/discoveries\/batch/)
+  assert.doesNotMatch(app, /\/api\/iconoplasm\/discoveries\/encounter/)
   assert.match(app, /source: "gene_page_visit"/)
   assert.match(app, /trigger: "gene_page_visit"/)
   assert.doesNotMatch(app, /source: "gene_page_visit"[\s\S]{0,220}dwell_ms/)
+  const visitStart = app.indexOf("function recordGenePageVisitDiscovery(symbol)")
+  const visitEnd = app.indexOf("function mergeWebsiteGuestDiscoveriesIfSignedIn()", visitStart)
+  const visit = app.slice(visitStart, visitEnd)
+  assert.match(
+    visit,
+    /websiteDiscoveryQueue\s*\.enqueue\(/,
+    "the visit path must enqueue into the durable queue",
+  )
+  assert.doesNotMatch(
+    visit,
+    /fetchAuthedJSON\(/,
+    "the visit path must not perform network I/O inline",
+  )
 
   const renderStart = app.indexOf("function renderGene(root, symbol, options)")
   const renderEnd = app.indexOf("function renderGeneContent(container, g)", renderStart)

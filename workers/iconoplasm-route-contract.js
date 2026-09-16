@@ -440,12 +440,24 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: null,
   }),
   contract({
+    // Retired per-hover writer: always answers 410 without touching D1. Kept on
+    // the contract so installed clients stay on the rate-limit/budget map.
     id: "discoveries_encounter",
     match: exact("/api/iconoplasm/discoveries/encounter"),
     methods: POST,
     auth: "optional-user-session",
     cache: "no-store",
     budgetFamily: "discoveries_encounter",
+    gatewayHandler: "iconoplasm_api",
+    rateLimit: null,
+  }),
+  contract({
+    id: "discoveries_batch",
+    match: exact("/api/iconoplasm/discoveries/batch"),
+    methods: POST,
+    auth: "optional-user-session",
+    cache: "no-store",
+    budgetFamily: "discoveries_batch",
     gatewayHandler: "iconoplasm_api",
     rateLimit: null,
   }),

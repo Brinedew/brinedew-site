@@ -1,9 +1,14 @@
 import assert from "node:assert/strict"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
-import { projectPublicCardHead } from "./lib/iconoplasm-card-publication-coordinator.js"
+import {
+  createCardPublicationCoordinatorClass,
+  projectGeneDelta,
+  projectPublicCardHead,
+} from "./lib/iconoplasm-card-publication-coordinator.js"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -213,3 +218,139 @@ test(
     }
   },
 )
+
+class CoordinatorSqlForTest {
+  constructor() {
+    this.db = new DatabaseSync(":memory:")
+  }
+
+  exec(sql, ...bindings) {
+    const source = String(sql || "")
+    let rows = []
+    if (bindings.length) {
+      rows = this.db.prepare(source).all(...bindings)
+    } else if (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(source) && !source.trim().includes(";")) {
+      rows = this.db.prepare(source).all()
+    } else {
+      this.db.exec(source)
+    }
+    return { toArray: () => rows }
+  }
+}
+
+function fakeCoordinatorState() {
+  const sql = new CoordinatorSqlForTest()
+  let alarm = null
+  const storage = {
+    sql,
+    transactionSync(callback) {
+      sql.db.exec("BEGIN IMMEDIATE")
+      try {
+        const result = callback()
+        sql.db.exec("COMMIT")
+        return result
+      } catch (error) {
+        sql.db.exec("ROLLBACK")
+        throw error
+      }
+    },
+    async getAlarm() {
+      return alarm
+    },
+    async setAlarm(value) {
+      alarm = value
+    },
+  }
+  const state = {
+    storage,
+    blockConcurrencyWhile(callback) {
+      this.ready = Promise.resolve().then(callback)
+      return this.ready
+    },
+  }
+  return { state, sql }
+}
+
+const sha = (char) => char.repeat(64)
+const commitPayload = (overrides = {}) => ({
+  symbol: "TP53",
+  version: 1,
+  selection_key: sha("a"),
+  withdrawn: false,
+  card: { key: `published-cards/v2/immutable/cards/${sha("b")}.json`, hash: sha("b") },
+  gene: { key: `published-cards/v2/immutable/genes/${sha("c")}.json`, hash: sha("c") },
+  portrait: {
+    key: `published-cards/v2/immutable/portraits/${sha("d")}.json`,
+    hash: sha("d"),
+  },
+  ...overrides,
+})
+
+test("coordinator accepts revision-checked gene commits once and replays repeats", async () => {
+  const { state, sql } = fakeCoordinatorState()
+  const Publisher = createCardPublicationCoordinatorClass(() => ({}))
+  const owner = new Publisher(state, {})
+  await state.ready
+  const commit = (body) =>
+    owner.fetch(
+      new Request("https://internal/commit-gene-version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    )
+  const first = await commit(commitPayload())
+  assert.equal(first.status, 200)
+  assert.equal((await first.json()).accepted, true)
+  const replay = await commit(commitPayload())
+  assert.equal(replay.status, 200)
+  assert.equal((await replay.json()).replayed, true)
+  const conflict = await commit(commitPayload({ selection_key: sha("e") }))
+  assert.equal(conflict.status, 409)
+  assert.equal((await conflict.json()).code, "GENE_COMMIT_CONFLICT")
+  const stale = await commit(commitPayload({ version: 0 }))
+  assert.equal(stale.status, 400)
+  const status = await (await owner.fetch(new Request("https://internal/gene-delta-status"))).json()
+  assert.equal(status.ok, true)
+  assert.equal(status.seq, 0)
+  assert.equal(status.pending, 1)
+  assert.equal(status.projection_pending, true)
+  assert.equal(status.segments, 0)
+  sql.db.close()
+})
+
+test("gene delta projection writes the KV document once and skips unchanged bytes", async () => {
+  const values = new Map()
+  let writes = 0
+  const env = {
+    KV: {
+      async get(key) {
+        return values.get(key) || null
+      },
+      async put(key, value) {
+        writes += 1
+        values.set(key, value)
+      },
+    },
+  }
+  const projection = {
+    schema_version: 1,
+    base: "ccv2-" + sha("a"),
+    view: "ccv2-" + sha("a") + ".c" + sha("f"),
+    chain_hash: sha("f"),
+    segments: [
+      { seq: 1, key: "published-cards/v2/immutable/indexes/x.json", hash: sha("b"), count: 2 },
+    ],
+    entry_count: 2,
+    committed_at: null,
+  }
+  const first = await projectGeneDelta(env, projection, null)
+  assert.equal(first.written, true)
+  const repeat = await projectGeneDelta(env, projection, first.json)
+  assert.equal(repeat.written, false)
+  assert.equal(writes, 1)
+  assert.deepEqual(
+    JSON.parse(values.get("iconoplasm:gene-delta")).segments[0].key,
+    projection.segments[0].key,
+  )
+})

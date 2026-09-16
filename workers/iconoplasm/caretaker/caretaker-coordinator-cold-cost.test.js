@@ -31,7 +31,7 @@ test(
         constructor(state,env) {
           this.state=state;this.env=env;this.sqlCost={rows_read:0,rows_written:0};this.alarmWrites=0;
           const sql={exec:(query,...args)=>{const cursor=state.storage.sql.exec(query,...args);const rows=cursor.toArray();this.sqlCost.rows_read+=cursor.rowsRead;this.sqlCost.rows_written+=cursor.rowsWritten;return {toArray:()=>rows}}};
-          const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),setAlarm:async time=>{this.alarmWrites++;await state.storage.setAlarm(Math.max(time,Date.now()+86400000))}};
+          const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),transaction:fn=>state.storage.transaction(fn),getAlarm:async()=>null,setAlarm:async time=>{this.alarmWrites++;await state.storage.setAlarm(Math.max(time,Date.now()+86400000))}};
           this.context={storage,blockConcurrencyWhile:fn=>state.blockConcurrencyWhile(fn)};
           this.coordinator=new Coordinator(this.context,env);
         }

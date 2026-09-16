@@ -489,14 +489,18 @@ export class CaretakerSupervoteLedger {
     })
   }
 
-  async projectAssignment(rawEvent) {
+  /**
+   * Synchronous assignment projection core. Callers that must commit this
+   * state together with another authority change (for example the per-gene
+   * publication intent) run it inside their own storage transaction.
+   */
+  projectAssignmentCore(rawEvent) {
     const event = normalizeAssignmentEvent(rawEvent)
     const coordinatorSymbol = normalizeSymbol(this.getSymbol() || event.gene_symbol)
     if (coordinatorSymbol !== event.gene_symbol) {
       fail("ASSIGNMENT_GENE_MISMATCH", "Assignment event belongs to another gene", 409)
     }
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => {
+    {
       const current = this.readAssignment()
       const head = this.readHead()
       if (current) {
@@ -643,10 +647,27 @@ export class CaretakerSupervoteLedger {
       )
       this.compactHistory()
       return { ok: true, changed: true, replayed: false, snapshot: this.snapshot() }
-    })
+    }
   }
 
-  async setSelection({
+  async projectAssignment(rawEvent) {
+    await this.armAlarm(1)
+    return this.storage.transactionSync(() => this.projectAssignmentCore(rawEvent))
+  }
+
+  async setSelection(options = {}) {
+    await this.armAlarm(1)
+    return this.storage.transactionSync(() => this.setSelectionCore(options))
+  }
+
+  /**
+   * Synchronous supervote mutation core. Callers that must commit this state
+   * together with the per-gene publication intent run it inside the shared
+   * storage transaction, so entitlement/version checks and command receipts
+   * are preserved while a failed intent can no longer leave a committed
+   * supervote change behind.
+   */
+  setSelectionCore({
     accountId,
     assetSha256 = null,
     direction = null,
@@ -669,8 +690,7 @@ export class CaretakerSupervoteLedger {
       expectedSupervoteVersion,
       "expected_supervote_version",
     )
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => {
+    {
       const receipt = first(
         this.sql,
         `SELECT request_sha256, response_json
@@ -814,7 +834,7 @@ export class CaretakerSupervoteLedger {
       )
       this.compactHistory()
       return response
-    })
+    }
   }
 
   projectAssetEligibilityInTransaction(rawEvent) {

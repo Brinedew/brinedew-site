@@ -137,6 +137,7 @@ const commonRuntimeFiles = [
   "content-detail-cache.js",
   "content-vote-bridge.js",
   "content-reading-session.js",
+  "discovery-batch-queue.js",
   "content.css",
   "highlight-runtime.js",
   "content.js",
