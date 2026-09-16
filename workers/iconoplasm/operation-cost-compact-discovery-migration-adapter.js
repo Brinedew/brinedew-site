@@ -10,16 +10,23 @@ import {
 // adapter never seeds one row per catalog gene and its measured cost does not
 // grow with catalog size.
 //
-// Guards: a bounded schema count and proof that the target table is not
-// already present, so a partially applied or replayed migration fails closed
-// before the first DDL instead of half-applying over live state.
-export const COMPACT_DISCOVERY_SCHEMA_GUARD = `SELECT CASE WHEN
-  (SELECT COUNT(*) FROM (SELECT 1 FROM sqlite_schema LIMIT 1025)) <= 1024 THEN 1
-  ELSE json('COST_MIGRATION_SCHEMA_BOUND_EXCEEDED') END AS admitted`
-
-export const COMPACT_DISCOVERY_INSTALLED_GUARD = `SELECT CASE WHEN NOT EXISTS (
-  SELECT 1 FROM sqlite_schema WHERE name = 'icono_discovery_user_state_v2'
-) THEN 1 ELSE json('COST_MIGRATION_SCHEMA_CHANGED') END AS admitted`
+// One bounded schema guard. It accepts at most 1024 existing schema objects
+// and proves the v2 tables are not already present. The schema is scanned
+// exactly once and capped at 1025 rows, so the guard fails closed on a
+// pathological schema instead of reading past its declared bound. The old
+// two-statement form declared 256 reads while its guards scanned the schema
+// repeatedly; the bound below covers this guard's full accepted range.
+export const COMPACT_DISCOVERY_SCHEMA_GUARD = `SELECT CASE
+  WHEN COUNT(*) > 1024
+  THEN json('COST_MIGRATION_SCHEMA_BOUND_EXCEEDED')
+  WHEN SUM(CASE WHEN name IN (
+    'icono_discovery_user_state_v2',
+    'icono_discovery_shared_state_v2',
+    'icono_discovery_ordinals_v2'
+  ) THEN 1 ELSE 0 END) > 0
+  THEN json('COST_MIGRATION_SCHEMA_CHANGED')
+  ELSE 1 END AS admitted
+FROM (SELECT name FROM sqlite_schema LIMIT 1025)`
 
 export function createCompactDiscoveryMigrationCostAdapter({
   db,
@@ -35,19 +42,20 @@ export function createCompactDiscoveryMigrationCostAdapter({
         throw new OperationCostError("COST_MIGRATION_ARGUMENTS_INVALID")
       const statements = [
         { sql: COMPACT_DISCOVERY_SCHEMA_GUARD, parameters: [] },
-        { sql: COMPACT_DISCOVERY_INSTALLED_GUARD, parameters: [] },
         ...COMPACT_DISCOVERY_MIGRATION_STATEMENTS.map((sql) => ({ sql, parameters: [] })),
         {
           sql: "INSERT INTO d1_migrations (name) VALUES (?)",
           parameters: [COMPACT_DISCOVERY_MIGRATION_NAME],
         },
       ]
-      // DDL only: two bounded schema guards, twelve schema/singleton statements
-      // and the migration receipt. Measured natively at 19,023 catalog rows:
-      // 49 reads / 23 writes. The bound reserves a wider margin but is still
-      // independent of catalog size because the replacement performs no
-      // catalog work.
-      const bound = { rows_read: 256, rows_written: 64, requests: 1 }
+      // DDL only: one bounded single-pass schema guard, thirteen
+      // schema/singleton statements and the migration receipt. The guard
+      // accepts at most 1024 schema objects and reads at most 1025 schema rows
+      // before its cap; the catalog is never read. Increasing an operation's
+      // honest reservation inside the existing daily allowance does not change
+      // that allowance. Measured: 336 reads at 315 schema objects and 1045
+      // reads at the accepted 1024-object ceiling.
+      const bound = { rows_read: 1152, rows_written: 64, requests: 1 }
       const bytes = new TextEncoder().encode(
         JSON.stringify({ statements, executable_sha256, schema_sha256 }),
       )
