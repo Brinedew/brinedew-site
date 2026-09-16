@@ -70,6 +70,18 @@ test("cooperative matcher yields on busy turns and remains lexically identical t
   }
 })
 
+test("storage-driven recognition rescans stay promise-safe before the scanner exists", () => {
+  // A blocklist storage event can arrive before the page scanner is
+  // constructed. The rescan call must always receive a promise, so that
+  // startup-race refreshes cannot silently drop their own rescan with a
+  // TypeError on a synchronous return value.
+  assert.match(content, /async function scanPage\(root\) \{/)
+  assert.match(
+    content,
+    /if \(rescan\) \{\s*void scanPage\(document\.body\)\.then\(\(\) => refreshHighlightStyles\(\)\)/,
+  )
+})
+
 test("post-load matcher completes in bounded tasks even when the browser never offers idle time", async () => {
   const callbacks = []
   let clock = 0
