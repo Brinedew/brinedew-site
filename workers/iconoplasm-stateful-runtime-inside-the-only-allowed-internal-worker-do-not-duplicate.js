@@ -17606,6 +17606,7 @@ export class IconoplasmVoteCoordinator {
       const handover = await this.ensureDemandDrivenHandover({
         publishedAssetSha: options.publishedAssetSha,
         adminOverride: options.adminOverride,
+        verifySource: options.verifySource === true,
       })
       if (!handover.activated) {
         return { authority: "deferred", publication: null, vote: null, deferral: handover }
@@ -17632,7 +17633,7 @@ export class IconoplasmVoteCoordinator {
    * its coverage and later first-candidate behavior through the normal v2
    * selection path.
    */
-  async ensureDemandDrivenHandover({ publishedAssetSha, adminOverride } = {}) {
+  async ensureDemandDrivenHandover({ publishedAssetSha, adminOverride, verifySource } = {}) {
     if (this.getMeta("authority_epoch") === "v2") return { activated: true, replayed: true }
     const symbol = normalizeSymbol(this.getMeta("symbol") || "")
     if (!symbol) return { activated: false, code: "SYMBOL_REQUIRED" }
@@ -17649,8 +17650,11 @@ export class IconoplasmVoteCoordinator {
     // Complete-input verification: the local authority must contain every
     // accepted legacy vote with the same voter, candidate and value before the
     // epoch flips. Migration-only, keyset-paginated, double-pass verified and
-    // bounded; the same contract as the operator transfer.
-    if (this.env?.ICONOPLASM_DB) {
+    // bounded; the same contract as the operator transfer. It runs only for a
+    // coordinator whose retained state was imported in this same request
+    // (cold); a warm coordinator reconciles its retained local authority
+    // without a D1 round trip.
+    if (verifySource === true && this.env?.ICONOPLASM_DB) {
       let snapshot = null
       try {
         snapshot = await this.readLegacyVoteSnapshot(symbol)
@@ -19360,6 +19364,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
+      const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const assetSha = normalizeSha256(payload?.asset_sha256 || "")
       const userId = normalizeUserId(payload?.user_id || "")
@@ -19385,6 +19390,12 @@ export class IconoplasmVoteCoordinator {
         candidateImageId: payload?.candidate_image_id,
         ensuredAsset,
         reason: payload?.reason || "vote_auto_promote",
+        // A cold gene just imported its complete retained state from D1 in
+        // this request, so the handover re-verifies that source once. A warm
+        // coordinator reconciles its retained local authority without touching
+        // D1: the settled outbox proves no accepted work is in flight, and the
+        // warm-vote cost fence forbids a D1 round trip.
+        verifySource: !wasWarm,
       })
       if (outcome.authority === "deferred") {
         // The demand-driven handover could not safely complete yet. Nothing
@@ -19425,6 +19436,7 @@ export class IconoplasmVoteCoordinator {
       if (!requestedSymbol) {
         return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
       }
+      const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const items = Array.isArray(payload?.items) ? payload.items : []
       const results = []
@@ -19455,6 +19467,12 @@ export class IconoplasmVoteCoordinator {
           candidateImageId: raw?.candidate_image_id,
           ensuredAsset,
           reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
+          // A cold gene just imported its complete retained state from D1 in
+          // this request, so the handover re-verifies that source once. A warm
+          // coordinator reconciles its retained local authority without
+          // touching D1: the settled outbox proves no accepted work is in
+          // flight, and the cost fence forbids a D1 round trip on warm votes.
+          verifySource: !wasWarm,
         })
         const result = outcome.vote
         if (result.final_vote_value === 0) {
