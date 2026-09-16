@@ -827,6 +827,27 @@ async function ensureFreshGeneData({ cacheOnly = false } = {}) {
   return getStoredGeneData()
 }
 
+function broadcastRecognitionPolicyUpdate() {
+  // B-765: recognition policy (curated aliases and the shared blocklist) can
+  // advance while articles are open. Open pages adopt the new map and rescan in
+  // bounded slices; the card snapshot epoch and any visible hover are untouched,
+  // and no timer or polling is added.
+  if (!chrome.tabs?.query || !chrome.tabs?.sendMessage) return
+  chrome.tabs.query({}, (tabs) => {
+    if (chrome.runtime?.lastError || !Array.isArray(tabs)) return
+    for (const tab of tabs) {
+      if (typeof tab?.id !== "number") continue
+      try {
+        chrome.tabs.sendMessage(tab.id, { type: "RECOGNITION_POLICY_UPDATED" }, () => {
+          void chrome.runtime?.lastError
+        })
+      } catch (_error) {
+        // No content script in this tab; its next page load uses the new map.
+      }
+    }
+  })
+}
+
 async function refreshGeneData({
   forceArtifactRefresh = false,
   manifestCacheBustRevision = "",
@@ -1456,6 +1477,7 @@ async function fetchGeneData({
     })
     if (needsArtifact) clearPortraitDataUrlCaches()
     await clearContractError()
+    broadcastRecognitionPolicyUpdate()
 
     return {
       schema_version: manifest.schema_version,
