@@ -1,0 +1,87 @@
+name: B-749 apply scoped finalization slice
+
+on:
+  push:
+    branches:
+      - fix/b749-reject-global-read-model-sync
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ contains(github.event.head_commit.message, '[b749-apply-stage]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/b749-reject-global-read-model-sync
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Apply production and queue-test patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/b749-patch-1.b64 .github/b749-patch-2.b64 .github/b749-patch-3.b64 .github/b749-patch-4.b64 | base64 --decode | gzip -d > /tmp/b749-source.patch
+          git apply --check /tmp/b749-source.patch
+          git apply /tmp/b749-source.patch
+          cat .github/b749-test-1.b64 .github/b749-test-2.b64 | base64 --decode | gzip -d > workers/iconoplasm/sync-finalization-publication.test.js
+      - name: Syntax check changed JavaScript
+        run: |
+          node --check workers/iconoplasm/sync-finalization-publication.js
+          node --check workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js
+          node --check workers/iconoplasm/sync-finalization-publication.test.js
+          node --check workers/iconoplasm.sync-finalization-queue.test.js
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate operation-cost identities
+        run: |
+          node scripts/generate-operation-cost-identities.mjs
+          node scripts/generate-operation-cost-identities.mjs --check
+      - name: Focused finalization tests
+        run: pnpm exec node --test workers/iconoplasm/sync-finalization-publication.test.js workers/iconoplasm.sync-finalization-queue.test.js
+      - name: Full repository tests
+        id: full_tests
+        shell: bash
+        run: |
+          set +e
+          pnpm test > /tmp/b749-full-tests.log 2>&1
+          status=$?
+          set -e
+          tail -n 120 /tmp/b749-full-tests.log
+          exit "$status"
+      - name: Build
+        run: pnpm run build
+      - name: Remove temporary delivery machinery and commit verified slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f \
+            .github/workflows/b749-apply.yml \
+            .github/workflows/b749-red-green.yml \
+            .github/workflows/b749-offline-source.yml \
+            .github/b749-patch-1.b64 \
+            .github/b749-patch-2.b64 \
+            .github/b749-patch-3.b64 \
+            .github/b749-patch-4.b64 \
+            .github/b749-test-1.b64 \
+            .github/b749-test-2.b64
+          git add -u
+          git status --short
+          git config user.name 'Brinedew'
+          git config user.email 'brinedew@proton.me'
+          git commit -m 'fix(B-749): hand finalization to exact V2 gene owners [b749-apply-done]'
+          git push origin HEAD:fix/b749-reject-global-read-model-sync
+      - name: Preserve full test output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: b749-scoped-finalization-full-tests-${{ github.sha }}
+          path: /tmp/b749-full-tests.log
+          if-no-files-found: warn
+          retention-days: 3
