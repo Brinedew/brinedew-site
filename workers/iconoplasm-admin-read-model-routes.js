@@ -95,6 +95,15 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       )
     const fullVision = coerceBoolean(payload?.full_vision ?? payload?.fullVision, false)
     const fullRebuild = coerceBoolean(payload?.full_rebuild ?? payload?.fullRebuild, false)
+    if (fullVision || fullRebuild)
+      return done(
+        "admin_read_models_sync_400",
+        json(
+          { error: "Scoped read-model sync does not allow full_vision or full_rebuild" },
+          400,
+          NO_STORE,
+        ),
+      )
     const skipVoteSummaries = coerceBoolean(
       payload?.skip_vote_summaries ?? payload?.skipVoteSummaries,
       false,
@@ -122,8 +131,8 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       skipVisionRollups,
       skipDashboard,
     }
-    // Scoped finalization phases stay D1-only. The durable ledger completion
-    // performs the single global card-catalog publication.
+    // This guard prevents caller-requested widening. B-749 still owns replacing
+    // the legacy publication service below with an exact-scope V2 handoff.
     const result = shouldPublishGalleryDirtyShards
       ? await syncReadModelsAndPublishGalleryDirtyShards(env, options)
       : await syncReadModels(env, options)
