@@ -1,0 +1,30 @@
+name: B-749 temporary offline source export
+
+on:
+  push:
+    branches: ["fix/b749-reject-global-read-model-sync"]
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Archive tracked source only, without credentials or production access
+        shell: bash
+        run: |
+          git rev-parse HEAD > source-commit.txt
+          git archive --format=tar.gz --output=repository-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v7
+        with:
+          name: b749-offline-source-${{ github.sha }}
+          path: |
+            repository-source.tar.gz
+            source-commit.txt
+          if-no-files-found: error
+          retention-days: 1
