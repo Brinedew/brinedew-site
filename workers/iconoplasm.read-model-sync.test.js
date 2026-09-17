@@ -339,7 +339,7 @@ test("admin sync reads transactional counts without rebuilding catalogue history
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          symbols: [],
+          symbols: ["TP53"],
           skip_vote_summaries: true,
           skip_gene_rollups: true,
           skip_vision_rollups: true,
