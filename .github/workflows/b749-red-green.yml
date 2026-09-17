@@ -1,0 +1,162 @@
+name: B-749 scoped finalization red proof
+
+on:
+  push:
+    branches:
+      - fix/b749-reject-global-read-model-sync
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10.10.0
+
+jobs:
+  red:
+    if: ${{ !contains(github.event.head_commit.message, '[b749-red-proof]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/b749-reject-global-read-model-sync
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Add red acceptance tests
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('workers/iconoplasm/sync-finalization-publication.test.js')
+          s = p.read_text()
+          anchor = 'const now = "2026-09-09T03:00:00.000Z"\n'
+          if 'scoped finalization requires durable per-gene acceptance before completion' in s:
+              raise SystemExit('red tests already present')
+          block = r'''
+
+          function sqliteD1(db) {
+            return {
+              prepare(sql) {
+                let args = []
+                return {
+                  bind(...values) {
+                    args = values
+                    return this
+                  },
+                  async all() {
+                    const statement = db.prepare(sql)
+                    return { results: statement.all(...args) }
+                  },
+                  async first() {
+                    const statement = db.prepare(sql)
+                    return statement.get(...args) || null
+                  },
+                  async run() {
+                    const statement = db.prepare(sql)
+                    const result = statement.run(...args)
+                    return { results: [], meta: { changes: Number(result.changes || 0) } }
+                  },
+                }
+              },
+            }
+          }
+
+          test("scoped finalization requires durable per-gene acceptance before completion", async () => {
+            const sqlite = new DatabaseSync(":memory:")
+            try {
+              for (const file of [
+                "0028_add_finalization_jobs.sql",
+                "0094_finalization_summary.sql",
+                "0100_finalization_job_version.sql",
+                "0101_finalization_publication_barrier.sql",
+              ])
+                sqlite.exec(source(file))
+              sqlite.prepare(
+                "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES('TP53','queued','completed_pending_finalize')",
+              ).run()
+              sqlite.prepare(
+                "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES('BRCA1','queued','reconcile')",
+              ).run()
+              const db = sqliteD1(sqlite)
+              const accepted = []
+              const result = await drainCompletedFinalization(db, {
+                symbols: ["TP53"],
+                now,
+                notifyPublisher: async ({ symbols, jobs }) => {
+                  assert.deepEqual(symbols, ["TP53"])
+                  assert.deepEqual(jobs.map((job) => job.gene_symbol), ["TP53"])
+                  const before = sqlite
+                    .prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='TP53'")
+                    .get()
+                  assert.notEqual(before.status, "completed", "the durable V2 handoff must precede acknowledgement")
+                  accepted.push(...symbols)
+                  return { accepted: true }
+                },
+              })
+              assert.deepEqual(accepted, ["TP53"])
+              assert.equal(result.finalized, 1)
+              assert.equal(result.broaden_next_drain, false)
+              assert.equal(
+                sqlite.prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='TP53'").get().status,
+                "completed",
+              )
+              assert.equal(
+                sqlite.prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='BRCA1'").get().status,
+                "queued",
+                "unrelated work must not block or join the scoped handoff",
+              )
+            } finally {
+              sqlite.close()
+            }
+          })
+
+          test("ordinary finalization refuses an empty scope instead of selecting the global ledger", async () => {
+            await assert.rejects(
+              drainCompletedFinalization(
+                { prepare: () => assert.fail("empty scope must refuse before any database read") },
+                { symbols: [], now, notifyPublisher: async () => assert.fail("must not publish") },
+              ),
+              /explicit non-empty finalization scope/i,
+            )
+          })
+          '''
+          if anchor not in s:
+              raise SystemExit('anchor missing')
+          p.write_text(s.replace(anchor, anchor + block, 1))
+      - name: Verify old implementation is red
+        id: red
+        shell: bash
+        run: |
+          set +e
+          pnpm exec node --test --test-name-pattern='scoped finalization requires durable|ordinary finalization refuses an empty scope' workers/iconoplasm/sync-finalization-publication.test.js > /tmp/b749-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/b749-red.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Expected old implementation to fail the new acceptance tests.' >&2
+            exit 1
+          fi
+          grep -q 'scoped finalization requires durable per-gene acceptance before completion' /tmp/b749-red.log
+          grep -q 'ordinary finalization refuses an empty scope instead of selecting the global ledger' /tmp/b749-red.log
+      - name: Commit red tests
+        shell: bash
+        run: |
+          git config user.name 'Brinedew'
+          git config user.email 'brinedew@proton.me'
+          git add workers/iconoplasm/sync-finalization-publication.test.js
+          git commit -m 'test(B-749): require V2 handoff before finalization ack [b749-red-proof]'
+          git push origin HEAD:fix/b749-reject-global-read-model-sync
+      - name: Preserve red proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: b749-finalization-red-${{ github.sha }}
+          path: /tmp/b749-red.log
+          if-no-files-found: warn
+          retention-days: 3
