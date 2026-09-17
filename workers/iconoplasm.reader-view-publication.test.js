@@ -15,6 +15,7 @@ import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
+import { resetPublishedViewReaderCachesForTest } from "./lib/iconoplasm-card-reader-view.js"
 
 // B-762 end-to-end reader view: a committed gene version travels through the
 // real publication system (vote authority -> durable handoff -> card-publication
@@ -609,5 +610,119 @@ test(
       match: { params: { snapshot: view1 } },
     })
     assert.equal(retiredIndex.status, 410)
+  },
+)
+
+test(
+  "a missing immutable dependency of the advertised view is temporary, not retired",
+  { timeout: 120000 },
+  async (t) => {
+    const bunny = installBunnyStorage()
+    t.after(() => bunny.restore())
+    resetIconoplasmRuntimeCachesForTest()
+    resetPublishedViewReaderCachesForTest()
+
+    const values = new Map()
+    const kv = {
+      values,
+      async get(key) {
+        return values.has(key) ? values.get(key) : null
+      },
+      async put(key, value) {
+        values.set(key, String(value))
+      },
+    }
+    const env = storageEnv(kv)
+    const store = createPublishedCardObjectStore(env)
+    const base = await writeBaseCatalog(store, [
+      cardVm("TP53", { portraitSha: sha("1"), prose: "The exact base TP53 manifestation." }),
+    ])
+    values.set(
+      "iconoplasm:gallery-version",
+      JSON.stringify({ current: base.version, previous: null }),
+    )
+
+    const ownerState = fakeState()
+    t.after(() => ownerState.sql.db.close())
+    const Publisher = createCardPublicationCoordinatorClass(ownerSource)
+    const owner = new Publisher(ownerState.state, env)
+    await ownerState.state.ready
+    owner.repo.put("head", {
+      current: {
+        version: base.version,
+        key: base.key,
+        manifest: base.manifest,
+        published_at: new Date().toISOString(),
+      },
+      previous: null,
+      watermark: { id: 0, created_at: null },
+    })
+    const { coordinator } = await seedVoteAuthority(t)
+    await coordinator.applyAuthoritativeVoteMutation({
+      assetSha256: sha("b"),
+      userId: "reader-1",
+      requestedVoteValue: 1,
+      ensuredAsset: coordinator.ensureAssetSummaryRow(sha("b"), { visionId: "anima-v1-8" }),
+    })
+    coordinator.env = { ICONOPLASM_CARD_PUBLICATION: ownerBinding(owner) }
+    const published = await coordinator.alarm()
+    assert.equal(published.handoff.delivered, 1)
+    for (let wake = 0; wake < 3; wake += 1) await owner.alarm()
+    const view = (await advertisedView(kv)).view
+    const chainHash = view.split(".c")[1]
+    assert.equal((await readGene(env, view, "TP53")).status, 200)
+
+    // The freshly advertised chain object disappears from every read source,
+    // which is the observed production flap. The view is still the currently
+    // advertised one, so resolution must be temporary, never retired.
+    const chainSuffix = publishedCardObjectKey("indexes", chainHash)
+    const chainPath = [...bunny.objects.keys()].find((path) => path.endsWith(chainSuffix))
+    assert.ok(chainPath, "the advertised chain object was written")
+    const storedChain = bunny.objects.get(chainPath)
+    bunny.objects.delete(chainPath)
+    resetIconoplasmRuntimeCachesForTest()
+    resetPublishedViewReaderCachesForTest()
+
+    const indexResponse = await hoverDeliveryHandlers.index({
+      env,
+      match: { params: { snapshot: view } },
+    })
+    assert.equal(indexResponse.status, 503)
+    assert.equal(indexResponse.headers.get("cache-control"), "no-store")
+    assert.equal((await indexResponse.json()).code, "card_delivery_index_unavailable")
+
+    const contentResponse = await hoverDeliveryHandlers.content({
+      request: new Request(
+        `https://iconoplasm.brinedew.bio/api/public/v1/card-content/v1/${chainHash}/genes/TP53`,
+      ),
+      env,
+      ctx: { waitUntil() {} },
+      match: { params: { hash: chainHash, lane: "genes", symbol: "TP53" } },
+    })
+    assert.equal(contentResponse.status, 503)
+    assert.equal(contentResponse.headers.get("cache-control"), "no-store")
+    assert.equal((await contentResponse.json()).code, "card_content_unavailable")
+
+    // Once the same immutable object is readable again, the exact advertised
+    // view resolves as before.
+    bunny.objects.set(chainPath, storedChain)
+    resetIconoplasmRuntimeCachesForTest()
+    resetPublishedViewReaderCachesForTest()
+    assert.equal((await readGene(env, view, "TP53")).status, 200)
+
+    // A hash that is not the advertised dependency and never resolves stays a
+    // retired identity.
+    const unknown = "f".repeat(64)
+    resetPublishedViewReaderCachesForTest()
+    const retired = await hoverDeliveryHandlers.content({
+      request: new Request(
+        `https://iconoplasm.brinedew.bio/api/public/v1/card-content/v1/${unknown}/genes/TP53`,
+      ),
+      env,
+      ctx: { waitUntil() {} },
+      match: { params: { hash: unknown, lane: "genes", symbol: "TP53" } },
+    })
+    assert.equal(retired.status, 410)
+    assert.equal((await retired.json()).code, "card_snapshot_retired")
   },
 )

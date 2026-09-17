@@ -354,3 +354,84 @@ test("gene delta projection writes the KV document once and skips unchanged byte
     projection.segments[0].key,
   )
 })
+
+test(
+  "a changed delta view is not advertised until its chain and segments are reader-readable",
+  { timeout: 60000 },
+  async () => {
+    const values = new Map()
+    let writes = 0
+    const env = {
+      KV: {
+        async get(key) {
+          return values.get(key) || null
+        },
+        async put(key, value) {
+          writes += 1
+          values.set(key, value)
+        },
+      },
+    }
+    const { state, sql } = fakeCoordinatorState()
+    const Publisher = createCardPublicationCoordinatorClass(() => ({}))
+    const owner = new Publisher(state, env)
+    await state.ready
+    owner.repo.put("head", { current: { version: "ccv2-" + sha("a") }, previous: null })
+    const commit = await owner.fetch(
+      new Request("https://internal/commit-gene-version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(commitPayload()),
+      }),
+    )
+    assert.equal(commit.status, 200)
+
+    const wrote = []
+    let reachable = false
+    owner.objectStore = {
+      async read() {
+        return null
+      },
+      async write(kind, value) {
+        const key = `published-cards/v2/immutable/${kind}/${sha("f")}.json`
+        wrote.push(key)
+        return { key, hash: sha("f"), size: JSON.stringify(value).length }
+      },
+      async verifyReaderResolvable(key) {
+        return {
+          ready: reachable,
+          sources: { authenticated_storage: reachable, cdn: reachable },
+        }
+      },
+    }
+
+    // Immutable writes succeed, but the read plane is not yet stable: the
+    // changed view must not be advertised, and the previous projection (none)
+    // stays authoritative with durable projection work still pending.
+    const blocked = await owner.projectGeneDeltaStep()
+    assert.equal(blocked.ok, false)
+    assert.equal(blocked.reason, "delta_objects_unreadable")
+    assert.equal(blocked.more, true)
+    assert.equal(writes, 0)
+    assert.equal(values.has("iconoplasm:gene-delta"), false)
+    assert.equal(owner.geneDelta.projection_pending, true)
+    assert.ok(wrote.length >= 2, "the segment and chain writes happened")
+
+    // A later wake sees the same immutable dependencies stably readable and
+    // advertises the view exactly once.
+    reachable = true
+    const advanced = await owner.projectGeneDeltaStep()
+    assert.equal(advanced.ok, true)
+    assert.equal(advanced.advertised, true)
+    assert.equal(writes, 1)
+    const advertised = JSON.parse(values.get("iconoplasm:gene-delta"))
+    assert.equal(advertised.chain_hash, sha("f"))
+
+    // Idle repeat performs no KV writes and no new immutable writes.
+    const idle = await owner.projectGeneDeltaStep()
+    assert.equal(idle.skipped, true)
+    assert.equal(writes, 1)
+    assert.equal(wrote.length, 2)
+    sql.db.close()
+  },
+)
