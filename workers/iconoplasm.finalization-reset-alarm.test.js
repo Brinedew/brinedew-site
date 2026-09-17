@@ -45,7 +45,7 @@ test(
             }
             await this.governor.alarm();
           } else if(body.vote) await this.governor.deferVoteProjectionToReset();
-          else await this.governor.deferFinalizationToReset();
+          else await this.governor.deferFinalizationToReset({runId:'retained-alarm-run',symbols:['TP53']});
           return Response.json({wake:await this.state.storage.get('finalization_reset_wake')||null,voteWake:await this.state.storage.get('vote_projection_reset_wake')||null,alarm:await this.state.storage.getAlarm(),writes:this.writes,alarms:this.alarms,sends:this.sends,voteSends:this.voteSends});
         }
       }

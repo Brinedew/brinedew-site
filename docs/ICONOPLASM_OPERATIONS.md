@@ -4,13 +4,38 @@ This is the cheat sheet for answering Iconoplasm data questions from the website
 
 If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This file is for live-data operations, not for explaining the product split from scratch.
 
-The short version: query remote D1 for live authoring, vote, candidate, discovery,
-and rich-detail state. For a public portrait, inspect the exact card artifact
-selected by `KV_GALLERY_VERSION`; D1 can legitimately lead that published
-version. Do not guess from frontend state, and do not assume the sibling
-workstation repo has already pushed what you need.
+## Current cutover boundary: 17 September 2026
 
-For canonical portrait voting and public card artifact consistency, read `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` before touching data. It contains the PRL split-brain incident, the safe repair path, and the forbidden shortcuts.
+Read `docs/RECOVERY_OWNERSHIP_CONTRACT.md`,
+`docs/D1_READ_EXHAUSTION_PREVENTION.md` and Linear B-742/B-749 before recovery.
+During the current production D1 hold, use source inspection and isolated tests.
+Do not run production sync, publication retries, queue releases or diagnostic D1
+queries. Reconcile the installed revision and current incident status before any
+later live operation. A branch passing tests does not activate its behavior.
+
+The intended V2 workflow preserves one independently frozen session/scope and
+logical operation identity through save, authority acceptance, publication and
+fresh-reader verification. Missing V2 state must recover through its bounded
+handover/snapshot protocol or fail closed. Global `run-sync`, a catalog rebuild,
+or waiting for every unrelated finalization job is not an ordinary repair path.
+
+Current source still has separate authority mechanisms. The vote coordinator
+uses a per-gene `authority_epoch=v2`. Manifestation cutover uses singleton
+primary/authoring authority rows and verifies its entire planned set before
+activation. B-726 owns reconciling these mechanisms; the vote epoch alone does
+not prove complete authoring, caretaker or pending-obligation migration.
+
+Choose the authority before interpreting data. Retained D1 vote/publication rows
+are historical/projection input for migrated genes. Public image identity comes
+from the exact advertised immutable card view. A V2 view names its baseline and
+immutable delta chain; a plain baseline remains valid historical input. Neither
+D1 nor a cache may elect substitute public bytes. In the intended V2 workflow, the workstation must be an exact replica and
+draft/generation surface, never a second overwrite authority.
+
+For historical portrait incidents, read
+`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. Historical global-repair examples
+are not authorization to restore a retired writer. B-771's component status is
+recorded in `plans/B-762-DELETION-INVENTORY.md`.
 
 For gene-label recognition, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
 Curated page labels are administrator-owned desired state in the primary D1 and
@@ -22,7 +47,14 @@ alias/blocklist recognition-pair bundle and remain KV-only.
 
 Run these from `d:\Coding\Website`.
 
-Use the remote database when the question is about production data:
+Only after the production hold is lifted and provider-level admission permits
+it, use the remote database for an explicitly bounded retained-state question.
+First verify that the selected table is authoritative for that gene and state
+category. A `LIMIT` bounds returned rows, not scanned rows; use an indexed exact
+key and verify query plans offline. Broad analyses belong on a retained local
+snapshot instead of the production database.
+
+The executor, rather than the owner, runs approved technical operations:
 
 - `pnpm exec wrangler d1 execute iconoplasm --remote --command "..."`
 
@@ -37,14 +69,14 @@ If you skip `--remote`, you are not looking at the live data.
 - `icono_gene_discoveries`
   - per-user discovery history
 - `icono_publish_state`
-  - the current D1 authoring/vote leader for a gene; not public portrait authority
+  - retained legacy authoring/vote projection; check the gene's authority epoch before interpreting it; never public image authority
 - `icono_portrait_assets`
   - portrait candidates and their asset metadata
 
 ## retrieval protocol
 
 1. Decide whether the question is about live runtime data or workstation/control-plane data.
-   - Live site question: stay in this repo and query remote D1.
+   - Live site question: inspect the installed authority and exact published view in this repo; use D1 only for an admitted exact-key question about retained data.
    - Authoring/sync pipeline question: check `d:\Coding\Datasets\iconoplasm` first.
 2. Prefer the runtime table that already stores the answer.
    - Example: `sex` and curated `full_name` live in `icono_gene_essence`, so use that instead of inferring from UI cards.
@@ -57,12 +89,19 @@ If you skip `--remote`, you are not looking at the live data.
 
 Exception: do **not** JSON-aggregate giant full-catalog payloads just because it looks tidy. For large admin/catalog questions, page or limit the result instead. Giant aggregates can hit D1 size limits and tell you less than you think.
 
-## canonical example: shortest male full names
+## offline analysis example: shortest male full names
 
-This is the query pattern used for the “top 100 shortest full names for genes marked as male” request.
+This historical query pattern answers “top 100 shortest full names for genes
+marked as male”. Its expression filter and sort can scan the corpus. Run it
+against a local retained snapshot; the output limit does not make it a safe
+production D1 lookup.
 
-```text
-pnpm exec wrangler d1 execute iconoplasm --remote --command "SELECT json_group_array(json_object('gene_symbol', gene_symbol, 'full_name', full_name, 'name_len', name_len)) AS rows_json FROM (SELECT gene_symbol, full_name, LENGTH(TRIM(full_name)) AS name_len FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '' ORDER BY name_len ASC, full_name COLLATE NOCASE ASC, gene_symbol ASC LIMIT 100);"
+```sql
+SELECT gene_symbol, full_name, LENGTH(TRIM(full_name)) AS name_len
+FROM icono_gene_essence
+WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> ''
+ORDER BY name_len ASC, full_name COLLATE NOCASE ASC, gene_symbol ASC
+LIMIT 100;
 ```
 
 What this does:
@@ -72,17 +111,21 @@ What this does:
 - ignores blank names
 - sorts by trimmed name length first
 - breaks ties alphabetically by full name, then by symbol
-- returns the top 100 rows in one JSON blob
+- returns the top 100 rows from the retained snapshot
 
 If you only need the count first, use the same filter without the list projection:
 
-```text
-pnpm exec wrangler d1 execute iconoplasm --remote --command "SELECT COUNT(*) AS male_count FROM icono_gene_essence WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';"
+```sql
+SELECT COUNT(*) AS male_count FROM icono_gene_essence
+WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';
 ```
 
 ## discovery questions
 
-If the question is about what a specific user has discovered, start with `icono_gene_discoveries` and join names in from catalog or essence if needed.
+First identify whether the deployed reader uses compact V2 discovery state or
+retained legacy rows; B-764 owns this cutover. The query below diagnoses the
+legacy projection for one user. It must not overwrite migrated compact state
+or serve as an ordinary fallback when the compact reader is unavailable.
 
 Shape to remember:
 
@@ -113,7 +156,7 @@ Why this shape matters:
 
 Two rules matter here:
 
-1. Signed-in personal shelf mode comes from `icono_gene_discoveries` through `/api/iconoplasm/discoveries/me`.
+1. Signed-in personal shelf mode uses `/api/iconoplasm/discoveries/me` and the deployed discovery authority. Retained `icono_gene_discoveries` rows are not a second writer after compact-state migration.
 2. Signed-in users should never have a real zero-state shelf. The starter trio (`INS`, `RHO`, `PRL`) is part of the contract.
 
 So if an authenticated user appears to have zero discoveries, do not assume the UI is allowed to show that. Check whether the worker failed to seed or return the starter rows.
@@ -143,10 +186,13 @@ release.
 
 The authority relationship is:
 
-- D1 `icono_publish_state` owns authoring and vote-projection state and may
-  legitimately advance first.
-- The exact card artifact selected through `KV_GALLERY_VERSION` is the sole
-  public portrait authority.
+- The gene's active authority owns its desired selection. D1
+  `icono_publish_state` is the retained legacy projection and may differ after
+  a per-gene authority transfer.
+- The exact advertised immutable card view owns the public portrait. V2 reader
+  code resolves `<base>.c<chainHash>` through immutable chain/segment objects;
+  `KV_GALLERY_VERSION` alone names only the baseline. Read the installed head
+  contract before selecting a version.
 - `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
   metadata, public media, signed-in and anonymous galleries, archive ranges,
   image sitemaps, extension cards, and print-copy inputs must all project that
@@ -208,7 +254,9 @@ All three public responses must name the same artifact version and portrait SHA.
 An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
 publication failure, not permission to query D1 for substitute public bytes.
 
-Query D1 separately when you need to see whether authoring state is ahead:
+After admission and only for a gene still using the legacy projection, an
+exact-key D1 read can show whether that projection is ahead. During the current
+hold, do not execute this or the following projection-job query:
 
 ```powershell
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
@@ -223,79 +271,46 @@ Check whether a vote projection job is already queued:
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, substr(last_error,1,200) AS last_error FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' LIMIT 1"
 ```
 
-### repair genuinely stuck publication through the admin sync barrier
+### recover exact publication without reviving global sync
 
-Do not hand-edit `icono_publish_state`, `KV_GALLERY_VERSION`, or card artifact KV keys.
+Retain the original generation output, hashes, session/request IDs, authority
+revision, logical operation ID, publication obligations and uncertain receipts.
+Do not regenerate saved images, clear a pending job manually, edit
+`icono_publish_state`, or advance a public pointer by hand.
 
-Do not run a repair merely because D1 leads. Repair only when the bounded
-publisher is stuck, the selected artifact is unavailable, or public surfaces do
-not agree on the selected version.
+Identify the failing stage from that operation's own receipts. For a migrated
+gene, recovery must remain on its V2 authority epoch and per-gene publication
+attempt. Verify the exact immutable object bytes and advertised view from a
+fresh reader. An unrelated gene's backlog must not become its completion gate.
+An absent object is not a successful publication and does not authorize a V1
+fallback. B-762 owns live per-gene publication acceptance; B-749 additionally
+requires the original workstation scope and repeat/restart receipts to agree.
 
-Use the authenticated admin read-model sync for the affected symbol. It updates
-that symbol's read models and asks the normal budget-gated publisher to replace
-only the owning dirty shard:
+The ordinary `/api/iconoplasm/admin/read-models/sync` handler in this source
+rejects missing/empty normalized scope and rejects `full_rebuild`/`fullRebuild`
+or `full_vision`/`fullVision` when enabled. Its surviving publication wrapper
+still calls the generic gallery publisher without forwarding that scope. This
+is a remaining B-749 defect, so a successful scoped HTTP response alone is not
+proof of bounded V2 publication. Never bypass a scope refusal with a full flag,
+a newly invented operation ID, or a global recovery continuation.
 
-```powershell
-@'
-const token = process.env.ICONOPLASM_ADMIN_TOKEN;
-if (!token) throw new Error("ICONOPLASM_ADMIN_TOKEN missing");
-const res = await fetch("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
-  method: "POST",
-  headers: {
-    "content-type": "application/json",
-    accept: "application/json",
-    "x-iconoplasm-admin-token": token,
-  },
-  body: JSON.stringify({
-    symbols: ["PRL"],
-    publish_gallery_dirty_shards: true,
-    skip_dashboard: true,
-  }),
-});
-console.log(JSON.stringify({ status: res.status, payload: await res.json() }, null, 2));
-'@ | node -
-```
+`scripts/repair-iconoplasm-newer-tie-canon.mjs` is permanently retired in source.
+Every flag mode exits with `LEGACY_GLOBAL_REPAIR_RETIRED` before network or D1
+access. The original May repair is preserved in git history. Its old direct D1
+writer and empty-scope final publication are not available as recovery tools.
 
-If `/api/iconoplasm/cards/PRL` still returns `cf-cache-status: HIT` with the old artifact after the sync succeeds, purge only that one API URL from Cloudflare. This should be a legacy-cache cleanup path, not the normal freshness mechanism:
-
-```powershell
-@'
-const token = process.env.CLOUDFLARE_API_TOKEN;
-const zoneId = "011c9fff052a2bcce10eec371a788771"; // brinedew.bio
-const files = ["https://iconoplasm.brinedew.bio/api/iconoplasm/cards/PRL"];
-const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${token}`,
-    "content-type": "application/json",
-    accept: "application/json",
-  },
-  body: JSON.stringify({ files }),
-});
-console.log(JSON.stringify({ status: res.status, payload: await res.json() }, null, 2));
-'@ | node -
-```
-
-If the endpoints now agree and a stale projection row remains, clear only the
-completed symbol job so the projection drain does not repeat already-settled
-promotion work:
-
-```powershell
-pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "DELETE FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' AND reason = 'vote_auto_promote'"
-```
-
-For the PRL repair on 2026-05-20, the final good state was:
-
-- artifact version `mpduzx6k-9e396c96`
-- canonical asset `c9d01e44d6ea92e2cc363ee70c50afd85bd1edc893a7ae05a207251fa5d3d576`
-- candidate image `31345`
+Historical PRL evidence from 2026-05-20 remains useful for reconciliation:
+artifact `mpduzx6k-9e396c96`, asset
+`c9d01e44d6ea92e2cc363ee70c50afd85bd1edc893a7ae05a207251fa5d3d576`,
+candidate image `31345`. These identifiers do not authorize replaying that
+historical repair or deleting a current projection obligation.
 
 ### do not repeat the bad repair paths
 
 Avoid these even if they look faster:
 
 - do not trust the frontend candidate count as the source of truth
-- do not build a symbol-scoped card artifact
+- do not disguise a partial catalog as a complete baseline; verified V2 per-gene immutable cards and exact delta views are the supported source design
 - do not add a D1 fallback to the public card, site-gene-detail, public-media,
   gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
@@ -307,9 +322,9 @@ Avoid these even if they look faster:
 - If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
 - If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
-- If public portraits look wrong, inspect `KV_GALLERY_VERSION` and its exact card
-  artifact first. Compare D1 `icono_publish_state` only to determine whether
-  authoring is legitimately ahead or publication is stuck.
+- If public portraits look wrong, inspect the exact advertised view, its
+  immutable objects and the gene's active authority. Compare retained D1 rows
+  only after identifying their epoch and role.
 
 ## website ops sync: durable objects telemetry guard
 
@@ -334,7 +349,10 @@ What to do next:
 - do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path
 
 2. confirm the DO usage panel is green again
-3. only then rerun Website Ops sync
+3. reconcile the original operation's durable identity, accepted receipts and
+   independently frozen membership; resume only the verified bounded V2 path
+   after its activation/capacity gates pass. Restored telemetry never authorizes
+   global `run-sync` or proves that its consumption defect is fixed.
 
 What **not** to do:
 
@@ -363,21 +381,26 @@ Freshness SLA:
 
 A red scheduled workflow is the publication failure alert. If the admin shows `stale`, `unavailable`, or `deploy fallback`, inspect that workflow before touching runtime telemetry fences or increasing KV budgets.
 
-### finalization has one production path
+### retained V1 finalization is not the V2 recovery path
 
-Website Ops sync finalization has one path only:
+The legacy chain was `GUI Sync -> workstation run-sync -> D1 finalization ledger
+-> Queue drain -> global pending count reaches zero`. Its retained jobs,
+receipts, queue messages and dead-letter state must survive until their accepted
+obligations have been reconciled. B-771 removes its executable producers,
+consumers, bindings, cron duties and recovery launchers after replacement
+consumers are verified. It must not be resumed as the normal path for migrated
+operations, and zero global pending jobs is not a V2 success criterion.
 
-`GUI Sync button -> workstation run-sync preflight -> durable D1 finalization ledger -> Cloudflare Queue drain_finalization_ledger -> geneguessr-api queue consumer -> /finalization/pending reaches zero`
+No direct Queue kicks, job deletion, ad hoc `/finalization/process`, or synthetic
+completion receipts are recovery substitutes. A transport failure preserves the
+same durable obligation. Source/configuration retirement must update IPD-004,
+IPD-010 and affected authority fences together; documentation alone cannot prove
+that a queue or scheduled launcher is unavailable.
 
-Forbidden recovery paths:
-
-- no workstation-side finalization processing
-- no `/api/iconoplasm/admin/finalization/process`
-- no direct Cloudflare Queue sends outside the worker
-- no GitHub Actions Queue kick
-- no compatibility shim that marks the run done without `/finalization/pending` reaching zero
-
-If Queue send returns `429` or `QUEUE_SEND_FAILED`, the correct behavior is to fail loud before or during sync, preserve the durable ledger, and fix Cloudflare Queue allowance/account state. Re-running the GUI button without Queue headroom is not progress.
+The release workflow starts automatically on a push to `main`. A source-only
+review branch must stay unmerged while that automatic release would conflict
+with the production hold. Keep protected checks intact and record the exact
+reviewed revision, test results and any live work still unverified in Linear.
 
 ## when to leave this repo
 
