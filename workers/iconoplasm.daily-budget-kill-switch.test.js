@@ -1909,7 +1909,7 @@ function syncFinalizationQueueEnv(budgetNamespace, db) {
 
 function syncFinalizationDrainMessage() {
   return {
-    body: { kind: "drain_finalization_ledger", run_id: "sync-budget-test", symbols: [] },
+    body: { kind: "drain_finalization_ledger", run_id: "sync-budget-test", symbols: ["TP53"] },
     acked: false,
     retried: false,
     ack() {

@@ -14,7 +14,9 @@ function fixture(t, rows = [["TP53", "completed_pending_finalize"]]) {
     "0100_finalization_job_version.sql",
     "0101_finalization_publication_barrier.sql",
   ]) {
-    sqlite.exec(readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8"))
+    sqlite.exec(
+      readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8"),
+    )
   }
   const insert = sqlite.prepare(
     "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES(?,'queued',?)",
@@ -78,7 +80,9 @@ test("V2 acceptance precedes completion while an unrelated job stays unfinished"
   assert.equal(result.remaining, 0)
   assert.equal(result.broaden_next_drain, false)
   assert.equal(
-    sqlite.prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='BRCA1'").get().status,
+    sqlite
+      .prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='BRCA1'")
+      .get().status,
     "queued",
   )
   assert.ok(queries.every((sql) => !sql.includes("FROM icono_sync_finalization_summary")))
