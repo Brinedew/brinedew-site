@@ -29,9 +29,11 @@ test("resume id is passed only as an explicit workflow-dispatch input", () => {
 })
 
 test("unsafe post-mutation failures still stop automatic retry", () => {
-  assert.match(workflow, /This is not a proven retry-safe pre-mutation budget gate/)
-  assert.doesNotMatch(
-    workflow.slice(workflow.indexOf('"Apply reviewed D1 migrations through prediction admission"')),
-    /resume_run_id="\$\{latest_failed_run_id\}"/,
-  )
+  const start = workflow.indexOf('            case "${failed_step}" in')
+  const end = workflow.indexOf("            esac", start)
+  assert.ok(start >= 0 && end > start, "the failed-step classifier must exist")
+  const classifier = workflow.slice(start, end)
+
+  assert.match(classifier, /This is not a proven retry-safe pre-mutation budget gate/)
+  assert.doesNotMatch(classifier, /"Apply reviewed D1 migrations through prediction admission"\)/)
 })
