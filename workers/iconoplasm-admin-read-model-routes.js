@@ -88,6 +88,11 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     const visionIds = Array.from(
       new Set(rawVisionIds.map((value) => validVisionId(value)).filter(Boolean)),
     )
+    if (!symbols.length && !visionIds.length)
+      return done(
+        "admin_read_models_sync_400",
+        json({ error: "Scoped read-model sync requires at least one symbol or vision_id" }, 400),
+      )
     const fullVision = coerceBoolean(payload?.full_vision ?? payload?.fullVision, false)
     const fullRebuild = coerceBoolean(payload?.full_rebuild ?? payload?.fullRebuild, false)
     const skipVoteSummaries = coerceBoolean(
