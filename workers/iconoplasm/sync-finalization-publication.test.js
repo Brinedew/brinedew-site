@@ -23,7 +23,6 @@ const source = (name) =>
   readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8")
 const now = "2026-09-09T03:00:00.000Z"
 
-
 function sqliteD1(db) {
   return {
     prepare(sql) {
