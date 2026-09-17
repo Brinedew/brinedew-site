@@ -23,6 +23,38 @@ export const CARD_PUBLICATION_WORKER_REPAIR_FILES = Object.freeze([
   "workers/lib/iconoplasm-card-publication.js",
 ])
 
+// The committed scoped-finalization repair (PR #153, merged as 0d78a912) plus
+// its admission change. It contains the stateful runtime handoff, the
+// read-model route guard, the retired legacy repair, their regression suites,
+// the regenerated operation-cost identity and the verification/retirement
+// records. No migration, seed or data file appears in the envelope.
+export const SCOPED_FINALIZATION_WORKER_REPAIR_FILES = Object.freeze([
+  ".github/workflows/ci.yaml",
+  "docs/ICONOPLASM_OPERATIONS.md",
+  "plans/B-749-SCOPED-HANDOFF-VERIFICATION-20260917.md",
+  "plans/B-762-DELETION-INVENTORY.md",
+  "scripts/repair-iconoplasm-newer-tie-canon.mjs",
+  "scripts/repair-iconoplasm-newer-tie-canon.test.mjs",
+  "scripts/verify-exhausted-capacity-worker-repair.mjs",
+  "scripts/verify-exhausted-capacity-worker-repair.test.js",
+  "workers/generated/operation-cost-identities.js",
+  "workers/iconoplasm-admin-read-model-routes.js",
+  "workers/iconoplasm-admin-read-model-routes.test.js",
+  "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  "workers/iconoplasm.b749-scoped-reset.test.js",
+  "workers/iconoplasm.daily-budget-kill-switch.test.js",
+  "workers/iconoplasm.finalization-reset-alarm.test.js",
+  "workers/iconoplasm.read-model-sync.test.js",
+  "workers/iconoplasm.sync-finalization-queue.test.js",
+  "workers/iconoplasm.vote-authority-demand-handover.test.js",
+  "workers/iconoplasm.vote-authority-handoff.test.js",
+  "workers/iconoplasm.vote-reset-wake.test.js",
+  "workers/iconoplasm/sync-finalization-publication.cost.test.js",
+  "workers/iconoplasm/sync-finalization-publication.js",
+  "workers/iconoplasm/sync-finalization-publication.test.js",
+  "workers/iconoplasm/sync-finalization-scoped-core.test.js",
+])
+
 const WORKER_REPAIR_ENVELOPES = Object.freeze([
   {
     allowed: B749_WORKER_REPAIR_FILES,
@@ -37,6 +69,14 @@ const WORKER_REPAIR_ENVELOPES = Object.freeze([
       "workers/generated/operation-cost-identities.js",
       "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
       "workers/lib/iconoplasm-card-publication.js",
+    ],
+  },
+  {
+    allowed: SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
+    required: [
+      "workers/generated/operation-cost-identities.js",
+      "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      "workers/iconoplasm/sync-finalization-publication.js",
     ],
   },
 ])
