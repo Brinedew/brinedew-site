@@ -5,6 +5,8 @@ import {
   SCOPED_FINALIZATION_STATUS_LIST_SQL,
 } from "./iconoplasm/sync-finalization-status-list.js"
 import {
+  FINALIZATION_COMPLETION_PAGE_SIZE,
+  SCOPED_FINALIZATION_REMAINDER_SQL,
   GLOBAL_READY_FINALIZATION_SQL,
   SCOPED_READY_FINALIZATION_SQL,
   COMPLETE_READY_FINALIZATION_SQL,
@@ -70,7 +72,7 @@ class FakeStatement {
               (!scope || scope.has(row.gene_symbol)),
           )
           .sort((a, b) => a.gene_symbol.localeCompare(b.gene_symbol))
-          .slice(0, 100)
+          .slice(0, FINALIZATION_COMPLETION_PAGE_SIZE)
           .map((row) => ({ gene_symbol: row.gene_symbol, job_version: row.job_version })),
       }
     }
@@ -346,6 +348,18 @@ class FakeStatement {
   }
 
   async first() {
+    if (this.sql === SCOPED_FINALIZATION_REMAINDER_SQL) {
+      const scope = new Set(JSON.parse(this.args[0]))
+      const rows = [...this.db.jobs.values()].filter(
+        (row) => scope.has(row.gene_symbol) && row.status !== "completed",
+      )
+      return {
+        remaining: rows.length,
+        ready_remaining: rows.filter((row) =>
+          ["completed_pending_finalize", "completed"].includes(row.phase),
+        ).length,
+      }
+    }
     if (this.sql.includes("RETURNING enqueued_version")) {
       const [token, until, version, , now] = this.args
       const state = this.db.handoff
@@ -909,7 +923,36 @@ function buildFakeQueue({ failMessage = "" } = {}) {
   }
 }
 
+function bindFinalizationV2Acceptance(env, handoffs = []) {
+  if (!env.ICONOPLASM_VOTE_COORDINATORS) {
+    env.ICONOPLASM_VOTE_COORDINATORS = {
+      idFromName: (name) => name,
+      get: (id) => ({
+        async fetch(request) {
+          const url = new URL(request.url)
+          const payload = await request.json().catch(() => ({}))
+          if (url.pathname !== "/publication/finalization-handoff")
+            return Response.json({ ok: false, error: "unexpected route" }, { status: 404 })
+          const symbol = String(payload?.symbol || "")
+            .trim()
+            .toUpperCase()
+          handoffs.push({ id, symbol, path: url.pathname })
+          return Response.json({
+            ok: true,
+            accepted: true,
+            symbol,
+            authority_epoch: "v2",
+            job_version: payload.job_version,
+          })
+        },
+      }),
+    }
+  }
+  return handoffs
+}
+
 async function deliverFinalizationForTest(env, body) {
+  bindFinalizationV2Acceptance(env)
   let acked = false
   const retries = []
   const result = await handleIconoplasmSyncFinalizationQueue(
@@ -982,9 +1025,10 @@ test("the existing governor coalesces one reset wake and retains it through depl
     },
   }
   const { governor, values, alarms } = finalizationGovernorForTest(env)
-  const first = await governor.deferFinalizationToReset()
+  const resetMessage = { runId: "retained-run", symbols: ["TP53"] }
+  const first = await governor.deferFinalizationToReset(resetMessage)
   assert.equal(first.reset_at, Date.parse("2026-09-13T00:00:05Z"))
-  for (let n = 0; n < 100; n++) await governor.deferFinalizationToReset()
+  for (let n = 0; n < 100; n++) await governor.deferFinalizationToReset(resetMessage)
   assert.equal(alarms.length, 1, "duplicate refusals do not rewrite the alarm")
   now = first.reset_at
   assert.equal((await governor.alarm()).reason, "schema_transition_or_disabled")
@@ -999,7 +1043,8 @@ test("the existing governor coalesces one reset wake and retains it through depl
   const restarted = new IconoplasmSyncGovernor(governor.state, env)
   assert.equal((await restarted.alarm()).queue_message_sent, true)
   assert.equal(sent.length, 1)
-  assert.deepEqual(sent[0].symbols, [])
+  assert.deepEqual(sent[0].symbols, ["TP53"])
+  assert.equal(sent[0].run_id, "retained-run")
   assert.equal(values.has("finalization_reset_wake"), false)
   await restarted.alarm()
   assert.equal(sent.length, 1, "an empty alarm does no Queue work")
@@ -1500,6 +1545,7 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
         body: JSON.stringify({
           run_id: "pytest-run",
           reason: "pytest-kick",
+          symbols: ["TP53"],
         }),
       }),
       {
@@ -1516,6 +1562,7 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
   assert.equal(payload?.process, null)
   assert.equal(queue.sent.length, 1)
   assert.equal(queue.sent[0]?.kind, "drain_finalization_ledger")
+  assert.deepEqual(queue.sent[0]?.symbols, ["TP53"])
 })
 
 test("admin finalization kick fails loud with the Cloudflare Queue send error", async () => {
@@ -1533,6 +1580,7 @@ test("admin finalization kick fails loud with the Cloudflare Queue send error", 
         body: JSON.stringify({
           run_id: "pytest-run",
           reason: "pytest-kick",
+          symbols: ["TP53"],
         }),
       }),
       {
@@ -1796,6 +1844,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
+  const handoffs = bindFinalizationV2Acceptance(env)
   let acknowledged = false
   const retries = []
 
@@ -1806,7 +1855,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
           body: {
             kind: "drain_finalization_ledger",
             run_id: "sync-test",
-            symbols: [],
+            symbols,
           },
           ack() {
             acknowledged = true
@@ -1826,6 +1875,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
   assert.equal(acknowledged, true)
   assert.deepEqual(retries, [])
   assert.deepEqual(queue.sent, [])
+  assert.deepEqual(handoffs.map((item) => item.symbol).sort(), [...symbols].sort())
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
     ["completed", "completed"],
@@ -1836,7 +1886,7 @@ test("queue drain message finalizes when only pending-finalize rows remain", asy
   )
 })
 
-test("scoped queue drain completes scoped pending-finalize rows while deferring global KV publish", async () => {
+test("scoped queue drain completes only its pending-finalize rows through V2 handoff", async () => {
   const queue = buildFakeQueue()
   const kv = testKv()
   const env = {
@@ -1867,6 +1917,7 @@ test("scoped queue drain completes scoped pending-finalize rows while deferring 
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: kv,
   }
+  const handoffs = bindFinalizationV2Acceptance(env)
   let acknowledged = false
 
   const result = await handleIconoplasmSyncFinalizationQueue(
@@ -1899,12 +1950,10 @@ test("scoped queue drain completes scoped pending-finalize rows while deferring 
   assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "completed")
   assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.phase, "completed")
   assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
-  assert.equal(queue.sent.length, 1)
-  assert.deepEqual(queue.sent[0]?.symbols, [])
-  assert.equal(
-    Number(queue.sendOptions[0]?.delaySeconds || 0),
-    0,
-    "the remaining global job is due now",
+  assert.equal(queue.sent.length, 0, "unrelated work must not be adopted by the scoped retry")
+  assert.deepEqual(
+    handoffs.map((item) => item.symbol),
+    ["BRCA1", "TP53"],
   )
 })
 
@@ -1932,7 +1981,11 @@ test("future retry rows schedule one due-time wakeup instead of an immediate Que
     {
       messages: [
         {
-          body: { kind: "drain_finalization_ledger", run_id: "capacity-incident" },
+          body: {
+            kind: "drain_finalization_ledger",
+            run_id: "capacity-incident",
+            symbols: ["TP53"],
+          },
           ack() {},
           retry() {},
         },
@@ -1949,76 +2002,48 @@ test("future retry rows schedule one due-time wakeup instead of an immediate Que
   assert.ok(queue.sendOptions[0].delaySeconds <= 45 * 60)
 })
 
-test("global queue drain bulk-completes ready pending-finalize rows during mixed ledger work without KV publish", async () => {
+test("unscoped queue drain is refused without touching the finalization ledger", async () => {
   const queue = buildFakeQueue()
-  const kv = testKv()
   const env = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: new FakeIconoplasmDb({
       jobs: [
-        {
-          gene_symbol: "TP53",
-          status: "queued",
-          phase: "completed_pending_finalize",
-          vision_ids_json: JSON.stringify(["anima-v1-1"]),
-        },
-        {
-          gene_symbol: "BRCA1",
-          status: "queued",
-          phase: "completed_pending_finalize",
-          vision_ids_json: JSON.stringify(["anima-v1-2"]),
-        },
-        {
-          gene_symbol: "EGFR",
-          status: "running",
-          phase: "vote_summaries",
-          last_attempt_at: "2099-01-01T00:00:00.000Z",
-          vision_ids_json: JSON.stringify(["anima-v1-3"]),
-        },
+        { gene_symbol: "TP53", status: "queued", phase: "completed_pending_finalize" },
+        { gene_symbol: "BRCA1", status: "queued", phase: "completed_pending_finalize" },
       ],
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-    KV: kv,
   }
   let acknowledged = false
-
   const result = await handleIconoplasmSyncFinalizationQueue(
     {
       messages: [
         {
-          body: {
-            kind: "drain_finalization_ledger",
-            run_id: "sync-test",
-            symbols: [],
-          },
+          body: { kind: "drain_finalization_ledger", run_id: "legacy-global", symbols: [] },
           ack() {
             acknowledged = true
           },
-          retry() {},
+          retry() {
+            assert.fail("unsafe global work must not be retried as an ordinary operation")
+          },
         },
       ],
     },
     env,
     { waitUntil() {} },
   )
-
-  assert.equal(result.ok, true)
-  assert.equal(result.processed, 0)
-  assert.equal(result.finalized, 2)
+  assert.equal(result.ok, false)
+  assert.equal(result.failed, 1)
   assert.equal(acknowledged, true)
-  assert.equal(kv.puts.length, 0)
-  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.status, "completed")
-  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.status, "completed")
-  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.status, "running")
-  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.phase, "vote_summaries")
-  assert.equal(queue.sent.length, 1)
-  assert.deepEqual(queue.sent[0]?.symbols, [])
+  assert.deepEqual(queue.sent, [])
+  assert.deepEqual(
+    ["TP53", "BRCA1"].map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
+    ["queued", "queued"],
+  )
 })
 
-test("scoped completion schedules the remaining global page before one publisher handoff", async () => {
+test("scoped completion never broadens to an unrelated ready finalization", async () => {
   const queue = buildFakeQueue()
-  const kv = testKv()
   const symbols = ["TP53", "BRCA1", "EGFR"]
   const env = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
@@ -2031,10 +2056,9 @@ test("scoped completion schedules the remaining global page before one publisher
       })),
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-    KV: kv,
+    KV: testKv(),
   }
-
+  const handoffs = bindFinalizationV2Acceptance(env)
   const result = await handleIconoplasmSyncFinalizationQueue(
     {
       messages: [
@@ -2052,23 +2076,16 @@ test("scoped completion schedules the remaining global page before one publisher
     env,
     { waitUntil() {} },
   )
-
   assert.equal(result.ok, true)
   assert.equal(result.finalized, 2)
-  assert.equal(queue.sent.length, 1)
-  assert.deepEqual(queue.sent[0].symbols, [])
-  assert.equal(kv.puts.length, 0)
-  const next = await handleIconoplasmSyncFinalizationQueue(
-    { messages: [{ body: queue.sent[0], ack() {}, retry() {} }] },
-    env,
-    { waitUntil() {} },
-  )
-  assert.equal(next.finalized, 1)
-  assert.ok(kv.puts.length > 0)
   assert.deepEqual(
-    symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.status),
-    ["completed", "completed", "completed"],
+    handoffs.map((item) => item.symbol),
+    ["BRCA1", "TP53"],
   )
+  assert.equal(queue.sent.length, 0)
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("BRCA1")?.status, "completed")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("EGFR")?.status, "queued")
 })
 
 test("queue drain completes 1001 ready rows in bounded pages without rebuilding their finished visions", async () => {
@@ -2091,6 +2108,7 @@ test("queue drain completes 1001 ready rows in bounded pages without rebuilding 
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
+  const handoffs = bindFinalizationV2Acceptance(env)
 
   const deliver = () =>
     handleIconoplasmSyncFinalizationQueue(
@@ -2100,7 +2118,7 @@ test("queue drain completes 1001 ready rows in bounded pages without rebuilding 
             body: {
               kind: "drain_finalization_ledger",
               run_id: "sync-test",
-              symbols: [],
+              symbols,
             },
             ack() {},
             retry() {},
@@ -2112,17 +2130,14 @@ test("queue drain completes 1001 ready rows in bounded pages without rebuilding 
     )
 
   let total = 0
-  for (let page = 0; page < 11; page++) {
+  for (let page = 0; page < Math.ceil(symbols.length / FINALIZATION_COMPLETION_PAGE_SIZE); page++) {
     const result = await deliver()
     assert.equal(result.ok, true)
-    assert.ok(result.finalized <= 100)
+    assert.ok(result.finalized <= FINALIZATION_COMPLETION_PAGE_SIZE)
     total += result.finalized
   }
   assert.equal(total, 1001)
-  assert.equal(
-    env.ICONOPLASM_DB.handoff.notified_version,
-    env.ICONOPLASM_DB.handoff.enqueued_version,
-  )
+  assert.equal(handoffs.length, 1001)
   assert.equal(
     env.ICONOPLASM_DB.calls.filter((call) =>
       call.sql.includes("INSERT INTO icono_admin_vision_rollup"),
@@ -2396,3 +2411,69 @@ test("queue finalization consumer fails loud when Queue path is disabled", async
   assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "reconcile")
   assert.deepEqual(queue.sent, [])
 })
+
+test("deferred per-gene publication schedules its retry deadline instead of an immediate drain", async () => {
+  const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [{ gene_symbol: "TP53", status: "queued", phase: "completed_pending_finalize" }],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_VOTE_COORDINATORS: {
+      idFromName: (name) => name,
+      get: () => ({
+        async fetch(request) {
+          assert.equal(new URL(request.url).pathname, "/publication/finalization-handoff")
+          assert.deepEqual(await request.json(), { symbol: "TP53", job_version: 1 })
+          return Response.json({ ok: false, accepted: false, retry_after_ms: 300000 })
+        },
+      }),
+    },
+    KV: testKv(),
+  }
+  const body = { kind: "drain_finalization_ledger", run_id: "saved-publication", symbols: ["TP53"] }
+  const result = await deliverFinalizationForTest(env, body)
+
+  assert.equal(result.result.ok, true)
+  assert.equal(result.acked, true, "the delayed replacement was accepted by the queue")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53").status, "queued")
+  assert.equal(queue.sent.length, 1)
+  assert.equal(queue.sent[0].run_id, body.run_id)
+  assert.deepEqual(queue.sent[0].symbols, body.symbols)
+  assert.ok(
+    queue.sendOptions[0]?.delaySeconds >= 299 && queue.sendOptions[0]?.delaySeconds <= 300,
+    JSON.stringify(queue.sendOptions),
+  )
+})
+
+for (const receipt of [
+  { ok: true, accepted: true, symbol: "BRCA1", authority_epoch: "v2" },
+  { ok: true, accepted: true, symbol: "TP53", authority_epoch: "v1" },
+  { ok: false, accepted: true, symbol: "TP53", authority_epoch: "v2" },
+]) {
+  test(`finalization retains its obligation for an inconsistent receipt ${JSON.stringify(receipt)}`, async () => {
+    const env = {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_DB: new FakeIconoplasmDb({
+        jobs: [{ gene_symbol: "TP53", status: "queued", phase: "completed_pending_finalize" }],
+      }),
+      ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+      ICONOPLASM_VOTE_COORDINATORS: {
+        idFromName: (name) => name,
+        get: () => ({ fetch: async () => Response.json(receipt) }),
+      },
+      KV: testKv(),
+    }
+    const delivery = await deliverFinalizationForTest(env, {
+      kind: "drain_finalization_ledger",
+      run_id: "receipt-run",
+      symbols: ["TP53"],
+    })
+    assert.equal(delivery.result.ok, false)
+    assert.equal(delivery.acked, false)
+    assert.equal(delivery.retries.length, 1)
+    assert.equal(env.ICONOPLASM_DB.jobs.get("TP53").status, "queued")
+    assert.equal(env.ICONOPLASM_SYNC_FINALIZATION_QUEUE.sent.length, 0)
+  })
+}

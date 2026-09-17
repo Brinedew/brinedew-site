@@ -41,7 +41,7 @@ test("vote and finalization reset wakes share one alarm without losing either re
   }
   const { governor, values, alarms, state } = governorFixture(env)
   const first = await governor.deferVoteProjectionToReset()
-  await governor.deferFinalizationToReset()
+  await governor.deferFinalizationToReset({ runId: "shared-reset-run", symbols: ["TP53"] })
   const writes = alarms.length
   for (let i = 0; i < 100; i++) await governor.deferVoteProjectionToReset()
   assert.equal(alarms.length, writes)

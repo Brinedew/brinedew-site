@@ -117,11 +117,102 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
   assert.equal(payload.publish_gallery_dirty_shards, false)
 })
 
-test("global publication sync returns the durable publisher handoff outcome", async () => {
+const emptyScopes = [
+  ["missing scope", {}],
+  ["null payload", null],
+  ["null scope", { symbols: null, vision_ids: null }],
+  ["empty arrays", { symbols: [], vision_ids: [] }],
+  ["non-array scope", { symbols: "TP53", vision_ids: "vision-one" }],
+  ["scope empty after normalization", { symbols: ["", "  ", null], vision_ids: ["invalid"] }],
+  ["camel-case vision scope empty after normalization", { visionIds: ["invalid", null] }],
+]
+
+for (const [description, body] of emptyScopes) {
+  for (const publish of [false, true]) {
+    test(`rejects ${description} before ${publish ? "publication" : "direct sync"}`, async () => {
+      const calls = []
+      const handlers = createIconoplasmAdminReadModelHandlers(
+        readModelServices({
+          syncReadModels: async () => calls.push("direct"),
+          syncReadModelsAndPublishGalleryDirtyShards: async () => calls.push("publication"),
+        }),
+      )
+      const response = await responseFrom(handlers["admin_read_models.sync"], {
+        body: body === null ? null : { ...body, publish_gallery_dirty_shards: publish },
+      })
+      const payload = await response.json()
+
+      assert.equal(response.status, 400)
+      assert.match(payload.error, /at least one symbol or vision_id/)
+      assert.deepEqual(calls, [])
+    })
+  }
+}
+
+for (const flag of ["full_rebuild", "fullRebuild", "full_vision", "fullVision"]) {
+  for (const publish of [false, true]) {
+    test(`scoped ${publish ? "publication" : "direct sync"} rejects ${flag}`, async () => {
+      const calls = []
+      const handlers = createIconoplasmAdminReadModelHandlers(
+        readModelServices({
+          syncReadModels: async () => calls.push("direct"),
+          syncReadModelsAndPublishGalleryDirtyShards: async () => calls.push("publication"),
+        }),
+      )
+      const response = await responseFrom(handlers["admin_read_models.sync"], {
+        body: { symbols: ["TP53"], [flag]: true, publish_gallery_dirty_shards: publish },
+      })
+      const payload = await response.json()
+
+      assert.equal(response.status, 400)
+      assert.equal(response.headers.get("Cache-Control"), "no-store")
+      assert.match(payload.error, /does not allow full_vision or full_rebuild/)
+      assert.deepEqual(calls, [])
+    })
+  }
+}
+
+for (const publish of [false, true]) {
+  test(`vision-only ${publish ? "publication" : "direct sync"} keeps its explicit scope`, async () => {
+    const calls = []
+    const sync = async (_env, options) => {
+      calls.push(options)
+      return { symbols: 0, visions: 1 }
+    }
+    const forbidden = async () => {
+      throw new Error("wrong sync service")
+    }
+    const handlers = createIconoplasmAdminReadModelHandlers(
+      readModelServices({
+        syncReadModels: publish ? forbidden : sync,
+        syncReadModelsAndPublishGalleryDirtyShards: publish ? sync : forbidden,
+      }),
+    )
+    const response = await responseFrom(handlers["admin_read_models.sync"], {
+      body: {
+        visionIds: [" vision-one ", "invalid", "vision-one"],
+        publish_gallery_dirty_shards: publish,
+        full_vision: false,
+        full_rebuild: false,
+      },
+    })
+    const payload = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.visions, 1)
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0].symbols, [])
+    assert.deepEqual(calls[0].visionIds, ["vision-one"])
+    assert.equal(calls[0].fullVision, false)
+    assert.equal(calls[0].fullRebuild, false)
+  })
+}
+
+test("scoped publication sync returns the durable publisher handoff outcome", async () => {
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
       syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 0,
+        symbols: 1,
         visions: 0,
         publication_queued: true,
         migration_pending: false,
@@ -130,7 +221,7 @@ test("global publication sync returns the durable publisher handoff outcome", as
   )
 
   const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { publish_gallery_dirty_shards: true },
+    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
   })
   const payload = await response.json()
 
@@ -140,11 +231,11 @@ test("global publication sync returns the durable publisher handoff outcome", as
   assert.equal(payload.card_catalog_publication, null)
 })
 
-test("global publication sync preserves a safe publisher deferral", async () => {
+test("scoped publication sync preserves a safe publisher deferral", async () => {
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
       syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 0,
+        symbols: 1,
         visions: 0,
         card_catalog_publication: {
           deferred: true,
@@ -156,7 +247,7 @@ test("global publication sync preserves a safe publisher deferral", async () => 
   )
 
   const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { publish_gallery_dirty_shards: true },
+    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
   })
   const payload = await response.json()
 
