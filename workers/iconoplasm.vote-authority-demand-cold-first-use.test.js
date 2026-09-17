@@ -190,3 +190,126 @@ test("cold ordinary first mutation reconstructs retained candidate authority wit
     "original first command did not execute after handover",
   )
 })
+
+function countingLegacyD1(symbol) {
+  const inner = retainedLegacyD1(symbol)
+  const counters = { envelopeReads: 0 }
+  return {
+    counters,
+    prepare(sql) {
+      const source = String(sql || "")
+      // The envelope read is the only retained-source query with a LIMIT; the
+      // cold bootstrap asset query does not bound its rows.
+      const envelope = /FROM icono_portrait_assets[\s\S]*LIMIT/.test(source)
+      const prepared = inner.prepare(sql)
+      return {
+        bind(...bindings) {
+          const bound = prepared.bind(...bindings)
+          return {
+            async all() {
+              if (envelope) counters.envelopeReads += 1
+              return bound.all()
+            },
+            async first() {
+              return bound.first()
+            },
+            async run() {
+              return bound.run()
+            },
+          }
+        },
+      }
+    },
+  }
+}
+
+test("a warm-but-empty coordinator reconstructs candidate authority on the first canonical command", async (t) => {
+  const symbol = "TP53"
+  const { state, sql } = stateFixture()
+  t.after(() => sql.db.close())
+  const d1 = countingLegacyD1(symbol)
+  const coordinator = new IconoplasmVoteCoordinator(state, { ICONOPLASM_DB: d1 })
+  await state.ready
+  coordinator.setMeta("symbol", symbol)
+
+  // The ordinary gene page renders vote boxes with this batched snapshot read.
+  // It marks the coordinator bootstrapped without creating candidate authority,
+  // which is exactly the warm first-use state the demand handover must handle.
+  const snapshots = await post(coordinator, "/vote/snapshots", {
+    items: [{ symbol, asset_sha256: sha("a"), vision_id: "anima-v1-9" }],
+  })
+  assert.equal(snapshots.status, 200)
+  assert.equal(coordinator.getMeta("bootstrapped"), "1")
+  assert.equal(
+    coordinator.sqlFirst("SELECT COUNT(*) AS n FROM gene_candidate_authority").n,
+    0,
+    "the snapshot read must not fabricate candidate authority",
+  )
+
+  const response = await post(coordinator, "/vote/set", {
+    symbol,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).authority, "v2")
+  const status = await (await post(coordinator, "/publication/state", { symbol })).json()
+  assert.equal(status.authority_epoch, "v2")
+  assert.equal(status.winner_asset_sha256, sha("a"), "retained published authority was lost")
+  assert.equal(
+    status.candidate_count,
+    1,
+    "warm first use skipped retained candidate reconstruction",
+  )
+  assert.equal(d1.counters.envelopeReads, 1)
+
+  const repeat = await post(coordinator, "/vote/set", {
+    symbol,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(repeat.status, 200)
+  assert.equal(d1.counters.envelopeReads, 1, "the warm path must stay D1-free after reconstruction")
+})
+
+test("an activated v2 gene with empty candidate authority repairs once and advances the selection", async (t) => {
+  const symbol = "TP53"
+  const { state, sql } = stateFixture()
+  t.after(() => sql.db.close())
+  const d1 = countingLegacyD1(symbol)
+  const coordinator = new IconoplasmVoteCoordinator(state, { ICONOPLASM_DB: d1 })
+  await state.ready
+  coordinator.setMeta("symbol", symbol)
+  coordinator.setMeta("bootstrapped", "1")
+  coordinator.setMeta("authority_epoch", "v2")
+  assert.equal(coordinator.sqlFirst("SELECT COUNT(*) AS n FROM gene_candidate_authority").n, 0)
+
+  const response = await post(coordinator, "/vote/set", {
+    symbol,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).authority, "v2")
+  const status = await (await post(coordinator, "/publication/state", { symbol })).json()
+  assert.equal(status.authority_epoch, "v2")
+  assert.equal(status.candidate_count, 1, "activated v2 gene stayed permanently candidate-less")
+  assert.equal(status.winner_asset_sha256, sha("a"))
+  assert.equal(d1.counters.envelopeReads, 1)
+
+  const repeat = await post(coordinator, "/vote/set", {
+    symbol,
+    asset_sha256: sha("a"),
+    user_id: "new-user",
+    vote_value: 1,
+    vision_id: "anima-v1-9",
+  })
+  assert.equal(repeat.status, 200)
+  assert.equal(d1.counters.envelopeReads, 1, "the warm path must stay D1-free after reconstruction")
+})
