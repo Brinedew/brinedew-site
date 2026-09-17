@@ -117,11 +117,38 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
   assert.equal(payload.publish_gallery_dirty_shards, false)
 })
 
-test("global publication sync returns the durable publisher handoff outcome", async () => {
+test("empty read-model sync scope is rejected before any global work", async () => {
+  let directCalls = 0
+  let invalidatingCalls = 0
+  const handlers = createIconoplasmAdminReadModelHandlers(
+    readModelServices({
+      syncReadModels: async () => {
+        directCalls += 1
+        return { symbols: 0, visions: 0 }
+      },
+      syncReadModelsAndPublishGalleryDirtyShards: async () => {
+        invalidatingCalls += 1
+        return { symbols: 0, visions: 0 }
+      },
+    }),
+  )
+
+  const response = await responseFrom(handlers["admin_read_models.sync"], {
+    body: { publish_gallery_dirty_shards: true },
+  })
+  const payload = await response.json()
+
+  assert.equal(response.status, 400)
+  assert.match(payload.error, /at least one symbol or vision_id/)
+  assert.equal(directCalls, 0)
+  assert.equal(invalidatingCalls, 0)
+})
+
+test("scoped publication sync returns the durable publisher handoff outcome", async () => {
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
       syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 0,
+        symbols: 1,
         visions: 0,
         publication_queued: true,
         migration_pending: false,
@@ -130,7 +157,7 @@ test("global publication sync returns the durable publisher handoff outcome", as
   )
 
   const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { publish_gallery_dirty_shards: true },
+    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
   })
   const payload = await response.json()
 
@@ -140,11 +167,11 @@ test("global publication sync returns the durable publisher handoff outcome", as
   assert.equal(payload.card_catalog_publication, null)
 })
 
-test("global publication sync preserves a safe publisher deferral", async () => {
+test("scoped publication sync preserves a safe publisher deferral", async () => {
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
       syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 0,
+        symbols: 1,
         visions: 0,
         card_catalog_publication: {
           deferred: true,
@@ -156,7 +183,7 @@ test("global publication sync preserves a safe publisher deferral", async () => 
   )
 
   const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { publish_gallery_dirty_shards: true },
+    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
   })
   const payload = await response.json()
 
