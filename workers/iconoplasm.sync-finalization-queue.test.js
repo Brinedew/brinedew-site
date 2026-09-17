@@ -2411,3 +2411,69 @@ test("queue finalization consumer fails loud when Queue path is disabled", async
   assert.equal(env.ICONOPLASM_DB.jobs.get("TP53")?.phase, "reconcile")
   assert.deepEqual(queue.sent, [])
 })
+
+test("deferred per-gene publication schedules its retry deadline instead of an immediate drain", async () => {
+  const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [{ gene_symbol: "TP53", status: "queued", phase: "completed_pending_finalize" }],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_VOTE_COORDINATORS: {
+      idFromName: (name) => name,
+      get: () => ({
+        async fetch(request) {
+          assert.equal(new URL(request.url).pathname, "/publication/finalization-handoff")
+          assert.deepEqual(await request.json(), { symbol: "TP53", job_version: 1 })
+          return Response.json({ ok: false, accepted: false, retry_after_ms: 300000 })
+        },
+      }),
+    },
+    KV: testKv(),
+  }
+  const body = { kind: "drain_finalization_ledger", run_id: "saved-publication", symbols: ["TP53"] }
+  const result = await deliverFinalizationForTest(env, body)
+
+  assert.equal(result.result.ok, true)
+  assert.equal(result.acked, true, "the delayed replacement was accepted by the queue")
+  assert.equal(env.ICONOPLASM_DB.jobs.get("TP53").status, "queued")
+  assert.equal(queue.sent.length, 1)
+  assert.equal(queue.sent[0].run_id, body.run_id)
+  assert.deepEqual(queue.sent[0].symbols, body.symbols)
+  assert.ok(
+    queue.sendOptions[0]?.delaySeconds >= 299 && queue.sendOptions[0]?.delaySeconds <= 300,
+    JSON.stringify(queue.sendOptions),
+  )
+})
+
+for (const receipt of [
+  { ok: true, accepted: true, symbol: "BRCA1", authority_epoch: "v2" },
+  { ok: true, accepted: true, symbol: "TP53", authority_epoch: "v1" },
+  { ok: false, accepted: true, symbol: "TP53", authority_epoch: "v2" },
+]) {
+  test(`finalization retains its obligation for an inconsistent receipt ${JSON.stringify(receipt)}`, async () => {
+    const env = {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_DB: new FakeIconoplasmDb({
+        jobs: [{ gene_symbol: "TP53", status: "queued", phase: "completed_pending_finalize" }],
+      }),
+      ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+      ICONOPLASM_VOTE_COORDINATORS: {
+        idFromName: (name) => name,
+        get: () => ({ fetch: async () => Response.json(receipt) }),
+      },
+      KV: testKv(),
+    }
+    const delivery = await deliverFinalizationForTest(env, {
+      kind: "drain_finalization_ledger",
+      run_id: "receipt-run",
+      symbols: ["TP53"],
+    })
+    assert.equal(delivery.result.ok, false)
+    assert.equal(delivery.acked, false)
+    assert.equal(delivery.retries.length, 1)
+    assert.equal(env.ICONOPLASM_DB.jobs.get("TP53").status, "queued")
+    assert.equal(env.ICONOPLASM_SYNC_FINALIZATION_QUEUE.sent.length, 0)
+  })
+}

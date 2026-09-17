@@ -219,3 +219,138 @@ test("one alarm publishes the winner and hands it to the reader view owner", asy
   assert.equal(result.handoff.delivered, 1)
   assert.equal(requests.length, 1)
 })
+
+function finalizationSource(responses, queries) {
+  let reads = 0
+  return {
+    prepare(query) {
+      if (/FROM icono_sync_finalization_jobs/.test(query)) {
+        return {
+          bind(symbol, version) {
+            assert.equal(symbol, "TP53")
+            return {
+              async first() {
+                return version === 1
+                  ? { job_version: 1, status: "queued", phase: "completed_pending_finalize" }
+                  : null
+              },
+            }
+          },
+        }
+      }
+      assert.match(query, /FROM icono_portrait_assets/)
+      assert.match(query, /WHERE gene_symbol = \?/)
+      assert.match(query, /LIMIT \?/)
+      return {
+        bind(symbol, limit) {
+          assert.equal(symbol, "TP53")
+          assert.equal(limit, 65)
+          return {
+            async all() {
+              queries.push({ symbol, limit })
+              const value = responses[Math.min(reads, responses.length - 1)]
+              reads += 1
+              if (value instanceof Error) throw value
+              return structuredClone(value)
+            },
+          }
+        },
+      }
+    },
+  }
+}
+
+const retainedCandidates = (letters = ["a", "b", "c"]) =>
+  letters.map((letter) => ({
+    asset_sha256: sha(letter),
+    status: "approved",
+    autopick_eligible: 1,
+    is_stale: 0,
+    is_legacy: 0,
+    created_at: "",
+  }))
+
+async function requestFinalizationHandoff(coordinator) {
+  const response = await coordinator.fetch(
+    new Request("https://coordinator/publication/finalization-handoff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol: "TP53", job_version: 1 }),
+    }),
+  )
+  assert.equal(response.status, 200)
+  return response.json()
+}
+
+test("the real finalization handler persists one V2 intent and replays it after restart", async (t) => {
+  const { coordinator, state, sql } = await seeded(t)
+  // A retained vote for the newly generated candidate must become selectable
+  // when finalization imports that candidate; no selection has been committed yet.
+  coordinator.state.storage.transactionSync(() =>
+    coordinator.applyVoteStateMutationCore({
+      assetSha256: sha("c"),
+      userId: "retained-reader",
+      requestedVoteValue: 1,
+      ensuredAsset: coordinator.ensureAssetSummaryRow(sha("c"), { visionId: "anima-v1-7" }),
+    }),
+  )
+  assert.equal(coordinator.publication.read().pending, false)
+  const queries = []
+  coordinator.env = {
+    ICONOPLASM_DB: finalizationSource([{ results: retainedCandidates() }], queries),
+  }
+  const first = await requestFinalizationHandoff(coordinator)
+  assert.equal(first.ok, true)
+  assert.equal(first.accepted, true)
+  assert.equal(first.authority_epoch, "v2")
+  assert.equal(first.symbol, "TP53")
+  assert.equal(first.job_version, 1)
+  assert.equal(first.candidate_count, 3)
+  assert.equal(coordinator.publication.read().pending, true)
+  assert.equal(queries.length, 2)
+  assert.equal(sql.db.prepare("SELECT COUNT(*) AS count FROM vote_outbox").get().count, 0)
+  const desired = coordinator.publication.read()
+  const restarted = new IconoplasmVoteCoordinator(state, coordinator.env)
+  await state.ready
+  const repeat = await requestFinalizationHandoff(restarted)
+  assert.deepEqual(repeat, first)
+  assert.deepEqual(restarted.publication.read(), desired)
+})
+
+for (const [name, responses, expectedCode] of [
+  [
+    "changing candidate source",
+    [{ results: retainedCandidates() }, { results: retainedCandidates(["a"]) }],
+    "CANDIDATE_SOURCE_CHANGED",
+  ],
+  [
+    "oversized candidate source",
+    [{ results: Array.from({ length: 65 }, () => retainedCandidates()[0]) }],
+    "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE",
+  ],
+  ["failed candidate read", [new Error("storage unavailable")], "CANDIDATE_SOURCE_FAILED"],
+  ["malformed candidate response", [{}], "CANDIDATE_SOURCE_FAILED"],
+  [
+    "explicitly failed candidate response",
+    [{ success: false, results: [] }],
+    "CANDIDATE_SOURCE_FAILED",
+  ],
+]) {
+  test(`the real finalization handler preserves authority on ${name}`, async (t) => {
+    const { coordinator, sql } = await seeded(t)
+    const prior = sql.db
+      .prepare("SELECT * FROM gene_candidate_authority ORDER BY asset_sha256")
+      .all()
+    const publication = coordinator.publication.read()
+    coordinator.env = { ICONOPLASM_DB: finalizationSource(responses, []) }
+    const result = await requestFinalizationHandoff(coordinator)
+    assert.equal(result.accepted, false)
+    assert.equal(result.code, expectedCode)
+    assert.deepEqual(
+      sql.db.prepare("SELECT * FROM gene_candidate_authority ORDER BY asset_sha256").all(),
+      prior,
+    )
+    assert.deepEqual(coordinator.publication.read(), publication)
+    assert.equal(coordinator.getMeta("authority_epoch"), "v2")
+  })
+}
