@@ -27418,6 +27418,7 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.loadedAt = 0
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
+  clearAdvertisedGeneDeltaViewCache()
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
   cardCatalogParsedManifestCache.clear()
@@ -33000,10 +33001,64 @@ async function handlePublicMedia(request, env, symbol) {
   )
 }
 
+// B-767: the site detail/page must resolve the same advertised v2 view the
+// reader lanes consume. The projection is one small KV document; a short TTL
+// memo keeps a page burst from paying one KV read per symbol while the exact
+// chain itself is already cached once per isolate by the reader-view module.
+const ADVERTISED_GENE_DELTA_VIEW_TTL_MS = 30000
+const advertisedGeneDeltaViewCache = { value: null, loadedAt: 0, loaded: false }
+function clearAdvertisedGeneDeltaViewCache() {
+  advertisedGeneDeltaViewCache.value = null
+  advertisedGeneDeltaViewCache.loadedAt = 0
+  advertisedGeneDeltaViewCache.loaded = false
+}
+async function advertisedGeneDeltaViewForDetail(env) {
+  const now = Date.now()
+  if (
+    advertisedGeneDeltaViewCache.loaded &&
+    now - advertisedGeneDeltaViewCache.loadedAt < ADVERTISED_GENE_DELTA_VIEW_TTL_MS
+  )
+    return advertisedGeneDeltaViewCache.value
+  const value = await readAdvertisedGeneDeltaView(env)
+  advertisedGeneDeltaViewCache.value = value
+  advertisedGeneDeltaViewCache.loadedAt = Date.now()
+  advertisedGeneDeltaViewCache.loaded = true
+  return value
+}
+
+async function readAdvertisedDeltaCardProjection(env, baseVersion, symbol) {
+  const delta = await advertisedGeneDeltaViewForDetail(env)
+  if (!delta || delta.base !== baseVersion) return null
+  const parsed = parsePublishedViewId(delta.view)
+  if (!parsed.chainHash) return null
+  const resolved = await readPublishedViewEntry({
+    readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
+    chainHash: parsed.chainHash,
+    base: delta.base,
+    symbol,
+  })
+  // A view that names this symbol is authoritative: a committed entry replaces
+  // the base card, a tombstone stays a tombstone, and an unreadable dependency
+  // fails closed exactly like the reader lanes instead of resurrecting base
+  // content the view retired.
+  if (!resolved.ok) return { kind: "unavailable", version: delta.view, payload: null }
+  if (!resolved.entry) return null
+  const cardKey = resolved.entry.card?.key || ""
+  const card = cardKey
+    ? await readPublishedBunnyCardObject(env, cardKey, (value) => value?.symbol === symbol)
+    : null
+  const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
+  return payload
+    ? { kind: "available", version: delta.view, payload }
+    : { kind: "unavailable", version: delta.view, payload: null }
+}
+
 async function readPublishedGeneCardPortraitProjection(env, symbol) {
   const versionInfo = await currentMobileCardSnapshotVersion(env)
   const version = String(versionInfo?.current || "").trim()
   if (!version || version === "0") return { kind: "unavailable", version, payload: null }
+  const advertised = await readAdvertisedDeltaCardProjection(env, version, symbol)
+  if (advertised) return advertised
   const artifact = await readPublishedCardCatalogArtifact(env, version, [symbol], {
     allowWholeArtifact: false,
   })
