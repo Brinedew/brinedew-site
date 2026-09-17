@@ -61,9 +61,9 @@ jobs:
         run: |
           node scripts/generate-operation-cost-identities.mjs
           node scripts/generate-operation-cost-identities.mjs --check
-      - name: Format touched tests
+      - name: Format touched files
         run: |
-          pnpm exec prettier --write workers/iconoplasm/sync-finalization-publication.test.js workers/iconoplasm.sync-finalization-queue.test.js workers/iconoplasm.b749-scoped-reset.test.js workers/iconoplasm.finalization-reset-alarm.test.js workers/iconoplasm.vote-reset-wake.test.js workers/iconoplasm.daily-budget-kill-switch.test.js
+          pnpm exec prettier --write workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js workers/iconoplasm/sync-finalization-publication.js workers/iconoplasm/sync-finalization-publication.test.js workers/iconoplasm.sync-finalization-queue.test.js workers/iconoplasm.b749-scoped-reset.test.js workers/iconoplasm.finalization-reset-alarm.test.js workers/iconoplasm.vote-reset-wake.test.js workers/iconoplasm.daily-budget-kill-switch.test.js
       - name: Focused regression suite
         run: |
           pnpm exec node --test workers/iconoplasm/sync-finalization-publication.test.js workers/iconoplasm.sync-finalization-queue.test.js workers/iconoplasm.b749-scoped-reset.test.js workers/iconoplasm.finalization-reset-alarm.test.js workers/iconoplasm.vote-reset-wake.test.js
