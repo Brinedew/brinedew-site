@@ -16,6 +16,7 @@ import {
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   buildPublishedScannerArtifact,
@@ -2201,4 +2202,107 @@ test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_STATEFUL_W
   assert.equal(gateway.calls[0]?.method, "POST")
   assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { symbols: ["A1BG", "TP53"] })
   assert.equal(gateway.calls[0]?.headers?.["x-iconoplasm-extension-version"], "0.3.0")
+})
+
+test("site gene detail resolves the advertised v2 delta view for its symbol", async (t) => {
+  const objects = new Map()
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(url instanceof Request ? url.url : String(url))
+    if (!parsed.hostname.endsWith("storage.test")) return originalFetch(url, init)
+    const method = String(
+      init.method || (url instanceof Request ? url.method : "GET") || "GET",
+    ).toUpperCase()
+    if (method === "PUT") {
+      objects.set(parsed.pathname, new Uint8Array(await new Response(init.body).arrayBuffer()))
+      return new Response(null, { status: 201 })
+    }
+    const value = objects.get(parsed.pathname)
+    return value
+      ? new Response(value, { status: 200, headers: { "content-type": "application/json" } })
+      : new Response(null, { status: 404 })
+  }
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    resetIconoplasmRuntimeCachesForTest()
+  })
+  resetIconoplasmRuntimeCachesForTest()
+
+  const kv = buildPublishedCardReadKv()
+  const env = buildEnv({
+    KV: kv,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
+  })
+  const store = createPublishedCardObjectStore(env)
+
+  // Advertised v2 view: A1BG committed with a distinct portrait. The base
+  // epoch KV fixture keeps its own portrait, so a base-only resolution fails
+  // this assertion.
+  const deltaPortrait = "b".repeat(64)
+  const baseShard = JSON.parse(await kv.get("iconoplasm:card-catalog-shard:test-card-v1:0"))
+  const baseCard = baseShard.cards.find((card) => card.symbol === "A1BG")
+  assert.notEqual(baseCard.payload.portrait.asset_sha256, deltaPortrait)
+  const deltaCard = JSON.parse(JSON.stringify(baseCard))
+  deltaCard.payload = {
+    ...deltaCard.payload,
+    portrait: {
+      ...deltaCard.payload.portrait,
+      asset_sha256: deltaPortrait,
+      vision_id: "anima-v1-9999",
+      candidate_image_id: 4242,
+    },
+  }
+  deltaCard.portrait = deltaCard.payload.portrait
+  deltaCard.field_status = { ...(deltaCard.field_status || {}), portrait: "present" }
+  const cardRef = await store.write("cards", deltaCard)
+  const geneRef = await store.write("genes", deltaCard.payload)
+  const portraitRef = await store.write("portraits", {
+    symbol: "A1BG",
+    portrait: deltaCard.payload.portrait,
+  })
+  const segmentRef = await store.write("indexes", {
+    schema_version: 1,
+    seq: 1,
+    entries: {
+      A1BG: {
+        symbol: "A1BG",
+        version: 2,
+        seq: 0,
+        status: "committed",
+        selection_key: "e".repeat(64),
+        card: { key: cardRef.key, hash: cardRef.hash },
+        gene: { key: geneRef.key, hash: geneRef.hash },
+        portrait: { key: portraitRef.key, hash: portraitRef.hash },
+      },
+    },
+  })
+  const chainRef = await store.write("indexes", {
+    base: "test-card-v1",
+    kind: "gene_delta_chain",
+    schema_version: 1,
+    segments: [{ seq: 1, key: segmentRef.key, hash: segmentRef.hash, count: 1 }],
+  })
+  await kv.put(
+    "iconoplasm:gene-delta",
+    JSON.stringify({ view: `test-card-v1.c${chainRef.hash}`, base: "test-card-v1" }),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+      }),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), `test-card-v1.c${chainRef.hash}`)
+  assert.equal(payload?.card_snapshot_version, `test-card-v1.c${chainRef.hash}`)
+  assert.equal(payload?.portrait?.asset_sha256, deltaPortrait)
+  assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
 })
