@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   B749_WORKER_REPAIR_FILES,
   CARD_PUBLICATION_WORKER_REPAIR_FILES,
+  SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
   verifyWorkerRepairPaths,
 } from "./verify-exhausted-capacity-worker-repair.mjs"
 import { requireNormalWorkerRepairState } from "./verify-exhausted-capacity-worker-state.mjs"
@@ -43,6 +44,30 @@ test("exhausted-capacity repair accepts the exact frozen-card publication envelo
       verifyWorkerRepairPaths(
         CARD_PUBLICATION_WORKER_REPAIR_FILES.filter(
           (path) => path !== "workers/lib/iconoplasm-card-publication.js",
+        ),
+      ),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+})
+
+test("exhausted-capacity repair accepts the exact scoped-finalization envelope", () => {
+  assert.deepEqual(
+    verifyWorkerRepairPaths(SCOPED_FINALIZATION_WORKER_REPAIR_FILES),
+    SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths([
+        ...SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
+        "migrations-iconoplasm/9999_scoped_finalization.sql",
+      ]),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths(
+        SCOPED_FINALIZATION_WORKER_REPAIR_FILES.filter(
+          (path) => path !== "workers/iconoplasm/sync-finalization-publication.js",
         ),
       ),
     /COST_WORKER_REPAIR_SCOPE_REFUSED/,
