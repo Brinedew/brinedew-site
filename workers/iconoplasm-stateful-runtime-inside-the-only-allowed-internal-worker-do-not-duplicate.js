@@ -17611,6 +17611,15 @@ export class IconoplasmVoteCoordinator {
       if (!handover.activated) {
         return { authority: "deferred", publication: null, vote: null, deferral: handover }
       }
+    } else {
+      // B-762: one-time bounded repair for an already-activated gene whose
+      // candidate authority was never reconstructed (a warm first use before
+      // the reconstruction fix). Without it the gene is permanently pinned to
+      // its empty winner identity and no command can advance the selection.
+      const repair = await this.reconstructCandidateAuthorityIfMissing(this.getMeta("symbol") || "")
+      if (!repair.ok && repair.defer) {
+        return { authority: "deferred", publication: null, vote: null, deferral: repair }
+      }
     }
     // An activated v2 gene never falls back to legacy execution, including
     // when its eligible set is empty: the selection becomes an explicit
@@ -17694,38 +17703,21 @@ export class IconoplasmVoteCoordinator {
           message: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
         }
       }
-      // Retained candidate/policy reconstruction: the same cold first use seeds
-      // the gene's bounded candidate authority from its own legacy rows, so an
-      // ordinary canonical command never depends on a catalog-wide transfer or
-      // test-side seeding. The operator transfer's 64-candidate envelope
-      // applies here too; a larger retained source defers explicitly instead
-      // of certifying a truncated candidate set.
-      if (!(Number(this.sqlFirst(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)?.n) > 0)) {
-        let retained = null
-        try {
-          retained = await this.readLegacyCandidateAuthorityEnvelope(symbol)
-        } catch (error) {
-          return {
-            activated: false,
-            code: "CANDIDATE_SOURCE_FAILED",
-            message: sanitizeText(String(error?.message || error), 300),
-          }
-        }
-        if (retained.overflow) {
-          return {
-            activated: false,
-            code: "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE",
-            message: "Retained candidate source exceeds the bounded handover envelope",
-          }
-        }
-        try {
-          this.importGeneCandidateAuthority(retained.items)
-        } catch (error) {
-          return {
-            activated: false,
-            code: "CANDIDATE_SOURCE_REJECTED",
-            message: sanitizeText(String(error?.message || error), 300),
-          }
+    }
+    // B-762: retained candidate reconstruction must not depend on cold vote
+    // verification. A coordinator whose first touch was an ordinary page
+    // snapshot read has asset summaries but no candidate authority, and would
+    // otherwise certify a winner-less (tombstone) selection for its first
+    // canonical command. Bounded to this gene's own retained rows with one D1
+    // attempt per coordinator; a genuinely empty retained source remains the
+    // supported empty state and the warm path stays D1-free afterward.
+    {
+      const reconstruction = await this.reconstructCandidateAuthorityIfMissing(symbol)
+      if (!reconstruction.ok && reconstruction.defer) {
+        return {
+          activated: false,
+          code: reconstruction.code,
+          message: reconstruction.message,
         }
       }
     }
@@ -18128,6 +18120,63 @@ export class IconoplasmVoteCoordinator {
       if (second.votes.get(key) !== value) return { changed: true }
     }
     return { changed: false, votes: second.votes }
+  }
+
+  /**
+   * One bounded retained-candidate reconstruction for this gene, independent
+   * of the warm/cold vote flag. Runs only while the coordinator has no
+   * candidate authority and has not yet attempted reconstruction, so an
+   * ordinary warm command performs no D1 read once the gene owns candidates
+   * (or its retained source is genuinely empty). The 64-candidate envelope is
+   * shared with the operator transfer; a larger retained source defers
+   * explicitly instead of certifying a truncated candidate set, and the
+   * deferral does not mark the attempt so a later command re-evaluates the
+   * same condition. An administrator-pinned gene never reconstructs.
+   */
+  async reconstructCandidateAuthorityIfMissing(symbol) {
+    const safeSymbol = normalizeSymbol(symbol)
+    if (!safeSymbol) return { ok: true, skipped: true, reason: "symbol_required" }
+    if (!this.env?.ICONOPLASM_DB) return { ok: true, skipped: true, reason: "no_database" }
+    if (this.getMeta("admin_override") === "1")
+      return { ok: true, skipped: true, reason: "admin_override" }
+    if (Number(this.sqlFirst(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)?.n) > 0)
+      return { ok: true, skipped: true, reason: "candidates_present" }
+    if (this.getMeta("candidate_authority_reconstruction") === "1")
+      return { ok: true, skipped: true, reason: "reconstruction_attempted" }
+    let retained = null
+    try {
+      retained = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
+    } catch (error) {
+      return {
+        ok: false,
+        defer: true,
+        code: "CANDIDATE_SOURCE_FAILED",
+        message: sanitizeText(String(error?.message || error), 300),
+      }
+    }
+    if (retained.overflow) {
+      return {
+        ok: false,
+        defer: true,
+        code: "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE",
+        message: "Retained candidate source exceeds the bounded handover envelope",
+      }
+    }
+    try {
+      this.importGeneCandidateAuthority(retained.items)
+    } catch (error) {
+      return {
+        ok: false,
+        defer: true,
+        code: "CANDIDATE_SOURCE_REJECTED",
+        message: sanitizeText(String(error?.message || error), 300),
+      }
+    }
+    this.setMeta("candidate_authority_reconstruction", "1")
+    return {
+      ok: true,
+      reconstructed: Array.isArray(retained.items) ? retained.items.length : 0,
+    }
   }
 
   /**
