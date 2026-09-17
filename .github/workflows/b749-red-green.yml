@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  PNPM_VERSION: 10.10.0
-
 jobs:
   red:
     if: ${{ !contains(github.event.head_commit.message, '[b749-red-proof]') }}
@@ -22,7 +19,6 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
           run_install: false
       - uses: actions/setup-node@v6
         with:
