@@ -18197,7 +18197,9 @@ export class IconoplasmVoteCoordinator {
     )
       .bind(symbol, envelope + 1)
       .all()
-    const rows = Array.isArray(response?.results) ? response.results : []
+    if (response?.success === false || !Array.isArray(response?.results))
+      throw new Error("Candidate authority source did not return a verified row set")
+    const rows = response.results
     if (rows.length > envelope) return { overflow: true, items: [] }
     return {
       overflow: false,
@@ -18222,10 +18224,11 @@ export class IconoplasmVoteCoordinator {
   async acceptSyncFinalizationHandoff(symbol, rawJobVersion) {
     const safeSymbol = this.ensureSymbol(symbol)
     const jobVersion = Number(rawJobVersion)
-    const deferred = (code, retryAfterMs = 300000) => ({
+    const deferred = (code, retryAfterMs = 300000, error = null) => ({
       ok: false,
       accepted: false,
       code,
+      ...(error ? { error } : {}),
       retry_after_ms: retryAfterMs,
     })
     if (!Number.isSafeInteger(jobVersion) || jobVersion < 1)
@@ -18262,15 +18265,20 @@ export class IconoplasmVoteCoordinator {
 
     if (this.getMeta("authority_epoch") !== "v2") {
       await this.ensureBootstrapped(safeSymbol)
-      const retainedProjection = await this.env.ICONOPLASM_DB.prepare(
-        `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-         FROM icono_publish_state WHERE gene_symbol = ? LIMIT 1`,
-      )
-        .bind(safeSymbol)
-        .first()
+      const retainedProjection =
+        (await this.env.ICONOPLASM_DB.prepare(
+          `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
+             FROM icono_publish_state
+            WHERE gene_symbol = ?
+            LIMIT 1`,
+        )
+          .bind(safeSymbol)
+          .first()) || null
       const handover = await this.ensureDemandDrivenHandover({
         publishedAssetSha: retainedProjection?.current_asset_sha256 || "",
         adminOverride: Number(retainedProjection?.admin_override || 0) > 0,
+        // Finalization is a system transfer boundary, so verify the complete
+        // retained vote source even if an earlier read warmed the coordinator.
         verifySource: true,
       })
       if (!handover?.activated) return deferred(String(handover?.code || "HANDOVER_DEFERRED"))
@@ -18283,8 +18291,12 @@ export class IconoplasmVoteCoordinator {
       first = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
       second = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
       if (!ready(await readJob())) return deferred("FINALIZATION_JOB_SUPERSEDED")
-    } catch {
-      return deferred("CANDIDATE_SOURCE_FAILED")
+    } catch (error) {
+      return deferred(
+        "CANDIDATE_SOURCE_FAILED",
+        300000,
+        sanitizeText(String(error?.message || error), 300),
+      )
     }
     if (first.overflow || second.overflow)
       return deferred("CANDIDATE_SOURCE_EXCEEDS_ENVELOPE", 900000)
@@ -18310,6 +18322,7 @@ export class IconoplasmVoteCoordinator {
       is_legacy: Number(raw?.is_legacy) > 0 ? 1 : 0,
       created_at: sanitizeText(raw?.created_at || "", 64) || "",
     })
+    let imported = null
     try {
       await this.publication.commitSelection(() => {
         if ((Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision)
@@ -18330,7 +18343,9 @@ export class IconoplasmVoteCoordinator {
           if (incoming.get(item.asset_sha256) !== JSON.stringify(item))
             throw new Error("FINALIZATION_AUTHORITY_CONFLICT")
         }
-        this.applyCandidateAuthorityCore(second.items, { replace: false })
+        imported = this.applyCandidateAuthorityCore(second.items, { replace: false })
+        receipt.candidate_count = Number(imported?.candidate_count || 0) || 0
+        receipt.candidate_changed = imported?.changed === true
         // The receipt, candidate mutation and publication intent share the
         // existing owner's transaction. A failed intent/alarm rolls all back.
         this.setMeta("sync_finalization_receipt", JSON.stringify(receipt))
@@ -18339,6 +18354,7 @@ export class IconoplasmVoteCoordinator {
     } catch (error) {
       return deferred(sanitizeText(String(error?.message || "FINALIZATION_HANDOFF_REJECTED"), 100))
     }
+    await this.armOutboxAlarm(1)
     return receipt
   }
 
@@ -20567,27 +20583,31 @@ export class IconoplasmSyncGovernor {
     }
     return this.state.storage.transaction(async (txn) => {
       const current = await txn.get(key)
-      if (current?.day === day) {
-        if (!isFinalization) return { ok: true, deferred: true, reset_at: current.due_at }
-        const messages = Array.isArray(current.messages) ? current.messages.slice() : []
-        const identity = JSON.stringify([safeMessage.run_id, safeMessage.symbols])
-        if (!messages.some((item) => JSON.stringify([item?.run_id, item?.symbols]) === identity)) {
+      if (isFinalization) {
+        // A capacity-day change never transfers or cancels an accepted scope.
+        // Keep every unsent identity until the Queue has accepted that message.
+        const messages = Array.isArray(current?.messages) ? current.messages.slice() : []
+        const identity = JSON.stringify(safeMessage)
+        if (!messages.some((item) => JSON.stringify(item) === identity)) {
           if (messages.length >= 8) {
             const error = new Error("Finalization reset wake scope capacity exceeded")
             error.code = "FINALIZATION_RESET_SCOPE_CAPACITY"
             throw error
           }
           messages.push(safeMessage)
-          await txn.put(key, { ...current, messages })
         }
-        return { ok: true, deferred: true, reset_at: current.due_at, scopes: messages.length }
+        const resetAt = current?.day === day ? current.due_at : dueAt
+        const next = { ...current, day, due_at: resetAt, messages }
+        if (JSON.stringify(next) !== JSON.stringify(current)) {
+          await txn.put(key, next)
+          await this.schedulePendingResetAlarm(txn)
+        }
+        return { ok: true, deferred: true, reset_at: resetAt, scopes: messages.length }
       }
-      const wake = isFinalization
-        ? { day, due_at: dueAt, messages: [safeMessage] }
-        : { day, due_at: dueAt }
-      await txn.put(key, wake)
+      if (current?.day === day) return { ok: true, deferred: true, reset_at: current.due_at }
+      await txn.put(key, { day, due_at: dueAt })
       await this.schedulePendingResetAlarm(txn)
-      return { ok: true, deferred: true, reset_at: dueAt, ...(isFinalization ? { scopes: 1 } : {}) }
+      return { ok: true, deferred: true, reset_at: dueAt }
     })
   }
 
@@ -20614,7 +20634,7 @@ export class IconoplasmSyncGovernor {
       this.state.storage.transaction(async (txn) => {
         const current = await txn.get(key)
         if (current?.day !== wake.day) return
-        await txn.put(key, { ...wake, due_at: dueAt })
+        await txn.put(key, { ...current, due_at: dueAt })
         await this.schedulePendingResetAlarm(txn)
       })
     if (wake.due_at > Date.now()) {
@@ -20643,48 +20663,43 @@ export class IconoplasmSyncGovernor {
           reason: "legacy_unscoped_finalization_wake_refused",
         }
       }
+      // Queue sends yield to other requests. Remove only identities this wake
+      // actually delivered from the CURRENT record, never replace it with the
+      // old snapshot or delete all entries merely because their day matches.
       const delivered = new Set()
-      const messageIdentity = (message) =>
-        JSON.stringify([message?.run_id, message?.symbols, message?.drain_scoped_phases === true])
-      for (let index = 0; index < messages.length; index += 1) {
-        const sent = await sendSyncFinalizationDrainQueueMessage(this.env, messages[index])
+      const settle = async (retryAt = null) =>
+        this.state.storage.transaction(async (txn) => {
+          const current = await txn.get(key)
+          if (!current) return 0
+          const retained = Array.isArray(current.messages) ? current.messages : []
+          const remaining = retained.filter((message) => !delivered.has(JSON.stringify(message)))
+          if (remaining.length) {
+            await txn.put(key, {
+              ...current,
+              messages: remaining,
+              due_at: retryAt == null ? current.due_at : Math.max(current.due_at, retryAt),
+            })
+          } else {
+            await txn.delete(key)
+          }
+          await this.schedulePendingResetAlarm(txn)
+          return remaining.length
+        })
+      for (const message of messages) {
+        const sent = await sendSyncFinalizationDrainQueueMessage(this.env, message)
         if (!sent.ok) {
           const delay = /daily.*queue|queue.*daily/i.test(sent.detail || "")
             ? secondsUntilCloudflareDailyReset() * 1000
             : 900000
-          await this.state.storage.transaction(async (txn) => {
-            const current = await txn.get(key)
-            if (current?.day !== wake.day) return
-            await txn.put(key, {
-              ...current,
-              messages: (Array.isArray(current.messages) ? current.messages : []).filter(
-                (message) => !delivered.has(messageIdentity(message)),
-              ),
-              due_at: Date.now() + delay,
-            })
-            await this.schedulePendingResetAlarm(txn)
-          })
+          await settle(Date.now() + delay)
           return { ok: false, deferred: true, reason: sent.code }
         }
-        delivered.add(messageIdentity(messages[index]))
+        delivered.add(JSON.stringify(message))
       }
-      await this.state.storage.transaction(async (txn) => {
-        const current = await txn.get(key)
-        if (current?.day === wake.day) {
-          const remaining = (Array.isArray(current.messages) ? current.messages : []).filter(
-            (message) => !delivered.has(messageIdentity(message)),
-          )
-          if (remaining.length) {
-            await txn.put(key, { ...current, messages: remaining, due_at: Date.now() + 1 })
-          } else {
-            await txn.delete(key)
-          }
-        }
-        await this.schedulePendingResetAlarm(txn)
-      })
+      const remaining = await settle()
       return {
         ok: true,
-        pending: false,
+        pending: remaining > 0,
         queue_message_sent: true,
         queue_messages_sent: messages.length,
       }
@@ -24989,12 +25004,7 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
           "/publication/finalization-handoff",
           { symbol, job_version: job.job_version },
         )
-        if (
-          response?.accepted !== true ||
-          response?.authority_epoch !== "v2" ||
-          response?.symbol !== symbol ||
-          response?.job_version !== job.job_version
-        ) {
+        if (response?.accepted !== true) {
           const retryAfterMs = Math.max(
             1000,
             Math.min(900000, Number(response?.retry_after_ms || 300000) || 300000),
@@ -25003,6 +25013,18 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
             accepted: false,
             nextAttemptAt: new Date(Date.now() + retryAfterMs).toISOString(),
           }
+        }
+        if (
+          response.ok !== true ||
+          response.symbol !== symbol ||
+          response.authority_epoch !== "v2" ||
+          Number(response.job_version) !== Number(job.job_version)
+        ) {
+          const error = new Error(
+            "Per-gene finalization receipt does not match the requested V2 authority",
+          )
+          error.code = "FINALIZATION_RECEIPT_MISMATCH"
+          throw error
         }
       }
       return { accepted: true }
@@ -25642,6 +25664,16 @@ async function processPendingSyncFinalizationJobs(
     symbols: scopedSymbols,
     nowIso: new Date().toISOString(),
   })
+  // Completion-ready rows remain pending while the V2 owner is deferred. Keep
+  // their receipt counts truthful without treating a future retry as runnable.
+  const publicationRetryAt = finalizeResult?.publication_next_attempt_at || null
+  const publicationRunnable =
+    Number(finalizeResult?.ready_remaining) > 0 &&
+    (!publicationRetryAt || Date.parse(publicationRetryAt) <= Date.now())
+  const nextAttemptAt =
+    [pendingWork.next_attempt_at, publicationRetryAt]
+      .filter((value) => value && Number.isFinite(Date.parse(value)))
+      .sort((left, right) => Date.parse(left) - Date.parse(right))[0] || null
   return {
     ok: true,
     processed,
@@ -25652,9 +25684,8 @@ async function processPendingSyncFinalizationJobs(
     recovered_stale_running: Math.max(0, Number(staleRecovery?.recovered || 0) || 0),
     finalized: Math.max(0, Number(finalizeResult?.finalized || 0) || 0),
     remaining: Math.max(pendingWork.remaining, Number(finalizeResult?.remaining || 0) || 0),
-    has_runnable: pendingWork.has_runnable || Number(finalizeResult?.ready_remaining) > 0,
-    next_attempt_at:
-      pendingWork.next_attempt_at || finalizeResult?.publication_next_attempt_at || null,
+    has_runnable: pendingWork.has_runnable || publicationRunnable,
+    next_attempt_at: nextAttemptAt,
     publication_pending: finalizeResult?.publication_pending === true,
     reschedule_symbols: scopedSymbols,
     results,

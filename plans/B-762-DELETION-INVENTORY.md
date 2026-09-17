@@ -21,7 +21,7 @@ review branch. None of these labels proves production activation.
 | `handleIconoplasmVoteProjectionQueue`, drain queue messages | Queue consumer | `ICONOPLASM_VOTE_PROJECTION_QUEUE` consumer + DLQ | Un-migrated genes' projections | None for migrated genes | Retired-pending after last migration; keep DLQ drain until then |
 | `projectVoteCoordinatorLedgerRow`, `appendVoteEvent` (D1 `icono_image_votes` projection) | `deliverOutboxRow` | D1 writes | Audit/history for pre-v2 votes | Kept as historical records; no new v2 writes | Bypassed for v2; keep historical rows |
 | `deliverCaretakerSupervoteOutbox`, `projectCaretakerSupervoteOutboxToD1` | caretaker alarm drain (`drainOutbox`); caretaker assignment/supervote routes enqueue | D1 `icono_caretaker_*` projections; scheduler on recompute | Caretaker authority projection for un-migrated genes and current admin surfaces | v2 assignment/supervote state commits atomically with publication intent; D1 projection stays for unmigrated genes | Bypassed only for v2 votes; assignment now commits atomically with intent. Retired-pending until caretaker D1 consumers migrate |
-| Global finalization barrier (`sync-finalization-publication.js`, `unfinished_count = 0`) | scheduled finalization job, gallery publication | Queue/cron | Nothing for v2: one gene must publish while others sleep | Per-gene `publication_pending` + alarm retry | Bypassed for v2 publication; retire only with IPD-004/IPD-010 enforcement updates together |
+| Global finalization barrier (`sync-finalization-publication.js`, `unfinished_count = 0`) | historical singleton helpers; legacy gallery publication | Queue/cron | Accepted pending job obligations and exact job versions | Ordinary scoped finalization obtains a matching per-gene V2 receipt before completing a job; no unrelated-ledger gate or scope broadening | Retired from the ordinary finalization caller in the source patch; historical singleton helpers remain pending B-771 and registered IPD-004/IPD-010 enforcement migration |
 | `exportAssetSummaries()` on the vote path | election and `/state` export | hot DO reads | Full export remains for admin observability | `geneAuthoritySummaries()` (bounded to candidates) | Removed from hot path: audit `COST` proves zero exports per duplicate vote, flat 35/31 reads from 2 to 10,000 historical assets |
 | Legacy bootstrap import in `ensureBootstrapped` | `/vote/set`, `/vote/import`, `/vote/snapshot(s)`, `/state` | D1 reads (`icono_portrait_assets`, `icono_image_votes`) | One-time import for un-migrated genes | v2 guard returns before any D1 binding is required | Guarded: `authority_epoch === "v2"` exits first; rollback keeps v2 votes because the epoch check precedes the destructive import |
 | Global card head / dirty-shard publisher (`/wake`, `publisher.step`) | scheduled publication, vote projection | `ICONOPLASM_CARD_PUBLICATION` + KV manifest | Un-migrated catalog publication | `/materialize-symbol` per-gene immutable objects | Kept for un-migrated genes; v2 genes publish without touching head/watermark |
@@ -59,9 +59,13 @@ review branch. None of these labels proves production activation.
 
 PR #153 contains route-level negative tests for empty/invalid scope and all
 full-flag aliases on both service paths, positive scoped work and receipt tests,
-and executable retirement tests for the historical repair. The operation-cost
-implementation identity is regenerated. The temporary source-export workflow
-used for offline verification is removed from the final branch.
+and executable retirement tests for the historical repair. The scoped finalization
+implementation in this local patch is present as normal source rather than a CI-only encoded patch.
+It preserves exact reset scopes, retains concurrently accepted and previous-day
+obligations, checks the per-gene V2 receipt before acknowledgement, and schedules
+publication deferrals at their reported deadline. The operation-cost implementation
+identity is regenerated. The temporary source-export workflow
+used for offline verification is removed by this patch. Remote integration is pending.
 
 No production D1 query, migration, queue release or runtime decommissioning is
 proved by these source changes. The ordinary publication wrapper still calls
@@ -69,3 +73,8 @@ the generic gallery publisher without propagating exact membership. Current
 Wrangler bindings and recovery launchers remain pending reconciliation; remove
 their executable behavior together with registered IPD-004/IPD-010 enforcement
 points after the surviving consumers pass their own acceptance.
+
+The local source verification record is
+`B-749-SCOPED-HANDOFF-VERIFICATION-20260917.md`. Its tests do not establish
+remote integration, production activation, complete authoring migration, or
+B-742's enabled-day proof. No issue closes from that record alone.

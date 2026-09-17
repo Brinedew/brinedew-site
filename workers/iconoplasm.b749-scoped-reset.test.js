@@ -66,6 +66,95 @@ test("deferred finalization reset replays the exact run and symbol scope", async
   assert.deepEqual(queue.sent[0].symbols, ["TP53", "BRCA1"])
 })
 
+test("reset delivery preserves a new scope accepted while the queue send is in flight", async () => {
+  const { values, queue, governor } = governorHarness()
+  await governor.deferFinalizationToReset({ runId: "first-run", symbols: ["TP53"] })
+  const wake = values.get("finalization_reset_wake")
+  values.set("finalization_reset_wake", { ...wake, due_at: Date.now() - 1 })
+  queue.send = async (message) => {
+    queue.sent.push(structuredClone(message))
+    await governor.deferFinalizationToReset({ runId: "second-run", symbols: ["BRCA1"] })
+  }
+
+  const result = await governor.alarm()
+
+  assert.equal(result.queue_message_sent, true)
+  assert.equal(result.pending, true)
+  assert.deepEqual(
+    values
+      .get("finalization_reset_wake")
+      ?.messages.map(({ run_id, symbols }) => ({ run_id, symbols })),
+    [{ run_id: "second-run", symbols: ["BRCA1"] }],
+    "acknowledging the sent snapshot must not delete a later accepted operation",
+  )
+  queue.send = async (message) => queue.sent.push(structuredClone(message))
+  await governor.alarm()
+  assert.deepEqual(
+    queue.sent.map((message) => message.run_id),
+    ["first-run", "second-run"],
+  )
+  assert.equal(values.has("finalization_reset_wake"), false)
+})
+
+test("partial queue failure retains concurrently accepted scopes and only removes sent messages", async () => {
+  const { values, queue, governor } = governorHarness()
+  await governor.deferFinalizationToReset({ runId: "first-run", symbols: ["TP53"] })
+  await governor.deferFinalizationToReset({ runId: "retry-run", symbols: ["SOD1"] })
+  const wake = values.get("finalization_reset_wake")
+  values.set("finalization_reset_wake", { ...wake, due_at: Date.now() - 1 })
+  queue.send = async (message) => {
+    if (message.run_id === "retry-run") {
+      await governor.deferFinalizationToReset({ runId: "new-run", symbols: ["BRCA1"] })
+      throw new Error("Queue transport unavailable")
+    }
+    queue.sent.push(structuredClone(message))
+  }
+
+  const result = await governor.alarm()
+
+  assert.equal(result.ok, false)
+  assert.equal(result.deferred, true)
+  assert.deepEqual(
+    values.get("finalization_reset_wake")?.messages.map((message) => message.run_id),
+    ["retry-run", "new-run"],
+  )
+  assert.deepEqual(
+    queue.sent.map((message) => message.run_id),
+    ["first-run"],
+  )
+})
+
+test("a later capacity day retains undelivered scopes from the previous day", async (t) => {
+  let now = Date.parse("2026-09-17T18:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const { values, governor } = governorHarness()
+  await governor.deferFinalizationToReset({ runId: "saved-run", symbols: ["TP53"] })
+  now += 86400000
+  await governor.deferFinalizationToReset({ runId: "new-day-run", symbols: ["BRCA1"] })
+
+  assert.deepEqual(
+    values.get("finalization_reset_wake").messages.map((message) => message.run_id),
+    ["saved-run", "new-day-run"],
+    "a new reset date cannot replace the retained obligation ledger",
+  )
+})
+
+test("reset scope capacity refuses a new operation without discarding existing days", async (t) => {
+  let now = Date.parse("2026-09-17T18:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const { values, governor } = governorHarness()
+  for (let index = 0; index < 8; index += 1) {
+    await governor.deferFinalizationToReset({ runId: `saved-${index}`, symbols: ["TP53"] })
+  }
+  const retained = structuredClone(values.get("finalization_reset_wake"))
+  now += 86400000
+  await assert.rejects(
+    governor.deferFinalizationToReset({ runId: "overflow", symbols: ["BRCA1"] }),
+    { code: "FINALIZATION_RESET_SCOPE_CAPACITY" },
+  )
+  assert.deepEqual(values.get("finalization_reset_wake"), retained)
+})
+
 test("reset delivery preserves a new scope arriving during the queue send", async () => {
   const { values, queue, governor } = governorHarness()
   await governor.deferFinalizationToReset({ runId: "original", symbols: ["TP53"] })
