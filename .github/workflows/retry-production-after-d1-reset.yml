@@ -294,6 +294,7 @@ jobs:
             exit 0
           fi
 
+          resume_run_id=""
           if [[ -z "${staged_run_id}" ]]; then
             latest_failed_run_id="$(
               jq -r --arg sha "${head_sha}" \
@@ -318,6 +319,35 @@ jobs:
               "Check account capacity before release mutations"|\
               "Refresh account capacity immediately before pausing application work")
                 ;;
+              "Read installed schema-transition state and reader headroom")
+                installed_state="$(
+                  cf_rest GET \
+                    "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${CLOUDFLARE_SCRIPT_NAME}/settings"
+                )"
+                if jq -e '
+                  [.result.bindings[]? | select(.name == "ICONOPLASM_SCHEMA_TRANSITION")] as $transition |
+                  [.result.bindings[]? | select(.name == "ICONOPLASM_SCHEMA_TRANSITION_MODE")] as $mode |
+                  [.result.bindings[]? | select(.name == "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID")] as $origin |
+                  ($transition | length) == 1 and
+                  $transition[0].type == "plain_text" and $transition[0].text == "1" and
+                  ($mode | length) == 1 and
+                  $mode[0].type == "plain_text" and $mode[0].text == "reader-recovery" and
+                  ($origin | length) <= 1 and
+                  (($origin | length) == 0 or
+                    ($origin[0].type == "plain_text" and ($origin[0].text // "") == ""))
+                ' <<<"${installed_state}" >/dev/null; then
+                  # A D1-free reader-recovery artifact can exist before any migration
+                  # lineage is retained. The failed canonical run is an admissible
+                  # origin under readReleaseOrigin, and every later release gate still
+                  # revalidates it before any migration mutation can occur.
+                  resume_run_id="${latest_failed_run_id}"
+                  echo "Reader-recovery transition has no retained migration origin; resuming through failed canonical run ${resume_run_id}."
+                else
+                  echo "Latest canonical deploy failed at '${failed_step}', but installed state does not prove the no-origin reader-recovery case."
+                  echo "Quarantine remains active and automatic retry stops until the installed state is repaired or gains a retained origin."
+                  exit 0
+                fi
+                ;;
               *)
                 echo "Latest canonical deploy failed at '${failed_step:-unknown}'."
                 echo "This is not a proven retry-safe pre-mutation budget gate; quarantine remains active and automatic retry stops until that same failure is repaired on main."
@@ -334,8 +364,13 @@ jobs:
             exit 0
           fi
 
+          dispatch_resume_args=()
+          if [[ -n "${resume_run_id}" ]]; then
+            dispatch_resume_args=(-f "inputs[resume_run_id]=${resume_run_id}")
+          fi
           echo "Dispatching canonical production deploy for ${head_sha}; normal CI, headroom, migration, activation, and smoke gates remain authoritative."
           gh api --method POST \
             -H "Accept: application/vnd.github+json" \
             "repos/${REPOSITORY}/actions/workflows/${DEPLOY_WORKFLOW}/dispatches" \
+            "${dispatch_resume_args[@]}" \
             -f ref=main
