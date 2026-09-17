@@ -39,10 +39,22 @@ jobs:
           node --check workers/iconoplasm/sync-finalization-publication.test.js
           node --check workers/iconoplasm.sync-finalization-queue.test.js
       - run: pnpm install --frozen-lockfile
+      - name: Install Quartz plugins
+        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
+      - name: Format staged slice
+        run: |
+          pnpm exec prettier \
+            workers/iconoplasm/sync-finalization-publication.js \
+            workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js \
+            workers/iconoplasm/sync-finalization-publication.test.js \
+            workers/iconoplasm.sync-finalization-queue.test.js \
+            --write
       - name: Regenerate operation-cost identities
         run: |
           node scripts/generate-operation-cost-identities.mjs
           node scripts/generate-operation-cost-identities.mjs --check
+      - name: Check types and style
+        run: pnpm run check
       - name: Focused finalization tests
         run: pnpm exec node --test workers/iconoplasm/sync-finalization-publication.test.js workers/iconoplasm.sync-finalization-queue.test.js
       - name: Full repository tests
