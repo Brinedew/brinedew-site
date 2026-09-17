@@ -1,5 +1,9 @@
 import { publishedCardObjectKey } from "./lib/iconoplasm-published-card-objects.js"
-import { parsePublishedViewId, readGeneDeltaChain } from "./lib/iconoplasm-card-reader-view.js"
+import {
+  parsePublishedViewId,
+  readAdvertisedGeneDeltaView,
+  readGeneDeltaChain,
+} from "./lib/iconoplasm-card-reader-view.js"
 
 // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: transport projections, not a
 // publisher. The existing gallery barrier admits hashes; unchanged hashes
@@ -106,9 +110,14 @@ export function createHoverDeliveryHandlers({
           base: view.base,
         })
         if (!chain.ok) {
-          return chain.code === "CHAIN_READ_FAILED" || chain.code === "SEGMENT_READ_FAILED"
-            ? failure("card_delivery_index_unavailable")
-            : failure("card_snapshot_retired", 410)
+          // B-762: an immutable object that is missing from every read source
+          // for the requested view is an availability failure, not a retired
+          // identity. Only a structurally invalid id/chain relationship is
+          // permanently gone. Temporary failures are no-store 503.
+          const retired = chain.code === "CHAIN_INVALID" || chain.code === "CHAIN_BASE_MISMATCH"
+          return retired
+            ? failure("card_snapshot_retired", 410)
+            : failure("card_delivery_index_unavailable")
         }
         if (!published.includes(chain.chain.base)) return failure("card_snapshot_retired", 410)
         const refs = ranges(await manifest(env, chain.chain.base))
@@ -183,7 +192,19 @@ export function createHoverDeliveryHandlers({
           base: null,
         })
         if (!chain.ok) {
-          return chain.code === "CHAIN_READ_FAILED" || chain.code === "SEGMENT_READ_FAILED"
+          // B-762: a missing immutable object is temporary for the currently
+          // advertised view's exact chain. An unknown hash that is not the
+          // advertised dependency and never resolves stays retired.
+          const advertised = await readAdvertisedGeneDeltaView(env)
+          const advertisedChain = advertised
+            ? parsePublishedViewId(advertised.view).chainHash
+            : null
+          const availability =
+            chain.code === "CHAIN_READ_FAILED" ||
+            chain.code === "SEGMENT_READ_FAILED" ||
+            chain.code === "SEGMENT_UNAVAILABLE" ||
+            (chain.code === "CHAIN_UNAVAILABLE" && advertisedChain === hash)
+          return availability
             ? failure("card_content_unavailable")
             : failure("card_snapshot_retired", 410)
         }
