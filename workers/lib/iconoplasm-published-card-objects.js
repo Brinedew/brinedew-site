@@ -149,8 +149,45 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     throw failure || new Error("Published object unavailable")
   }
 
+  /**
+   * B-762 reader-readiness probe: an object is only reader-resolvable when
+   * every configured read source (authenticated Storage and the public CDN)
+   * returns bytes matching the exact content hash. A single authenticated
+   * Storage success is not sufficient evidence for advertising a view.
+   */
+  async function verifyReaderResolvable(key) {
+    const identity = objectIdentity(key)
+    const candidates = externalPortraitReadCandidates(env, key, { accept: "application/json" })
+    const sources = {}
+    for (const candidate of candidates) {
+      if (Object.hasOwn(sources, candidate.source)) continue
+      let ok = false
+      try {
+        const response = await send(
+          candidate.url,
+          { method: "GET", headers: candidate.headers },
+          key,
+        )
+        if (response.ok) {
+          const bytes = await boundedBytes(response, identity.limit, bodyTimeoutMs)
+          ok = (await publishedObjectHash(bytes)) === identity.hash
+        } else {
+          await response.body?.cancel().catch(() => {})
+        }
+      } catch {
+        ok = false
+      }
+      sources[candidate.source] = ok
+    }
+    return {
+      ready: Object.keys(sources).length > 0 && Object.values(sources).every(Boolean),
+      sources,
+    }
+  }
+
   return {
     read,
+    verifyReaderResolvable,
     async write(kind, value) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
