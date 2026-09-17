@@ -545,6 +545,7 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
     fence.decision,
     /missing requested card or missing or invalid selected artifact produces an uncached 503/,
   )
+  assert.match(fence.decision, /advertised per-gene publication view names the symbol/)
 
   const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
   assert.equal(topology.architectureFence, "IPD-009")
