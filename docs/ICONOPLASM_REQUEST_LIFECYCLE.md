@@ -34,13 +34,19 @@ After a successful card-catalog version flip, publication synchronizes route
 membership only for canonical-affecting event symbols in the watermark window.
 The operation is idempotent. It never copies mutable canon into the route table
 and never publishes KV per vote. A newly projected vote can change rich candidate
-state and therefore the detail ETag, but it cannot move the public portrait before
-publication. The next successful 15-minute publication tick rewrites only the
-dirty content-addressed shard and atomically flips the browse manifest, page
-portrait, media projection, and discovery documents together. A
-scattered delta may require multiple six-shard preparation ticks, but the old
-manifest remains coherent until the one final flip; it never falls back to a
-complete-catalog rebuild. See architecture fence IPD-010.
+state and therefore the detail ETag.
+
+A canonical-affecting command on an activated gene publishes that gene's exact
+selected card through the advertised per-gene view (the base epoch plus its
+exact immutable delta chain), without waiting for a global publication tick. The
+website detail resolves, for a symbol the advertised view names, the exact
+committed card in that view; untouched symbols keep resolving from the base
+artifact selected by `KV_GALLERY_VERSION`. The base catalog epoch is no longer
+the portrait mechanism for routine changes. A symbol the advertised view names
+whose immutable dependency is unreadable fails closed with an uncached 503 and
+never falls back to base content the view retired. No legacy projection queue,
+global finalization barrier, or complete-catalog rebuild participates in this
+path. See architecture fences IPD-009 and IPD-010.
 
 ## Warm versus authenticated
 
