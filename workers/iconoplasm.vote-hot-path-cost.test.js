@@ -34,7 +34,11 @@ test(
           }};
           const storage={sql,transactionSync:fn=>state.storage.transactionSync(fn),transaction:fn=>state.storage.transaction(fn),setAlarm:async()=>{},getAlarm:async()=>null};
           this.context={storage,blockConcurrencyWhile:fn=>state.blockConcurrencyWhile(fn)};
-          this.env={ICONOPLASM_DB:{prepare(){throw Error('Warm vote unexpectedly queried D1')}}};
+          // B-762: a warm-but-empty coordinator performs exactly one bounded
+          // retained-candidate envelope read, then stays D1-free. Any other D1
+          // access on the warm path is still a defect.
+          this.d1Queries=0;
+          this.env={ICONOPLASM_DB:{prepare:(sql)=>{this.d1Queries+=1;const s=String(sql);if(s.includes('FROM icono_portrait_assets')&&s.includes('LIMIT')) return {bind:()=>({all:async()=>({results:[]})})};throw Error('Warm vote unexpectedly queried D1')}}};
           this.coordinator=new Coordinator(this.context,this.env);
         }
         async fetch(request) {
@@ -53,7 +57,7 @@ test(
           if(path==='/retired-indexes') return Response.json({indexes:this.state.storage.sql.exec("SELECT name FROM sqlite_schema WHERE name IN ('idx_vote_by_user_asset_asset','idx_vote_by_user_asset_vision','idx_asset_summary_vision')").toArray(),assets:this.state.storage.sql.exec('SELECT COUNT(*) AS n FROM asset_summary').toArray()[0].n});
           this.cost={rows_read:0,rows_written:0};
           const response=await this.coordinator.fetch(request);
-          return Response.json({body:await response.json(),cost:this.cost,status:response.status});
+          return Response.json({body:await response.json(),cost:this.cost,status:response.status,d1Queries:this.d1Queries});
         }
       }
       export default {fetch(request,env){return env.COORDINATOR.get(env.COORDINATOR.idFromName('TP53')).fetch(request)}}
@@ -91,6 +95,11 @@ test(
       assert.equal(vote.body.final_vote_value, 1)
       assert.equal(vote.body.snapshot.image_score, 1)
       assert.equal(Object.hasOwn(vote.body, "asset_summaries"), false)
+      assert.equal(
+        vote.d1Queries,
+        1,
+        "the first warm-but-empty command performs one bounded retained-candidate read",
+      )
       assert.ok(vote.cost.rows_read <= 200, JSON.stringify(vote.cost))
       assert.ok(vote.cost.rows_written <= 60, JSON.stringify(vote.cost))
       const imported = await (
@@ -105,6 +114,11 @@ test(
       assert.equal(imported.status, 200)
       assert.equal(imported.body.upserted, 1)
       assert.equal(Object.hasOwn(imported.body, "asset_summaries"), false)
+      assert.equal(
+        imported.d1Queries,
+        1,
+        "the one-time reconstruction marker keeps the warm path D1-free",
+      )
       assert.ok(imported.cost.rows_read <= 200, JSON.stringify(imported.cost))
       assert.ok(imported.cost.rows_written <= 60, JSON.stringify(imported.cost))
       const repeated = await (
@@ -126,6 +140,11 @@ test(
         repeated.cost.rows_written,
         0,
         "unchanged metadata and a duplicate vote do not write SQL rows",
+      )
+      assert.equal(
+        repeated.d1Queries,
+        1,
+        "the warm path performs no further D1 read after the one-time reconstruction",
       )
       t.diagnostic(
         JSON.stringify({
