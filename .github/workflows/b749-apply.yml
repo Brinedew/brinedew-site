@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/b749-patch-v2-1.b64 .github/b749-patch-v2-2.b64 .github/b749-patch-v2-3.b64 .github/b749-patch-v2-4.b64 | base64 --decode | gzip -d > /tmp/b749-source.patch
+          cat .github/b749-patch-v3-1.b64 .github/b749-patch-v3-2.b64 | base64 --decode | gzip -d > /tmp/b749-source.patch
           git apply --check /tmp/b749-source.patch
           git apply /tmp/b749-source.patch
           cat .github/b749-test-v2-1.b64 .github/b749-test-v2-2.b64 | base64 --decode | gzip -d > workers/iconoplasm/sync-finalization-publication.test.js
@@ -76,7 +76,9 @@ jobs:
             .github/b749-patch-v2-3.b64 \
             .github/b749-patch-v2-4.b64 \
             .github/b749-test-v2-1.b64 \
-            .github/b749-test-v2-2.b64
+            .github/b749-test-v2-2.b64 \
+            .github/b749-patch-v3-1.b64 \
+            .github/b749-patch-v3-2.b64
           git add -u
           git status --short
           git config user.name 'Brinedew'
