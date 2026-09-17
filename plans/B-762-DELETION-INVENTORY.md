@@ -1,10 +1,18 @@
-# B-762 deletion inventory
+# B-762 / B-771 V1 retirement inventory
 
-Short-lived companion to `B-762-SYSOP-V2-HANDOFF.md`. Migrated genes must work
-with these entrypoints unavailable; each row names the surviving requirement so
-nothing is removed before its replacement is verified. Status values:
-**bypassed** (v2 path never calls it), **retired-pending** (remove after the
-last legacy gene migrates), **kept** (surviving interface).
+Current source audit: 17 September 2026. B-771 owns final decommissioning;
+B-725 (workstation), B-726 (lossless authority transfer), B-749 (exact scoped
+workflow) and B-764 (compact discovery) retain their separate acceptance.
+The older `B-762-SYSOP-V2-HANDOFF.md` records staged implementation history.
+Read current code and Linear before treating one of its checkpoints as current.
+
+Migrated genes must work with superseded writers unavailable. Each row names
+retained obligations so cleanup does not erase accepted work. An unrelated
+unmigrated gene is not a prerequisite for one healthy V2 operation. Global
+unbinding follows reconciliation of the responsibilities still using that
+binding. **Bypassed** means source routing avoids it; **retired-pending** means
+it still exists; **retired-source** means its executable body is gone on this
+review branch. None of these labels proves production activation.
 
 | Obsolete item | Actual callers | Job / binding | Surviving requirement | Replacement | Status / removal proof |
 | --- | --- | --- | --- | --- | --- |
@@ -17,7 +25,11 @@ last legacy gene migrates), **kept** (surviving interface).
 | `exportAssetSummaries()` on the vote path | election and `/state` export | hot DO reads | Full export remains for admin observability | `geneAuthoritySummaries()` (bounded to candidates) | Removed from hot path: audit `COST` proves zero exports per duplicate vote, flat 35/31 reads from 2 to 10,000 historical assets |
 | Legacy bootstrap import in `ensureBootstrapped` | `/vote/set`, `/vote/import`, `/vote/snapshot(s)`, `/state` | D1 reads (`icono_portrait_assets`, `icono_image_votes`) | One-time import for un-migrated genes | v2 guard returns before any D1 binding is required | Guarded: `authority_epoch === "v2"` exits first; rollback keeps v2 votes because the epoch check precedes the destructive import |
 | Global card head / dirty-shard publisher (`/wake`, `publisher.step`) | scheduled publication, vote projection | `ICONOPLASM_CARD_PUBLICATION` + KV manifest | Un-migrated catalog publication | `/materialize-symbol` per-gene immutable objects | Kept for un-migrated genes; v2 genes publish without touching head/watermark |
-| KV gallery barrier projection (`KV_GALLERY_VERSION`) | readers and publisher | KV | Fresh-reader resolution for un-migrated genes | Per-gene read pointer (next slice; not built yet) | Kept: do not remove until the per-gene reader pointer is verified |
+| KV gallery baseline and V2 advertised delta view | hover delivery and card-publication coordinator | KV baseline/head plus immutable Bunny chain/segments | Exact historical views and fresh-reader resolution | `iconoplasm-card-reader-view.js` resolves `<base>.c<chainHash>`; hover delivery consumes the advertised view | Implemented in source; live acceptance belongs to B-762. Preserve baseline objects and historical chains; remove only superseded executable publication behavior |
+| Ordinary `/admin/read-models/sync` empty scope and full flags | workstation/admin HTTP caller | read-model handler | Explicit symbol/vision work and truthful handoff/deferral receipts | Reject empty normalized scope and enabled full-rebuild/full-vision flags before both sync services | Retired-source in PR #153; behavioral direct/publication tests. The generic publication wrapper remains a B-749 scope escape and is not certified bounded |
+| `repair-iconoplasm-newer-tie-canon.mjs` | historical May repair entrypoint; no other repository caller found | direct Cloudflare D1 plus empty-scope publication | Preserve historical source, accepted images, selections, votes and receipts | Permanent `LEGACY_GLOBAL_REPAIR_RETIRED` exit without imports/network/D1 | Retired-source in PR #153; executable flag-mode tests with network trap and a source anti-rollback test |
+| Manifestation singleton authority cutover | `freezeLegacyManifestationWriter`, `activateManifestationAuthority`, authoring/caretaker consumers | primary and authoring D1 singleton rows; encrypted-body migration | Preserve exact bodies, IDs, ordered snapshots and projection obligations | B-726 must reconcile the current global authoring activation with the per-gene vote epoch | Still global in source. The vote epoch alone does not establish complete manifestation/caretaker migration |
+| Recovery continuation/executor, old sync-finalization orchestration and launchers | recovery workflows; workstation/tray/Drain paths | production workflows, Queue/cron, local scheduled jobs | Accepted pending obligations, original operation/scope IDs and uncertain receipts | Exact V2 resumable operation; retain historical receipts read-only | Retired-pending B-725/B-749/B-771. Preserving a continuation record does not preserve permission to execute its V1/global path |
 
 ## Temporary migration interfaces
 
@@ -36,4 +48,24 @@ last legacy gene migrates), **kept** (surviving interface).
   the existing object store; a cache never elects canon.
 - Private authoring ciphertext and exact revision identities.
 - Human extension-release gate; no store submission from this work.
-- B-742/B-749 recovery executor, continuation and receipts.
+- B-742/B-749 original operation/scope identity, continuation records, accepted
+  obligations and receipts, including uncertain outcomes. These are retained
+  evidence; the V1/global executor is not a permanent survivor.
+- Generated image bytes, immutable hashes, provenance, assignments, canonicals,
+  user/candidate votes, overrides, supervotes, drafts and saved publication intent.
+  Retirement must never regenerate an accepted output or silently discard work.
+
+## Branch verification and remaining runtime work
+
+PR #153 contains route-level negative tests for empty/invalid scope and all
+full-flag aliases on both service paths, positive scoped work and receipt tests,
+and executable retirement tests for the historical repair. The operation-cost
+implementation identity is regenerated. The temporary source-export workflow
+used for offline verification is removed from the final branch.
+
+No production D1 query, migration, queue release or runtime decommissioning is
+proved by these source changes. The ordinary publication wrapper still calls
+the generic gallery publisher without propagating exact membership. Current
+Wrangler bindings and recovery launchers remain pending reconciliation; remove
+their executable behavior together with registered IPD-004/IPD-010 enforcement
+points after the surviving consumers pass their own acceptance.

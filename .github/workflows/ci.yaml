@@ -80,7 +80,35 @@ jobs:
           node scripts/generate-operation-cost-identities.mjs --check
 
       - name: Test
-        run: pnpm test
+        id: tests
+        shell: bash
+        run: |
+          set +e
+          pnpm test > "$RUNNER_TEMP/repository-tests.log" 2>&1
+          test_status=$?
+          set -e
+          python3 - "$RUNNER_TEMP/repository-tests.log" <<'PYTHON'
+          import re
+          import sys
+          from pathlib import Path
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          selected = set(range(max(0, len(lines) - 30), len(lines)))
+          for index, line in enumerate(lines):
+              if re.match(r"^\s*not ok\b", line):
+                  selected.update(range(max(0, index - 2), min(len(lines), index + 80)))
+          for index in sorted(selected):
+              print(lines[index])
+          PYTHON
+          exit "$test_status"
+
+      - name: Preserve complete test output
+        if: ${{ always() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: repository-tests-${{ github.sha }}
+          path: ${{ runner.temp }}/repository-tests.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Ensure Quartz builds
         run: pnpm run build
