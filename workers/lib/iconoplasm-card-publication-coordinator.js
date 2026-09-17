@@ -13,7 +13,11 @@ import {
   planGeneDeltaCoalesce,
   PUBLIC_GENE_DELTA_PROJECTION_KEY,
 } from "./iconoplasm-card-gene-delta.js"
-import { createPublishedCardObjectStore } from "./iconoplasm-published-card-objects.js"
+import {
+  createPublishedCardObjectStore,
+  publishedCardObjectKey,
+} from "./iconoplasm-published-card-objects.js"
+import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./bunny-storage-consistency.js"
 
 const PUBLIC_CARD_HEAD_PROJECTION_KEY = "iconoplasm:gallery-version"
 
@@ -28,6 +32,30 @@ export async function projectGeneDelta(env, projection, previousJson = null) {
   if (!env?.KV) return { written: false, deferred: true, json }
   await env.KV.put(PUBLIC_GENE_DELTA_PROJECTION_KEY, json)
   return { written: true, deferred: false, json }
+}
+
+/**
+ * B-762 advertisement barrier: a changed delta view is only advertised after
+ * every immutable object it names (the exact chain and each referenced
+ * segment) is readable from every configured source with the exact content
+ * hash. A single immediate authenticated-Storage success is not sufficient.
+ * Uses the shared Bunny read-after-write schedule; a view that never becomes
+ * stably readable keeps its previous projection and durable retry.
+ */
+export async function awaitDeltaObjectReadiness(verify, keys) {
+  for (const delay of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+    let ready = true
+    for (const key of keys) {
+      const result = await verify(key)
+      if (!result?.ready) {
+        ready = false
+        break
+      }
+    }
+    if (ready) return true
+  }
+  return false
 }
 
 function publicCardHeadProjection(head) {
@@ -257,6 +285,26 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           chainHash,
           committedAt: new Date().toISOString(),
         })
+        // B-762: never advertise a changed view before every immutable object
+        // it names is reader-resolvable. Failure retains the previous
+        // projection and re-arms durable projection work instead of exposing a
+        // view whose dependencies a fresh reader would receive as 404.
+        if (chainHash && geneDeltaProjectionHash(projection) !== (state.projected_json || null)) {
+          const dependencies = [
+            publishedCardObjectKey("indexes", chainHash),
+            ...state.segments.map((segment) => segment.key),
+          ]
+          const ready = await awaitDeltaObjectReadiness(
+            (key) => this.objectStore.verifyReaderResolvable(key),
+            dependencies,
+          )
+          if (!ready) {
+            state = { ...state, projection_pending: true }
+            this.geneDelta = state
+            this.persistGeneDelta()
+            return { ok: false, retry: true, more: true, reason: "delta_objects_unreadable" }
+          }
+        }
         const advertised = await projectGeneDelta(
           this.env,
           projection,
