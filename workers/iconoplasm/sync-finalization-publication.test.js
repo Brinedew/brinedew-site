@@ -23,6 +23,93 @@ const source = (name) =>
   readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8")
 const now = "2026-09-09T03:00:00.000Z"
 
+
+function sqliteD1(db) {
+  return {
+    prepare(sql) {
+      let args = []
+      return {
+        bind(...values) {
+          args = values
+          return this
+        },
+        async all() {
+          const statement = db.prepare(sql)
+          return { results: statement.all(...args) }
+        },
+        async first() {
+          const statement = db.prepare(sql)
+          return statement.get(...args) || null
+        },
+        async run() {
+          const statement = db.prepare(sql)
+          const result = statement.run(...args)
+          return { results: [], meta: { changes: Number(result.changes || 0) } }
+        },
+      }
+    },
+  }
+}
+
+test("scoped finalization requires durable per-gene acceptance before completion", async () => {
+  const sqlite = new DatabaseSync(":memory:")
+  try {
+    for (const file of [
+      "0028_add_finalization_jobs.sql",
+      "0094_finalization_summary.sql",
+      "0100_finalization_job_version.sql",
+      "0101_finalization_publication_barrier.sql",
+    ])
+      sqlite.exec(source(file))
+    sqlite.prepare(
+      "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES('TP53','queued','completed_pending_finalize')",
+    ).run()
+    sqlite.prepare(
+      "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES('BRCA1','queued','reconcile')",
+    ).run()
+    const db = sqliteD1(sqlite)
+    const accepted = []
+    const result = await drainCompletedFinalization(db, {
+      symbols: ["TP53"],
+      now,
+      notifyPublisher: async ({ symbols, jobs }) => {
+        assert.deepEqual(symbols, ["TP53"])
+        assert.deepEqual(jobs.map((job) => job.gene_symbol), ["TP53"])
+        const before = sqlite
+          .prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='TP53'")
+          .get()
+        assert.notEqual(before.status, "completed", "the durable V2 handoff must precede acknowledgement")
+        accepted.push(...symbols)
+        return { accepted: true }
+      },
+    })
+    assert.deepEqual(accepted, ["TP53"])
+    assert.equal(result.finalized, 1)
+    assert.equal(result.broaden_next_drain, false)
+    assert.equal(
+      sqlite.prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='TP53'").get().status,
+      "completed",
+    )
+    assert.equal(
+      sqlite.prepare("SELECT status FROM icono_sync_finalization_jobs WHERE gene_symbol='BRCA1'").get().status,
+      "queued",
+      "unrelated work must not block or join the scoped handoff",
+    )
+  } finally {
+    sqlite.close()
+  }
+})
+
+test("ordinary finalization refuses an empty scope instead of selecting the global ledger", async () => {
+  await assert.rejects(
+    drainCompletedFinalization(
+      { prepare: () => assert.fail("empty scope must refuse before any database read") },
+      { symbols: [], now, notifyPublisher: async () => assert.fail("must not publish") },
+    ),
+    /explicit non-empty finalization scope/i,
+  )
+})
+
 test("missing handoff counters refuse before completing any saved jobs", async () => {
   await assert.rejects(
     drainCompletedFinalization(
