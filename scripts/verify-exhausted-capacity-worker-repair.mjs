@@ -55,6 +55,27 @@ export const SCOPED_FINALIZATION_WORKER_REPAIR_FILES = Object.freeze([
   "workers/iconoplasm/sync-finalization-scoped-core.test.js",
 ])
 
+// The pending schema-free diff from installed base 0059139d to 3a3d838c:
+// the discovery read-burn repair (PR #159, merged as 8e135878) that removes
+// the full-catalog alias scan and the ordinal ORDER BY, the hourly statement
+// burn watch (PR #160, merged as 3a3d838c), and two documentation banners
+// (PR #158). No migration, seed or data file appears in the envelope.
+export const DISCOVERY_READ_BURN_WORKER_REPAIR_FILES = Object.freeze([
+  ".github/workflows/iconoplasm-d1-statement-burn-watch.yml",
+  "docs/B742_RECOVERY_HANDOFF.md",
+  "docs/RECOVERY_RESUME_CHECKLIST.md",
+  "plans/B-762-SYSOP-V2-HANDOFF.md",
+  "scripts/architecture-fences.test.js",
+  "scripts/check-iconoplasm-d1-statement-burns.mjs",
+  "scripts/check-iconoplasm-d1-statement-burns.test.js",
+  "scripts/verify-exhausted-capacity-worker-repair.mjs",
+  "scripts/verify-exhausted-capacity-worker-repair.test.js",
+  "workers/generated/operation-cost-identities.js",
+  "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  "workers/iconoplasm/discovery-ordinal-store.js",
+  "workers/iconoplasm/discovery-ordinal-store.test.js",
+])
+
 const WORKER_REPAIR_ENVELOPES = Object.freeze([
   {
     allowed: B749_WORKER_REPAIR_FILES,
@@ -77,6 +98,14 @@ const WORKER_REPAIR_ENVELOPES = Object.freeze([
       "workers/generated/operation-cost-identities.js",
       "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
       "workers/iconoplasm/sync-finalization-publication.js",
+    ],
+  },
+  {
+    allowed: DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
+    required: [
+      "workers/generated/operation-cost-identities.js",
+      "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+      "workers/iconoplasm/discovery-ordinal-store.js",
     ],
   },
 ])
