@@ -6,10 +6,6 @@ import test from "node:test"
 
 const root = new URL("../", import.meta.url)
 const workflow = readFileSync(new URL(".github/workflows/deploy-quartz.yml", root), "utf8")
-const recovery = readFileSync(
-  new URL(".github/workflows/retry-production-after-d1-reset.yml", root),
-  "utf8",
-)
 const sentinelName = "Reject exhausted capacity before release setup"
 // The manual D1-free reader recovery intentionally repeats the exact-source
 // and exact-CI labels. The early-release sentinel applies only to the normal
@@ -71,24 +67,6 @@ test("published readers recover before D1 admission and all later release gates 
     2,
   )
   assert.match(workflow, /cancel-in-progress: false/)
-})
-
-test("reset controller recognizes early refusal while retaining background containment", () => {
-  const start = recovery.indexOf('case "${failed_step}" in')
-  const end = recovery.indexOf("esac", start)
-  assert.ok(start >= 0 && end > start)
-  assert.ok(recovery.slice(start, end).includes(`"${sentinelName}"`))
-  assert.match(recovery, /set_queue_pause_state true/)
-  assert.doesNotMatch(recovery, /set_queue_pause_state false/)
-  assert.match(
-    recovery,
-    /B-742 quarantine asserted: Iconoplasm Cron jobs disabled and Queue delivery paused\./,
-  )
-  assert.match(
-    recovery,
-    /Pre-reset containment complete; canonical release waits for Sep 17 UTC capacity\./,
-  )
-  assert.match(recovery, /retaining background quarantine/)
 })
 
 test("real sentinel imports load and missing credentials refuse before provider traffic", () => {

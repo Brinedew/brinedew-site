@@ -162,29 +162,16 @@ import from 17 to 13. An identical desired-vote command reads 14 SQL rows and
 writes zero, retaining the same user vote and snapshot. These counts describe
 SQLite statements; the existing alarm/wakeup and delivery costs remain separate.
 
-`scripts/install-reset-deployer.ps1` updates the existing Windows task
-**Iconoplasm Deploy Window Dispatcher**. Its versioned runner has a 180-second
-process deadline, starts at 00:00 UTC (07:00 Vietnam), wakes the laptop when
-Windows permits it, and checks every five minutes during the reset window.
-The armed exact source, reset date, deadline and retained dispatch state live in
-`artifacts/reset-deploy/`. Dispatch requires current-main CI and headroom across
-all twelve meters. It records the reservation before the GitHub POST and will
-not replay an uncertain dispatch. Only the latest exact-main workflow attempt,
-all six full-release steps and installed normal mode establish activation.
-The two migrations remain individually staged. Only a successful exact-attempt
-migration step plus its explicit continuation checkpoint, with every normal
-activation step skipped, permits automatic continuation. The executor preserves
-the installed migration origin, records the checkpoint before dispatch and
-retains uncertain outcomes; a generic successful or failed workflow cannot
-renew a migration allowance. CI verifies checkpoint continuation through full
-activation, restart and an uncertain second POST.
-
-The reset activation deadline is September 13 at 00:30 UTC. A miss belongs to
-B-756 and the registered **Cloudflare reset recovery** Codex heartbeat, which
-owns failure inspection and repair. The existing Prefect B-749 continuation
-retains its sync lineage and waits for the repaired server before resuming.
-Deployment, both authenticated sync checks, fresh pages/blots, and the enabled
-UTC day ending September 14 at 00:00 UTC remain separate acceptance gates.
+The Windows **Iconoplasm Deploy Window Dispatcher** task,
+`scripts/install-reset-deployer.ps1`, its runner and the
+`scripts/dispatch-production-in-reset-window.mjs` executor were retired on
+2026-09-18 (B-772). The reset-window deadline, five-minute wake loop, retained
+reservation state and the September 13-14 gates above were incident-window
+machinery; they are deleted so no local task or scheduled workflow can mutate
+production. Release and recovery now run only through the canonical GitHub
+workflow: `deploy-quartz.yml` on push, or an explicit `workflow_dispatch`
+carrying `resume_run_id` when installed state is under an existing
+reader-recovery transition.
 
 ## Acceptance contract
 

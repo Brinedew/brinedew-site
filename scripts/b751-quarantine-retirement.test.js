@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
 
@@ -16,7 +16,7 @@ test("the expired B-742 hard quarantine is retired at the whole-job boundary", (
   const job = workflow.jobs.quarantine
 
   assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
-  assert.ok(workflow.on.schedule.length > 0)
+  assert.ok(!Object.hasOwn(workflow.on, "schedule"))
   assert.ok(Object.hasOwn(workflow.on, "push"))
   assert.equal(job.if, manualOnly)
   assert.match(source, /One-shot Sep 17 pre-reset quarantine has expired/)
@@ -38,23 +38,16 @@ test("the hard-quarantine retirement rejects removal or widening of the job fenc
   }
 })
 
-test("the existing cloud recovery driver remains a self-expiring Sep 17 one-shot", () => {
-  const { source, workflow } = readWorkflow("retry-production-after-d1-reset.yml")
-  const job = workflow.jobs["recover-production"]
-
-  assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
-  assert.ok(workflow.on.schedule.length >= 3)
-  assert.equal(job.if, temporaryFence)
-  assert.match(source, /2026-09-16/)
-  assert.match(source, /2026-09-17/)
-  assert.match(source, /One-shot Sep 17 recovery driver has expired/)
-  assert.match(source, /2,12,22,32,42,52 7-23/)
-  assert.equal(job["runs-on"], "ubuntu-latest")
-  assert.match(source, /CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN/)
-  assert.match(source, /iconoplasm-sync-finalization/)
-  assert.match(source, /iconoplasm-vote-projection/)
-  assert.match(source, /iconoplasm-gene-card-materialization/)
-  assert.doesNotMatch(source, /resume-delivery|set_queue_pause_state false/)
+test("no automatic production recovery controller can be re-armed", () => {
+  assert.ok(
+    !existsSync(
+      new URL("../.github/workflows/retry-production-after-d1-reset.yml", import.meta.url),
+    ),
+  )
+  const { source } = readWorkflow("deploy-quartz.yml")
+  assert.match(source, /resume_run_id:/)
+  assert.match(source, /ICONOPLASM_RELEASE_ORIGIN_RUN_ID: \$\{\{ inputs\.resume_run_id \}\}/)
+  assert.doesNotMatch(source, /schedule:/)
 })
 
 test("canonical protected production and D1-free containment remain independent", () => {
