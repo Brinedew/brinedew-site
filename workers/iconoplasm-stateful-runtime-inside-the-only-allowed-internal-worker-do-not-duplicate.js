@@ -11958,11 +11958,13 @@ async function readOrImportCompactUserState(
     if (!legacyRows.length) return null
     // Bounded one-time transfer: only this user's own symbols acquire
     // ordinals. Historical names that left the catalog stay resolvable as
-    // inactive entries instead of being dropped or bulk-seeded.
+    // inactive entries instead of being dropped or bulk-seeded. Aliases are
+    // resolved by the compact dictionary alone; a catalog-wide alias scan
+    // once burned 2.1M reads for a single import (B-774).
     const importLookup = await ensureDiscoveryDictionaryForNames(
       env.ICONOPLASM_DB,
       legacyRows.map((row) => row?.gene_symbol),
-      { preserveHistorical: true, resolveCatalogAliases: true },
+      { preserveHistorical: true },
     )
     const importDictionary = discoveryCompactDictionaryFromLookup(importLookup)
     const resolvable = legacyRows.filter((row) =>
