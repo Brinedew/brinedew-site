@@ -47,7 +47,7 @@ capacity, clear reservations or change migration lineage.
 
 Before intervening in a new incident, the executor must inspect installed
 release state and active workflows, then use the existing compatible path under
-[RECOVERY-001](RECOVERY_OWNERSHIP_CONTRACT.md). Reconcile any already-running old
+`RECOVERY-001` (root `AGENTS.md`). Reconcile any already-running old
 revision separately: a merge cannot stop a job that has already started.
 
 ## Remaining B-742 acceptance
