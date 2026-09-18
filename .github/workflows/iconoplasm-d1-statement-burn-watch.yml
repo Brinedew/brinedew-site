@@ -1,0 +1,33 @@
+name: Iconoplasm D1 statement burn watch
+
+on:
+  schedule:
+    - cron: "26 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iconoplasm-d1-statement-burn-watch
+  cancel-in-progress: true
+
+jobs:
+  statement-burn-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ICONOPLASM_STATEMENT_READ_ALERT: "500000"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Fail when any single statement burns the read budget
+        run: node scripts/check-iconoplasm-d1-statement-burns.mjs
