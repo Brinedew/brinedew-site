@@ -1,100 +1,45 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
-import {
-  B749_WORKER_REPAIR_FILES,
-  CARD_PUBLICATION_WORKER_REPAIR_FILES,
-  DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
-  SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
-  verifyWorkerRepairPaths,
-} from "./verify-exhausted-capacity-worker-repair.mjs"
+import { verifyWorkerRepairPaths } from "./verify-exhausted-capacity-worker-repair.mjs"
 import { requireNormalWorkerRepairState } from "./verify-exhausted-capacity-worker-state.mjs"
 
-test("exhausted-capacity repair accepts only the exact reviewed B-749 source envelope", () => {
-  assert.deepEqual(verifyWorkerRepairPaths(B749_WORKER_REPAIR_FILES), B749_WORKER_REPAIR_FILES)
-  assert.throws(
-    () => verifyWorkerRepairPaths([...B749_WORKER_REPAIR_FILES, "migrations-iconoplasm/9999.sql"]),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths(
-        B749_WORKER_REPAIR_FILES.filter(
-          (path) => !path.includes("iconoplasm-stateful-runtime-inside-the-only-allowed"),
-        ),
-      ),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
+test("exhausted-capacity repair accepts a schema-free worker diff", () => {
+  const paths = [
+    ".github/workflows/iconoplasm-d1-statement-burn-watch.yml",
+    "docs/ICONOPLASM_OPERATIONS.md",
+    "scripts/verify-exhausted-capacity-worker-repair.mjs",
+    "workers/generated/operation-cost-identities.js",
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+    "workers/iconoplasm/discovery-ordinal-store.js",
+    "workers/iconoplasm/discovery-ordinal-store.test.js",
+  ]
+  assert.deepEqual(verifyWorkerRepairPaths(paths), [...paths].sort())
 })
 
-test("exhausted-capacity repair accepts the exact frozen-card publication envelope", () => {
-  assert.deepEqual(
-    verifyWorkerRepairPaths(CARD_PUBLICATION_WORKER_REPAIR_FILES),
-    CARD_PUBLICATION_WORKER_REPAIR_FILES,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths([
-        ...CARD_PUBLICATION_WORKER_REPAIR_FILES,
-        "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-      ]),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths(
-        CARD_PUBLICATION_WORKER_REPAIR_FILES.filter(
-          (path) => path !== "workers/lib/iconoplasm-card-publication.js",
-        ),
-      ),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
+test("exhausted-capacity repair refuses schema, data and dependency changes", () => {
+  const base = ["workers/iconoplasm/discovery-ordinal-store.js"]
+  for (const forbidden of [
+    "migrations-iconoplasm/9999_discovery_read_burn.sql",
+    "migrations/0001_add_column.sql",
+    "seeds/genes.json",
+    "data/portraits.json",
+    "workers/iconoplasm/catalog.sqlite",
+    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    "package.json",
+    "pnpm-lock.yaml",
+  ])
+    assert.throws(
+      () => verifyWorkerRepairPaths([...base, forbidden]),
+      /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+      forbidden,
+    )
 })
 
-test("exhausted-capacity repair accepts the exact scoped-finalization envelope", () => {
-  assert.deepEqual(
-    verifyWorkerRepairPaths(SCOPED_FINALIZATION_WORKER_REPAIR_FILES),
-    SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
-  )
+test("exhausted-capacity repair refuses an empty or test-only diff", () => {
+  assert.throws(() => verifyWorkerRepairPaths([]), /COST_WORKER_REPAIR_SCOPE_REFUSED/)
   assert.throws(
-    () =>
-      verifyWorkerRepairPaths([
-        ...SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
-        "migrations-iconoplasm/9999_scoped_finalization.sql",
-      ]),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths(
-        SCOPED_FINALIZATION_WORKER_REPAIR_FILES.filter(
-          (path) => path !== "workers/iconoplasm/sync-finalization-publication.js",
-        ),
-      ),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
-})
-
-test("exhausted-capacity repair accepts the exact discovery read-burn envelope", () => {
-  assert.deepEqual(
-    verifyWorkerRepairPaths(DISCOVERY_READ_BURN_WORKER_REPAIR_FILES),
-    DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths([
-        ...DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
-        "migrations-iconoplasm/9999_discovery_read_burn.sql",
-      ]),
-    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
-  )
-  assert.throws(
-    () =>
-      verifyWorkerRepairPaths(
-        DISCOVERY_READ_BURN_WORKER_REPAIR_FILES.filter(
-          (path) => path !== "workers/iconoplasm/discovery-ordinal-store.js",
-        ),
-      ),
+    () => verifyWorkerRepairPaths(["workers/iconoplasm/discovery-ordinal-store.test.js"]),
     /COST_WORKER_REPAIR_SCOPE_REFUSED/,
   )
 })
