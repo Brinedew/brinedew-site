@@ -6,8 +6,8 @@ If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This f
 
 ## Current cutover boundary: 17 September 2026
 
-Read `docs/RECOVERY_OWNERSHIP_CONTRACT.md`,
-`docs/D1_READ_EXHAUSTION_PREVENTION.md` and Linear B-742/B-749 before recovery.
+Read `docs/D1_READ_EXHAUSTION_PREVENTION.md` and Linear B-742/B-749 before
+recovery.
 During the current production D1 hold, use source inspection and isolated tests.
 Do not run production sync, publication retries, queue releases or diagnostic D1
 queries. Reconcile the installed revision and current incident status before any

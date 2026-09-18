@@ -2,18 +2,12 @@
 
 ## Recovery ownership fence: RECOVERY-001
 
-Read [Recovery Ownership Contract](docs/RECOVERY_OWNERSHIP_CONTRACT.md) before incident, capacity,
-deployment or recovery work. The accepting executor owns delivery through a
-verified user operation; the owner does not run deployment/SQL commands or
-time resets. A safeguard must preserve a tested compatible repair path
-under its exact failure. Continue non-deploying source publication and
-isolated tests while live D1 is exhausted. Refusal is containment evidence.
-Deferred work needs an inspected registered executor, accessible source,
-wake condition and failure destination. A chat or Linear edit does not
-schedule it. Preserve security, actual admission and schema compatibility
-when replacing a deadlocking guard through explicit change control.
-This contract adds no new production gate or prerequisite redesign.
-Historical checkpoints below require fresh state reconciliation.
+The executor owns delivery through a verified user operation. Refusal is
+containment evidence, not restoration: keep a tested repair path under every
+safeguard, continue source publication and isolated tests while D1 is
+exhausted, and give deferred work an inspected executor, wake condition and
+failure destination. Change a deadlocking guard through explicit change
+control. Canonical: the RECOVERY-001 rule in the root `AGENTS.md`.
 
 ## Agent operating rule: do not build the wall you then blame
 
