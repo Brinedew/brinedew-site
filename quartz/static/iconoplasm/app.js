@@ -21,7 +21,7 @@ import {
   createWebsiteGuestDiscoveryStore,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-store.js?v=20260730-module-cache"
+} from "./guest-discovery-store.js?v=20260915-durable-discovery-queue"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
