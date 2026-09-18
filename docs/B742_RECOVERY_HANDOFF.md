@@ -1,5 +1,9 @@
 # B-742 recovery handoff — 9 September 2026
 
+> **Historical — superseded 2026-09-18 (B-772).** The current execution context is the
+> [B-742 CURRENT recovery runbook + trap index](https://linear.app/brinedew/document/b-742-current-recovery-runbook-trap-index-745f775b7493).
+> This document is kept as evidence only; do not execute from it.
+
 ## Recovery ownership fence: RECOVERY-001
 
 Read [Recovery Ownership Contract](RECOVERY_OWNERSHIP_CONTRACT.md) before incident, capacity,
