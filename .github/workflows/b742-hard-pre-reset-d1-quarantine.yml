@@ -24,10 +24,10 @@ concurrency:
 
 jobs:
   quarantine:
-    # B-742 recurrence: re-enable the existing hard quarantine for the Sep 17
-    # reset only. Scheduled invocations self-expire after Sep 16 UTC; the manual
-    # emergency path remains available inside its narrow reset window.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    # The Sep 17 one-shot has expired. Retire unattended execution at the whole
+    # job boundary so an early shell exit cannot fall through to mutating steps.
+    # Keep the explicit emergency path while B-742 remains open.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
