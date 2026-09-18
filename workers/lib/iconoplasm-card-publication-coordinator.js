@@ -118,6 +118,19 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           source: sourceForEnv(env),
         })
         this.geneDelta = this.repo.get("gene_delta") || emptyGeneDeltaState()
+        let advertisedDeltaBase = null
+        try {
+          advertisedDeltaBase = this.geneDelta.projected_json
+            ? JSON.parse(this.geneDelta.projected_json)?.base || null
+            : null
+        } catch {
+          advertisedDeltaBase = null
+        }
+        const deltaRebasePending = Boolean(
+          this.geneDelta.segments.length &&
+          this.repo.get("head")?.current?.version &&
+          advertisedDeltaBase !== this.repo.get("head").current.version,
+        )
         this.projectedHeadVersion = null
         try {
           const projection = await projectPublicCardHead(env, this.repo.get("head"))
@@ -128,7 +141,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           this.projectionDeferred = String(error.message || error).slice(0, 500)
         }
         if (
-          (this.geneDelta.projection_pending || this.geneDelta.coalesce) &&
+          (this.geneDelta.projection_pending || this.geneDelta.coalesce || deltaRebasePending) &&
           !this.repo.get("job") &&
           !this.repo.get("requested") &&
           !this.repo.get("effects")
@@ -246,11 +259,24 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           const written = await this.objectStore.write("indexes", pendingSegmentBody(state, seq))
           state = completeSegmentWrite(state, { seq, key: written.key, hash: written.hash })
         }
-        if (!state.projection_pending && !coalesced) {
+        const baseVersion = this.repo.get("head")?.current?.version || null
+        let advertisedBase = null
+        try {
+          advertisedBase = state.projected_json
+            ? JSON.parse(state.projected_json)?.base || null
+            : null
+        } catch {
+          advertisedBase = null
+        }
+        // B-762: a card-catalog head advance orphans the previous delta view
+        // (readers refuse a view whose base is not current). Re-project when
+        // the last advertised base differs from the current head so committed
+        // per-gene selections stay visible; idle wakes remain write-free.
+        const rebaseRequired = Boolean(baseVersion && advertisedBase !== baseVersion)
+        if (!state.projection_pending && !coalesced && !rebaseRequired) {
           this.geneDelta = state
           return { skipped: true, segments: state.segments.length }
         }
-        const baseVersion = this.repo.get("head")?.current?.version || null
         let chainHash = null
         if (state.segments.length && baseVersion) {
           const fingerprint = geneDeltaChainFingerprint(baseVersion, state.segments)
