@@ -2,13 +2,16 @@ import { execFileSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
 
 // A repair is any reviewed diff that cannot touch schema or data: no migration,
-// seed, data or dependency path, and at least one non-test Worker source file.
+// seed, data or dependency path, and at least one non-test source file the
+// zero-D1 Worker deploy actually ships - a workers/** module or a quartz/static
+// asset published in the same bundle (the immutable app modules live there, and
+// a cache-stamp fix must be able to land while D1 is exhausted).
 // Review and the exact-CI gate provide the "reviewed" half; this rule refuses
 // only the categories that could mutate D1 or change the deploy contract.
 const FORBIDDEN_PATH = /(^|\/)(migrations[^/]*|seeds?|data)\//i
 const FORBIDDEN_EXTENSION = /\.(sql|sqlite|sqlite3|db|db3)$/i
 const FORBIDDEN_FILES = /^(wrangler[^/]*\.toml|package\.json|pnpm-lock\.yaml)$/i
-const WORKER_SOURCE = /^workers\/.*\.js$/i
+const WORKER_SOURCE = /^(?:workers\/.*\.js|quartz\/static\/.*\.(?:js|css))$/i
 const TEST_FILE = /\.test\.js$/i
 
 export function verifyWorkerRepairPaths(paths) {
