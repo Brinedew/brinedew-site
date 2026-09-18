@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -162,4 +163,10 @@ test("website guest discovery store stays usable when localStorage is unavailabl
 
   assert.doesNotThrow(() => store.remember("INS"))
   assert.deepEqual(store.pendingSymbols(), ["INS"])
+})
+
+test("the app imports this module under a stamp bumped for the durable discovery queue", () => {
+  const source = readFileSync(new URL("./app.js", import.meta.url), "utf8")
+  assert.match(source, /from "\.\/guest-discovery-store\.js\?v=20260915-durable-discovery-queue"/)
+  assert.match(source, /createWebsiteDiscoveryBatchQueue/)
 })
