@@ -1,5 +1,11 @@
 # B-762: implementation handoff, 14 September 2026
 
+> **Historical — implemented and superseded 2026-09-18 (B-772).** The sysop-v2 source work
+> described here is merged. Current state and remaining acceptance are tracked in
+> [B-762](https://linear.app/brinedew/issue/B-762/a-healthy-gene-publication-can-be-blocked-by-unrelated-global)
+> and the [B-742 CURRENT recovery runbook + trap index](https://linear.app/brinedew/document/b-742-current-recovery-runbook-trap-index-745f775b7493).
+> Kept as evidence only; do not execute from it.
+
 ## Delivered, with scope limits
 
 `workers/iconoplasm/vote-authority/gene-publication-state.js` is a preparatory
