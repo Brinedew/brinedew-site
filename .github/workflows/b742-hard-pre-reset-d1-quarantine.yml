@@ -6,11 +6,6 @@ on:
     paths:
       - ".github/workflows/b742-hard-pre-reset-d1-quarantine.yml"
       - "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"
-  schedule:
-    # One-shot Sep 17 incident protection. Install a known-green D1-free
-    # containment source a full hour before reset so a late/red repair head,
-    # GitHub queueing or dependency installation cannot expose the fresh budget.
-    - cron: "0 23 * * *"
   workflow_dispatch:
 
 permissions:
