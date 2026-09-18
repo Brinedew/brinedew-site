@@ -17,10 +17,12 @@ RETURNING version`
 const META_INSERT_SQL = `INSERT INTO icono_discovery_dictionary_meta_v2 (singleton, version, updated_at)
 VALUES (1, ?, CURRENT_TIMESTAMP)
 ON CONFLICT(singleton) DO UPDATE SET version = excluded.version, updated_at = CURRENT_TIMESTAMP`
+// The returned rows feed name/ordinal maps, so no SQL ordering is required.
+// Keeping the filter on the name primary key avoids an ordinal-index walk
+// across unrelated rows (read amplification measured 2026-09-17, B-774).
 const NAMES_SELECT_SQL = `SELECT name, ordinal, canonical, active
 FROM icono_discovery_ordinals_v2
-WHERE name IN (SELECT value FROM json_each(?))
-ORDER BY ordinal, name`
+WHERE name IN (SELECT value FROM json_each(?))`
 const ALL_ROWS_SELECT_SQL = `SELECT name, ordinal, canonical, active
 FROM icono_discovery_ordinals_v2
 ORDER BY ordinal, name`
@@ -52,11 +54,6 @@ const MAX_ORDINAL_SELECT_SQL = `SELECT COALESCE(MAX(ordinal), -1) AS max_ordinal
 FROM icono_discovery_ordinals_v2`
 const CATALOG_BY_NAME_SQL = `SELECT gene_symbol, aliases_json FROM icono_gene_catalog
 WHERE gene_symbol IN (SELECT value FROM json_each(?))`
-const CATALOG_BY_ALIAS_SQL = `SELECT gene_symbol, aliases_json FROM icono_gene_catalog
-WHERE EXISTS (
-  SELECT 1 FROM json_each(icono_gene_catalog.aliases_json)
-  WHERE value IN (SELECT value FROM json_each(?))
-)`
 const ROWS_FOR_ORDINAL_SQL = `SELECT name FROM icono_discovery_ordinals_v2
 WHERE ordinal = ? ORDER BY name`
 
@@ -229,8 +226,8 @@ function catalogAliasNames(raw, canonical) {
 }
 
 // Bounded append-only dictionary resolver. Only the names a caller actually
-// touches acquire ordinals: direct catalog matches, optional catalog aliases
-// and (for legacy imports) historical names that left the catalog. A first
+// touches acquire ordinals: exact catalog-symbol probes and (for legacy
+// imports) historical names that left the catalog. A first
 // discovery therefore never reads or writes one row per catalog gene, while
 // existing ordinals are preserved, a rename keeps the prior ordinal and a
 // retired symbol stays resolvable as an inactive entry. Writes are guarded by
@@ -239,7 +236,7 @@ function catalogAliasNames(raw, canonical) {
 export async function ensureDiscoveryDictionaryForNames(
   db,
   names,
-  { preserveHistorical = false, resolveCatalogAliases = false } = {},
+  { preserveHistorical = false } = {},
 ) {
   const wanted = normalizeNames(names)
   if (!wanted.length) return loadDiscoveryDictionaryForNames(db, wanted)
@@ -252,14 +249,13 @@ export async function ensureDiscoveryDictionaryForNames(
     // never re-read later: a fresh read could pair a stale maximum with a
     // newer version and validate an already-invalid ordinal.
     const expectedVersion = Math.max(lookup.version, 1)
+    // Exact-symbol probes only. Never resolve aliases by scanning the
+    // catalog: the aliases_json EXISTS form measured 0.5M-2.1M reads per call
+    // and matched nothing (2026-09-18, B-774). The compact dictionary is the
+    // alias authority; unresolved names become inactive entries below.
     const catalogRows = rows(
       await db.prepare(CATALOG_BY_NAME_SQL).bind(JSON.stringify(unresolved)).all(),
     )
-    if (resolveCatalogAliases) {
-      catalogRows.push(
-        ...rows(await db.prepare(CATALOG_BY_ALIAS_SQL).bind(JSON.stringify(unresolved)).all()),
-      )
-    }
     const maxRow = await db.prepare(MAX_ORDINAL_SELECT_SQL).first()
     let nextOrdinal = Number(maxRow?.max_ordinal ?? -1) + 1
     const planned = new Map()

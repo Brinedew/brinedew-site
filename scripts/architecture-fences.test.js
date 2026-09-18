@@ -607,3 +607,17 @@ test("IPD-006 preserves durable publication groups and bounded Discord receipts"
   assert.match(migration, /legacy-request:/)
   assert.doesNotMatch(delivery, /setTimeout|setInterval/)
 })
+
+// B-774: request-scoped discovery resolution must never scan the catalog
+// aliases. One full alias scan measured 0.5M-2.1M D1 rows read and matched
+// nothing; three of them consumed 3.16M reads on 2026-09-18.
+test("B-774 forbids catalog-wide alias scans in discovery resolution", () => {
+  for (const file of [
+    "workers/iconoplasm/discovery-ordinal-store.js",
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  ]) {
+    const source = readRepositoryFile(file)
+    assert.doesNotMatch(source, /json_each\(\s*icono_gene_catalog\.aliases_json\s*\)/, file)
+    assert.doesNotMatch(source, /resolveCatalogAliases/, file)
+  }
+})
