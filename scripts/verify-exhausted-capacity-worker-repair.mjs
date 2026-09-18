@@ -19,9 +19,7 @@ export function verifyWorkerRepairPaths(paths) {
     !actual.length ||
     actual.some(
       (path) =>
-        FORBIDDEN_PATH.test(path) ||
-        FORBIDDEN_EXTENSION.test(path) ||
-        FORBIDDEN_FILES.test(path),
+        FORBIDDEN_PATH.test(path) || FORBIDDEN_EXTENSION.test(path) || FORBIDDEN_FILES.test(path),
     ) ||
     !actual.some((path) => WORKER_SOURCE.test(path) && !TEST_FILE.test(path))
   if (refused) throw new Error("COST_WORKER_REPAIR_SCOPE_REFUSED")
