@@ -435,3 +435,85 @@ test(
     sql.db.close()
   },
 )
+
+test(
+  "a card-catalog head advance re-advertises the durable delta view on the new base",
+  { timeout: 60000 },
+  async () => {
+    const values = new Map()
+    let writes = 0
+    const env = {
+      KV: {
+        async get(key) {
+          return values.get(key) || null
+        },
+        async put(key, value) {
+          writes += 1
+          values.set(key, value)
+        },
+      },
+    }
+    const { state, sql } = fakeCoordinatorState()
+    const Publisher = createCardPublicationCoordinatorClass(() => ({}))
+    const owner = new Publisher(state, env)
+    await state.ready
+    const baseA = "ccv2-" + sha("a")
+    const baseB = "ccv2-" + sha("b")
+    owner.repo.put("head", { current: { version: baseA }, previous: null })
+    const commit = await owner.fetch(
+      new Request("https://internal/commit-gene-version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(commitPayload()),
+      }),
+    )
+    assert.equal(commit.status, 200)
+
+    let immutableWrites = 0
+    owner.objectStore = {
+      async read() {
+        return null
+      },
+      async write(kind, value) {
+        immutableWrites += 1
+        const hash = sha(String(immutableWrites % 10))
+        return {
+          key: `published-cards/v2/immutable/${kind}/${hash}.json`,
+          hash,
+          size: JSON.stringify(value).length,
+        }
+      },
+      async verifyReaderResolvable() {
+        return { ready: true, sources: { authenticated_storage: true, cdn: true } }
+      },
+    }
+
+    const first = await owner.projectGeneDeltaStep()
+    assert.equal(first.ok, true)
+    assert.equal(first.advertised, true)
+    const advertisedA = JSON.parse(values.get("iconoplasm:gene-delta"))
+    assert.equal(advertisedA.base, baseA)
+    assert.match(advertisedA.view, /\.c[a-f0-9]{64}$/)
+    assert.equal(writes, 1)
+
+    // Global base advance: no gene-delta change is pending, but the advertised
+    // view now names a base readers refuse. The same wake must re-base it so
+    // the committed selections stay visible.
+    owner.repo.put("head", { current: { version: baseB }, previous: { version: baseA } })
+    const rebased = await owner.projectGeneDeltaStep()
+    assert.equal(rebased.ok, true)
+    assert.equal(rebased.advertised, true)
+    const advertisedB = JSON.parse(values.get("iconoplasm:gene-delta"))
+    assert.equal(advertisedB.base, baseB)
+    assert.match(advertisedB.view, new RegExp(`^${baseB}\\.c[a-f0-9]{64}$`))
+    assert.notEqual(advertisedB.chain_hash, advertisedA.chain_hash)
+    assert.deepEqual(advertisedB.segments, advertisedA.segments)
+    assert.equal(writes, 2)
+
+    // Idle repeat on the new base still writes nothing.
+    const idle = await owner.projectGeneDeltaStep()
+    assert.equal(idle.skipped, true)
+    assert.equal(writes, 2)
+    sql.db.close()
+  },
+)
