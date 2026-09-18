@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
 
+const manualOnly = "github.event_name == 'workflow_dispatch'"
 const temporaryFence = "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'"
 
 function readWorkflow(filename) {
@@ -10,14 +11,14 @@ function readWorkflow(filename) {
   return { source, workflow: parse(source) }
 }
 
-test("the temporary B-742 hard quarantine is narrowly reactivated for Sep 17", () => {
+test("the expired B-742 hard quarantine is retired at the whole-job boundary", () => {
   const { source, workflow } = readWorkflow("b742-hard-pre-reset-d1-quarantine.yml")
   const job = workflow.jobs.quarantine
 
   assert.ok(Object.hasOwn(workflow.on, "workflow_dispatch"))
   assert.ok(workflow.on.schedule.length > 0)
-  assert.equal(job.if, temporaryFence)
-  assert.match(source, /2026-09-16/)
+  assert.ok(Object.hasOwn(workflow.on, "push"))
+  assert.equal(job.if, manualOnly)
   assert.match(source, /One-shot Sep 17 pre-reset quarantine has expired/)
   assert.match(source, /SAFE_CONTAINMENT_SHA: d00ae8e39bb5c2115c5a70d42a8ca76fc84127ce/)
   assert.equal(job["runs-on"], "ubuntu-latest")
@@ -28,7 +29,16 @@ test("the temporary B-742 hard quarantine is narrowly reactivated for Sep 17", (
   assert.doesNotMatch(source, /resume-delivery|set_queue_pause_state false/)
 })
 
-test("the existing cloud recovery driver is reactivated for Sep 17 only and never unpauses background work", () => {
+test("the hard-quarantine retirement rejects removal or widening of the job fence", () => {
+  const { workflow } = readWorkflow("b742-hard-pre-reset-d1-quarantine.yml")
+  for (const weakened of [undefined, true, "always()", temporaryFence]) {
+    const copy = structuredClone(workflow)
+    copy.jobs.quarantine.if = weakened
+    assert.notEqual(copy.jobs.quarantine.if, manualOnly)
+  }
+})
+
+test("the existing cloud recovery driver remains a self-expiring Sep 17 one-shot", () => {
   const { source, workflow } = readWorkflow("retry-production-after-d1-reset.yml")
   const job = workflow.jobs["recover-production"]
 
