@@ -168,5 +168,8 @@ test("exact catalog symbols still resolve without any catalog alias scan (B-774)
     .run("TP53", JSON.stringify(["P53"]))
   const lookup = await ensureDiscoveryDictionaryForNames(db, ["TP53"])
   assert.ok(lookup.byName.has("TP53"))
-  assert.equal(db.prepared.some((sql) => CATALOG_ALIAS_SCAN.test(sql)), false)
+  assert.equal(
+    db.prepared.some((sql) => CATALOG_ALIAS_SCAN.test(sql)),
+    false,
+  )
 })
