@@ -17,6 +17,15 @@ test("exhausted-capacity repair accepts a schema-free worker diff", () => {
   assert.deepEqual(verifyWorkerRepairPaths(paths), [...paths].sort())
 })
 
+test("exhausted-capacity repair accepts the shipped static app bundle", () => {
+  const paths = [
+    "quartz/static/iconoplasm/app.js",
+    "quartz/static/iconoplasm/guest-discovery-store.test.js",
+    "scripts/verify-exhausted-capacity-worker-repair.test.js",
+  ]
+  assert.deepEqual(verifyWorkerRepairPaths(paths), [...paths].sort())
+})
+
 test("exhausted-capacity repair refuses schema, data and dependency changes", () => {
   const base = ["workers/iconoplasm/discovery-ordinal-store.js"]
   for (const forbidden of [
@@ -40,6 +49,14 @@ test("exhausted-capacity repair refuses an empty or test-only diff", () => {
   assert.throws(() => verifyWorkerRepairPaths([]), /COST_WORKER_REPAIR_SCOPE_REFUSED/)
   assert.throws(
     () => verifyWorkerRepairPaths(["workers/iconoplasm/discovery-ordinal-store.test.js"]),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+  assert.throws(
+    () => verifyWorkerRepairPaths(["quartz/static/iconoplasm/app.test.js"]),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+  assert.throws(
+    () => verifyWorkerRepairPaths(["docs/ICONOPLASM_OPERATIONS.md"]),
     /COST_WORKER_REPAIR_SCOPE_REFUSED/,
   )
 })
