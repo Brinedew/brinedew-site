@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   B749_WORKER_REPAIR_FILES,
   CARD_PUBLICATION_WORKER_REPAIR_FILES,
+  DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
   SCOPED_FINALIZATION_WORKER_REPAIR_FILES,
   verifyWorkerRepairPaths,
 } from "./verify-exhausted-capacity-worker-repair.mjs"
@@ -68,6 +69,30 @@ test("exhausted-capacity repair accepts the exact scoped-finalization envelope",
       verifyWorkerRepairPaths(
         SCOPED_FINALIZATION_WORKER_REPAIR_FILES.filter(
           (path) => path !== "workers/iconoplasm/sync-finalization-publication.js",
+        ),
+      ),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+})
+
+test("exhausted-capacity repair accepts the exact discovery read-burn envelope", () => {
+  assert.deepEqual(
+    verifyWorkerRepairPaths(DISCOVERY_READ_BURN_WORKER_REPAIR_FILES),
+    DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths([
+        ...DISCOVERY_READ_BURN_WORKER_REPAIR_FILES,
+        "migrations-iconoplasm/9999_discovery_read_burn.sql",
+      ]),
+    /COST_WORKER_REPAIR_SCOPE_REFUSED/,
+  )
+  assert.throws(
+    () =>
+      verifyWorkerRepairPaths(
+        DISCOVERY_READ_BURN_WORKER_REPAIR_FILES.filter(
+          (path) => path !== "workers/iconoplasm/discovery-ordinal-store.js",
         ),
       ),
     /COST_WORKER_REPAIR_SCOPE_REFUSED/,
