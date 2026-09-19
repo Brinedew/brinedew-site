@@ -45,6 +45,12 @@ import {
   renderDiagramStudio,
   unmountDiagramStudio,
 } from "./diagram-studio.js?v=bf8285189184406b"
+import {
+  iconoplasmPublicationReader,
+  immutableBlotByteUrl,
+} from "./publication-reader.js?v=20260919-static-read-plane"
+
+globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -224,6 +230,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function fetchJSON(path, init) {
     var requestInit = init || {}
+    var publicationReader = window.IconoplasmPublicationReader
+    var publicUrl = new URL(path, "https://iconoplasm.invalid")
+    if (
+      publicationReader &&
+      publicUrl.pathname === "/api/public/v1/genes/search" &&
+      ["", "catalog"].includes(publicUrl.searchParams.get("scope") || "")
+    ) {
+      return publicationReader.search(publicUrl.searchParams.get("q") || "", {
+        limit: Number(publicUrl.searchParams.get("limit") || 12),
+      })
+    }
+    if (publicationReader && publicUrl.pathname === "/api/public/v1/gallery") {
+      return publicationReader.gallery({
+        order: publicUrl.searchParams.get("order") || "votes",
+        limit: Number(publicUrl.searchParams.get("limit") || 24),
+        offset: Number(publicUrl.searchParams.get("offset") || 0),
+        seed: publicUrl.searchParams.get("seed") || "",
+      })
+    }
+    if (publicationReader && publicUrl.pathname === "/api/public/v1/metadata") {
+      return publicationReader.metadata()
+    }
     return fetch(API + path, requestInit).then(function (r) {
       return r.text().then(function (raw) {
         var payload = null
@@ -920,7 +948,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // image-vs-placeholder at load time: the route resolves the exact published
     // card's blot, so this never trusts a possibly stale card blot field and
     // never leaves the surface blank.
-    var semanticUrl = "/blot/" + encodeURIComponent(symbol) + ".webp"
+    var semanticUrl = immutableBlotByteUrl(genePayload && genePayload.blot)
     var fullName = String(
       (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
     ).trim()
@@ -1530,13 +1558,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function fetchCompleteGeneDetailFromEndpoint(key, options) {
-    var detailPath = "/api/iconoplasm/site/genes/" + encodeURIComponent(key)
-    var requestInit = undefined
-    if (options && options.forceFresh) {
-      detailPath += "?fresh=" + encodeURIComponent(String(Date.now()))
-      requestInit = { cache: "no-store" }
+    var publicationReader = window.IconoplasmPublicationReader
+    if (!publicationReader || typeof publicationReader.gene !== "function") {
+      return Promise.reject(new Error("Immutable Iconoplasm publication reader is unavailable"))
     }
-    return fetchJSON(detailPath, requestInit).then(function (data) {
+    return publicationReader.gene(key, options || {}).then(function (data) {
       if (!isCompleteGeneDetailPayload(data, key)) {
         throw new Error("Incomplete gene detail response for " + key)
       }
@@ -9376,7 +9402,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // Hydration must preserve the same current-renderer route emitted by the
       // server. Replacing it with the immutable card's historical URL would
       // visibly roll the blot back after page load.
-      var canonicalBlotUrl = String(blot.semantic_url || "").trim()
+      var canonicalBlotUrl = immutableBlotByteUrl(blot)
       var currentBlotUrl = blotImage.currentSrc || blotImage.getAttribute("src") || ""
       if (blotImage.complete && blotImage.naturalWidth === 0 && currentBlotUrl) {
         portraitDelivery.reportFailure(currentBlotUrl)

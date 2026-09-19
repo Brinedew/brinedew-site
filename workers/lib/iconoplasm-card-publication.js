@@ -28,6 +28,40 @@ export function projectCardBlot(record, blot) {
   return projected
 }
 
+export function publicCatalogEntry(card) {
+  const record = card?.payload && typeof card.payload === "object" ? card.payload : {}
+  const symbol = String(record.symbol || card?.symbol || "")
+    .trim()
+    .toUpperCase()
+  const candidates = Array.isArray(record.portrait_candidates) ? record.portrait_candidates : []
+  const candidateSummaries = candidates.map((candidate) => ({
+    candidate_image_id: candidate.candidate_image_id ?? null,
+    asset_sha256: candidate.asset_sha256 ?? null,
+    image_upvotes: Number(candidate.image_upvotes || 0),
+    image_downvotes: Number(candidate.image_downvotes || 0),
+    image_score: Number(candidate.image_score || 0),
+    is_current: Boolean(candidate.is_current),
+  }))
+  const current = candidateSummaries.find((candidate) => candidate.is_current) || null
+  return {
+    symbol,
+    canonical_symbol: String(record.canonical_symbol || symbol),
+    full_name: String(record.full_name || record.name || symbol),
+    protein_name: String(record.protein_name || ""),
+    color: String(record.color || "#888"),
+    chromosome: record.chromosome ?? null,
+    weight_kg: record.weight_kg ?? null,
+    age_years: record.age_years ?? null,
+    popularity_score: Number(record.popularity_score || 0),
+    portrait: record.portrait ?? null,
+    blot: record.blot ?? null,
+    image_upvotes: current?.image_upvotes || 0,
+    image_downvotes: current?.image_downvotes || 0,
+    image_score: current?.image_score || 0,
+    candidate_summaries: candidateSummaries,
+  }
+}
+
 export class CardPublicationRepository {
   constructor(storage) {
     this.storage = storage
@@ -337,6 +371,11 @@ export function createCardPublication({
       const chunk = orderedCards.slice(sealOffset, packedChunk.end)
       const entryChunk = orderedEntries.slice(sealOffset, packedChunk.end)
       const deliveryIndexes = []
+      const catalogPages = []
+      const priorCatalogIndex = ref.catalog_index ? await readValue(ref.catalog_index.key) : null
+      const priorCatalogPages = Array.isArray(priorCatalogIndex?.pages)
+        ? priorCatalogIndex.pages
+        : ref.catalog_pages || []
       for (let i = 0; i < entryChunk.length; i += CARD_DELIVERY_INDEX_SIZE) {
         const part = entryChunk.slice(i, i + CARD_DELIVERY_INDEX_SIZE)
         const value = { schema_version: 2, entries: part }
@@ -357,7 +396,38 @@ export function createCardPublication({
           first_symbol: part[0][0],
           last_symbol: part.at(-1)[0],
         })
+        const catalogValue = {
+          schema_version: 1,
+          entries: chunk.slice(i, i + CARD_DELIVERY_INDEX_SIZE).map(publicCatalogEntry),
+        }
+        const oldCatalog = priorCatalogPages.find(
+          (page) => page.first_symbol === part[0][0] && page.last_symbol === part.at(-1)[0],
+        )
+        let catalogObject
+        if (
+          oldCatalog &&
+          canonicalPublishedJson(await readValue(oldCatalog.key)) ===
+            canonicalPublishedJson(catalogValue)
+        )
+          catalogObject = oldCatalog
+        else catalogObject = await objects.write("catalogs", catalogValue)
+        catalogPages.push({
+          key: catalogObject.key,
+          first_symbol: part[0][0],
+          last_symbol: part.at(-1)[0],
+          entry_count: part.length,
+        })
       }
+      const catalogIndexValue = { schema_version: 1, pages: catalogPages }
+      const oldCatalogIndex = ref.catalog_index
+      let catalogIndexObject
+      if (
+        oldCatalogIndex &&
+        canonicalPublishedJson(await readValue(oldCatalogIndex.key)) ===
+          canonicalPublishedJson(catalogIndexValue)
+      )
+        catalogIndexObject = oldCatalogIndex
+      else catalogIndexObject = await objects.write("catalogs", catalogIndexValue)
       const packed = await objects.write("shards", {
         schema_version: 2,
         cards: packedChunk.stableCards,
@@ -369,6 +439,12 @@ export function createCardPublication({
         first_symbol: chunk[0].symbol,
         last_symbol: chunk.at(-1).symbol,
         delivery_indexes: deliveryIndexes,
+        catalog_index: {
+          key: catalogIndexObject.key,
+          first_symbol: chunk[0].symbol,
+          last_symbol: chunk.at(-1).symbol,
+          page_count: catalogPages.length,
+        },
       })
     }
     if (nextSealOffset < orderedCards.length) {

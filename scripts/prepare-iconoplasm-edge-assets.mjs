@@ -2,6 +2,7 @@ import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "nod
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
+import { ICONOPLASM_GENE_RANGES } from "../workers/iconoplasm-gene-discovery.js"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -22,7 +23,7 @@ const iconoplasmCsp = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com",
-  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com",
+  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com",
   "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com",
   "worker-src 'self' blob:",
   "form-action 'self'",
@@ -67,6 +68,45 @@ ${serviceDiscoveryHeaders}
 
 /*.js
   Cache-Control: public, max-age=31536000, immutable
+`
+
+const iconoplasmRobots = `User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://iconoplasm.brinedew.bio/sitemap.xml
+`
+
+const iconoplasmSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://iconoplasm.brinedew.bio/</loc></url>
+  <url><loc>https://iconoplasm.brinedew.bio/genes</loc></url>
+${ICONOPLASM_GENE_RANGES.map(
+  (range) => `  <url><loc>https://iconoplasm.brinedew.bio/genes/${range.slug}</loc></url>`,
+).join("\n")}
+  <url><loc>https://iconoplasm.brinedew.bio/privacy</loc></url>
+  <url><loc>https://iconoplasm.brinedew.bio/license</loc></url>
+</urlset>
+`
+
+const iconoplasmLlms = `# Iconoplasm
+
+Iconoplasm maps human-gene biology onto memorable visual character cards called blots.
+
+- [Gene reference catalog](https://iconoplasm.brinedew.bio/genes)
+- [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)
+- Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
+- Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
+`
+
+const redirectsFile = `/blot/* /static/iconoplasm/blot-placeholder.svg 200
+/portraits/* /static/iconoplasm/blot-placeholder.svg 200
 `
 
 async function ensureFile(filePath) {
@@ -156,6 +196,10 @@ export async function prepareIconoplasmEdgeAssets({
     path.join(resolvedOutput, "caretaker-terms.html"),
   )
   await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
+  await writeFile(path.join(resolvedOutput, "robots.txt"), iconoplasmRobots, "utf8")
+  await writeFile(path.join(resolvedOutput, "sitemap.xml"), iconoplasmSitemap, "utf8")
+  await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
+  await writeFile(path.join(resolvedOutput, "_redirects"), redirectsFile, "utf8")
 
   const report = await inspectTree(resolvedOutput, resolvedOutput)
   if (report.fileCount > maxAssetFiles) {
