@@ -1,17 +1,45 @@
 const CDN = "https://iconoplasmportraits.b-cdn.net"
-const ORIGIN = "https://iconoplasm.brinedew.bio"
 const HEAD_PATH = "/api/public/v1/card-current"
 const HEAD_STORAGE_KEY = "iconoplasm.publication-head.v1"
 const HASH = /^[a-f0-9]{64}$/
 const BASE_VERSION = /^ccv2-([a-f0-9]{64})$/
 const VIEW_VERSION = /^(ccv2-[a-f0-9]{64})\.c([a-f0-9]{64})$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
+const MAX_CATALOG_INDEXES = 32
+const MAX_SEARCH_RESULTS = 12
+const MAX_GALLERY_PAGE_SIZE = 24
+export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
+  catalogIndexes: MAX_CATALOG_INDEXES,
+  compactIndexBytes: 128 * 1024,
+  resultPageBytes: 512 * 1024,
+  searchRequests: 2 + MAX_CATALOG_INDEXES + MAX_SEARCH_RESULTS,
+  searchBytes: 2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_SEARCH_RESULTS * 512 * 1024,
+  galleryRequests: 2 + MAX_CATALOG_INDEXES + MAX_GALLERY_PAGE_SIZE,
+  galleryBytes:
+    2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_GALLERY_PAGE_SIZE * 512 * 1024,
+})
 
 function normalizedSymbol(value) {
   const symbol = String(value || "")
     .trim()
     .toUpperCase()
   return SYMBOL.test(symbol) ? symbol : ""
+}
+
+function nullableNumber(value) {
+  if (value == null || value === "") return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function randomRank(seed, symbol) {
+  const input = `${seed || "iconoplasm"}|${symbol}`
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
 }
 
 function parseHead(value) {
@@ -29,7 +57,7 @@ async function sha256(text) {
 
 function objectIdentity(key, expectedKind = "") {
   const match = String(key || "").match(
-    /^published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|catalogs|manifests)\/([a-f0-9]{64})\.json$/,
+    /^published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|catalogindexes|catalogs|manifests)\/([a-f0-9]{64})\.json$/,
   )
   if (!match || (expectedKind && match[1] !== expectedKind)) {
     throw new Error("Invalid immutable publication object key")
@@ -38,9 +66,24 @@ function objectIdentity(key, expectedKind = "") {
 }
 
 export function immutableBlotByteUrl(blot) {
-  for (const value of [blot?.image_url, blot?.accelerator_url, blot?.immutable_url]) {
+  const fingerprint = String(blot?.blot_fingerprint || "")
+    .trim()
+    .toLowerCase()
+  const objectKey = String(blot?.object_key || "").trim()
+  const match = objectKey.match(
+    /^blots\/v1\/([A-Z0-9])\/([A-Z0-9][A-Z0-9._-]{0,63})\/([a-f0-9]{32})\/([A-Z0-9][A-Z0-9._-]{0,63})-iconoplasm-gene-blot\.webp$/,
+  )
+  if (
+    !match ||
+    match[1] !== match[2].slice(0, 1) ||
+    match[2] !== match[4] ||
+    match[3] !== fingerprint
+  ) {
+    return "/static/iconoplasm/blot-placeholder.svg"
+  }
+  for (const value of [blot?.image_url, blot?.accelerator_url]) {
     const url = String(value || "").trim()
-    if (url.startsWith(`${CDN}/`)) return url
+    if (url === `${CDN}/${objectKey}`) return url
   }
   return "/static/iconoplasm/blot-placeholder.svg"
 }
@@ -62,52 +105,9 @@ function withImmutableMedia(record) {
   }
 }
 
-function raceWithCancelableHedge(primary, secondary, delayMs) {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    let secondaryStarted = false
-    let failures = 0
-    const errors = []
-    let timer
-
-    const run = (operation, isPrimary) => {
-      Promise.resolve()
-        .then(operation)
-        .then(
-          (value) => {
-            if (settled) return
-            settled = true
-            clearTimeout(timer)
-            resolve(value)
-          },
-          (error) => {
-            if (settled) return
-            failures += 1
-            errors.push(error)
-            if (isPrimary) startSecondary()
-            if (secondaryStarted && failures === 2) {
-              settled = true
-              reject(new AggregateError(errors, "Every publication source failed"))
-            }
-          },
-        )
-    }
-    const startSecondary = () => {
-      if (settled || secondaryStarted) return
-      secondaryStarted = true
-      clearTimeout(timer)
-      run(secondary, false)
-    }
-
-    run(primary, true)
-    timer = setTimeout(startSecondary, delayMs)
-  })
-}
-
 export function createIconoplasmPublicationReader(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis)
   const storage = options.storage ?? globalThis.localStorage ?? null
-  const hedgeMs = Math.max(0, Number(options.hedgeMs ?? 350) || 0)
   const objects = new Map()
   let headPromise = null
   let catalogPromise = null
@@ -144,20 +144,8 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (headPromise) return headPromise
     headPromise = (async () => {
       try {
-        const head = await raceWithCancelableHedge(
-          async () => {
-            const parsed = parseHead((await fetchJson(CDN + HEAD_PATH, 2048)).value)
-            if (!parsed) throw new Error("Invalid publication head")
-            return parsed
-          },
-          async () => {
-            const parsed = parseHead((await fetchJson(ORIGIN + HEAD_PATH, 2048)).value)
-            if (!parsed) throw new Error("Invalid publication head")
-            return parsed
-          },
-          hedgeMs,
-        )
-        rememberHead(head)
+        const head = parseHead((await fetchJson(CDN + HEAD_PATH, 2048)).value)
+        if (!head) throw new Error("Invalid publication head")
         return head
       } catch {
         const prior = storedHead()
@@ -176,19 +164,12 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (objects.has(cacheKey)) return objects.get(cacheKey)
     const path = `/published-cards/v2/immutable/${cacheKey}.json`
     const promise = (async () => {
-      const read = async (origin) => {
-        const { value, text } = await fetchJson(
-          origin + path,
-          kind === "catalogs" ? 512 * 1024 : 65536,
-        )
-        if ((await sha256(text)) !== hash) throw new Error("Publication hash mismatch")
-        return value
-      }
-      return raceWithCancelableHedge(
-        () => read(CDN),
-        () => read(ORIGIN),
-        hedgeMs,
+      const { value, text } = await fetchJson(
+        CDN + path,
+        kind === "catalogs" ? 512 * 1024 : kind === "catalogindexes" ? 128 * 1024 : 65536,
       )
+      if ((await sha256(text)) !== hash) throw new Error("Publication hash mismatch")
+      return value
     })()
     objects.set(cacheKey, promise)
     try {
@@ -199,8 +180,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     }
   }
 
-  async function publication() {
-    const head = await currentHead()
+  async function publication(head) {
     const base = VIEW_VERSION.exec(String(head.reader_view || ""))?.[1] || head.current
     const manifestHash = BASE_VERSION.exec(base)?.[1]
     if (!manifestHash) throw new Error("Invalid publication base")
@@ -209,6 +189,24 @@ export function createIconoplasmPublicationReader(options = {}) {
       throw new Error("Invalid publication manifest")
     }
     return { head, base, manifest }
+  }
+
+  async function fromCoherentPublication(operation) {
+    const prior = storedHead()
+    let candidate = null
+    let candidateError = null
+    try {
+      candidate = await currentHead()
+      const result = await operation(candidate)
+      rememberHead(candidate)
+      return result
+    } catch (error) {
+      candidateError = error
+    }
+    if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) {
+      return operation(prior)
+    }
+    throw candidateError
   }
 
   async function viewEntry(head, symbol) {
@@ -246,49 +244,77 @@ export function createIconoplasmPublicationReader(options = {}) {
   async function gene(symbol) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
-    const { head, manifest } = await publication()
-    const delta = await viewEntry(head, key)
-    if (delta?.status === "withdrawn") return null
-    if (delta?.status === "committed") {
-      const identity = objectIdentity(delta.gene?.key, "genes")
-      const record = await immutableObject("genes", identity.hash)
-      return record?.symbol === key ? withImmutableMedia(record) : null
-    }
-    return withImmutableMedia(await baseGene(manifest, key))
+    return fromCoherentPublication(async (head) => {
+      const { manifest } = await publication(head)
+      const delta = await viewEntry(head, key)
+      if (delta?.status === "withdrawn") return null
+      if (delta?.status === "committed") {
+        const identity = objectIdentity(delta.gene?.key, "genes")
+        const record = await immutableObject("genes", identity.hash)
+        return record?.symbol === key ? withImmutableMedia(record) : null
+      }
+      return withImmutableMedia(await baseGene(manifest, key))
+    })
   }
 
-  async function catalog() {
-    if (catalogPromise) return catalogPromise
-    catalogPromise = (async () => {
-      const { base, manifest } = await publication()
-      const catalogIndexes = await Promise.all(
-        manifest.shards.map(async (shard) => {
-          const identity = objectIdentity(shard.catalog_index?.key, "catalogs")
-          const index = await immutableObject("catalogs", identity.hash)
-          if (index?.schema_version !== 1 || !Array.isArray(index.pages)) {
-            throw new Error("Invalid public catalog index")
-          }
-          return index.pages
-        }),
-      )
-      const pages = await Promise.all(
-        catalogIndexes.flat().map(async (pageRef) => {
-          const identity = objectIdentity(pageRef.key, "catalogs")
-          const page = await immutableObject("catalogs", identity.hash)
-          if (page?.schema_version !== 1 || !Array.isArray(page.entries)) {
-            throw new Error("Invalid public catalog page")
-          }
-          return page.entries.map(withImmutableMedia)
-        }),
-      )
-      return { version: base, entries: pages.flat() }
-    })()
+  async function catalogIndexes(head) {
+    const { base, manifest } = await publication(head)
+    if (manifest.shards.length > MAX_CATALOG_INDEXES) {
+      throw new Error("Public catalog exceeds its compact-index request bound")
+    }
+    if (catalogPromise?.version === base) {
+      return { version: base, indexes: await catalogPromise.value }
+    }
+    const value = Promise.all(
+      manifest.shards.map(async (shard) => {
+        const identity = objectIdentity(shard.catalog_index?.key, "catalogindexes")
+        const index = await immutableObject("catalogindexes", identity.hash)
+        if (
+          index?.schema_version !== 2 ||
+          !Array.isArray(index.pages) ||
+          !Array.isArray(index.search_entries) ||
+          !Array.isArray(index.gallery_entries)
+        ) {
+          throw new Error("Public catalog projection is not activated")
+        }
+        return index
+      }),
+    )
+    catalogPromise = { version: base, value }
     try {
-      return await catalogPromise
+      return { version: base, indexes: await value }
     } catch (error) {
       catalogPromise = null
       throw error
     }
+  }
+
+  async function catalogEntriesAt(indexes, locations) {
+    const pages = new Map()
+    for (const location of locations) {
+      const index = indexes[location.index]
+      const pageRef = index?.pages?.[location.page]
+      if (!pageRef) throw new Error("Invalid compact catalog location")
+      if (!pages.has(pageRef.key)) {
+        const identity = objectIdentity(pageRef.key, "catalogs")
+        pages.set(
+          pageRef.key,
+          immutableObject("catalogs", identity.hash).then((page) => {
+            if (page?.schema_version !== 1 || !Array.isArray(page.entries)) {
+              throw new Error("Invalid public catalog page")
+            }
+            return page.entries
+          }),
+        )
+      }
+    }
+    return Promise.all(
+      locations.map(async (location) => {
+        const pageRef = indexes[location.index].pages[location.page]
+        const entries = await pages.get(pageRef.key)
+        return withImmutableMedia(entries[location.offset])
+      }),
+    )
   }
 
   async function search(query, { limit = 12, symbols = null } = {}) {
@@ -297,66 +323,139 @@ export function createIconoplasmPublicationReader(options = {}) {
       .toLowerCase()
     if (!needle) return { genes: [], query: "" }
     const allowed = symbols ? new Set(symbols.map(normalizedSymbol).filter(Boolean)) : null
-    const { entries } = await catalog()
-    const ranked = []
-    for (const entry of entries) {
-      if (allowed && !allowed.has(entry.symbol)) continue
-      const symbol = String(entry.symbol || "").toLowerCase()
-      const name = String(entry.full_name || "").toLowerCase()
-      let rank = 0
-      if (symbol === needle) rank = 1
-      else if (symbol.startsWith(needle)) rank = 2
-      else if (name.startsWith(needle)) rank = 3
-      else if (symbol.includes(needle)) rank = 4
-      else if (name.includes(needle)) rank = 5
-      if (rank) ranked.push({ ...entry, match_rank: rank })
-    }
-    ranked.sort(
-      (left, right) =>
-        left.match_rank - right.match_rank || left.symbol.localeCompare(right.symbol),
-    )
-    return {
-      genes: ranked.slice(0, Math.max(1, Math.min(100, Number(limit) || 12))),
-      query: needle.toUpperCase(),
-    }
+    return fromCoherentPublication(async (head) => {
+      const { indexes } = await catalogIndexes(head)
+      const ranked = []
+      indexes.forEach((index, indexNumber) => {
+        index.search_entries.forEach(([rawSymbol, rawName, page, offset]) => {
+          if (allowed && !allowed.has(rawSymbol)) return
+          const symbol = String(rawSymbol || "").toLowerCase()
+          const name = String(rawName || "").toLowerCase()
+          let rank = 0
+          if (symbol === needle) rank = 1
+          else if (symbol.startsWith(needle)) rank = 2
+          else if (name.startsWith(needle)) rank = 3
+          else if (symbol.includes(needle)) rank = 4
+          else if (name.includes(needle)) rank = 5
+          if (rank) ranked.push({ symbol: rawSymbol, rank, index: indexNumber, page, offset })
+        })
+      })
+      ranked.sort(
+        (left, right) => left.rank - right.rank || left.symbol.localeCompare(right.symbol),
+      )
+      const selected = ranked.slice(
+        0,
+        Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12)),
+      )
+      const genes = await catalogEntriesAt(indexes, selected)
+      return { genes, query: needle.toUpperCase() }
+    })
   }
 
-  async function gallery({ order = "votes", offset = 0, limit = 24 } = {}) {
-    const { version, entries } = await catalog()
-    const sorted = entries.slice()
-    if (order === "alphabetical") sorted.sort((a, b) => a.symbol.localeCompare(b.symbol))
-    else if (order === "popular")
-      sorted.sort(
-        (a, b) =>
-          Number(b.popularity_score || 0) - Number(a.popularity_score || 0) ||
-          a.symbol.localeCompare(b.symbol),
+  async function gallery({ order = "votes", offset = 0, limit = 24, seed = "" } = {}) {
+    return fromCoherentPublication(async (head) => {
+      const { version, indexes } = await catalogIndexes(head)
+      const rows = indexes.flatMap((index, indexNumber) =>
+        index.gallery_entries.map(
+          ([
+            symbol,
+            page,
+            itemOffset,
+            popularity,
+            votes,
+            publishedAt,
+            nameLength,
+            uniqueness,
+            weight,
+            age,
+            published,
+          ]) => ({
+            symbol,
+            page,
+            offset: itemOffset,
+            popularity: Number(popularity || 0),
+            votes: Number(votes || 0),
+            publishedAt: String(publishedAt || ""),
+            nameLength: Number(nameLength || symbol.length),
+            uniqueness: nullableNumber(uniqueness),
+            weight: nullableNumber(weight),
+            age: nullableNumber(age),
+            published: Number(published || 0) === 1,
+            index: indexNumber,
+          }),
+        ),
       )
-    else
-      sorted.sort(
-        (a, b) =>
-          Number(b.image_score || 0) - Number(a.image_score || 0) ||
-          a.symbol.localeCompare(b.symbol),
-      )
-    const start = Math.max(0, Number(offset) || 0)
-    const size = Math.max(1, Math.min(100, Number(limit) || 24))
-    return {
-      order,
-      total: sorted.length,
-      published_total: sorted.filter((entry) => entry.portrait?.status === "published").length,
-      offset: start,
-      limit: size,
-      has_more: start + size < sorted.length,
-      snapshot_version: version,
-      items: sorted.slice(start, start + size),
-    }
+      if (["symbol", "alphabetical"].includes(order))
+        rows.sort((a, b) => a.symbol.localeCompare(b.symbol))
+      else if (order === "shortest")
+        rows.sort((a, b) => a.nameLength - b.nameLength || a.symbol.localeCompare(b.symbol))
+      else if (order === "newest")
+        rows.sort(
+          (a, b) =>
+            b.publishedAt.localeCompare(a.publishedAt) ||
+            b.popularity - a.popularity ||
+            a.symbol.localeCompare(b.symbol),
+        )
+      else if (order === "random")
+        rows.sort(
+          (a, b) =>
+            randomRank(seed, a.symbol) - randomRank(seed, b.symbol) ||
+            a.symbol.localeCompare(b.symbol),
+        )
+      else if (order === "uniqueness")
+        rows.sort(
+          (a, b) =>
+            (a.uniqueness == null) - (b.uniqueness == null) ||
+            (a.uniqueness ?? 0) - (b.uniqueness ?? 0) ||
+            b.popularity - a.popularity ||
+            a.symbol.localeCompare(b.symbol),
+        )
+      else if (["heaviest", "lightest"].includes(order))
+        rows.sort(
+          (a, b) =>
+            (a.weight == null) - (b.weight == null) ||
+            (order === "heaviest"
+              ? (b.weight ?? 0) - (a.weight ?? 0)
+              : (a.weight ?? 0) - (b.weight ?? 0)) ||
+            b.popularity - a.popularity ||
+            a.symbol.localeCompare(b.symbol),
+        )
+      else if (["oldest", "youngest"].includes(order))
+        rows.sort(
+          (a, b) =>
+            (a.age == null) - (b.age == null) ||
+            (order === "oldest" ? (b.age ?? 0) - (a.age ?? 0) : (a.age ?? 0) - (b.age ?? 0)) ||
+            b.popularity - a.popularity ||
+            a.symbol.localeCompare(b.symbol),
+        )
+      else if (["popular", "popularity"].includes(order))
+        rows.sort((a, b) => b.popularity - a.popularity || a.symbol.localeCompare(b.symbol))
+      else rows.sort((a, b) => b.votes - a.votes || a.symbol.localeCompare(b.symbol))
+      const start = Math.max(0, Number(offset) || 0)
+      const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
+      const selected = rows.slice(start, start + size)
+      const items = await catalogEntriesAt(indexes, selected)
+      return {
+        order,
+        total: rows.length,
+        published_total: rows.filter((row) => row.published).length,
+        offset: start,
+        limit: size,
+        has_more: start + size < rows.length,
+        snapshot_version: version,
+        items,
+      }
+    })
   }
 
   async function metadata() {
-    const head = await currentHead()
-    return {
-      card_snapshot_version: head.reader_view || head.current,
-      publication_source: "immutable_sysop_v2",
-    }
+    return fromCoherentPublication(async (head) => {
+      await publication(head)
+      return {
+        card_snapshot_version: head.reader_view || head.current,
+        publication_source: "immutable_sysop_v2",
+      }
+    })
   }
 
   return { currentHead, gene, search, gallery, metadata }

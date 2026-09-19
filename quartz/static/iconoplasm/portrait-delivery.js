@@ -169,4 +169,3 @@ export function createPortraitDelivery(options = {}) {
 }
 
 export const portraitDelivery = createPortraitDelivery()
-portraitDelivery.refreshPolicy()
