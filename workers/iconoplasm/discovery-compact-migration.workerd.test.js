@@ -206,6 +206,11 @@ test(
           .status,
         "pending",
       )
+      await db
+        .prepare(
+          "UPDATE icono_discovery_compact_activation_v2 SET lease_token='', lease_until='' WHERE singleton=1",
+        )
+        .run()
 
       const authorityCalls = []
       const env = {
@@ -293,6 +298,82 @@ test(
         .prepare("SELECT payload_json FROM icono_discovery_shared_delivery_outbox_v2")
         .all()
       assert.equal(outbox.results.length, 1)
+    })
+  },
+)
+
+test(
+  "overlapping scheduled migration loser never touches reservation and winner failure stays uncertain",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      await db
+        .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53','TP53')")
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO icono_gene_discoveries
+           (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+           VALUES ('reader','TP53','extension_hover','extension_hover','hover_dwell','hover_dwell')`,
+        )
+        .run()
+      await applyStatements(db, compactMigrationStatements())
+
+      let releaseReservation
+      let reservationStarted
+      const reservationStartedPromise = new Promise((resolve) => {
+        reservationStarted = resolve
+      })
+      const reservationGate = new Promise((resolve) => {
+        releaseReservation = resolve
+      })
+      const calls = []
+      const failingDb = {
+        prepare(sql) {
+          const statement = db.prepare(sql)
+          if (String(sql).includes("SELECT *") && String(sql).includes("icono_gene_discoveries")) {
+            return {
+              bind() {
+                return this
+              },
+              async all() {
+                throw new Error("injected migration failure after admission")
+              },
+            }
+          }
+          return statement
+        },
+      }
+      const env = {
+        ICONOPLASM_DB: failingDb,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              const path = new URL(request.url).pathname
+              calls.push(path)
+              if (path === "/reserve-mutation-writes") {
+                reservationStarted()
+                await reservationGate
+              }
+              return Response.json({ ok: true })
+            },
+          }),
+        },
+      }
+
+      const winner = migrateIconoplasmCompactDiscoveryForScheduled(env)
+      await reservationStartedPromise
+      const loser = await migrateIconoplasmCompactDiscoveryForScheduled(env)
+      assert.equal(loser.code, "DISCOVERY_MIGRATION_LEASE_HELD")
+      assert.deepEqual(calls, ["/reserve-mutation-writes"])
+      releaseReservation()
+      await assert.rejects(winner, /injected migration failure after admission/)
+      assert.deepEqual(calls, ["/reserve-mutation-writes"])
     })
   },
 )
