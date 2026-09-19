@@ -90,12 +90,14 @@ export function immutableBlotByteUrl(blot) {
 
 function withImmutableMedia(record) {
   if (!record || typeof record !== "object") return record
+  const candidates = Array.isArray(record.portrait_candidates) ? record.portrait_candidates : []
+  const projected = { ...record, portrait_candidates: candidates }
   const portrait = record.portrait && typeof record.portrait === "object" ? record.portrait : null
   const sha = String(portrait?.asset_sha256 || "").toLowerCase()
-  if (!HASH.test(sha) || portrait?.status !== "published") return record
+  if (!HASH.test(sha) || portrait?.status !== "published") return projected
   const prefix = `${CDN}/portraits/v1/${sha.slice(0, 2)}/${sha}`
   return {
-    ...record,
+    ...projected,
     portrait: {
       ...portrait,
       thumb_url: `${prefix}/thumb.webp`,
