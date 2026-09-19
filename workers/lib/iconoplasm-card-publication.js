@@ -657,6 +657,10 @@ export function createCardPublication({
       if (job.group >= job.groups.length) return { more: true, committed: await commit(job) }
       const group = job.groups[job.group]
       const oldCards = await cardsFor(job, job.baseline.shards[group.index])
+      if (job.migration && source.reuseExistingCardObjectsForMigration) {
+        await finishGroup(job, group, oldCards)
+        return { more: true }
+      }
       const count = group.symbols?.length ?? oldCards.length
       if (job.offset < count) await prepare(job, group, oldCards)
       else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)

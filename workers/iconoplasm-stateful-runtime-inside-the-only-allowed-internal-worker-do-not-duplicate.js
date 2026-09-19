@@ -28581,6 +28581,12 @@ async function currentGalleryVersion(env) {
 export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordinatorClass(
   (env) => ({
     buildRevision: CARD_CATALOG_BUILD_REVISION,
+    // Revisions 2-4 retain the same immutable card, gene and portrait object
+    // contracts. The migration adds the compact catalog projection and a new
+    // manifest; rewriting and re-verifying three objects for all 19,023 genes
+    // would turn this metadata cutover into a multi-hour Bunny upload. Dirty
+    // genes are still fully rematerialized through source.materialize().
+    reuseExistingCardObjectsForMigration: true,
     async legacyBaseline() {
       const raw = await env.KV.get(KV_GALLERY_VERSION)
       const barrier = normalizeGalleryVersionBarrierValue(JSON.parse(raw))
