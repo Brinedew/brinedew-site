@@ -860,8 +860,10 @@ test("public vote set is routed through the vote coordinator instead of reading 
           headers: {
             "Content-Type": "application/json",
             Cookie: "session=abc123",
+            "x-iconoplasm-command-id": "viral-load:tp53:2026-09-19:000000",
           },
           body: JSON.stringify({
+            command_id: "viral-load:tp53:2026-09-19:000000",
             symbol: "TP53",
             asset_sha256: assetSha,
             candidate_ref: `a:TP53|${assetSha}`,
@@ -885,6 +887,7 @@ test("public vote set is routed through the vote coordinator instead of reading 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
+  assert.equal(payload?.command_id, "viral-load:tp53:2026-09-19:000000")
   assert.equal(coordinator.calls.length, 1)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/set")
   assert.equal(queue.messages.length, 0)

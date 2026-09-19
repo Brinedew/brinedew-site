@@ -146,11 +146,11 @@ export async function runViralLoadReleaseGate({
             },
             transferBytes: {
               ...tier.resources.transferBytes,
-              operations: Math.ceil(driver.transferBytes * (readers / 100_000)),
+              operations: Math.ceil(task5.raw.bunnyDelivery.deliveredBytes * (readers / 100_000)),
               evidence: {
-                status: "pending_external",
+                status: readers === 100_000 ? "measured_cdn" : "reviewed_cdn_projection",
                 source: task5.evidence.digest,
-                observation: "client_bytes_not_provider_cdn_meter",
+                observation: "bunny_delivery_receipt",
                 observedAtReaders: 100_000,
               },
             },

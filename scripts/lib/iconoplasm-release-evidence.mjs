@@ -59,7 +59,6 @@ const EXPECTED_PROVIDER_METERS = Object.freeze([
   "durableObjectRowsWritten",
   "queueOperations",
   "externalRequests",
-  "transferBytes",
 ])
 
 const NON_ZERO_TASK5_METERS = Object.freeze([
@@ -71,7 +70,6 @@ const NON_ZERO_TASK5_METERS = Object.freeze([
   "durableObjectRowsWritten",
   "queueOperations",
   "externalRequests",
-  "transferBytes",
 ])
 const TASK5_EXTERNAL_GATES = Object.freeze([
   "hostedExecution",
@@ -136,7 +134,7 @@ export function createGitHubActionsRunVerifier({ token, repository, fetchImpl = 
       jobId: job?.id,
       conclusion: job?.conclusion,
       headSha: run.head_sha,
-      environment: job?.name?.includes("collect-viral-load-staging-evidence") ? "staging" : null,
+      environment: job?.name === "produce-iconoplasm-viral-load-task5-evidence" ? "staging" : null,
     }
   }
 }
@@ -232,7 +230,7 @@ export async function validateTask5ViralLoadEvidence(
   const trusted = await trustedRunVerifier(provenance, { expectedCommit, now })
   if (
     !trusted?.verified ||
-    provenance?.workflowPath !== ".github/workflows/deploy-quartz.yml" ||
+    provenance?.workflowPath !== ".github/workflows/iconoplasm-viral-load-task5.yml" ||
     trusted.workflowPath !== provenance.workflowPath ||
     provenance?.runId !== trusted.runId ||
     provenance?.jobId !== trusted.jobId ||
@@ -298,6 +296,7 @@ export async function validateTask5ViralLoadEvidence(
     .every(
       ({ artifact }) => artifact.kind === "bunny_delivery_receipt" && artifact.deliveredBytes > 0,
     )
+  const bunnyDelivery = supporting.find(({ kind }) => kind === "bunny_delivery")?.artifact
   const faultsValid = supporting
     .filter(({ kind }) => kind === "fault_injection")
     .every(
@@ -408,6 +407,7 @@ export async function validateTask5ViralLoadEvidence(
         raw: {
           hostedDriver,
           providerQuery,
+          bunnyDelivery,
           shedReceipts: shedReceipts.map(({ artifact }) => artifact),
         },
       }
