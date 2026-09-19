@@ -45,8 +45,15 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const VOTE_WAKE_MIGRATION_NAME = "0107_vote_projection_wake_generation.sql"
+export const VOTE_WAKE_MIGRATION_STATEMENTS = Object.freeze([
+  "ALTER TABLE icono_vote_projection_refresh_jobs\n  ADD COLUMN wake_outstanding INTEGER NOT NULL DEFAULT 0 CHECK(wake_outstanding IN (0, 1));",
+  "ALTER TABLE icono_vote_projection_refresh_jobs\n  ADD COLUMN wake_version INTEGER NOT NULL DEFAULT 0 CHECK(wake_version >= 0);"
+])
 export const COMPACT_DISCOVERY_MIGRATION_NAME = "0106_compact_discovery_state_v2.sql"
 export const COMPACT_DISCOVERY_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE TABLE icono_discovery_compact_activation_v2 (\n  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n  status TEXT NOT NULL CHECK(status IN ('pending', 'complete')),\n  cursor_user_id TEXT NOT NULL DEFAULT '',\n  migrated_users INTEGER NOT NULL DEFAULT 0 CHECK(migrated_users >= 0),\n  completed_at TEXT,\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+  "INSERT INTO icono_discovery_compact_activation_v2 (\n  singleton, status, cursor_user_id, migrated_users\n) VALUES (1, 'pending', '', 0);",
   "CREATE TABLE icono_discovery_cas_guard (\n  ok INTEGER NOT NULL CONSTRAINT DISCOVERY_COMPACT_CAS_CONFLICT CHECK(ok = 1)\n);",
   "CREATE TABLE icono_discovery_user_state_v2 (\n  user_id TEXT PRIMARY KEY,\n  dictionary_version INTEGER NOT NULL CHECK(dictionary_version >= 1),\n  state_version INTEGER NOT NULL CHECK(state_version >= 1),\n  membership_b64 TEXT NOT NULL CHECK(length(membership_b64) <= 16384),\n  member_count INTEGER NOT NULL CHECK(member_count >= 0),\n  next_event_seq INTEGER NOT NULL CHECK(next_event_seq >= 1),\n  next_chunk_seq INTEGER NOT NULL CHECK(next_chunk_seq >= 1),\n  active_events_json TEXT NOT NULL CHECK(json_valid(active_events_json) AND length(active_events_json) <= 262144),\n  recent_receipts_json TEXT NOT NULL CHECK(json_valid(recent_receipts_json) AND length(recent_receipts_json) <= 131072),\n  last_batch_id TEXT NOT NULL CHECK(length(last_batch_id) <= 128),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;",
   "CREATE TABLE icono_discovery_shared_state_v2 (\n  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n  dictionary_version INTEGER NOT NULL CHECK(dictionary_version >= 0),\n  state_version INTEGER NOT NULL CHECK(state_version >= 0),\n  discoverer_counts_b64 TEXT NOT NULL CHECK(length(discoverer_counts_b64) <= 200000),\n  encounter_counts_b64 TEXT NOT NULL CHECK(length(encounter_counts_b64) <= 200000),\n  first_at_b64 TEXT NOT NULL CHECK(length(first_at_b64) <= 200000),\n  latest_at_b64 TEXT NOT NULL CHECK(length(latest_at_b64) <= 200000),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",

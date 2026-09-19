@@ -1,5 +1,10 @@
 import { recordCompactDiscoveryBatch } from "./discovery-compact-service.js"
 import { readCompactDiscoveryChronology, readCompactUserState } from "./discovery-compact-store.js"
+import {
+  ensureDiscoveryDictionaryForNames,
+  loadDiscoveryDictionaryForNames,
+} from "./discovery-ordinal-store.js"
+import { createDiscoveryOrdinalDictionary } from "./discovery-compact-state.js"
 
 // One-time per-user import of legacy `icono_gene_discoveries` rows into the
 // compact representation. Runs only while a user has no compact state, is
@@ -8,6 +13,37 @@ import { readCompactDiscoveryChronology, readCompactUserState } from "./discover
 
 export const DISCOVERY_IMPORT_MAX_EVENTS_PER_GENE = 32
 export const DISCOVERY_IMPORT_BATCH_ENCOUNTERS = 256
+export const DISCOVERY_MIGRATION_USER_PAGE_LIMIT = 25
+
+export async function readCompactDiscoveryActivation(db) {
+  const row = await db
+    .prepare(
+      `SELECT status, cursor_user_id, migrated_users, completed_at
+       FROM icono_discovery_compact_activation_v2 WHERE singleton = 1`,
+    )
+    .first()
+  return row
+    ? {
+        status: String(row.status || "pending"),
+        cursor_user_id: String(row.cursor_user_id || ""),
+        migrated_users: Math.max(0, Number(row.migrated_users || 0) || 0),
+        completed_at: row.completed_at ? String(row.completed_at) : null,
+      }
+    : null
+}
+
+export async function assertCompactDiscoveryActivated(db) {
+  const activation = await readCompactDiscoveryActivation(db)
+  if (activation?.status !== "complete") {
+    const error = new Error(
+      "Compact discovery activation is blocked until the bounded legacy migration completes",
+    )
+    error.code = "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE"
+    error.activation = activation
+    throw error
+  }
+  return activation
+}
 
 export function parseLegacyDiscoveryTimestamp(value) {
   const text = String(value || "").trim()
@@ -127,4 +163,78 @@ export async function importLegacyDiscoveryUser({
     batches,
     remaining: Math.max(0, symbols.length - cursor),
   }
+}
+
+export async function migrateLegacyDiscoveryPage({
+  db,
+  userLimit = DISCOVERY_MIGRATION_USER_PAGE_LIMIT,
+  nowSeconds = Math.floor(Date.now() / 1000),
+}) {
+  const activation = await readCompactDiscoveryActivation(db)
+  if (!activation) throw new Error("Compact discovery activation schema is missing")
+  if (activation.status === "complete") return { ok: true, complete: true, migrated_users: 0 }
+  const limit = Math.max(1, Math.min(100, Number.parseInt(String(userLimit), 10) || 25))
+  const users = await db
+    .prepare(
+      `SELECT DISTINCT user_id
+       FROM icono_gene_discoveries
+       WHERE user_id > ?
+       ORDER BY user_id
+       LIMIT ?`,
+    )
+    .bind(activation.cursor_user_id, limit + 1)
+    .all()
+  const page = (Array.isArray(users?.results) ? users.results : []).slice(0, limit)
+  let migratedUsers = 0
+  let cursor = activation.cursor_user_id
+  let partialUser = false
+  for (const entry of page) {
+    const userId = String(entry?.user_id || "")
+    const legacy = await db
+      .prepare(`SELECT * FROM icono_gene_discoveries WHERE user_id = ? ORDER BY gene_symbol`)
+      .bind(userId)
+      .all()
+    const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
+    await ensureDiscoveryDictionaryForNames(
+      db,
+      legacyRows.map((row) => row.gene_symbol),
+      { preserveHistorical: true },
+    )
+    const lookup = await loadDiscoveryDictionaryForNames(
+      db,
+      legacyRows.map((row) => row.gene_symbol),
+    )
+    const dictionary = createDiscoveryOrdinalDictionary(
+      [...lookup.byOrdinal.entries()].map(([ordinal, symbol]) => ({ symbol, ordinal })),
+      { version: lookup.version },
+    )
+    const result = await importLegacyDiscoveryUser({
+      db,
+      userId,
+      dictionary,
+      legacyRows,
+      nowSeconds,
+      batchLimit: 32,
+    })
+    if (result.remaining > 0) {
+      partialUser = true
+      break
+    }
+    cursor = userId
+    migratedUsers += 1
+  }
+  const hasMore =
+    partialUser || page.length < (Array.isArray(users?.results) ? users.results : []).length
+  const complete = !hasMore && page.length < limit
+  await db
+    .prepare(
+      `UPDATE icono_discovery_compact_activation_v2
+       SET status = ?, cursor_user_id = ?, migrated_users = migrated_users + ?,
+           completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE singleton = 1 AND status = 'pending'`,
+    )
+    .bind(complete ? "complete" : "pending", cursor, migratedUsers, complete ? 1 : 0)
+    .run()
+  return { ok: true, complete, migrated_users: migratedUsers, cursor_user_id: cursor }
 }

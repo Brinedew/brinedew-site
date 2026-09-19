@@ -2,14 +2,23 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
+import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
 import {
   IconoplasmVoteCoordinator,
   handleIconoplasmQueue,
-  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmVoteProjectionQueue,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as handleIconoplasmRequestInsideProduction,
+  handleIconoplasmVoteProjectionQueue as handleIconoplasmVoteProjectionQueueProduction,
   resolveDesiredVoteValue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const handleIconoplasmVoteProjectionQueue = (batch, env, ctx) =>
+  handleIconoplasmVoteProjectionQueueProduction(batch, withTestMutationAuthority(env), ctx)
+const handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate = (
+  request,
+  env,
+  ctx,
+) => handleIconoplasmRequestInsideProduction(request, withTestMutationAuthority(env), ctx)
 
 class DurableObjectSqlForTest {
   constructor() {
@@ -272,6 +281,12 @@ class RecordingStatement {
   async first() {
     this.db.calls.push({ type: "first", sql: this.sql, args: this.args })
     if (
+      /UPDATE icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING wake_version/i.test(this.sql)
+    ) {
+      return { wake_version: 1 }
+    }
+    if (
       /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
       /RETURNING\s+job_version/i.test(this.sql)
     ) {
@@ -294,6 +309,12 @@ class RecordingStatement {
 
   async all() {
     this.db.calls.push({ type: "all", sql: this.sql, args: this.args })
+    if (
+      /UPDATE icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING wake_version/i.test(this.sql)
+    ) {
+      return { results: [{ wake_version: 1 }], meta: { changes: 1, rows_written: 1 } }
+    }
     if (
       /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
       /RETURNING\s+job_version/i.test(this.sql)
@@ -664,10 +685,13 @@ test("VoteCoordinator outbox survives a partial D1 handoff and replays with one 
   })
   const queue = fakeQueue()
   const { state } = fakeVoteCoordinatorState()
-  const coordinator = new IconoplasmVoteCoordinator(state, {
-    ICONOPLASM_DB: db,
-    ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
-  })
+  const coordinator = new IconoplasmVoteCoordinator(
+    state,
+    withTestMutationAuthority({
+      ICONOPLASM_DB: db,
+      ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
+    }),
+  )
   await state.ready
   const assetSha = "e".repeat(64)
   coordinator.setMeta("symbol", "SOX4")

@@ -34,10 +34,35 @@ function encountersFor(userIndex) {
 }
 
 function measuredDb(db, receipts) {
+  const wrap = (statement) => ({
+    __raw: statement,
+    bind(...args) {
+      return wrap(statement.bind(...args))
+    },
+    async all() {
+      const result = await statement.all()
+      receipts.push({
+        reads: Number(result.meta?.rows_read || 0),
+        writes: Number(result.meta?.rows_written || 0),
+      })
+      return result
+    },
+    async first(column) {
+      return statement.first(column)
+    },
+    async run() {
+      const result = await statement.run()
+      receipts.push({
+        reads: Number(result.meta?.rows_read || 0),
+        writes: Number(result.meta?.rows_written || 0),
+      })
+      return result
+    },
+  })
   return {
-    prepare: (sql) => db.prepare(sql),
+    prepare: (sql) => wrap(db.prepare(sql)),
     batch: async (statements) => {
-      const results = await db.batch(statements)
+      const results = await db.batch(statements.map((statement) => statement.__raw || statement))
       receipts.push(
         results.reduce(
           (sum, result) => ({
@@ -137,6 +162,11 @@ test(
         )
       }
       const drainWrites = drainReceipts.reduce((sum, entry) => sum + entry.writes, 0)
+      assert.equal(
+        drainWrites,
+        SAVERS * 2 + Math.ceil(SAVERS / 128),
+        "real D1 bills one shared update per drain page plus one receipt and one indexed outbox delete per delivery",
+      )
       console.log(
         "B764_WORKLOAD_RECEIPT",
         JSON.stringify({
@@ -149,7 +179,8 @@ test(
           drain_writes: drainWrites,
           drain_batches: Math.ceil(drained / 128),
           projected_2000_saver_reads: (personal.reads / SAVERS) * 2000,
-          projected_2000_saver_writes: (personal.writes / SAVERS) * 2000 + 2000,
+          projected_2000_saver_writes:
+            (personal.writes / SAVERS) * 2000 + 2 * 2000 + Math.ceil(2000 / 128),
         }),
       )
     } finally {
