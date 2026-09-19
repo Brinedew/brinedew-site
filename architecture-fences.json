@@ -207,6 +207,11 @@
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
+          "category": "source",
+          "file": "scripts/iconoplasm-viral-load-task5-driver.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-004]"
+        },
+        {
           "category": "test",
           "file": "scripts/iconoplasm-viral-load-release-gate.test.mjs",
           "token": "ARCHITECTURE FENCE [IPD-004]"

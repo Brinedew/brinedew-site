@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -7,8 +8,11 @@ import {
   MUTATION_LANES,
   releaseTierAssessment,
 } from "./iconoplasm-first-principles-capacity.mjs"
-import { reconcileProviderAttribution } from "./lib/iconoplasm-release-evidence.mjs"
-import { runAnonymousRouteReplay } from "./lib/iconoplasm-static-route-replay.mjs"
+import {
+  reconcileProviderAttribution,
+  validateTask5ViralLoadEvidence,
+} from "./lib/iconoplasm-release-evidence.mjs"
+import { proveAnonymousRouteTopology } from "./lib/iconoplasm-static-topology-proof.mjs"
 
 // ARCHITECTURE FENCE [IPD-004]: release arithmetic consumes the named mutation
 // lanes and measured receipts; it never invents a second admission authority.
@@ -17,129 +21,154 @@ export function buildHostileTp53Profile({ day = "staging-day" } = {}) {
   const commandsPerSecond = 100
   const durationSeconds = 10 * 60
   const commandCount = commandsPerSecond * durationSeconds
+  const prefix = `viral-load:tp53:${day}:`
+  const digest = createHash("sha256")
+  for (let index = 0; index < commandCount; index++)
+    digest.update(`${prefix}${String(index).padStart(6, "0")}\n`)
   const unitsPerCommand = MEASURED_MUTATION_ENVELOPES.voteCommand.reservedD1RowsWritten
   const acceptedCommands = Math.floor(MUTATION_LANES.user_action / unitsPerCommand)
-  const commands = Array.from({ length: commandCount }, (_, index) => ({
-    commandId: `viral-load:tp53:${day}:${String(index).padStart(6, "0")}`,
-    geneSymbol: "TP53",
-    voteValue: 1,
-  }))
   return {
     profile: "hostile_tp53_authenticated_votes",
+    verdict: "blocked_pending_hosted_execution",
     hostedExecution: "not_run_locally",
     commandsPerSecond,
     durationSeconds,
     commandCount,
-    commands,
+    commandIdentity: {
+      prefix,
+      first: `${prefix}000000`,
+      last: `${prefix}${String(commandCount - 1).padStart(6, "0")}`,
+      digestAlgorithm: "sha256-newline-delimited",
+      digest: digest.digest("hex"),
+    },
     capacity: {
       lane: "user_action",
       unitsPerCommand,
       laneLimit: MUTATION_LANES.user_action,
-      acceptedCommands,
-      refusedCommands: commandCount - acceptedCommands,
-      refusal: "retryable_capacity_refusal_exact_command_retained",
-      lostAcceptedCommands: 0,
+      modeledAcceptedCommands: acceptedCommands,
+      modeledRefusedCommands: commandCount - acceptedCommands,
+      observedAcceptedCommands: null,
+      observedLostAcceptedCommands: null,
     },
     concurrentStaticChecks: {
       path: "/gene/TP53",
-      statefulWorkerRouteEvents: 0,
-      statefulOperations: 0,
-      evidence: "local profile only; hosted concurrency remains Task 5",
+      verdict: "pending_hosted_execution",
+      physicalChecks: 0,
+    },
+    driver: {
+      script: "scripts/iconoplasm-viral-load-task5-driver.mjs",
+      anonymousArticleLoads: 500_000,
+      outputKind: "iconoplasm_viral_load_task5_driver_receipt",
     },
   }
 }
 
 export function evaluateFailureProfiles() {
-  const profiles = [
-    ["stale_pointer", "serve_coherent_prior_immutable_artifact"],
-    ["bunny_outage", "serve_static_first_party_fallback_or_placeholder"],
-    ["expired_artifact", "return_static_404_or_bounded_retryable_response"],
-    ["laptop_off_accumulation", "retain_durable_pending_mutations"],
-    ["d1_exhaustion", "refuse_before_dispatch_and_retain_exact_command"],
-    ["queue_exhaustion", "retain_accepted_command_in_durable_ledger"],
-    ["delayed_projection", "serve_coherent_previous_immutable_projection"],
-  ]
-  return profiles.map(([name, outcome]) => ({
+  return [
+    "stale_pointer",
+    "bunny_outage",
+    "expired_artifact",
+    "laptop_off_accumulation",
+    "d1_exhaustion",
+    "queue_exhaustion",
+    "delayed_projection",
+  ].map((name) => ({
     name,
-    outcome,
-    anonymousReadAvailability: "complete",
-    anonymousStatefulRouteEvents: 0,
-    anonymousStatefulOperations: 0,
-    lostAcceptedCommands: 0,
-    verdict: "pass",
+    verdict: "pending_fault_injection",
+    observation: null,
+    anonymousStatefulRouteEvents: null,
+    anonymousStatefulOperations: null,
+    lostAcceptedCommands: null,
   }))
 }
 
-function defaultExternalGates() {
+export function jsonErrorEnvelope(error) {
   return {
-    hostedExecution: "pending_task_5",
-    authenticatedBrowser: "pending_task_5",
-    multiRegion: "pending_task_5",
-    bunnyDelivery: "pending_task_5",
+    schemaVersion: 1,
+    gate: "iconoplasm_viral_load_release",
+    overallVerdict: "error",
+    error: {
+      code: String(error?.code || "UNEXPECTED_ERROR"),
+      message: String(error?.message || error || "unknown error"),
+    },
   }
 }
 
 export async function runViralLoadReleaseGate({
   outputPath,
-  providerEvidence,
-  runRouteReplay = true,
+  task5Evidence,
+  runTopologyProof = true,
 } = {}) {
-  const tenThousand = releaseTierAssessment(10_000)
-  const hundredThousand = releaseTierAssessment(100_000)
-  const million = releaseTierAssessment(1_000_000)
-  const routeReplay = runRouteReplay
-    ? await runAnonymousRouteReplay({ journeys: 100_000, articleLoadsPerJourney: 5 })
-    : {
-        verified: false,
-        reason: "not_run",
-        journeys: 100_000,
-        articleLoads: 500_000,
-        statefulWorkerRouteEvents: null,
-        statefulOperations: null,
+  const topologyProof = runTopologyProof
+    ? await proveAnonymousRouteTopology()
+    : { kind: "exact_build_topology_proof", verified: false, reason: "not_run" }
+  const task5 = validateTask5ViralLoadEvidence(task5Evidence)
+  const attribution = reconcileProviderAttribution(task5.verified ? task5.evidence.provider : null)
+  const externalEvidenceVerified =
+    task5.verified &&
+    attribution.verified &&
+    task5.evidence.commandReceipts.lostAcceptedCommands === 0
+  const tiers = Object.fromEntries(
+    [10_000, 100_000, 1_000_000].map((readers) => {
+      const tier = releaseTierAssessment(readers)
+      const readPlane = {
+        ...tier.readPlane,
+        verdict: topologyProof.verified ? "topology_proven" : "blocked_missing_topology_proof",
+        evidence: { topologyProof },
       }
-  const attribution = reconcileProviderAttribution(providerEvidence)
-  // Task 5 must add evidence readers for these gates. Task 4 deliberately has
-  // no caller override that could relabel an unrun hosted/browser check.
-  const externalGates = defaultExternalGates()
-  const tier100000Verdict = routeReplay.verified ? "pass" : "blocked_missing_route_replay"
-  const externalVerified = Object.values(externalGates).every((value) => value === "verified")
+      const tierVerdict =
+        topologyProof.verified && externalEvidenceVerified
+          ? readers === 10_000
+            ? "pass"
+            : readers === 100_000
+              ? "read_pass_interactions_safely_shed"
+              : "read_pass_personalized_overflow_pending_or_refused"
+          : "blocked_missing_evidence"
+      return [
+        String(readers),
+        {
+          ...tier,
+          readAvailability: topologyProof.verified ? "topology_proven" : "blocked",
+          readPlane,
+          interactionPlane: {
+            ...tier.interactionPlane,
+            verdict: externalEvidenceVerified
+              ? tier.interactionPlane.verdict
+              : "blocked_missing_task5_evidence",
+            lostAcceptedCommands: task5.verified
+              ? task5.evidence.commandReceipts.lostAcceptedCommands
+              : null,
+          },
+          verdict: tierVerdict,
+        },
+      ]
+    }),
+  )
+  const hostileProfile = buildHostileTp53Profile({ day: "staging-day" })
+  const failureProfiles = evaluateFailureProfiles()
+  const overallPass = topologyProof.verified && externalEvidenceVerified
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     gate: "iconoplasm_viral_load_release",
-    tiers: {
-      10000: tenThousand,
-      100000: {
-        ...hundredThousand,
-        evidence: { ...hundredThousand.evidence, routeReplay },
-        verdict: tier100000Verdict,
-      },
-      1000000: million,
-    },
-    hostileProfile: buildHostileTp53Profile({ day: "staging-day" }),
-    failureProfiles: evaluateFailureProfiles(),
+    tiers,
+    hostileProfile,
+    failureProfiles,
     attribution,
-    externalGates,
-    verifiedEvidence: [
-      "task_3_measured_mutation_receipts",
-      ...(routeReplay.verified ? ["local_static_assets_workerd_route_replay"] : []),
-      ...(attribution.verified ? ["provider_before_after_attribution"] : []),
-    ],
-    unverifiedEvidence: [
-      "task_3_production_wiring",
-      ...Object.entries(externalGates)
-        .filter(([, value]) => value !== "verified")
-        .map(([name]) => name),
-      ...(!attribution.verified ? ["provider_before_after_attribution"] : []),
-    ],
-    overallVerdict:
-      tenThousand.verdict === "pass" &&
-      tier100000Verdict === "pass" &&
-      million.readAvailability === "complete" &&
-      million.mutations.lostAcceptedCommands === 0 &&
-      attribution.verified &&
-      externalVerified
-        ? "pass"
-        : "blocked",
+    task5Evidence: {
+      verdict: task5.verdict,
+      verified: task5.verified,
+      digest: task5.verified ? task5.evidence.digest : null,
+      runIdentity: task5.verified ? task5.evidence.run : null,
+    },
+    externalGates: task5.verified
+      ? task5.evidence.externalGates
+      : {
+          hostedExecution: "pending_task_5",
+          authenticatedBrowser: "pending_task_5",
+          multiRegion: "pending_task_5",
+          bunnyDelivery: "pending_task_5",
+        },
+    overallVerdict: overallPass ? "pass" : "blocked",
   }
   if (outputPath) {
     await mkdir(path.dirname(outputPath), { recursive: true })
@@ -157,17 +186,24 @@ async function main() {
   const outputPath = path.resolve(
     valueFor("--output") || "artifacts/iconoplasm-viral-load-gates/report.json",
   )
-  const providerEvidencePath = valueFor("--provider-evidence")
-  const providerEvidence = providerEvidencePath
-    ? JSON.parse(await readFile(path.resolve(providerEvidencePath), "utf8"))
+  const task5EvidencePath = valueFor("--task5-evidence")
+  const task5Evidence = task5EvidencePath
+    ? JSON.parse(await readFile(path.resolve(task5EvidencePath), "utf8"))
     : undefined
   const report = await runViralLoadReleaseGate({
     outputPath,
-    providerEvidence,
-    runRouteReplay: !args.includes("--skip-route-replay"),
+    task5Evidence,
+    runTopologyProof: !args.includes("--skip-topology-proof"),
   })
   process.stdout.write(`${JSON.stringify(report)}\n`)
   if (report.overallVerdict !== "pass") process.exitCode = 1
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main()
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  try {
+    await main()
+  } catch (error) {
+    process.stdout.write(`${JSON.stringify(jsonErrorEnvelope(error))}\n`)
+    process.exitCode = 2
+  }
+}
