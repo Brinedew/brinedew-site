@@ -45,6 +45,11 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const COMPACT_DISCOVERY_ACTIVATION_MIGRATION_NAME = "0108_compact_discovery_activation_v2.sql"
+export const COMPACT_DISCOVERY_ACTIVATION_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE TABLE IF NOT EXISTS icono_discovery_compact_activation_v2 (\n  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n  status TEXT NOT NULL CHECK(status IN ('pending', 'complete')),\n  cursor_user_id TEXT NOT NULL DEFAULT '',\n  cursor_gene_symbol TEXT NOT NULL DEFAULT '',\n  lease_token TEXT NOT NULL DEFAULT '',\n  lease_until TEXT NOT NULL DEFAULT '',\n  total_legacy_rows INTEGER NOT NULL DEFAULT 0 CHECK(total_legacy_rows >= 0),\n  migrated_rows INTEGER NOT NULL DEFAULT 0 CHECK(migrated_rows >= 0),\n  migrated_users INTEGER NOT NULL DEFAULT 0 CHECK(migrated_users >= 0),\n  completed_at TEXT,\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+  "INSERT OR IGNORE INTO icono_discovery_compact_activation_v2 (\n  singleton, status, cursor_user_id, cursor_gene_symbol, migrated_users, total_legacy_rows\n) VALUES (1, 'pending', '', '', 0, 0);"
+])
 export const VOTE_WAKE_MIGRATION_NAME = "0107_vote_projection_wake_generation.sql"
 export const VOTE_WAKE_MIGRATION_STATEMENTS = Object.freeze([
   "ALTER TABLE icono_vote_projection_refresh_jobs\n  ADD COLUMN wake_outstanding INTEGER NOT NULL DEFAULT 0 CHECK(wake_outstanding IN (0, 1));",
