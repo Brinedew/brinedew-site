@@ -9,7 +9,10 @@ import {
   readCompactUserState,
   readSharedCompactState,
 } from "./discovery-compact-store.js"
-import { importLegacyDiscoveryUser } from "./discovery-compact-migrate.js"
+import {
+  claimCompactDiscoveryMigrationLease,
+  importLegacyDiscoveryUser,
+} from "./discovery-compact-migrate.js"
 import { migrateIconoplasmCompactDiscoveryForScheduled } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   ensureDiscoveryDictionaryForNames,
@@ -180,6 +183,22 @@ test(
       }
       await applyStatements(db, compactMigrationStatements())
 
+      const leaseOne = await claimCompactDiscoveryMigrationLease(db, {
+        token: "executor-one",
+        now: "2026-09-19T00:00:00.000Z",
+      })
+      const overlapping = await claimCompactDiscoveryMigrationLease(db, {
+        token: "executor-two",
+        now: "2026-09-19T00:00:01.000Z",
+      })
+      assert.ok(leaseOne)
+      assert.equal(overlapping, null)
+      await db
+        .prepare(
+          "UPDATE icono_discovery_compact_activation_v2 SET lease_token='', lease_until='' WHERE singleton=1",
+        )
+        .run()
+
       const refused = await migrateIconoplasmCompactDiscoveryForScheduled({ ICONOPLASM_DB: db })
       assert.equal(refused.pending, true)
       assert.equal(
@@ -205,6 +224,9 @@ test(
       const first = await migrateIconoplasmCompactDiscoveryForScheduled(env)
       assert.equal(first.pending, true)
       assert.equal(first.migrated_rows, 8)
+      assert.equal(first.measured_legacy_rows, 9)
+      assert.equal(first.bounded_rows_per_day, 768)
+      assert.equal(first.maximum_remaining_days, 1)
       const resumed = await migrateIconoplasmCompactDiscoveryForScheduled({ ...env })
       assert.equal(resumed.complete, true)
       assert.equal(resumed.migrated_rows, 1)

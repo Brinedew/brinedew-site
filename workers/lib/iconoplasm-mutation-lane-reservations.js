@@ -10,8 +10,8 @@ export const MUTATION_ORDINARY_DAILY_CEILING =
   D1_PROVIDER_DAILY_WRITE_LIMIT - MUTATION_UNALLOCATED_HEADROOM
 export const MUTATION_COMPLETED_RETRY_HORIZON_DAYS = 32
 export const MUTATION_TOMBSTONE_RETENTION_DAYS = 32
-export const MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY =
-  40_000 * (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS)
+export const MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY =
+  70_000 * (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS)
 export const MUTATION_LANE_DAILY_LIMITS = Object.freeze({
   user_action: 40_000,
   publication: 10_000,
@@ -336,6 +336,28 @@ export class DailyMutationLaneReservations {
       }
       return { ok: true, compacted: rows.length, expired_tombstones: expired.length }
     })
+  }
+
+  nextCompactionAt() {
+    const completed = this.row(
+      `SELECT MIN(completed_at) AS completed_at
+       FROM daily_mutation_lane_reservations
+       WHERE status = 'completed' AND completed_at IS NOT NULL`,
+    )?.completed_at
+    const tombstone = this.row(
+      `SELECT MIN(completed_at) AS completed_at
+       FROM daily_mutation_lane_reservation_tombstones`,
+    )?.completed_at
+    const candidates = [
+      completed
+        ? Date.parse(completed) + MUTATION_COMPLETED_RETRY_HORIZON_DAYS * 86400000
+        : Number.NaN,
+      tombstone
+        ? Date.parse(tombstone) +
+          (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS) * 86400000
+        : Number.NaN,
+    ].filter(Number.isFinite)
+    return candidates.length ? Math.min(...candidates) : null
   }
 
   snapshot(day, providerRowsWritten = 0) {

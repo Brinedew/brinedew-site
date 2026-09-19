@@ -89,6 +89,7 @@ test("VoteCoordinator refuses a ninth newly-created active asset while preservin
   await state.ready
   coordinator.setMeta("symbol", "TP53")
   coordinator.setMeta("bootstrapped", "1")
+  coordinator.setMeta("authority_epoch", "v2")
   for (let index = 0; index < 8; index += 1) {
     coordinator.ensureAssetSummaryRow(index.toString(16).padStart(64, "0"), {
       visionId: `anima-v1-${index + 1}`,
@@ -104,6 +105,47 @@ test("VoteCoordinator refuses a ninth newly-created active asset while preservin
       }),
     /VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED/,
   )
+  assert.equal(coordinator.exportAssetSummaries().length, 8)
+})
+
+test("vote set and import routes reject a ninth asset before inserting it", async (t) => {
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  coordinator.setMeta("authority_epoch", "v2")
+  for (let index = 0; index < 8; index += 1) {
+    coordinator.ensureAssetSummaryRow(index.toString(16).padStart(64, "0"), {
+      visionId: `anima-v1-${index + 1}`,
+    })
+  }
+  const ninth = "f".repeat(64)
+  const setResponse = await coordinator.fetch(
+    new Request("https://coordinator/vote/set", {
+      method: "POST",
+      body: JSON.stringify({
+        symbol: "TP53",
+        asset_sha256: ninth,
+        user_id: "reader-9",
+        vote_value: 1,
+      }),
+    }),
+  )
+  assert.equal(setResponse.status, 409)
+  assert.equal((await setResponse.json()).code, "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
+  const importResponse = await coordinator.fetch(
+    new Request("https://coordinator/vote/import", {
+      method: "POST",
+      body: JSON.stringify({
+        symbol: "TP53",
+        items: [{ asset_sha256: ninth, user_id: "reader-9", vote_value: 1 }],
+      }),
+    }),
+  )
+  assert.equal(importResponse.status, 409)
+  assert.equal((await importResponse.json()).code, "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
   assert.equal(coordinator.exportAssetSummaries().length, 8)
 })
 
@@ -203,7 +245,7 @@ test("vote alarm preserves every outbox identity through a daily pause, new vote
   assert.equal(coordinator.getMeta("outbox_budget_retry_at"), "")
 })
 
-test("vote alarm keeps the exact outbox command pending when the user-action lane is full", async (t) => {
+test("vote alarm keeps the exact outbox command pending when provider headroom is reserved", async (t) => {
   const calls = []
   const budget = {
     idFromName: () => "global",
@@ -214,7 +256,7 @@ test("vote alarm keeps the exact outbox command pending when the user-action lan
         calls.push({ path, body })
         if (path === "/reserve-mutation-writes") {
           return Response.json(
-            { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+            { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
             { status: 429 },
           )
         }
