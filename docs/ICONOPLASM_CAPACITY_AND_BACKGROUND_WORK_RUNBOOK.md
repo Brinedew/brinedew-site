@@ -226,29 +226,38 @@ The executable viral-load release gate is
 case from those receipts: 2,000 compact discovery batches reserve 12,000
 `user_action` units, 1,000 accepted votes reserve another 4,000, and 200
 winner changes reserve 8,800 `publication` units. The resulting 24,800
-provider reservation leaves 75,200 of 100,000 writes as provider headroom.
-This arithmetic consumes Task 3's measured model; it does not certify the
-still-pending production wiring.
+provider reservation leaves 45,200 unused units inside the 70,000 ordinary
+ceiling. The separate 30,000-unit protected headroom remains untouched; it is
+not added to ordinary capacity. This arithmetic consumes the digest-validated
+Task 3 measurement receipt; it does not certify the still-pending production
+wiring.
 
-The same runner keeps reading and mutation completion separate. Its 100,000
-anonymous-journey gate dispatches one request through the real built Cloudflare
-Static Assets/Workerd owner for every anonymous route equivalence class, then
-deterministically scales those checked classes to five article loads per
-journey. D1, Durable Object, Queue, KV-write, session, and internal-service
-bindings are armed to throw if an anonymous route enters the Worker. The
-one-million-reader case may pass static reading while reporting personalized
-mutation overflow as pending or retryably refused; accepted command identities
-must never be lost.
+The same runner keeps reading and mutation completion separate. Its local
+anonymous gate is an exact-build topology proof, not a claimed load replay: it
+digests the production asset tree and Wrangler configuration, then physically
+dispatches every anonymous route equivalence class through the real Cloudflare
+Static Assets/Workerd owner. D1, Durable Object, Queue, KV-write, session, and
+internal-service bindings throw if an anonymous route enters the Worker. The
+report records only the physical dispatch count. Task 5 must separately execute
+500,000 physical article loads for 100,000 journeys; the scalable driver is
+`pnpm run load:iconoplasm-viral-task5`. The one-million-reader case may prove
+static route ownership while personalized completion and zero loss of accepted
+commands remain pending until canonical hosted evidence exists.
 
 The hostile staging profile defines 60,000 exact TP53 vote identities at 100
-commands per second for ten minutes. Local execution proves only the profile,
-capacity refusal, and static route contract. Hosted concurrency, authenticated
-browser behavior, multi-region routing, and Bunny delivery remain Task 5 gates.
-The stale-pointer, Bunny-outage, expired-artifact, laptop-off, D1-exhaustion,
-Queue-exhaustion, and delayed-projection profiles all keep anonymous traffic out
-of state. Provider attribution accepts only explicit before/after provider
-meters, blocks missing evidence, and blocks release below 95 percent explained
-non-static work; application estimates never fill provider fields.
+commands per second for ten minutes. The Task 5 driver concurrently executes
+the static workload and refuses to count an accepted command unless the hosted
+response echoes its exact identity and durable receipt. Local execution proves
+only the profile and static route contract; it does not prove hosted capacity
+refusal. Hosted concurrency, authenticated browser behavior, multi-region
+routing, and Bunny delivery remain Task 5 gates. The stale-pointer,
+Bunny-outage, expired-artifact, laptop-off, D1-exhaustion, Queue-exhaustion, and
+delayed-projection profiles remain blocked pending observed fault injection.
+Provider attribution accepts only digest-covered before/after provider meters
+with account, environment, run identity, ordered fresh timestamps, and complete
+meter coverage. Every non-zero meter and the aggregate must be at least 95
+percent explained; zero/zero cannot satisfy an expected non-static meter, and
+application estimates never fill provider fields.
 
 Known daily refusals atomically retain one reset alarm in the existing
 SyncGovernor before acknowledging the old transport message. Repeated refusals

@@ -23,6 +23,10 @@ on:
         description: "Installed compatible commit used to prove the repair diff contains no schema or data changes"
         required: false
         type: string
+      viral_load_task5_evidence_run_id:
+        description: "Workflow run containing the canonical Task 5 viral-load evidence artifact"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -382,6 +386,25 @@ jobs:
 
       - name: Build Quartz site
         run: pnpm run build
+
+      - name: Restore canonical Task 5 viral-load evidence
+        if: github.event_name == 'workflow_dispatch' && inputs.viral_load_task5_evidence_run_id != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
+          path: artifacts/iconoplasm-viral-load-gates/task5
+          run-id: ${{ inputs.viral_load_task5_evidence_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Block deployment until viral-load evidence is complete
+        env:
+          ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE: artifacts/iconoplasm-viral-load-gates/task5/evidence.json
+        run: |
+          if [ -f "$ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE" ]; then
+            pnpm run gate:iconoplasm-viral-load -- --task5-evidence="$ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE"
+          else
+            pnpm run gate:iconoplasm-viral-load
+          fi
 
       - name: Verify Geneguessr assets bundled
         run: |

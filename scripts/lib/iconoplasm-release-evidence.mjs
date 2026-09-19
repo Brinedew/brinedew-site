@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 export const FULL_RELEASE_STEPS = Object.freeze([
   "Deploy the only allowed internal stateful worker (production)",
   "Deploy production static site to Cloudflare Pages",
@@ -44,6 +46,83 @@ export function isMigrationCheckpoint(run, jobs) {
 }
 
 const PROVIDER_ATTRIBUTION_THRESHOLD = 0.95
+const EXPECTED_PROVIDER_METERS = Object.freeze([
+  "workerRequests",
+  "kvReads",
+  "kvWrites",
+  "kvLists",
+  "d1RowsRead",
+  "d1RowsWritten",
+  "durableObjectRequests",
+  "durableObjectRowsRead",
+  "durableObjectRowsWritten",
+  "queueOperations",
+  "externalRequests",
+  "transferBytes",
+])
+
+const NON_ZERO_TASK5_METERS = Object.freeze([
+  "workerRequests",
+  "d1RowsRead",
+  "d1RowsWritten",
+  "durableObjectRequests",
+  "durableObjectRowsRead",
+  "durableObjectRowsWritten",
+  "queueOperations",
+  "externalRequests",
+  "transferBytes",
+])
+const TASK5_EXTERNAL_GATES = Object.freeze([
+  "hostedExecution",
+  "authenticatedBrowser",
+  "multiRegion",
+  "bunnyDelivery",
+])
+
+function sha256Receipt(artifact) {
+  const { digest, digestAlgorithm, ...receipt } = artifact || {}
+  return {
+    digest,
+    digestAlgorithm,
+    computed: createHash("sha256").update(JSON.stringify(receipt)).digest("hex"),
+  }
+}
+
+export function validateTask5ViralLoadEvidence(evidence) {
+  if (!evidence) return { verdict: "blocked_missing_task5_evidence", verified: false }
+  const digest = sha256Receipt(evidence)
+  const started = Date.parse(evidence.run?.startedAt || "")
+  const ended = Date.parse(evidence.run?.endedAt || "")
+  const valid =
+    evidence.schemaVersion === 1 &&
+    evidence.kind === "iconoplasm_viral_load_task5_evidence" &&
+    digest.digestAlgorithm === "sha256" &&
+    digest.digest === digest.computed &&
+    /^[a-f0-9]{40}$/.test(evidence.run?.commitSha || "") &&
+    /^[a-f0-9]{64}$/.test(evidence.run?.accountIdHash || "") &&
+    evidence.run?.environment === "production" &&
+    typeof evidence.run?.id === "string" &&
+    evidence.run.id.length > 0 &&
+    Number.isFinite(started) &&
+    Number.isFinite(ended) &&
+    started < ended &&
+    evidence.hostedLoad?.physicalRequests >= 500_000 &&
+    evidence.hostedLoad?.commandsAttempted === 60_000 &&
+    evidence.commandReceipts?.lostAcceptedCommands === 0 &&
+    evidence.provider?.identity?.accountIdHash === evidence.run.accountIdHash &&
+    evidence.provider?.identity?.environment === evidence.run.environment &&
+    evidence.provider?.identity?.runId === evidence.run.id &&
+    Date.parse(evidence.provider?.observedAt?.before || "") <= started &&
+    Date.parse(evidence.provider?.observedAt?.after || "") >= ended &&
+    NON_ZERO_TASK5_METERS.every(
+      (meter) => Number(evidence.provider?.meters?.[meter]?.expected) > 0,
+    ) &&
+    Object.keys(evidence.externalGates || {}).length === TASK5_EXTERNAL_GATES.length &&
+    TASK5_EXTERNAL_GATES.every((gate) => evidence.externalGates?.[gate] === "verified")
+  return valid
+    ? { verdict: "pass", verified: true, evidence }
+    : { verdict: "blocked_invalid_task5_evidence", verified: false }
+}
 
 export function reconcileProviderAttribution(evidence) {
   if (!evidence) {
@@ -55,11 +134,17 @@ export function reconcileProviderAttribution(evidence) {
   }
   if (
     evidence.schemaVersion !== 1 ||
-    evidence.source !== "cloudflare_provider_meters" ||
+    evidence.kind !== "cloudflare_provider_meter_delta" ||
+    evidence.source !== "cloudflare_provider_api" ||
+    !/^[a-f0-9]{64}$/.test(evidence.identity?.accountIdHash || "") ||
+    evidence.identity?.environment !== "production" ||
+    typeof evidence.identity?.runId !== "string" ||
+    evidence.identity.runId.length === 0 ||
     !evidence.observedAt?.before ||
     !evidence.observedAt?.after ||
     !evidence.meters ||
-    Object.keys(evidence.meters).length === 0
+    Object.keys(evidence.meters).length !== EXPECTED_PROVIDER_METERS.length ||
+    !EXPECTED_PROVIDER_METERS.every((meter) => Object.hasOwn(evidence.meters, meter))
   ) {
     return {
       verdict: "blocked_invalid_provider_evidence",
@@ -69,10 +154,27 @@ export function reconcileProviderAttribution(evidence) {
   }
   let observedNonStaticOperations = 0
   let explainedNonStaticOperations = 0
+  const perMeter = {}
+  const beforeAt = Date.parse(evidence.observedAt.before)
+  const afterAt = Date.parse(evidence.observedAt.after)
+  if (
+    !Number.isFinite(beforeAt) ||
+    !Number.isFinite(afterAt) ||
+    beforeAt >= afterAt ||
+    afterAt > Date.now() + 60_000 ||
+    Date.now() - afterAt > 24 * 60 * 60 * 1_000
+  ) {
+    return {
+      verdict: "blocked_invalid_provider_evidence",
+      threshold: PROVIDER_ATTRIBUTION_THRESHOLD,
+      verified: false,
+    }
+  }
   for (const [meter, observation] of Object.entries(evidence.meters)) {
     const before = Number(observation?.before)
     const after = Number(observation?.after)
     const explained = Number(observation?.explained)
+    const expected = Number(observation?.expected)
     if (
       !Number.isFinite(before) ||
       !Number.isFinite(after) ||
@@ -80,7 +182,10 @@ export function reconcileProviderAttribution(evidence) {
       before < 0 ||
       after < before ||
       explained < 0 ||
-      explained > after - before
+      explained > after - before ||
+      !Number.isFinite(expected) ||
+      expected < 0 ||
+      (expected > 0 && after - before === 0)
     ) {
       return {
         verdict: "blocked_invalid_provider_evidence",
@@ -91,6 +196,13 @@ export function reconcileProviderAttribution(evidence) {
     }
     observedNonStaticOperations += after - before
     explainedNonStaticOperations += explained
+    const fraction = after - before === 0 ? 1 : explained / (after - before)
+    perMeter[meter] = {
+      observed: after - before,
+      explained,
+      expected,
+      attributionFraction: fraction,
+    }
   }
   const attributionFraction =
     observedNonStaticOperations === 0
@@ -98,16 +210,20 @@ export function reconcileProviderAttribution(evidence) {
         ? 1
         : 0
       : explainedNonStaticOperations / observedNonStaticOperations
+  const everyMeterPasses = Object.values(perMeter).every(
+    ({ attributionFraction }) => attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD,
+  )
   return {
     verdict:
-      attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD
+      attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD && everyMeterPasses
         ? "pass"
         : "blocked_below_attribution_threshold",
     threshold: PROVIDER_ATTRIBUTION_THRESHOLD,
-    verified: attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD,
+    verified: attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD && everyMeterPasses,
     observedNonStaticOperations,
     explainedNonStaticOperations,
     attributionFraction,
+    perMeter,
     evidenceSource: evidence.source,
     observedAt: evidence.observedAt,
   }
