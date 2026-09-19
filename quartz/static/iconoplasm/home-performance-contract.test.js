@@ -1494,7 +1494,7 @@ test("mobile home collection always uses the lit-archival card contract", async 
   )
 })
 
-test("mobile home collection refreshes card VMs from the manifest before painting", async () => {
+test("guest mobile collection reads immutable publication while accounts refresh from manifest", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadMobileCardPageVM(pageEntries, options)")
   const end = app.indexOf("function prewarmMobileCardPageVM(pageEntries)", start)
@@ -1505,6 +1505,12 @@ test("mobile home collection refreshes card VMs from the manifest before paintin
   assert.match(app, /var MOBILE_CARD_VM_IDB_NAME = "iconoplasm-mobile-card-vms"/)
   assert.match(app, /function mobileCardCacheGetMany\(version, symbols\)/)
   assert.match(app, /function mobileCardCacheSetMany\(version, cards\)/)
+  const guestGuard = block.indexOf("if (!currentUser)")
+  const manifestFetch = block.indexOf('fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest"')
+  assert.notEqual(guestGuard, -1, "guest collection needs a stateless branch")
+  assert.notEqual(manifestFetch, -1, "signed-in collection still needs the current manifest")
+  assert.ok(guestGuard < manifestFetch, "guest branch must return before the stateful manifest")
+  assert.match(block.slice(guestGuard, manifestFetch), /publicationReader\.genes\(symbols/)
   assert.match(block, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(block, /symbols:\s*symbols/)
   assert.match(block, /mobileCardCacheSetMany\(manifest\.snapshot_version, cards\)/)

@@ -244,20 +244,32 @@ export function createIconoplasmPublicationReader(options = {}) {
     return record?.symbol === symbol ? record : null
   }
 
+  async function geneFromPublication(head, key) {
+    const { manifest } = await publication(head)
+    const delta = await viewEntry(head, key)
+    if (delta?.status === "withdrawn") return null
+    if (delta?.status === "committed") {
+      const identity = objectIdentity(delta.gene?.key, "genes")
+      const record = await immutableObject("genes", identity.hash)
+      return record?.symbol === key ? withImmutableMedia(record) : null
+    }
+    return withImmutableMedia(await baseGene(manifest, key))
+  }
+
   async function gene(symbol) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
-    return fromCoherentPublication(`gene:${key}`, async (head) => {
-      const { manifest } = await publication(head)
-      const delta = await viewEntry(head, key)
-      if (delta?.status === "withdrawn") return null
-      if (delta?.status === "committed") {
-        const identity = objectIdentity(delta.gene?.key, "genes")
-        const record = await immutableObject("genes", identity.hash)
-        return record?.symbol === key ? withImmutableMedia(record) : null
-      }
-      return withImmutableMedia(await baseGene(manifest, key))
-    })
+    return fromCoherentPublication(`gene:${key}`, (head) => geneFromPublication(head, key))
+  }
+
+  async function genes(symbols) {
+    const keys = [...new Set((Array.isArray(symbols) ? symbols : []).map(normalizedSymbol))]
+      .filter(Boolean)
+      .slice(0, MAX_GALLERY_PAGE_SIZE)
+    if (!keys.length) return []
+    return fromCoherentPublication(`genes:${keys.join(",")}`, async (head) =>
+      (await Promise.all(keys.map((key) => geneFromPublication(head, key)))).filter(Boolean),
+    )
   }
 
   async function catalogIndexes(head) {
@@ -462,7 +474,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
-  return { currentHead, gene, search, gallery, metadata }
+  return { currentHead, gene, genes, search, gallery, metadata }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
