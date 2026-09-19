@@ -710,6 +710,12 @@ test("named Task 5 workflow executes every raw producer under staging provenance
     "utf8",
   )
   assert.match(workflow, /produce-iconoplasm-viral-load-task5-evidence:/)
+  assert.match(workflow, /pull_request:[\s\S]*branches: \[main\]/)
+  assert.match(
+    workflow,
+    /TASK5_COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/,
+  )
+  assert.match(workflow, /ref: \$\{\{ env\.TASK5_COMMIT \}\}/)
   assert.match(workflow, /environment: staging/)
   assert.match(workflow, /ICONOPLASM_STAGING_SESSION_COOKIE/)
   assert.match(workflow, /iconoplasm-viral-load-task5-driver\.mjs/)

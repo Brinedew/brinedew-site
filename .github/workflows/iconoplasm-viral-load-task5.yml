@@ -1,6 +1,8 @@
 name: Iconoplasm Viral Load Task 5 Evidence
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,10 +18,12 @@ jobs:
     runs-on: [self-hosted, iconoplasm-task5-staging]
     environment: staging
     timeout-minutes: 90
+    env:
+      TASK5_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.TASK5_COMMIT }}
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -32,11 +36,11 @@ jobs:
           ICONOPLASM_STAGING_BASE_URL: ${{ vars.ICONOPLASM_STAGING_BASE_URL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
-        run: node scripts/run-iconoplasm-task5-external-profile.mjs --profile=provider-before --output=artifacts/iconoplasm-viral-load-gates/task5/provider-before.json --commit=${{ github.sha }} --environment=staging
+        run: node scripts/run-iconoplasm-task5-external-profile.mjs --profile=provider-before --output=artifacts/iconoplasm-viral-load-gates/task5/provider-before.json --commit=${{ env.TASK5_COMMIT }} --environment=staging
       - name: Run exact authenticated TP53 workload with concurrent static reads
         env:
           ICONOPLASM_STAGING_SESSION_COOKIE: ${{ secrets.ICONOPLASM_STAGING_SESSION_COOKIE }}
-        run: node scripts/iconoplasm-viral-load-task5-driver.mjs --base-url=${{ vars.ICONOPLASM_STAGING_BASE_URL }} --day=$(date -u +%F) --asset-sha256=${{ vars.ICONOPLASM_TASK5_TP53_ASSET_SHA256 }} --commit=${{ github.sha }} --environment=staging --output=artifacts/iconoplasm-viral-load-gates/task5/raw/hosted-driver.json
+        run: node scripts/iconoplasm-viral-load-task5-driver.mjs --base-url=${{ vars.ICONOPLASM_STAGING_BASE_URL }} --day=$(date -u +%F) --asset-sha256=${{ vars.ICONOPLASM_TASK5_TP53_ASSET_SHA256 }} --commit=${{ env.TASK5_COMMIT }} --environment=staging --output=artifacts/iconoplasm-viral-load-gates/task5/raw/hosted-driver.json
       - name: Produce authenticated browser, regional, Bunny, fault, and quantitative shed receipts
         env:
           ICONOPLASM_STAGING_BASE_URL: ${{ vars.ICONOPLASM_STAGING_BASE_URL }}
@@ -57,7 +61,7 @@ jobs:
             node scripts/run-iconoplasm-task5-external-profile.mjs \
               --profile="$profile" \
               --output="artifacts/iconoplasm-viral-load-gates/task5/raw/$profile.json" \
-              --commit=${{ github.sha }} \
+              --commit=${{ env.TASK5_COMMIT }} \
               --environment=staging
           done
       - name: Capture provider delta for exactly this workload window
@@ -66,14 +70,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
           ICONOPLASM_TASK5_PROVIDER_BEFORE: artifacts/iconoplasm-viral-load-gates/task5/provider-before.json
-        run: node scripts/run-iconoplasm-task5-external-profile.mjs --profile=provider-query --output=artifacts/iconoplasm-viral-load-gates/task5/raw/provider-query.json --commit=${{ github.sha }} --environment=staging
+        run: node scripts/run-iconoplasm-task5-external-profile.mjs --profile=provider-query --output=artifacts/iconoplasm-viral-load-gates/task5/raw/provider-query.json --commit=${{ env.TASK5_COMMIT }} --environment=staging
       - name: Compose canonical digest-bound Task 5 evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/collect-iconoplasm-viral-load-staging-evidence.mjs --commit=${{ github.sha }} --environment=staging
+        run: node scripts/collect-iconoplasm-viral-load-staging-evidence.mjs --commit=${{ env.TASK5_COMMIT }} --environment=staging
       - name: Upload exact immutable Task 5 evidence
         uses: actions/upload-artifact@v7
         with:
-          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
+          name: iconoplasm-viral-load-task5-evidence-${{ env.TASK5_COMMIT }}
           path: artifacts/iconoplasm-viral-load-gates/task5
           if-no-files-found: error
