@@ -17,6 +17,7 @@ import {
   validateTask5ViralLoadEvidence,
 } from "./lib/iconoplasm-release-evidence.mjs"
 import {
+  mapExecutedOperationsToProviderMeters,
   assessHostedSchedule,
   buildHostedCommand,
   classifyHostedResponse,
@@ -110,12 +111,12 @@ function task5Bundle() {
     durableObjectRowsWritten: 80_000,
     queueOperations: 3,
     externalRequests: 0,
-    transferBytes: 1_000_000,
+    transferBytes: null,
   }
   const provider = {
     ...providerEvidence(
       Object.fromEntries(
-        Object.entries(expected).map(([name, value]) => [name, { before: 0, after: value }]),
+        Object.entries(expected).map(([name, value]) => [name, { before: 0, after: value ?? 0 }]),
       ),
     ),
     identity: {
@@ -345,6 +346,19 @@ function task5Evidence() {
   return task5Bundle().evidence
 }
 
+function replaceRawArtifact(bundle, name, mutate) {
+  const artifact = JSON.parse(bundle.rawArtifacts[name])
+  mutate(artifact)
+  bundle.rawArtifacts[name] = JSON.stringify(artifact)
+  bundle.evidence.rawArtifacts.find((entry) => entry.name === name).sha256 = createHash("sha256")
+    .update(bundle.rawArtifacts[name])
+    .digest("hex")
+  const receipt = { ...bundle.evidence }
+  delete receipt.digest
+  delete receipt.digestAlgorithm
+  bundle.evidence.digest = createHash("sha256").update(JSON.stringify(receipt)).digest("hex")
+}
+
 const trustedRunVerifier = async () => ({
   verified: true,
   workflowPath: ".github/workflows/deploy-quartz.yml",
@@ -402,6 +416,22 @@ test("Task 5 driver sends exact identities and refuses responses without durable
     }).verdict,
     "bounded_capacity_refusal",
   )
+})
+
+test("driver maps client transfer to unavailable CDN evidence, not a provider operation", () => {
+  const mapped = mapExecutedOperationsToProviderMeters({
+    workerRequests: 60_000,
+    d1RowsRead: 0,
+    d1RowsWritten: 40_000,
+    durableObjectRequests: 20_000,
+    durableObjectRowsRead: 80_000,
+    durableObjectRowsWritten: 80_000,
+    queueOperations: 3,
+    externalRequests: 0,
+    transferBytes: 1_000_000,
+  })
+  assert.equal(mapped.externalRequests, 0)
+  assert.equal(mapped.transferBytes, null)
 })
 
 test("hostile schedule rejects one missed 100-command second and excessive elapsed time", () => {
@@ -560,11 +590,12 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
     now: Date.parse("2026-09-19T00:11:00Z"),
   })
   assert.equal(report.task5Evidence.verdict, "pass")
-  assert.equal(report.attribution.verdict, "pass")
+  assert.equal(report.attribution.verdict, "blocked_unavailable_provider_meter")
+  assert.deepEqual(report.attribution.unavailableMeters, ["transferBytes"])
   assert.equal(report.attribution.perMeter.workerRequests.expected, 60_000)
   assert.equal(report.attribution.perMeter.d1RowsWritten.expected, 40_000)
   assert.equal(report.attribution.perMeter.externalRequests.expected, 0)
-  assert.equal(report.overallChecks.externalResourcesResolved, true)
+  assert.equal(report.overallChecks.externalResourcesResolved, false)
   assert.equal(report.tiers["10000"].resources.externalRequests.evidence.status, "measured_hosted")
   assert.equal(
     report.tiers["1000000"].mutationResourceDisposition.workerRequests.disposition,
@@ -579,6 +610,44 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
   assert.equal(report.hostileProfile.hostedExecution, "verified")
   assert.ok(report.failureProfiles.every(({ verdict }) => verdict === "verified"))
   assert.equal(report.overallVerdict, "blocked")
+})
+
+test("shed coverage must equal modeled overflow and overcoverage blocks the tier", async () => {
+  const bundle = task5Bundle()
+  replaceRawArtifact(bundle, "shed-100000-publication.json", (receipt) => {
+    receipt.attempted++
+    receipt.refused++
+    receipt.coverage.lanes.publication++
+    receipt.identity.count++
+    receipt.identity.last = `${receipt.identity.prefix}${String(receipt.identity.count - 1).padStart(9, "0")}`
+    const { digest: _digest, ...unsigned } = receipt.identity
+    receipt.identity.digest = createHash("sha256").update(JSON.stringify(unsigned)).digest("hex")
+  })
+  const report = await runViralLoadReleaseGate({
+    runTopologyProof: false,
+    task5Evidence: bundle.evidence,
+    rawArtifacts: bundle.rawArtifacts,
+    trustedRunVerifier,
+    expectedCommit: "c".repeat(40),
+    now: Date.parse("2026-09-19T00:11:00Z"),
+  })
+  assert.equal(report.task5Evidence.verdict, "pass")
+  assert.equal(report.tiers["100000"].laneDisposition.publication.coverageVerified, false)
+  assert.equal(report.tiers["100000"].verdict, "blocked_invalid_shed_coverage")
+})
+
+test("operation shed receipts reject unrelated lane and resource mappings", async () => {
+  const bundle = task5Bundle()
+  replaceRawArtifact(bundle, "shed-100000-discovery.json", (receipt) => {
+    receipt.coverage.lanes.publication = 1
+  })
+  const result = await validateTask5ViralLoadEvidence(bundle.evidence, {
+    expectedCommit: "c".repeat(40),
+    trustedRunVerifier,
+    rawArtifacts: bundle.rawArtifacts,
+    now: Date.parse("2026-09-19T00:11:00Z"),
+  })
+  assert.equal(result.verdict, "blocked_invalid_raw_artifacts")
 })
 
 test("generic refusal labels cannot replace quantitative operation-specific shed receipts", async () => {

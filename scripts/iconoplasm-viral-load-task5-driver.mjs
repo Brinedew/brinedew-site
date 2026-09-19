@@ -6,6 +6,7 @@ import {
   assessHostedSchedule,
   buildHostedCommand,
   classifyHostedResponse,
+  mapExecutedOperationsToProviderMeters,
   summarizeHostedCommandIdentity,
 } from "./lib/iconoplasm-viral-load-task5-driver.mjs"
 
@@ -161,22 +162,7 @@ export async function runHostedTask5Load({
 
   const elapsedMs = Date.now() - runStartedMs
   actualOperations.transferBytes = transferBytes
-  const providerOperations = {
-    workerRequests: actualOperations.workerRequests,
-    kvReads: 0,
-    kvWrites: 0,
-    kvLists: 0,
-    d1RowsRead: actualOperations.d1RowsRead,
-    d1RowsWritten: actualOperations.d1RowsWritten,
-    durableObjectRequests: actualOperations.durableObjectRequests,
-    durableObjectRowsRead: actualOperations.durableObjectRowsRead,
-    durableObjectRowsWritten: actualOperations.durableObjectRowsWritten,
-    queueOperations: actualOperations.queueOperations,
-    // Browser-to-origin fetches are not Cloudflare Worker external subrequests.
-    externalRequests: 0,
-    // Client-observed bytes do not define the provider's billable transfer meter.
-    transferBytes: null,
-  }
+  const providerOperations = mapExecutedOperationsToProviderMeters(actualOperations)
   const schedule = assessHostedSchedule(windows, elapsedMs)
   const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)
   const percentile = (fraction) =>

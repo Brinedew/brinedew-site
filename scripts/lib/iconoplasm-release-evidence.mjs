@@ -161,6 +161,16 @@ const REQUIRED_SHED_RECEIPTS = Object.freeze([
   "1000000:worker",
   "1000000:durable_object",
 ])
+const SHED_COVERAGE_KEYS = Object.freeze({
+  discovery: { lanes: ["user_action"], resources: [] },
+  vote: { lanes: ["user_action"], resources: [] },
+  publication: { lanes: ["publication"], resources: [] },
+  worker: { lanes: [], resources: ["workerRequests"] },
+  durable_object: {
+    lanes: [],
+    resources: ["durableObjectRequests", "durableObjectRowsWritten"],
+  },
+})
 
 function validShedReceipt(artifact, expectedCommit) {
   const identity = artifact?.identity
@@ -176,6 +186,14 @@ function validShedReceipt(artifact, expectedCommit) {
     ...Object.values(artifact?.coverage?.lanes || {}),
     ...Object.values(artifact?.coverage?.resources || {}),
   ]
+  const canonicalCoverage = SHED_COVERAGE_KEYS[artifact?.operation]
+  const exactCoverageKeys = ["lanes", "resources"].every(
+    (kind) =>
+      canonicalCoverage &&
+      Object.keys(artifact?.coverage?.[kind] || {})
+        .toSorted()
+        .join("\n") === canonicalCoverage[kind].toSorted().join("\n"),
+  )
   return (
     artifact?.schemaVersion === 1 &&
     artifact?.kind === "iconoplasm_operation_shed_receipt" &&
@@ -197,8 +215,9 @@ function validShedReceipt(artifact, expectedCommit) {
     artifact.coverage &&
     typeof artifact.coverage.lanes === "object" &&
     typeof artifact.coverage.resources === "object" &&
+    exactCoverageKeys &&
     coverageValues.length > 0 &&
-    coverageValues.every((value) => Number.isSafeInteger(value) && value >= 0 && value <= count)
+    coverageValues.every((value) => Number.isSafeInteger(value) && value > 0 && value <= count)
   )
 }
 
@@ -423,8 +442,8 @@ export function reconcileProviderAttribution(
       (meter) =>
         Object.hasOwn(evidence.meters, meter) &&
         Object.hasOwn(expectedOperations, meter) &&
-        Number.isFinite(expectedOperations[meter]) &&
-        expectedOperations[meter] >= 0,
+        ((Number.isFinite(expectedOperations[meter]) && expectedOperations[meter] >= 0) ||
+          expectedOperations[meter] === null),
     )
   ) {
     return {
@@ -436,6 +455,7 @@ export function reconcileProviderAttribution(
   let observedNonStaticOperations = 0
   let explainedNonStaticOperations = 0
   const perMeter = {}
+  const unavailableMeters = []
   const beforeAt = Date.parse(evidence.observedAt.before)
   const afterAt = Date.parse(evidence.observedAt.after)
   if (
@@ -454,9 +474,9 @@ export function reconcileProviderAttribution(
   for (const [meter, observation] of Object.entries(evidence.meters)) {
     const before = Number(observation?.before)
     const after = Number(observation?.after)
-    const expected = Number(expectedOperations[meter])
+    const expectedValue = expectedOperations[meter]
+    const expected = Number(expectedValue)
     const observed = after - before
-    const explained = Math.min(observed, expected)
     if (
       !Number.isFinite(before) ||
       !Number.isFinite(after) ||
@@ -464,9 +484,7 @@ export function reconcileProviderAttribution(
       Object.hasOwn(observation || {}, "expected") ||
       before < 0 ||
       after < before ||
-      !Number.isFinite(expected) ||
-      expected < 0 ||
-      (expected > 0 && after - before < expected * PROVIDER_ATTRIBUTION_THRESHOLD)
+      (expectedValue !== null && (!Number.isFinite(expected) || expected < 0))
     ) {
       return {
         verdict: "blocked_invalid_provider_evidence",
@@ -475,6 +493,25 @@ export function reconcileProviderAttribution(
         invalidMeter: meter,
       }
     }
+    if (expectedValue === null) {
+      unavailableMeters.push(meter)
+      perMeter[meter] = {
+        observed,
+        expected: null,
+        status: "unavailable_blocking",
+        attributionFraction: null,
+      }
+      continue
+    }
+    if (expected > 0 && observed < expected * PROVIDER_ATTRIBUTION_THRESHOLD) {
+      return {
+        verdict: "blocked_invalid_provider_evidence",
+        threshold: PROVIDER_ATTRIBUTION_THRESHOLD,
+        verified: false,
+        invalidMeter: meter,
+      }
+    }
+    const explained = Math.min(observed, expected)
     observedNonStaticOperations += observed
     explainedNonStaticOperations += explained
     const fraction = observed === 0 ? 1 : explained / observed
@@ -492,8 +529,23 @@ export function reconcileProviderAttribution(
         : 0
       : explainedNonStaticOperations / observedNonStaticOperations
   const everyMeterPasses = Object.values(perMeter).every(
-    ({ attributionFraction }) => attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD,
+    ({ attributionFraction }) =>
+      attributionFraction === null || attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD,
   )
+  if (unavailableMeters.length > 0) {
+    return {
+      verdict: "blocked_unavailable_provider_meter",
+      threshold: PROVIDER_ATTRIBUTION_THRESHOLD,
+      verified: false,
+      unavailableMeters,
+      observedNonStaticOperations,
+      explainedNonStaticOperations,
+      attributionFraction,
+      perMeter,
+      evidenceSource: evidence.source,
+      observedAt: evidence.observedAt,
+    }
+  }
   return {
     verdict:
       attributionFraction >= PROVIDER_ATTRIBUTION_THRESHOLD && everyMeterPasses
