@@ -172,6 +172,33 @@ consumers and both dead-letter queues before repairing retention; it never
 unpauses or creates a consumer. Serialization supplements, but does not prove,
 complete-phase row-cost admission.
 
+Popularity does not buy a Queue operation per vote. The vote projection ledger
+keeps one dirty row per gene. The first vote that changes a clean gene sends one
+wake; later votes only advance that row's generation. If a vote advances the row
+while its current generation is running, that consumer schedules one follow-up
+global drain after it proves the stale generation could not delete the newer row.
+
+The existing daily-budget Durable Object also owns four non-borrowing D1 mutation
+lanes. `user_action` has 40,000 reserved write units, `publication` 10,000,
+`finalization_recovery` 10,000, and `laptop_delivery` 10,000. The other 30,000 of
+the 100,000-write daily provider allowance remains unallocated headroom. A full
+lane refuses before its mutation dispatch; user actions remain locally pending
+or receive a retryable refusal, and durable background work remains pending.
+Unused capacity in one lane never moves to another lane.
+
+The operation ID is the reservation identity. A retry with the same ID, lane,
+and unit bound reuses its original reservation even after UTC midnight and does
+not charge the new day. A changed lane or unit bound is an identity mismatch.
+Timeouts and other uncertain outcomes never refund or regenerate a reservation.
+The shared budget snapshot exposes all four lane balances for operators.
+
+B-764 compact discovery is the activated request contract. Hover encounters,
+guest merge, starter seed, membership, shelf, gallery window, and clan reads use
+the one compact per-user record and durable shared-delivery outbox. The retired
+per-hover route remains a write-free 410. Legacy discovery import is an explicit
+migration tool only; request handling contains no `icono_gene_discoveries`
+writer or whole-membership fallback.
+
 Known daily refusals atomically retain one reset alarm in the existing
 SyncGovernor before acknowledging the old transport message. Repeated refusals
 coalesce without rewriting the alarm. The alarm waits through schema transition,

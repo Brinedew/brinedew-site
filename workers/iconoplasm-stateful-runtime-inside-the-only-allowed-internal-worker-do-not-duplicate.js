@@ -1,6 +1,7 @@
 import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js"
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
+import { DailyMutationLaneReservations } from "./lib/iconoplasm-mutation-lane-reservations.js"
 import {
   createDiscoveryOrdinalDictionary,
   hasDiscoveryOrdinal,
@@ -20,7 +21,6 @@ import {
   consumeSharedDiscoveryDeliveries,
   drainSharedDiscoveryDeliveries,
 } from "./iconoplasm/discovery-shared-delivery.js"
-import { importLegacyDiscoveryUser } from "./iconoplasm/discovery-compact-migrate.js"
 import {
   compactSharedRowsFromSummaries,
   compactSharedSummaries,
@@ -2226,6 +2226,7 @@ function isIconoplasmDailyBudgetError(error) {
       "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
       "COST_AUTHORITY_STORAGE_READ_QUOTA",
       "QUEUE_ACCOUNT_DAILY_LIMIT",
+      "MUTATION_LANE_CAPACITY_EXHAUSTED",
     ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
@@ -2351,6 +2352,39 @@ async function reserveIconoplasmCardCatalogKvWrites(
     }
     throw new IconoplasmCardCatalogKvWriteBudgetConfigurationError(
       `Card-catalog KV write budget reservation failed (${response.status})`,
+    )
+  }
+  return payload
+}
+
+async function reserveIconoplasmMutationWrites(
+  env,
+  { lane, operationId, units, dayKey = iconoplasmUtcDayKey() } = {},
+) {
+  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
+  // Local unit fixtures do not bind the production authority. The deploy
+  // topology fence requires this binding in every activated environment; a
+  // production request with the binding present never bypasses its result.
+  if (!stub) return { ok: true, local_unbound: true }
+  const response = await stub.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: dayKey,
+        lane,
+        operation_id: operationId,
+        units,
+      }),
+    }),
+  )
+  const payload = await response.json().catch(() => null)
+  if (response.status === 429 && payload?.code === "MUTATION_LANE_CAPACITY_EXHAUSTED") {
+    return payload
+  }
+  if (!response.ok || payload?.ok !== true) {
+    throw new IconoplasmD1DailyBudgetConfigurationError(
+      `Mutation-lane reservation failed (${response.status})`,
     )
   }
   return payload
@@ -2914,6 +2948,27 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
     throw new IconoplasmD1DailyBudgetConfigurationError(
       "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
+  }
+  if (attribution?.budget_class === "workstation_sync_write") {
+    const body = request ? await request.clone().text() : ""
+    const requestIdentity = await sha256Hex(
+      `${request?.method || "POST"}\n${request ? new URL(request.url).pathname : attribution.route_family}\n${body}`,
+    )
+    const admission = await reserveIconoplasmMutationWrites(env, {
+      lane: "laptop_delivery",
+      operationId: `laptop:${requestIdentity}`,
+      // One laptop command cannot use more than the provider's existing
+      // 50-statement invocation envelope. Retain the full amount on timeout.
+      units: 50,
+      dayKey: budgets.cycleInfo.dayKey,
+    })
+    if (admission?.ok !== true) {
+      throw new IconoplasmD1DailyBudgetExceededError({
+        exhausted: true,
+        exhausted_by: "laptop_delivery_mutation_lane",
+        mutation_lane: admission,
+      })
+    }
   }
   let snapshot
   try {
@@ -11916,7 +11971,6 @@ export async function fulfillGenerationRequests(
 // Compact discovery integration. The ordinal dictionary resolves every
 // requested name to one stable bit; the legacy per-hover writer is retired.
 const DISCOVERY_COMPACT_BATCH_MAX_ENCOUNTERS = 256
-const discoveryCompactImportPromises = new Map()
 
 function discoveryCompactDictionaryFromLookup(lookup) {
   return createDiscoveryOrdinalDictionary(
@@ -11930,65 +11984,14 @@ async function readDiscoveryDictionaryForSymbols(env, names) {
   return lookup
 }
 
-// A user's compact state is created once. While it is missing, that user's own
-// legacy rows (an exact-key seek, not a corpus scan) are imported in bounded
-// batches and every later read is compact. Concurrent first touches share one
-// import.
-async function readOrImportCompactUserState(
-  env,
-  { userId, isAdmin = false, allowImport = false } = {},
-) {
+// Activation fence: request paths read only the compact authoritative record.
+// Legacy rows are imported by the explicit migration tool before cutover; a
+// request may never resurrect the old whole-membership scan as a fallback.
+async function readCompactUserStateForRequest(env, { userId } = {}) {
   if (!env.ICONOPLASM_DB) return null
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return null
-  const existing = await readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
-  if (existing || !allowImport) return existing
-  const inFlight = discoveryCompactImportPromises.get(userIdNorm)
-  if (inFlight) return inFlight
-  const promise = (async () => {
-    const legacy = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, first_discovered_at, last_encountered_at, encounter_count,
-              first_source, last_source, first_trigger, last_trigger,
-              first_dwell_ms, last_dwell_ms
-       FROM icono_gene_discoveries
-       WHERE user_id = ?`,
-    )
-      .bind(userIdNorm)
-      .all()
-    const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
-    if (!legacyRows.length) return null
-    // Bounded one-time transfer: only this user's own symbols acquire
-    // ordinals. Historical names that left the catalog stay resolvable as
-    // inactive entries instead of being dropped or bulk-seeded. Aliases are
-    // resolved by the compact dictionary alone; a catalog-wide alias scan
-    // once burned 2.1M reads for a single import (B-774).
-    const importLookup = await ensureDiscoveryDictionaryForNames(
-      env.ICONOPLASM_DB,
-      legacyRows.map((row) => row?.gene_symbol),
-      { preserveHistorical: true },
-    )
-    const importDictionary = discoveryCompactDictionaryFromLookup(importLookup)
-    const resolvable = legacyRows.filter((row) =>
-      importLookup.byName.has(
-        String(row?.gene_symbol || "")
-          .trim()
-          .toUpperCase(),
-      ),
-    )
-    if (!resolvable.length) return null
-    await importLegacyDiscoveryUser({
-      db: env.ICONOPLASM_DB,
-      userId: userIdNorm,
-      dictionary: importDictionary,
-      legacyRows: resolvable,
-      isAdmin,
-    })
-    return readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
-  })().finally(() => {
-    discoveryCompactImportPromises.delete(userIdNorm)
-  })
-  discoveryCompactImportPromises.set(userIdNorm, promise)
-  return promise
+  return readCompactUserState(env.ICONOPLASM_DB, userIdNorm)
 }
 
 // One compact recorder for hover batches, guest merges and starter seeding.
@@ -12000,6 +12003,21 @@ async function recordCompactDiscoveryEncounters(
 ) {
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const db = env.ICONOPLASM_DB
+  const admission = await reserveIconoplasmMutationWrites(env, {
+    lane: "user_action",
+    operationId: `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`,
+    // Real D1 receipts: three writes for the compact personal batch and one
+    // retained unit for its later shared-delivery commit.
+    units: 4,
+  })
+  if (admission?.ok !== true) {
+    const error = new Error(
+      "Discovery capacity is reserved for other mutation lanes; retain the exact batch for retry",
+    )
+    error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+    error.mutation_lane = admission
+    throw error
+  }
   const names = encounters.map((encounter) => encounter.symbol)
   const lookup = await ensureDiscoveryDictionaryForNames(db, names)
   const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
@@ -12008,7 +12026,7 @@ async function recordCompactDiscoveryEncounters(
     return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
   }
   const dictionary = discoveryCompactDictionaryFromLookup(lookup)
-  await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  await readCompactUserStateForRequest(env, { userId })
   const result = await recordCompactDiscoveryBatch(db, {
     userId,
     isAdmin,
@@ -12023,7 +12041,7 @@ async function readCompactDiscoveryMembership(env, { userId, symbols, isAdmin = 
   const discovered = []
   if (!symbols.length) return discovered
   const lookup = await readDiscoveryDictionaryForSymbols(env, symbols)
-  const state = await readOrImportCompactUserState(env, { userId, isAdmin, allowImport: true })
+  const state = await readCompactUserStateForRequest(env, { userId })
   const membership = String(state?.membership_b64 || "")
   for (const symbol of symbols) {
     const ordinal = lookup.byName.get(symbol)
@@ -12217,10 +12235,8 @@ async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
   // membership bits; a user who already has them performs no write at all.
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
   const lookup = await readDiscoveryDictionaryForSymbols(env, ICONOPLASM_STARTER_GENE_SYMBOLS)
-  const state = await readOrImportCompactUserState(env, {
+  const state = await readCompactUserStateForRequest(env, {
     userId: userIdNorm,
-    isAdmin,
-    allowImport: true,
   })
   const membership = String(state?.membership_b64 || "")
   const missing = ICONOPLASM_STARTER_GENE_SYMBOLS.filter((symbol) => {
@@ -12287,10 +12303,8 @@ async function enrichGeneDiscoveryRows(env, rows) {
 }
 
 async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
-  const state = await readOrImportCompactUserState(env, {
+  const state = await readCompactUserStateForRequest(env, {
     userId,
-    isAdmin,
-    allowImport: true,
   })
   if (!state) return []
   const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
@@ -12300,6 +12314,29 @@ async function compactShelfRows(env, { userId, isAdmin = false, limit = null } =
       ? rows
       : rows.slice(0, Math.max(1, Math.min(10000, Number.parseInt(String(limit), 10) || 5000)))
   return enrichGeneDiscoveryRows(env, bounded)
+}
+
+async function enrichCompactDiscoveryRowsWithClanOrigins(env, rows) {
+  if (!rows.length) return []
+  const originBySymbol = new Map()
+  const symbols = [...new Set(rows.map((row) => row.gene_symbol).filter(Boolean))]
+  for (let offset = 0; offset < symbols.length; offset += 250) {
+    const chunk = symbols.slice(offset, offset + 250)
+    const result = await env.ICONOPLASM_DB.prepare(
+      `SELECT gene_symbol, aesthetics_origin_json
+       FROM icono_gene_essence
+       WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+    )
+      .bind(JSON.stringify(chunk))
+      .all()
+    for (const row of Array.isArray(result?.results) ? result.results : []) {
+      originBySymbol.set(normalizeSymbol(row?.gene_symbol || ""), row?.aesthetics_origin_json)
+    }
+  }
+  return rows.map((row) => ({
+    ...row,
+    aesthetics_origin_json: sanitizeText(originBySymbol.get(row.gene_symbol) || "[]", 4096) || "[]",
+  }))
 }
 
 async function listUserGeneDiscoveries(
@@ -12536,10 +12573,8 @@ async function countUserGeneDiscoveries(env, { userId } = {}) {
   const userIdNorm = normalizeUserId(userId || "")
   if (!userIdNorm || isGuestUserId(userIdNorm)) return 0
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const state = await readOrImportCompactUserState(env, {
+  const state = await readCompactUserStateForRequest(env, {
     userId: userIdNorm,
-    isAdmin,
-    allowImport: true,
   })
   return Math.max(0, Number(state?.member_count || 0) || 0)
 }
@@ -12588,10 +12623,8 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
     .bind(cleanedLimit)
     .all()
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const state = await readOrImportCompactUserState(env, {
+  const state = await readCompactUserStateForRequest(env, {
     userId: userIdNorm,
-    isAdmin,
-    allowImport: true,
   })
   const discovered = new Map()
   if (state) {
@@ -12631,10 +12664,8 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
   if (requestedSymbols.length) {
     const lookup = await readDiscoveryDictionaryForSymbols(env, requestedSymbols)
-    const state = await readOrImportCompactUserState(env, {
+    const state = await readCompactUserStateForRequest(env, {
       userId: userIdNorm,
-      isAdmin,
-      allowImport: true,
     })
     const membership = String(state?.membership_b64 || "")
     const fresh = requestedSymbols.filter((symbol) => {
@@ -18394,6 +18425,19 @@ export class IconoplasmVoteCoordinator {
       throw new Error("Invalid VoteCoordinator outbox row")
     }
 
+    const admission = await reserveIconoplasmMutationWrites(env, {
+      lane: "user_action",
+      operationId: `vote:${mutationId}`,
+      units: 4,
+    })
+    if (admission?.ok !== true) {
+      const error = new Error(
+        "Vote D1 delivery is pending because the user-action mutation lane is full",
+      )
+      error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+      throw error
+    }
+
     await projectVoteCoordinatorLedgerRow(env, {
       symbol,
       assetSha256: assetSha,
@@ -19864,6 +19908,7 @@ function isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error) {
 export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
   constructor(state, env = {}) {
     this.state = state
+    this.mutationReservations = new DailyMutationLaneReservations(state.storage)
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
       initializeCatalog: initializePublishedHydratedCatalog,
       onAuthorityEvent: (event, scopedEnv) =>
@@ -19879,6 +19924,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     })
     this.state.blockConcurrencyWhile(async () => {
       try {
+        this.mutationReservations.initialize()
         this.operationCosts.initialize()
         // The budget ledger lives in a single durable object so all isolates spend
         // from one shared counter. Module-memory counters were exactly the kind of
@@ -20396,6 +20442,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
               ? "rows_written_daily_smart"
               : null,
       updated_at: row?.updated_at || null,
+      mutation_lanes: this.mutationReservations.snapshot(dayKey),
     }
   }
 
@@ -20423,6 +20470,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rowsReadMonthlyLimit: positiveIntFromEnv(payload?.budgets?.rowsReadMonthlyLimit, 0),
       rowsWrittenMonthlyLimit: positiveIntFromEnv(payload?.budgets?.rowsWrittenMonthlyLimit, 0),
       dailyBurstMultiplier: positiveNumberFromEnv(payload?.budgets?.dailyBurstMultiplier, 1),
+    }
+
+    if (url.pathname === "/reserve-mutation-writes") {
+      const reservation = this.mutationReservations.reserve({
+        day: dayKey,
+        lane: payload?.lane,
+        operation_id: payload?.operation_id,
+        units: payload?.units,
+      })
+      return Response.json(reservation, { status: reservation.ok === false ? 429 : 200 })
+    }
+
+    if (url.pathname === "/mutation-reservation-snapshot") {
+      return Response.json(this.mutationReservations.snapshot(dayKey))
     }
 
     if (url.pathname === "/snapshot") {
@@ -23361,7 +23422,7 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
   const safeSymbol = normalizeSymbol(symbol)
   if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
   const nowIso = new Date().toISOString()
-  await env.ICONOPLASM_DB.prepare(
+  const row = await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_vote_projection_refresh_jobs (
        gene_symbol,
        actor_id,
@@ -23380,7 +23441,8 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
        next_attempt_at = excluded.next_attempt_at,
        attempts = 0,
        last_error = '',
-       job_version = icono_vote_projection_refresh_jobs.job_version + 1`,
+       job_version = icono_vote_projection_refresh_jobs.job_version + 1
+     RETURNING job_version`,
   )
     .bind(
       safeSymbol,
@@ -23389,16 +23451,21 @@ async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } 
       nowIso,
       nowIso,
     )
-    .run()
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT job_version
-     FROM icono_vote_projection_refresh_jobs
-     WHERE gene_symbol = ?
-     LIMIT 1`,
-  )
-    .bind(safeSymbol)
     .first()
-  return { ok: true, symbol: safeSymbol, job_version: Number(row?.job_version || 0) }
+  const jobVersion = Number(row?.job_version || 0)
+  if (!Number.isSafeInteger(jobVersion) || jobVersion < 1) {
+    throw new Error("Vote projection refresh job did not return its durable generation")
+  }
+  return {
+    ok: true,
+    symbol: safeSymbol,
+    job_version: jobVersion,
+    // The insert is the only transition from clean to dirty. Further votes
+    // update the same durable gene row and must not mint Queue operations. If a
+    // vote supersedes a running generation, that consumer schedules the single
+    // follow-up drain after its current delivery is consumed.
+    wake_required: jobVersion === 1,
+  }
 }
 
 async function recordVoteProjectionRefreshFailure(
@@ -23727,7 +23794,7 @@ async function rollbackAppliedVoteProjectionRefreshes(env, applied, error) {
 // rebuild, guarded rollbacks, and durable failure records under D1's 50 statements.
 export const VOTE_PROJECTION_RECOVERY_LIMIT = 2
 
-async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
+export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
   if (rawJobs.length > VOTE_PROJECTION_RECOVERY_LIMIT)
     throw new RangeError("Vote recovery batch exceeds rollback-safe limit")
   const jobs = []
@@ -23744,6 +23811,18 @@ async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
   const applied = []
   for (const job of jobs) {
     try {
+      const admission = await reserveIconoplasmMutationWrites(env, {
+        lane: "publication",
+        operationId: `vote-projection:${job.symbol}:${job.job_version}`,
+        units: 8,
+      })
+      if (admission?.ok !== true) {
+        throw new IconoplasmD1DailyBudgetExceededError({
+          exhausted: true,
+          exhausted_by: "publication_mutation_lane",
+          mutation_lane: admission,
+        })
+      }
       const result = await applyVoteProjectionRefreshWithoutPublicArtifact(env, job)
       applied.push(result)
       resultBySymbol.set(job.symbol, result)
@@ -24181,12 +24260,18 @@ export async function handleIconoplasmVoteProjectionQueue(batch, env) {
   const resultBySymbol = new Map(batchResults.map((result) => [result.symbol, result]))
   const recordedFailureSymbols = new Set()
   const retryAtBySymbol = new Map()
+  const followupWakeSymbols = new Set()
   for (const entry of dueEntries) {
     const result =
       resultBySymbol.get(entry.job.symbol) ||
       voteProjectionRefreshFailureResult(entry.job, new Error("vote projection refresh failed"))
     results.push(result)
     if (result?.ok) {
+      if (result.superseded && !followupWakeSymbols.has(result.symbol)) {
+        const followup = await sendVoteProjectionDrainQueueMessage(env)
+        if (!followup.ok) throw new Error(followup.detail || followup.code)
+        followupWakeSymbols.add(result.symbol)
+      }
       processed += 1
       if (typeof entry.message?.ack === "function") entry.message.ack()
       continue
@@ -24866,6 +24951,18 @@ async function recoverStaleRunningSyncFinalizationJobs(
     if (!leaseAt || leaseAt > cutoffIso) continue
     const symbol = normalizeSymbol(row?.gene_symbol || "")
     if (!symbol) continue
+    const admission = await reserveIconoplasmMutationWrites(env, {
+      lane: "finalization_recovery",
+      operationId: `finalization-recovery:${symbol}:${Number(row.job_version)}:${normalizeSyncFinalizationJobPhase(row?.phase)}`,
+      units: 50,
+    })
+    if (admission?.ok !== true) {
+      throw new IconoplasmD1DailyBudgetExceededError({
+        exhausted: true,
+        exhausted_by: "finalization_recovery_mutation_lane",
+        mutation_lane: admission,
+      })
+    }
     const changed = await writeSyncFinalizationJobState(env, {
       symbol,
       expectedVersion: Number(row.job_version),
@@ -25614,7 +25711,7 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
   return { ok: true, drained, applied, duplicates }
 }
 
-async function processPendingSyncFinalizationJobs(
+export async function processPendingSyncFinalizationJobs(
   env,
   ctx,
   {
@@ -25661,6 +25758,21 @@ async function processPendingSyncFinalizationJobs(
   let partialBudget = null
   for (const job of rows) {
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
+    const admission = await reserveIconoplasmMutationWrites(env, {
+      lane: "finalization_recovery",
+      operationId: `finalization:${job.symbol}:${job.job_version}:${job.phase}`,
+      // The queue invocation is already hard-limited to 50 D1 statements. A
+      // complete phase keeps that full reservation because indexed/triggered
+      // row work can be ambiguous after a provider timeout.
+      units: 50,
+    })
+    if (admission?.ok !== true) {
+      throw new IconoplasmD1DailyBudgetExceededError({
+        exhausted: true,
+        exhausted_by: "finalization_recovery_mutation_lane",
+        mutation_lane: admission,
+      })
+    }
     console.log("[Iconoplasm] finalization Queue job start", {
       symbol: job.symbol,
       phase: job.phase,
@@ -25842,7 +25954,7 @@ async function summarizePendingSyncFinalizationWork(
   }
 }
 
-async function scheduleVoteProjectionRefresh(
+export async function scheduleVoteProjectionRefresh(
   env,
   ctx,
   { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
@@ -25860,8 +25972,9 @@ async function scheduleVoteProjectionRefresh(
   const safeReason = voteProjectionRefreshJobReason(reason)
 
   let durable = false
+  let job = null
   try {
-    const job = await enqueueVoteProjectionRefreshJob(env, {
+    job = await enqueueVoteProjectionRefreshJob(env, {
       symbol: safeSymbol,
       actorId: safeActorId,
       reason: safeReason,
@@ -25872,13 +25985,16 @@ async function scheduleVoteProjectionRefresh(
     console.error("[Iconoplasm] vote projection queue enqueue failed:", error)
   }
 
-  const queueResult = durable
-    ? await sendVoteProjectionRefreshQueueMessage(env, {
-        symbol: safeSymbol,
-        actorId: safeActorId,
-        reason: safeReason,
-      })
-    : { ok: false, code: "DURABLE_JOB_NOT_ENQUEUED" }
+  const queueResult =
+    durable && job?.wake_required
+      ? await sendVoteProjectionRefreshQueueMessage(env, {
+          symbol: safeSymbol,
+          actorId: safeActorId,
+          reason: safeReason,
+        })
+      : durable
+        ? { ok: true, skipped: true, code: "DIRTY_GENE_WAKE_ALREADY_PENDING" }
+        : { ok: false, code: "DURABLE_JOB_NOT_ENQUEUED" }
   if (!queueResult?.ok) {
     console.error("[Iconoplasm] vote projection Queue send failed:", {
       symbol: safeSymbol,
@@ -25889,10 +26005,16 @@ async function scheduleVoteProjectionRefresh(
 
   return {
     ok: true,
-    queued: Boolean(queueResult?.ok),
+    queued: Boolean(queueResult?.ok && !queueResult?.skipped),
     durable,
-    queue_sent: Boolean(queueResult?.ok),
-    mode: queueResult?.ok ? "queue" : durable ? "durable_pending" : "best_effort",
+    queue_sent: Boolean(queueResult?.ok && !queueResult?.skipped),
+    mode: queueResult?.skipped
+      ? "durable_coalesced"
+      : queueResult?.ok
+        ? "queue"
+        : durable
+          ? "durable_pending"
+          : "best_effort",
     symbol: safeSymbol,
   }
 }
@@ -33722,10 +33844,8 @@ async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}
     Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
   )
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const state = await readOrImportCompactUserState(env, {
+  const state = await readCompactUserStateForRequest(env, {
     userId: userIdNorm,
-    isAdmin,
-    allowImport: true,
   })
   if (!state) return []
   const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
@@ -35331,6 +35451,24 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       } catch (error) {
         const code = String(error?.code || "")
+        if (code === "MUTATION_LANE_CAPACITY_EXHAUSTED") {
+          return done(
+            "discoveries_batch_capacity",
+            json(
+              {
+                ok: false,
+                persisted: false,
+                pending: true,
+                code,
+                error:
+                  "Discovery capacity is reserved for other mutation lanes; keep this exact batch pending and retry later.",
+                batch_id: batchId,
+              },
+              429,
+              { "Cache-Control": "no-store", "Retry-After": "60" },
+            ),
+          )
+        }
         if (code === "DISCOVERY_COMPACT_CONFLICT") {
           return done(
             "discoveries_batch_retry",
@@ -36657,26 +36795,16 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const userId = normalizeUserId(sessionUser.user_id)
       await ensureStarterGeneDiscoveries(env, { userId })
-      const discoveryRows = await env.ICONOPLASM_DB.prepare(
-        // Cost fence: this is bounded to the caller's indexed discovery rows and
-        // joins on raw canonical gene_symbol keys. The clan catalog is in module
-        // memory, so this route must never become a whole-inventory D1 scan.
-        `SELECT
-           d.gene_symbol AS gene_symbol,
-           ge.aesthetics_origin_json AS aesthetics_origin_json,
-           COALESCE(ge.full_name, '') AS full_name,
-           gr.current_asset_sha256 AS asset_sha256
-         FROM icono_gene_discoveries d
-         LEFT JOIN icono_gene_essence ge
-           ON ge.gene_symbol = d.gene_symbol
-         LEFT JOIN icono_admin_gene_rollup gr
-           ON gr.gene_symbol = d.gene_symbol
-         WHERE d.user_id = ?
-         ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-         LIMIT 10000`,
+      // The authoritative compact chronology is the membership/order source.
+      // Never fall back to the retired per-hover table on this whole-shelf view.
+      const discoveryRows = await enrichCompactDiscoveryRowsWithClanOrigins(
+        env,
+        await compactShelfRows(env, {
+          userId,
+          isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+          limit: 10000,
+        }),
       )
-        .bind(userId)
-        .all()
       // Scalability: a long-time player can have ~10k discoveries spanning
       // hundreds of clans. Keep the per-clan true count, but only ship a small
       // preview of member blots per clan (thumb + symbol only) so the payload
@@ -36695,7 +36823,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       // endpoint. Members use the medium portrait (true portrait aspect, ~398x512)
       // NOT the thumb variant (a 256x256 square center-crop) so tiles are uncropped.
       const PREVIEW_CAP = 4
-      for (const row of Array.isArray(discoveryRows?.results) ? discoveryRows.results : []) {
+      for (const row of discoveryRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
         if (!symbol) continue
         let origins = []
@@ -36812,29 +36940,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
         }
         const userId = normalizeUserId(sessionUser.user_id)
-        const memberRows = await env.ICONOPLASM_DB.prepare(
-          // Cost fence: bounded to the caller's indexed discovery rows.
-          `SELECT
-             d.gene_symbol AS gene_symbol,
-             ge.aesthetics_origin_json AS aesthetics_origin_json,
-             COALESCE(ge.full_name, '') AS full_name,
-             gr.current_asset_sha256 AS asset_sha256
-           FROM icono_gene_discoveries d
-           LEFT JOIN icono_gene_essence ge
-             ON ge.gene_symbol = d.gene_symbol
-           LEFT JOIN icono_admin_gene_rollup gr
-             ON gr.gene_symbol = d.gene_symbol
-           WHERE d.user_id = ?
-           ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC
-           LIMIT 10000`,
+        const memberRows = await enrichCompactDiscoveryRowsWithClanOrigins(
+          env,
+          await compactShelfRows(env, {
+            userId,
+            isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
+            limit: 10000,
+          }),
         )
-          .bind(userId)
-          .all()
         const membersPortraitBase = portraitBase(url, env)
         const singles = []
         const multis = []
         const seen = new Set()
-        for (const row of Array.isArray(memberRows?.results) ? memberRows.results : []) {
+        for (const row of memberRows) {
           const symbol = normalizeSymbol(row?.gene_symbol || "")
           if (!symbol || seen.has(symbol)) continue
           let origins = []
@@ -39021,15 +39139,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             "admin_vote_projection_reconciliation",
           ),
         })
-        const wake = await sendVoteProjectionRefreshQueueMessage(env, {
+        const wake = job?.wake_required
+          ? await sendVoteProjectionRefreshQueueMessage(env, {
+              symbol,
+              actorId: "admin_reconciliation",
+              reason: voteProjectionRefreshJobReason(
+                payload?.reason,
+                "admin_vote_projection_reconciliation",
+              ),
+            })
+          : { ok: true, skipped: true }
+        results.push({
           symbol,
-          actorId: "admin_reconciliation",
-          reason: voteProjectionRefreshJobReason(
-            payload?.reason,
-            "admin_vote_projection_reconciliation",
-          ),
+          job_version: job?.job_version || 0,
+          queued: wake?.ok === true && !wake?.skipped,
+          coalesced: wake?.skipped === true,
         })
-        results.push({ symbol, job_version: job?.job_version || 0, queued: wake?.ok === true })
       }
       return done(
         "admin_votes_projection_refresh_reconcile",

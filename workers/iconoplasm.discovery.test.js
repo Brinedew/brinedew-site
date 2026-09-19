@@ -345,7 +345,7 @@ test("a ten-hover batch commits one compact state and replays without duplicates
   )
 })
 
-test("membership reads compact state and imports legacy rows exactly once", async () => {
+test("membership reads only compact state and never resurrects the legacy membership fallback", async () => {
   const env = await buildEnv({ sessions: sessionFor("reader") })
   env.gatewayDb.raw
     .prepare(
@@ -361,9 +361,10 @@ test("membership reads compact state and imports legacy rows exactly once", asyn
     { cookie: "session=abc" },
   )
   const payload = await (await invoke(request, env)).json()
-  assert.deepEqual(payload.discovered_symbols, ["TP53"])
-  assert.equal(await compactRowCount(env), 1)
-  // Legacy rows vanish; membership must still answer from compact state.
+  assert.deepEqual(payload.discovered_symbols, [])
+  assert.equal(await compactRowCount(env), 0)
+  // The retired table is irrelevant to request-time membership both before
+  // and after cleanup. Migration must happen through the explicit tool.
   env.gatewayDb.raw.exec("DELETE FROM icono_gene_discoveries")
   const again = await (
     await invoke(
@@ -374,7 +375,7 @@ test("membership reads compact state and imports legacy rows exactly once", asyn
       env,
     )
   ).json()
-  assert.deepEqual(again.discovered_symbols, ["TP53"])
+  assert.deepEqual(again.discovered_symbols, [])
 })
 
 test("shared aggregates stay exact through the durable deferred delivery drain", async () => {

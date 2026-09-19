@@ -93,13 +93,15 @@ test(
         { reads: 0, writes: 0 },
       )
       assert.equal(receipts.length, SAVERS * 2, "one read batch and one commit batch per saver")
-      assert.ok(
-        personal.writes >= SAVERS * 2,
-        `personal writes ${personal.writes} must include every personal row and outbox row`,
+      assert.equal(
+        personal.reads,
+        SAVERS * 3,
+        "the production compact schema must retain exactly three D1 rows read per saver batch",
       )
-      assert.ok(
-        personal.writes <= SAVERS * 4,
-        `personal writes ${personal.writes} exceed the accepted envelope`,
+      assert.equal(
+        personal.writes,
+        SAVERS * 3,
+        "the production compact schema and outbox index must retain exactly three D1 writes per saver batch",
       )
 
       const firstUser = await readCompactUserState(db, "saver-0")
