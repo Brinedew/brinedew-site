@@ -8,6 +8,8 @@ import { ICONOPLASM_GENE_RANGES } from "../workers/iconoplasm-gene-discovery.js"
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
 // validation coupled to direct route ownership; do not replace it with a
 // Worker-side cache that still consumes one invocation per file.
+// ARCHITECTURE FENCE [IPD-003]: final activation derives complete gene sitemap
+// membership from the verified immutable compact catalog, never a runtime scan.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const publicRoot = path.join(repoRoot, "public")
 const targetRoot = path.join(repoRoot, "public-iconoplasm-edge")
@@ -83,17 +85,45 @@ Disallow: /api/
 Sitemap: https://iconoplasm.brinedew.bio/sitemap.xml
 `
 
-const iconoplasmSitemap = `<?xml version="1.0" encoding="UTF-8"?>
+const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
+
+function publicationSymbols(publicationIndexes = []) {
+  const symbols = new Set()
+  for (const index of publicationIndexes) {
+    if (index?.schema_version !== 2 || !Array.isArray(index.search_entries)) {
+      throw new Error("Invalid immutable compact catalog index")
+    }
+    for (const entry of index.search_entries) {
+      const symbol = String(entry?.[0] || "")
+        .trim()
+        .toUpperCase()
+      if (!SYMBOL.test(symbol)) throw new Error("Invalid published gene symbol")
+      if (symbols.has(symbol)) throw new Error(`Duplicate published gene symbol: ${symbol}`)
+      symbols.add(symbol)
+    }
+  }
+  return [...symbols].sort((left, right) => left.localeCompare(right))
+}
+
+function iconoplasmSitemap(symbols) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iconoplasm.brinedew.bio/</loc></url>
   <url><loc>https://iconoplasm.brinedew.bio/genes</loc></url>
 ${ICONOPLASM_GENE_RANGES.map(
   (range) => `  <url><loc>https://iconoplasm.brinedew.bio/genes/${range.slug}</loc></url>`,
 ).join("\n")}
+${symbols
+  .map(
+    (symbol) =>
+      `  <url><loc>https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}</loc></url>`,
+  )
+  .join("\n")}
   <url><loc>https://iconoplasm.brinedew.bio/privacy</loc></url>
   <url><loc>https://iconoplasm.brinedew.bio/license</loc></url>
 </urlset>
 `
+}
 
 const iconoplasmLlms = `# Iconoplasm
 
@@ -105,9 +135,38 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 - Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 `
 
-const redirectsFile = `/blot/* /static/iconoplasm/blot-placeholder.svg 200
+const redirectsFile = `/blot/* / 200
 /portraits/* /static/iconoplasm/blot-placeholder.svg 200
 `
+
+export async function writeIconoplasmCompatibilityArtifacts({
+  outputRoot = targetRoot,
+  publicationIndexes = null,
+  symbols = null,
+} = {}) {
+  const resolvedOutput = path.resolve(outputRoot)
+  const publishedSymbols = symbols
+    ? [...symbols].map((value) =>
+        String(value || "")
+          .trim()
+          .toUpperCase(),
+      )
+    : publicationSymbols(publicationIndexes || [])
+  if (
+    publishedSymbols.some((symbol) => !SYMBOL.test(symbol)) ||
+    new Set(publishedSymbols).size !== publishedSymbols.length
+  ) {
+    throw new Error("Invalid published gene symbol inventory")
+  }
+  publishedSymbols.sort((left, right) => left.localeCompare(right))
+  await writeFile(
+    path.join(resolvedOutput, "sitemap.xml"),
+    iconoplasmSitemap(publishedSymbols),
+    "utf8",
+  )
+  await writeFile(path.join(resolvedOutput, "_redirects"), redirectsFile, "utf8")
+  return { geneCount: publishedSymbols.length }
+}
 
 async function ensureFile(filePath) {
   const info = await stat(filePath)
@@ -144,6 +203,7 @@ async function inspectTree(directory, bundleRoot) {
 export async function prepareIconoplasmEdgeAssets({
   sourceRoot = publicRoot,
   outputRoot = targetRoot,
+  publicationIndexes = [],
 } = {}) {
   const resolvedSource = path.resolve(sourceRoot)
   const resolvedOutput = path.resolve(outputRoot)
@@ -197,9 +257,11 @@ export async function prepareIconoplasmEdgeAssets({
   )
   await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
   await writeFile(path.join(resolvedOutput, "robots.txt"), iconoplasmRobots, "utf8")
-  await writeFile(path.join(resolvedOutput, "sitemap.xml"), iconoplasmSitemap, "utf8")
   await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
-  await writeFile(path.join(resolvedOutput, "_redirects"), redirectsFile, "utf8")
+  await writeIconoplasmCompatibilityArtifacts({
+    outputRoot: resolvedOutput,
+    publicationIndexes,
+  })
   const sourceSha = String(
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
   ).trim()

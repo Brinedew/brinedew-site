@@ -3,6 +3,7 @@ import { execFile } from "node:child_process"
 import { readFile, rm, writeFile } from "node:fs/promises"
 import { promisify } from "node:util"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { writeIconoplasmCompatibilityArtifacts } from "./prepare-iconoplasm-edge-assets.mjs"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const HASH = /^[a-f0-9]{64}$/
@@ -68,6 +69,7 @@ export async function verifyPublicReadArtifacts({
   ) {
     throw new Error("public read artifacts are not activated")
   }
+  const symbols = new Set()
   for (const shard of manifest.shards) {
     const identity = String(shard.catalog_index.key).match(
       /^published-cards\/v2\/immutable\/catalogindexes\/([a-f0-9]{64})\.json$/,
@@ -86,11 +88,24 @@ export async function verifyPublicReadArtifacts({
       !Array.isArray(index.gallery_entries)
     )
       throw new Error("public read artifacts are not activated")
+    for (const entry of index.search_entries) {
+      const symbol = String(entry?.[0] || "")
+        .trim()
+        .toUpperCase()
+      if (!/^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(symbol) || symbols.has(symbol)) {
+        throw new Error("public read symbol inventory is invalid")
+      }
+      symbols.add(symbol)
+    }
+  }
+  if (symbols.size !== manifest.card_count) {
+    throw new Error("public read symbol inventory is incomplete")
   }
   return {
     version: head.current,
     geneCount: manifest.card_count,
     indexCount: manifest.shards.length,
+    symbols: [...symbols].sort((left, right) => left.localeCompare(right)),
   }
 }
 
@@ -206,12 +221,14 @@ export async function releasePublicReadCutover({
   startMigration,
   waitForMigration,
   verifyArtifacts,
+  prepareStaticCompatibility,
   activate,
 }) {
   await deployPreparation()
   await startMigration()
   const migration = await waitForMigration()
   const verification = await verifyArtifacts()
+  await prepareStaticCompatibility(verification)
   await activate(verification)
   return { migration, verification }
 }
@@ -279,6 +296,8 @@ async function releaseFromCli(cacheBust) {
           readStatus: () => publicationMigrationStatus(adminToken),
         }),
       verifyArtifacts: () => waitForPublicReadArtifacts(),
+      prepareStaticCompatibility: (verification) =>
+        writeIconoplasmCompatibilityArtifacts({ symbols: verification.symbols }),
       activate: () =>
         runPnpm([
           "exec",

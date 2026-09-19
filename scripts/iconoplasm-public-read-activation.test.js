@@ -61,7 +61,7 @@ test("activation gate reads and hashes every advertised compact index", async ()
         return Response.json({
           build_revision: 3,
           storage: "bunny_card_catalog_v2",
-          card_count: 19023,
+          card_count: 2,
           shards: [
             {
               catalog_index: {
@@ -73,13 +73,24 @@ test("activation gate reads and hashes every advertised compact index", async ()
       return Response.json({
         schema_version: 2,
         pages: [],
-        search_entries: [],
-        gallery_entries: [],
+        search_entries: [
+          ["RB1", "RB transcriptional corepressor 1", 0, 0],
+          ["TP53", "tumor protein p53", 0, 1],
+        ],
+        gallery_entries: [
+          ["RB1", 0, 0],
+          ["TP53", 0, 1],
+        ],
       })
     },
     verifyHash: false,
   })
-  assert.deepEqual(result, { version: `ccv2-${hash}`, geneCount: 19023, indexCount: 1 })
+  assert.deepEqual(result, {
+    version: `ccv2-${hash}`,
+    geneCount: 2,
+    indexCount: 1,
+    symbols: ["RB1", "TP53"],
+  })
   assert.equal(requests.length, 3)
 })
 
@@ -239,4 +250,36 @@ test("completed owner migration still requires exact Bunny proof before activati
     /Bunny artifacts incomplete/,
   )
   assert.deepEqual(operations, ["deploy-retained-assets", "migrate-existing-owner", "verify-bunny"])
+})
+
+test("activation writes static compatibility artifacts from the verified immutable index first", async () => {
+  const operations = []
+  const verification = {
+    version: `ccv2-${"a".repeat(64)}`,
+    geneCount: 2,
+    indexCount: 1,
+    symbols: ["RB1", "TP53"],
+  }
+  await cutover.releasePublicReadCutover({
+    deployPreparation: async () => operations.push("deploy-retained-assets"),
+    startMigration: async () => operations.push("migrate-existing-owner"),
+    waitForMigration: async () => operations.push("migration-complete"),
+    verifyArtifacts: async () => {
+      operations.push("verify-bunny")
+      return verification
+    },
+    prepareStaticCompatibility: async (received) => {
+      assert.deepEqual(received, verification)
+      operations.push("write-static-sitemap")
+    },
+    activate: async () => operations.push("activate-production"),
+  })
+  assert.deepEqual(operations, [
+    "deploy-retained-assets",
+    "migrate-existing-owner",
+    "migration-complete",
+    "verify-bunny",
+    "write-static-sitemap",
+    "activate-production",
+  ])
 })

@@ -92,6 +92,8 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "shared vote totals",
     "directly from Bunny",
     "static placeholder",
+    "stable first-party blot route",
+    "static application shell",
     "explicit-intent only",
   ]) {
     assert.match(
@@ -117,6 +119,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "workers/iconoplasm-gene-discovery.js",
     "workers/iconoplasm.account-gallery-window.test.js",
     "scripts/architecture-fences.test.js",
+    "quartz/static/iconoplasm/public-blot-route.js",
   ]) {
     assert.equal(markerFiles.has(protectedFile), true, `IPD-011 no longer guards ${protectedFile}`)
   }
@@ -165,6 +168,10 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(fence.decision, /linked from its frozen text-only archive range/)
   assert.match(fence.decision, /listed in its gene-sitemap shard/)
+  assert.match(
+    fence.decision,
+    /verified compact catalog index.*static sitemap.*no per-gene Cloudflare files/,
+  )
   assert.match(fence.decision, /only its image-specific projections are absent/)
   assert.match(
     fence.decision,
@@ -179,6 +186,10 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   )
   assert.match(fence.change_control, /Do not promote a raw portrait as the canonical public image/)
   assert.match(fence.change_control, /publish a full-corpus image manifest/)
+  assert.equal(
+    fence.markers.some((marker) => marker.file === "scripts/prepare-iconoplasm-edge-assets.mjs"),
+    true,
+  )
 })
 
 // ARCHITECTURE FENCE [IPD-001]
