@@ -888,6 +888,19 @@ test("public vote set is routed through the vote coordinator instead of reading 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(payload?.command_id, "viral-load:tp53:2026-09-19:000000")
+  assert.deepEqual(payload?.operations, {
+    d1RowsRead: 0,
+    d1RowsWritten: 4,
+    durableObjectRequests: 2,
+    durableObjectRowsRead: 8,
+    durableObjectRowsWritten: 8,
+    queueOperations: 0,
+  })
+  assert.deepEqual(payload?.operation_receipt, {
+    basis: "admitted_vote_command_v1",
+    d1_reservation: { lane: "user_action", units: 4 },
+    durable_outbox: true,
+  })
   assert.equal(coordinator.calls.length, 1)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/set")
   assert.equal(queue.messages.length, 0)
