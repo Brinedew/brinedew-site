@@ -25939,15 +25939,6 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
     `${activation.cursor_user_id}\n${activation.cursor_gene_symbol}`,
   )
   const operationId = `discovery-migration:${cursorDigest}`
-  // The cursor-derived token is stable across retries. Only the invocation
-  // that owns this lease may touch the matching reservation lifecycle.
-  const leaseToken = operationId
-  const claimed = await claimCompactDiscoveryMigrationLease(env.ICONOPLASM_DB, {
-    token: leaseToken,
-  })
-  if (!claimed) {
-    return { ok: true, pending: true, code: "DISCOVERY_MIGRATION_LEASE_HELD" }
-  }
   let admission
   try {
     admission = await reserveIconoplasmMutationWrites(env, {
@@ -25960,6 +25951,16 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   }
   if (admission?.ok !== true) {
     return { ok: false, pending: true, code: admission?.code || "MUTATION_ADMISSION_REFUSED" }
+  }
+  // Admission must precede the lease write. The cursor-derived token and
+  // reservation are stable across retries; a lease loser deliberately leaves
+  // that shared uncertain reservation untouched.
+  const leaseToken = operationId
+  const claimed = await claimCompactDiscoveryMigrationLease(env.ICONOPLASM_DB, {
+    token: leaseToken,
+  })
+  if (!claimed) {
+    return { ok: true, pending: true, code: "DISCOVERY_MIGRATION_LEASE_HELD" }
   }
   const result = await migrateLegacyDiscoveryPage({
     db: env.ICONOPLASM_DB,
