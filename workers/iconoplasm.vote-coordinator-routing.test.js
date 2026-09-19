@@ -90,11 +90,15 @@ test("VoteCoordinator refuses a ninth newly-created active asset while preservin
   coordinator.setMeta("symbol", "TP53")
   coordinator.setMeta("bootstrapped", "1")
   coordinator.setMeta("authority_epoch", "v2")
+  const activeCandidates = []
   for (let index = 0; index < 8; index += 1) {
-    coordinator.ensureAssetSummaryRow(index.toString(16).padStart(64, "0"), {
+    const assetSha = index.toString(16).padStart(64, "0")
+    coordinator.ensureAssetSummaryRow(assetSha, {
       visionId: `anima-v1-${index + 1}`,
     })
+    activeCandidates.push({ asset_sha256: assetSha, status: "ready" })
   }
+  coordinator.importGeneCandidateAuthority(activeCandidates)
   assert.throws(
     () =>
       coordinator.applyVoteMutation({
@@ -116,11 +120,15 @@ test("vote set and import routes reject a ninth asset before inserting it", asyn
   coordinator.setMeta("symbol", "TP53")
   coordinator.setMeta("bootstrapped", "1")
   coordinator.setMeta("authority_epoch", "v2")
+  const activeCandidates = []
   for (let index = 0; index < 8; index += 1) {
-    coordinator.ensureAssetSummaryRow(index.toString(16).padStart(64, "0"), {
+    const assetSha = index.toString(16).padStart(64, "0")
+    coordinator.ensureAssetSummaryRow(assetSha, {
       visionId: `anima-v1-${index + 1}`,
     })
+    activeCandidates.push({ asset_sha256: assetSha, status: "ready" })
   }
+  coordinator.importGeneCandidateAuthority(activeCandidates)
   const ninth = "f".repeat(64)
   const setResponse = await coordinator.fetch(
     new Request("https://coordinator/vote/set", {
