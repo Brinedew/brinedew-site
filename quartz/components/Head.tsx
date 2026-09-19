@@ -210,47 +210,9 @@ export default (() => {
     geneCardPromise: null,
   }
   var geneMatch = /^\\/gene\\/([^/?#]+)/.exec(iconoplasmStartupPath)
-  if (geneMatch && window.fetch) {
+  if (geneMatch) {
     bootstrap.geneDetailSymbol = decodeURIComponent(geneMatch[1] || "").trim().toUpperCase()
     if (bootstrap.geneDetailSymbol) {
-      var isCompleteGeneDetail = function (data) {
-        return !!(
-          data &&
-          typeof data === "object" &&
-          data.symbol === bootstrap.geneDetailSymbol &&
-          data.essence &&
-          typeof data.essence === "object" &&
-          Array.isArray(data.portrait_candidates)
-        )
-      }
-      var startGeneDetailFetch = function () {
-        if (bootstrap.geneDetailPromise) return bootstrap.geneDetailPromise
-        if (isCompleteGeneDetail(embeddedGeneCard)) {
-          bootstrap.geneDetailData = embeddedGeneCard
-          bootstrap.geneDetailPromise = Promise.resolve(embeddedGeneCard)
-        } else {
-          bootstrap.geneDetailPromise = fetch(
-            origin +
-              "/api/iconoplasm/site/genes/" +
-              encodeURIComponent(bootstrap.geneDetailSymbol),
-          )
-            .then(function (response) {
-              if (!response.ok) return null
-              return response.json().catch(function () {
-                return null
-              })
-            })
-            .then(function (data) {
-              var completeData = isCompleteGeneDetail(data) ? data : null
-              bootstrap.geneDetailData = completeData
-              return completeData
-            })
-            .catch(function () {
-              return null
-            })
-        }
-        return bootstrap.geneDetailPromise
-      }
       var embeddedGeneCard = null
       try {
         // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
@@ -279,27 +241,7 @@ export default (() => {
       if (embeddedGeneCard) {
         bootstrap.geneCardData = embeddedGeneCard
         bootstrap.geneCardPromise = Promise.resolve(embeddedGeneCard)
-      } else {
-          bootstrap.geneCardPromise = fetch(
-            origin + "/api/iconoplasm/cards/" + encodeURIComponent(bootstrap.geneDetailSymbol),
-        )
-          .then(function (response) {
-            if (!response.ok) return null
-            return response.json().catch(function () {
-              return null
-            })
-          })
-          .then(function (payload) {
-            var card = payload && (payload.card || (payload.cards && payload.cards[0]))
-            var data = (card && card.payload) || payload?.payload || null
-            bootstrap.geneCardData = data || null
-            return data || null
-          })
-          .catch(function () {
-            return null
-          })
       }
-      startGeneDetailFetch()
     }
   }
   if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") && window.fetch) {
