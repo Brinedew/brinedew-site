@@ -36355,10 +36355,57 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const payload = await parseJsonBody(request)
-      const result = await mergeGuestGeneDiscoveries(env, {
-        userId: sessionUser.user_id,
-        symbols: Array.isArray(payload?.symbols) ? payload.symbols : [],
-      })
+      const requestedSymbols = Array.isArray(payload?.symbols) ? payload.symbols : []
+      let result
+      try {
+        result = await mergeGuestGeneDiscoveries(env, {
+          userId: sessionUser.user_id,
+          symbols: requestedSymbols,
+        })
+      } catch (error) {
+        const code = String(error?.code || "")
+        const capacityRefusal =
+          code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
+          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
+        if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
+          return done(
+            "discoveries_merge_capacity",
+            json(
+              {
+                ok: false,
+                persisted: false,
+                pending: true,
+                code,
+                error: "Discovery capacity is unavailable; keep these exact symbols pending.",
+                symbols: requestedSymbols,
+              },
+              capacityRefusal ? 429 : 503,
+              { "Cache-Control": "no-store", "Retry-After": "60" },
+            ),
+          )
+        }
+        if (code === "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE") {
+          return done(
+            "discoveries_merge_migration_incomplete",
+            json(
+              {
+                ok: false,
+                persisted: false,
+                pending: true,
+                code,
+                error: "Discovery activation is waiting for the bounded legacy migration.",
+                symbols: requestedSymbols,
+              },
+              503,
+              { "Cache-Control": "no-store", "Retry-After": "300" },
+            ),
+          )
+        }
+        throw error
+      }
       if (!result.ok) {
         return done(
           "discoveries_merge_400",
