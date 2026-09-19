@@ -516,6 +516,20 @@ test("auth payload owns the admin bit without a second admin session probe", asy
   assert.match(block, /refreshCurrentGeneInteractiveIslands\(\)/)
 })
 
+test("anonymous settings bootstrap does not probe auth or admin state", async () => {
+  const app = await readFile(settingsAppPath, "utf8")
+  const initStart = app.indexOf("function init()")
+  const initEnd = app.indexOf('\n  if (document.readyState === "loading")', initStart)
+  assert.notEqual(initStart, -1, "missing settings initializer")
+  assert.notEqual(initEnd, -1, "missing settings initializer boundary")
+  const block = app.slice(initStart, initEnd)
+
+  assert.match(app, /hasSharedSessionPresenceHint/)
+  assert.match(block, /if \(!hasSharedSessionPresenceHint\(\)\) return/)
+  assert.match(block, /fetchAuthenticatedUser/)
+  assert.doesNotMatch(app, /fetchIconoplasmAdminState|\/api\/iconoplasm\/admin\/me/)
+})
+
 test("account collection single-flights duplicate window requests", async () => {
   const app = await readFile(appPath, "utf8")
 
