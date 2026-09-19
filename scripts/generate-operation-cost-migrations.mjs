@@ -115,12 +115,22 @@ export function compactDiscoveryMigrationStatements() {
   // replaced by the bounded on-demand dictionary resolver, so a statement
   // count that grows with the migration means the seed came back. The canonical
   // identity index plus the activation gate and its singleton are fifteen
-  // reviewed statements.
+  // reviewed statements. Migration 0108 repairs installations that recorded
+  // 0106 before the activation statements were historically appended.
   return reviewedMigrationStatements(
     "migrations-iconoplasm",
     "0106_compact_discovery_state_v2.sql",
     0,
     15,
+  )
+}
+
+export function compactDiscoveryActivationMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0108_compact_discovery_activation_v2.sql",
+    0,
+    2,
   )
 }
 
@@ -143,6 +153,11 @@ function output() {
     throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
   }
   const migrations = [
+    [
+      "COMPACT_DISCOVERY_ACTIVATION",
+      "0108_compact_discovery_activation_v2.sql",
+      compactDiscoveryActivationMigrationStatements(),
+    ],
     ["VOTE_WAKE", "0107_vote_projection_wake_generation.sql", voteWakeMigrationStatements()],
     [
       "COMPACT_DISCOVERY",
