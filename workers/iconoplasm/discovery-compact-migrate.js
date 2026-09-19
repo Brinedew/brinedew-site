@@ -13,12 +13,12 @@ import { createDiscoveryOrdinalDictionary } from "./discovery-compact-state.js"
 
 export const DISCOVERY_IMPORT_MAX_EVENTS_PER_GENE = 32
 export const DISCOVERY_IMPORT_BATCH_ENCOUNTERS = 256
-export const DISCOVERY_MIGRATION_USER_PAGE_LIMIT = 25
+export const DISCOVERY_MIGRATION_ROW_PAGE_LIMIT = 8
 
 export async function readCompactDiscoveryActivation(db) {
   const row = await db
     .prepare(
-      `SELECT status, cursor_user_id, migrated_users, completed_at
+      `SELECT status, cursor_user_id, cursor_gene_symbol, migrated_users, completed_at
        FROM icono_discovery_compact_activation_v2 WHERE singleton = 1`,
     )
     .first()
@@ -26,6 +26,7 @@ export async function readCompactDiscoveryActivation(db) {
     ? {
         status: String(row.status || "pending"),
         cursor_user_id: String(row.cursor_user_id || ""),
+        cursor_gene_symbol: String(row.cursor_gene_symbol || ""),
         migrated_users: Math.max(0, Number(row.migrated_users || 0) || 0),
         completed_at: row.completed_at ? String(row.completed_at) : null,
       }
@@ -167,34 +168,38 @@ export async function importLegacyDiscoveryUser({
 
 export async function migrateLegacyDiscoveryPage({
   db,
-  userLimit = DISCOVERY_MIGRATION_USER_PAGE_LIMIT,
+  rowLimit = DISCOVERY_MIGRATION_ROW_PAGE_LIMIT,
   nowSeconds = Math.floor(Date.now() / 1000),
 }) {
   const activation = await readCompactDiscoveryActivation(db)
   if (!activation) throw new Error("Compact discovery activation schema is missing")
   if (activation.status === "complete") return { ok: true, complete: true, migrated_users: 0 }
-  const limit = Math.max(1, Math.min(100, Number.parseInt(String(userLimit), 10) || 25))
-  const users = await db
+  const limit = Math.max(1, Math.min(8, Number.parseInt(String(rowLimit), 10) || 8))
+  const selected = await db
     .prepare(
-      `SELECT DISTINCT user_id
+      `SELECT *
        FROM icono_gene_discoveries
-       WHERE user_id > ?
-       ORDER BY user_id
+       WHERE user_id > ? OR (user_id = ? AND gene_symbol > ?)
+       ORDER BY user_id, gene_symbol
        LIMIT ?`,
     )
-    .bind(activation.cursor_user_id, limit + 1)
+    .bind(
+      activation.cursor_user_id,
+      activation.cursor_user_id,
+      activation.cursor_gene_symbol,
+      limit + 1,
+    )
     .all()
-  const page = (Array.isArray(users?.results) ? users.results : []).slice(0, limit)
+  const selectedRows = Array.isArray(selected?.results) ? selected.results : []
+  const page = selectedRows.slice(0, limit)
+  const byUser = new Map()
+  for (const row of page) {
+    const userId = String(row?.user_id || "")
+    if (!byUser.has(userId)) byUser.set(userId, [])
+    byUser.get(userId).push(row)
+  }
   let migratedUsers = 0
-  let cursor = activation.cursor_user_id
-  let partialUser = false
-  for (const entry of page) {
-    const userId = String(entry?.user_id || "")
-    const legacy = await db
-      .prepare(`SELECT * FROM icono_gene_discoveries WHERE user_id = ? ORDER BY gene_symbol`)
-      .bind(userId)
-      .all()
-    const legacyRows = Array.isArray(legacy?.results) ? legacy.results : []
+  for (const [userId, legacyRows] of byUser) {
     await ensureDiscoveryDictionaryForNames(
       db,
       legacyRows.map((row) => row.gene_symbol),
@@ -214,27 +219,38 @@ export async function migrateLegacyDiscoveryPage({
       dictionary,
       legacyRows,
       nowSeconds,
-      batchLimit: 32,
+      batchLimit: 8,
     })
-    if (result.remaining > 0) {
-      partialUser = true
-      break
-    }
-    cursor = userId
+    if (result.remaining > 0) throw new Error("Bounded discovery migration page overflow")
     migratedUsers += 1
   }
-  const hasMore =
-    partialUser || page.length < (Array.isArray(users?.results) ? users.results : []).length
-  const complete = !hasMore && page.length < limit
+  const last = page.at(-1)
+  const cursorUserId = last ? String(last.user_id || "") : activation.cursor_user_id
+  const cursorGeneSymbol = last ? String(last.gene_symbol || "") : activation.cursor_gene_symbol
+  const complete = selectedRows.length <= limit
   await db
     .prepare(
       `UPDATE icono_discovery_compact_activation_v2
-       SET status = ?, cursor_user_id = ?, migrated_users = migrated_users + ?,
+       SET status = ?, cursor_user_id = ?, cursor_gene_symbol = ?,
+           migrated_users = migrated_users + ?,
            completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
            updated_at = CURRENT_TIMESTAMP
        WHERE singleton = 1 AND status = 'pending'`,
     )
-    .bind(complete ? "complete" : "pending", cursor, migratedUsers, complete ? 1 : 0)
+    .bind(
+      complete ? "complete" : "pending",
+      cursorUserId,
+      cursorGeneSymbol,
+      migratedUsers,
+      complete ? 1 : 0,
+    )
     .run()
-  return { ok: true, complete, migrated_users: migratedUsers, cursor_user_id: cursor }
+  return {
+    ok: true,
+    complete,
+    migrated_users: migratedUsers,
+    migrated_rows: page.length,
+    cursor_user_id: cursorUserId,
+    cursor_gene_symbol: cursorGeneSymbol,
+  }
 }

@@ -19,6 +19,13 @@ export function withTestMutationAuthority(env) {
               reserved_units: body.units,
             })
           }
+          if (path === "/complete-mutation-write-reservation") {
+            return Response.json({
+              ok: true,
+              terminal: true,
+              operation_id: body.operation_id,
+            })
+          }
           return Response.json({
             day_key: body.day_key,
             cycle_key: body.cycle_key,
