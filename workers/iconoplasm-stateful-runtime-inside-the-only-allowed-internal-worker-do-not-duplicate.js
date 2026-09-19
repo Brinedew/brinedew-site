@@ -17,7 +17,11 @@ import {
   readSharedCompactState,
 } from "./iconoplasm/discovery-compact-store.js"
 import { recordCompactDiscoveryBatch } from "./iconoplasm/discovery-compact-service.js"
-import { assertCompactDiscoveryActivated } from "./iconoplasm/discovery-compact-migrate.js"
+import {
+  assertCompactDiscoveryActivated,
+  migrateLegacyDiscoveryPage,
+  readCompactDiscoveryActivation,
+} from "./iconoplasm/discovery-compact-migrate.js"
 import {
   consumeSharedDiscoveryDeliveries,
   drainSharedDiscoveryDeliveries,
@@ -2383,7 +2387,12 @@ async function reserveIconoplasmMutationWrites(
     }),
   )
   const payload = await response.json().catch(() => null)
-  if (response.status === 429 && payload?.code === "MUTATION_LANE_CAPACITY_EXHAUSTED") {
+  if (
+    response.status === 429 &&
+    ["MUTATION_LANE_CAPACITY_EXHAUSTED", "MUTATION_PROVIDER_HEADROOM_RESERVED"].includes(
+      payload?.code,
+    )
+  ) {
     return payload
   }
   if (!response.ok || payload?.ok !== true) {
@@ -2392,6 +2401,29 @@ async function reserveIconoplasmMutationWrites(
     )
   }
   return payload
+}
+
+async function completeIconoplasmMutationReservation(env, operationId) {
+  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
+  if (!stub) return false
+  try {
+    const response = await stub.fetch(
+      new Request(
+        "https://iconoplasm-d1-daily-budget-kill-switch/complete-mutation-write-reservation",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation_id: operationId }),
+        },
+      ),
+    )
+    return response.ok
+  } catch (error) {
+    // The mutation has already committed. An uncertain completion receipt must
+    // retain capacity and be retried/compacted by the owner, never refunded.
+    console.error("[Iconoplasm] mutation reservation completion remains uncertain", error)
+    return false
+  }
 }
 
 function iconoplasmAdminMutationLimiterDetail(
@@ -2958,9 +2990,10 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
     const requestIdentity = await sha256Hex(
       `${request?.method || "POST"}\n${request ? new URL(request.url).pathname : attribution.route_family}\n${body}`,
     )
+    const operationId = `laptop:${requestIdentity}`
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "laptop_delivery",
-      operationId: `laptop:${requestIdentity}`,
+      operationId,
       // One laptop command cannot use more than the provider's existing
       // 50-statement invocation envelope. Retain the full amount on timeout.
       units: 50,
@@ -2973,6 +3006,7 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
         mutation_lane: admission,
       })
     }
+    env = { ...env, __iconoplasmMutationReservationOperationId: operationId }
   }
   let snapshot
   try {
@@ -3057,6 +3091,8 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
       targetDailyPercent,
       targetRowsWrittenCeiling,
     },
+    mutationReservationOperationId:
+      sanitizeText(env?.__iconoplasmMutationReservationOperationId || "", 255) || null,
   }
   assertIconoplasmAdminMutationLimiterMayStart(state)
   return {
@@ -12008,9 +12044,13 @@ async function recordCompactDiscoveryEncounters(
 ) {
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const db = env.ICONOPLASM_DB
+  // The cutover fence is deliberately first: a pending migration performs no
+  // dictionary mutation and consumes no mutation-lane reservation.
+  await assertCompactDiscoveryActivated(db)
+  const operationId = `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`
   const admission = await reserveIconoplasmMutationWrites(env, {
     lane: "user_action",
-    operationId: `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`,
+    operationId,
     // Real D1 receipts: three writes for the compact personal batch, one
     // receipt and one indexed outbox delete for its shared delivery, plus one
     // conservative unit for the page-level shared-state update.
@@ -12029,10 +12069,10 @@ async function recordCompactDiscoveryEncounters(
   const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
   const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
   if (!known.length) {
+    await completeIconoplasmMutationReservation(env, operationId)
     return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
   }
   const dictionary = discoveryCompactDictionaryFromLookup(lookup)
-  await readCompactUserStateForRequest(env, { userId })
   const result = await recordCompactDiscoveryBatch(db, {
     userId,
     isAdmin,
@@ -12040,6 +12080,7 @@ async function recordCompactDiscoveryEncounters(
     dictionary,
     encounters: known,
   })
+  await completeIconoplasmMutationReservation(env, operationId)
   return { ...result, recorded: known.length, dropped: unknown }
 }
 
@@ -18431,9 +18472,10 @@ export class IconoplasmVoteCoordinator {
       throw new Error("Invalid VoteCoordinator outbox row")
     }
 
+    const reservationOperationId = `vote:${mutationId}`
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "user_action",
-      operationId: `vote:${mutationId}`,
+      operationId: reservationOperationId,
       units: 4,
     })
     if (admission?.ok !== true) {
@@ -18478,6 +18520,7 @@ export class IconoplasmVoteCoordinator {
          AND delivered_at IS NULL`,
       Number(row.id),
     )
+    await completeIconoplasmMutationReservation(env, reservationOperationId)
   }
 
   async deliverCaretakerSupervoteOutbox(payload, env = this.env) {
@@ -18884,6 +18927,23 @@ export class IconoplasmVoteCoordinator {
           resolved_vision_id: resolvedVisionId,
           candidate_image_id: resolvedCandidateImageId,
           snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
+        }
+      }
+
+      if (
+        finalVoteValue !== 0 &&
+        !this.sqlFirst(
+          `SELECT 1 AS present FROM asset_summary WHERE asset_sha256 = ?`,
+          safeAssetSha,
+        )
+      ) {
+        const activeAssets = Number(
+          this.sqlFirst(`SELECT COUNT(*) AS count FROM asset_summary`)?.count || 0,
+        )
+        if (activeAssets >= 8) {
+          const error = new Error("VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
+          error.code = "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED"
+          throw error
         }
       }
 
@@ -20490,6 +20550,17 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       return Response.json(reservation, { status: reservation.ok === false ? 429 : 200 })
     }
 
+    if (url.pathname === "/complete-mutation-write-reservation") {
+      const completed = this.mutationReservations.complete({
+        operation_id: payload?.operation_id,
+        completed_at: new Date().toISOString(),
+      })
+      if (typeof this.state.storage.setAlarm === "function") {
+        await this.state.storage.setAlarm(Date.now() + 60_000)
+      }
+      return Response.json(completed)
+    }
+
     if (url.pathname === "/mutation-reservation-snapshot") {
       return Response.json(this.mutationReservations.snapshot(dayKey))
     }
@@ -20557,6 +20628,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     return Response.json({ error: "Not found" }, { status: 404 })
+  }
+
+  async alarm() {
+    const result = this.mutationReservations.compactTerminal({
+      now: new Date().toISOString(),
+      limit: 1000,
+    })
+    if (
+      (result.compacted >= 1000 || result.expired_tombstones >= 1000) &&
+      typeof this.state.storage.setAlarm === "function"
+    ) {
+      await this.state.storage.setAlarm(Date.now() + 60_000)
+    }
+    return result
   }
 }
 
@@ -23737,18 +23822,26 @@ function voteProjectionRefreshFailureResult(job, error, extra = {}) {
   }
 }
 
-async function applyVoteProjectionRefreshWithoutPublicArtifact(env, job) {
+async function applyVoteProjectionRefreshWithoutPublicArtifact(
+  env,
+  job,
+  suppliedCoordinatorState = null,
+) {
   const safeSymbol = normalizeSymbol(job?.symbol || "")
   if (!safeSymbol) throw new Error("Bad vote projection refresh symbol.")
   const actorNorm = normalizeUserId(job?.actor_id || "vote_projection")
   const reasonNorm = voteProjectionRefreshJobReason(job?.reason)
-  const coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: safeSymbol })
+  const coordinatorState =
+    suppliedCoordinatorState || (await iconoplasmVoteCoordinatorState(env, { symbol: safeSymbol }))
   const assetSummaries = Array.isArray(coordinatorState?.asset_summaries)
     ? coordinatorState.asset_summaries
     : []
-  if (assetSummaries.length > 8) {
-    const error = new Error("VOTE_PROJECTION_ASSET_BOUND_EXCEEDED")
-    error.code = "VOTE_PROJECTION_ASSET_BOUND_EXCEEDED"
+  // Eight is the forward creation limit. Historical coordinators may contain
+  // more and must remain projectable; the measured D1 cost scales by five
+  // writes per asset and is admitted using that actual bounded count.
+  if (assetSummaries.length > 64) {
+    const error = new Error("VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED")
+    error.code = "VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED"
     throw error
   }
   let autoPromote = { ok: true, changed: false, code: "NOT_STARTED" }
@@ -23855,12 +23948,23 @@ export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
   const applied = []
   for (const job of jobs) {
     try {
+      const coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: job.symbol })
+      const assetCount = Array.isArray(coordinatorState?.asset_summaries)
+        ? coordinatorState.asset_summaries.length
+        : 0
+      if (assetCount > 64) {
+        const error = new Error("VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED")
+        error.code = "VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED"
+        throw error
+      }
+      const projectionUnits = 4 + assetCount * 5
+      const reservationOperationId = `vote-projection:${job.symbol}:${job.job_version}`
       const admission = await reserveIconoplasmMutationWrites(env, {
         lane: "publication",
-        operationId: `vote-projection:${job.symbol}:${job.job_version}`,
-        // Real SQLite/D1-shaped migration, index and trigger receipts measure
-        // 44 writes for the accepted maximum of eight candidate assets.
-        units: 44,
+        operationId: reservationOperationId,
+        // Real SQLite/D1-shaped migrations, indexes and triggers measure four
+        // fixed writes plus five writes for each coordinator asset.
+        units: projectionUnits,
       })
       if (admission?.ok !== true) {
         throw new IconoplasmD1DailyBudgetExceededError({
@@ -23869,7 +23973,12 @@ export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
           mutation_lane: admission,
         })
       }
-      const result = await applyVoteProjectionRefreshWithoutPublicArtifact(env, job)
+      const result = await applyVoteProjectionRefreshWithoutPublicArtifact(
+        env,
+        job,
+        coordinatorState,
+      )
+      result.reservation_operation_id = reservationOperationId
       applied.push(result)
       resultBySymbol.set(job.symbol, result)
     } catch (error) {
@@ -23908,6 +24017,9 @@ export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
           ).bind(result.symbol, result.job_version),
         ),
       )
+      for (const result of applied) {
+        await completeIconoplasmMutationReservation(env, result.reservation_operation_id)
+      }
       applied.forEach((result, index) => {
         result.superseded = !(
           Number(cleared[index]?.meta?.changes ?? cleared[index]?.changes ?? 0) > 0
@@ -25019,9 +25131,10 @@ async function recoverStaleRunningSyncFinalizationJobs(
     if (!leaseAt || leaseAt > cutoffIso) continue
     const symbol = normalizeSymbol(row?.gene_symbol || "")
     if (!symbol) continue
+    const reservationOperationId = `finalization-recovery:${symbol}:${Number(row.job_version)}:${normalizeSyncFinalizationJobPhase(row?.phase)}`
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "finalization_recovery",
-      operationId: `finalization-recovery:${symbol}:${Number(row.job_version)}:${normalizeSyncFinalizationJobPhase(row?.phase)}`,
+      operationId: reservationOperationId,
       units: 50,
     })
     if (admission?.ok !== true) {
@@ -25043,6 +25156,7 @@ async function recoverStaleRunningSyncFinalizationJobs(
       completedAt: null,
     })
     if (changed) recovered += 1
+    await completeIconoplasmMutationReservation(env, reservationOperationId)
   }
   return {
     ok: true,
@@ -25779,6 +25893,36 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
   return { ok: true, drained, applied, duplicates }
 }
 
+// The one production owner for the legacy cutover. Each invocation advances
+// at most eight legacy rows, persists its lexicographic cursor, and activates
+// request traffic only after reconciliation reaches the end.
+export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, pending: true, code: "NO_DB" }
+  const activation = await readCompactDiscoveryActivation(env.ICONOPLASM_DB)
+  if (!activation) return { ok: false, pending: true, code: "MIGRATION_SCHEMA_MISSING" }
+  if (activation.status === "complete") return { ok: true, complete: true, migrated_rows: 0 }
+  const cursorDigest = await sha256Hex(
+    `${activation.cursor_user_id}\n${activation.cursor_gene_symbol}`,
+  )
+  const operationId = `discovery-migration:${cursorDigest}`
+  let admission
+  try {
+    admission = await reserveIconoplasmMutationWrites(env, {
+      lane: "finalization_recovery",
+      operationId,
+      units: 64,
+    })
+  } catch (error) {
+    return { ok: false, pending: true, code: error?.code || "MUTATION_ADMISSION_UNAVAILABLE" }
+  }
+  if (admission?.ok !== true) {
+    return { ok: false, pending: true, code: admission?.code || "MUTATION_ADMISSION_REFUSED" }
+  }
+  const result = await migrateLegacyDiscoveryPage({ db: env.ICONOPLASM_DB, rowLimit: 8 })
+  await completeIconoplasmMutationReservation(env, operationId)
+  return { ...result, pending: !result.complete }
+}
+
 export async function processPendingSyncFinalizationJobs(
   env,
   ctx,
@@ -25826,9 +25970,10 @@ export async function processPendingSyncFinalizationJobs(
   let partialBudget = null
   for (const job of rows) {
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
+    const reservationOperationId = `finalization:${job.symbol}:${job.job_version}:${job.phase}`
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "finalization_recovery",
-      operationId: `finalization:${job.symbol}:${job.job_version}:${job.phase}`,
+      operationId: reservationOperationId,
       // The queue invocation is already hard-limited to 50 D1 statements. A
       // complete phase keeps that full reservation because indexed/triggered
       // row work can be ambiguous after a provider timeout.
@@ -25855,7 +26000,10 @@ export async function processPendingSyncFinalizationJobs(
       nextAttemptAt: nowIso,
       lastError: "",
     })
-    if (!claimed) continue
+    if (!claimed) {
+      await completeIconoplasmMutationReservation(env, reservationOperationId)
+      continue
+    }
     const claimedVersion = job.job_version + 1
     try {
       const phaseResult = await processSyncFinalizationJobPhase(env, ctx, job)
@@ -25892,6 +26040,7 @@ export async function processPendingSyncFinalizationJobs(
           stop_reason: stopReason,
           result: phaseResult.result,
         })
+        await completeIconoplasmMutationReservation(env, reservationOperationId)
         break
       }
       const advanced = await writeSyncFinalizationJobState(env, {
@@ -25926,6 +26075,7 @@ export async function processPendingSyncFinalizationJobs(
         next_phase: phaseResult.next_phase,
         result: phaseResult.result,
       })
+      await completeIconoplasmMutationReservation(env, reservationOperationId)
     } catch (error) {
       // The shared day has already refused work. Preserve the claimed job and
       // let its version-fenced stale recovery resume at the governor reset wake;
@@ -25957,10 +26107,20 @@ export async function processPendingSyncFinalizationJobs(
   let finalizeResult = { ok: true, finalized: 0, remaining: 0 }
   if (!partial && finalizeIfDrained) {
     const readyFinalizations = await readReadyFinalizationPage(env.ICONOPLASM_DB, scopedSymbols)
-    for (const ready of readyFinalizations) {
+    let completionOperationId = null
+    if (readyFinalizations.length) {
+      const completionDigest = await sha256Hex(
+        JSON.stringify(
+          readyFinalizations.map((ready) => [
+            normalizeSymbol(ready.gene_symbol),
+            Number(ready.job_version),
+          ]),
+        ),
+      )
+      completionOperationId = `finalization-complete-page:${completionDigest}`
       const admission = await reserveIconoplasmMutationWrites(env, {
         lane: "finalization_recovery",
-        operationId: `finalization-complete:${normalizeSymbol(ready.gene_symbol)}:${Number(ready.job_version)}`,
+        operationId: completionOperationId,
         units: 50,
       })
       if (admission?.ok !== true) {
@@ -25974,6 +26134,9 @@ export async function processPendingSyncFinalizationJobs(
     finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
       symbols: scopedSymbols,
     })
+    if (completionOperationId) {
+      await completeIconoplasmMutationReservation(env, completionOperationId)
+    }
   }
   const pendingWork = await summarizePendingSyncFinalizationWork(env, {
     symbols: scopedSymbols,
@@ -34693,6 +34856,17 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
   } finally {
     await flushIconoplasmD1DailyBudgetUsageFromEnv(meteredEnv)
     const budgetState = meteredEnv?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH] || null
+    if (
+      budgetState?.mutationReservationOperationId &&
+      responseStatus >= 200 &&
+      responseStatus < 400 &&
+      !handledError
+    ) {
+      await completeIconoplasmMutationReservation(
+        meteredEnv,
+        budgetState.mutationReservationOperationId,
+      )
+    }
     const attributionErrorCode =
       handledError instanceof IconoplasmD1DailyBudgetExceededError
         ? "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED"

@@ -12,6 +12,7 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   DailyMutationLaneReservations,
+  MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY,
   MUTATION_LANE_DAILY_LIMITS,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
 
@@ -452,11 +453,22 @@ test("unresolved reservations survive indefinitely while old completed identitie
       }),
     /MUTATION_RESERVATION_IDENTITY_MISMATCH/,
   )
+  const expired = ledger.compactTerminal({ now: "2026-09-05T00:00:00Z", limit: 100 })
+  assert.equal(expired.expired_tombstones, 1)
+  assert.equal(
+    raw
+      .prepare(
+        "SELECT COUNT(*) AS n FROM daily_mutation_lane_reservation_tombstones WHERE operation_id='lifecycle:completed'",
+      )
+      .get().n,
+    0,
+  )
+  assert.equal(MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY, 2_560_000)
   raw.close()
 })
 
-test("discovery overload stays pending and refuses before any D1 dispatch", async () => {
-  let d1Touches = 0
+test("discovery overload stays pending and refuses before any D1 mutation", async () => {
+  let d1Mutations = 0
   const capacity = {
     idFromName: () => "global",
     get: () => ({
@@ -499,9 +511,12 @@ test("discovery overload stays pending and refuses before any D1 dispatch", asyn
       ),
       {
         ICONOPLASM_DB: {
-          prepare() {
-            d1Touches += 1
-            throw new Error("D1 must not be reached after capacity refusal")
+          prepare(sql) {
+            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
+            return { first: async () => ({ status: "complete" }) }
+          },
+          batch() {
+            d1Mutations += 1
           },
         },
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: capacity,
@@ -517,11 +532,73 @@ test("discovery overload stays pending and refuses before any D1 dispatch", asyn
   assert.equal(payload.pending, true)
   assert.equal(payload.persisted, false)
   assert.equal(payload.batch_id, "device-1:7")
-  assert.equal(d1Touches, 0)
+  assert.equal(d1Mutations, 0)
+})
+
+test("provider headroom refusal reaches discovery unchanged before D1 dispatch", async () => {
+  let d1Mutations = 0
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=test" },
+          body: JSON.stringify({
+            batch_id: "device-1:provider-headroom",
+            encounters: [
+              {
+                symbol: "TP53",
+                at: 1_800_000_000,
+                source: "extension_hover",
+                trigger: "hover_dwell",
+                dwell_ms: 900,
+              },
+            ],
+          }),
+        },
+      ),
+      {
+        ICONOPLASM_DB: {
+          prepare(sql) {
+            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
+            return { first: async () => ({ status: "complete" }) }
+          },
+          batch() {
+            d1Mutations += 1
+          },
+        },
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            fetch: async () =>
+              Response.json(
+                {
+                  ok: false,
+                  code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
+                  disposition: "pending_or_retryable_refusal",
+                },
+                { status: 429 },
+              ),
+          }),
+        },
+        GAME_SESSIONS: {
+          idFromName: () => "session",
+          get: () => ({ fetch: async () => Response.json({ user_id: "reader-1" }) }),
+        },
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+  assert.equal(response.status, 429)
+  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+  assert.equal(payload.pending, true)
+  assert.equal(payload.persisted, false)
+  assert.equal(d1Mutations, 0)
 })
 
 test("discovery request fails closed before D1 when the shared mutation authority is unbound", async () => {
-  let d1Touches = 0
+  let d1Mutations = 0
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -545,9 +622,12 @@ test("discovery request fails closed before D1 when the shared mutation authorit
       ),
       {
         ICONOPLASM_DB: {
-          prepare() {
-            d1Touches += 1
-            throw new Error("D1 must not be reached without the mutation authority")
+          prepare(sql) {
+            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
+            return { first: async () => ({ status: "complete" }) }
+          },
+          batch() {
+            d1Mutations += 1
           },
         },
         GAME_SESSIONS: {
@@ -560,7 +640,7 @@ test("discovery request fails closed before D1 when the shared mutation authorit
   const payload = await response.json()
   assert.equal(response.status, 503)
   assert.equal(payload.code, "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR")
-  assert.equal(d1Touches, 0)
+  assert.equal(d1Mutations, 0)
 })
 
 test("finalization recovery lane refuses a durable phase before its first mutation", async () => {
@@ -640,7 +720,7 @@ test("finalization recovery lane refuses a durable phase before its first mutati
   )
 })
 
-test("completed-pending finalization with no phase rows reserves its exact identity before mutation", async () => {
+test("completed-pending finalization reserves once for one bounded completion page", async () => {
   let mutations = 0
   const reservations = []
   const db = {
@@ -655,7 +735,12 @@ test("completed-pending finalization with no phase rows reserves its exact ident
             text.includes("phase IN ('completed_pending_finalize', 'completed')") &&
             text.includes("SELECT gene_symbol, job_version")
           ) {
-            return { results: [{ gene_symbol: "TP53", job_version: 11 }] }
+            return {
+              results: [
+                { gene_symbol: "BRCA1", job_version: 12 },
+                { gene_symbol: "TP53", job_version: 11 },
+              ],
+            }
           }
           return { results: [] }
         },
@@ -694,16 +779,10 @@ test("completed-pending finalization with no phase rows reserves its exact ident
     /ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED/,
   )
   assert.equal(mutations, 0)
-  assert.deepEqual(
-    reservations.map(({ lane, operation_id, units }) => ({ lane, operation_id, units })),
-    [
-      {
-        lane: "finalization_recovery",
-        operation_id: "finalization-complete:TP53:11",
-        units: 50,
-      },
-    ],
-  )
+  assert.equal(reservations.length, 1)
+  assert.equal(reservations[0].lane, "finalization_recovery")
+  assert.equal(reservations[0].units, 50)
+  assert.match(reservations[0].operation_id, /^finalization-complete-page:[a-f0-9]{64}$/)
 })
 
 test("publication lane refuses vote projection before D1 mutation", async () => {
@@ -748,7 +827,7 @@ test("publication lane refuses vote projection before D1 mutation", async () => 
   assert.equal(d1Touches, 0)
   assert.deepEqual(
     reservations.map(({ lane, operation_id, units }) => ({ lane, operation_id, units })),
-    [{ lane: "publication", operation_id: "vote-projection:TP53:9", units: 44 }],
+    [{ lane: "publication", operation_id: "vote-projection:TP53:9", units: 4 }],
   )
 })
 
@@ -802,7 +881,8 @@ test("publication reservation covers the measured worst accepted projection on r
         idFromName: () => "global",
         get: () => ({
           fetch: async (request) => {
-            reservations.push(await request.json())
+            const body = await request.json()
+            if (body.lane) reservations.push(body)
             return Response.json({ ok: true })
           },
         }),
@@ -838,13 +918,20 @@ test("publication reservation covers the measured worst accepted projection on r
     score: 0,
     vote_count: 0,
   }
-  const beforeRefusal = db.rowsWritten
+  const beforeOverflow = db.rowsWritten
+  const overflowReservations = []
   const overBound = await processVoteProjectionRefreshJobBatch(
     {
       ICONOPLASM_DB: db,
       ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
         idFromName: () => "global",
-        get: () => ({ fetch: async () => Response.json({ ok: true }) }),
+        get: () => ({
+          fetch: async (request) => {
+            const body = await request.json()
+            if (body.lane) overflowReservations.push(body)
+            return Response.json({ ok: true })
+          },
+        }),
       },
       ICONOPLASM_VOTE_COORDINATORS: {
         idFromName: (name) => name,
@@ -856,9 +943,16 @@ test("publication reservation covers the measured worst accepted projection on r
     },
     [{ gene_symbol: symbol, actor_id: "tester", reason: "vote_auto_promote", job_version: 8 }],
   )
-  assert.equal(overBound[0].ok, false)
-  assert.match(overBound[0].error, /VOTE_PROJECTION_ASSET_BOUND_EXCEEDED/)
-  assert.equal(db.rowsWritten, beforeRefusal)
+  assert.equal(overBound[0].ok, true, JSON.stringify(overBound[0]))
+  assert.equal(overBound[0].asset_count, 9)
+  assert.equal(overflowReservations.length, 1)
+  assert.ok(
+    overflowReservations[0].units >= db.rowsWritten - beforeOverflow,
+    JSON.stringify({
+      reserved: overflowReservations[0].units,
+      measured: db.rowsWritten - beforeOverflow,
+    }),
+  )
 
   db.raw.exec("DELETE FROM icono_vote_projection_refresh_jobs")
   db.raw

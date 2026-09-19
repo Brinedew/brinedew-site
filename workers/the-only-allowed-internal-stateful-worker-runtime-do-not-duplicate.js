@@ -1331,6 +1331,7 @@ import {
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
+  migrateIconoplasmCompactDiscoveryForScheduled,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
@@ -3284,6 +3285,7 @@ export default {
         gallery: () => runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
+        discoveryMigration: () => migrateIconoplasmCompactDiscoveryForScheduled(env),
         sharedDelivery: () => drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env),
         materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         recognition: () => reconcileIconoplasmRecognitionPolicies(env),

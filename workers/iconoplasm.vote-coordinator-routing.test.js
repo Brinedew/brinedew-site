@@ -82,6 +82,31 @@ function fakeVoteCoordinatorState() {
   return { state, alarms }
 }
 
+test("VoteCoordinator refuses a ninth newly-created active asset while preserving historical rows", async (t) => {
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  for (let index = 0; index < 8; index += 1) {
+    coordinator.ensureAssetSummaryRow(index.toString(16).padStart(64, "0"), {
+      visionId: `anima-v1-${index + 1}`,
+    })
+  }
+  assert.throws(
+    () =>
+      coordinator.applyVoteMutation({
+        assetSha256: "f".repeat(64),
+        userId: "reader-9",
+        requestedVoteValue: 1,
+        visionId: "anima-v1-9",
+      }),
+    /VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED/,
+  )
+  assert.equal(coordinator.exportAssetSummaries().length, 8)
+})
+
 test("vote alarm preserves every outbox identity through a daily pause, new votes, restart and automatic reset wakeup", async (t) => {
   let now = Date.parse("2026-09-12T20:00:00Z"),
     exhausted = true

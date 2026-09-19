@@ -10,6 +10,7 @@ import {
   readSharedCompactState,
 } from "./discovery-compact-store.js"
 import { importLegacyDiscoveryUser } from "./discovery-compact-migrate.js"
+import { migrateIconoplasmCompactDiscoveryForScheduled } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   ensureDiscoveryDictionaryForNames,
   loadDiscoveryDictionaryForNames,
@@ -149,6 +150,73 @@ test(
           tables: migratedTables.length,
         }),
       )
+    })
+  },
+)
+
+test(
+  "the admitted scheduled executor resumes its durable cursor and alone activates compact discovery",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      for (let index = 0; index < 9; index += 1) {
+        const symbol = `TEST${index}`
+        await db
+          .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)")
+          .bind(symbol, symbol)
+          .run()
+        await db
+          .prepare(
+            `INSERT INTO icono_gene_discoveries
+             (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+             VALUES ('reader', ?, 'extension_hover', 'extension_hover', 'hover_dwell', 'hover_dwell')`,
+          )
+          .bind(symbol)
+          .run()
+      }
+      await applyStatements(db, compactMigrationStatements())
+
+      const refused = await migrateIconoplasmCompactDiscoveryForScheduled({ ICONOPLASM_DB: db })
+      assert.equal(refused.pending, true)
+      assert.equal(
+        (await db.prepare("SELECT status FROM icono_discovery_compact_activation_v2").first())
+          .status,
+        "pending",
+      )
+
+      const authorityCalls = []
+      const env = {
+        ICONOPLASM_DB: db,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              const body = await request.json()
+              authorityCalls.push({ path: new URL(request.url).pathname, body })
+              return Response.json({ ok: true, operation_id: body.operation_id })
+            },
+          }),
+        },
+      }
+      const first = await migrateIconoplasmCompactDiscoveryForScheduled(env)
+      assert.equal(first.pending, true)
+      assert.equal(first.migrated_rows, 8)
+      const resumed = await migrateIconoplasmCompactDiscoveryForScheduled({ ...env })
+      assert.equal(resumed.complete, true)
+      assert.equal(resumed.migrated_rows, 1)
+      assert.equal(
+        authorityCalls.filter((call) => call.path === "/reserve-mutation-writes").length,
+        2,
+      )
+      assert.equal(
+        authorityCalls.filter((call) => call.path.includes("complete-mutation")).length,
+        2,
+      )
+      assert.equal((await readCompactUserState(db, "reader")).member_count, 9)
     })
   },
 )
