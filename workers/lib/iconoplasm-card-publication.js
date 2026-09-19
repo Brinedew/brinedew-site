@@ -20,6 +20,22 @@ export const CARD_DELIVERY_INDEX_SIZE = 128
 // Bootstrap ~19k cards reserves ~44k; ordinary winner changes are much smaller.
 export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 55000
 export const CARD_PUBLICATION_CONTROL_WRITE_RESERVE = 1000
+export const CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT = 24
+
+export async function enrichPublishedGeneCandidates(records, loadCandidates) {
+  const enriched = []
+  for (const record of Array.isArray(records) ? records : []) {
+    const candidates = await loadCandidates(record)
+    enriched.push({
+      ...record,
+      portrait_candidates: (Array.isArray(candidates) ? candidates : []).slice(
+        0,
+        CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT,
+      ),
+    })
+  }
+  return enriched
+}
 
 export function projectCardBlot(record, blot) {
   const projected = { ...record }

@@ -4,6 +4,8 @@ import test from "node:test"
 import {
   createCardPublication,
   CARD_PUBLICATION_BATCH,
+  CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT,
+  enrichPublishedGeneCandidates,
   projectCardBlot,
 } from "./lib/iconoplasm-card-publication.js"
 import { PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT } from "./iconoplasm-public-canonical-runtime.js"
@@ -25,6 +27,30 @@ test("blot projection clones authoritative hydrated cards instead of mutating fr
   assert.equal(projected.blot, ready)
   assert.equal(frozen.blot.status, "stale")
   assert.equal("blot" in withoutBlot, false)
+})
+
+test("public gene publication adds bounded candidate snapshots sequentially", async () => {
+  const records = [
+    { symbol: "TP53", portrait: { asset_sha256: "a".repeat(64) } },
+    { symbol: "BRCA1", portrait: { asset_sha256: "b".repeat(64) } },
+  ]
+  const calls = []
+  let active = 0
+  const enriched = await enrichPublishedGeneCandidates(records, async (record) => {
+    active += 1
+    assert.equal(active, 1, "candidate projection must not fan out D1 reads")
+    calls.push(record.symbol)
+    active -= 1
+    return Array.from({ length: CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT + 3 }, (_, index) => ({
+      asset_sha256: String(index).padStart(64, "0"),
+      image_score: index,
+    }))
+  })
+
+  assert.deepEqual(calls, ["TP53", "BRCA1"])
+  assert.equal(enriched[0].portrait_candidates.length, CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT)
+  assert.equal(enriched[1].portrait_candidates.length, CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT)
+  assert.equal("portrait_candidates" in records[0], false, "source records stay immutable")
 })
 
 function fixture(count = 9) {

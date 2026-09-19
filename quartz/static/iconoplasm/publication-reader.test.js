@@ -332,6 +332,40 @@ test("the browser resolves gene, search, and gallery from one immutable publicat
   )
 })
 
+test("a legacy immutable gene without candidates remains a complete static dossier", async () => {
+  const fixture = await immutableFixture()
+  const legacyGene = { ...fixture.gene }
+  delete legacyGene.portrait_candidates
+  const geneObject = await immutableFixtureObject("genes", legacyGene)
+  const oldEntry = JSON.parse(
+    fixture.objects.get([...fixture.objects.keys()].find((key) => key.includes("/indexes/"))),
+  )
+  oldEntry.entries[0][2] = geneObject.hash
+  const indexObject = await immutableFixtureObject("indexes", oldEntry)
+  const manifest = JSON.parse(fixture.manifestObject.body)
+  manifest.shards[0].delivery_indexes[0].key = indexObject.path.slice(1)
+  const manifestObject = await immutableFixtureObject("manifests", manifest)
+  const objects = new Map(fixture.objects)
+  objects.set(geneObject.path, geneObject.body)
+  objects.set(indexObject.path, indexObject.body)
+  objects.set(manifestObject.path, manifestObject.body)
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") {
+        return new Response(
+          JSON.stringify({ schema_version: 2, current: `ccv2-${manifestObject.hash}` }),
+        )
+      }
+      const body = objects.get(pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  const gene = await reader.gene("TP53")
+  assert.deepEqual(gene.portrait_candidates, [])
+})
+
 test("a healthy Bunny response never starts a browser-side canonical-origin hedge", async () => {
   const fixture = await immutableFixture()
   let originRequests = 0

@@ -79,6 +79,7 @@ import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membersh
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
+  enrichPublishedGeneCandidates,
   projectCardBlot,
 } from "./lib/iconoplasm-card-publication.js"
 import {
@@ -1161,7 +1162,7 @@ const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // deployment migration instead of silently mixing cards produced by two mappers.
 // `blot` is an additive, optional projection on the revision-2 card artifact so it can be
 // backfilled shard-by-shard without taking every existing published card offline.
-const CARD_CATALOG_BUILD_REVISION = 3
+const CARD_CATALOG_BUILD_REVISION = 4
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
 // Content-addressed shard storage (B-530). Shards are keyed by the sha256 of their
@@ -30268,8 +30269,18 @@ async function cardCatalogRecordsForArtifact(
     .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
     .filter(Boolean)
   const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)
+  const publicationRecords = symbolList.length
+    ? await enrichPublishedGeneCandidates(hydratedRecords, (record) =>
+        portraitCandidatesForGene(
+          env,
+          new URL(requestUrl || "https://iconoplasm.brinedew.bio/"),
+          normalizeSymbol(record?.symbol || record?.canonical_symbol || ""),
+          record?.portrait?.asset_sha256 || null,
+        ),
+      )
+    : hydratedRecords
   const rowsBySymbol = new Map(rows.map((row) => [normalizeSymbol(row?.gene_symbol || ""), row]))
-  return hydratedRecords.map((record) => {
+  return publicationRecords.map((record) => {
     const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
     const readyBlot = exactReadyGeneBlotProjection(record, rowsBySymbol.get(symbol))
     return projectCardBlot(record, readyBlot)
