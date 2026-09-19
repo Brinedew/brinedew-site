@@ -3,10 +3,17 @@
   "kind": "iconoplasm_task3_mutation_measurement",
   "generatedAt": "2026-09-19T14:06:03.671Z",
   "provenance": {
-    "task3Commit": "02a39908",
+    "productionBaseCommit": "02a3990870b0a4169e1c2aa4a46778fc46636dac",
+    "measurementCommit": "0474463e09d4569fbac8984f1184f08067c747bb",
     "runtime": "miniflare_d1",
     "harness": "workers/iconoplasm/discovery-workload.workerd.test.js",
-    "command": "node --test workers/iconoplasm/discovery-workload.workerd.test.js --test-name-pattern=real D1 prints exact per-saver row receipts"
+    "command": "node --test workers/iconoplasm/discovery-workload.workerd.test.js --test-name-pattern=real D1 prints exact per-saver row receipts",
+    "fileSha256": {
+      "workers/iconoplasm/discovery-workload.workerd.test.js": "15a79d269321b2016135a6d2ec479c684e4c34b7e54e445d677d6b3c19db518a",
+      "workers/iconoplasm/discovery-compact-service.js": "571d9300c9d52e0127714f7b080624377dcd2430e59e4a4bbf9cbecab754889c",
+      "workers/iconoplasm/discovery-compact-store.js": "aaa0514a70215b0d456b29d1ce6c9e6e92c6acd2fff6a97a7328f29029d94fe9",
+      "workers/iconoplasm/discovery-shared-delivery.js": "0affe3af6b597bab24fa4c4da62bb4895a5487372d63cff8e907850e4802133a"
+    }
   },
   "workload": {
     "savers": 2000,
@@ -27,5 +34,5 @@
     "personalMs": 402575
   },
   "digestAlgorithm": "sha256",
-  "digest": "1b90ce5f7291cf4bef60ee1f60cfc387e359554cb0e8a23741cb0b91348570c3"
+  "digest": "b4f40b9b14664e9feec4716ec2e01024d9f79e84878611d239e6b8c4d2600d23"
 }
