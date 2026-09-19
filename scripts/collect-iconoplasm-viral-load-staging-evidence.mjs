@@ -62,7 +62,9 @@ const runResponse = await fetch(
 )
 if (!runResponse.ok) throw new Error("Could not resolve immutable GitHub job identity")
 const jobs = (await runResponse.json()).jobs || []
-const job = jobs.find((candidate) => candidate.name.includes("collect-viral-load-staging-evidence"))
+const job = jobs.find(
+  (candidate) => candidate.name === "produce-iconoplasm-viral-load-task5-evidence",
+)
 if (!job?.id) throw new Error("Could not identify the staging evidence job")
 
 const kindFor = (name) =>
@@ -96,7 +98,7 @@ const receipt = {
   schemaVersion: 1,
   kind: "iconoplasm_viral_load_task5_evidence",
   provenance: {
-    workflowPath: ".github/workflows/deploy-quartz.yml",
+    workflowPath: ".github/workflows/iconoplasm-viral-load-task5.yml",
     runId,
     jobId: job.id,
     conclusion: "success",

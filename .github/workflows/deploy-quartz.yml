@@ -65,19 +65,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - run: corepack enable && corepack prepare pnpm@11.0.9 --activate
-      - run: pnpm config set minimumReleaseAge 1440 && pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
-      - name: Collect immutable raw hosted, provider, browser, regional, Bunny, and fault receipts
+      - name: Resolve allowlisted immutable Task 5 artifact
+        id: task5-artifact
         env:
-          ICONOPLASM_TASK5_AUTHORIZATION: ${{ secrets.ICONOPLASM_STAGING_TASK5_AUTHORIZATION }}
-          ICONOPLASM_STAGING_BASE_URL: ${{ vars.ICONOPLASM_STAGING_BASE_URL }}
-          ICONOPLASM_TASK5_ASSET_SHA256: ${{ vars.ICONOPLASM_TASK5_TP53_ASSET_SHA256 }}
-          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/collect-iconoplasm-viral-load-staging-evidence.mjs --commit=${{ github.sha }} --environment=staging
+        run: node scripts/resolve-iconoplasm-task5-artifact.mjs --run-id=${{ inputs.viral_load_task5_evidence_run_id }} --expected-commit=${{ github.sha }}
+      - name: Download exact verified Task 5 evidence artifact
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ steps.task5-artifact.outputs.artifact_id }}
+          path: artifacts/iconoplasm-viral-load-gates/task5
+          run-id: ${{ steps.task5-artifact.outputs.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         with:
           name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}

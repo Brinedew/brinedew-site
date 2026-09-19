@@ -42,7 +42,7 @@ async function pooled(items, concurrency, operation) {
 
 export async function runHostedTask5Load({
   baseUrl,
-  authorization,
+  sessionCookie,
   day,
   assetSha256,
   fetchImpl = fetch,
@@ -55,7 +55,8 @@ export async function runHostedTask5Load({
   environment,
 }) {
   if (!/^https:\/\//.test(baseUrl)) throw new Error("baseUrl must be an HTTPS hosted target")
-  if (!authorization) throw new Error("ICONOPLASM_TASK5_AUTHORIZATION is required")
+  if (!/^session=[A-Za-z0-9_-]+$/.test(sessionCookie || ""))
+    throw new Error("ICONOPLASM_STAGING_SESSION_COOKIE must contain one session cookie")
   const expectedCommands = durationSeconds * commandsPerSecond
   if (expectedCommands !== 60_000)
     throw new Error("certification profile must issue exactly 60,000 commands")
@@ -79,6 +80,7 @@ export async function runHostedTask5Load({
   const commandLatenciesMs = []
   const windows = []
   let staticFailures = 0
+  let operationReceiptResponses = 0
   let physicalStaticRequests = 0
   let transferBytes = 0
   const startedAt = new Date().toISOString()
@@ -114,7 +116,7 @@ export async function runHostedTask5Load({
         const response = await fetchImpl(`${baseUrl}/api/iconoplasm/votes/set`, {
           method: "POST",
           headers: {
-            authorization,
+            Cookie: sessionCookie,
             "content-type": "application/json",
             "x-iconoplasm-command-id": command.id,
           },
@@ -126,19 +128,20 @@ export async function runHostedTask5Load({
         let classification = classifyHostedResponse(command.id, { status: response.status, body })
         const operations = body?.operations
         if (
-          ["accepted_durable", "bounded_capacity_refusal"].includes(classification.verdict) &&
-          (!operations ||
-            Object.keys(actualOperations)
-              .filter(
-                (name) => !["workerRequests", "externalRequests", "transferBytes"].includes(name),
-              )
-              .some((name) => !Number.isSafeInteger(operations[name]) || operations[name] < 0))
+          operations &&
+          Object.keys(actualOperations)
+            .filter(
+              (name) => !["workerRequests", "externalRequests", "transferBytes"].includes(name),
+            )
+            .some((name) => !Number.isSafeInteger(operations[name]) || operations[name] < 0)
         ) {
           classification = { ...classification, verdict: "invalid_missing_operation_receipt" }
         }
-        if (!classification.verdict.startsWith("invalid_"))
+        if (!classification.verdict.startsWith("invalid_") && operations) {
+          operationReceiptResponses++
           for (const name of Object.keys(operations))
             if (Object.hasOwn(actualOperations, name)) actualOperations[name] += operations[name]
+        }
         receiptDigest.update(`${command.id}\t${classification.verdict}\t${response.status}\n`)
         if (classification.verdict === "accepted_durable") counts.acceptedDurable++
         else if (classification.verdict === "bounded_capacity_refusal") {
@@ -162,7 +165,9 @@ export async function runHostedTask5Load({
 
   const elapsedMs = Date.now() - runStartedMs
   actualOperations.transferBytes = transferBytes
-  const providerOperations = mapExecutedOperationsToProviderMeters(actualOperations)
+  const providerOperations = mapExecutedOperationsToProviderMeters(actualOperations, {
+    mutationOperationsKnown: operationReceiptResponses === expectedCommands,
+  })
   const schedule = assessHostedSchedule(windows, elapsedMs)
   const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)
   const percentile = (fraction) =>
@@ -211,7 +216,7 @@ async function main() {
   )
   const receipt = await runHostedTask5Load({
     baseUrl: option("--base-url"),
-    authorization: process.env.ICONOPLASM_TASK5_AUTHORIZATION,
+    sessionCookie: process.env.ICONOPLASM_STAGING_SESSION_COOKIE,
     day: option("--day"),
     assetSha256: option("--asset-sha256"),
     commitSha: option("--commit"),

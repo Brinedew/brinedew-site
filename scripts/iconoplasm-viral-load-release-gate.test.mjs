@@ -22,6 +22,7 @@ import {
   buildHostedCommand,
   classifyHostedResponse,
 } from "./lib/iconoplasm-viral-load-task5-driver.mjs"
+import { resolveTask5Artifact } from "./resolve-iconoplasm-task5-artifact.mjs"
 
 const providerMeterNames = [
   "workerRequests",
@@ -35,7 +36,6 @@ const providerMeterNames = [
   "durableObjectRowsWritten",
   "queueOperations",
   "externalRequests",
-  "transferBytes",
 ]
 
 function providerEvidence(meterOverrides = {}) {
@@ -290,7 +290,7 @@ function task5Bundle() {
       endedAt: "2026-09-19T00:10:00Z",
     },
     provenance: {
-      workflowPath: ".github/workflows/deploy-quartz.yml",
+      workflowPath: ".github/workflows/iconoplasm-viral-load-task5.yml",
       runId: 123,
       jobId: 456,
       conclusion: "success",
@@ -361,7 +361,7 @@ function replaceRawArtifact(bundle, name, mutate) {
 
 const trustedRunVerifier = async () => ({
   verified: true,
-  workflowPath: ".github/workflows/deploy-quartz.yml",
+  workflowPath: ".github/workflows/iconoplasm-viral-load-task5.yml",
   runId: 123,
   jobId: 456,
   conclusion: "success",
@@ -400,8 +400,12 @@ test("Task 5 driver sends exact identities and refuses responses without durable
   assert.equal(command.body.symbol, "TP53")
   assert.equal(
     classifyHostedResponse(command.id, {
-      status: 202,
-      body: { accepted: true, command_id: command.id, durable: true },
+      status: 200,
+      body: {
+        ok: true,
+        command_id: command.id,
+        projection_refresh: { durable: true, mode: "durable_outbox" },
+      },
     }).verdict,
     "accepted_durable",
   )
@@ -590,13 +594,16 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
     now: Date.parse("2026-09-19T00:11:00Z"),
   })
   assert.equal(report.task5Evidence.verdict, "pass")
-  assert.equal(report.attribution.verdict, "blocked_unavailable_provider_meter")
-  assert.deepEqual(report.attribution.unavailableMeters, ["transferBytes"])
+  assert.equal(report.attribution.verdict, "pass")
   assert.equal(report.attribution.perMeter.workerRequests.expected, 60_000)
   assert.equal(report.attribution.perMeter.d1RowsWritten.expected, 40_000)
   assert.equal(report.attribution.perMeter.externalRequests.expected, 0)
-  assert.equal(report.overallChecks.externalResourcesResolved, false)
+  assert.equal(report.overallChecks.externalResourcesResolved, true)
   assert.equal(report.tiers["10000"].resources.externalRequests.evidence.status, "measured_hosted")
+  assert.equal(
+    report.tiers["10000"].resources.transferBytes.evidence.status,
+    "reviewed_cdn_projection",
+  )
   assert.equal(
     report.tiers["1000000"].mutationResourceDisposition.workerRequests.disposition,
     "intentional_shed_pending",
@@ -692,6 +699,51 @@ test("production deploy invokes the blocking viral-load gate with Task 5 evidenc
   assert.match(workflow, /deploy-viral-load-staging:/)
   assert.match(workflow, /collect-viral-load-staging-evidence:/)
   assert.match(workflow, /needs:[\s\S]*collect-viral-load-staging-evidence/)
+  assert.match(workflow, /inputs\.viral_load_task5_evidence_run_id/)
+  assert.match(workflow, /resolve-iconoplasm-task5-artifact\.mjs/)
+  assert.doesNotMatch(workflow, /ICONOPLASM_TASK5_AUTHORIZATION/)
+})
+
+test("Task 5 artifact resolver allowlists exact workflow, commit, job, and digest", async () => {
+  const commit = "c".repeat(40)
+  const responses = [
+    {
+      path: ".github/workflows/iconoplasm-viral-load-task5.yml",
+      head_sha: commit,
+      conclusion: "success",
+      jobs_url: "https://api.github.com/jobs",
+      artifacts_url: "https://api.github.com/artifacts",
+    },
+    {
+      jobs: [
+        { id: 22, name: "produce-iconoplasm-viral-load-task5-evidence", conclusion: "success" },
+      ],
+    },
+    {
+      artifacts: [
+        {
+          id: 33,
+          name: `iconoplasm-viral-load-task5-evidence-${commit}`,
+          expired: false,
+          digest: `sha256:${"d".repeat(64)}`,
+        },
+      ],
+    },
+  ]
+  const resolved = await resolveTask5Artifact({
+    repository: "brinedew/website",
+    runId: 11,
+    expectedCommit: commit,
+    token: "token",
+    fetchImpl: async () => ({ ok: true, json: async () => responses.shift() }),
+  })
+  assert.deepEqual(resolved, {
+    runId: 11,
+    jobId: 22,
+    artifactId: 33,
+    artifactName: `iconoplasm-viral-load-task5-evidence-${commit}`,
+    artifactDigest: `sha256:${"d".repeat(64)}`,
+  })
 })
 
 test("Task 4 callers cannot self-certify hosted Task 5 gates", async () => {
