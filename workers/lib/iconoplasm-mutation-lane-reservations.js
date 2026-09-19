@@ -6,6 +6,9 @@
 
 export const D1_PROVIDER_DAILY_WRITE_LIMIT = 100_000
 export const MUTATION_UNALLOCATED_HEADROOM = 30_000
+export const MUTATION_ORDINARY_DAILY_CEILING =
+  D1_PROVIDER_DAILY_WRITE_LIMIT - MUTATION_UNALLOCATED_HEADROOM
+export const MUTATION_COMPLETED_RETRY_HORIZON_DAYS = 32
 export const MUTATION_LANE_DAILY_LIMITS = Object.freeze({
   user_action: 40_000,
   publication: 10_000,
@@ -65,7 +68,33 @@ export class DailyMutationLaneReservations {
       day TEXT NOT NULL,
       lane TEXT NOT NULL,
       reserved_units INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'reserved',
+      completed_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`)
+    const reservationColumns = new Set(
+      this.storage.sql
+        .exec(`PRAGMA table_info(daily_mutation_lane_reservations)`)
+        .toArray()
+        .map((column) => String(column?.name || "")),
+    )
+    if (!reservationColumns.has("status")) {
+      this.storage.sql.exec(
+        `ALTER TABLE daily_mutation_lane_reservations ADD COLUMN status TEXT NOT NULL DEFAULT 'reserved'`,
+      )
+    }
+    if (!reservationColumns.has("completed_at")) {
+      this.storage.sql.exec(
+        `ALTER TABLE daily_mutation_lane_reservations ADD COLUMN completed_at TEXT`,
+      )
+    }
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS daily_mutation_lane_reservation_tombstones (
+      operation_id TEXT PRIMARY KEY,
+      day TEXT NOT NULL,
+      lane TEXT NOT NULL,
+      reserved_units INTEGER NOT NULL,
+      completed_at TEXT NOT NULL,
+      compacted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`)
     this.storage.sql.exec(
       `CREATE INDEX IF NOT EXISTS idx_daily_mutation_lane_reservations_day_lane
@@ -91,22 +120,32 @@ export class DailyMutationLaneReservations {
 
     return this.transactionSync(() => {
       const previous = this.row(
-        `SELECT day, lane, reserved_units
+        `SELECT day, lane, reserved_units, status
          FROM daily_mutation_lane_reservations
          WHERE operation_id = ?`,
         operationId,
       )
-      if (previous) {
+      const tombstone = previous
+        ? null
+        : this.row(
+            `SELECT day, lane, reserved_units
+             FROM daily_mutation_lane_reservation_tombstones
+             WHERE operation_id = ?`,
+            operationId,
+          )
+      if (previous || tombstone) {
+        const retained = previous || tombstone
         requireValue(
-          previous.lane === lane && Number(previous.reserved_units) === units,
+          retained.lane === lane && Number(retained.reserved_units) === units,
           "MUTATION_RESERVATION_IDENTITY_MISMATCH",
         )
         return {
           ok: true,
           replayed: true,
-          day: previous.day,
+          terminal: Boolean(tombstone || previous.status === "completed"),
+          day: retained.day,
           requested_day: day,
-          carried_from_day: previous.day === day ? null : previous.day,
+          carried_from_day: retained.day === day ? null : retained.day,
           lane,
           operation_id: operationId,
           reserved_units: units,
@@ -133,6 +172,32 @@ export class DailyMutationLaneReservations {
           reserved_units: used,
           lane_limit: limit,
           lane_remaining: Math.max(0, limit - used),
+        }
+      }
+
+      const allLaneUsage = this.row(
+        `SELECT COALESCE(SUM(reserved_units), 0) AS reserved_units
+         FROM daily_mutation_lane_usage
+         WHERE day = ?`,
+        day,
+      )
+      const allLaneReservedUnits = Math.max(0, Number(allLaneUsage?.reserved_units || 0) || 0)
+      const providerRowsWritten = Math.max(0, Number(input.provider_rows_written || 0) || 0)
+      if (providerRowsWritten + allLaneReservedUnits + units > MUTATION_ORDINARY_DAILY_CEILING) {
+        return {
+          ok: false,
+          code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
+          disposition: lane === "user_action" ? "pending_or_retryable_refusal" : "durable_pending",
+          day,
+          lane,
+          requested_units: units,
+          provider_rows_written: providerRowsWritten,
+          all_lane_reserved_units: allLaneReservedUnits,
+          ordinary_ceiling: MUTATION_ORDINARY_DAILY_CEILING,
+          provider_remaining: Math.max(
+            0,
+            MUTATION_ORDINARY_DAILY_CEILING - providerRowsWritten - allLaneReservedUnits,
+          ),
         }
       }
 
@@ -169,7 +234,80 @@ export class DailyMutationLaneReservations {
     })
   }
 
-  snapshot(day) {
+  complete(input) {
+    requireValue(input && typeof input === "object", "MUTATION_RESERVATION_REQUIRED")
+    const operationId = cleanIdentity(input.operation_id)
+    const completedAt = String(input.completed_at || new Date().toISOString())
+    requireValue(Number.isFinite(Date.parse(completedAt)), "MUTATION_COMPLETION_TIME_INVALID")
+    return this.transactionSync(() => {
+      const row = this.row(
+        `SELECT operation_id, status FROM daily_mutation_lane_reservations WHERE operation_id = ?`,
+        operationId,
+      )
+      if (!row) {
+        const tombstone = this.row(
+          `SELECT operation_id FROM daily_mutation_lane_reservation_tombstones WHERE operation_id = ?`,
+          operationId,
+        )
+        requireValue(tombstone, "MUTATION_RESERVATION_NOT_FOUND")
+        return { ok: true, replayed: true, terminal: true, operation_id: operationId }
+      }
+      if (row.status === "completed") {
+        return { ok: true, replayed: true, terminal: true, operation_id: operationId }
+      }
+      this.storage.sql.exec(
+        `UPDATE daily_mutation_lane_reservations
+         SET status = 'completed', completed_at = ?
+         WHERE operation_id = ? AND status = 'reserved'`,
+        completedAt,
+        operationId,
+      )
+      return { ok: true, replayed: false, terminal: true, operation_id: operationId }
+    })
+  }
+
+  compactTerminal({ now = new Date().toISOString(), limit = 1000 } = {}) {
+    const nowMs = Date.parse(String(now || ""))
+    requireValue(Number.isFinite(nowMs), "MUTATION_COMPACTION_TIME_INVALID")
+    const beforeTime = new Date(
+      nowMs - MUTATION_COMPLETED_RETRY_HORIZON_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString()
+    const safeLimit = Math.max(1, Math.min(5000, Number.parseInt(String(limit), 10) || 1000))
+    return this.transactionSync(() => {
+      const rows = this.storage.sql
+        .exec(
+          `SELECT operation_id, day, lane, reserved_units, completed_at
+           FROM daily_mutation_lane_reservations
+           WHERE status = 'completed' AND completed_at < ?
+           ORDER BY completed_at, operation_id
+           LIMIT ?`,
+          beforeTime,
+          safeLimit,
+        )
+        .toArray()
+      for (const row of rows) {
+        this.storage.sql.exec(
+          `INSERT INTO daily_mutation_lane_reservation_tombstones
+           (operation_id, day, lane, reserved_units, completed_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(operation_id) DO NOTHING`,
+          row.operation_id,
+          row.day,
+          row.lane,
+          row.reserved_units,
+          row.completed_at,
+        )
+        this.storage.sql.exec(
+          `DELETE FROM daily_mutation_lane_reservations
+           WHERE operation_id = ? AND status = 'completed'`,
+          row.operation_id,
+        )
+      }
+      return { ok: true, compacted: rows.length }
+    })
+  }
+
+  snapshot(day, providerRowsWritten = 0) {
     const safeDay = cleanDay(day)
     const rows = this.storage.sql
       .exec(
@@ -183,6 +321,8 @@ export class DailyMutationLaneReservations {
     return {
       day: safeDay,
       provider_limit: D1_PROVIDER_DAILY_WRITE_LIMIT,
+      ordinary_ceiling: MUTATION_ORDINARY_DAILY_CEILING,
+      provider_rows_written: Math.max(0, Number(providerRowsWritten || 0) || 0),
       unallocated_headroom: MUTATION_UNALLOCATED_HEADROOM,
       lanes: Object.fromEntries(
         Object.entries(MUTATION_LANE_DAILY_LIMITS).map(([lane, limit]) => {

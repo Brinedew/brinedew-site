@@ -11,15 +11,19 @@ import {
   SCOPED_READY_FINALIZATION_SQL,
   COMPLETE_READY_FINALIZATION_SQL,
 } from "./iconoplasm/sync-finalization-publication.js"
+import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmSyncFinalizationQueue,
+  handleIconoplasmSyncFinalizationQueue as handleIconoplasmSyncFinalizationQueueProduction,
   iconoplasmCardCatalogKvWriteBudgetDeferral,
   IconoplasmSyncGovernor,
   syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const handleIconoplasmSyncFinalizationQueue = (batch, env, ctx) =>
+  handleIconoplasmSyncFinalizationQueueProduction(batch, withTestMutationAuthority(env), ctx)
 
 function finalizationPhasePriority(phase) {
   const value = String(phase || "")
@@ -897,12 +901,12 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
 
 function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   const gatewayDb = new FakeIconoplasmDb({ jobs })
-  const gatewayEnv = {
+  const gatewayEnv = withTestMutationAuthority({
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
-  }
+  })
   const env = {
     ...gatewayEnv,
     ICONOPLASM_DB: null,
@@ -953,6 +957,7 @@ function bindFinalizationV2Acceptance(env, handoffs = []) {
 }
 
 async function deliverFinalizationForTest(env, body) {
+  env = withTestMutationAuthority(env)
   bindFinalizationV2Acceptance(env)
   bindHealthySyncGovernorForTest(env)
   let acked = false
