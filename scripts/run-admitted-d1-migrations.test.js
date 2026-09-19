@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, readdirSync } from "node:fs"
 import { runAdmittedMigrations } from "./run-admitted-d1-migrations.mjs"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 
@@ -97,6 +97,16 @@ test("release manifest points only at real reviewed migration files", () => {
   for (const key of Object.keys(manifest.migrations)) {
     const [resource, name] = key.split("/")
     assert.ok(existsSync(new URL(`../${directories[resource]}/${name}`, import.meta.url)), key)
+  }
+})
+
+test("the newest owned migration cannot exist outside the reviewed release manifest", () => {
+  for (const resource of ["iconoplasm", "iconoplasm-authoring"]) {
+    const newest = readdirSync(new URL(`../${directories[resource]}/`, import.meta.url))
+      .filter((name) => name.endsWith(".sql"))
+      .sort()
+      .at(-1)
+    assert.ok(manifest.migrations[`${resource}/${newest}`], `${resource}/${newest}`)
   }
 })
 
