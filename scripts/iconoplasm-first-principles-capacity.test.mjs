@@ -12,6 +12,8 @@ import {
   readerGrowthAssessment,
   firstPersonaOverLimit,
   notificationInboxCost,
+  loadTask3MutationMeasurement,
+  PROVIDER_RESOURCE_KEYS,
   releaseTierAssessment,
   votingCost,
   websiteGuestDiscoveryMergeCost,
@@ -23,6 +25,14 @@ function first(perUser, base) {
 }
 
 test("10,000 readers use measured mutation receipts instead of the obsolete 172,000-write estimate", () => {
+  const measurement = loadTask3MutationMeasurement()
+  assert.equal(measurement.schemaVersion, 1)
+  assert.equal(measurement.workload.savers, 2_000)
+  assert.equal(measurement.workload.encounters, 20_000)
+  assert.equal(measurement.meters.d1RowsRead, 6_000)
+  assert.equal(measurement.meters.d1RowsWritten, 10_016)
+  assert.ok(Number.isInteger(measurement.meters.d1RowsWritten))
+  assert.match(measurement.digest, /^[a-f0-9]{64}$/)
   const result = readerGrowthAssessment(10_000)
   assert.equal(result.activity.articleLoads, 50_000)
   assert.equal(result.activity.voters, 500)
@@ -30,7 +40,7 @@ test("10,000 readers use measured mutation receipts instead of the obsolete 172,
   assert.equal(result.activity.winningImageChanges, 200)
   assert.equal(result.activity.savedDiscoveries, 20_000)
   assert.equal(result.mutations.lanes.user_action.reserved, 16_000)
-  assert.equal(result.mutations.lanes.user_action.actualMeasured, 14_016)
+  assert.equal(result.mutations.lanes.user_action.measured, 10_016)
   assert.equal(result.mutations.lanes.publication.reserved, 8_800)
   assert.deepEqual(result.mutations.measuredOperations, {
     discoveryD1RowsRead: 6_000,
@@ -39,34 +49,58 @@ test("10,000 readers use measured mutation receipts instead of the obsolete 172,
     publicationD1RowsWritten: 8_800,
   })
   assert.equal(result.mutations.provider.reserved, 24_800)
-  assert.equal(result.mutations.provider.headroom, 75_200)
-  assert.equal(result.mutations.provider.headroomFraction, 0.752)
+  assert.equal(result.mutations.provider.protectedHeadroom, 30_000)
+  assert.equal(result.mutations.provider.unusedOrdinaryCapacity, 45_200)
+  assert.equal(result.mutations.provider.ordinaryCeiling, 70_000)
+  assert.deepEqual(result.mutations.modeledActions.finalizationRecovery, {
+    count: 0,
+    reason: "reader workload contains no generation finalization action",
+  })
+  assert.deepEqual(result.mutations.modeledActions.laptopDelivery, {
+    count: 0,
+    reason: "reader workload contains no workstation delivery action",
+  })
   assert.equal(result.verdict, "fits_measured_isolated_lanes")
   assert.equal(result.evidence.productionWiringCertified, false)
   assert.deepEqual(result.reads.portraitFallbacksByFraction, {
     0.02: 1_000,
     0.1: 5_000,
   })
+  assert.deepEqual(Object.keys(result.resources), PROVIDER_RESOURCE_KEYS)
+  for (const [name, resource] of Object.entries(result.resources)) {
+    assert.ok(Number.isInteger(resource.operations), name)
+    assert.ok(
+      ["measured", "reviewed_bound", "not_applicable", "pending_external"].includes(
+        resource.evidence.status,
+      ),
+      name,
+    )
+    assert.notEqual(resource.evidence.status, "assumed", name)
+  }
 })
 
 test("release tiers separate static read availability from mutation completion", () => {
   const tenThousand = releaseTierAssessment(10_000)
-  assert.equal(tenThousand.readAvailability, "complete")
+  assert.equal(tenThousand.readAvailability, "pending_topology_proof")
   assert.equal(tenThousand.mutationCompletion, "fits_measured_isolated_lanes")
-  assert.equal(tenThousand.verdict, "pass")
+  assert.equal(tenThousand.verdict, "blocked_pending_topology_proof")
 
   const million = releaseTierAssessment(1_000_000)
-  assert.equal(million.readAvailability, "complete")
+  assert.equal(million.readAvailability, "pending_topology_proof")
   assert.equal(million.mutationCompletion, "pending_or_refused_without_loss")
   assert.ok(million.mutations.pendingOrRefusedUnits > 0)
-  assert.equal(million.mutations.lostAcceptedCommands, 0)
-  assert.equal(million.verdict, "read_pass_mutation_overflow")
+  assert.equal(million.interactionPlane.lostAcceptedCommands, null)
+  assert.equal(million.verdict, "blocked_pending_topology_proof")
 
   const anonymous = releaseTierAssessment(100_000)
   assert.equal(anonymous.activity.articleLoads, 500_000)
-  assert.equal(anonymous.activity.signedInReaders, 0)
-  assert.equal(anonymous.activity.savedDiscoveries, 0)
-  assert.equal(anonymous.activity.votes, 0)
+  assert.equal(anonymous.activity.signedInReaders, 20_000)
+  assert.equal(anonymous.activity.savedDiscoveries, 200_000)
+  assert.equal(anonymous.activity.votes, 10_000)
+  assert.equal(anonymous.activity.winningImageChanges, 2_000)
+  assert.equal(anonymous.readPlane.verdict, "pending_topology_proof")
+  assert.equal(anonymous.interactionPlane.verdict, "bounded_overflow")
+  assert.ok(anonymous.interactionPlane.pendingOrRefusedUnits > 0)
 })
 
 test("healthy CDN delivery does not erase discovery or vote costs", () => {
@@ -80,7 +114,7 @@ test("regional fallback and voter participation are explicit independent growth 
   const baseline = readerGrowthAssessment(10_000)
   const regional = readerGrowthAssessment(10_000, { bunnyBlockedFraction: 0.1 })
   assert.equal(regional.reads.portraitFallbacks, 5_000)
-  assert.equal(regional.reads.statefulOperations, 0)
+  assert.equal(regional.reads.statefulOperations, null)
   assert.equal(regional.activity.votes, baseline.activity.votes)
   const engaged = readerGrowthAssessment(10_000, { voterFraction: 0.2 })
   assert.equal(engaged.activity.votes, 4_000)

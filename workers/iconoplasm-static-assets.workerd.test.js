@@ -7,7 +7,7 @@ import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { preparePublicReadCutoverConfig } from "../scripts/prepare-iconoplasm-public-read-cutover.mjs"
-import { runAnonymousRouteReplay } from "../scripts/lib/iconoplasm-static-route-replay.mjs"
+import { proveAnonymousRouteTopology } from "../scripts/lib/iconoplasm-static-topology-proof.mjs"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -149,15 +149,20 @@ test(
 )
 
 test(
-  "100,000 anonymous journeys replay through the real built Static Assets route owner",
+  "the exact production build and Wrangler config exhaust anonymous route ownership",
   { timeout: 30_000 },
   async () => {
-    const replay = await runAnonymousRouteReplay({ journeys: 100_000, articleLoadsPerJourney: 5 })
-    assert.equal(replay.journeys, 100_000)
-    assert.equal(replay.articleLoads, 500_000)
-    assert.equal(replay.routeOwner, "cloudflare_static_assets_workerd")
-    assert.equal(replay.statefulWorkerRouteEvents, 0)
-    assert.deepEqual(replay.statefulOperations, {
+    const proof = await proveAnonymousRouteTopology()
+    assert.equal(proof.kind, "exact_build_topology_proof")
+    assert.equal(proof.assetRoot, "public-iconoplasm-edge")
+    assert.equal(
+      proof.wranglerConfig,
+      "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    )
+    assert.ok(proof.physicalDispatches > 0)
+    assert.equal(proof.logicalDispatches, undefined)
+    assert.equal(proof.statefulWorkerRouteEvents, 0)
+    assert.deepEqual(proof.observedStatefulOperations, {
       d1: 0,
       durableObject: 0,
       queue: 0,
@@ -165,7 +170,7 @@ test(
       session: 0,
       internalService: 0,
     })
-    assert.equal(replay.throwingBindingsArmed, true)
-    assert.equal(replay.verified, true)
+    assert.equal(proof.instrumentedBindingsArmed, true)
+    assert.equal(proof.verified, true)
   },
 )
