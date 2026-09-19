@@ -146,6 +146,15 @@ function migrationReceipt(status) {
   }
 }
 
+export async function startPublicationMigrationIfRequired({ readStatus, startMigration } = {}) {
+  if (typeof readStatus !== "function") throw new Error("Migration status reader is required")
+  if (typeof startMigration !== "function") throw new Error("Migration starter is required")
+  const status = await readStatus()
+  if (migrationReceipt(status).complete) return { started: false, status }
+  await startMigration()
+  return { started: true, status }
+}
+
 function compareProgress(left, right) {
   for (let index = 0; index < left.length; index += 1) {
     if (left[index] !== right[index]) return left[index] - right[index]
@@ -280,16 +289,21 @@ async function releaseFromCli(cacheBust) {
         ])
       },
       startMigration: async () => {
-        const response = await fetch(
-          "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/migrate-card-storage",
-          {
-            method: "POST",
-            headers: { "x-iconoplasm-admin-token": adminToken },
-            signal: AbortSignal.timeout(30_000),
+        await startPublicationMigrationIfRequired({
+          readStatus: () => publicationMigrationStatus(adminToken),
+          startMigration: async () => {
+            const response = await fetch(
+              "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/migrate-card-storage",
+              {
+                method: "POST",
+                headers: { "x-iconoplasm-admin-token": adminToken },
+                signal: AbortSignal.timeout(30_000),
+              },
+            )
+            if (!response.ok)
+              throw new Error(`Publication migration request failed (${response.status})`)
           },
-        )
-        if (!response.ok)
-          throw new Error(`Publication migration request failed (${response.status})`)
+        })
       },
       waitForMigration: () =>
         waitForPublicationMigration({
