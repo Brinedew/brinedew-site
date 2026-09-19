@@ -432,8 +432,8 @@ test("image-edit publish keeps a real publisher upvote and hydrates the vote UI"
   assert.match(seed, /canonical[\s\S]*next exact card artifact is released/)
   assert.doesNotMatch(app, /VOTE_PROJECTION_REFRESH_DELAYS_MS|voteProjectionRefreshPolls/)
   assert.doesNotMatch(wire, /handle\.ensureSnapshot\(\)/)
-  assert.match(wire, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
-  assert.match(wire, /handle\.setSnapshot\(snapshot/)
+  assert.match(wire, /deferSnapshot: true/)
+  assert.doesNotMatch(wire, /votes\/snapshots/)
 })
 
 test("server candidate islands hydrate actions and favorite controls without replacing public cards", () => {
