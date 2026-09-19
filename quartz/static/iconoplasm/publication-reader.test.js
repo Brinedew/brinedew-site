@@ -16,6 +16,7 @@ import {
 } from "../../../workers/test-helpers/throwing-state-bindings.js"
 
 const appPath = new URL("./app.js", import.meta.url)
+const headPath = new URL("../../components/Head.tsx", import.meta.url)
 const wranglerPath = new URL(
   "../../../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
   import.meta.url,
@@ -55,6 +56,32 @@ test("anonymous gene detail asks the immutable publication reader instead of a s
   assert.equal(payload.symbol, "TP53")
   assert.equal(readerCalls.length, 1)
   assert.deepEqual(load.calls, [])
+})
+
+test("gene document head-start never calls the stateful card or detail APIs", async () => {
+  const source = await readFile(headPath, "utf8")
+  const startupStart = source.indexOf("var bootstrap = {")
+  const startupEnd = source.indexOf(
+    'if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "")',
+    startupStart,
+  )
+  assert.notEqual(startupStart, -1, "missing Iconoplasm bootstrap")
+  assert.notEqual(startupEnd, -1, "missing Iconoplasm bootstrap boundary")
+  const geneStartup = source.slice(startupStart, startupEnd)
+  assert.doesNotMatch(geneStartup, /\/api\/iconoplasm\/cards/)
+  assert.doesNotMatch(geneStartup, /\/api\/iconoplasm\/site\/genes/)
+  assert.doesNotMatch(geneStartup, /startGeneDetailFetch/)
+})
+
+test("passive gene hydration never polls print-copy state", async () => {
+  const source = await readFile(appPath, "utf8")
+  const start = source.indexOf("function wirePrintCopyRequests")
+  const end = source.indexOf("function openPrintCopyImage", start)
+  assert.notEqual(start, -1, "missing print-copy wiring")
+  assert.notEqual(end, -1, "missing print-copy wiring boundary")
+  const block = source.slice(start, end)
+  assert.doesNotMatch(block, /fetchPrintCopyStatus/)
+  assert.doesNotMatch(block, /fetchJSON|fetch\(/)
 })
 
 test("anonymous catalog search, gallery, and freshness stay in the publication reader", async () => {
