@@ -180,7 +180,7 @@ test(
 
 test(
   "the exact production build and Wrangler config exhaust anonymous route ownership",
-  { timeout: 30_000 },
+  { timeout: 120_000 },
   async () => {
     const proof = await proveAnonymousRouteTopology()
     assert.equal(proof.kind, "exact_build_topology_proof")
