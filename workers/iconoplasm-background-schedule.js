@@ -5,6 +5,7 @@ const quarterHours = (minute) => Object.freeze([minute, minute + 15, minute + 30
 
 export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   sharedDiscovery: Object.freeze([0]),
+  discoveryMigration: Object.freeze([1, 16, 33, 48]),
   sharedDelivery: Object.freeze([10, 28, 46]),
   caretakerComments: quarterHours(2),
   fulfillment: quarterHours(5),

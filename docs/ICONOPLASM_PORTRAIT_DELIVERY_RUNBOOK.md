@@ -82,21 +82,15 @@ runtime with the authenticated Storage API credential. One server-side adapter,
 requests, GET/HEAD source selection, PUT, and DELETE. Routes and notification
 senders must not reconstruct those operations independently.
 
-`https://iconoplasm.brinedew.bio/portraits/v1/...` and
-`https://iconoplasm.brinedew.bio/gene-cards/v1/...`, and immutable
-immutable blot requests first read authenticated Storage. Stable
-`/blot/<SYMBOL>.webp` requests derive the current exact card's immutable blot
-key, then use the same adapter. Bunny can expose
-different truth through its Storage API and public CDN
-replicas: the observed CASP8AP2 failure loaded from an American VPN while the
-Vietnam first-party Storage read returned 404. A Storage 404 or unreachable
-Storage view therefore advances inside the Worker to the public CDN view. The
-Vietnamese browser still talks only to the first-party URL; Cloudflare performs
-the second Bunny read. Only failure of every configured view is a missing
-object. A split-view success emits the structured
-`portrait-storage-regional-divergence` warning. Successful immutable GETs are
-written to Cloudflare's edge cache, and query strings do not create duplicate
-cache objects.
+Authenticated authoring and verification continue to use Bunny Storage through
+the one server-side adapter. Anonymous delivery does not. Stable
+`/blot/<SYMBOL>.webp` requests are internally rewritten by Static Assets to the
+application shell without changing their first-party URL. The browser reads the
+gene-scoped coherent Sysop V2 artifact from Bunny, validates its fingerprint and
+immutable object key, and navigates to those exact Bunny bytes. If neither the
+current nor prior coherent gene publication has a valid blot, it uses the
+bundled static placeholder. It never falls into the Worker, Storage API, D1,
+Durable Objects, Queues, or a repair path.
 
 Website Ops stores `regionally_divergent` separately from ordinary
 `renderable`. Its existing storage-audit action always prioritizes unknown rows,

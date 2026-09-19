@@ -11,15 +11,19 @@ import {
   SCOPED_READY_FINALIZATION_SQL,
   COMPLETE_READY_FINALIZATION_SQL,
 } from "./iconoplasm/sync-finalization-publication.js"
+import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
 import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmSyncFinalizationQueue,
+  handleIconoplasmSyncFinalizationQueue as handleIconoplasmSyncFinalizationQueueProduction,
   iconoplasmCardCatalogKvWriteBudgetDeferral,
   IconoplasmSyncGovernor,
   syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const handleIconoplasmSyncFinalizationQueue = (batch, env, ctx) =>
+  handleIconoplasmSyncFinalizationQueueProduction(batch, withTestMutationAuthority(env), ctx)
 
 function finalizationPhasePriority(phase) {
   const value = String(phase || "")
@@ -897,12 +901,12 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
 
 function buildEnv({ jobs = [] } = {}, { bindGateway = true } = {}) {
   const gatewayDb = new FakeIconoplasmDb({ jobs })
-  const gatewayEnv = {
+  const gatewayEnv = withTestMutationAuthority({
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
-  }
+  })
   const env = {
     ...gatewayEnv,
     ICONOPLASM_DB: null,
@@ -924,6 +928,7 @@ function buildFakeQueue({ failMessage = "" } = {}) {
 }
 
 function bindFinalizationV2Acceptance(env, handoffs = []) {
+  bindHealthySyncGovernorForTest(env)
   if (!env.ICONOPLASM_VOTE_COORDINATORS) {
     env.ICONOPLASM_VOTE_COORDINATORS = {
       idFromName: (name) => name,
@@ -952,7 +957,9 @@ function bindFinalizationV2Acceptance(env, handoffs = []) {
 }
 
 async function deliverFinalizationForTest(env, body) {
+  env = withTestMutationAuthority(env)
   bindFinalizationV2Acceptance(env)
+  bindHealthySyncGovernorForTest(env)
   let acked = false
   const retries = []
   const result = await handleIconoplasmSyncFinalizationQueue(
@@ -973,8 +980,48 @@ async function deliverFinalizationForTest(env, body) {
   return { result, acked, retries }
 }
 
-function finalizationGovernorForTest(env) {
-  const values = new Map(),
+function bindHealthySyncGovernorForTest(env) {
+  if (env.ICONOPLASM_SYNC_GOVERNOR) return
+  env.ICONOPLASM_SYNC_GOVERNOR = {
+    idFromName: (name) => name,
+    get: () => ({
+      fetch: async (request) => {
+        const path = new URL(request.url).pathname
+        if (path === "/permit")
+          return Response.json({ ok: true, granted: 1, lease_id: "healthy-test-lease" })
+        return Response.json({ ok: true })
+      },
+    }),
+  }
+}
+
+async function observeHealthyGovernorForTest(governor) {
+  const response = await governor.fetch(
+    new Request("https://iconoplasm-sync-governor/provider-observation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public_health: "healthy" }),
+    }),
+  )
+  assert.equal(response.ok, true)
+}
+
+function finalizationGovernorForTest(env, { providerHealthy = true } = {}) {
+  const values = new Map(
+      providerHealthy
+        ? [
+            [
+              "state",
+              {
+                batch_permits: 8,
+                public_health: "healthy",
+                provider_observed_at: new Date(Date.now()).toISOString(),
+                updated_at: new Date(Date.now()).toISOString(),
+              },
+            ],
+          ]
+        : [],
+    ),
     alarms = []
   const storage = {
     async get(key) {
@@ -1099,6 +1146,7 @@ test("finalization preserves its remaining vision cursor through daily refusal a
 
   queue.sent.length = 0 // Original transport messages may expire; the D1 cursor remains.
   now = values.get("finalization_reset_wake").due_at
+  await observeHealthyGovernorForTest(governor)
   await governor.alarm()
   assert.equal(queue.sent.length, 1)
   for (let pass = 0; pass < 2; pass++) {
@@ -1128,7 +1176,17 @@ test("finalization hands an exhausted day to a durable reset wake before D1 and 
     idFromName: () => "global",
     get: () => ({
       fetch: async (request) => {
+        const path = new URL(request.url).pathname
         const body = await request.json()
+        if (path === "/reserve-mutation-writes") {
+          return Response.json({
+            ok: true,
+            replayed: false,
+            lane: body.lane,
+            operation_id: body.operation_id,
+            reserved_units: body.units,
+          })
+        }
         return Response.json({
           day_key: body.day_key,
           cycle_key: body.cycle_key,
@@ -1164,6 +1222,7 @@ test("finalization hands an exhausted day to a durable reset wake before D1 and 
   assert.equal(queue.sent.length, 0)
   exhausted = false
   now = values.get("finalization_reset_wake").due_at
+  await observeHealthyGovernorForTest(governor)
   await governor.alarm()
   assert.equal(queue.sent.length, 1)
   const resumed = await deliverFinalizationForTest({ ...env }, queue.sent.shift())
@@ -1663,6 +1722,7 @@ test("queue finalization consumer rejects the old per-symbol message path", asyn
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: testKv(),
   }
+  bindHealthySyncGovernorForTest(env)
   let acknowledged = false
   let retried = false
 
@@ -1976,6 +2036,7 @@ test("future retry rows schedule one due-time wakeup instead of an immediate Que
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
   }
+  bindHealthySyncGovernorForTest(env)
 
   const result = await handleIconoplasmSyncFinalizationQueue(
     {
@@ -2014,6 +2075,7 @@ test("unscoped queue drain is refused without touching the finalization ledger",
     }),
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
   }
+  bindHealthySyncGovernorForTest(env)
   let acknowledged = false
   const result = await handleIconoplasmSyncFinalizationQueue(
     {
@@ -2315,7 +2377,8 @@ test("sync governor replaces stale active consumer counts with expiring leases",
         {
           batch_permits: 8,
           active_consumers: 2009,
-          updated_at: "2026-05-13T09:36:36.076Z",
+          public_health: "healthy",
+          updated_at: new Date(Date.now()).toISOString(),
         },
       ],
     ])
@@ -2354,6 +2417,322 @@ test("sync governor replaces stale active consumer counts with expiring leases",
   } finally {
     Date.now = originalNow
   }
+})
+
+test("sync governor grants zero permits when provider health is unknown, unhealthy, exhausted, or stale", async (t) => {
+  const now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const cases = [
+    {
+      name: "unknown",
+      state: {
+        public_health: "unknown",
+        batch_permits: 8,
+        updated_at: new Date(now).toISOString(),
+      },
+      bottleneck: "provider_health_unknown",
+    },
+    {
+      name: "unhealthy",
+      state: {
+        public_health: "unhealthy",
+        batch_permits: 8,
+        updated_at: new Date(now).toISOString(),
+      },
+      bottleneck: "public_health",
+    },
+    {
+      name: "exhausted",
+      state: {
+        public_health: "healthy",
+        batch_permits: 0,
+        updated_at: new Date(now).toISOString(),
+      },
+      bottleneck: "provider_capacity_exhausted",
+    },
+    {
+      name: "stale",
+      state: {
+        public_health: "healthy",
+        batch_permits: 8,
+        updated_at: new Date(now - 60_001).toISOString(),
+      },
+      bottleneck: "provider_observation_stale",
+    },
+  ]
+
+  for (const example of cases) {
+    const env = {}
+    const { governor, values } = finalizationGovernorForTest(env)
+    values.set("state", example.state)
+    const response = await governor.fetch(
+      new Request("https://iconoplasm-sync-governor/permit?requested=1", { method: "POST" }),
+    )
+    const permit = await response.json()
+
+    assert.equal(permit.granted, 0, example.name)
+    assert.equal(permit.lease_id, undefined, example.name)
+    assert.equal(permit.governor.public_health, example.state.public_health, example.name)
+    assert.equal(permit.governor.current_bottleneck, example.bottleneck, example.name)
+    assert.ok(permit.next_admission_at > now, example.name)
+  }
+})
+
+test("ordinary lease release cannot manufacture a provider health observation", async (t) => {
+  const now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const previousObservation = new Date(now - 120_000).toISOString()
+  const env = {}
+  const { governor, values } = finalizationGovernorForTest(env, { providerHealthy: false })
+  values.set("state", {
+    batch_permits: 8,
+    public_health: "unknown",
+    provider_observed_at: previousObservation,
+    updated_at: previousObservation,
+    active_consumer_leases: {
+      "lease-under-test": {
+        requested: 1,
+        granted: 1,
+        issued_at_ms: now - 1000,
+        expires_at_ms: now + 60_000,
+      },
+    },
+  })
+
+  const response = await governor.fetch(
+    new Request("https://iconoplasm-sync-governor/release", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lease_id: "lease-under-test",
+        processed: 1,
+        failed: 0,
+        retrying: 0,
+        public_health: "healthy",
+      }),
+    }),
+  )
+  const released = await response.json()
+
+  assert.equal(released.governor.active_consumers, 0)
+  assert.equal(released.governor.public_health, "unknown")
+  assert.equal(released.governor.provider_observed_at, previousObservation)
+})
+
+test("thrown and malformed governor permits defer to owned admission instead of polling", async (t) => {
+  const now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  for (const failure of ["throw", "malformed"]) {
+    const deferredPayloads = []
+    const env = {
+      ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+      ICONOPLASM_DB: new FakeIconoplasmDb({
+        jobs: [{ gene_symbol: "GAB1", status: "queued", phase: "reconcile" }],
+      }),
+      ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+      ICONOPLASM_SYNC_GOVERNOR: {
+        idFromName: (name) => name,
+        get: () => ({
+          async fetch(request) {
+            const path = new URL(request.url).pathname
+            if (path === "/permit") {
+              if (failure === "throw") throw new Error("governor transport unavailable")
+              return new Response("not-json", { status: 200 })
+            }
+            if (path === "/defer-finalization-until") {
+              const payload = await request.json()
+              deferredPayloads.push(payload)
+              return Response.json({
+                ok: true,
+                deferred: true,
+                reset_at: payload.next_admission_at,
+              })
+            }
+            return Response.json({ ok: true })
+          },
+        }),
+      },
+    }
+    const body = {
+      kind: "drain_finalization_ledger",
+      run_id: `gab1-${failure}`,
+      symbols: ["GAB1"],
+      idempotency_key: `gab1-${failure}:drain:1:GAB1:GAB1`,
+    }
+
+    const delivery = await deliverFinalizationForTest(env, body)
+
+    assert.equal(delivery.result.granted, 0, failure)
+    assert.equal(delivery.acked, true, failure)
+    assert.deepEqual(delivery.retries, [], failure)
+    assert.equal(deferredPayloads.length, 1, failure)
+    assert.ok(deferredPayloads[0].next_admission_at > now + 60_000, failure)
+  }
+})
+
+test("a fresh owned healthy observation pulls a retained finalization wake forward", async (t) => {
+  let now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const queue = buildFakeQueue()
+  const env = { ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue }
+  const { governor, values, alarms } = finalizationGovernorForTest(env, {
+    providerHealthy: false,
+  })
+  const originalAdmissionAt = now + 12 * 60 * 60 * 1000
+  const body = {
+    kind: "drain_finalization_ledger",
+    run_id: "early-provider-recovery",
+    symbols: ["GAB1"],
+    idempotency_key: "early-provider-recovery:drain:1:GAB1:GAB1",
+  }
+  await governor.deferFinalizationUntil(body, originalAdmissionAt)
+  assert.equal(values.get("finalization_reset_wake")?.due_at, originalAdmissionAt)
+
+  now += 5 * 60 * 1000
+  const observation = await governor.fetch(
+    new Request("https://iconoplasm-sync-governor/provider-observation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public_health: "healthy" }),
+    }),
+  )
+  assert.equal(observation.ok, true)
+  assert.equal(values.get("finalization_reset_wake")?.due_at, now)
+  assert.equal(alarms.at(-1), now)
+  assert.equal((await governor.alarm()).queue_message_sent, true)
+  assert.deepEqual(queue.sent, [body])
+})
+
+test("durable refusal redelivers the byte-equivalent canonical scoped identity", async (t) => {
+  let now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [{ gene_symbol: "GAB1", status: "queued", phase: "reconcile" }],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  const { governor, values } = finalizationGovernorForTest(env, { providerHealthy: false })
+  const body = {
+    kind: "drain_finalization_ledger",
+    run_id: "scoped-gab1",
+    symbols: ["GAB1"],
+    drain_scoped_phases: true,
+    idempotency_key: "scoped-gab1:drain:1:GAB1:GAB1",
+  }
+
+  const delivery = await deliverFinalizationForTest(env, body)
+  assert.equal(delivery.acked, true)
+  assert.deepEqual(values.get("finalization_reset_wake")?.messages, [body])
+
+  now = values.get("finalization_reset_wake").due_at
+  assert.equal((await governor.alarm()).queue_message_sent, true)
+  assert.deepEqual(queue.sent, [body])
+})
+
+test("a refused GAB1 wake keeps its exact identity until truthful health permits automatic progress", async (t) => {
+  let now = Date.parse("2026-09-19T06:00:00.000Z")
+  t.mock.method(Date, "now", () => now)
+  const queue = buildFakeQueue()
+  const body = {
+    kind: "drain_finalization_ledger",
+    run_id: "gab1-repair",
+    symbols: ["GAB1"],
+    idempotency_key: "gab1-repair:drain:1:GAB1:GAB1",
+  }
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [
+        {
+          gene_symbol: "GAB1",
+          status: "queued",
+          phase: "reconcile",
+          keep_assets_json: JSON.stringify([{ symbol: "GAB1", asset_sha256: "a".repeat(64) }]),
+          legacy_assets_json: JSON.stringify([]),
+          vision_ids_json: JSON.stringify(["anima-v1-1"]),
+          requested_at: "2026-09-19T05:00:00.000Z",
+          next_attempt_at: "2026-09-19T05:00:00.000Z",
+        },
+      ],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    KV: testKv(),
+  }
+  bindFinalizationV2Acceptance(env)
+  const { governor, values } = finalizationGovernorForTest(env, { providerHealthy: false })
+  const first = await deliverFinalizationForTest(env, body)
+
+  assert.equal(first.result.granted, 0)
+  assert.equal(first.acked, true, "the durable governor owns the accepted identity")
+  assert.deepEqual(first.retries, [], "the Queue transport does not poll before admission")
+  assert.deepEqual(values.get("finalization_reset_wake")?.messages, [body])
+  assert.equal(env.ICONOPLASM_DB.jobs.get("GAB1")?.phase, "reconcile")
+
+  const admissionAt = values.get("finalization_reset_wake").due_at
+  now = admissionAt
+  const observation = await governor.fetch(
+    new Request("https://iconoplasm-sync-governor/provider-observation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public_health: "healthy" }),
+    }),
+  )
+  assert.equal(observation.ok, true)
+  assert.equal((await governor.alarm()).queue_message_sent, true)
+  assert.deepEqual(queue.sent, [body])
+
+  const resumed = await deliverFinalizationForTest(env, queue.sent[0])
+  assert.equal(resumed.result.granted, 1)
+  assert.equal(resumed.acked, true)
+  assert.deepEqual(resumed.retries, [])
+  assert.equal(env.ICONOPLASM_DB.jobs.get("GAB1")?.phase, "vote_summaries")
+})
+
+test("a refused consumer retains no wake before the governor-owned admission time", async (t) => {
+  const now = Date.parse("2026-09-19T06:00:00.000Z")
+  const nextAdmissionAt = now + 48 * 60 * 60 * 1000
+  t.mock.method(Date, "now", () => now)
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_DB: new FakeIconoplasmDb({
+      jobs: [{ gene_symbol: "GAB1", status: "queued", phase: "reconcile" }],
+    }),
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: buildFakeQueue(),
+  }
+  const { values } = finalizationGovernorForTest(env, { providerHealthy: false })
+  values.set("state", {
+    batch_permits: 0,
+    public_health: "exhausted",
+    provider_observed_at: new Date(now).toISOString(),
+    updated_at: new Date(now).toISOString(),
+    next_admission_at: nextAdmissionAt,
+  })
+  const delivery = await deliverFinalizationForTest(env, {
+    kind: "drain_finalization_ledger",
+    run_id: "owned-admission",
+    symbols: ["GAB1"],
+  })
+
+  assert.equal(delivery.acked, true)
+  assert.deepEqual(delivery.retries, [])
+  assert.equal(values.get("finalization_reset_wake")?.due_at, nextAdmissionAt)
+
+  const laterAdmissionAt = nextAdmissionAt + 60 * 60 * 1000
+  values.set("state", {
+    ...values.get("state"),
+    next_admission_at: laterAdmissionAt,
+  })
+  const second = await deliverFinalizationForTest(env, {
+    kind: "drain_finalization_ledger",
+    run_id: "later-owned-admission",
+    symbols: ["TP53"],
+  })
+  assert.equal(second.acked, true)
+  assert.deepEqual(second.retries, [])
+  assert.equal(values.get("finalization_reset_wake")?.due_at, laterAdmissionAt)
 })
 
 test("queue finalization consumer fails loud when Queue path is disabled", async () => {

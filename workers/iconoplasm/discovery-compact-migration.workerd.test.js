@@ -9,7 +9,13 @@ import {
   readCompactUserState,
   readSharedCompactState,
 } from "./discovery-compact-store.js"
-import { importLegacyDiscoveryUser } from "./discovery-compact-migrate.js"
+import {
+  claimCompactDiscoveryMigrationLease,
+  importLegacyDiscoveryUser,
+  migrateLegacyDiscoveryPage,
+  readCompactDiscoveryActivation,
+} from "./discovery-compact-migrate.js"
+import { migrateIconoplasmCompactDiscoveryForScheduled } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   ensureDiscoveryDictionaryForNames,
   loadDiscoveryDictionaryForNames,
@@ -101,6 +107,9 @@ test(
 
       const shared = await readSharedCompactState(db)
       assert.equal(shared.state_version, 0)
+      const activationBeforeExecutor = await readCompactDiscoveryActivation(db)
+      assert.equal(activationBeforeExecutor.total_legacy_rows, 0)
+      assert.equal(activationBeforeExecutor.migrated_rows, 0)
       assert.deepEqual(await readDiscoveryDictionaryMeta(db), { version: 1 })
       const seeded = await loadDiscoveryDictionaryForNames(db, ["BRCA1", "TP53", "RETIRED1"])
       assert.equal(seeded.byName.size, 0)
@@ -149,6 +158,123 @@ test(
           tables: migratedTables.length,
         }),
       )
+    })
+  },
+)
+
+test(
+  "the admitted scheduled executor resumes its durable cursor and alone activates compact discovery",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      for (let index = 0; index < 9; index += 1) {
+        const symbol = `TEST${index}`
+        await db
+          .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)")
+          .bind(symbol, symbol)
+          .run()
+        await db
+          .prepare(
+            `INSERT INTO icono_gene_discoveries
+             (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+             VALUES ('reader', ?, 'extension_hover', 'extension_hover', 'hover_dwell', 'hover_dwell')`,
+          )
+          .bind(symbol)
+          .run()
+      }
+      await applyStatements(db, compactMigrationStatements())
+
+      const leaseOne = await claimCompactDiscoveryMigrationLease(db, {
+        token: "executor-one",
+        now: "2026-09-19T00:00:00.000Z",
+      })
+      const overlapping = await claimCompactDiscoveryMigrationLease(db, {
+        token: "executor-two",
+        now: "2026-09-19T00:00:01.000Z",
+      })
+      assert.ok(leaseOne)
+      assert.equal(overlapping, null)
+      await db
+        .prepare(
+          "UPDATE icono_discovery_compact_activation_v2 SET lease_token='', lease_until='' WHERE singleton=1",
+        )
+        .run()
+
+      const refused = await migrateIconoplasmCompactDiscoveryForScheduled({ ICONOPLASM_DB: db })
+      assert.equal(refused.pending, true)
+      const activationAfterMissingAuthority = await db
+        .prepare(
+          "SELECT status, lease_token, lease_until FROM icono_discovery_compact_activation_v2",
+        )
+        .first()
+      assert.equal(activationAfterMissingAuthority.status, "pending")
+      assert.equal(activationAfterMissingAuthority.lease_token, "")
+      assert.equal(activationAfterMissingAuthority.lease_until, "")
+
+      const refusedAuthorityCalls = []
+      const capacityRefused = await migrateIconoplasmCompactDiscoveryForScheduled({
+        ICONOPLASM_DB: db,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              refusedAuthorityCalls.push(new URL(request.url).pathname)
+              return Response.json(
+                { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+                { status: 429 },
+              )
+            },
+          }),
+        },
+      })
+      assert.equal(capacityRefused.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+      assert.deepEqual(refusedAuthorityCalls, ["/reserve-mutation-writes"])
+      const activationAfterRefusedAuthority = await db
+        .prepare("SELECT lease_token, lease_until FROM icono_discovery_compact_activation_v2")
+        .first()
+      assert.equal(activationAfterRefusedAuthority.lease_token, "")
+      assert.equal(activationAfterRefusedAuthority.lease_until, "")
+
+      const authorityCalls = []
+      const env = {
+        ICONOPLASM_DB: db,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              const body = await request.json()
+              authorityCalls.push({ path: new URL(request.url).pathname, body })
+              return Response.json({ ok: true, operation_id: body.operation_id })
+            },
+          }),
+        },
+      }
+      const first = await migrateIconoplasmCompactDiscoveryForScheduled(env)
+      assert.equal(first.pending, true)
+      assert.equal(first.migrated_rows, 8)
+      assert.equal(first.measured_legacy_rows, 8)
+      assert.equal(first.denominator_complete, false)
+      assert.equal(first.bounded_rows_per_day, 768)
+      assert.equal(first.maximum_remaining_days, null)
+      const resumed = await migrateIconoplasmCompactDiscoveryForScheduled({ ...env })
+      assert.equal(resumed.complete, true)
+      assert.equal(resumed.migrated_rows, 1)
+      assert.equal(resumed.measured_legacy_rows, 9)
+      assert.equal(resumed.denominator_complete, true)
+      assert.equal(resumed.maximum_remaining_days, 0)
+      assert.equal(
+        authorityCalls.filter((call) => call.path === "/reserve-mutation-writes").length,
+        2,
+      )
+      assert.equal(
+        authorityCalls.filter((call) => call.path.includes("complete-mutation")).length,
+        2,
+      )
+      assert.equal((await readCompactUserState(db, "reader")).member_count, 9)
     })
   },
 )
@@ -203,6 +329,153 @@ test(
         .prepare("SELECT payload_json FROM icono_discovery_shared_delivery_outbox_v2")
         .all()
       assert.equal(outbox.results.length, 1)
+    })
+  },
+)
+
+test(
+  "overlapping scheduled migration loser never completes the shared reservation and winner failure stays uncertain",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      await db
+        .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53','TP53')")
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO icono_gene_discoveries
+           (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+           VALUES ('reader','TP53','extension_hover','extension_hover','hover_dwell','hover_dwell')`,
+        )
+        .run()
+      await applyStatements(db, compactMigrationStatements())
+
+      let releaseMigration
+      let migrationStarted
+      const migrationStartedPromise = new Promise((resolve) => {
+        migrationStarted = resolve
+      })
+      const migrationGate = new Promise((resolve) => {
+        releaseMigration = resolve
+      })
+      const calls = []
+      const reservationOperationIds = []
+      const leaseTokens = []
+      const failingDb = {
+        prepare(sql) {
+          const statement = db.prepare(sql)
+          if (String(sql).includes("SET lease_token = ?")) {
+            return {
+              bind(...values) {
+                leaseTokens.push(values[0])
+                return statement.bind(...values)
+              },
+            }
+          }
+          if (String(sql).includes("SELECT *") && String(sql).includes("icono_gene_discoveries")) {
+            return {
+              bind() {
+                return this
+              },
+              async all() {
+                migrationStarted()
+                await migrationGate
+                throw new Error("injected migration failure after admission")
+              },
+            }
+          }
+          return statement
+        },
+      }
+      const env = {
+        ICONOPLASM_DB: failingDb,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              const path = new URL(request.url).pathname
+              calls.push(path)
+              if (path === "/reserve-mutation-writes") {
+                reservationOperationIds.push((await request.json()).operation_id)
+              }
+              return Response.json({ ok: true })
+            },
+          }),
+        },
+      }
+
+      const winner = migrateIconoplasmCompactDiscoveryForScheduled(env)
+      await migrationStartedPromise
+      const loser = await migrateIconoplasmCompactDiscoveryForScheduled(env)
+      assert.equal(loser.code, "DISCOVERY_MIGRATION_LEASE_HELD")
+      assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
+      assert.equal(reservationOperationIds.length, 2)
+      assert.equal(reservationOperationIds[0], reservationOperationIds[1])
+      assert.equal(leaseTokens.length, 2)
+      assert.notEqual(leaseTokens[0], leaseTokens[1])
+      assert.match(leaseTokens[0], /^[0-9a-f]{8}-[0-9a-f-]{27}$/i)
+      assert.match(leaseTokens[1], /^[0-9a-f]{8}-[0-9a-f-]{27}$/i)
+      releaseMigration()
+      await assert.rejects(winner, /injected migration failure after admission/)
+      assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
+    })
+  },
+)
+
+test(
+  "an expired migration lease is taken over by a unique token and the stale owner cannot mutate or advance",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      await db
+        .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53','TP53')")
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO icono_gene_discoveries
+           (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+           VALUES ('reader','TP53','extension_hover','extension_hover','hover_dwell','hover_dwell')`,
+        )
+        .run()
+      await applyStatements(db, compactMigrationStatements())
+
+      const staleToken = crypto.randomUUID()
+      const replacementToken = crypto.randomUUID()
+      assert.notEqual(staleToken, replacementToken)
+      assert.ok(
+        await claimCompactDiscoveryMigrationLease(db, {
+          token: staleToken,
+          now: "2026-09-19T00:00:00.000Z",
+        }),
+      )
+      assert.ok(
+        await claimCompactDiscoveryMigrationLease(db, {
+          token: replacementToken,
+          now: "2026-09-19T00:02:00.000Z",
+        }),
+      )
+
+      const beforeStaleAttempt = await readCompactDiscoveryActivation(db)
+      const staleAttempt = await migrateLegacyDiscoveryPage({ db, leaseToken: staleToken })
+      assert.equal(staleAttempt.code, "DISCOVERY_MIGRATION_LEASE_LOST")
+      assert.deepEqual(await readCompactDiscoveryActivation(db), beforeStaleAttempt)
+      assert.equal(await readCompactUserState(db, "reader"), null)
+
+      const replacement = await migrateLegacyDiscoveryPage({ db, leaseToken: replacementToken })
+      assert.equal(replacement.complete, true)
+      assert.equal(replacement.migrated_rows, 1)
+      assert.equal((await readCompactUserState(db, "reader")).member_count, 1)
+      const activation = await readCompactDiscoveryActivation(db)
+      assert.equal(activation.status, "complete")
+      assert.equal(activation.migrated_rows, 1)
     })
   },
 )

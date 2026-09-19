@@ -58,8 +58,8 @@ export async function reconcileFinalizationQueue({
   })
   // Validate both complete transports before changing any retention setting.
   // delivery_paused may be either explicit boolean value: recovery owns the
-  // pause/unpause decision elsewhere, while this function proves the consumer
-  // shape and preserves whichever state it observed.
+  // pause/unpause decision elsewhere. This function validates consumer shape
+  // without acquiring authority to write an earlier delivery-state snapshot.
   const consumers = CONSUMERS.map(({ queue, deadLetterQueue, batchSize }) => {
     const primary = queues.find((item) => item.queue_name === queue)
     const dlq = queues.find((item) => item.queue_name === deadLetterQueue)
@@ -96,7 +96,7 @@ export async function reconcileFinalizationQueue({
         throw new Error(`${queue.queue_name} does not retain reset-delayed work for 24 hours`)
       // PATCH only the owned retention setting; never unpause, pause or purge a queue.
       await api(`/${queue.queue_id}`, "PATCH", {
-        settings: { ...queue.settings, message_retention_period: RETENTION_SECONDS },
+        settings: { message_retention_period: RETENTION_SECONDS },
       })
       current = (await api(`/${queue.queue_id}`)).result
     }
@@ -105,10 +105,20 @@ export async function reconcileFinalizationQueue({
       current?.settings?.message_retention_period !== RETENTION_SECONDS
     )
       throw new Error(`Finalization Queue retention did not persist for ${queue.queue_name}`)
-    for (const key of ["delivery_delay", "delivery_paused"]) {
-      if (Object.hasOwn(queue.settings, key) && current.settings[key] !== queue.settings[key])
-        throw new Error(`Finalization Queue ${key} changed unexpectedly`)
-    }
+    if (
+      Object.hasOwn(queue.settings, "delivery_delay") &&
+      current.settings.delivery_delay !== queue.settings.delivery_delay
+    )
+      throw new Error("Finalization Queue delivery_delay changed unexpectedly")
+    if (
+      Object.hasOwn(queue.settings, "delivery_paused") &&
+      typeof current.settings.delivery_paused !== "boolean"
+    )
+      throw new Error("Finalization Queue delivery_paused readback is invalid")
+    // A concurrent operator pause/resume is valid. Report its readback in both
+    // views; never overwrite it with the initial inventory's pause value.
+    const consumer = consumers.find((item) => item.queue === queue.queue_name)
+    if (consumer) consumer.delivery_paused = current.settings.delivery_paused
     results.push({
       queue: queue.queue_name,
       retention_seconds: RETENTION_SECONDS,

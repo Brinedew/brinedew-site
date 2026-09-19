@@ -161,9 +161,10 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.equal(publicPatterns.includes("iconoplasm.brinedew.bio/*"), false)
   assert.deepEqual(statefulPatterns, ["iconoplasm.brinedew.bio/*"])
   assert.equal(statefulConfig.assets.directory, "./public-iconoplasm-edge")
-  assert.equal(statefulConfig.assets.not_found_handling, "none")
+  assert.equal(statefulConfig.assets.not_found_handling, "single-page-application")
   assert.ok(statefulConfig.assets.run_worker_first.includes("/api/*"))
-  assert.ok(statefulConfig.assets.run_worker_first.includes("/gene/*"))
+  assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)
+  assert.equal(statefulConfig.assets.run_worker_first.includes("/portraits/*"), false)
 })
 
 test("the deterministic asset bundle is complete, secure, and within Free-plan limits", async (t) => {
@@ -198,14 +199,25 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const report = await prepareIconoplasmEdgeAssets({
     sourceRoot: source,
     outputRoot: target,
+    publicationIndexes: [
+      {
+        schema_version: 2,
+        search_entries: [
+          ["RB1", "RB transcriptional corepressor 1", 0, 0],
+          ["TP53", "tumor protein p53", 0, 1],
+        ],
+      },
+    ],
   })
   const home = readFileSync(path.join(target, "index.html"), "utf8")
   const privacy = readFileSync(path.join(target, "privacy.html"), "utf8")
   const license = readFileSync(path.join(target, "license.html"), "utf8")
   const caretakerTerms = readFileSync(path.join(target, "caretaker-terms.html"), "utf8")
   const headers = readFileSync(path.join(target, "_headers"), "utf8")
+  const sitemap = readFileSync(path.join(target, "sitemap.xml"), "utf8")
+  const redirects = readFileSync(path.join(target, "_redirects"), "utf8")
 
-  assert.equal(report.fileCount, 9)
+  assert.ok(report.fileCount < 20)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
@@ -220,6 +232,17 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /metadata>; rel="service-meta"; type="application\/json"/)
   assert.match(headers, /llms\.txt>; rel="describedby"; type="text\/plain"/)
   assert.match(headers, /\/static\/iconoplasm\/\*/)
+  assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/RB1/)
+  assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
+  assert.match(
+    redirects,
+    /^\/blot\/\* https:\/\/iconoplasmportraits\.b-cdn\.net\/blot\/:splat 302$/m,
+  )
+  assert.throws(
+    () => statSync(path.join(target, "gene")),
+    /ENOENT/,
+    "complete gene discovery must not create one Cloudflare file per gene",
+  )
   assert.ok(statSync(path.join(target, "static", "iconoplasm", "styles.css")).isFile())
 })
 
@@ -248,7 +271,7 @@ test("production hands off the existing route before Wrangler reconciles statefu
   )
   const handoffIndex = workflow.indexOf("Hand off Iconoplasm route to the prepared stateful worker")
   const statefulDeployIndex = workflow.indexOf(
-    "Deploy the only allowed internal stateful worker (production)",
+    "Publish, verify, and activate immutable public reads",
   )
 
   assert.ok(handoffIndex > 0)

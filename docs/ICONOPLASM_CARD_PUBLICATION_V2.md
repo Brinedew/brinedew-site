@@ -117,11 +117,20 @@ three requested symbols (two hits), with zero writes. Empty-symbol checks serve
 popup authentication without reading or creating discovery rows.
 
 Healthy readers fetch immutable objects directly from paid Bunny Storage/CDN.
-Blocked or corrupt responses use the exact first-party object path, with
-bounded hedging, cancellation and byte/hash validation. Private routes and
-credentials never enter these CDN paths. Both lanes share only bounded hash
-directories; a stalled rich card must not block its independent portrait.
-Changing one gene does not change its neighbors' card/image URLs.
+The website retains a coherent prior head when the CDN/current projection is
+unavailable and uses bundled media placeholders rather than sending a viral
+crowd through the stateful Worker. The extension retains its bounded exact-path
+compatibility hedge for installed clients. Private routes and credentials never
+enter CDN paths. Both lanes share only bounded hash directories; a stalled rich
+card must not block its independent portrait. Changing one gene does not change
+its neighbors' card/image URLs.
+
+Each root-manifest shard names one content-addressed catalog index. That index
+names content-addressed catalog pages of at most 128 entries without inflating
+the root manifest with every page reference. The existing publisher writes and
+verifies the index and pages in the same job that seals the root; each page
+carries public search/gallery fields, passive candidate summaries, and shared
+vote totals. They have no independent pointer, writer, or repair path.
 
 ### Released-client transport acceptance
 

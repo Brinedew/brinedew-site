@@ -117,13 +117,8 @@ test("a canonical release accepts and preserves provider quarantine", async () =
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
   for (const call of calls.filter((c) => c.method === "PATCH")) {
     const settings = JSON.parse(call.body).settings
-    const queue = queues.find((candidate) => call.url.endsWith(candidate.queue_id))
-    assert.ok(queue)
     assert.equal(settings.message_retention_period, 86400)
-    // The retention write preserves exactly the delivery state observed for
-    // that queue: a deliberately paused queue stays paused, and a queue that
-    // never carried an explicit pause field must not gain one.
-    assert.equal(settings.delivery_paused, queue.settings.delivery_paused)
+    assert.deepEqual(settings, { message_retention_period: 86400 })
   }
 })
 
@@ -191,4 +186,62 @@ test("a success response without persisted retention is refused", async () => {
     }),
     /did not persist/,
   )
+})
+
+for (const paused of [true, false]) {
+  test(`retention repair preserves a concurrent ${paused ? "pause" : "resume"}`, async () => {
+    const { queues, calls, options } = fixture()
+    queues[0].settings.delivery_paused = !paused
+    let changedByOperator = false
+    const result = await reconcileFinalizationQueue({
+      ...options,
+      fetchImpl: async (url, init) => {
+        if (init.method === "PATCH" && url.endsWith(queues[0].queue_id)) {
+          changedByOperator = true
+          queues[0].settings.delivery_paused = paused
+        }
+        return options.fetchImpl(url, init)
+      },
+    })
+    assert.equal(changedByOperator, true)
+    assert.equal(queues[0].settings.delivery_paused, paused)
+    assert.equal(result.consumers[0].delivery_paused, paused)
+    assert.equal(result.queues[0].delivery_paused, paused)
+    for (const call of calls.filter((item) => item.method === "PATCH"))
+      assert.deepEqual(JSON.parse(call.body), { settings: { message_retention_period: 86400 } })
+  })
+}
+
+test("invalid pause readback fails without repairing it from stale inventory", async () => {
+  for (const invalid of [undefined, "true", null]) {
+    const { queues, options } = fixture()
+    await assert.rejects(
+      reconcileFinalizationQueue({
+        ...options,
+        fetchImpl: async (url, init) => {
+          if (init.method === "GET" && url.endsWith(queues[0].queue_id))
+            queues[0].settings.delivery_paused = invalid
+          return options.fetchImpl(url, init)
+        },
+      }),
+      /delivery_paused/,
+    )
+    assert.equal(queues[0].settings.delivery_paused, invalid)
+  }
+})
+
+test("a concurrent delay change is refused without overwriting it", async () => {
+  const { queues, options } = fixture()
+  await assert.rejects(
+    reconcileFinalizationQueue({
+      ...options,
+      fetchImpl: async (url, init) => {
+        if (init.method === "PATCH" && url.endsWith(queues[0].queue_id))
+          queues[0].settings.delivery_delay = 30
+        return options.fetchImpl(url, init)
+      },
+    }),
+    /delivery_delay/,
+  )
+  assert.equal(queues[0].settings.delivery_delay, 30)
 })

@@ -172,6 +172,93 @@ consumers and both dead-letter queues before repairing retention; it never
 unpauses or creates a consumer. Serialization supplements, but does not prove,
 complete-phase row-cost admission.
 
+Popularity does not buy a Queue operation per vote. The vote projection ledger
+keeps one dirty row per gene. The first vote that changes a clean gene sends one
+wake; later votes only advance that row's generation while the wake claim is
+outstanding. Queue-send failure releases the exact claim, and a consumer releases
+only the generation carried by its message. A vote racing a consumer either joins
+the generation being processed or claims exactly one successor wake; stale
+completion cannot delete the newer row.
+
+The existing daily-budget Durable Object also owns four non-borrowing D1 mutation
+lanes. `user_action` has 40,000 reserved write units, `publication` 10,000,
+`finalization_recovery` 10,000, and `laptop_delivery` 10,000. The other 30,000 of
+the 100,000-write daily provider allowance remains unallocated headroom. A full
+lane refuses before its mutation dispatch; user actions remain locally pending
+or receive a retryable refusal, and durable background work remains pending.
+Unused capacity in one lane never moves to another lane. This is not a parallel
+70,000-write counter: every reservation also reads the authoritative
+`daily_budget_usage.rows_written` value in the same Durable Object, and refuses
+when provider-recorded writes plus all retained lane reservations would exceed
+70,000. A missing shared-budget binding is a configuration failure, never local
+success.
+
+The operation ID is the reservation identity. A retry with the same ID, lane,
+and unit bound reuses its original reservation even after UTC midnight and does
+not charge the new day. A changed lane or unit bound is an identity mismatch.
+Timeouts and other uncertain outcomes never refund or regenerate a reservation.
+Unresolved identities are retained indefinitely. Only explicitly completed
+identities become eligible for compaction after the 32-day retry/uncertainty
+horizon, and compaction keeps an anti-reuse tombstone with the original lane,
+day, and units. The shared budget snapshot exposes all four lane balances for
+operators.
+
+B-764 compact discovery is the activated request contract. Hover encounters,
+guest merge, starter seed, membership, shelf, gallery window, and clan reads use
+the one compact per-user record and durable shared-delivery outbox. The retired
+per-hover route remains a write-free 410. Legacy discovery import is an explicit
+migration tool only; request handling contains no `icono_gene_discoveries`
+writer or whole-membership fallback. The singleton activation receipt starts
+pending, so authenticated compact reads and writes refuse until the bounded,
+resumable migration has imported every legacy user. Real D1 receipts bill three
+personal writes per saver plus one receipt and one indexed outbox delete per
+delivery and one shared-state write per drain page: 2,000 savers cost 10,016
+writes, so each accepted discovery batch reserves six units.
+
+Vote projection accepts at most eight candidate summaries per gene. The real
+migration/index/trigger harness measured 44 D1 row writes at that accepted
+maximum, so each dirty-generation projection reserves 44 publication units;
+nine candidates refuse before D1 mutation. Two hundred changed genes therefore
+cost at most 8,800 of the 10,000-unit publication lane.
+
+The executable viral-load release gate is
+`pnpm run gate:iconoplasm-viral-load`. It derives its 10,000-reader mutation
+case from those receipts: 2,000 compact discovery batches reserve 12,000
+`user_action` units, 1,000 accepted votes reserve another 4,000, and 200
+winner changes reserve 8,800 `publication` units. The resulting 24,800
+provider reservation leaves 45,200 unused units inside the 70,000 ordinary
+ceiling. The separate 30,000-unit protected headroom remains untouched; it is
+not added to ordinary capacity. This arithmetic consumes the digest-validated
+Task 3 measurement receipt; it does not certify the still-pending production
+wiring.
+
+The same runner keeps reading and mutation completion separate. Its local
+anonymous gate is an exact-build topology proof, not a claimed load replay: it
+digests the production asset tree and Wrangler configuration, then physically
+dispatches every anonymous route equivalence class through the real Cloudflare
+Static Assets/Workerd owner. D1, Durable Object, Queue, KV-write, session, and
+internal-service bindings throw if an anonymous route enters the Worker. The
+report records only the physical dispatch count. Task 5 must separately execute
+500,000 physical article loads for 100,000 journeys; the scalable driver is
+`pnpm run load:iconoplasm-viral-task5`. The one-million-reader case may prove
+static route ownership while personalized completion and zero loss of accepted
+commands remain pending until canonical hosted evidence exists.
+
+The hostile staging profile defines 60,000 exact TP53 vote identities at 100
+commands per second for ten minutes. The Task 5 driver concurrently executes
+the static workload and refuses to count an accepted command unless the hosted
+response echoes its exact identity and durable receipt. Local execution proves
+only the profile and static route contract; it does not prove hosted capacity
+refusal. Hosted concurrency, authenticated browser behavior, multi-region
+routing, and Bunny delivery remain Task 5 gates. The stale-pointer,
+Bunny-outage, expired-artifact, laptop-off, D1-exhaustion, Queue-exhaustion, and
+delayed-projection profiles remain blocked pending observed fault injection.
+Provider attribution accepts only digest-covered before/after provider meters
+with account, environment, run identity, ordered fresh timestamps, and complete
+meter coverage. Every non-zero meter and the aggregate must be at least 95
+percent explained; zero/zero cannot satisfy an expected non-static meter, and
+application estimates never fill provider fields.
+
 Known daily refusals atomically retain one reset alarm in the existing
 SyncGovernor before acknowledging the old transport message. Repeated refusals
 coalesce without rewriting the alarm. The alarm waits through schema transition,
@@ -300,11 +387,20 @@ primary D1 projection.
 
 ## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
 
-`iconoplasm.brinedew.bio/*` belongs directly to `geneguessr-api`. Matching
-homepage, privacy, JavaScript, CSS, font, icon, and download files are served by
-Workers Static Assets before Worker code executes. Dynamic misses such as
-`/api/*`, `/gene/*`, crawler documents, admin routes, and portrait fallback
-enter the existing stateful Worker once.
+`iconoplasm.brinedew.bio/*` belongs directly to the existing deployment, but
+anonymous documents no longer belong to its stateful request path. Workers
+Static Assets serves one SPA shell for `/`, `/gene/*`, `/genes/*`, and other
+documents before Worker code executes. `robots.txt`, `sitemap.xml`, and
+`llms.txt` are static build artifacts. The final activation derives every
+published `/gene/{SYMBOL}` sitemap entry from the already verified immutable
+compact catalog indexes; it emits one sitemap and no per-gene Cloudflare files.
+The stable `/blot/{SYMBOL}.webp` URL rewrites internally to the same static
+shell, which resolves the gene-scoped coherent publication to its exact
+content-addressed Bunny blot and uses the bundled placeholder only when that
+artifact is genuinely absent. The browser loads dossiers, catalog search,
+gallery pages, portraits, blots, and passive vote totals from content-addressed
+Sysop V2 Bunny artifacts. Only explicit mutation and administrator `/api/*`
+paths enter the existing stateful Worker.
 
 The shared public proxy must not reclaim the Iconoplasm hostname. Production
 telemetry on the Free plan showed nearly one public invocation for every
@@ -340,8 +436,9 @@ The generated bundle must:
 - remain below 20,000 files and 25 MiB per file;
 - carry the same CSP, clickjacking, MIME, referrer, permissions, and transport
   headers as the previous Worker-served responses;
-- keep dynamic gene pages on the Worker so complete first paint, alias
-  redirects, unknown-symbol 404s, and crawl eligibility remain correct.
+- keep one gene shell rather than 19,023 generated HTML files;
+- emit crawler documents and media-failure placeholders as assets;
+- allow Bunny JSON and image reads in CSP without widening script origins.
 
 Rate limiting belongs in the stateful route owner, where direct and shared-host
 dynamic requests cannot accidentally bypass it or be charged twice. Voting
@@ -349,41 +446,28 @@ authority remains the per-gene VoteCoordinator Durable Object; never move
 immediate ranking truth to eventually consistent KV to make this routing shape
 look simpler.
 
-### Canonical gene first-paint cold path (B-694)
+### Canonical anonymous read path
 
-The route owner has one deliberately staged read path for `/gene/{SYMBOL}`:
+1. Static Assets serves the SPA shell without Worker execution.
+2. Bunny serves the shared current-head document. Its origin is the publisher's
+   bounded KV projection, never the coordinator or D1. The browser retains the
+   last coherent head when both sources fail.
+3. The browser validates content hashes for the exact root manifest, one small
+   directory, the per-gene object, and any advertised delta-chain receipt.
+4. Search and gallery read one compact catalog index per publication shard and
+   its at-most-128-entry pages, all committed by the same publisher. Those pages
+   include passive candidate summaries and shared vote totals; personal vote
+   state is not loaded.
+5. Portrait and blot bytes use immutable Bunny URLs. A stable blot request keeps
+   its first-party route while the static shell resolves that same immutable
+   identity; failure shows the bundled placeholder and never invokes a Worker
+   or reconstructs state.
 
-1. Static Assets serves matching files before Worker code.
-2. The existing stateful Worker resolves an exact canonical symbol from the
-   identity-only `icono_published_gene_routes` D1 index. Publication advances
-   this table only after the card-catalog barrier succeeds. The normal exact
-   identity-resolution stage therefore spends zero KV reads and does not hydrate
-   the 19,023-gene artifact or let unpublished catalog rows enter discovery.
-3. The Worker asks the existing site-gene detail handler for the response
-   headers only. Its ETag supplies the immutable HTML snapshot key; the detail
-   handler uses bounded indexed D1 reads for fresh page facts, votes, and
-   candidates, plus a bounded one-symbol read from the exact card artifact
-   selected by `KV_GALLERY_VERSION`. The card portrait overrides D1 portrait
-   identity and candidate `is_current` state.
-4. `caches.default.match` runs before JSON parsing, card rendering, or shell
-   injection. A hit returns the cached document immediately.
-5. Only a miss parses the detail payload and renders the complete first-paint
-   card. The same response is reused for rendering; it is not fetched again.
-
-Alias and UniProt identifiers are intentionally different: they are not D1
-primary keys and continue through the immutable published-catalog resolver so
-they can redirect without creating a second alias map. Unknown symbols remain
-real 404s; incomplete profiles remain noindex; complete profiles remain the
-only indexable discovery surface.
-
-Do not merge route membership, D1 authoring state, and public portrait identity
-into one snapshot. The route index answers only “has this symbol crossed
-publication?”. The complete detail payload and ETag combine fresh bounded D1
-facts with the exact published-card portrait and card version. D1 may
-legitimately lead until a dirty-shard release; there is no gene-detail fallback
-that exposes that unpublished SHA. Selecting public portrait identity from D1
-would restore mixed-authority split-brain, while resolving ordinary exact-symbol
-membership from the whole KV catalog would restore the request-spend regression.
+The throwing-bindings regression harness makes D1, Durable Objects, Queues, KV
+writes, sessions, Browser Rendering, and service bindings throw on access while
+it exercises homepage, search, gallery, dossier, portrait, blot, sitemap,
+robots, llms, immutable object, and passive-vote paths. Route-topology tests also
+prove `/gene/*` is no longer `run_worker_first`.
 
 The protected entrypoint/config names are part of the architecture contract and
 must not be shortened or replaced:
@@ -403,9 +487,9 @@ no normal-request service binding, no symbol-only cache, and no duplicate
 publication state.
 
 The regression contract lives in
-`workers/iconoplasm-gene-cold-path.test.js`. A change is incomplete if that
-test no longer proves both the indexed canonical lookup and cache-before-render
-ordering.
+`quartz/static/iconoplasm/publication-reader.test.js`. A change is incomplete if
+that test no longer proves asset bypass, exact immutable identity, prior-head
+retention, and throwing-state isolation.
 
 Linear B-670 contains the live telemetry, user journeys, 22 ranked scenarios,
 research synthesis, rejected alternatives, and zero-spend constraint. Treat

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "kind": "iconoplasm_task3_mutation_measurement",
+  "generatedAt": "2026-09-19T15:54:59.567Z",
+  "provenance": {
+    "productionBaseCommit": "339e2a84b287df3da6ae4a8413ceb66465d64a6f",
+    "measurementCommit": "66986b7559abd0a4b97775c7c1baafe7370d5acd",
+    "runtime": "miniflare_d1",
+    "harness": "workers/iconoplasm/discovery-workload.workerd.test.js",
+    "command": "node --test workers/iconoplasm/discovery-workload.workerd.test.js --test-name-pattern=real D1 prints exact per-saver row receipts",
+    "fileSha256": {
+      "workers/iconoplasm/discovery-workload.workerd.test.js": "15a79d269321b2016135a6d2ec479c684e4c34b7e54e445d677d6b3c19db518a",
+      "workers/iconoplasm/discovery-compact-service.js": "571d9300c9d52e0127714f7b080624377dcd2430e59e4a4bbf9cbecab754889c",
+      "workers/iconoplasm/discovery-compact-store.js": "140880b319c2529e7da1c5b2ceb619c8beefd44965f1e62c139bf7e76b6ce5fe",
+      "workers/iconoplasm/discovery-shared-delivery.js": "0affe3af6b597bab24fa4c4da62bb4895a5487372d63cff8e907850e4802133a"
+    }
+  },
+  "workload": {
+    "savers": 2000,
+    "encounters": 20000,
+    "personalBatches": 2000,
+    "drainBatches": 16
+  },
+  "meters": {
+    "d1RowsRead": 6000,
+    "d1RowsWritten": 10016
+  },
+  "components": {
+    "personalReads": 6000,
+    "personalWrites": 6000,
+    "drainWrites": 4016
+  },
+  "timing": {
+    "personalMs": 404384
+  },
+  "digestAlgorithm": "sha256",
+  "digest": "73a68f1a7cb19eee26f2c3e3e7f8bef84a2e1502cb849c6e3a76c62e57ec0b94"
+}

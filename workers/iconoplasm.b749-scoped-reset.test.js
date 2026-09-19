@@ -88,6 +88,8 @@ test("reset delivery preserves a new scope accepted while the queue send is in f
     "acknowledging the sent snapshot must not delete a later accepted operation",
   )
   queue.send = async (message) => queue.sent.push(structuredClone(message))
+  const remaining = values.get("finalization_reset_wake")
+  values.set("finalization_reset_wake", { ...remaining, due_at: Date.now() - 1 })
   await governor.alarm()
   assert.deepEqual(
     queue.sent.map((message) => message.run_id),
