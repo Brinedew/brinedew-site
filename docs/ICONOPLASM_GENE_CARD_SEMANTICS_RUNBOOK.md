@@ -63,12 +63,14 @@ its clamped CSS at a 768px layout width.
 Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
-The stable first-party `/blot/{SYMBOL}.webp` route resolves only the immutable
-object referenced by the current coherent Sysop V2 gene artifact. Static Assets
-keeps the semantic URL and serves the application shell; its resolver validates
-the content-addressed Bunny blot URL and uses a bundled placeholder only if the
-current and gene-scoped prior publications cannot supply the exact object. It is
-not a second selection timeline and never consults live D1 portrait state.
+The stable first-party `/blot/{SYMBOL}.webp` route is one Static Assets wildcard
+redirect to the publisher-owned Bunny alias `/blot/{SYMBOL}.webp`; it never
+serves HTML or invokes JavaScript. Before the publication head advances, the
+single publication coordinator copies the exact verified content-addressed
+WebP bytes to that alias, or copies verified static placeholder image bytes when
+the coherent gene artifact has no blot. The alias is therefore a delivery
+projection of the publication, not a second selection timeline, and it never
+consults live D1 portrait state.
 
 When a complete, indexable gene page has an exact ready blot, that blot must be
 present consistently in all of these projections:
@@ -184,12 +186,12 @@ verified symbols produce one static sitemap containing every canonical
 not store 19,023 gene documents and no crawler request reads KV, D1, a Durable
 Object, a Queue, a session, or Browser Rendering.
 
-Blot readiness does not control text-gene sitemap membership. The stable blot
-route resolves the same gene-scoped immutable publication in the browser and
-redirects to its fingerprint-bound Bunny bytes. If neither the current nor the
-coherent prior gene artifact has a valid blot, it selects the bundled static
-placeholder. It never reconstructs identity or readiness from a runtime
-database.
+Blot readiness does not control text-gene sitemap membership. GET and HEAD for
+the stable blot route receive an HTTP redirect from Static Assets to the stable
+Bunny alias. The publisher verifies that alias against the immutable blot hash
+before committing the head; when no valid blot exists, it publishes static SVG
+placeholder bytes at the same image alias. Non-JavaScript clients therefore get
+an image response without Worker execution or runtime reconstruction.
 
 The crawl frontier exists for search indexing and user-directed retrieval, not
 for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot

@@ -234,8 +234,10 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /\/static\/iconoplasm\/\*/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/RB1/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
-  assert.match(redirects, /^\/blot\/\* \/ 200$/m)
-  assert.doesNotMatch(redirects, /^\/blot\/\* .*blot-placeholder/m)
+  assert.match(
+    redirects,
+    /^\/blot\/\* https:\/\/iconoplasmportraits\.b-cdn\.net\/blot\/:splat 302$/m,
+  )
   assert.throws(
     () => statSync(path.join(target, "gene")),
     /ENOENT/,

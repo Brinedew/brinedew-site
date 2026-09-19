@@ -49,14 +49,7 @@ import {
   iconoplasmPublicationReader,
   immutableBlotByteUrl,
 } from "./publication-reader.js?v=20260919-static-read-plane"
-import {
-  isPublicBlotRoutePath,
-  resolvePublicBlotRoute,
-} from "./public-blot-route.js?v=20260919-static-read-plane"
-
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
-var publicBlotRouteActive = isPublicBlotRoutePath(globalThis.location?.pathname)
-if (publicBlotRouteActive) resolvePublicBlotRoute({ reader: iconoplasmPublicationReader })
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
 // appearance settings. Loading the cross-subdomain bridge during anonymous
@@ -64,8 +57,6 @@ if (publicBlotRouteActive) resolvePublicBlotRoute({ reader: iconoplasmPublicatio
 var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 ;(function () {
   "use strict"
-
-  if (publicBlotRouteActive) return
 
   var ICONO_ARCHIVE_RESTORE_SESSION_STORAGE_KEY = "iconoplasm.archiveRestoreSession.v1"
 

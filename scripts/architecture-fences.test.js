@@ -93,7 +93,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "directly from Bunny",
     "static placeholder",
     "stable first-party blot route",
-    "static application shell",
+    "Static Assets wildcard",
     "explicit-intent only",
   ]) {
     assert.match(
@@ -119,7 +119,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "workers/iconoplasm-gene-discovery.js",
     "workers/iconoplasm.account-gallery-window.test.js",
     "scripts/architecture-fences.test.js",
-    "quartz/static/iconoplasm/public-blot-route.js",
+    "workers/lib/iconoplasm-published-card-objects.js",
   ]) {
     assert.equal(markerFiles.has(protectedFile), true, `IPD-011 no longer guards ${protectedFile}`)
   }
