@@ -9,7 +9,10 @@ import {
   publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
-import { migrateLegacyDiscoveryPage } from "./iconoplasm/discovery-compact-migrate.js"
+import {
+  claimCompactDiscoveryMigrationLease,
+  migrateLegacyDiscoveryPage,
+} from "./iconoplasm/discovery-compact-migrate.js"
 import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
@@ -382,7 +385,13 @@ test("activation blocks incomplete legacy migration, then migrated membership re
   assert.equal((await blocked.json()).code, "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE")
   assert.equal(await compactRowCount(env), 0)
 
-  const migration = await migrateLegacyDiscoveryPage({ db: env.gatewayDb, userLimit: 25 })
+  const leaseToken = "discovery-test-lease"
+  await claimCompactDiscoveryMigrationLease(env.gatewayDb, { token: leaseToken })
+  const migration = await migrateLegacyDiscoveryPage({
+    db: env.gatewayDb,
+    rowLimit: 8,
+    leaseToken,
+  })
   assert.equal(migration.complete, true)
   const payload = await (await invoke(request, env)).json()
   assert.deepEqual(payload.discovered_symbols, ["TP53"])
@@ -519,27 +528,14 @@ test("discoveries me returns the compact shelf with exact first/last and counts"
   assert.equal(egfr.encounter_count, 1)
 })
 
-test("starter seeding adds only missing membership bits and is write-free afterwards", async () => {
+test("passive discovery reads never manufacture starter membership", async () => {
   const env = await buildEnv({ sessions: sessionFor("reader") })
   const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
   const firstPayload = await first.json()
-  assert.deepEqual(firstPayload.discovered_symbols.slice().sort(), ["INS", "PRL", "RHO"])
-  const versionAfterSeed = Number(
-    (
-      await env.gatewayDb
-        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
-        .first()
-    ).state_version,
-  )
+  assert.deepEqual(firstPayload.discovered_symbols, [])
+  assert.equal(await compactRowCount(env), 0)
   await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
-  const versionAfterSecond = Number(
-    (
-      await env.gatewayDb
-        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
-        .first()
-    ).state_version,
-  )
-  assert.equal(versionAfterSecond, versionAfterSeed)
+  assert.equal(await compactRowCount(env), 0)
 })
 
 test("the hourly symbol publisher reads compact shared state", async () => {

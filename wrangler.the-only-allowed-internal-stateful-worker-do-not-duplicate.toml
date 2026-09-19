@@ -15,9 +15,10 @@ name = "geneguessr-api"
 main = "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
-# Cron triggers need workers_dev=true to fire. The public edge worker owns
-# production routes; this worker is only publicly reachable via service binding.
-workers_dev = true
+# Cron triggers are independent of HTTP routing. Keep the default workers.dev
+# hostname disabled so anonymous traffic cannot bypass the owned custom-domain
+# route and drive the stateful runtime directly.
+workers_dev = false
 preview_urls = false
 
 # ARCHITECTURE FENCE [IPD-007]: Iconoplasm is static-first on the Free plan. Matching files are served by
