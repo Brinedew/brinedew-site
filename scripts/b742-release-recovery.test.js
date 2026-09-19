@@ -130,7 +130,7 @@ test("manual reader recovery is exact-CI gated and never enters the D1 release p
 
 test("exact push CI archives the static bundle needed by D1-free recovery", () => {
   const ci = readFileSync(new URL("../.github/workflows/ci.yaml", import.meta.url), "utf8")
-  assert.match(ci, /Ensure Quartz builds/)
+  assert.match(ci, /Build exact HEAD before topology tests/)
   assert.match(ci, /Archive exact tested Iconoplasm static assets for recovery/)
   assert.match(ci, /name: iconoplasm-edge-assets-\$\{\{ github\.sha \}\}/)
   assert.match(ci, /path: public-iconoplasm-edge/)

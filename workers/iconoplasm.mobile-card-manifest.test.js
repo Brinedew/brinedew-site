@@ -437,7 +437,7 @@ function putContentAddressedCardCatalogBaseline(
     `iconoplasm:card-catalog:${version}`,
     JSON.stringify({
       schema: "iconoplasm.cardCatalog.v1",
-      build_revision: 2,
+      build_revision: 3,
       artifact_version: version,
       snapshot_version: version,
       artifact_validated_at: "2026-05-09T00:00:00.000Z",

@@ -8,6 +8,10 @@ const readWorkflow = (name) =>
 
 test("every production state-owner upload retains incident cron containment", () => {
   const workflow = parse(readWorkflow("deploy-quartz.yml"))
+  const cutover = readFileSync(
+    new URL("./prepare-iconoplasm-public-read-cutover.mjs", import.meta.url),
+    "utf8",
+  )
   const uploads = workflow.jobs["deploy-production"].steps.filter(
     (step) =>
       (step.run?.includes("pnpm exec wrangler deploy") ||
@@ -15,10 +19,9 @@ test("every production state-owner upload retains incident cron containment", ()
       (step.run.includes("--config wrangler.the-only-allowed-internal-stateful-worker") ||
         step.run.includes("--config wrangler.iconoplasm-schema-transition.generated.toml")),
   )
-  assert.equal(uploads.length, 4)
+  assert.equal(uploads.length, 3)
   const conditional = uploads.filter((step) => step.if)
   assert.deepEqual(conditional.map((step) => step.if).sort(), [
-    "steps.migrations.outputs.continuation_required != 'true'",
     "steps.migrations.outputs.continuation_required != 'true'",
     "steps.release-state.outputs.schema_transition != 'true'",
     "steps.release-state.outputs.schema_transition == 'true'",
@@ -26,10 +29,16 @@ test("every production state-owner upload retains incident cron containment", ()
   assert.equal(
     uploads.filter((step) => step.if === "steps.migrations.outputs.continuation_required != 'true'")
       .length,
-    2,
+    1,
   )
   const expected = '--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'
   for (const step of uploads) assert.ok(step.run.includes(expected), step.name)
+  assert.equal(
+    (cutover.match(/"--triggers",\s*"55 23 \* \* \*",\s*"3 0 \* \* \*",\s*"6 12 \* \* \*"/g) || [])
+      .length,
+    2,
+    "both cutover deploys must retain the three independent GeneGuessr schedules",
+  )
 })
 
 test("the Sep 17 hard pre-reset quarantine is one-shot, early and pinned to known-green containment", () => {

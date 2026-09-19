@@ -12288,42 +12288,6 @@ async function rebuildSharedGeneDiscoveryRollup(env) {
   }
 }
 
-async function ensureStarterGeneDiscoveries(env, { userId } = {}) {
-  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
-  const userIdNorm = normalizeUserId(userId || "")
-  if (!userIdNorm || isGuestUserId(userIdNorm)) {
-    return { ok: false, error: "Authentication required" }
-  }
-  // Starter genes are part of the signed-in shelf contract. They are compact
-  // membership bits; a user who already has them performs no write at all.
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const lookup = await readDiscoveryDictionaryForSymbols(env, ICONOPLASM_STARTER_GENE_SYMBOLS)
-  const state = await readCompactUserStateForRequest(env, {
-    userId: userIdNorm,
-  })
-  const membership = String(state?.membership_b64 || "")
-  const missing = ICONOPLASM_STARTER_GENE_SYMBOLS.filter((symbol) => {
-    const ordinal = lookup.byName.get(symbol)
-    return ordinal == null || !hasDiscoveryOrdinal(membership, ordinal)
-  })
-  if (!missing.length) return { ok: true, created: 0, symbols: [] }
-  const at = Math.floor(Date.now() / 1000)
-  const seedBatchId = `starter.seed.${(await sha256Hex(`starter:${userIdNorm}`)).slice(0, 32)}`
-  await recordCompactDiscoveryEncounters(env, {
-    userId: userIdNorm,
-    isAdmin,
-    batchId: seedBatchId,
-    encounters: missing.map((symbol) => ({
-      symbol,
-      at,
-      source: DISCOVERY_SOURCE_STARTER_SEED,
-      trigger: DISCOVERY_TRIGGER_STARTER_SEED,
-      dwell_ms: null,
-    })),
-  })
-  return { ok: true, created: missing.length, symbols: missing }
-}
-
 // Card metadata for compact shelf rows. Discovery fields stay in charge; the
 // catalog/essence/rollup joins only fill identity, measurements and live votes.
 async function enrichGeneDiscoveryRows(env, rows) {
@@ -18947,23 +18911,6 @@ export class IconoplasmVoteCoordinator {
         }
       }
 
-      if (
-        finalVoteValue !== 0 &&
-        !this.sqlFirst(
-          `SELECT 1 AS present FROM asset_summary WHERE asset_sha256 = ?`,
-          safeAssetSha,
-        )
-      ) {
-        const activeAssets = Number(
-          this.sqlFirst(`SELECT COUNT(*) AS count FROM asset_summary`)?.count || 0,
-        )
-        if (activeAssets >= 8) {
-          const error = new Error("VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
-          error.code = "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED"
-          throw error
-        }
-      }
-
       if (finalVoteValue === 0) {
         this.state.storage.sql.exec(
           `DELETE FROM vote_by_user_asset
@@ -19784,16 +19731,6 @@ export class IconoplasmVoteCoordinator {
       if (!assetSha || !userId || requested == null) {
         return Response.json({ error: "Missing or invalid vote payload" }, { status: 400 })
       }
-      if (
-        requested !== 0 &&
-        !this.getExistingAssetSummary(assetSha) &&
-        this.exportAssetSummaries().length >= 8
-      ) {
-        return Response.json(
-          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
-          { status: 409 },
-        )
-      }
       const ensuredAsset = await this.ensureAssetSummaryFromMetadata(
         symbol,
         assetSha,
@@ -19861,19 +19798,6 @@ export class IconoplasmVoteCoordinator {
       const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const items = Array.isArray(payload?.items) ? payload.items : []
-      const existingAssets = new Set(this.exportAssetSummaries().map((item) => item.asset_sha256))
-      const incomingAssets = new Set(
-        items
-          .filter((item) => normalizeVoteValue(item?.vote_value) !== 0)
-          .map((item) => normalizeSha256(item?.asset_sha256 || ""))
-          .filter((assetSha) => assetSha && !existingAssets.has(assetSha)),
-      )
-      if (existingAssets.size + incomingAssets.size > 8) {
-        return Response.json(
-          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
-          { status: 409 },
-        )
-      }
       const results = []
       let upserted = 0
       let deleted = 0
@@ -34301,8 +34225,10 @@ async function handlePublicGeneSearch(request, env) {
     if (sessionUser?.user_id) {
       candidateSymbols = await listUserDiscoveredGeneSymbols(env, { userId: sessionUser.user_id })
       if (!candidateSymbols.length) {
-        await ensureStarterGeneDiscoveries(env, { userId: sessionUser.user_id })
-        candidateSymbols = await listUserDiscoveredGeneSymbols(env, { userId: sessionUser.user_id })
+        // Empty-account starters are a presentation default, not a discovery.
+        // A passive search must never spend mutation capacity or manufacture
+        // durable personal state on behalf of the reader.
+        candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
       }
     } else {
       appliedScope = "starter"
@@ -36050,9 +35976,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
       const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
-      if (!showAllApplied) {
-        await ensureStarterGeneDiscoveries(env, { userId })
-      }
       const discoveries = showAllApplied
         ? await listAllCatalogGeneDiscoveriesForAdmin(env, {
             userId,
@@ -36208,11 +36131,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const userId = normalizeUserId(sessionUser?.user_id || "")
-      if (requestedScope === "personal") {
-        await accountWindowStage("acct_starter", () =>
-          ensureStarterGeneDiscoveries(env, { userId }),
-        )
-      }
       const cleanedLimit = Math.max(
         1,
         Math.min(
@@ -37274,7 +37192,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const userId = normalizeUserId(sessionUser.user_id)
-      await ensureStarterGeneDiscoveries(env, { userId })
       // The authoritative compact chronology is the membership/order source.
       // Never fall back to the retired per-hover table on this whole-shelf view.
       const discoveryRows = await enrichCompactDiscoveryRowsWithClanOrigins(
