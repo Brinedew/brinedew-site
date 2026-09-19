@@ -18803,6 +18803,23 @@ export class IconoplasmVoteCoordinator {
       : null
   }
 
+  voteAssetExceedsActiveCandidateLimit(assetSha256) {
+    const safeAssetSha = normalizeSha256(assetSha256)
+    if (!safeAssetSha) return false
+    if (
+      this.sqlFirst(
+        `SELECT 1 AS present FROM gene_candidate_authority WHERE asset_sha256 = ?`,
+        safeAssetSha,
+      )
+    ) {
+      return false
+    }
+    return (
+      Number(this.sqlFirst(`SELECT COUNT(*) AS count FROM gene_candidate_authority`)?.count || 0) >=
+      8
+    )
+  }
+
   async ensureAssetSummaryFromMetadata(
     symbol,
     assetSha256,
@@ -18909,6 +18926,12 @@ export class IconoplasmVoteCoordinator {
           candidate_image_id: resolvedCandidateImageId,
           snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
         }
+      }
+
+      if (finalVoteValue !== 0 && this.voteAssetExceedsActiveCandidateLimit(safeAssetSha)) {
+        const error = new Error("VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
+        error.code = "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED"
+        throw error
       }
 
       if (finalVoteValue === 0) {
@@ -19731,6 +19754,12 @@ export class IconoplasmVoteCoordinator {
       if (!assetSha || !userId || requested == null) {
         return Response.json({ error: "Missing or invalid vote payload" }, { status: 400 })
       }
+      if (requested !== 0 && this.voteAssetExceedsActiveCandidateLimit(assetSha)) {
+        return Response.json(
+          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
+          { status: 409 },
+        )
+      }
       const ensuredAsset = await this.ensureAssetSummaryFromMetadata(
         symbol,
         assetSha,
@@ -19798,6 +19827,18 @@ export class IconoplasmVoteCoordinator {
       const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const items = Array.isArray(payload?.items) ? payload.items : []
+      if (
+        items.some((item) => {
+          const requested = normalizeVoteValue(item?.vote_value)
+          const assetSha = normalizeSha256(item?.asset_sha256 || "")
+          return requested !== 0 && assetSha && this.voteAssetExceedsActiveCandidateLimit(assetSha)
+        })
+      ) {
+        return Response.json(
+          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
+          { status: 409 },
+        )
+      }
       const results = []
       let upserted = 0
       let deleted = 0
