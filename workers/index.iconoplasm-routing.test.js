@@ -122,6 +122,38 @@ test("public edge preserves the main site's missing privacy document instead of 
   assert.equal(await response.text(), "Not found")
 })
 
+test("public edge serves every non-API apex read from Pages before Iconoplasm assets can intercept", async () => {
+  const upstreamCalls = []
+  globalThis.fetch = async (url, init) => {
+    upstreamCalls.push(String(url))
+    assert.equal(new Headers(init?.headers).get("Cookie"), null)
+    assert.equal(new Headers(init?.headers).get("Authorization"), null)
+    return new Response(
+      '<html><head></head><body data-slug="settings/index">Settings</body></html>',
+      {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      },
+    )
+  }
+  const stateful = statefulSpy()
+
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/settings/index?route-test=1", {
+      headers: {
+        Authorization: "Bearer private",
+        Cookie: "session=private",
+      },
+    }),
+    { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
+    {},
+  )
+
+  assert.deepEqual(upstreamCalls, ["https://brinedew-bio.pages.dev/settings/index?route-test=1"])
+  assert.equal(stateful.calls.length, 0)
+  assert.match(await response.text(), /data-slug="settings\/index"/)
+  assert.equal(response.headers.get("X-Brinedew-Static-Route"), "public-edge")
+})
+
 test("public edge canonicalizes document aliases without invoking either upstream", async () => {
   globalThis.fetch = async () => {
     throw new Error("Pages must not be fetched for a canonical redirect")
