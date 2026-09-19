@@ -61,50 +61,10 @@ test("diagram catalog search executes through the immutable publication reader",
   }
 })
 
-test("the stable blot route resolves the exact immutable Bunny blot without state", async () => {
-  const fingerprint = "b".repeat(32)
-  const objectKey = `blots/v1/T/TP53/${fingerprint}/TP53-iconoplasm-gene-blot.webp`
-  const replacements = []
-  const { resolvePublicBlotRoute } = await import(
-    `./public-blot-route.js?immutable-blot=${Date.now()}`
+test("the application has no JavaScript semantic-blot route fallback", async () => {
+  const app = await import("node:fs/promises").then((fs) =>
+    fs.readFile(new URL("./app.js", import.meta.url), "utf8"),
   )
-  const result = await resolvePublicBlotRoute({
-    location: {
-      pathname: "/blot/TP53.webp",
-      replace: (value) => replacements.push(value),
-    },
-    reader: {
-      async gene(symbol) {
-        assert.equal(symbol, "TP53")
-        return {
-          symbol,
-          blot: {
-            blot_fingerprint: fingerprint,
-            object_key: objectKey,
-            accelerator_url: `https://iconoplasmportraits.b-cdn.net/${objectKey}`,
-          },
-        }
-      },
-    },
-  })
-
-  assert.equal(result, `https://iconoplasmportraits.b-cdn.net/${objectKey}`)
-  assert.deepEqual(replacements, [result])
-})
-
-test("a genuinely missing blot route resolves only to the bundled static placeholder", async () => {
-  const replacements = []
-  const { resolvePublicBlotRoute } = await import(
-    `./public-blot-route.js?missing-blot=${Date.now()}`
-  )
-  const result = await resolvePublicBlotRoute({
-    location: {
-      pathname: "/blot/RB1.webp",
-      replace: (value) => replacements.push(value),
-    },
-    reader: { gene: async () => null },
-  })
-
-  assert.equal(result, "/static/iconoplasm/blot-placeholder.svg")
-  assert.deepEqual(replacements, [result])
+  assert.doesNotMatch(app, /public-blot-route/)
+  assert.doesNotMatch(app, /publicBlotRouteActive/)
 })

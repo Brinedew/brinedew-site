@@ -32,6 +32,7 @@ function fixture(count = 9) {
   let prepared = new Map()
   const bytes = new Map()
   const writes = []
+  const aliases = []
   let failure = null
   let event = 1
   let dirty = []
@@ -69,6 +70,11 @@ function fixture(count = 9) {
     async read(key) {
       return bytes.has(key) ? { value: JSON.parse(bytes.get(key)) } : null
     },
+    async publishBlotAlias(symbol, blot) {
+      if (failure === "blot-alias") throw new Error("injected alias failure")
+      aliases.push({ symbol, blot: structuredClone(blot) })
+      return { key: `blot/${symbol}.webp` }
+    },
   }
   const source = {
     legacyBaseline: async () => ({
@@ -103,6 +109,7 @@ function fixture(count = 9) {
     repository,
     objects,
     writes,
+    aliases,
     cards,
     source,
     fail: (kind) => {
@@ -115,8 +122,41 @@ function fixture(count = 9) {
   }
 }
 
+test("publication verifies every gene blot alias before committing its head", async () => {
+  const f = fixture(2)
+  f.cards[0].payload.blot = {
+    status: "ready",
+    blot_fingerprint: "b".repeat(64),
+    asset_sha256: "c".repeat(64),
+    object_key: `blots/v1/G/G0000/${"b".repeat(64)}/G0000-iconoplasm-gene-blot.webp`,
+  }
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  assert.equal(p.status().head, null)
+  await p.step()
+  assert.equal(p.status().head, null)
+  assert.deepEqual(
+    f.aliases.map((item) => item.symbol),
+    ["G0000", "G0001"],
+  )
+  await drain(p)
+  assert.ok(p.status().head)
+})
+
+test("an unverified blot alias leaves the prior publication head untouched", async () => {
+  const f = fixture(1)
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  f.fail("blot-alias")
+  await assert.rejects(p.step(), /injected alias failure/)
+  assert.equal(p.status().head, null)
+  assert.equal(p.status().job.alias_offset || 0, 0)
+})
+
 async function drain(publisher) {
-  for (let i = 0; i < 200; i++) if (!(await publisher.step()).more) return
+  for (let i = 0; i < 500; i++) if (!(await publisher.step()).more) return
   throw new Error("publication failed to drain")
 }
 
@@ -380,6 +420,7 @@ test("root upload failure leaves the old complete catalog and durable commit job
   const f = fixture(1)
   const p = f.create()
   await p.bootstrap()
+  await p.step()
   await p.step()
   await p.step()
   f.fail("manifests")

@@ -512,11 +512,26 @@ export function createCardPublication({
         refs,
         group: job.group + 1,
         offset: 0,
+        alias_offset: 0,
         sealed_refs: [],
         seal_offset: 0,
       })
       repo.clearPrepared()
     })
+  }
+  async function publishBlotAliases(job) {
+    const prepared = repo.prepared()
+    const offset = job.alias_offset || 0
+    const slice = prepared.slice(offset, offset + CARD_PUBLICATION_BATCH)
+    repo.reserveWrites?.(2)
+    for (let index = 0; index < slice.length; index += CARD_PUBLICATION_CONCURRENCY) {
+      await settlePublicationWrites(
+        slice
+          .slice(index, index + CARD_PUBLICATION_CONCURRENCY)
+          .map((item) => objects.publishBlotAlias(item.symbol, item.card?.payload?.blot || null)),
+      )
+    }
+    repo.put("job", { ...job, alias_offset: offset + slice.length })
   }
   async function commit(job) {
     repo.reserveWrites?.(6)
@@ -628,6 +643,7 @@ export function createCardPublication({
       const oldCards = await cardsFor(job, job.baseline.shards[group.index])
       const count = group.symbols?.length ?? oldCards.length
       if (job.offset < count) await prepare(job, group, oldCards)
+      else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)
       else await finishGroup(job, group, oldCards)
       return { more: true }
     },
