@@ -245,7 +245,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   async function gene(symbol) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
-    return fromCoherentPublication("gene", async (head) => {
+    return fromCoherentPublication(`gene:${key}`, async (head) => {
       const { manifest } = await publication(head)
       const delta = await viewEntry(head, key)
       if (delta?.status === "withdrawn") return null
@@ -324,7 +324,10 @@ export function createIconoplasmPublicationReader(options = {}) {
       .toLowerCase()
     if (!needle) return { genes: [], query: "" }
     const allowed = symbols ? new Set(symbols.map(normalizedSymbol).filter(Boolean)) : null
-    return fromCoherentPublication("search", async (head) => {
+    const size = Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12))
+    const allowedIdentity = allowed ? [...allowed].sort().join(",") : "*"
+    const scope = `search:${encodeURIComponent(needle)}:${size}:${allowedIdentity}`
+    return fromCoherentPublication(scope, async (head) => {
       const { indexes } = await catalogIndexes(head)
       const ranked = []
       indexes.forEach((index, indexNumber) => {
@@ -344,17 +347,17 @@ export function createIconoplasmPublicationReader(options = {}) {
       ranked.sort(
         (left, right) => left.rank - right.rank || left.symbol.localeCompare(right.symbol),
       )
-      const selected = ranked.slice(
-        0,
-        Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12)),
-      )
+      const selected = ranked.slice(0, size)
       const genes = await catalogEntriesAt(indexes, selected)
       return { genes, query: needle.toUpperCase() }
     })
   }
 
   async function gallery({ order = "votes", offset = 0, limit = 24, seed = "" } = {}) {
-    return fromCoherentPublication("gallery", async (head) => {
+    const start = Math.max(0, Number(offset) || 0)
+    const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
+    const scope = `gallery:${encodeURIComponent(order)}:${start}:${size}:${encodeURIComponent(seed)}`
+    return fromCoherentPublication(scope, async (head) => {
       const { version, indexes } = await catalogIndexes(head)
       const rows = indexes.flatMap((index, indexNumber) =>
         index.gallery_entries.map(
@@ -432,8 +435,6 @@ export function createIconoplasmPublicationReader(options = {}) {
       else if (["popular", "popularity"].includes(order))
         rows.sort((a, b) => b.popularity - a.popularity || a.symbol.localeCompare(b.symbol))
       else rows.sort((a, b) => b.votes - a.votes || a.symbol.localeCompare(b.symbol))
-      const start = Math.max(0, Number(offset) || 0)
-      const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
       const selected = rows.slice(start, start + size)
       const items = await catalogEntriesAt(indexes, selected)
       return {

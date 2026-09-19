@@ -563,13 +563,14 @@ jobs:
       # Deploy the publisher while retaining the exact currently active asset
       # bundle and pre-cutover routing, then run its existing Durable Object
       # owner and wait for Bunny. Only the final activation uploads this build's
-      # SPA assets and static-first routing. The 68-minute bound is the 20k-card
-      # ceiling (3,334 six-card alarms + 27 shard seals + 2 control alarms + two
-      # 30s CDN windows) plus the two five-minute-bounded Wrangler deploys and
-      # the 30-second migration request.
+      # SPA assets and static-first routing. This is a 70-minute safe execution
+      # window, not a completion forecast: the migration gets 50 minutes while
+      # monotonic owner receipts reset a five-minute stall clock, then Bunny gets
+      # four minutes and each Wrangler deploy is bounded at five. If the window
+      # expires, retained assets/routes stay live and a rerun resumes idempotently.
       - name: Publish, verify, and activate immutable public reads
         if: steps.migrations.outputs.continuation_required != 'true'
-        timeout-minutes: 68
+        timeout-minutes: 70
         env:
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
         run: node scripts/prepare-iconoplasm-public-read-cutover.mjs --release "$CACHE_BUST"
