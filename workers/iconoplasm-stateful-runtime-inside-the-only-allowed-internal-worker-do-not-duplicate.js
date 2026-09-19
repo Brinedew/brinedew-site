@@ -20210,7 +20210,11 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       return this.providerObservationCache
     }
     this.providerObservationCheckedAt = now
-    if (!this.env?.KV || typeof this.env.KV.get !== "function") {
+    // D1 allowances are account-wide. Staging owns an isolated application KV,
+    // but must admit mutations against the same provider observation as
+    // production; otherwise every staging mutation fails closed forever.
+    const providerObservationKv = this.env?.PROD_KV || this.env?.KV
+    if (!providerObservationKv || typeof providerObservationKv.get !== "function") {
       this.providerObservationCache = {
         ok: false,
         code: "MUTATION_PROVIDER_OBSERVATION_MISSING",
@@ -20220,7 +20224,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
     let snapshot
     try {
-      snapshot = await this.env.KV.get(KV_OBSERVABILITY_SNAPSHOT, "json")
+      snapshot = await providerObservationKv.get(KV_OBSERVABILITY_SNAPSHOT, "json")
     } catch {
       snapshot = null
     }
