@@ -173,7 +173,7 @@ function buildEnv({ bindGateway = true } = {}) {
       `iconoplasm:card-catalog:${baselineVersion}`,
       JSON.stringify({
         schema: "iconoplasm.cardCatalog.v1",
-        build_revision: 3,
+        build_revision: 4,
         artifact_version: baselineVersion,
         snapshot_version: baselineVersion,
         artifact_validated_at: "2026-04-16T00:00:00.000Z",

@@ -176,7 +176,7 @@ class FakeDb {
   }
 }
 
-function seedBaseline(kvStore, symbols, { buildRevision = 3, shardSize = 2 } = {}) {
+function seedBaseline(kvStore, symbols, { buildRevision = 4, shardSize = 2 } = {}) {
   const version = "baseline-v2"
   const shards = []
   for (let offset = 0; offset < symbols.length; offset += shardSize) {
