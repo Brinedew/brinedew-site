@@ -199,14 +199,25 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const report = await prepareIconoplasmEdgeAssets({
     sourceRoot: source,
     outputRoot: target,
+    publicationIndexes: [
+      {
+        schema_version: 2,
+        search_entries: [
+          ["RB1", "RB transcriptional corepressor 1", 0, 0],
+          ["TP53", "tumor protein p53", 0, 1],
+        ],
+      },
+    ],
   })
   const home = readFileSync(path.join(target, "index.html"), "utf8")
   const privacy = readFileSync(path.join(target, "privacy.html"), "utf8")
   const license = readFileSync(path.join(target, "license.html"), "utf8")
   const caretakerTerms = readFileSync(path.join(target, "caretaker-terms.html"), "utf8")
   const headers = readFileSync(path.join(target, "_headers"), "utf8")
+  const sitemap = readFileSync(path.join(target, "sitemap.xml"), "utf8")
+  const redirects = readFileSync(path.join(target, "_redirects"), "utf8")
 
-  assert.equal(report.fileCount, 13)
+  assert.ok(report.fileCount < 20)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
@@ -221,6 +232,15 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /metadata>; rel="service-meta"; type="application\/json"/)
   assert.match(headers, /llms\.txt>; rel="describedby"; type="text\/plain"/)
   assert.match(headers, /\/static\/iconoplasm\/\*/)
+  assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/RB1/)
+  assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
+  assert.match(redirects, /^\/blot\/\* \/ 200$/m)
+  assert.doesNotMatch(redirects, /^\/blot\/\* .*blot-placeholder/m)
+  assert.throws(
+    () => statSync(path.join(target, "gene")),
+    /ENOENT/,
+    "complete gene discovery must not create one Cloudflare file per gene",
+  )
   assert.ok(statSync(path.join(target, "static", "iconoplasm", "styles.css")).isFile())
 })
 

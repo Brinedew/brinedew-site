@@ -29,7 +29,16 @@ async function makeAssetFixture() {
   for (const page of ["index", "privacy", "license", "caretaker-terms"])
     await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
   await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
-  const summary = await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot })
+  const summary = await prepareIconoplasmEdgeAssets({
+    sourceRoot,
+    outputRoot,
+    publicationIndexes: [
+      {
+        schema_version: 2,
+        search_entries: [["TP53", "tumor protein p53", 0, 0]],
+      },
+    ],
+  })
   assert.ok(summary.fileCount > 10, "the prepared bundle contains the actual Iconoplasm modules")
   return { temporaryRoot, outputRoot }
 }
@@ -84,6 +93,8 @@ test(
       }
       const apiResponse = await runtime.dispatchFetch("https://iconoplasm.test/api/auth/me")
       assert.equal(apiResponse.status, 599, await apiResponse.text())
+      const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp")
+      assert.match(await blotResponse.text(), /static\/iconoplasm\/app\.js/)
     } finally {
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
