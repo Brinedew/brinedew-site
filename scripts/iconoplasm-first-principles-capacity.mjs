@@ -60,8 +60,8 @@ export function loadTask3MutationMeasurement({ measurementPath = TASK3_MEASUREME
     digestAlgorithm !== "sha256" ||
     digest !== computed ||
     !Number.isFinite(Date.parse(artifact.generatedAt || "")) ||
-    artifact.provenance?.productionBaseCommit !== "02a3990870b0a4169e1c2aa4a46778fc46636dac" ||
-    artifact.provenance?.measurementCommit !== "0474463e09d4569fbac8984f1184f08067c747bb" ||
+    artifact.provenance?.productionBaseCommit !== "339e2a84b287df3da6ae4a8413ceb66465d64a6f" ||
+    artifact.provenance?.measurementCommit !== "66986b7559abd0a4b97775c7c1baafe7370d5acd" ||
     artifact.provenance?.runtime !== "miniflare_d1" ||
     artifact.provenance?.harness !== "workers/iconoplasm/discovery-workload.workerd.test.js" ||
     artifact.workload?.savers !== 2_000 ||
