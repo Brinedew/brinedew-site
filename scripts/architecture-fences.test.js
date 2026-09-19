@@ -503,7 +503,10 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   )
   assert.match(fence.decision, /verifiably deleted 30 days after plaintext retirement/)
   assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
-  assert.doesNotMatch(deploy, /wrangler d1 migrations apply/)
+  const stagingMigrationRehearsal =
+    "wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging"
+  assert.match(deploy, new RegExp(stagingMigrationRehearsal.replaceAll(" ", "\\s+")))
+  assert.doesNotMatch(deploy.replace(stagingMigrationRehearsal, ""), /wrangler d1 migrations apply/)
   assert.match(product, /Website authoring authority owns/)
   assert.match(product, /workstation is a replica/)
   assert.match(storage, /AccessKey/)
