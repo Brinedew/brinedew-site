@@ -181,11 +181,11 @@ async function immutableFixtureObject(kind, value) {
   }
 }
 
-async function immutableFixture() {
+async function immutableFixture({ fullName = "tumor protein p53" } = {}) {
   const object = immutableFixtureObject
   const gene = {
     symbol: "TP53",
-    full_name: "tumor protein p53",
+    full_name: fullName,
     color: "#223344",
     essence: { summary: "Guardian of the genome" },
     portrait: { status: "published", asset_sha256: "a".repeat(64) },
@@ -206,7 +206,7 @@ async function immutableFixture() {
     entries: [
       {
         symbol: "TP53",
-        full_name: "tumor protein p53",
+        full_name: fullName,
         color: "#223344",
         popularity_score: 100,
         image_upvotes: 7,
@@ -220,7 +220,7 @@ async function immutableFixture() {
   const catalogIndexObject = await object("catalogindexes", {
     schema_version: 2,
     pages: [{ first_symbol: "TP53", last_symbol: "TP53", key: catalogObject.path.slice(1) }],
-    search_entries: [["TP53", "tumor protein p53", 0, 0]],
+    search_entries: [["TP53", fullName, 0, 0]],
     gallery_entries: [["TP53", 0, 0, 100, 5]],
   })
   const manifestObject = await object("manifests", {
@@ -249,7 +249,7 @@ async function immutableFixture() {
       manifestObject,
     ].map((entry) => [entry.path, entry.body]),
   )
-  return { gene, head, objects, manifestObject }
+  return { gene, head, objects, geneObject, manifestObject }
 }
 
 test("the browser resolves gene, search, and gallery from one immutable publication", async () => {
@@ -398,6 +398,31 @@ test("a valid new head with a missing child retains the last fully coherent publ
 
   assert.equal((await reader.gene("TP53")).symbol, "TP53")
   assert.equal(stored.get("iconoplasm.publication-head.v1"), prior.head)
+})
+
+test("a search on a partially propagated head cannot erase the prior coherent gene fallback", async () => {
+  const prior = await immutableFixture({ fullName: "prior tumor protein p53" })
+  const next = await immutableFixture({ fullName: "next tumor protein p53" })
+  const stored = new Map([["iconoplasm.publication-head.v1", prior.head]])
+  const reader = createIconoplasmPublicationReader({
+    storage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, value),
+    },
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") return new Response(next.head)
+      if (pathname === next.geneObject.path) return new Response(null, { status: 404 })
+      const body = next.objects.get(pathname) || prior.objects.get(pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  assert.deepEqual(
+    (await reader.search("next", { limit: 12 })).genes.map((gene) => gene.full_name),
+    ["next tumor protein p53"],
+  )
+  assert.equal((await reader.gene("TP53")).full_name, "prior tumor protein p53")
 })
 
 test("search and gallery fetch compact indexes plus only result pages", async () => {

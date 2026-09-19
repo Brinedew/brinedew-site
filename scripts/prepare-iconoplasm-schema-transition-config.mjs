@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
+import { preparePublicReadCutoverConfig } from "./prepare-iconoplasm-public-read-cutover.mjs"
 
 export const CANONICAL_CONFIG =
   "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
@@ -19,7 +20,7 @@ export function prepareSchemaTransitionConfig(source, { mode = SCHEMA_TRANSITION
   // B-742: the migration stage is a live deployment. If admission subsequently
   // fails, the already-tested published-card reader must survive that failed stage.
   // Preserve every route, secret binding, Durable Object identity and budget.
-  return source.replace(canonicalMain, transitionMain)
+  return preparePublicReadCutoverConfig(source.replace(canonicalMain, transitionMain))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
