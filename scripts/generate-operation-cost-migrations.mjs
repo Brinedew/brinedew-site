@@ -114,12 +114,22 @@ export function compactDiscoveryMigrationStatements() {
   // B-764: schema and singleton state only. The catalog-sized ordinal seed was
   // replaced by the bounded on-demand dictionary resolver, so a statement
   // count that grows with the migration means the seed came back. The canonical
-  // identity index is the thirteenth reviewed statement.
+  // identity index plus the activation gate and its singleton are fifteen
+  // reviewed statements.
   return reviewedMigrationStatements(
     "migrations-iconoplasm",
     "0106_compact_discovery_state_v2.sql",
     0,
-    13,
+    15,
+  )
+}
+
+export function voteWakeMigrationStatements() {
+  return reviewedMigrationStatements(
+    "migrations-iconoplasm",
+    "0107_vote_projection_wake_generation.sql",
+    0,
+    2,
   )
 }
 
@@ -133,6 +143,7 @@ function output() {
     throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
   }
   const migrations = [
+    ["VOTE_WAKE", "0107_vote_projection_wake_generation.sql", voteWakeMigrationStatements()],
     [
       "COMPACT_DISCOVERY",
       "0106_compact_discovery_state_v2.sql",

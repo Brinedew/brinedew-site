@@ -32,6 +32,7 @@ function fixture(count = 9) {
   let prepared = new Map()
   const bytes = new Map()
   const writes = []
+  const aliases = []
   let failure = null
   let event = 1
   let dirty = []
@@ -69,6 +70,11 @@ function fixture(count = 9) {
     async read(key) {
       return bytes.has(key) ? { value: JSON.parse(bytes.get(key)) } : null
     },
+    async publishBlotAlias(symbol, blot) {
+      if (failure === "blot-alias") throw new Error("injected alias failure")
+      aliases.push({ symbol, blot: structuredClone(blot) })
+      return { key: `blot/${symbol}.webp` }
+    },
   }
   const source = {
     legacyBaseline: async () => ({
@@ -103,6 +109,7 @@ function fixture(count = 9) {
     repository,
     objects,
     writes,
+    aliases,
     cards,
     source,
     fail: (kind) => {
@@ -115,8 +122,41 @@ function fixture(count = 9) {
   }
 }
 
+test("publication verifies every gene blot alias before committing its head", async () => {
+  const f = fixture(2)
+  f.cards[0].payload.blot = {
+    status: "ready",
+    blot_fingerprint: "b".repeat(64),
+    asset_sha256: "c".repeat(64),
+    object_key: `blots/v1/G/G0000/${"b".repeat(64)}/G0000-iconoplasm-gene-blot.webp`,
+  }
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  assert.equal(p.status().head, null)
+  await p.step()
+  assert.equal(p.status().head, null)
+  assert.deepEqual(
+    f.aliases.map((item) => item.symbol),
+    ["G0000", "G0001"],
+  )
+  await drain(p)
+  assert.ok(p.status().head)
+})
+
+test("an unverified blot alias leaves the prior publication head untouched", async () => {
+  const f = fixture(1)
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  f.fail("blot-alias")
+  await assert.rejects(p.step(), /injected alias failure/)
+  assert.equal(p.status().head, null)
+  assert.equal(p.status().job.alias_offset || 0, 0)
+})
+
 async function drain(publisher) {
-  for (let i = 0; i < 200; i++) if (!(await publisher.step()).more) return
+  for (let i = 0; i < 500; i++) if (!(await publisher.step()).more) return
   throw new Error("publication failed to drain")
 }
 
@@ -178,6 +218,77 @@ test("bootstrap keeps legacy public until every object is prepared and atomicall
   assert.equal(p.status().head.watermark.id, 1)
   assert.equal(p.status().job, null)
   assert.equal(p.status().requested, null)
+})
+
+test("the committed manifest atomically names a bounded compact public catalog index", async () => {
+  const f = fixture(2)
+  f.cards[0].payload = {
+    symbol: "G0000",
+    full_name: "First gene",
+    color: "#123456",
+    portrait: { status: "published", asset_sha256: "a".repeat(64) },
+    portrait_candidates: [
+      {
+        candidate_image_id: 7,
+        asset_sha256: "b".repeat(64),
+        image_upvotes: 12,
+        image_downvotes: 2,
+        image_score: 10,
+        is_current: true,
+      },
+    ],
+  }
+  const p = f.create()
+
+  await p.bootstrap()
+  await drain(p)
+
+  const manifest = p.status().head.current.manifest
+  assert.equal(manifest.catalog_pages, undefined, "page refs must not inflate the root manifest")
+  assert.equal(manifest.shards.length, 1)
+  const catalogIndexRef = manifest.shards[0].catalog_index
+  assert.equal(catalogIndexRef.page_count, 1)
+  assert.match(catalogIndexRef.key, /\/catalogindexes\/[a-f0-9]{64}\.json$/)
+  const catalogIndex = (await f.objects.read(catalogIndexRef.key)).value
+  assert.equal(
+    new TextEncoder().encode(canonicalPublishedJson(catalogIndex)).byteLength <=
+      PUBLISHED_CARD_OBJECT_LIMITS.catalogindexes,
+    true,
+  )
+  assert.equal(catalogIndex.schema_version, 2)
+  assert.equal(catalogIndex.pages.length, 1)
+  assert.deepEqual(catalogIndex.search_entries[0], ["G0000", "First gene", 0, 0])
+  assert.deepEqual(catalogIndex.gallery_entries[0], [
+    "G0000",
+    0,
+    0,
+    0,
+    10,
+    "",
+    10,
+    null,
+    null,
+    null,
+    1,
+  ])
+  const pageRef = catalogIndex.pages[0]
+  assert.equal(pageRef.first_symbol, "G0000")
+  assert.equal(pageRef.last_symbol, "G0001")
+  const page = (await f.objects.read(pageRef.key)).value
+  assert.equal(page.schema_version, 1)
+  assert.equal(page.entries[0].symbol, "G0000")
+  assert.equal(page.entries[0].full_name, "First gene")
+  assert.equal(page.entries[0].portrait.asset_sha256, "a".repeat(64))
+  assert.deepEqual(page.entries[0].candidate_summaries, [
+    {
+      candidate_image_id: 7,
+      asset_sha256: "b".repeat(64),
+      image_upvotes: 12,
+      image_downvotes: 2,
+      image_score: 10,
+      is_current: true,
+    },
+  ])
 })
 
 test("a 750-card post-cutover repair resumes through bounded materialization pages", async () => {
@@ -242,6 +353,26 @@ test("storage bootstrap cannot silently acknowledge a mapping migration", async 
   assert.deepEqual(p.status().head, original)
 })
 
+test("an explicit publication migration keeps the old head until the new catalog projection commits", async () => {
+  const f = fixture()
+  f.source.buildRevision = 1
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const original = p.status().head
+  f.source.buildRevision = 2
+
+  await p.migrate()
+  assert.equal(p.status().job.migration, true)
+  assert.deepEqual(p.status().head, original)
+  await drain(p)
+
+  const migrated = p.status().head
+  assert.equal(migrated.current.manifest.build_revision, 2)
+  assert.equal(migrated.current.manifest.shards[0].catalog_index.page_count, 1)
+  assert.equal(migrated.previous.version, original.current.version)
+})
+
 test("failed bytes never advance head or watermark; a recreated publisher resumes durable progress", async () => {
   const f = fixture()
   const p = f.create()
@@ -289,6 +420,7 @@ test("root upload failure leaves the old complete catalog and durable commit job
   const f = fixture(1)
   const p = f.create()
   await p.bootstrap()
+  await p.step()
   await p.step()
   await p.step()
   f.fail("manifests")

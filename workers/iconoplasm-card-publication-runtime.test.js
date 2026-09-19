@@ -112,6 +112,11 @@ test(
             if(new URL(request.url).pathname === '/step') {
               await this.alarm(); return super.fetch(new Request('https://test/status'));
             }
+            if(new URL(request.url).pathname === '/progress-test') {
+              this.repo.put('head',{current:{version:'ccv2-old',published_at:'2026-09-19T00:00:00.000Z',manifest:{build_revision:2,card_count:19023}},previous:null,watermark:{id:1}});
+              this.repo.put('job',{migration:true,bootstrap:false,group:2,groups:[{},{},{}],offset:12,seal_offset:128,started_at:'2026-09-19T00:01:00.000Z'});
+              return super.fetch(new Request('https://test/status'));
+            }
             return super.fetch(request);
           }
         }
@@ -212,6 +217,17 @@ test(
       assert.equal(quota.rejected, true)
       assert.equal(quota.retained.reserved, 55000)
       assert.equal(quota.reset.reserved, 2)
+      const progress = await (await runtime.dispatchFetch("https://test/progress-test")).json()
+      assert.equal(progress.build_revision, 2)
+      assert.deepEqual(progress.job, {
+        bootstrap: false,
+        migration: true,
+        group: 2,
+        groups: 3,
+        offset: 12,
+        seal_offset: 128,
+        started_at: "2026-09-19T00:01:00.000Z",
+      })
       assert.equal(quota.reset.day, new Date().toISOString().slice(0, 10))
     } finally {
       await runtime.dispose()

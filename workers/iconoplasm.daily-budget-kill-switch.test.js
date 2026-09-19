@@ -1899,6 +1899,15 @@ test("vote projection queue consumer fails closed when the shared daily ledger i
 function syncFinalizationQueueEnv(budgetNamespace, db) {
   return {
     ICONOPLASM_DB: db,
+    ICONOPLASM_SYNC_GOVERNOR: {
+      idFromName: (name) => name,
+      get: () => ({
+        fetch: async (request) =>
+          new URL(request.url).pathname === "/permit"
+            ? Response.json({ ok: true, granted: 1, lease_id: "budget-test-lease" })
+            : Response.json({ ok: true }),
+      }),
+    },
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
     ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
     ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",

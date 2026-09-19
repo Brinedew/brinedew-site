@@ -23,6 +23,10 @@ on:
         description: "Installed compatible commit used to prove the repair diff contains no schema or data changes"
         required: false
         type: string
+      viral_load_task5_evidence_run_id:
+        description: "Workflow run containing the canonical Task 5 viral-load evidence artifact"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +39,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  deploy-viral-load-staging:
+    if: github.event_name != 'workflow_dispatch' || (inputs.reader_recovery_only != true && inputs.worker_repair_only != true)
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: corepack enable && corepack prepare pnpm@11.0.9 --activate
+      - run: pnpm config set minimumReleaseAge 1440 && pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - run: pnpm run build
+      - name: Deploy exact commit to named viral-load staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env staging --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_RELEASE_SHA:${{ github.sha }}"
+
+  collect-viral-load-staging-evidence:
+    needs: deploy-viral-load-staging
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve allowlisted immutable Task 5 artifact
+        id: task5-artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/resolve-iconoplasm-task5-artifact.mjs --run-id=${{ inputs.viral_load_task5_evidence_run_id }} --expected-commit=${{ github.sha }}
+      - name: Download exact verified Task 5 evidence artifact
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ steps.task5-artifact.outputs.artifact_id }}
+          path: artifacts/iconoplasm-viral-load-gates/task5
+          run-id: ${{ steps.task5-artifact.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
+          path: artifacts/iconoplasm-viral-load-gates/task5
+          if-no-files-found: error
+
   reader-recovery-only:
     # This is an explicit containment dispatch, not a migration retry. It is
     # deliberately unreachable from push/schedule automation and cannot resume
@@ -213,6 +261,7 @@ jobs:
             "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST" >/dev/null
 
   deploy-production:
+    needs: collect-viral-load-staging-evidence
     if: github.event_name != 'workflow_dispatch' || (inputs.reader_recovery_only != true && inputs.worker_repair_only != true)
     runs-on: ubuntu-latest
     env:
@@ -335,6 +384,8 @@ jobs:
           # its live verifier are production-release invariants, not CI-only checks.
           node scripts/run-tests.mjs \
             scripts/architecture-fences.test.js \
+            scripts/iconoplasm-first-principles-capacity.test.mjs \
+            scripts/iconoplasm-viral-load-release-gate.test.mjs \
             iconoplasm-extension/immutable-response-cache.test.js \
             iconoplasm-extension/content-portrait-cache.test.js \
             iconoplasm-extension/content-reading-session.test.js \
@@ -379,6 +430,22 @@ jobs:
 
       - name: Build Quartz site
         run: pnpm run build
+
+      - name: Prove exact built static route ownership
+        run: node --test workers/iconoplasm-static-assets.workerd.test.js
+
+      - name: Restore canonical Task 5 viral-load evidence
+        uses: actions/download-artifact@v7
+        with:
+          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
+          path: artifacts/iconoplasm-viral-load-gates/task5
+
+      - name: Block deployment until viral-load evidence is complete
+        env:
+          ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE: artifacts/iconoplasm-viral-load-gates/task5/evidence.json
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pnpm run gate:iconoplasm-viral-load -- --task5-evidence="$ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE" --task5-raw-root=artifacts/iconoplasm-viral-load-gates/task5/raw
 
       - name: Verify Geneguessr assets bundled
         run: |
@@ -560,9 +627,20 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/run-admitted-catalog-initialization.mjs
 
-      - name: Deploy the only allowed internal stateful worker (production)
+      # Deploy the publisher while retaining the exact currently active asset
+      # bundle and pre-cutover routing, then run its existing Durable Object
+      # owner and wait for Bunny. Only the final activation uploads this build's
+      # SPA assets and static-first routing. This is a 70-minute safe execution
+      # window, not a completion forecast: the migration gets 50 minutes while
+      # monotonic owner receipts reset a five-minute stall clock, then Bunny gets
+      # four minutes and each Wrangler deploy is bounded at five. If the window
+      # expires, retained assets/routes stay live and a rerun resumes idempotently.
+      - name: Publish, verify, and activate immutable public reads
         if: steps.migrations.outputs.continuation_required != 'true'
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+        timeout-minutes: 70
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+        run: node scripts/prepare-iconoplasm-public-read-cutover.mjs --release "$CACHE_BUST"
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         if: steps.migrations.outputs.continuation_required != 'true'
@@ -712,3 +790,16 @@ jobs:
           fi
           grep -Eq '"authenticated"[[:space:]]*:[[:space:]]*false' "$me_body"
           grep -Fiq 'Cache-Control: no-store' "$me_headers"
+
+  post-deploy-production-acceptance:
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Verify production reader operation after deployment
+        run: |
+          set -euo pipefail
+          sleep 5
+          curl --fail --silent --show-error --max-time 30 "https://iconoplasm.brinedew.bio/?v=${{ github.sha }}" >/dev/null
+          curl --fail --silent --show-error --max-time 30 "https://iconoplasm.brinedew.bio/gene/TP53?v=${{ github.sha }}" >/dev/null

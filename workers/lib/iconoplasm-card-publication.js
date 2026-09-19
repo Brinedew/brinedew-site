@@ -12,7 +12,7 @@ import {
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 export const CARD_PUBLICATION_BATCH = 6
 const CARD_PUBLICATION_CONCURRENCY = 2
-const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
+export const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
 const UTF8 = new TextEncoder()
 export const CARD_DELIVERY_INDEX_SIZE = 128
 // This publisher's allocation, NOT an account entitlement. Leave 45k of the
@@ -26,6 +26,45 @@ export function projectCardBlot(record, blot) {
   if (blot) projected.blot = blot
   else delete projected.blot
   return projected
+}
+
+export function publicCatalogEntry(card) {
+  const record = card?.payload && typeof card.payload === "object" ? card.payload : {}
+  const symbol = String(record.symbol || card?.symbol || "")
+    .trim()
+    .toUpperCase()
+  const candidates = Array.isArray(record.portrait_candidates) ? record.portrait_candidates : []
+  const candidateSummaries = candidates.map((candidate) => ({
+    candidate_image_id: candidate.candidate_image_id ?? null,
+    asset_sha256: candidate.asset_sha256 ?? null,
+    image_upvotes: Number(candidate.image_upvotes || 0),
+    image_downvotes: Number(candidate.image_downvotes || 0),
+    image_score: Number(candidate.image_score || 0),
+    is_current: Boolean(candidate.is_current),
+  }))
+  const current = candidateSummaries.find((candidate) => candidate.is_current) || null
+  return {
+    symbol,
+    canonical_symbol: String(record.canonical_symbol || symbol),
+    full_name: String(record.full_name || record.name || symbol),
+    protein_name: String(record.protein_name || ""),
+    color: String(record.color || "#888"),
+    chromosome: record.chromosome ?? null,
+    weight_kg: record.weight_kg ?? null,
+    age_years: record.age_years ?? null,
+    published_at: String(record.published_at || record.asset_created_at || ""),
+    uniqueness_rank:
+      record.uniqueness_rank != null && Number.isFinite(Number(record.uniqueness_rank))
+        ? Number(record.uniqueness_rank)
+        : null,
+    popularity_score: Number(record.popularity_score || 0),
+    portrait: record.portrait ?? null,
+    blot: record.blot ?? null,
+    image_upvotes: current?.image_upvotes || 0,
+    image_downvotes: current?.image_downvotes || 0,
+    image_score: current?.image_score || 0,
+    candidate_summaries: candidateSummaries,
+  }
 }
 
 export class CardPublicationRepository {
@@ -220,6 +259,29 @@ export function createCardPublication({
     })
     return status()
   }
+  async function migrate() {
+    const head = repo.get("head")
+    if (!head) return bootstrap()
+    if (repo.get("job")) return status()
+    if (head.current.manifest.build_revision === source.buildRevision) return status()
+    repo.reserveWrites?.(3)
+    repo.transaction(() => {
+      repo.put("job", {
+        bootstrap: false,
+        migration: true,
+        baseline: head.current.manifest,
+        baseline_version: head.current.version,
+        watermark: head.watermark,
+        groups: head.current.manifest.shards.map((_, index) => ({ index, symbols: null })),
+        group: 0,
+        offset: 0,
+        refs: [],
+        started_at: now(),
+      })
+      repo.put("requested", true)
+    })
+    return status()
+  }
   async function start() {
     const head = repo.get("head")
     if (!head) throw new Error("Card publication storage migration has not been initialized")
@@ -255,9 +317,10 @@ export function createCardPublication({
     const symbols = group.symbols || oldCards.map((card) => card.symbol)
     const slice = symbols.slice(job.offset, job.offset + CARD_PUBLICATION_BATCH)
     repo.reserveWrites?.(slice.length + 2)
-    const cards = job.bootstrap
-      ? oldCards.filter((card) => slice.includes(card.symbol))
-      : await source.materialize(slice)
+    const cards =
+      job.bootstrap || job.migration
+        ? oldCards.filter((card) => slice.includes(card.symbol))
+        : await source.materialize(slice)
     const bySymbol = new Map(cards.map((card) => [card.symbol, card]))
     // 6 cards * 3 independent objects * (PUT + verified GET) = 36 fetches.
     // Leave fourteen of Cloudflare Free's fifty subrequests for the old-shard
@@ -337,6 +400,12 @@ export function createCardPublication({
       const chunk = orderedCards.slice(sealOffset, packedChunk.end)
       const entryChunk = orderedEntries.slice(sealOffset, packedChunk.end)
       const deliveryIndexes = []
+      const catalogPages = []
+      const publicEntries = chunk.map(publicCatalogEntry)
+      const priorCatalogIndex = ref.catalog_index ? await readValue(ref.catalog_index.key) : null
+      const priorCatalogPages = Array.isArray(priorCatalogIndex?.pages)
+        ? priorCatalogIndex.pages
+        : ref.catalog_pages || []
       for (let i = 0; i < entryChunk.length; i += CARD_DELIVERY_INDEX_SIZE) {
         const part = entryChunk.slice(i, i + CARD_DELIVERY_INDEX_SIZE)
         const value = { schema_version: 2, entries: part }
@@ -357,7 +426,60 @@ export function createCardPublication({
           first_symbol: part[0][0],
           last_symbol: part.at(-1)[0],
         })
+        const catalogValue = {
+          schema_version: 1,
+          entries: publicEntries.slice(i, i + CARD_DELIVERY_INDEX_SIZE),
+        }
+        const oldCatalog = priorCatalogPages.find(
+          (page) => page.first_symbol === part[0][0] && page.last_symbol === part.at(-1)[0],
+        )
+        let catalogObject
+        if (
+          oldCatalog &&
+          canonicalPublishedJson(await readValue(oldCatalog.key)) ===
+            canonicalPublishedJson(catalogValue)
+        )
+          catalogObject = oldCatalog
+        else catalogObject = await objects.write("catalogs", catalogValue)
+        catalogPages.push({
+          key: catalogObject.key,
+          first_symbol: part[0][0],
+          last_symbol: part.at(-1)[0],
+          entry_count: part.length,
+        })
       }
+      const catalogIndexValue = {
+        schema_version: 2,
+        pages: catalogPages,
+        search_entries: publicEntries.map((entry, index) => [
+          entry.symbol,
+          entry.full_name,
+          Math.floor(index / CARD_DELIVERY_INDEX_SIZE),
+          index % CARD_DELIVERY_INDEX_SIZE,
+        ]),
+        gallery_entries: publicEntries.map((entry, index) => [
+          entry.symbol,
+          Math.floor(index / CARD_DELIVERY_INDEX_SIZE),
+          index % CARD_DELIVERY_INDEX_SIZE,
+          Number(entry.popularity_score || 0),
+          Number(entry.image_score || 0),
+          entry.published_at,
+          entry.full_name.length,
+          entry.uniqueness_rank,
+          entry.weight_kg,
+          entry.age_years,
+          entry.portrait?.status === "published" ? 1 : 0,
+        ]),
+      }
+      const oldCatalogIndex = ref.catalog_index
+      let catalogIndexObject
+      if (
+        oldCatalogIndex &&
+        canonicalPublishedJson(await readValue(oldCatalogIndex.key)) ===
+          canonicalPublishedJson(catalogIndexValue)
+      )
+        catalogIndexObject = oldCatalogIndex
+      else catalogIndexObject = await objects.write("catalogindexes", catalogIndexValue)
       const packed = await objects.write("shards", {
         schema_version: 2,
         cards: packedChunk.stableCards,
@@ -369,6 +491,12 @@ export function createCardPublication({
         first_symbol: chunk[0].symbol,
         last_symbol: chunk.at(-1).symbol,
         delivery_indexes: deliveryIndexes,
+        catalog_index: {
+          key: catalogIndexObject.key,
+          first_symbol: chunk[0].symbol,
+          last_symbol: chunk.at(-1).symbol,
+          page_count: catalogPages.length,
+        },
       })
     }
     if (nextSealOffset < orderedCards.length) {
@@ -384,11 +512,26 @@ export function createCardPublication({
         refs,
         group: job.group + 1,
         offset: 0,
+        alias_offset: 0,
         sealed_refs: [],
         seal_offset: 0,
       })
       repo.clearPrepared()
     })
+  }
+  async function publishBlotAliases(job) {
+    const prepared = repo.prepared()
+    const offset = job.alias_offset || 0
+    const slice = prepared.slice(offset, offset + CARD_PUBLICATION_BATCH)
+    repo.reserveWrites?.(2)
+    for (let index = 0; index < slice.length; index += CARD_PUBLICATION_CONCURRENCY) {
+      await settlePublicationWrites(
+        slice
+          .slice(index, index + CARD_PUBLICATION_CONCURRENCY)
+          .map((item) => objects.publishBlotAlias(item.symbol, item.card?.payload?.blot || null)),
+      )
+    }
+    repo.put("job", { ...job, alias_offset: offset + slice.length })
   }
   async function commit(job) {
     repo.reserveWrites?.(6)
@@ -399,7 +542,7 @@ export function createCardPublication({
     const count = refs.reduce((sum, ref) => sum + ref.card_count, 0)
     const manifest = {
       schema: job.baseline.schema,
-      build_revision: job.baseline.build_revision,
+      build_revision: source.buildRevision ?? job.baseline.build_revision,
       storage: CARD_PUBLICATION_STORAGE,
       source: "published_card_catalog",
       card_count: count,
@@ -418,7 +561,7 @@ export function createCardPublication({
         previous: head?.current.version === version ? head.previous : head?.current || null,
         watermark: job.watermark,
       })
-      if (!job.bootstrap && source.afterCommit)
+      if (!job.bootstrap && !job.migration && source.afterCommit)
         repo.put("effects", {
           version,
           after: head.watermark,
@@ -478,6 +621,7 @@ export function createCardPublication({
     status,
     wake,
     bootstrap,
+    migrate,
     materializeSymbol,
     async step() {
       const effects = repo.get("effects")
@@ -499,6 +643,7 @@ export function createCardPublication({
       const oldCards = await cardsFor(job, job.baseline.shards[group.index])
       const count = group.symbols?.length ?? oldCards.length
       if (job.offset < count) await prepare(job, group, oldCards)
+      else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)
       else await finishGroup(job, group, oldCards)
       return { more: true }
     },
