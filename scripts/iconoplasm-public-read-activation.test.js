@@ -209,6 +209,34 @@ test("an incomplete catalog starts migration through its existing owner", async 
   assert.equal(starts, 1)
 })
 
+test("catalog status tolerates bounded preparation-deploy propagation before deciding", async () => {
+  let reads = 0
+  let starts = 0
+  let waited = 0
+  const status = { current: "ccv2-current", build_revision: 4, failure: null, job: null }
+
+  const result = await cutover.startPublicationMigrationIfRequired({
+    readStatus: async () => {
+      reads += 1
+      if (reads < 3) throw new Error("status 503")
+      return status
+    },
+    startMigration: async () => {
+      starts += 1
+    },
+    attempts: 4,
+    intervalMs: 250,
+    wait: async (milliseconds) => {
+      waited += milliseconds
+    },
+  })
+
+  assert.equal(result.started, false)
+  assert.equal(reads, 3)
+  assert.equal(starts, 0)
+  assert.equal(waited, 500)
+})
+
 test("stalled migration fails closed before activation", async () => {
   assert.equal(typeof cutover.releasePublicReadCutover, "function")
   const operations = []
