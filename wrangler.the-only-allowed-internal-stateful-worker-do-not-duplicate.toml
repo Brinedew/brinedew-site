@@ -31,20 +31,13 @@ routes = [{ pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }]
 
 [assets]
 directory = "./public-iconoplasm-edge"
-not_found_handling = "none"
+not_found_handling = "single-page-application"
 run_worker_first = [
   "/api/*",
-  "/portraits/*",
-  "/published-cards/v2/immutable/*",
   "/admin*",
   "/blocklist*",
   "/artist-styles*",
-  "/health",
-  "/gene/*",
-  "/genes*",
-  "/sitemap*",
-  "/robots.txt",
-  "/llms.txt"
+  "/health"
 ]
 
 [observability]

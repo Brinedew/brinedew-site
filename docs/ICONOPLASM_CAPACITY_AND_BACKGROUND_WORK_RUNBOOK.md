@@ -300,11 +300,15 @@ primary D1 projection.
 
 ## ARCHITECTURE FENCE [IPD-007]: static-first, one dynamic Worker
 
-`iconoplasm.brinedew.bio/*` belongs directly to `geneguessr-api`. Matching
-homepage, privacy, JavaScript, CSS, font, icon, and download files are served by
-Workers Static Assets before Worker code executes. Dynamic misses such as
-`/api/*`, `/gene/*`, crawler documents, admin routes, and portrait fallback
-enter the existing stateful Worker once.
+`iconoplasm.brinedew.bio/*` belongs directly to the existing deployment, but
+anonymous documents no longer belong to its stateful request path. Workers
+Static Assets serves one SPA shell for `/`, `/gene/*`, `/genes/*`, and other
+documents before Worker code executes. `robots.txt`, `sitemap.xml`, and
+`llms.txt` are static build artifacts. Missing first-party portrait/blot aliases
+rewrite to a bundled placeholder. The browser loads dossiers, catalog search,
+gallery pages, portraits, blots, and passive vote totals from content-addressed
+Sysop V2 Bunny artifacts. Only explicit mutation and administrator `/api/*`
+paths enter the existing stateful Worker.
 
 The shared public proxy must not reclaim the Iconoplasm hostname. Production
 telemetry on the Free plan showed nearly one public invocation for every
@@ -340,8 +344,9 @@ The generated bundle must:
 - remain below 20,000 files and 25 MiB per file;
 - carry the same CSP, clickjacking, MIME, referrer, permissions, and transport
   headers as the previous Worker-served responses;
-- keep dynamic gene pages on the Worker so complete first paint, alias
-  redirects, unknown-symbol 404s, and crawl eligibility remain correct.
+- keep one gene shell rather than 19,023 generated HTML files;
+- emit crawler documents and media-failure placeholders as assets;
+- allow Bunny JSON and image reads in CSP without widening script origins.
 
 Rate limiting belongs in the stateful route owner, where direct and shared-host
 dynamic requests cannot accidentally bypass it or be charged twice. Voting
@@ -349,41 +354,26 @@ authority remains the per-gene VoteCoordinator Durable Object; never move
 immediate ranking truth to eventually consistent KV to make this routing shape
 look simpler.
 
-### Canonical gene first-paint cold path (B-694)
+### Canonical anonymous read path
 
-The route owner has one deliberately staged read path for `/gene/{SYMBOL}`:
+1. Static Assets serves the SPA shell without Worker execution.
+2. Bunny serves the shared current-head document. Its origin is the publisher's
+   bounded KV projection, never the coordinator or D1. The browser retains the
+   last coherent head when both sources fail.
+3. The browser validates content hashes for the exact root manifest, one small
+   directory, the per-gene object, and any advertised delta-chain receipt.
+4. Search and gallery read one compact catalog index per publication shard and
+   its at-most-128-entry pages, all committed by the same publisher. Those pages
+   include passive candidate summaries and shared vote totals; personal vote
+   state is not loaded.
+5. Portrait and blot bytes use immutable Bunny URLs. Failure shows the bundled
+   placeholder and never invokes a Worker or reconstructs state.
 
-1. Static Assets serves matching files before Worker code.
-2. The existing stateful Worker resolves an exact canonical symbol from the
-   identity-only `icono_published_gene_routes` D1 index. Publication advances
-   this table only after the card-catalog barrier succeeds. The normal exact
-   identity-resolution stage therefore spends zero KV reads and does not hydrate
-   the 19,023-gene artifact or let unpublished catalog rows enter discovery.
-3. The Worker asks the existing site-gene detail handler for the response
-   headers only. Its ETag supplies the immutable HTML snapshot key; the detail
-   handler uses bounded indexed D1 reads for fresh page facts, votes, and
-   candidates, plus a bounded one-symbol read from the exact card artifact
-   selected by `KV_GALLERY_VERSION`. The card portrait overrides D1 portrait
-   identity and candidate `is_current` state.
-4. `caches.default.match` runs before JSON parsing, card rendering, or shell
-   injection. A hit returns the cached document immediately.
-5. Only a miss parses the detail payload and renders the complete first-paint
-   card. The same response is reused for rendering; it is not fetched again.
-
-Alias and UniProt identifiers are intentionally different: they are not D1
-primary keys and continue through the immutable published-catalog resolver so
-they can redirect without creating a second alias map. Unknown symbols remain
-real 404s; incomplete profiles remain noindex; complete profiles remain the
-only indexable discovery surface.
-
-Do not merge route membership, D1 authoring state, and public portrait identity
-into one snapshot. The route index answers only “has this symbol crossed
-publication?”. The complete detail payload and ETag combine fresh bounded D1
-facts with the exact published-card portrait and card version. D1 may
-legitimately lead until a dirty-shard release; there is no gene-detail fallback
-that exposes that unpublished SHA. Selecting public portrait identity from D1
-would restore mixed-authority split-brain, while resolving ordinary exact-symbol
-membership from the whole KV catalog would restore the request-spend regression.
+The throwing-bindings regression harness makes D1, Durable Objects, Queues, KV
+writes, sessions, Browser Rendering, and service bindings throw on access while
+it exercises homepage, search, gallery, dossier, portrait, blot, sitemap,
+robots, llms, immutable object, and passive-vote paths. Route-topology tests also
+prove `/gene/*` is no longer `run_worker_first`.
 
 The protected entrypoint/config names are part of the architecture contract and
 must not be shortened or replaced:
@@ -403,9 +393,9 @@ no normal-request service binding, no symbol-only cache, and no duplicate
 publication state.
 
 The regression contract lives in
-`workers/iconoplasm-gene-cold-path.test.js`. A change is incomplete if that
-test no longer proves both the indexed canonical lookup and cache-before-render
-ordering.
+`quartz/static/iconoplasm/publication-reader.test.js`. A change is incomplete if
+that test no longer proves asset bypass, exact immutable identity, prior-head
+retention, and throwing-state isolation.
 
 Linear B-670 contains the live telemetry, user journeys, 22 ranked scenarios,
 research synthesis, rejected alternatives, and zero-spend constraint. Treat
