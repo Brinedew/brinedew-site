@@ -146,10 +146,27 @@ function migrationReceipt(status) {
   }
 }
 
-export async function startPublicationMigrationIfRequired({ readStatus, startMigration } = {}) {
+export async function startPublicationMigrationIfRequired({
+  readStatus,
+  startMigration,
+  attempts = 6,
+  intervalMs = 5_000,
+  wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
   if (typeof readStatus !== "function") throw new Error("Migration status reader is required")
   if (typeof startMigration !== "function") throw new Error("Migration starter is required")
-  const status = await readStatus()
+  let status
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      status = await readStatus()
+      break
+    } catch (error) {
+      lastError = error
+      if (attempt < attempts) await wait(intervalMs)
+    }
+  }
+  if (!status) throw lastError || new Error("Publication migration status remained unavailable")
   if (migrationReceipt(status).complete) return { started: false, status }
   await startMigration()
   return { started: true, status }
