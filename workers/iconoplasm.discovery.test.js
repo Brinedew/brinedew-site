@@ -169,7 +169,11 @@ function acceptingMutationAuthority() {
   }
 }
 
-async function buildEnv({ sessions, migrationComplete = true } = {}) {
+async function buildEnv({
+  sessions,
+  migrationComplete = true,
+  mutationAuthority = acceptingMutationAuthority(),
+} = {}) {
   const db = new D1Like()
   if (migrationComplete) {
     db.raw.exec(
@@ -196,7 +200,7 @@ async function buildEnv({ sessions, migrationComplete = true } = {}) {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: acceptingMutationAuthority(),
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: mutationAuthority,
     KV: new FakeKv(),
   }
   const env = {
@@ -500,6 +504,37 @@ test("guest merge converges into compact membership without double counting", as
     .first()
   assert.equal(Number(after.member_count), 2)
   assert.equal(JSON.parse(after.active_events_json).length, 2)
+})
+
+test("guest merge reports capacity refusal as retryable pending work instead of a crash", async () => {
+  const env = await buildEnv({
+    sessions: sessionFor("reader"),
+    mutationAuthority: {
+      idFromName: () => "global",
+      get: () => ({
+        fetch: async () =>
+          Response.json(
+            { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+            { status: 429 },
+          ),
+      }),
+    },
+  })
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53"] },
+    }),
+    env,
+  )
+  const payload = await response.json()
+  assert.equal(response.status, 429)
+  assert.equal(payload.ok, false)
+  assert.equal(payload.pending, true)
+  assert.equal(payload.persisted, false)
+  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+  assert.deepEqual(payload.symbols, ["TP53"])
+  assert.equal(await compactRowCount(env), 0)
 })
 
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {
