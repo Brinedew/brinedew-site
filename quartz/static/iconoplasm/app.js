@@ -44,11 +44,11 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=9a3d56f7fda94946"
+} from "./diagram-studio.js?v=3986208c76e2d74f"
 import {
   iconoplasmPublicationReader,
   immutableBlotByteUrl,
-} from "./publication-reader.js?v=27ea281ef98ee9ae"
+} from "./publication-reader.js?v=166919f6b7358465"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -2294,6 +2294,26 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       symbols.push(symbol)
     }
     if (!symbols.length) return Promise.resolve({ cards: [], failures: [] })
+    if (!currentUser) {
+      var publicationReader = window.IconoplasmPublicationReader
+      if (!publicationReader || typeof publicationReader.genes !== "function") {
+        return Promise.reject(new Error("Immutable Iconoplasm publication reader is unavailable"))
+      }
+      return publicationReader.genes(symbols).then(function (records) {
+        var bySymbol = Object.create(null)
+        for (var i = 0; i < records.length; i++) {
+          var record = records[i]
+          bySymbol[normalizedSymbol(record && record.symbol)] = record
+        }
+        var cards = []
+        var failures = []
+        for (var j = 0; j < symbols.length; j++) {
+          if (bySymbol[symbols[j]]) cards.push(bySymbol[symbols[j]])
+          else failures.push({ symbol: symbols[j], reason: "publication_missing" })
+        }
+        return { cards: cards, failures: failures, snapshotVersion: "immutable-sysop-v2" }
+      })
+    }
     var knownVersion = lastMobileCardVMVersion()
     return fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
