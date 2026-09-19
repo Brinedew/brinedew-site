@@ -69,19 +69,47 @@ function commandIdentity(day) {
   }
 }
 
+function shedReceipt({ operation, tierReaders, refused, coverage }) {
+  const prefix = `viral-load:${tierReaders}:${operation}:`
+  const identity = {
+    prefix,
+    first: `${prefix}000000000`,
+    last: `${prefix}${String(refused - 1).padStart(9, "0")}`,
+    count: refused,
+    digestAlgorithm: "sha256-canonical-contiguous-range",
+  }
+  identity.digest = createHash("sha256").update(JSON.stringify(identity)).digest("hex")
+  return {
+    schemaVersion: 1,
+    kind: "iconoplasm_operation_shed_receipt",
+    commitSha: "c".repeat(40),
+    environment: "staging",
+    startedAt: "2026-09-19T00:00:00Z",
+    endedAt: "2026-09-19T00:10:00Z",
+    operation,
+    tierReaders,
+    attempted: refused,
+    accepted: 0,
+    refused,
+    pending: 0,
+    identity,
+    coverage,
+  }
+}
+
 function task5Bundle() {
   const expected = {
-    workerRequests: 63_200,
+    workerRequests: 60_000,
     kvReads: 0,
     kvWrites: 0,
     kvLists: 0,
-    d1RowsRead: 86_000,
-    d1RowsWritten: 64_800,
-    durableObjectRequests: 22_000,
-    durableObjectRowsRead: 88_000,
-    durableObjectRowsWritten: 88_000,
-    queueOperations: 603,
-    externalRequests: 500_000,
+    d1RowsRead: 0,
+    d1RowsWritten: 40_000,
+    durableObjectRequests: 20_000,
+    durableObjectRowsRead: 80_000,
+    durableObjectRowsWritten: 80_000,
+    queueOperations: 3,
+    externalRequests: 0,
     transferBytes: 1_000_000,
   }
   const provider = {
@@ -120,9 +148,10 @@ function task5Bundle() {
         durableObjectRowsRead: 80_000,
         durableObjectRowsWritten: 80_000,
         queueOperations: 3,
-        externalRequests: 500_000,
+        externalRequests: 0,
         transferBytes: 1_000_000,
       },
+      providerOperations: expected,
       refusalByResource: {
         workerRequests: 50_000,
         d1RowsRead: 50_000,
@@ -139,6 +168,61 @@ function task5Bundle() {
     }),
     "provider-query.json": JSON.stringify(provider),
   }
+  const shedReceipts = [
+    shedReceipt({
+      operation: "discovery",
+      tierReaders: 100_000,
+      refused: 110_000,
+      coverage: { lanes: { user_action: 110_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "vote",
+      tierReaders: 100_000,
+      refused: 10_000,
+      coverage: { lanes: { user_action: 10_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "publication",
+      tierReaders: 100_000,
+      refused: 78_000,
+      coverage: { lanes: { publication: 78_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "discovery",
+      tierReaders: 1_000_000,
+      refused: 1_500_000,
+      coverage: { lanes: { user_action: 1_500_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "vote",
+      tierReaders: 1_000_000,
+      refused: 60_000,
+      coverage: { lanes: { user_action: 60_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "publication",
+      tierReaders: 1_000_000,
+      refused: 870_000,
+      coverage: { lanes: { publication: 870_000 }, resources: {} },
+    }),
+    shedReceipt({
+      operation: "worker",
+      tierReaders: 1_000_000,
+      refused: 200_227,
+      coverage: { lanes: {}, resources: { workerRequests: 200_227 } },
+    }),
+    shedReceipt({
+      operation: "durable_object",
+      tierReaders: 1_000_000,
+      refused: 700_000,
+      coverage: {
+        lanes: {},
+        resources: { durableObjectRequests: 100_000, durableObjectRowsWritten: 700_000 },
+      },
+    }),
+  ]
+  for (const receipt of shedReceipts)
+    rawArtifacts[`shed-${receipt.tierReaders}-${receipt.operation}.json`] = JSON.stringify(receipt)
   for (const name of ["browser", "region-apac", "region-eu", "region-us", "bunny"])
     rawArtifacts[`${name}.json`] = JSON.stringify({
       kind:
@@ -185,7 +269,9 @@ function task5Bundle() {
             ? "region"
             : name === "bunny.json"
               ? "bunny_delivery"
-              : "fault_injection"
+              : name.startsWith("shed-")
+                ? "operation_shed_receipt"
+                : "fault_injection"
   const rawManifest = Object.entries(rawArtifacts).map(([name, value]) => ({
     name,
     kind: kindFor(name),
@@ -475,19 +561,46 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
   })
   assert.equal(report.task5Evidence.verdict, "pass")
   assert.equal(report.attribution.verdict, "pass")
+  assert.equal(report.attribution.perMeter.workerRequests.expected, 60_000)
+  assert.equal(report.attribution.perMeter.d1RowsWritten.expected, 40_000)
+  assert.equal(report.attribution.perMeter.externalRequests.expected, 0)
   assert.equal(report.overallChecks.externalResourcesResolved, true)
   assert.equal(report.tiers["10000"].resources.externalRequests.evidence.status, "measured_hosted")
   assert.equal(
     report.tiers["1000000"].mutationResourceDisposition.workerRequests.disposition,
     "intentional_shed_pending",
   )
-  assert.ok(
-    report.tiers["1000000"].mutationResourceDisposition.workerRequests.observedRefusalCommands > 0,
+  assert.equal(
+    report.tiers["1000000"].mutationResourceDisposition.workerRequests.coverageVerified,
+    true,
   )
   assert.equal(report.overallChecks.hundredThousandActionsExplicitlyShed, true)
   assert.equal(report.overallChecks.millionOverLimitMutationsExplicitlyShed, true)
   assert.equal(report.hostileProfile.hostedExecution, "verified")
   assert.ok(report.failureProfiles.every(({ verdict }) => verdict === "verified"))
+  assert.equal(report.overallVerdict, "blocked")
+})
+
+test("generic refusal labels cannot replace quantitative operation-specific shed receipts", async () => {
+  const bundle = task5Bundle()
+  bundle.evidence.rawArtifacts = bundle.evidence.rawArtifacts.filter(
+    ({ kind }) => kind !== "operation_shed_receipt",
+  )
+  for (const name of Object.keys(bundle.rawArtifacts))
+    if (name.startsWith("shed-")) delete bundle.rawArtifacts[name]
+  const receipt = { ...bundle.evidence }
+  delete receipt.digest
+  delete receipt.digestAlgorithm
+  bundle.evidence.digest = createHash("sha256").update(JSON.stringify(receipt)).digest("hex")
+  const report = await runViralLoadReleaseGate({
+    runTopologyProof: false,
+    task5Evidence: bundle.evidence,
+    rawArtifacts: bundle.rawArtifacts,
+    trustedRunVerifier,
+    expectedCommit: "c".repeat(40),
+    now: Date.parse("2026-09-19T00:11:00Z"),
+  })
+  assert.equal(report.task5Evidence.verdict, "blocked_missing_raw_artifacts")
   assert.equal(report.overallVerdict, "blocked")
 })
 
