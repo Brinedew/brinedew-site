@@ -2115,6 +2115,33 @@ test("gene votes batch initial snapshots and give responsive copies one controll
   const primeStart = app.indexOf("function primeGeneVoteBoxGroups")
   const primeEnd = app.indexOf("function wireGeneVoteControls", primeStart)
   const primeBlock = app.slice(primeStart, primeEnd)
+  assert.match(
+    primeBlock,
+    /function primeGeneVoteBoxGroups\(groups\) \{\s*if \(!currentUser\) return Promise\.resolve\(\)/,
+    "anonymous gene readers must not fetch personalized vote snapshots",
+  )
   assert.match(primeBlock, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
   assert.equal((primeBlock.match(/fetchJSON\(/g) || []).length, 1)
+})
+
+test("anonymous gene suggestions remain off the stateful comments API", async () => {
+  const app = await readFile(appPath, "utf8")
+  const wireStart = app.indexOf("function wireGeneSuggestions")
+  const wireEnd = app.indexOf("function publicManifestationMarkup", wireStart)
+  assert.notEqual(wireStart, -1, "missing gene suggestion wiring")
+  assert.notEqual(wireEnd, -1, "missing gene suggestion wiring boundary")
+  const wireBlock = app.slice(wireStart, wireEnd)
+  const guestGuard = wireBlock.indexOf("if (!currentUser)")
+  const commentsFetch = wireBlock.indexOf("fetchAuthedJSON(commentsPath)")
+  assert.notEqual(guestGuard, -1, "anonymous suggestions need a current-user guard")
+  assert.notEqual(commentsFetch, -1, "signed-in suggestions still need the comments fetch")
+  assert.ok(
+    guestGuard < commentsFetch,
+    "the anonymous guard must run before the stateful comments request",
+  )
+  assert.match(
+    wireBlock.slice(guestGuard, commentsFetch),
+    /renderSuggestList\(listEl, \[\], countEl\)[\s\S]*return/,
+    "guest readers should receive a deterministic empty public state without a network request",
+  )
 })

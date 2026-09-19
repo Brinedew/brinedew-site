@@ -4951,6 +4951,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function primeGeneVoteBoxGroups(groups) {
+    if (!currentUser) return Promise.resolve()
     var voteGroups = (Array.isArray(groups) ? groups : []).filter(Boolean)
     if (!voteGroups.length) return Promise.resolve()
     var uniqueItems = []
@@ -9657,6 +9658,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var listEl = sec.querySelector("[data-icono-suggest-list]")
     var countEl = sec.querySelector("[data-icono-suggest-count]")
     var commentsPath = "/api/iconoplasm/genes/" + encodeURIComponent(symbol) + "/comments"
+    if (!currentUser) {
+      renderSuggestList(listEl, [], countEl)
+      return
+    }
     fetchAuthedJSON(commentsPath)
       .then(function (data) {
         renderSuggestList(listEl, data && data.comments, countEl)
