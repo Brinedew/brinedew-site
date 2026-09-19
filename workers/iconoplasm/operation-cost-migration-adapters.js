@@ -15,6 +15,7 @@ import { createVoteJobVersionMigrationCostAdapter } from "./operation-cost-vote-
 import { createAssetSummaryMigrationCostAdapter } from "./operation-cost-asset-summary-migration-adapter.js"
 import { createBlacklistLookupMigrationCostAdapter } from "./operation-cost-blacklist-migration-adapter.js"
 import { createCompactDiscoveryMigrationCostAdapter } from "./operation-cost-compact-discovery-migration-adapter.js"
+import { createVoteWakeMigrationCostAdapter } from "./operation-cost-vote-wake-migration-adapter.js"
 import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
   createInboxCountersMigrationCostAdapter,
@@ -25,6 +26,13 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0107",
+      createVoteWakeMigrationCostAdapter({
+        db: env.ICONOPLASM_DB,
+        ...identities,
+      }),
+    ],
     [
       "iconoplasm-migration-0106",
       createCompactDiscoveryMigrationCostAdapter({

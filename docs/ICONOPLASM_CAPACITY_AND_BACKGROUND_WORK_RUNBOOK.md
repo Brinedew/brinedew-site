@@ -174,9 +174,11 @@ complete-phase row-cost admission.
 
 Popularity does not buy a Queue operation per vote. The vote projection ledger
 keeps one dirty row per gene. The first vote that changes a clean gene sends one
-wake; later votes only advance that row's generation. If a vote advances the row
-while its current generation is running, that consumer schedules one follow-up
-global drain after it proves the stale generation could not delete the newer row.
+wake; later votes only advance that row's generation while the wake claim is
+outstanding. Queue-send failure releases the exact claim, and a consumer releases
+only the generation carried by its message. A vote racing a consumer either joins
+the generation being processed or claims exactly one successor wake; stale
+completion cannot delete the newer row.
 
 The existing daily-budget Durable Object also owns four non-borrowing D1 mutation
 lanes. `user_action` has 40,000 reserved write units, `publication` 10,000,
@@ -184,20 +186,40 @@ lanes. `user_action` has 40,000 reserved write units, `publication` 10,000,
 the 100,000-write daily provider allowance remains unallocated headroom. A full
 lane refuses before its mutation dispatch; user actions remain locally pending
 or receive a retryable refusal, and durable background work remains pending.
-Unused capacity in one lane never moves to another lane.
+Unused capacity in one lane never moves to another lane. This is not a parallel
+70,000-write counter: every reservation also reads the authoritative
+`daily_budget_usage.rows_written` value in the same Durable Object, and refuses
+when provider-recorded writes plus all retained lane reservations would exceed
+70,000. A missing shared-budget binding is a configuration failure, never local
+success.
 
 The operation ID is the reservation identity. A retry with the same ID, lane,
 and unit bound reuses its original reservation even after UTC midnight and does
 not charge the new day. A changed lane or unit bound is an identity mismatch.
 Timeouts and other uncertain outcomes never refund or regenerate a reservation.
-The shared budget snapshot exposes all four lane balances for operators.
+Unresolved identities are retained indefinitely. Only explicitly completed
+identities become eligible for compaction after the 32-day retry/uncertainty
+horizon, and compaction keeps an anti-reuse tombstone with the original lane,
+day, and units. The shared budget snapshot exposes all four lane balances for
+operators.
 
 B-764 compact discovery is the activated request contract. Hover encounters,
 guest merge, starter seed, membership, shelf, gallery window, and clan reads use
 the one compact per-user record and durable shared-delivery outbox. The retired
 per-hover route remains a write-free 410. Legacy discovery import is an explicit
 migration tool only; request handling contains no `icono_gene_discoveries`
-writer or whole-membership fallback.
+writer or whole-membership fallback. The singleton activation receipt starts
+pending, so authenticated compact reads and writes refuse until the bounded,
+resumable migration has imported every legacy user. Real D1 receipts bill three
+personal writes per saver plus one receipt and one indexed outbox delete per
+delivery and one shared-state write per drain page: 2,000 savers cost 10,016
+writes, so each accepted discovery batch reserves six units.
+
+Vote projection accepts at most eight candidate summaries per gene. The real
+migration/index/trigger harness measured 44 D1 row writes at that accepted
+maximum, so each dirty-generation projection reserves 44 publication units;
+nine candidates refuse before D1 mutation. Two hundred changed genes therefore
+cost at most 8,800 of the 10,000-unit publication lane.
 
 Known daily refusals atomically retain one reset alarm in the existing
 SyncGovernor before acknowledging the old transport message. Repeated refusals

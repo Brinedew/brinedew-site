@@ -9,6 +9,7 @@ import {
   publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
+import { migrateLegacyDiscoveryPage } from "./iconoplasm/discovery-compact-migrate.js"
 import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
@@ -156,8 +157,23 @@ class FakeGameSessions {
   }
 }
 
-async function buildEnv({ sessions } = {}) {
+function acceptingMutationAuthority() {
+  return {
+    idFromName: () => "global",
+    get: () => ({
+      fetch: async () => Response.json({ ok: true, replayed: false }),
+    }),
+  }
+}
+
+async function buildEnv({ sessions, migrationComplete = true } = {}) {
   const db = new D1Like()
+  if (migrationComplete) {
+    db.raw.exec(
+      `UPDATE icono_discovery_compact_activation_v2
+       SET status='complete', completed_at=CURRENT_TIMESTAMP WHERE singleton=1`,
+    )
+  }
   const insertCatalog = db.raw.prepare(
     "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)",
   )
@@ -177,6 +193,7 @@ async function buildEnv({ sessions } = {}) {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: acceptingMutationAuthority(),
     KV: new FakeKv(),
   }
   const env = {
@@ -345,8 +362,8 @@ test("a ten-hover batch commits one compact state and replays without duplicates
   )
 })
 
-test("membership reads only compact state and never resurrects the legacy membership fallback", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+test("activation blocks incomplete legacy migration, then migrated membership remains visible without request-time scans", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader"), migrationComplete: false })
   env.gatewayDb.raw
     .prepare(
       `INSERT INTO icono_gene_discoveries
@@ -360,11 +377,19 @@ test("membership reads only compact state and never resurrects the legacy member
     `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
     { cookie: "session=abc" },
   )
-  const payload = await (await invoke(request, env)).json()
-  assert.deepEqual(payload.discovered_symbols, [])
+  const blocked = await invoke(request, env)
+  assert.equal(blocked.status, 503)
+  assert.equal((await blocked.json()).code, "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE")
   assert.equal(await compactRowCount(env), 0)
-  // The retired table is irrelevant to request-time membership both before
-  // and after cleanup. Migration must happen through the explicit tool.
+
+  const migration = await migrateLegacyDiscoveryPage({ db: env.gatewayDb, userLimit: 25 })
+  assert.equal(migration.complete, true)
+  const payload = await (await invoke(request, env)).json()
+  assert.deepEqual(payload.discovered_symbols, ["TP53"])
+  assert.equal(await compactRowCount(env), 1)
+
+  // After the activation receipt is complete, request membership stays on the
+  // compact record even when the retired source rows are removed.
   env.gatewayDb.raw.exec("DELETE FROM icono_gene_discoveries")
   const again = await (
     await invoke(
@@ -375,7 +400,7 @@ test("membership reads only compact state and never resurrects the legacy member
       env,
     )
   ).json()
-  assert.deepEqual(again.discovered_symbols, [])
+  assert.deepEqual(again.discovered_symbols, ["TP53"])
 })
 
 test("shared aggregates stay exact through the durable deferred delivery drain", async () => {

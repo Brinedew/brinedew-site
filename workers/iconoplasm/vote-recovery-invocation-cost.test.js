@@ -9,6 +9,7 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createD1InvocationBudget } from "../lib/d1-invocation-budget.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { withTestMutationAuthority } from "./test-only-mutation-authority.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -125,7 +126,7 @@ test(
           this.retries.push(options)
         },
       }))
-      const env = {
+      const env = withTestMutationAuthority({
         ICONOPLASM_DB: budget.binding(db),
         ICONOPLASM_VOTE_COORDINATORS: {
           idFromName: (id) => id,
@@ -149,7 +150,7 @@ test(
             },
           }),
         },
-      }
+      })
       const result = await handleIconoplasmVoteProjectionQueue({ messages: deliveries }, env)
       assert.equal(result.failed, 2)
       assert.equal(result.retrying, 3)
