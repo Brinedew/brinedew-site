@@ -15,9 +15,10 @@ name = "geneguessr-api"
 main = "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 compatibility_date = "2025-11-12"
 compatibility_flags = ["nodejs_compat"]
-# Cron triggers need workers_dev=true to fire. The public edge worker owns
-# production routes; this worker is only publicly reachable via service binding.
-workers_dev = true
+# Cron triggers are independent of HTTP routing. Keep the default workers.dev
+# hostname disabled so anonymous traffic cannot bypass the owned custom-domain
+# route and drive the stateful runtime directly.
+workers_dev = false
 preview_urls = false
 
 # ARCHITECTURE FENCE [IPD-007]: Iconoplasm is static-first on the Free plan. Matching files are served by
@@ -31,20 +32,13 @@ routes = [{ pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }]
 
 [assets]
 directory = "./public-iconoplasm-edge"
-not_found_handling = "none"
+not_found_handling = "single-page-application"
 run_worker_first = [
   "/api/*",
-  "/portraits/*",
-  "/published-cards/v2/immutable/*",
   "/admin*",
   "/blocklist*",
   "/artist-styles*",
-  "/health",
-  "/gene/*",
-  "/genes*",
-  "/sitemap*",
-  "/robots.txt",
-  "/llms.txt"
+  "/health"
 ]
 
 [observability]
@@ -284,11 +278,14 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # as does supervote delivery with five 16-message batches/hour.
 # Vote recovery runs six times hourly; nightly archive, canon repair and gallery run at 23:56/58/59
 # in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,6,7,8,10,11,13,14,15,17,18,19,20,23,24,26,27,28,29,30,31,32,34,35,38,39,41,42,43,44,45,46,47,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,6,7,8,10,11,13,14,15,16,17,18,19,20,23,24,26,27,28,29,30,31,32,33,34,35,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
-workers_dev = false
+# Staging owns no production route, no cron, and separate mutable stores. Its
+# checked-in workers.dev URL is the executable rehearsal surface used before
+# production activation; production remains workers_dev=false above.
+workers_dev = true
 preview_urls = false
 # Wrangler inherits top-level routes unless an environment replaces them.
 # Staging owns queue consumers and test data only; it must never contend for
@@ -352,6 +349,7 @@ preview_id = "7d59f063885e415ab3df5301393a114d"
 [[env.staging.durable_objects.bindings]]
 name = "GAME_SESSIONS"
 class_name = "GameSession"
+script_name = "geneguessr-api"
 
 [[env.staging.durable_objects.bindings]]
 name = "ICONOPLASM_VOTE_COORDINATORS"
@@ -444,6 +442,9 @@ destination_address = "brinedew@proton.me"
 allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [env.staging.vars]
+ICONOPLASM_SCHEMA_TRANSITION = "0"
+ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
+ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"

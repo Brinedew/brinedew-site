@@ -236,7 +236,7 @@ function catalogAliasNames(raw, canonical) {
 export async function ensureDiscoveryDictionaryForNames(
   db,
   names,
-  { preserveHistorical = false } = {},
+  { preserveHistorical = false, maxMutationWrites = null } = {},
 ) {
   const wanted = normalizeNames(names)
   if (!wanted.length) return loadDiscoveryDictionaryForNames(db, wanted)
@@ -356,6 +356,17 @@ export async function ensureDiscoveryDictionaryForNames(
       return prior && prior.canonical === name && entry.canonical !== name ? 0 : 1
     }
     pending.sort((left, right) => leavesCanonicalIdentity(left) - leavesCanonicalIdentity(right))
+    const mutationWrites = 1 + pending.length
+    if (
+      maxMutationWrites !== null &&
+      (!Number.isInteger(maxMutationWrites) ||
+        maxMutationWrites < 0 ||
+        mutationWrites > maxMutationWrites)
+    ) {
+      const error = new Error("Discovery dictionary mutation exceeds its admitted write bound")
+      error.code = "DISCOVERY_DICTIONARY_WRITE_BOUND_EXCEEDED"
+      throw error
+    }
     // One attempt, one writer token. The conditional version update runs first
     // and every row upsert is gated on the version and token it installs, so a
     // rejected version aborts all related mutations inside the same database

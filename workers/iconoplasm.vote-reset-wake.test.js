@@ -121,7 +121,7 @@ test("daily vote refusal retains a reset wake before transport ack and does no D
   })
   await assert.rejects(
     handleIconoplasmVoteProjectionQueue({ messages: [message] }, env),
-    /wake unavailable/,
+    /did not retain the vote projection reset wake/,
   )
   assert.equal(acked, 1, "uncertain durable handoff must retain the transport")
 })

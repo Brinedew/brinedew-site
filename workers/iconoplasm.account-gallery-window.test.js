@@ -63,6 +63,11 @@ class FakeDb {
     this.calls = []
     this.raw = new DatabaseSync(":memory:")
     this.raw.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+    this.raw
+      .prepare(
+        "UPDATE icono_discovery_compact_activation_v2 SET status = 'complete', completed_at = CURRENT_TIMESTAMP WHERE singleton = 1",
+      )
+      .run()
     this.raw.exec(`
       CREATE TABLE icono_gene_catalog (
         gene_symbol TEXT PRIMARY KEY,
@@ -484,7 +489,6 @@ test("account gallery window returns strict rich cards for newest without full s
   const serverTiming = response.headers.get("Server-Timing") || ""
   for (const stage of [
     "acct_session",
-    "acct_starter",
     "acct_window",
     "acct_count",
     "acct_version",

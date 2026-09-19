@@ -17,18 +17,20 @@ higher signed-in/voter participation, multiple regions, cold caches, scattered
 genes, bursts and ordinary background/site work. These are scenarios to test,
 not claims about what real readers already do.
 
-| Daily readers | Votes/day | Newly saved discoveries/day | Modeled discovery + vote D1 writes/day | Current verdict                                                 |
-| ------------: | --------: | --------------------------: | -------------------------------------: | --------------------------------------------------------------- |
-|            10 |         1 |                          20 |                                    172 | These components fit; whole product unverified                  |
-|         1,000 |       100 |                       2,000 |                                 17,200 | These components fit; whole product unverified                  |
-|        10,000 |     1,000 |                      20,000 |                                172,000 | Redesign required by the model: exceeds 100,000 free writes/day |
+| Daily readers | Votes/day | Newly saved discoveries/day | Reserved discovery + vote D1 writes/day | Current verdict                                |
+| ------------: | --------: | --------------------------: | --------------------------------------: | ---------------------------------------------- |
+|            10 |         1 |                          20 |                                      16 | These components fit; whole product unverified |
+|         1,000 |       100 |                       2,000 |                                   1,600 | These components fit; whole product unverified |
+|        10,000 |     1,000 |                      20,000 |                                  16,000 | Fits the named lanes; hosted evidence pending  |
 
-This uses the existing conservative per-action model: eight D1 write units per
-new saved discovery and twelve per vote, including index/projection work. It
-does not assert an exact measured breakpoint. Even perfect Bunny cache hits
-cannot remove these writes. At 10,000 readers, 20% voting instead of 5% produces
-4,000 votes/day; the existing three-Queue-operation model alone exceeds the
-10,000/day Queue allowance. A two-minute image target does not fix either path.
+The old 172,000-write result is obsolete. The release model now verifies the
+digest of Task 3's real 2,000-saver, 20,000-encounter Miniflare/D1 receipt:
+6,000 rows read and 10,016 rows written. Admission still reserves six writes
+per discovery batch rather than averaging the receipt into a desired-answer
+constant. Each accepted vote reserves four user-action writes, and the
+separate winner projection reserves up to 44 publication writes. Perfect Bunny
+cache hits cannot remove these mutations, and local arithmetic does not certify
+the pending production wiring or hosted behavior.
 
 The executable `readerGrowthAssessment` also exposes a deliberately naive
 direct-reload-check policy and first-party metadata/image fallback costs. This

@@ -20,6 +20,7 @@ import {
 import { BUNNY_READ_AFTER_WRITE_DELAYS_MS } from "./bunny-storage-consistency.js"
 
 const PUBLIC_CARD_HEAD_PROJECTION_KEY = "iconoplasm:gallery-version"
+export const CARD_PUBLICATION_ALARM_CADENCE_MS = 1000
 
 /**
  * B-762 reader view projection. Change-driven only: the caller passes the last
@@ -157,7 +158,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
         if (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects")) {
           const retryAt = Number(this.repo.get("failure")?.retry_at || 0)
           try {
-            await this.arm(1000, {
+            await this.arm(CARD_PUBLICATION_ALARM_CADENCE_MS, {
               control: retryAt > 0,
               at: retryAt > Date.now() ? retryAt : null,
             })
@@ -376,7 +377,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             this.repo.reserveWrites(2)
             this.repo.remove("failure")
           }
-          if (result.more || delta.more) await this.arm(1000)
+          if (result.more || delta.more) await this.arm(CARD_PUBLICATION_ALARM_CADENCE_MS)
         } catch (error) {
           // At-least-once alarms must not exhaust platform retries and abandon
           // durable work. Retry only an existing job, with bounded backoff.
@@ -414,13 +415,16 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           watermark: head?.watermark || null,
           published_at: head?.current.published_at || null,
           card_count: head?.current.manifest.card_count || 0,
+          build_revision: head?.current.manifest.build_revision || null,
           requested: Boolean(requested),
           job: job
             ? {
                 bootstrap: job.bootstrap,
+                migration: job.migration === true,
                 group: job.group,
                 groups: job.groups.length,
                 offset: job.offset,
+                seal_offset: job.seal_offset || 0,
                 started_at: job.started_at,
               }
             : null,
@@ -528,6 +532,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       try {
         return await this.exclusive(async () => {
           if (path === "/bootstrap") await this.publisher.bootstrap()
+          else if (path === "/migrate") await this.publisher.migrate()
           else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)
@@ -535,7 +540,11 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           } else return reply({ error: "Not found" }, 404)
           // Coalesce nearby votes for 10s; one person's vote never synchronously
           // pays to build the public catalog. Target 1-2min, not a strict SLA.
-          await this.arm(path === "/bootstrap" ? 1000 : 10000)
+          await this.arm(
+            path === "/bootstrap" || path === "/migrate"
+              ? CARD_PUBLICATION_ALARM_CADENCE_MS
+              : 10000,
+          )
           return reply({ accepted: true }, 202)
         })
       } catch (error) {
