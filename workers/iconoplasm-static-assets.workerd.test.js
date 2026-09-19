@@ -7,6 +7,7 @@ import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { preparePublicReadCutoverConfig } from "../scripts/prepare-iconoplasm-public-read-cutover.mjs"
+import { runAnonymousRouteReplay } from "../scripts/lib/iconoplasm-static-route-replay.mjs"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -144,5 +145,27 @@ test(
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
     }
+  },
+)
+
+test(
+  "100,000 anonymous journeys replay through the real built Static Assets route owner",
+  { timeout: 30_000 },
+  async () => {
+    const replay = await runAnonymousRouteReplay({ journeys: 100_000, articleLoadsPerJourney: 5 })
+    assert.equal(replay.journeys, 100_000)
+    assert.equal(replay.articleLoads, 500_000)
+    assert.equal(replay.routeOwner, "cloudflare_static_assets_workerd")
+    assert.equal(replay.statefulWorkerRouteEvents, 0)
+    assert.deepEqual(replay.statefulOperations, {
+      d1: 0,
+      durableObject: 0,
+      queue: 0,
+      kvWrite: 0,
+      session: 0,
+      internalService: 0,
+    })
+    assert.equal(replay.throwingBindingsArmed, true)
+    assert.equal(replay.verified, true)
   },
 )
