@@ -20,6 +20,7 @@ import { recordCompactDiscoveryBatch } from "./iconoplasm/discovery-compact-serv
 import {
   assertCompactDiscoveryActivated,
   claimCompactDiscoveryMigrationLease,
+  inspectCompactDiscoveryMigrationPage,
   migrateLegacyDiscoveryPage,
   readCompactDiscoveryActivation,
 } from "./iconoplasm/discovery-compact-migrate.js"
@@ -26009,7 +26010,9 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
 // The one production owner for the legacy cutover. Each invocation advances
 // at most eight legacy rows, persists its lexicographic cursor, and activates
 // request traffic only after reconciliation reaches the end.
-export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
+const ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE = 64
+
+async function migrateIconoplasmCompactDiscoveryPage(env) {
   if (!env?.ICONOPLASM_DB) return { ok: false, pending: true, code: "NO_DB" }
   const activation = await readCompactDiscoveryActivation(env.ICONOPLASM_DB)
   if (!activation) return { ok: false, pending: true, code: "MIGRATION_SCHEMA_MISSING" }
@@ -26018,12 +26021,15 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
     `${activation.cursor_user_id}\n${activation.cursor_gene_symbol}`,
   )
   const operationId = `discovery-migration:${cursorDigest}`
+  const prediction = await inspectCompactDiscoveryMigrationPage(env.ICONOPLASM_DB, {
+    rowLimit: 8,
+  })
   let admission
   try {
     admission = await reserveIconoplasmMutationWrites(env, {
       lane: "finalization_recovery",
       operationId,
-      units: 64,
+      units: prediction.write_units,
     })
   } catch (error) {
     return { ok: false, pending: true, code: error?.code || "MUTATION_ADMISSION_UNAVAILABLE" }
@@ -26048,16 +26054,64 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   })
   if (result?.ok !== true) return result
   await completeIconoplasmMutationReservation(env, operationId)
-  const rowsPerDay = 8 * 4 * 24
   return {
     ...result,
     pending: !result.complete,
+    predicted_write_units: prediction.write_units,
+    predicted_cold_users: prediction.cold_users,
     measured_legacy_rows: Number(result.measured_legacy_rows || 0),
     denominator_complete: Boolean(result.complete),
-    bounded_rows_per_day: rowsPerDay,
-    maximum_remaining_days: result.complete ? 0 : null,
-    minimum_remaining_rows: result.complete ? 0 : 1,
-    next_page_due_within_minutes: result.complete ? 0 : 15,
+  }
+}
+
+// One scheduled owner may consume several independently admitted pages. Each
+// page retains its cursor-derived identity and capacity receipt; a refusal or
+// held lease stops immediately. This removes the week-long outage caused by
+// treating one eight-row page as an entire cron invocation without weakening
+// the per-page mutation bound or the finalization/recovery lane.
+export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
+  let migratedRows = 0
+  let migratedUsers = 0
+  let pages = 0
+  let measuredLegacyRows = 0
+  let reservedWriteUnits = 0
+  let last = null
+  for (let page = 0; page < ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE; page++) {
+    const result = await migrateIconoplasmCompactDiscoveryPage(env)
+    last = result
+    if (result?.ok !== true) return { ...result, pages, migrated_rows: migratedRows }
+    pages += 1
+    reservedWriteUnits += Math.max(0, Number(result.predicted_write_units || 0) || 0)
+    migratedRows += Math.max(0, Number(result.migrated_rows || 0) || 0)
+    migratedUsers += Math.max(0, Number(result.migrated_users || 0) || 0)
+    measuredLegacyRows = Math.max(
+      measuredLegacyRows,
+      Math.max(0, Number(result.measured_legacy_rows || 0) || 0),
+    )
+    if (result.complete) break
+    if (
+      result.code === "DISCOVERY_MIGRATION_LEASE_HELD" ||
+      Math.max(0, Number(result.migrated_rows || 0) || 0) <= 0
+    )
+      break
+  }
+  const complete = Boolean(last?.complete)
+  return {
+    ...last,
+    ok: last?.ok === true,
+    complete,
+    pending: !complete,
+    pages,
+    migrated_rows: migratedRows,
+    migrated_users: migratedUsers,
+    measured_legacy_rows: measuredLegacyRows,
+    reserved_write_units: reservedWriteUnits,
+    denominator_complete: complete,
+    bounded_rows_per_wake: 8 * ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE,
+    bounded_rows_per_day: 8 * ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE * 4 * 24,
+    maximum_remaining_days: complete ? 0 : null,
+    minimum_remaining_rows: complete ? 0 : 1,
+    next_page_due_within_minutes: complete ? 0 : 15,
   }
 }
 

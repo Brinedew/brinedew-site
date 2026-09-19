@@ -14,6 +14,44 @@ import { createDiscoveryOrdinalDictionary } from "./discovery-compact-state.js"
 export const DISCOVERY_IMPORT_MAX_EVENTS_PER_GENE = 32
 export const DISCOVERY_IMPORT_BATCH_ENCOUNTERS = 256
 export const DISCOVERY_MIGRATION_ROW_PAGE_LIMIT = 8
+export const DISCOVERY_MIGRATION_BASE_WRITE_UNITS = 12
+export const DISCOVERY_MIGRATION_COLD_USER_WRITE_UNITS = 24
+
+export async function inspectCompactDiscoveryMigrationPage(db, { rowLimit = 8 } = {}) {
+  const activation = await readCompactDiscoveryActivation(db)
+  if (!activation) throw new Error("Compact discovery activation schema is missing")
+  const limit = Math.max(1, Math.min(8, Number.parseInt(String(rowLimit), 10) || 8))
+  const row = await db
+    .prepare(
+      `WITH page AS (
+         SELECT user_id
+         FROM icono_gene_discoveries
+         WHERE user_id > ? OR (user_id = ? AND gene_symbol > ?)
+         ORDER BY user_id, gene_symbol
+         LIMIT ?
+       )
+       SELECT COUNT(*) AS legacy_rows,
+              COUNT(DISTINCT page.user_id) AS page_users,
+              COUNT(DISTINCT CASE WHEN compact.user_id IS NULL THEN page.user_id END) AS cold_users
+       FROM page
+       LEFT JOIN icono_discovery_user_state_v2 compact ON compact.user_id = page.user_id`,
+    )
+    .bind(
+      activation.cursor_user_id,
+      activation.cursor_user_id,
+      activation.cursor_gene_symbol,
+      limit,
+    )
+    .first()
+  const coldUsers = Math.max(0, Number(row?.cold_users || 0) || 0)
+  return {
+    legacy_rows: Math.max(0, Number(row?.legacy_rows || 0) || 0),
+    page_users: Math.max(0, Number(row?.page_users || 0) || 0),
+    cold_users: coldUsers,
+    write_units:
+      DISCOVERY_MIGRATION_BASE_WRITE_UNITS + coldUsers * DISCOVERY_MIGRATION_COLD_USER_WRITE_UNITS,
+  }
+}
 
 export async function readCompactDiscoveryActivation(db) {
   const row = await db

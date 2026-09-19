@@ -21,6 +21,7 @@ import {
   loadDiscoveryDictionaryForNames,
   readDiscoveryDictionaryMeta,
 } from "./discovery-ordinal-store.js"
+import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
 const migrationRoot = new URL("../../migrations-iconoplasm/", import.meta.url)
 
@@ -74,7 +75,7 @@ function compactMigrationStatements() {
 test(
   "the committed migration installs the exact compact schema and no catalog-sized ordinal seed",
   { timeout: 60000 },
-  async () => {
+  async (t) => {
     await withD1(async (db) => {
       await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
       await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
@@ -165,7 +166,7 @@ test(
 test(
   "the admitted scheduled executor resumes its durable cursor and alone activates compact discovery",
   { timeout: 60000 },
-  async () => {
+  async (t) => {
     await withD1(async (db) => {
       await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
       await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
@@ -253,19 +254,23 @@ test(
           }),
         },
       }
-      const first = await migrateIconoplasmCompactDiscoveryForScheduled(env)
-      assert.equal(first.pending, true)
-      assert.equal(first.migrated_rows, 8)
-      assert.equal(first.measured_legacy_rows, 8)
-      assert.equal(first.denominator_complete, false)
-      assert.equal(first.bounded_rows_per_day, 768)
-      assert.equal(first.maximum_remaining_days, null)
-      const resumed = await migrateIconoplasmCompactDiscoveryForScheduled({ ...env })
-      assert.equal(resumed.complete, true)
-      assert.equal(resumed.migrated_rows, 1)
-      assert.equal(resumed.measured_legacy_rows, 9)
-      assert.equal(resumed.denominator_complete, true)
-      assert.equal(resumed.maximum_remaining_days, 0)
+      const firstMeter = createOperationCostD1Meter(db)
+      const first = await migrateIconoplasmCompactDiscoveryForScheduled({
+        ...env,
+        ICONOPLASM_DB: firstMeter.db,
+      })
+      const firstActual = firstMeter.finish()
+      assert.equal(first.complete, true)
+      assert.equal(first.pending, false)
+      assert.equal(first.pages, 2)
+      assert.equal(first.migrated_rows, 9)
+      assert.equal(first.measured_legacy_rows, 9)
+      assert.equal(first.denominator_complete, true)
+      assert.equal(first.bounded_rows_per_wake, 512)
+      assert.equal(first.bounded_rows_per_day, 49152)
+      assert.equal(first.maximum_remaining_days, 0)
+      assert.ok(firstActual.rows_written <= first.reserved_write_units, JSON.stringify(firstActual))
+      t.diagnostic(JSON.stringify({ firstActual, reserved: first.reserved_write_units }))
       assert.equal(
         authorityCalls.filter((call) => call.path === "/reserve-mutation-writes").length,
         2,
@@ -329,6 +334,61 @@ test(
         .prepare("SELECT payload_json FROM icono_discovery_shared_delivery_outbox_v2")
         .all()
       assert.equal(outbox.results.length, 1)
+    })
+  },
+)
+
+test(
+  "migration admission covers eight cold users with maximum retained encounter history",
+  { timeout: 60000 },
+  async (t) => {
+    await withD1(async (db) => {
+      for (const migration of [
+        "0007_add_gene_catalog.sql",
+        "0018_add_gene_catalog_aliases.sql",
+        "0023_add_gene_discoveries.sql",
+        "0041_shared_gene_discovery_rollup.sql",
+      ])
+        await applyStatements(db, legacyStatements(migration))
+      for (let index = 0; index < 8; index += 1) {
+        const symbol = `COLD${index}`
+        await db
+          .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)")
+          .bind(symbol, symbol)
+          .run()
+        await db
+          .prepare(
+            `INSERT INTO icono_gene_discoveries
+             (user_id,gene_symbol,encounter_count,first_source,last_source,first_trigger,last_trigger)
+             VALUES (?, ?, 32, 'extension_hover', 'extension_hover', 'hover_dwell', 'hover_dwell')`,
+          )
+          .bind(`reader-${index}`, symbol)
+          .run()
+      }
+      await applyStatements(db, compactMigrationStatements())
+      const reservations = []
+      const meter = createOperationCostD1Meter(db)
+      const result = await migrateIconoplasmCompactDiscoveryForScheduled({
+        ICONOPLASM_DB: meter.db,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              const body = await request.json()
+              if (new URL(request.url).pathname === "/reserve-mutation-writes")
+                reservations.push(body)
+              return Response.json({ ok: true, operation_id: body.operation_id })
+            },
+          }),
+        },
+      })
+      const actual = meter.finish()
+      assert.equal(result.complete, true)
+      assert.equal(result.migrated_rows, 8)
+      assert.equal(reservations.length, 1)
+      assert.equal(reservations[0].units, 204)
+      assert.ok(actual.rows_written <= reservations[0].units, JSON.stringify(actual))
+      t.diagnostic(JSON.stringify({ actual, reserved: reservations[0].units }))
     })
   },
 )
