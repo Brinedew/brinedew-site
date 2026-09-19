@@ -137,6 +137,7 @@ test("a deferred V2 handoff leaves the finalization row pending with its retry d
       notifyPublisher: async () => ({ accepted: false, nextAttemptAt: retryAt }),
     })
     assert.equal(result.finalized, 0)
+    assert.equal(result.handoff_accepted, false)
     assert.equal(result.publication_pending, true)
     assert.equal(result.publication_next_attempt_at, retryAt)
     const row = sqlite
@@ -162,8 +163,12 @@ test("a superseding enqueue cannot be cleared by an older accepted handoff", asy
         "INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase) VALUES('TP53','queued','completed_pending_finalize')",
       )
       .run()
-    const result = await drainCompletedFinalization(sqliteD1(sqlite), {
+    const db = sqliteD1(sqlite)
+    const savedRows = (await db.prepare(SCOPED_READY_FINALIZATION_SQL).bind('["TP53"]').all())
+      .results
+    const result = await drainCompletedFinalization(db, {
       symbols: ["TP53"],
+      rows: savedRows,
       now,
       notifyPublisher: async () => {
         sqlite
@@ -175,6 +180,8 @@ test("a superseding enqueue cannot be cleared by an older accepted handoff", asy
       },
     })
     assert.equal(result.finalized, 0)
+    assert.equal(result.handoff_accepted, true)
+    assert.equal(result.terminal_noop, true)
     const row = sqlite
       .prepare(
         "SELECT status,phase,job_version FROM icono_sync_finalization_jobs WHERE gene_symbol='TP53'",

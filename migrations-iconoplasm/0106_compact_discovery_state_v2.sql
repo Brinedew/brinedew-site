@@ -16,14 +16,18 @@ CREATE TABLE icono_discovery_compact_activation_v2 (
   status TEXT NOT NULL CHECK(status IN ('pending', 'complete')),
   cursor_user_id TEXT NOT NULL DEFAULT '',
   cursor_gene_symbol TEXT NOT NULL DEFAULT '',
+  lease_token TEXT NOT NULL DEFAULT '',
+  lease_until TEXT NOT NULL DEFAULT '',
+  total_legacy_rows INTEGER NOT NULL DEFAULT 0 CHECK(total_legacy_rows >= 0),
+  migrated_rows INTEGER NOT NULL DEFAULT 0 CHECK(migrated_rows >= 0),
   migrated_users INTEGER NOT NULL DEFAULT 0 CHECK(migrated_users >= 0),
   completed_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT INTO icono_discovery_compact_activation_v2 (
-  singleton, status, cursor_user_id, cursor_gene_symbol, migrated_users
-) VALUES (1, 'pending', '', '', 0);
+  singleton, status, cursor_user_id, cursor_gene_symbol, migrated_users, total_legacy_rows
+) VALUES (1, 'pending', '', '', 0, (SELECT COUNT(*) FROM icono_gene_discoveries));
 
 CREATE TABLE icono_discovery_cas_guard (
   ok INTEGER NOT NULL CONSTRAINT DISCOVERY_COMPACT_CAS_CONFLICT CHECK(ok = 1)

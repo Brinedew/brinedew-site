@@ -255,6 +255,10 @@ CREATE TABLE icono_discovery_compact_activation_v2 (
   status TEXT NOT NULL CHECK(status IN ('pending', 'complete')),
   cursor_user_id TEXT NOT NULL DEFAULT '',
   cursor_gene_symbol TEXT NOT NULL DEFAULT '',
+  lease_token TEXT NOT NULL DEFAULT '',
+  lease_until TEXT NOT NULL DEFAULT '',
+  total_legacy_rows INTEGER NOT NULL DEFAULT 0 CHECK(total_legacy_rows >= 0),
+  migrated_rows INTEGER NOT NULL DEFAULT 0 CHECK(migrated_rows >= 0),
   migrated_users INTEGER NOT NULL DEFAULT 0 CHECK(migrated_users >= 0),
   completed_at TEXT,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

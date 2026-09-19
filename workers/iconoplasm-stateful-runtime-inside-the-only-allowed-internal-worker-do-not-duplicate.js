@@ -19,6 +19,7 @@ import {
 import { recordCompactDiscoveryBatch } from "./iconoplasm/discovery-compact-service.js"
 import {
   assertCompactDiscoveryActivated,
+  claimCompactDiscoveryMigrationLease,
   migrateLegacyDiscoveryPage,
   readCompactDiscoveryActivation,
 } from "./iconoplasm/discovery-compact-migrate.js"
@@ -2234,6 +2235,7 @@ function isIconoplasmDailyBudgetError(error) {
       "COST_AUTHORITY_STORAGE_READ_QUOTA",
       "QUEUE_ACCOUNT_DAILY_LIMIT",
       "MUTATION_LANE_CAPACITY_EXHAUSTED",
+      "MUTATION_PROVIDER_HEADROOM_RESERVED",
     ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
@@ -18830,17 +18832,18 @@ export class IconoplasmVoteCoordinator {
     candidateImageId = null,
   ) {
     const existing = this.getExistingAssetSummary(assetSha256)
-    if (existing) {
-      return this.ensureAssetSummaryRow(assetSha256, {
-        visionId: visionId || existing.vision_id || "",
-        candidateImageId: optionalInt(candidateImageId ?? existing.candidate_image_id),
-      })
-    }
+    if (existing)
+      return {
+        ...existing,
+        vision_id: visionId || existing.vision_id || "",
+        candidate_image_id: optionalInt(candidateImageId ?? existing.candidate_image_id),
+      }
     const metadata = await this.lookupAssetMetadata(symbol, assetSha256)
-    return this.ensureAssetSummaryRow(assetSha256, {
-      visionId: visionId || metadata?.vision_id || "",
-      candidateImageId: optionalInt(candidateImageId ?? metadata?.candidate_image_id),
-    })
+    return {
+      asset_sha256: assetSha256,
+      vision_id: visionId || metadata?.vision_id || "",
+      candidate_image_id: optionalInt(candidateImageId ?? metadata?.candidate_image_id),
+    }
   }
 
   applyVoteMutation(options = {}) {
@@ -19767,6 +19770,16 @@ export class IconoplasmVoteCoordinator {
       if (!assetSha || !userId || requested == null) {
         return Response.json({ error: "Missing or invalid vote payload" }, { status: 400 })
       }
+      if (
+        requested !== 0 &&
+        !this.getExistingAssetSummary(assetSha) &&
+        this.exportAssetSummaries().length >= 8
+      ) {
+        return Response.json(
+          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
+          { status: 409 },
+        )
+      }
       const ensuredAsset = await this.ensureAssetSummaryFromMetadata(
         symbol,
         assetSha,
@@ -19834,6 +19847,19 @@ export class IconoplasmVoteCoordinator {
       const wasWarm = this.getMeta("bootstrapped") === "1"
       const symbol = await this.ensureBootstrapped(requestedSymbol)
       const items = Array.isArray(payload?.items) ? payload.items : []
+      const existingAssets = new Set(this.exportAssetSummaries().map((item) => item.asset_sha256))
+      const incomingAssets = new Set(
+        items
+          .filter((item) => normalizeVoteValue(item?.vote_value) !== 0)
+          .map((item) => normalizeSha256(item?.asset_sha256 || ""))
+          .filter((assetSha) => assetSha && !existingAssets.has(assetSha)),
+      )
+      if (existingAssets.size + incomingAssets.size > 8) {
+        return Response.json(
+          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
+          { status: 409 },
+        )
+      }
       const results = []
       let upserted = 0
       let deleted = 0
@@ -20631,15 +20657,18 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
   }
 
   async alarm() {
+    const now = Date.now()
     const result = this.mutationReservations.compactTerminal({
-      now: new Date().toISOString(),
+      now: new Date(now).toISOString(),
       limit: 1000,
     })
-    if (
-      (result.compacted >= 1000 || result.expired_tombstones >= 1000) &&
-      typeof this.state.storage.setAlarm === "function"
-    ) {
-      await this.state.storage.setAlarm(Date.now() + 60_000)
+    if (typeof this.state.storage.setAlarm === "function") {
+      const nextEligibility = this.mutationReservations.nextCompactionAt()
+      if (result.compacted >= 1000 || result.expired_tombstones >= 1000) {
+        await this.state.storage.setAlarm(now + 60_000)
+      } else if (nextEligibility !== null) {
+        await this.state.storage.setAlarm(Math.max(now + 1, nextEligibility))
+      }
     }
     return result
   }
@@ -25362,7 +25391,11 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
   }
 }
 
-async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbols = null } = {}) {
+async function finalizeCompletedSyncFinalizationJobsIfDrained(
+  env,
+  ctx,
+  { symbols = null, rows = null } = {},
+) {
   if (!env?.ICONOPLASM_DB) return { ok: false, finalized: 0, remaining: 0 }
   const scopedSymbols = normalizeSyncFinalizationJobSymbols(symbols, { maxItems: 5000 })
   if (!scopedSymbols.length) {
@@ -25372,6 +25405,7 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, { symbol
   }
   return drainCompletedFinalization(env.ICONOPLASM_DB, {
     symbols: scopedSymbols,
+    rows,
     notifyPublisher: async ({ jobs }) => {
       for (const job of jobs) {
         const symbol = job.gene_symbol
@@ -25918,9 +25952,32 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   if (admission?.ok !== true) {
     return { ok: false, pending: true, code: admission?.code || "MUTATION_ADMISSION_REFUSED" }
   }
-  const result = await migrateLegacyDiscoveryPage({ db: env.ICONOPLASM_DB, rowLimit: 8 })
+  const leaseToken = crypto.randomUUID()
+  const claimed = await claimCompactDiscoveryMigrationLease(env.ICONOPLASM_DB, {
+    token: leaseToken,
+  })
+  if (!claimed) {
+    await completeIconoplasmMutationReservation(env, operationId)
+    return { ok: true, pending: true, code: "DISCOVERY_MIGRATION_LEASE_HELD" }
+  }
+  const result = await migrateLegacyDiscoveryPage({
+    db: env.ICONOPLASM_DB,
+    rowLimit: 8,
+    leaseToken,
+  })
   await completeIconoplasmMutationReservation(env, operationId)
-  return { ...result, pending: !result.complete }
+  const rowsPerDay = 8 * 4 * 24
+  const remainingRows = Math.max(
+    0,
+    activation.total_legacy_rows - activation.migrated_rows - Number(result.migrated_rows || 0),
+  )
+  return {
+    ...result,
+    pending: !result.complete,
+    measured_legacy_rows: activation.total_legacy_rows,
+    bounded_rows_per_day: rowsPerDay,
+    maximum_remaining_days: Math.ceil(remainingRows / rowsPerDay),
+  }
 }
 
 export async function processPendingSyncFinalizationJobs(
@@ -26133,8 +26190,9 @@ export async function processPendingSyncFinalizationJobs(
     }
     finalizeResult = await finalizeCompletedSyncFinalizationJobsIfDrained(env, ctx, {
       symbols: scopedSymbols,
+      rows: readyFinalizations,
     })
-    if (completionOperationId) {
+    if (completionOperationId && finalizeResult?.handoff_accepted === true) {
       await completeIconoplasmMutationReservation(env, completionOperationId)
     }
   }
