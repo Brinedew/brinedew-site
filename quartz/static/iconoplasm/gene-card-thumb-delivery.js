@@ -1,4 +1,4 @@
-import { portraitDelivery } from "./portrait-delivery.js?v=0d14e5a87d1914bf"
+import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 
 const GENE_CARD_THUMBNAIL_SELECTOR = "img.gene-card-thumb[data-iconoplasm-canonical-image-src]"
 

@@ -25,6 +25,7 @@ export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   genes: 65536,
   portraits: 8192,
   indexes: 65536,
+  catalogindexes: 128 * 1024,
   catalogs: 512 * 1024,
   manifests: 65536,
   shards: 4 * 1024 * 1024,

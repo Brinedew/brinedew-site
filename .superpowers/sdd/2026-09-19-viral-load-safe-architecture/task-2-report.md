@@ -11,12 +11,11 @@ display, portraits, and blots resolve from the existing Sysop V2 publication and
 content-addressed Bunny objects. Explicit account-scoped search, mutations, and
 administrator routes remain in the single stateful Worker.
 
-The current-head lookup keeps Bunny primary and a bounded canonical hedge. A
-healthy Bunny response cancels the hedge, so it cannot silently create one
-Worker/KV projection read per reader. If both sources fail, the reader retains
-the previously accepted coherent head. Immutable-object and media failure never
-falls through to D1, a Durable Object, Queue, session, browser binding, or an
-internal service; media uses the bundled static placeholder.
+The current-head lookup is Bunny-only in the browser. It never starts a
+canonical-origin hedge, and it retains the previously accepted coherent head
+when Bunny fails. Immutable-object and media failure never falls through to D1,
+a Durable Object, Queue, session, browser binding, or an internal service;
+media uses the bundled static placeholder.
 
 ## RED evidence
 
@@ -82,14 +81,9 @@ Both tests were red before implementation and green afterward.
 
 ## Verification limitations
 
-- `pnpm run check` reaches TypeScript before failing on the worktree's incomplete
-  generated `.quartz/plugins` tree: 28 existing plugin modules are absent, all
-  reported as TS2307 imports from `.quartz/plugins/index.ts`. None is a Task 2
-  file.
-- `pnpm run build` completed the shared-source sync and entered Quartz, but the
-  repository build exceeded the 240-second hard deadline without producing an
-  error. Because Quartz did not finish, the standalone edge-asset preparation
-  correctly failed on the absent generated `public/apps/iconoplasm/index.html`.
+- The initial worktree had an incomplete ignored `.quartz/plugins` tree. The
+  production build boundary became runnable after restoring the missing local
+  plugin build; the final build result is recorded in Review remediation.
 - This task does not claim deployment, CDN propagation, or authenticated
   Playwright production acceptance. Those remain separate release gates.
 
@@ -99,3 +93,77 @@ The commit includes the immutable browser reader, publisher catalog projection,
 static topology/asset generation, throwing-bindings tests, affected integration
 test updates, and the IPD fence/runbook changes listed above. It does not change
 `D:\Coding\Iconoplasm`.
+
+## Review remediation
+
+The first Task 2 review rejected the implementation. The review was right: the
+browser still had three ways to recreate stateful public demand, the head
+fallback could fan every slow reader into the canonical Worker, and the
+original topology test modeled the desired router instead of executing it.
+
+Focused RED evidence captured all eight findings before the fixes:
+
+1. Importing `portrait-delivery.js` performed one anonymous
+   `/api/public/v1/metadata` request.
+2. Diagram search did not expose an immutable-reader seam and still called the
+   public Worker API.
+3. A slow or failed Bunny head started canonical-origin requests from the
+   browser.
+4. A valid new head with a missing immutable child replaced the stored
+   last-good head.
+5. Search and gallery fetched every rich catalog page instead of compact
+   lookup data plus selected result pages.
+6. The original throwing-bindings request helper did not execute Cloudflare's
+   asset router.
+7. The then-current build-revision-2 manifest had no compact catalog index, so
+   direct routing activation would have broken search and gallery.
+8. Blot delivery accepted a Bunny URL without binding it to the exact published
+   object key and fingerprint.
+
+The corrected implementation removes the anonymous metadata startup refresh,
+routes diagram search through the same immutable reader, and makes the browser
+head path Bunny-only. The reader writes a new head to local storage only after
+the operation's manifest and required child objects validate; otherwise it
+serves the coherent prior publication or a static placeholder. It never starts
+a canonical-origin hedge.
+
+The publisher now writes one schema-2 compact catalog index per publication
+shard under a dedicated content-addressed `catalogindexes` namespace capped at
+128 KiB. Search and gallery load at most 32 compact indexes and then only the
+selected rich pages. The executable browser ceilings are 46 requests and
+10,553,344 bytes for a 12-result search, and 58 requests and 16,844,800 bytes
+for a 24-item gallery page. Those are deliberately pessimistic byte ceilings;
+actual content-addressed objects are normally much smaller. A manifest with
+more than 32 indexes fails closed instead of silently expanding per-browser
+fanout.
+
+Activation is now two-phase. The preparation deployment uses
+`run_worker_first = true`, so uploading the new bundle cannot activate it for
+anonymous readers. It starts the explicit build-revision-3 publication
+migration while preserving the old head. The activation gate then reads the
+Bunny head, hashes its manifest, and hashes every advertised compact index. It
+retries for at most four minutes to allow CDN propagation. Only a successful
+gate permits the canonical SPA/static routing deployment. Current
+build-revision-2 manifests fail this gate without falling back to stateful
+reconstruction.
+
+The new Miniflare/Workerd test prepares the real Iconoplasm static bundle from
+the actual modules and uses the production `assets` configuration. Homepage,
+search, gallery, dossier, portrait, blot, sitemap, robots, `llms.txt`, and an
+immutable-object path all bypass a Worker that returns status 599; `/api/*`
+still reaches that Worker. Separate executable module tests import the real
+portrait and diagram modules so unconditional startup calls fail directly.
+
+The review-fix verification boundary is **113 tests passed, 0 failed** in
+16.60 seconds. It includes the real Workerd route matrix, module startup,
+reader coherence and failure behavior, passive vote display, exact blot
+identity, compact-index publication and migration, route contracts,
+architecture fences, published-object storage, and affected gene request
+tests. The final `pnpm run build` completed 214 source files and emitted 3,174
+files in 12 seconds, followed by a 2,606-file, 52,369,661-byte Iconoplasm edge
+bundle. The first
+build attempt exposed an incomplete ignored community-plugin installation; I
+rebuilt that worktree-local plugin and reran the production build successfully.
+
+Deployment, CDN propagation, and live browser acceptance remain separate gates;
+this review-fix commit does not claim them.

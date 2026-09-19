@@ -528,6 +528,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       try {
         return await this.exclusive(async () => {
           if (path === "/bootstrap") await this.publisher.bootstrap()
+          else if (path === "/migrate") await this.publisher.migrate()
           else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)
