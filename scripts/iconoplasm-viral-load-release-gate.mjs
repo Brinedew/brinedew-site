@@ -17,7 +17,7 @@ import { proveAnonymousRouteTopology } from "./lib/iconoplasm-static-topology-pr
 // ARCHITECTURE FENCE [IPD-004]: release arithmetic consumes the named mutation
 // lanes and measured receipts; it never invents a second admission authority.
 
-export function buildHostileTp53Profile({ day = "staging-day" } = {}) {
+export function buildHostileTp53Profile({ day = "staging-day", observation } = {}) {
   const commandsPerSecond = 100
   const durationSeconds = 10 * 60
   const commandCount = commandsPerSecond * durationSeconds
@@ -29,8 +29,8 @@ export function buildHostileTp53Profile({ day = "staging-day" } = {}) {
   const acceptedCommands = Math.floor(MUTATION_LANES.user_action / unitsPerCommand)
   return {
     profile: "hostile_tp53_authenticated_votes",
-    verdict: "blocked_pending_hosted_execution",
-    hostedExecution: "not_run_locally",
+    verdict: observation ? "verified" : "blocked_pending_hosted_execution",
+    hostedExecution: observation ? "verified" : "not_run_locally",
     commandsPerSecond,
     durationSeconds,
     commandCount,
@@ -47,13 +47,14 @@ export function buildHostileTp53Profile({ day = "staging-day" } = {}) {
       laneLimit: MUTATION_LANES.user_action,
       modeledAcceptedCommands: acceptedCommands,
       modeledRefusedCommands: commandCount - acceptedCommands,
-      observedAcceptedCommands: null,
-      observedLostAcceptedCommands: null,
+      observedAcceptedCommands: observation?.commandReceipts.acceptedCommands ?? null,
+      observedCapacityRefusedCommands: observation?.commandReceipts.capacityRefusedCommands ?? null,
+      observedLostAcceptedCommands: observation?.commandReceipts.lostAcceptedCommands ?? null,
     },
     concurrentStaticChecks: {
       path: "/gene/TP53",
-      verdict: "pending_hosted_execution",
-      physicalChecks: 0,
+      verdict: observation ? "verified" : "pending_hosted_execution",
+      physicalChecks: observation?.hostedLoad.concurrentStaticChecks ?? 0,
     },
     driver: {
       script: "scripts/iconoplasm-viral-load-task5-driver.mjs",
@@ -63,7 +64,8 @@ export function buildHostileTp53Profile({ day = "staging-day" } = {}) {
   }
 }
 
-export function evaluateFailureProfiles() {
+export function evaluateFailureProfiles(observations) {
+  const observedByName = new Map((observations || []).map((profile) => [profile.name, profile]))
   return [
     "stale_pointer",
     "bunny_outage",
@@ -72,14 +74,19 @@ export function evaluateFailureProfiles() {
     "d1_exhaustion",
     "queue_exhaustion",
     "delayed_projection",
-  ].map((name) => ({
-    name,
-    verdict: "pending_fault_injection",
-    observation: null,
-    anonymousStatefulRouteEvents: null,
-    anonymousStatefulOperations: null,
-    lostAcceptedCommands: null,
-  }))
+  ].map((name) => {
+    const observation = observedByName.get(name)
+    return observation
+      ? { ...observation, observation: "canonical_task5_evidence" }
+      : {
+          name,
+          verdict: "pending_fault_injection",
+          observation: null,
+          anonymousStatefulRouteEvents: null,
+          anonymousStatefulOperations: null,
+          lostAcceptedCommands: null,
+        }
+  })
 }
 
 export function jsonErrorEnvelope(error) {
@@ -144,8 +151,13 @@ export async function runViralLoadReleaseGate({
       ]
     }),
   )
-  const hostileProfile = buildHostileTp53Profile({ day: "staging-day" })
-  const failureProfiles = evaluateFailureProfiles()
+  const hostileProfile = buildHostileTp53Profile({
+    day: task5.verified ? task5.evidence.hostedLoad.day : "staging-day",
+    observation: task5.verified ? task5.evidence : undefined,
+  })
+  const failureProfiles = evaluateFailureProfiles(
+    task5.verified ? task5.evidence.failureProfiles : undefined,
+  )
   const overallPass = topologyProof.verified && externalEvidenceVerified
   const report = {
     schemaVersion: 2,
