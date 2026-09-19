@@ -312,6 +312,10 @@ test("the browser resolves gene, search, and gallery from one immutable publicat
 
   const gene = await reader.gene("TP53")
   assert.equal(gene.symbol, fixture.gene.symbol)
+  assert.deepEqual(
+    (await reader.genes(["TP53", "TP53", "not valid!"])).map((record) => record.symbol),
+    ["TP53"],
+  )
   assert.equal(
     gene.portrait.medium_url,
     `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
