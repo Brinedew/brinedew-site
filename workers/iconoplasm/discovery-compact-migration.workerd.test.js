@@ -201,16 +201,38 @@ test(
 
       const refused = await migrateIconoplasmCompactDiscoveryForScheduled({ ICONOPLASM_DB: db })
       assert.equal(refused.pending, true)
-      assert.equal(
-        (await db.prepare("SELECT status FROM icono_discovery_compact_activation_v2").first())
-          .status,
-        "pending",
-      )
-      await db
+      const activationAfterMissingAuthority = await db
         .prepare(
-          "UPDATE icono_discovery_compact_activation_v2 SET lease_token='', lease_until='' WHERE singleton=1",
+          "SELECT status, lease_token, lease_until FROM icono_discovery_compact_activation_v2",
         )
-        .run()
+        .first()
+      assert.equal(activationAfterMissingAuthority.status, "pending")
+      assert.equal(activationAfterMissingAuthority.lease_token, "")
+      assert.equal(activationAfterMissingAuthority.lease_until, "")
+
+      const refusedAuthorityCalls = []
+      const capacityRefused = await migrateIconoplasmCompactDiscoveryForScheduled({
+        ICONOPLASM_DB: db,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+          idFromName: () => "global",
+          get: () => ({
+            async fetch(request) {
+              refusedAuthorityCalls.push(new URL(request.url).pathname)
+              return Response.json(
+                { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+                { status: 429 },
+              )
+            },
+          }),
+        },
+      })
+      assert.equal(capacityRefused.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+      assert.deepEqual(refusedAuthorityCalls, ["/reserve-mutation-writes"])
+      const activationAfterRefusedAuthority = await db
+        .prepare("SELECT lease_token, lease_until FROM icono_discovery_compact_activation_v2")
+        .first()
+      assert.equal(activationAfterRefusedAuthority.lease_token, "")
+      assert.equal(activationAfterRefusedAuthority.lease_until, "")
 
       const authorityCalls = []
       const env = {
@@ -303,7 +325,7 @@ test(
 )
 
 test(
-  "overlapping scheduled migration loser never touches reservation and winner failure stays uncertain",
+  "overlapping scheduled migration loser never completes the shared reservation and winner failure stays uncertain",
   { timeout: 60000 },
   async () => {
     await withD1(async (db) => {
@@ -323,13 +345,13 @@ test(
         .run()
       await applyStatements(db, compactMigrationStatements())
 
-      let releaseReservation
-      let reservationStarted
-      const reservationStartedPromise = new Promise((resolve) => {
-        reservationStarted = resolve
+      let releaseMigration
+      let migrationStarted
+      const migrationStartedPromise = new Promise((resolve) => {
+        migrationStarted = resolve
       })
-      const reservationGate = new Promise((resolve) => {
-        releaseReservation = resolve
+      const migrationGate = new Promise((resolve) => {
+        releaseMigration = resolve
       })
       const calls = []
       const failingDb = {
@@ -341,6 +363,8 @@ test(
                 return this
               },
               async all() {
+                migrationStarted()
+                await migrationGate
                 throw new Error("injected migration failure after admission")
               },
             }
@@ -356,10 +380,6 @@ test(
             async fetch(request) {
               const path = new URL(request.url).pathname
               calls.push(path)
-              if (path === "/reserve-mutation-writes") {
-                reservationStarted()
-                await reservationGate
-              }
               return Response.json({ ok: true })
             },
           }),
@@ -367,13 +387,13 @@ test(
       }
 
       const winner = migrateIconoplasmCompactDiscoveryForScheduled(env)
-      await reservationStartedPromise
+      await migrationStartedPromise
       const loser = await migrateIconoplasmCompactDiscoveryForScheduled(env)
       assert.equal(loser.code, "DISCOVERY_MIGRATION_LEASE_HELD")
-      assert.deepEqual(calls, ["/reserve-mutation-writes"])
-      releaseReservation()
+      assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
+      releaseMigration()
       await assert.rejects(winner, /injected migration failure after admission/)
-      assert.deepEqual(calls, ["/reserve-mutation-writes"])
+      assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
     })
   },
 )
