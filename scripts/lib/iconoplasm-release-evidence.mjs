@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { assessHostedSchedule } from "./iconoplasm-viral-load-task5-driver.mjs"
 
 export const FULL_RELEASE_STEPS = Object.freeze([
   "Deploy the only allowed internal stateful worker (production)",
@@ -200,25 +201,76 @@ export async function validateTask5ViralLoadEvidence(
   const entryFor = (kind) => manifest.find((entry) => entry.kind === kind)
   const hostedDriver = parsedRawArtifacts[entryFor("hosted_driver").name]
   const providerQuery = parsedRawArtifacts[entryFor("provider_query").name]
-  const supportingArtifactsValid = manifest
+  const supporting = manifest
     .filter((entry) => !["hosted_driver", "provider_query"].includes(entry.kind))
-    .every((entry) => {
-      const artifact = parsedRawArtifacts[entry.name]
-      return (
-        artifact?.verified === true &&
-        artifact?.commitSha === expectedCommit &&
-        artifact?.environment === "staging"
-      )
-    })
+    .map((entry) => ({ ...entry, artifact: parsedRawArtifacts[entry.name] }))
+  const commonValid = ({ artifact }) =>
+    artifact?.commitSha === expectedCommit &&
+    artifact?.environment === "staging" &&
+    Number.isFinite(Date.parse(artifact.startedAt)) &&
+    Date.parse(artifact.startedAt) < Date.parse(artifact.endedAt)
+  const browsersValid = supporting
+    .filter(({ kind }) => kind === "authenticated_browser")
+    .every(
+      ({ artifact }) =>
+        artifact.kind === "authenticated_browser_receipt" && artifact.successfulRequests > 0,
+    )
+  const regions = supporting.filter(({ kind }) => kind === "region")
+  const regionsValid =
+    new Set(regions.map(({ artifact }) => artifact.region)).size === 3 &&
+    regions.every(
+      ({ artifact }) =>
+        artifact.kind === "regional_read_receipt" && artifact.successfulRequests > 0,
+    )
+  const bunnyValid = supporting
+    .filter(({ kind }) => kind === "bunny_delivery")
+    .every(
+      ({ artifact }) => artifact.kind === "bunny_delivery_receipt" && artifact.deliveredBytes > 0,
+    )
+  const faultsValid = supporting
+    .filter(({ kind }) => kind === "fault_injection")
+    .every(
+      ({ artifact }) =>
+        artifact.kind === "fault_injection_receipt" &&
+        artifact.injectedRequests > 0 &&
+        artifact.anonymousStatefulOperations === 0 &&
+        artifact.lostAcceptedCommands === 0,
+    )
+  const recomputedSchedule = assessHostedSchedule(
+    hostedDriver?.schedule?.windows || [],
+    hostedDriver?.schedule?.elapsedMs,
+  )
+  const operationReceiptValid = [
+    "workerRequests",
+    "d1RowsRead",
+    "d1RowsWritten",
+    "durableObjectRequests",
+    "durableObjectRowsRead",
+    "durableObjectRowsWritten",
+    "queueOperations",
+    "externalRequests",
+    "transferBytes",
+  ].every(
+    (name) =>
+      Number.isSafeInteger(hostedDriver?.actualOperations?.[name]) &&
+      hostedDriver.actualOperations[name] >= 0,
+  )
   if (
     hostedDriver?.kind !== "iconoplasm_viral_load_task5_driver_receipt" ||
     hostedDriver?.certificationReady !== true ||
-    hostedDriver?.schedule?.verified !== true ||
+    !recomputedSchedule.verified ||
     hostedDriver?.physicalStaticRequests < 500_000 ||
     hostedDriver?.commandsAttempted !== 60_000 ||
+    !operationReceiptValid ||
+    Object.values(hostedDriver?.refusalByResource || {}).reduce((sum, count) => sum + count, 0) <
+      hostedDriver?.commandOutcomes?.capacityRefused ||
     providerQuery?.kind !== "cloudflare_provider_meter_delta" ||
     JSON.stringify(providerQuery) !== JSON.stringify(evidence.provider) ||
-    !supportingArtifactsValid
+    !supporting.every(commonValid) ||
+    !browsersValid ||
+    !regionsValid ||
+    !bunnyValid ||
+    !faultsValid
   ) {
     return { verdict: "blocked_invalid_raw_artifacts", verified: false }
   }
@@ -330,17 +382,16 @@ export function reconcileProviderAttribution(
   for (const [meter, observation] of Object.entries(evidence.meters)) {
     const before = Number(observation?.before)
     const after = Number(observation?.after)
-    const explained = Number(observation?.explained)
     const expected = Number(expectedOperations[meter])
+    const observed = after - before
+    const explained = Math.min(observed, expected)
     if (
       !Number.isFinite(before) ||
       !Number.isFinite(after) ||
-      !Number.isFinite(explained) ||
+      Object.hasOwn(observation || {}, "explained") ||
       Object.hasOwn(observation || {}, "expected") ||
       before < 0 ||
       after < before ||
-      explained < 0 ||
-      explained > after - before ||
       !Number.isFinite(expected) ||
       expected < 0 ||
       (expected > 0 && after - before < expected * PROVIDER_ATTRIBUTION_THRESHOLD)
@@ -352,11 +403,11 @@ export function reconcileProviderAttribution(
         invalidMeter: meter,
       }
     }
-    observedNonStaticOperations += after - before
+    observedNonStaticOperations += observed
     explainedNonStaticOperations += explained
-    const fraction = after - before === 0 ? 1 : explained / (after - before)
+    const fraction = observed === 0 ? 1 : explained / observed
     perMeter[meter] = {
-      observed: after - before,
+      observed,
       explained,
       expected,
       attributionFraction: fraction,

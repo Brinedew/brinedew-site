@@ -50,6 +50,8 @@ export async function runHostedTask5Load({
   commandsPerSecond = 100,
   anonymousArticleLoads = 500_000,
   concurrency = 200,
+  commitSha,
+  environment,
 }) {
   if (!/^https:\/\//.test(baseUrl)) throw new Error("baseUrl must be an HTTPS hosted target")
   if (!authorization) throw new Error("ICONOPLASM_TASK5_AUTHORIZATION is required")
@@ -62,6 +64,18 @@ export async function runHostedTask5Load({
   const receiptDigest = createHash("sha256")
   const scheduleDigest = createHash("sha256")
   const counts = { acceptedDurable: 0, capacityRefused: 0, invalidCommandReceipts: 0 }
+  const actualOperations = {
+    workerRequests: 0,
+    d1RowsRead: 0,
+    d1RowsWritten: 0,
+    durableObjectRequests: 0,
+    durableObjectRowsRead: 0,
+    durableObjectRowsWritten: 0,
+    queueOperations: 0,
+    externalRequests: 0,
+    transferBytes: 0,
+  }
+  const refusalByResource = {}
   const commandLatenciesMs = []
   const windows = []
   let staticFailures = 0
@@ -95,6 +109,7 @@ export async function runHostedTask5Load({
     await Promise.all([
       pooled(commands, concurrency, async (command) => {
         window.started++
+        actualOperations.workerRequests++
         const commandStarted = Date.now()
         const response = await fetchImpl(`${baseUrl}/api/iconoplasm/votes/set`, {
           method: "POST",
@@ -108,11 +123,29 @@ export async function runHostedTask5Load({
         const body = await response.json().catch(() => null)
         transferBytes += Buffer.byteLength(JSON.stringify(body || null))
         commandLatenciesMs.push(Date.now() - commandStarted)
-        const classification = classifyHostedResponse(command.id, { status: response.status, body })
+        let classification = classifyHostedResponse(command.id, { status: response.status, body })
+        const operations = body?.operations
+        if (
+          ["accepted_durable", "bounded_capacity_refusal"].includes(classification.verdict) &&
+          (!operations ||
+            Object.keys(actualOperations)
+              .filter(
+                (name) => !["workerRequests", "externalRequests", "transferBytes"].includes(name),
+              )
+              .some((name) => !Number.isSafeInteger(operations[name]) || operations[name] < 0))
+        ) {
+          classification = { ...classification, verdict: "invalid_missing_operation_receipt" }
+        }
+        if (!classification.verdict.startsWith("invalid_"))
+          for (const name of Object.keys(operations))
+            if (Object.hasOwn(actualOperations, name)) actualOperations[name] += operations[name]
         receiptDigest.update(`${command.id}\t${classification.verdict}\t${response.status}\n`)
         if (classification.verdict === "accepted_durable") counts.acceptedDurable++
-        else if (classification.verdict === "bounded_capacity_refusal") counts.capacityRefused++
-        else counts.invalidCommandReceipts++
+        else if (classification.verdict === "bounded_capacity_refusal") {
+          counts.capacityRefused++
+          for (const resource of body.refused_resources || [])
+            refusalByResource[resource] = (refusalByResource[resource] || 0) + 1
+        } else counts.invalidCommandReceipts++
       }),
       pooled(staticIndexes, concurrency, async (index) => {
         const route = STATIC_PATHS[index % STATIC_PATHS.length]
@@ -120,6 +153,7 @@ export async function runHostedTask5Load({
           headers: { "x-iconoplasm-task5-static-request": String(index) },
         })
         physicalStaticRequests++
+        actualOperations.externalRequests++
         transferBytes += (await response.arrayBuffer()).byteLength
         if (!response.ok) staticFailures++
       }),
@@ -130,6 +164,7 @@ export async function runHostedTask5Load({
   }
 
   const elapsedMs = Date.now() - runStartedMs
+  actualOperations.transferBytes = transferBytes
   const schedule = assessHostedSchedule(windows, elapsedMs)
   const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)
   const percentile = (fraction) =>
@@ -140,6 +175,8 @@ export async function runHostedTask5Load({
   return {
     schemaVersion: 1,
     kind: "iconoplasm_viral_load_task5_driver_receipt",
+    commitSha,
+    environment,
     target: { baseUrl, day },
     startedAt,
     endedAt: new Date().toISOString(),
@@ -149,6 +186,8 @@ export async function runHostedTask5Load({
     commandsAttempted: expectedCommands,
     commandIdentity: summarizeHostedCommandIdentity(day),
     commandOutcomes: counts,
+    actualOperations,
+    refusalByResource,
     schedule: {
       ...schedule,
       windowCount: windows.length,
@@ -164,6 +203,8 @@ export async function runHostedTask5Load({
       staticFailures === 0 &&
       counts.invalidCommandReceipts === 0 &&
       counts.acceptedDurable + counts.capacityRefused === expectedCommands &&
+      Object.values(refusalByResource).reduce((sum, count) => sum + count, 0) >=
+        counts.capacityRefused &&
       schedule.verified,
   }
 }
@@ -177,6 +218,8 @@ async function main() {
     authorization: process.env.ICONOPLASM_TASK5_AUTHORIZATION,
     day: option("--day"),
     assetSha256: option("--asset-sha256"),
+    commitSha: option("--commit"),
+    environment: option("--environment"),
   })
   await mkdir(path.dirname(output), { recursive: true })
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`, "utf8")

@@ -45,10 +45,7 @@ function providerEvidence(meterOverrides = {}) {
     identity: { accountIdHash: "a".repeat(64), environment: "production", runId: "run-1" },
     observedAt: { before: "2026-09-19T00:00:00Z", after: "2026-09-19T00:10:00Z" },
     meters: Object.fromEntries(
-      providerMeterNames.map((name) => [
-        name,
-        meterOverrides[name] || { before: 0, after: 0, explained: 0 },
-      ]),
+      providerMeterNames.map((name) => [name, meterOverrides[name] || { before: 0, after: 0 }]),
     ),
   }
 }
@@ -79,21 +76,18 @@ function task5Bundle() {
     kvWrites: 0,
     kvLists: 0,
     d1RowsRead: 86_000,
-    d1RowsWritten: 24_800,
+    d1RowsWritten: 64_800,
     durableObjectRequests: 22_000,
     durableObjectRowsRead: 88_000,
     durableObjectRowsWritten: 88_000,
-    queueOperations: 600,
+    queueOperations: 603,
     externalRequests: 500_000,
     transferBytes: 1_000_000,
   }
   const provider = {
     ...providerEvidence(
       Object.fromEntries(
-        Object.entries(expected).map(([name, value]) => [
-          name,
-          { before: 0, after: value, explained: value },
-        ]),
+        Object.entries(expected).map(([name, value]) => [name, { before: 0, after: value }]),
       ),
     ),
     identity: {
@@ -106,10 +100,37 @@ function task5Bundle() {
     "hosted-driver.json": JSON.stringify({
       kind: "iconoplasm_viral_load_task5_driver_receipt",
       certificationReady: true,
-      schedule: { verified: true },
+      schedule: {
+        elapsedMs: 600_000,
+        windows: Array.from({ length: 600 }, (_, second) => ({
+          second,
+          scheduled: 100,
+          started: 100,
+          startedAtOffsetMs: second * 1_000,
+        })),
+      },
       physicalStaticRequests: 500_000,
       commandsAttempted: 60_000,
       transferBytes: 1_000_000,
+      actualOperations: {
+        workerRequests: 60_000,
+        d1RowsRead: 0,
+        d1RowsWritten: 40_000,
+        durableObjectRequests: 20_000,
+        durableObjectRowsRead: 80_000,
+        durableObjectRowsWritten: 80_000,
+        queueOperations: 3,
+        externalRequests: 500_000,
+        transferBytes: 1_000_000,
+      },
+      refusalByResource: {
+        workerRequests: 50_000,
+        d1RowsRead: 50_000,
+        durableObjectRequests: 50_000,
+        durableObjectRowsWritten: 50_000,
+        user_action: 50_000,
+        publication: 50_000,
+      },
       commandOutcomes: {
         acceptedDurable: 10_000,
         capacityRefused: 50_000,
@@ -120,9 +141,19 @@ function task5Bundle() {
   }
   for (const name of ["browser", "region-apac", "region-eu", "region-us", "bunny"])
     rawArtifacts[`${name}.json`] = JSON.stringify({
-      verified: true,
+      kind:
+        name === "browser"
+          ? "authenticated_browser_receipt"
+          : name.startsWith("region-")
+            ? "regional_read_receipt"
+            : "bunny_delivery_receipt",
       commitSha: "c".repeat(40),
       environment: "staging",
+      startedAt: "2026-09-19T00:00:00Z",
+      endedAt: "2026-09-19T00:01:00Z",
+      successfulRequests: 1,
+      region: name.startsWith("region-") ? name.slice(7) : undefined,
+      deliveredBytes: name === "bunny" ? 1_000 : undefined,
     })
   for (const name of [
     "stale-pointer",
@@ -134,9 +165,14 @@ function task5Bundle() {
     "delayed-projection",
   ])
     rawArtifacts[`fault-${name}.json`] = JSON.stringify({
-      verified: true,
+      kind: "fault_injection_receipt",
       commitSha: "c".repeat(40),
       environment: "staging",
+      startedAt: "2026-09-19T00:00:00Z",
+      endedAt: "2026-09-19T00:01:00Z",
+      injectedRequests: 1,
+      anonymousStatefulOperations: 0,
+      lostAcceptedCommands: 0,
     })
   const kindFor = (name) =>
     name === "hosted-driver.json"
@@ -287,12 +323,15 @@ test("hostile schedule rejects one missed 100-command second and excessive elaps
     second,
     scheduled: 100,
     started: 100,
+    startedAtOffsetMs: second * 1_000,
   }))
   assert.equal(assessHostedSchedule(complete, 600_000).verified, true)
   complete[311].started = 99
   assert.equal(assessHostedSchedule(complete, 600_000).verified, false)
   complete[311].started = 100
   assert.equal(assessHostedSchedule(complete, 700_000).verified, false)
+  delete complete[311].startedAtOffsetMs
+  assert.equal(assessHostedSchedule(complete, 600_000).verified, false)
 })
 
 test("self-hashed Task 5 evidence is rejected without a trusted workflow verifier", async () => {
@@ -332,8 +371,8 @@ test("provider attribution blocks missing evidence and reconciles provider obser
   })
   const result = reconcileProviderAttribution(
     providerEvidence({
-      d1RowsWritten: { before: 100, after: 200, explained: 96 },
-      queueOperations: { before: 20, after: 30, explained: 10 },
+      d1RowsWritten: { before: 100, after: 200 },
+      queueOperations: { before: 20, after: 30 },
     }),
     {
       now: Date.parse("2026-09-19T00:11:00Z"),
@@ -350,7 +389,10 @@ test("provider attribution blocks missing evidence and reconciles provider obser
   assert.equal(result.verdict, "pass")
   assert.equal(result.verified, true)
   const belowThreshold = reconcileProviderAttribution(
-    providerEvidence({ d1RowsWritten: { before: 0, after: 100, explained: 94 } }),
+    providerEvidence({
+      d1RowsWritten: { before: 0, after: 100 },
+      workerRequests: { before: 0, after: 10 },
+    }),
     {
       now: Date.parse("2026-09-19T00:11:00Z"),
       expectedOperations: { ...zeroExpectedProviderOperations, d1RowsWritten: 100 },
@@ -360,7 +402,7 @@ test("provider attribution blocks missing evidence and reconciles provider obser
   assert.equal(belowThreshold.verified, false)
   assert.equal(
     reconcileProviderAttribution(
-      providerEvidence({ d1RowsWritten: { before: 0, after: 1, explained: 1, expected: 1 } }),
+      providerEvidence({ d1RowsWritten: { before: 0, after: 1, expected: 1 } }),
       {
         now: Date.parse("2026-09-19T00:11:00Z"),
         expectedOperations: { ...zeroExpectedProviderOperations, d1RowsWritten: 1 },
@@ -435,6 +477,15 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
   assert.equal(report.attribution.verdict, "pass")
   assert.equal(report.overallChecks.externalResourcesResolved, true)
   assert.equal(report.tiers["10000"].resources.externalRequests.evidence.status, "measured_hosted")
+  assert.equal(
+    report.tiers["1000000"].mutationResourceDisposition.workerRequests.disposition,
+    "intentional_shed_pending",
+  )
+  assert.ok(
+    report.tiers["1000000"].mutationResourceDisposition.workerRequests.observedRefusalCommands > 0,
+  )
+  assert.equal(report.overallChecks.hundredThousandActionsExplicitlyShed, true)
+  assert.equal(report.overallChecks.millionOverLimitMutationsExplicitlyShed, true)
   assert.equal(report.hostileProfile.hostedExecution, "verified")
   assert.ok(report.failureProfiles.every(({ verdict }) => verdict === "verified"))
   assert.equal(report.overallVerdict, "blocked")

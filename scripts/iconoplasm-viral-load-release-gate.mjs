@@ -130,18 +130,27 @@ export async function runViralLoadReleaseGate({
             .map(([name, resource]) => [name, resource.operations]),
         ),
         workerRequests:
-          tenThousandModel.resources.workerRequests.operations + driver.commandsAttempted,
+          tenThousandModel.resources.workerRequests.operations +
+          driver.actualOperations.workerRequests,
+        d1RowsRead:
+          tenThousandModel.resources.d1RowsRead.operations + driver.actualOperations.d1RowsRead,
+        d1RowsWritten:
+          tenThousandModel.resources.d1RowsWritten.operations +
+          driver.actualOperations.d1RowsWritten,
         durableObjectRequests:
           tenThousandModel.resources.durableObjectRequests.operations +
-          driver.commandOutcomes.acceptedDurable * 2,
+          driver.actualOperations.durableObjectRequests,
         durableObjectRowsRead:
           tenThousandModel.resources.durableObjectRowsRead.operations +
-          driver.commandOutcomes.acceptedDurable * 8,
+          driver.actualOperations.durableObjectRowsRead,
         durableObjectRowsWritten:
           tenThousandModel.resources.durableObjectRowsWritten.operations +
-          driver.commandOutcomes.acceptedDurable * 8,
-        externalRequests: driver.physicalStaticRequests,
-        transferBytes: driver.transferBytes,
+          driver.actualOperations.durableObjectRowsWritten,
+        queueOperations:
+          tenThousandModel.resources.queueOperations.operations +
+          driver.actualOperations.queueOperations,
+        externalRequests: driver.actualOperations.externalRequests,
+        transferBytes: driver.actualOperations.transferBytes,
       }
     : null
   const attribution = reconcileProviderAttribution(
@@ -190,11 +199,38 @@ export async function runViralLoadReleaseGate({
               ? "read_pass_interactions_safely_shed"
               : "read_pass_personalized_overflow_pending_or_refused"
           : "blocked_missing_evidence"
+      const mutationResourceDisposition = Object.fromEntries(
+        Object.entries(resources)
+          .filter(([, resource]) => resource.withinLimit === false)
+          .map(([name, resource]) => [
+            name,
+            {
+              operations: resource.operations,
+              limit: resource.limit,
+              disposition: "intentional_shed_pending",
+              observedRefusalCommands: driver?.refusalByResource?.[name] || 0,
+            },
+          ]),
+      )
+      const laneDisposition = Object.fromEntries(
+        Object.entries(tier.mutations.lanes)
+          .filter(([, lane]) => !lane.fits)
+          .map(([name, lane]) => [
+            name,
+            {
+              pendingOrRefused: lane.pendingOrRefused,
+              disposition: "intentional_shed_pending",
+              observedRefusalCommands: driver?.refusalByResource?.[name] || 0,
+            },
+          ]),
+      )
       return [
         String(readers),
         {
           ...tier,
           resources,
+          mutationResourceDisposition,
+          laneDisposition,
           readAvailability: topologyProof.verified ? "topology_proven" : "blocked",
           readPlane,
           interactionPlane: {
@@ -219,6 +255,11 @@ export async function runViralLoadReleaseGate({
     task5.verified ? task5.evidence.failureProfiles : undefined,
   )
   const tenThousand = tiers["10000"]
+  const sheddingObserved = (tier) =>
+    [
+      ...Object.values(tier.mutationResourceDisposition),
+      ...Object.values(tier.laneDisposition),
+    ].every((entry) => entry.observedRefusalCommands > 0)
   const overallChecks = {
     tenThousandLanesFit: Object.values(tenThousand.mutations.lanes).every((lane) => lane.fits),
     tenThousandBoundedResourcesFit: Object.values(tenThousand.resources)
@@ -233,10 +274,14 @@ export async function runViralLoadReleaseGate({
       ),
     hundredThousandHostedReadObserved:
       topologyProof.verified && driver?.physicalStaticRequests >= 500_000,
+    hundredThousandActionsExplicitlyShed:
+      tiers["100000"].interactionPlane.pendingOrRefusedUnits > 0 &&
+      sheddingObserved(tiers["100000"]),
     millionReadAndNoLoss:
       topologyProof.verified &&
       task5.verified &&
       task5.evidence.commandReceipts.lostAcceptedCommands === 0,
+    millionOverLimitMutationsExplicitlyShed: sheddingObserved(tiers["1000000"]),
     attributionVerified: attribution.verified,
   }
   const overallPass = Object.values(overallChecks).every(Boolean)
