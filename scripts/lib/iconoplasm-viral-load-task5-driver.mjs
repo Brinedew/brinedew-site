@@ -1,17 +1,22 @@
 import { createHash } from "node:crypto"
 
-export function mapExecutedOperationsToProviderMeters(actualOperations) {
+export function mapExecutedOperationsToProviderMeters(
+  actualOperations,
+  { mutationOperationsKnown = true } = {},
+) {
   return {
     workerRequests: actualOperations.workerRequests,
     kvReads: 0,
     kvWrites: 0,
     kvLists: 0,
-    d1RowsRead: actualOperations.d1RowsRead,
-    d1RowsWritten: actualOperations.d1RowsWritten,
-    durableObjectRequests: actualOperations.durableObjectRequests,
-    durableObjectRowsRead: actualOperations.durableObjectRowsRead,
-    durableObjectRowsWritten: actualOperations.durableObjectRowsWritten,
-    queueOperations: actualOperations.queueOperations,
+    d1RowsRead: mutationOperationsKnown ? actualOperations.d1RowsRead : null,
+    d1RowsWritten: mutationOperationsKnown ? actualOperations.d1RowsWritten : null,
+    durableObjectRequests: mutationOperationsKnown ? actualOperations.durableObjectRequests : null,
+    durableObjectRowsRead: mutationOperationsKnown ? actualOperations.durableObjectRowsRead : null,
+    durableObjectRowsWritten: mutationOperationsKnown
+      ? actualOperations.durableObjectRowsWritten
+      : null,
+    queueOperations: mutationOperationsKnown ? actualOperations.queueOperations : null,
     externalRequests: 0,
     transferBytes: null,
   }
@@ -50,7 +55,7 @@ export function buildHostedCommand({ day, index, assetSha256 }) {
       command_id: id,
       symbol: "TP53",
       asset_sha256: assetSha256,
-      candidate_ref: `a:TP53:${assetSha256}`,
+      candidate_ref: `a:TP53|${assetSha256}`,
       vote_value: index % 2 === 0 ? 1 : -1,
     },
   }
@@ -67,8 +72,9 @@ export function classifyHostedResponse(commandId, response) {
   if (
     response.status >= 200 &&
     response.status < 300 &&
-    body.accepted === true &&
-    body.durable === true
+    body.ok === true &&
+    body.projection_refresh?.durable === true &&
+    body.projection_refresh?.mode === "durable_outbox"
   ) {
     return { verdict: "accepted_durable", commandId, status: response.status }
   }

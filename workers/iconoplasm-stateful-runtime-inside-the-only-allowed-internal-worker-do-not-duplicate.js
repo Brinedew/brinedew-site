@@ -38919,6 +38919,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
       const visionId = normalizeVisionId(p?.vision_id || "")
       const requested = normalizeVoteValue(p?.vote_value)
+      const commandId = String(p?.command_id || "").trim()
+      const commandHeader = String(request.headers.get("x-iconoplasm-command-id") || "").trim()
+      if (
+        (commandId || commandHeader) &&
+        (!commandId ||
+          commandId !== commandHeader ||
+          !/^viral-load:tp53:\d{4}-\d{2}-\d{2}:\d{6}$/.test(commandId))
+      )
+        return done("votes_set_400", json({ error: "Invalid Task 5 command identity" }, 400))
       if (!candidateRef)
         return done(
           "votes_set_400",
@@ -38974,6 +38983,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         json(
           {
             ok: true,
+            ...(commandId ? { command_id: commandId } : {}),
             candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
