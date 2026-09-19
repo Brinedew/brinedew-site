@@ -179,10 +179,10 @@ export async function migrateLegacyDiscoveryPage({
 }) {
   const activation = await readCompactDiscoveryActivation(db)
   if (!activation) throw new Error("Compact discovery activation schema is missing")
-  if (activation.status === "complete") return { ok: true, complete: true, migrated_users: 0 }
   if (!leaseToken || activation.lease_token !== leaseToken) {
     return { ok: false, pending: true, code: "DISCOVERY_MIGRATION_LEASE_LOST" }
   }
+  if (activation.status === "complete") return { ok: true, complete: true, migrated_users: 0 }
   const limit = Math.max(1, Math.min(8, Number.parseInt(String(rowLimit), 10) || 8))
   const selected = await db
     .prepare(
@@ -237,7 +237,7 @@ export async function migrateLegacyDiscoveryPage({
   const cursorUserId = last ? String(last.user_id || "") : activation.cursor_user_id
   const cursorGeneSymbol = last ? String(last.gene_symbol || "") : activation.cursor_gene_symbol
   const complete = selectedRows.length <= limit
-  await db
+  const finalized = await db
     .prepare(
       `UPDATE icono_discovery_compact_activation_v2
        SET status = ?, cursor_user_id = ?, cursor_gene_symbol = ?,
@@ -257,6 +257,9 @@ export async function migrateLegacyDiscoveryPage({
       leaseToken,
     )
     .run()
+  if (Number(finalized?.meta?.changes || 0) !== 1) {
+    return { ok: false, pending: true, code: "DISCOVERY_MIGRATION_LEASE_LOST" }
+  }
   return {
     ok: true,
     complete,
