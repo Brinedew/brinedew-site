@@ -15,6 +15,10 @@ const deployWorkflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
 )
+const publicReadCutover = readFileSync(
+  new URL("../scripts/prepare-iconoplasm-public-read-cutover.mjs", import.meta.url),
+  "utf8",
+)
 const slotContract = readFileSync(
   new URL("./generated/iconoplasm-anima-emulsion-slot-contract.js", import.meta.url),
   "utf8",
@@ -304,8 +308,13 @@ test("production deploys invalidate cached Iconoplasm HTML shells by commit", ()
   )
   assert.match(
     deployWorkflow,
-    /Deploy the only allowed internal stateful worker \(production\)[\s\S]*ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST-backend[\s\S]*Deploy production static site to Cloudflare Pages[\s\S]*Activate current Iconoplasm HTML shell cache version[\s\S]*ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
+    /Publish, verify, and activate immutable public reads[\s\S]*Deploy production static site to Cloudflare Pages[\s\S]*Activate current Iconoplasm HTML shell cache version[\s\S]*ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
     "production should expose the final HTML cache key only after matching static assets are live",
+  )
+  assert.match(
+    publicReadCutover,
+    /ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$\{cacheBust\}-backend/,
+    "the pre-Pages publisher deploy must use a non-final cache identity",
   )
 })
 
