@@ -49,6 +49,21 @@ function providerEvidence(meterOverrides = {}) {
   }
 }
 
+function commandIdentity(day) {
+  const prefix = `viral-load:tp53:${day}:`
+  const digest = createHash("sha256")
+  for (let index = 0; index < 60_000; index++)
+    digest.update(`${prefix}${String(index).padStart(6, "0")}\n`)
+  return {
+    prefix,
+    first: `${prefix}000000`,
+    last: `${prefix}059999`,
+    count: 60_000,
+    digestAlgorithm: "sha256-newline-delimited",
+    digest: digest.digest("hex"),
+  }
+}
+
 function task5Evidence() {
   const receipt = {
     schemaVersion: 1,
@@ -61,8 +76,34 @@ function task5Evidence() {
       startedAt: "2026-09-19T00:00:00Z",
       endedAt: "2026-09-19T00:10:00Z",
     },
-    hostedLoad: { physicalRequests: 500_000, commandsAttempted: 60_000 },
-    commandReceipts: { acceptedCommands: 10_000, lostAcceptedCommands: 0 },
+    hostedLoad: {
+      physicalRequests: 500_000,
+      commandsAttempted: 60_000,
+      day: "2026-09-19",
+      commandIdentity: commandIdentity("2026-09-19"),
+      concurrentStaticChecks: 600,
+    },
+    commandReceipts: {
+      acceptedCommands: 10_000,
+      capacityRefusedCommands: 50_000,
+      lostAcceptedCommands: 0,
+      digestAlgorithm: "sha256-tab-newline-delimited",
+      digest: "d".repeat(64),
+    },
+    failureProfiles: [
+      "stale_pointer",
+      "bunny_outage",
+      "expired_artifact",
+      "laptop_off_accumulation",
+      "d1_exhaustion",
+      "queue_exhaustion",
+      "delayed_projection",
+    ].map((name) => ({
+      name,
+      verdict: "verified",
+      anonymousStatefulOperations: 0,
+      lostAcceptedCommands: 0,
+    })),
     externalGates: {
       hostedExecution: "verified",
       authenticatedBrowser: "verified",
@@ -241,6 +282,8 @@ test("canonical digest-checked Task 5 evidence is consumable without bypassing l
   })
   assert.equal(report.task5Evidence.verdict, "pass")
   assert.equal(report.attribution.verdict, "pass")
+  assert.equal(report.hostileProfile.hostedExecution, "verified")
+  assert.ok(report.failureProfiles.every(({ verdict }) => verdict === "verified"))
   assert.equal(report.overallVerdict, "blocked")
 })
 

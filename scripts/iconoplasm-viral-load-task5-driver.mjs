@@ -5,6 +5,7 @@ import path from "node:path"
 import {
   buildHostedCommand,
   classifyHostedResponse,
+  summarizeHostedCommandIdentity,
 } from "./lib/iconoplasm-viral-load-task5-driver.mjs"
 
 // ARCHITECTURE FENCE [IPD-004]: this driver produces observations for the
@@ -116,6 +117,7 @@ export async function runHostedTask5Load({
     physicalStaticRequests,
     staticFailures,
     commandsAttempted: expectedCommands,
+    commandIdentity: summarizeHostedCommandIdentity(day),
     commandOutcomes: counts,
     commandReceiptDigestAlgorithm: "sha256-tab-newline-delimited",
     commandReceiptDigest: receiptDigest.digest("hex"),
