@@ -57,3 +57,25 @@ export function classifyHostedResponse(commandId, response) {
   }
   return { verdict: "invalid_response", commandId, status: response.status }
 }
+
+export function assessHostedSchedule(windows, elapsedMs, { toleranceMs = 10_000 } = {}) {
+  const exactWindows =
+    windows.length === 600 &&
+    windows.every(
+      (window, second) =>
+        window.second === second &&
+        window.scheduled === 100 &&
+        window.started === 100 &&
+        (window.startedAtOffsetMs == null ||
+          Math.abs(window.startedAtOffsetMs - second * 1_000) <= 100),
+    )
+  const withinElapsedTolerance =
+    Number.isFinite(elapsedMs) && elapsedMs >= 599_000 && elapsedMs <= 600_000 + toleranceMs
+  return {
+    verified: exactWindows && withinElapsedTolerance,
+    exactWindows,
+    withinElapsedTolerance,
+    elapsedMs,
+    achievedRps: elapsedMs > 0 ? 60_000 / (elapsedMs / 1_000) : 0,
+  }
+}

@@ -60,7 +60,8 @@ export function loadTask3MutationMeasurement({ measurementPath = TASK3_MEASUREME
     digestAlgorithm !== "sha256" ||
     digest !== computed ||
     !Number.isFinite(Date.parse(artifact.generatedAt || "")) ||
-    !/^[a-f0-9]{8,40}$/.test(artifact.provenance?.task3Commit || "") ||
+    artifact.provenance?.productionBaseCommit !== "02a3990870b0a4169e1c2aa4a46778fc46636dac" ||
+    artifact.provenance?.measurementCommit !== "0474463e09d4569fbac8984f1184f08067c747bb" ||
     artifact.provenance?.runtime !== "miniflare_d1" ||
     artifact.provenance?.harness !== "workers/iconoplasm/discovery-workload.workerd.test.js" ||
     artifact.workload?.savers !== 2_000 ||
@@ -69,6 +70,17 @@ export function loadTask3MutationMeasurement({ measurementPath = TASK3_MEASUREME
     artifact.workload?.drainBatches !== 16
   ) {
     throw new Error("TASK3_MUTATION_MEASUREMENT_INVALID")
+  }
+  for (const [relativePath, expectedSha256] of Object.entries(
+    artifact.provenance.fileSha256 || {},
+  )) {
+    const absolutePath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      relativePath,
+    )
+    const actual = createHash("sha256").update(readFileSync(absolutePath)).digest("hex")
+    if (actual !== expectedSha256) throw new Error("TASK3_MUTATION_MEASUREMENT_FILE_MISMATCH")
   }
   for (const value of [
     artifact.meters?.d1RowsRead,

@@ -114,8 +114,114 @@ function sha256Receipt(artifact) {
   }
 }
 
-export function validateTask5ViralLoadEvidence(evidence) {
+export function createGitHubActionsRunVerifier({ token, repository, fetchImpl = fetch }) {
+  if (!token || !/^[^/]+\/[^/]+$/.test(repository || "")) return null
+  return async (provenance) => {
+    const headers = { authorization: `Bearer ${token}`, accept: "application/vnd.github+json" }
+    const runResponse = await fetchImpl(
+      `https://api.github.com/repos/${repository}/actions/runs/${provenance?.runId}`,
+      { headers },
+    )
+    if (!runResponse.ok) return { verified: false }
+    const run = await runResponse.json()
+    const jobsResponse = await fetchImpl(run.jobs_url, { headers })
+    if (!jobsResponse.ok) return { verified: false }
+    const jobs = (await jobsResponse.json()).jobs || []
+    const job = jobs.find((candidate) => String(candidate.id) === String(provenance?.jobId))
+    return {
+      verified: Boolean(job),
+      workflowPath: run.path,
+      runId: run.id,
+      jobId: job?.id,
+      conclusion: job?.conclusion,
+      headSha: run.head_sha,
+      environment: job?.name?.includes("collect-viral-load-staging-evidence") ? "staging" : null,
+    }
+  }
+}
+
+const RAW_ARTIFACT_KIND_COUNTS = Object.freeze({
+  hosted_driver: 1,
+  provider_query: 1,
+  authenticated_browser: 1,
+  region: 3,
+  bunny_delivery: 1,
+  fault_injection: 7,
+})
+
+export async function validateTask5ViralLoadEvidence(
+  evidence,
+  { expectedCommit, trustedRunVerifier, rawArtifacts, now = Date.now() } = {},
+) {
   if (!evidence) return { verdict: "blocked_missing_task5_evidence", verified: false }
+  if (typeof trustedRunVerifier !== "function")
+    return { verdict: "blocked_unverified_workflow_provenance", verified: false }
+  const provenance = evidence.provenance
+  const trusted = await trustedRunVerifier(provenance, { expectedCommit, now })
+  if (
+    !trusted?.verified ||
+    provenance?.workflowPath !== ".github/workflows/deploy-quartz.yml" ||
+    trusted.workflowPath !== provenance.workflowPath ||
+    provenance?.runId !== trusted.runId ||
+    provenance?.jobId !== trusted.jobId ||
+    trusted.conclusion !== "success" ||
+    trusted.headSha !== expectedCommit ||
+    provenance?.commitSha !== expectedCommit ||
+    trusted.environment !== "staging" ||
+    provenance?.environment !== "staging"
+  ) {
+    return { verdict: "blocked_unverified_workflow_provenance", verified: false }
+  }
+  const manifest = evidence.rawArtifacts
+  const kindCounts = Object.fromEntries(
+    Object.keys(RAW_ARTIFACT_KIND_COUNTS).map((kind) => [kind, 0]),
+  )
+  const parsedRawArtifacts = {}
+  if (!Array.isArray(manifest) || !rawArtifacts)
+    return { verdict: "blocked_missing_raw_artifacts", verified: false }
+  for (const entry of manifest) {
+    if (!Object.hasOwn(kindCounts, entry?.kind) || typeof rawArtifacts[entry.name] !== "string")
+      return { verdict: "blocked_invalid_raw_artifacts", verified: false }
+    const digest = createHash("sha256").update(rawArtifacts[entry.name]).digest("hex")
+    if (digest !== entry.sha256)
+      return { verdict: "blocked_invalid_raw_artifacts", verified: false }
+    try {
+      parsedRawArtifacts[entry.name] = JSON.parse(rawArtifacts[entry.name])
+    } catch {
+      return { verdict: "blocked_invalid_raw_artifacts", verified: false }
+    }
+    kindCounts[entry.kind]++
+  }
+  if (
+    Object.entries(RAW_ARTIFACT_KIND_COUNTS).some(([kind, count]) => kindCounts[kind] !== count)
+  ) {
+    return { verdict: "blocked_missing_raw_artifacts", verified: false }
+  }
+  const entryFor = (kind) => manifest.find((entry) => entry.kind === kind)
+  const hostedDriver = parsedRawArtifacts[entryFor("hosted_driver").name]
+  const providerQuery = parsedRawArtifacts[entryFor("provider_query").name]
+  const supportingArtifactsValid = manifest
+    .filter((entry) => !["hosted_driver", "provider_query"].includes(entry.kind))
+    .every((entry) => {
+      const artifact = parsedRawArtifacts[entry.name]
+      return (
+        artifact?.verified === true &&
+        artifact?.commitSha === expectedCommit &&
+        artifact?.environment === "staging"
+      )
+    })
+  if (
+    hostedDriver?.kind !== "iconoplasm_viral_load_task5_driver_receipt" ||
+    hostedDriver?.certificationReady !== true ||
+    hostedDriver?.schedule?.verified !== true ||
+    hostedDriver?.physicalStaticRequests < 500_000 ||
+    hostedDriver?.commandsAttempted !== 60_000 ||
+    providerQuery?.kind !== "cloudflare_provider_meter_delta" ||
+    JSON.stringify(providerQuery) !== JSON.stringify(evidence.provider) ||
+    !supportingArtifactsValid
+  ) {
+    return { verdict: "blocked_invalid_raw_artifacts", verified: false }
+  }
   const digest = sha256Receipt(evidence)
   const started = Date.parse(evidence.run?.startedAt || "")
   const ended = Date.parse(evidence.run?.endedAt || "")
@@ -126,7 +232,7 @@ export function validateTask5ViralLoadEvidence(evidence) {
     digest.digest === digest.computed &&
     /^[a-f0-9]{40}$/.test(evidence.run?.commitSha || "") &&
     /^[a-f0-9]{64}$/.test(evidence.run?.accountIdHash || "") &&
-    evidence.run?.environment === "production" &&
+    evidence.run?.environment === "staging" &&
     typeof evidence.run?.id === "string" &&
     evidence.run.id.length > 0 &&
     Number.isFinite(started) &&
@@ -157,17 +263,18 @@ export function validateTask5ViralLoadEvidence(evidence) {
     evidence.provider?.identity?.runId === evidence.run.id &&
     Date.parse(evidence.provider?.observedAt?.before || "") <= started &&
     Date.parse(evidence.provider?.observedAt?.after || "") >= ended &&
-    NON_ZERO_TASK5_METERS.every(
-      (meter) => Number(evidence.provider?.meters?.[meter]?.expected) > 0,
-    ) &&
+    NON_ZERO_TASK5_METERS.every((meter) => Object.hasOwn(evidence.provider?.meters || {}, meter)) &&
     Object.keys(evidence.externalGates || {}).length === TASK5_EXTERNAL_GATES.length &&
     TASK5_EXTERNAL_GATES.every((gate) => evidence.externalGates?.[gate] === "verified")
   return valid
-    ? { verdict: "pass", verified: true, evidence }
+    ? { verdict: "pass", verified: true, evidence, raw: { hostedDriver, providerQuery } }
     : { verdict: "blocked_invalid_task5_evidence", verified: false }
 }
 
-export function reconcileProviderAttribution(evidence) {
+export function reconcileProviderAttribution(
+  evidence,
+  { now = Date.now(), expectedOperations } = {},
+) {
   if (!evidence) {
     return {
       verdict: "blocked_missing_provider_evidence",
@@ -180,14 +287,21 @@ export function reconcileProviderAttribution(evidence) {
     evidence.kind !== "cloudflare_provider_meter_delta" ||
     evidence.source !== "cloudflare_provider_api" ||
     !/^[a-f0-9]{64}$/.test(evidence.identity?.accountIdHash || "") ||
-    evidence.identity?.environment !== "production" ||
+    !["production", "staging"].includes(evidence.identity?.environment) ||
     typeof evidence.identity?.runId !== "string" ||
     evidence.identity.runId.length === 0 ||
     !evidence.observedAt?.before ||
     !evidence.observedAt?.after ||
     !evidence.meters ||
+    !expectedOperations ||
     Object.keys(evidence.meters).length !== EXPECTED_PROVIDER_METERS.length ||
-    !EXPECTED_PROVIDER_METERS.every((meter) => Object.hasOwn(evidence.meters, meter))
+    !EXPECTED_PROVIDER_METERS.every(
+      (meter) =>
+        Object.hasOwn(evidence.meters, meter) &&
+        Object.hasOwn(expectedOperations, meter) &&
+        Number.isFinite(expectedOperations[meter]) &&
+        expectedOperations[meter] >= 0,
+    )
   ) {
     return {
       verdict: "blocked_invalid_provider_evidence",
@@ -204,8 +318,8 @@ export function reconcileProviderAttribution(evidence) {
     !Number.isFinite(beforeAt) ||
     !Number.isFinite(afterAt) ||
     beforeAt >= afterAt ||
-    afterAt > Date.now() + 60_000 ||
-    Date.now() - afterAt > 24 * 60 * 60 * 1_000
+    afterAt > now + 60_000 ||
+    now - afterAt > 24 * 60 * 60 * 1_000
   ) {
     return {
       verdict: "blocked_invalid_provider_evidence",
@@ -217,18 +331,19 @@ export function reconcileProviderAttribution(evidence) {
     const before = Number(observation?.before)
     const after = Number(observation?.after)
     const explained = Number(observation?.explained)
-    const expected = Number(observation?.expected)
+    const expected = Number(expectedOperations[meter])
     if (
       !Number.isFinite(before) ||
       !Number.isFinite(after) ||
       !Number.isFinite(explained) ||
+      Object.hasOwn(observation || {}, "expected") ||
       before < 0 ||
       after < before ||
       explained < 0 ||
       explained > after - before ||
       !Number.isFinite(expected) ||
       expected < 0 ||
-      (expected > 0 && after - before === 0)
+      (expected > 0 && after - before < expected * PROVIDER_ATTRIBUTION_THRESHOLD)
     ) {
       return {
         verdict: "blocked_invalid_provider_evidence",

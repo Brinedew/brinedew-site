@@ -200,6 +200,15 @@ export async function prepareIconoplasmEdgeAssets({
   await writeFile(path.join(resolvedOutput, "sitemap.xml"), iconoplasmSitemap, "utf8")
   await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
   await writeFile(path.join(resolvedOutput, "_redirects"), redirectsFile, "utf8")
+  const sourceSha = String(
+    process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
+  ).trim()
+  if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new Error("Invalid build source SHA")
+  await writeFile(
+    path.join(resolvedOutput, "_build-manifest.json"),
+    `${JSON.stringify({ schemaVersion: 1, kind: "iconoplasm_edge_build", sourceSha })}\n`,
+    "utf8",
+  )
 
   const report = await inspectTree(resolvedOutput, resolvedOutput)
   if (report.fileCount > maxAssetFiles) {
@@ -226,3 +235,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     }),
   )
 }
+import { execFileSync } from "node:child_process"

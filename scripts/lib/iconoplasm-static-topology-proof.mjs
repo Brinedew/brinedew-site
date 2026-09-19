@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { execFileSync } from "node:child_process"
 import { createRequire } from "node:module"
 import { readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
@@ -63,9 +64,19 @@ export default {
   }
 }`
 
-export async function proveAnonymousRouteTopology() {
+export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
   const assetRoot = path.join(repoRoot, ASSET_ROOT)
   if (!(await stat(assetRoot)).isDirectory()) throw new Error("PRODUCTION_STATIC_BUILD_MISSING")
+  const requiredCommit = String(
+    expectedCommit ||
+      process.env.GITHUB_SHA ||
+      execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }),
+  ).trim()
+  const buildManifest = JSON.parse(
+    await readFile(path.join(assetRoot, "_build-manifest.json"), "utf8"),
+  )
+  if (buildManifest.kind !== "iconoplasm_edge_build" || buildManifest.sourceSha !== requiredCommit)
+    throw new Error("STALE_PRODUCTION_STATIC_BUILD")
   const configText = await readFile(path.join(repoRoot, WRANGLER_CONFIG), "utf8")
   const config = parseToml(configText)
   const runtime = new Miniflare(
@@ -104,6 +115,7 @@ export async function proveAnonymousRouteTopology() {
     kind: "exact_build_topology_proof",
     assetRoot: ASSET_ROOT,
     assetBundle: bundle,
+    sourceSha: buildManifest.sourceSha,
     wranglerConfig: WRANGLER_CONFIG,
     wranglerConfigSha256: createHash("sha256").update(configText).digest("hex"),
     physicalDispatches: ANONYMOUS_ROUTE_CLASSES.length,
