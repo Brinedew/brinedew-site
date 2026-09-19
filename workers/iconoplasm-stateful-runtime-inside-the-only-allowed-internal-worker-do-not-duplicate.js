@@ -1774,6 +1774,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_cost_usage" ||
     family === "admin_mutation_limiter_policy" ||
     family === "admin_gallery_publish_status" ||
+    family === "admin_gallery_storage_migration_status" ||
     family === "admin_me"
   )
     return "admin_dashboard"
@@ -34978,6 +34979,18 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     return done(
       "admin_gallery_storage_migration",
       json(result, 202, { "Cache-Control": "no-store" }),
+    )
+  },
+  "admin_gallery.migrate_card_storage_status": async ({ request, env, done }) => {
+    if (!(await isIconoplasmAdmin(request, env)))
+      return done(
+        "admin_gallery_storage_migration_status_403",
+        json({ error: "Unauthorized" }, 403),
+      )
+    const result = await callCardPublication(env, "/status", { method: "GET" })
+    return done(
+      "admin_gallery_storage_migration_status",
+      json(result, 200, { "Cache-Control": "no-store" }),
     )
   },
   ...createIconoplasmAdminAssetHandlers({
