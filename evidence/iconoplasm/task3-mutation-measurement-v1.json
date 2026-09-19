@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "kind": "iconoplasm_task3_mutation_measurement",
+  "generatedAt": "2026-09-19T14:06:03.671Z",
+  "provenance": {
+    "task3Commit": "02a39908",
+    "runtime": "miniflare_d1",
+    "harness": "workers/iconoplasm/discovery-workload.workerd.test.js",
+    "command": "node --test workers/iconoplasm/discovery-workload.workerd.test.js --test-name-pattern=real D1 prints exact per-saver row receipts"
+  },
+  "workload": {
+    "savers": 2000,
+    "encounters": 20000,
+    "personalBatches": 2000,
+    "drainBatches": 16
+  },
+  "meters": {
+    "d1RowsRead": 6000,
+    "d1RowsWritten": 10016
+  },
+  "components": {
+    "personalReads": 6000,
+    "personalWrites": 6000,
+    "drainWrites": 4016
+  },
+  "timing": {
+    "personalMs": 402575
+  },
+  "digestAlgorithm": "sha256",
+  "digest": "1b90ce5f7291cf4bef60ee1f60cfc387e359554cb0e8a23741cb0b91348570c3"
+}
