@@ -25952,10 +25952,10 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   if (admission?.ok !== true) {
     return { ok: false, pending: true, code: admission?.code || "MUTATION_ADMISSION_REFUSED" }
   }
-  // Admission must precede the lease write. The cursor-derived token and
-  // reservation are stable across retries; a lease loser deliberately leaves
-  // that shared uncertain reservation untouched.
-  const leaseToken = operationId
+  // Admission must precede the lease write. The cursor-derived reservation is
+  // stable across retries, while every invocation uses a unique lease fence so
+  // an executor replaced after expiry cannot later advance the shared cursor.
+  const leaseToken = crypto.randomUUID()
   const claimed = await claimCompactDiscoveryMigrationLease(env.ICONOPLASM_DB, {
     token: leaseToken,
   })
@@ -25967,6 +25967,7 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
     rowLimit: 8,
     leaseToken,
   })
+  if (result?.ok !== true) return result
   await completeIconoplasmMutationReservation(env, operationId)
   const rowsPerDay = 8 * 4 * 24
   const remainingRows = Math.max(

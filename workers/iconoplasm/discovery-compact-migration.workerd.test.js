@@ -12,6 +12,8 @@ import {
 import {
   claimCompactDiscoveryMigrationLease,
   importLegacyDiscoveryUser,
+  migrateLegacyDiscoveryPage,
+  readCompactDiscoveryActivation,
 } from "./discovery-compact-migrate.js"
 import { migrateIconoplasmCompactDiscoveryForScheduled } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
@@ -354,9 +356,19 @@ test(
         releaseMigration = resolve
       })
       const calls = []
+      const reservationOperationIds = []
+      const leaseTokens = []
       const failingDb = {
         prepare(sql) {
           const statement = db.prepare(sql)
+          if (String(sql).includes("SET lease_token = ?")) {
+            return {
+              bind(...values) {
+                leaseTokens.push(values[0])
+                return statement.bind(...values)
+              },
+            }
+          }
           if (String(sql).includes("SELECT *") && String(sql).includes("icono_gene_discoveries")) {
             return {
               bind() {
@@ -380,6 +392,9 @@ test(
             async fetch(request) {
               const path = new URL(request.url).pathname
               calls.push(path)
+              if (path === "/reserve-mutation-writes") {
+                reservationOperationIds.push((await request.json()).operation_id)
+              }
               return Response.json({ ok: true })
             },
           }),
@@ -391,9 +406,69 @@ test(
       const loser = await migrateIconoplasmCompactDiscoveryForScheduled(env)
       assert.equal(loser.code, "DISCOVERY_MIGRATION_LEASE_HELD")
       assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
+      assert.equal(reservationOperationIds.length, 2)
+      assert.equal(reservationOperationIds[0], reservationOperationIds[1])
+      assert.equal(leaseTokens.length, 2)
+      assert.notEqual(leaseTokens[0], leaseTokens[1])
+      assert.match(leaseTokens[0], /^[0-9a-f]{8}-[0-9a-f-]{27}$/i)
+      assert.match(leaseTokens[1], /^[0-9a-f]{8}-[0-9a-f-]{27}$/i)
       releaseMigration()
       await assert.rejects(winner, /injected migration failure after admission/)
       assert.deepEqual(calls, ["/reserve-mutation-writes", "/reserve-mutation-writes"])
+    })
+  },
+)
+
+test(
+  "an expired migration lease is taken over by a unique token and the stale owner cannot mutate or advance",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, legacyStatements("0041_shared_gene_discovery_rollup.sql"))
+      await db
+        .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53','TP53')")
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO icono_gene_discoveries
+           (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+           VALUES ('reader','TP53','extension_hover','extension_hover','hover_dwell','hover_dwell')`,
+        )
+        .run()
+      await applyStatements(db, compactMigrationStatements())
+
+      const staleToken = crypto.randomUUID()
+      const replacementToken = crypto.randomUUID()
+      assert.notEqual(staleToken, replacementToken)
+      assert.ok(
+        await claimCompactDiscoveryMigrationLease(db, {
+          token: staleToken,
+          now: "2026-09-19T00:00:00.000Z",
+        }),
+      )
+      assert.ok(
+        await claimCompactDiscoveryMigrationLease(db, {
+          token: replacementToken,
+          now: "2026-09-19T00:02:00.000Z",
+        }),
+      )
+
+      const beforeStaleAttempt = await readCompactDiscoveryActivation(db)
+      const staleAttempt = await migrateLegacyDiscoveryPage({ db, leaseToken: staleToken })
+      assert.equal(staleAttempt.code, "DISCOVERY_MIGRATION_LEASE_LOST")
+      assert.deepEqual(await readCompactDiscoveryActivation(db), beforeStaleAttempt)
+      assert.equal(await readCompactUserState(db, "reader"), null)
+
+      const replacement = await migrateLegacyDiscoveryPage({ db, leaseToken: replacementToken })
+      assert.equal(replacement.complete, true)
+      assert.equal(replacement.migrated_rows, 1)
+      assert.equal((await readCompactUserState(db, "reader")).member_count, 1)
+      const activation = await readCompactDiscoveryActivation(db)
+      assert.equal(activation.status, "complete")
+      assert.equal(activation.migrated_rows, 1)
     })
   },
 )
