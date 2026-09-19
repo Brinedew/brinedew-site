@@ -2095,7 +2095,7 @@ test("direct candidate image API panel stays compact and hides transport details
   assert.match(styles, /\.icono-request-direct-publish\[hidden\]\s*\{/)
 })
 
-test("gene votes batch initial snapshots and give responsive copies one controller", async () => {
+test("gene votes hydrate only after explicit intent and give responsive copies one controller", async () => {
   const app = await readFile(appPath, "utf8")
 
   const candidateWireStart = app.indexOf("function wireCandidateVoteBoxes")
@@ -2115,7 +2115,7 @@ test("gene votes batch initial snapshots and give responsive copies one controll
   assert.match(leadWireBlock, /wireVoteBoxGroup\(boxes, symbol, portrait\.asset_sha256/)
 
   const groupStart = app.indexOf("function wireVoteBoxGroup")
-  const groupEnd = app.indexOf("function primeGeneVoteBoxGroups", groupStart)
+  const groupEnd = app.indexOf("function wireGeneVoteControls", groupStart)
   const groupBlock = app.slice(groupStart, groupEnd)
   assert.match(groupBlock, /wireVoteBox\(targets\[0\], symbol, assetSha/)
   assert.match(groupBlock, /mirrorBoxes: targets\.slice\(1\)/)
@@ -2125,16 +2125,12 @@ test("gene votes batch initial snapshots and give responsive copies one controll
     "responsive views must not create independent vote controllers",
   )
 
-  const primeStart = app.indexOf("function primeGeneVoteBoxGroups")
-  const primeEnd = app.indexOf("function wireGeneVoteControls", primeStart)
-  const primeBlock = app.slice(primeStart, primeEnd)
-  assert.match(
-    primeBlock,
-    /function primeGeneVoteBoxGroups\(groups\) \{\s*if \(!currentUser\) return Promise\.resolve\(\)/,
-    "anonymous gene readers must not fetch personalized vote snapshots",
-  )
-  assert.match(primeBlock, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
-  assert.equal((primeBlock.match(/fetchJSON\(/g) || []).length, 1)
+  const controlsStart = app.indexOf("function wireGeneVoteControls")
+  const controlsEnd = app.indexOf("function wireCandidateRemoveButtons", controlsStart)
+  const controlsBlock = app.slice(controlsStart, controlsEnd)
+  assert.doesNotMatch(controlsBlock, /primeGeneVoteBoxGroups|votes\/snapshots/)
+  assert.match(leadWireBlock, /deferSnapshot: true/)
+  assert.match(candidateWireBlock, /deferSnapshot: true/)
 })
 
 test("anonymous gene suggestions remain off the stateful comments API", async () => {
