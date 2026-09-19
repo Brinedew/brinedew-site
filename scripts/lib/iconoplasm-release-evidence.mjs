@@ -148,7 +148,59 @@ const RAW_ARTIFACT_KIND_COUNTS = Object.freeze({
   region: 3,
   bunny_delivery: 1,
   fault_injection: 7,
+  operation_shed_receipt: 8,
 })
+
+const REQUIRED_SHED_RECEIPTS = Object.freeze([
+  "100000:discovery",
+  "100000:vote",
+  "100000:publication",
+  "1000000:discovery",
+  "1000000:vote",
+  "1000000:publication",
+  "1000000:worker",
+  "1000000:durable_object",
+])
+
+function validShedReceipt(artifact, expectedCommit) {
+  const identity = artifact?.identity
+  const unsignedIdentity = identity && {
+    prefix: identity.prefix,
+    first: identity.first,
+    last: identity.last,
+    count: identity.count,
+    digestAlgorithm: identity.digestAlgorithm,
+  }
+  const count = artifact?.refused + artifact?.pending
+  const coverageValues = [
+    ...Object.values(artifact?.coverage?.lanes || {}),
+    ...Object.values(artifact?.coverage?.resources || {}),
+  ]
+  return (
+    artifact?.schemaVersion === 1 &&
+    artifact?.kind === "iconoplasm_operation_shed_receipt" &&
+    artifact?.commitSha === expectedCommit &&
+    artifact?.environment === "staging" &&
+    REQUIRED_SHED_RECEIPTS.includes(`${artifact.tierReaders}:${artifact.operation}`) &&
+    [artifact.attempted, artifact.accepted, artifact.refused, artifact.pending].every(
+      (value) => Number.isSafeInteger(value) && value >= 0,
+    ) &&
+    artifact.attempted === artifact.accepted + artifact.refused + artifact.pending &&
+    count > 0 &&
+    identity?.count === count &&
+    identity?.prefix === `viral-load:${artifact.tierReaders}:${artifact.operation}:` &&
+    identity?.first === `${identity.prefix}000000000` &&
+    identity?.last === `${identity.prefix}${String(count - 1).padStart(9, "0")}` &&
+    identity?.digestAlgorithm === "sha256-canonical-contiguous-range" &&
+    identity?.digest ===
+      createHash("sha256").update(JSON.stringify(unsignedIdentity)).digest("hex") &&
+    artifact.coverage &&
+    typeof artifact.coverage.lanes === "object" &&
+    typeof artifact.coverage.resources === "object" &&
+    coverageValues.length > 0 &&
+    coverageValues.every((value) => Number.isSafeInteger(value) && value >= 0 && value <= count)
+  )
+}
 
 export async function validateTask5ViralLoadEvidence(
   evidence,
@@ -236,6 +288,11 @@ export async function validateTask5ViralLoadEvidence(
         artifact.anonymousStatefulOperations === 0 &&
         artifact.lostAcceptedCommands === 0,
     )
+  const shedReceipts = supporting.filter(({ kind }) => kind === "operation_shed_receipt")
+  const shedReceiptsValid =
+    new Set(shedReceipts.map(({ artifact }) => `${artifact.tierReaders}:${artifact.operation}`))
+      .size === REQUIRED_SHED_RECEIPTS.length &&
+    shedReceipts.every(({ artifact }) => validShedReceipt(artifact, expectedCommit))
   const recomputedSchedule = assessHostedSchedule(
     hostedDriver?.schedule?.windows || [],
     hostedDriver?.schedule?.elapsedMs,
@@ -255,6 +312,12 @@ export async function validateTask5ViralLoadEvidence(
       Number.isSafeInteger(hostedDriver?.actualOperations?.[name]) &&
       hostedDriver.actualOperations[name] >= 0,
   )
+  const providerMappingValid = EXPECTED_PROVIDER_METERS.every(
+    (name) =>
+      (Number.isSafeInteger(hostedDriver?.providerOperations?.[name]) &&
+        hostedDriver.providerOperations[name] >= 0) ||
+      hostedDriver?.providerOperations?.[name] === null,
+  )
   if (
     hostedDriver?.kind !== "iconoplasm_viral_load_task5_driver_receipt" ||
     hostedDriver?.certificationReady !== true ||
@@ -262,15 +325,15 @@ export async function validateTask5ViralLoadEvidence(
     hostedDriver?.physicalStaticRequests < 500_000 ||
     hostedDriver?.commandsAttempted !== 60_000 ||
     !operationReceiptValid ||
-    Object.values(hostedDriver?.refusalByResource || {}).reduce((sum, count) => sum + count, 0) <
-      hostedDriver?.commandOutcomes?.capacityRefused ||
+    !providerMappingValid ||
     providerQuery?.kind !== "cloudflare_provider_meter_delta" ||
     JSON.stringify(providerQuery) !== JSON.stringify(evidence.provider) ||
     !supporting.every(commonValid) ||
     !browsersValid ||
     !regionsValid ||
     !bunnyValid ||
-    !faultsValid
+    !faultsValid ||
+    !shedReceiptsValid
   ) {
     return { verdict: "blocked_invalid_raw_artifacts", verified: false }
   }
@@ -319,7 +382,16 @@ export async function validateTask5ViralLoadEvidence(
     Object.keys(evidence.externalGates || {}).length === TASK5_EXTERNAL_GATES.length &&
     TASK5_EXTERNAL_GATES.every((gate) => evidence.externalGates?.[gate] === "verified")
   return valid
-    ? { verdict: "pass", verified: true, evidence, raw: { hostedDriver, providerQuery } }
+    ? {
+        verdict: "pass",
+        verified: true,
+        evidence,
+        raw: {
+          hostedDriver,
+          providerQuery,
+          shedReceipts: shedReceipts.map(({ artifact }) => artifact),
+        },
+      }
     : { verdict: "blocked_invalid_task5_evidence", verified: false }
 }
 

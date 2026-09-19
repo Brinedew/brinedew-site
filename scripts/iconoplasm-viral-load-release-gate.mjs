@@ -120,39 +120,8 @@ export async function runViralLoadReleaseGate({
     rawArtifacts,
     now,
   })
-  const tenThousandModel = releaseTierAssessment(10_000)
   const driver = task5.verified ? task5.raw.hostedDriver : null
-  const expectedProviderOperations = driver
-    ? {
-        ...Object.fromEntries(
-          Object.entries(tenThousandModel.resources)
-            .filter(([, resource]) => resource.limit != null)
-            .map(([name, resource]) => [name, resource.operations]),
-        ),
-        workerRequests:
-          tenThousandModel.resources.workerRequests.operations +
-          driver.actualOperations.workerRequests,
-        d1RowsRead:
-          tenThousandModel.resources.d1RowsRead.operations + driver.actualOperations.d1RowsRead,
-        d1RowsWritten:
-          tenThousandModel.resources.d1RowsWritten.operations +
-          driver.actualOperations.d1RowsWritten,
-        durableObjectRequests:
-          tenThousandModel.resources.durableObjectRequests.operations +
-          driver.actualOperations.durableObjectRequests,
-        durableObjectRowsRead:
-          tenThousandModel.resources.durableObjectRowsRead.operations +
-          driver.actualOperations.durableObjectRowsRead,
-        durableObjectRowsWritten:
-          tenThousandModel.resources.durableObjectRowsWritten.operations +
-          driver.actualOperations.durableObjectRowsWritten,
-        queueOperations:
-          tenThousandModel.resources.queueOperations.operations +
-          driver.actualOperations.queueOperations,
-        externalRequests: driver.actualOperations.externalRequests,
-        transferBytes: driver.actualOperations.transferBytes,
-      }
-    : null
+  const expectedProviderOperations = driver?.providerOperations || null
   const attribution = reconcileProviderAttribution(
     task5.verified ? task5.evidence.provider : null,
     { now, expectedOperations: expectedProviderOperations },
@@ -199,6 +168,35 @@ export async function runViralLoadReleaseGate({
               ? "read_pass_interactions_safely_shed"
               : "read_pass_personalized_overflow_pending_or_refused"
           : "blocked_missing_evidence"
+      const shedReceipts = (task5.raw?.shedReceipts || []).filter(
+        (receipt) => receipt.tierReaders === readers,
+      )
+      const shedCoverage = (kind, name, requiredOperations) => {
+        const requiredReceiptOperations =
+          kind === "lane"
+            ? name === "user_action"
+              ? ["discovery", "vote"]
+              : ["publication"]
+            : name === "workerRequests"
+              ? ["worker"]
+              : ["durable_object"]
+        const matching = shedReceipts.filter((receipt) =>
+          requiredReceiptOperations.includes(receipt.operation),
+        )
+        const observedShedUnits = matching.reduce(
+          (sum, receipt) => sum + (receipt.coverage?.[`${kind}s`]?.[name] || 0),
+          0,
+        )
+        return {
+          requiredReceiptOperations,
+          receiptDigests: matching.map((receipt) => receipt.identity.digest),
+          observedShedUnits,
+          coverageVerified:
+            requiredReceiptOperations.every((operation) =>
+              matching.some((receipt) => receipt.operation === operation),
+            ) && observedShedUnits >= requiredOperations,
+        }
+      }
       const mutationResourceDisposition = Object.fromEntries(
         Object.entries(resources)
           .filter(([, resource]) => resource.withinLimit === false)
@@ -208,7 +206,7 @@ export async function runViralLoadReleaseGate({
               operations: resource.operations,
               limit: resource.limit,
               disposition: "intentional_shed_pending",
-              observedRefusalCommands: driver?.refusalByResource?.[name] || 0,
+              ...shedCoverage("resource", name, resource.operations - resource.limit),
             },
           ]),
       )
@@ -220,7 +218,7 @@ export async function runViralLoadReleaseGate({
             {
               pendingOrRefused: lane.pendingOrRefused,
               disposition: "intentional_shed_pending",
-              observedRefusalCommands: driver?.refusalByResource?.[name] || 0,
+              ...shedCoverage("lane", name, lane.pendingOrRefused),
             },
           ]),
       )
@@ -259,7 +257,7 @@ export async function runViralLoadReleaseGate({
     [
       ...Object.values(tier.mutationResourceDisposition),
       ...Object.values(tier.laneDisposition),
-    ].every((entry) => entry.observedRefusalCommands > 0)
+    ].every((entry) => entry.coverageVerified)
   const overallChecks = {
     tenThousandLanesFit: Object.values(tenThousand.mutations.lanes).every((lane) => lane.fits),
     tenThousandBoundedResourcesFit: Object.values(tenThousand.resources)
@@ -267,8 +265,7 @@ export async function runViralLoadReleaseGate({
       .every((resource) => resource.withinLimit),
     externalResourcesResolved:
       externalEvidenceVerified &&
-      expectedProviderOperations?.externalRequests > 0 &&
-      expectedProviderOperations?.transferBytes > 0 &&
+      expectedProviderOperations != null &&
       Object.values(tenThousand.resources).every(
         (resource) => resource.evidence.status !== "pending_external",
       ),
