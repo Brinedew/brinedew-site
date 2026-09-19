@@ -2236,6 +2236,9 @@ function isIconoplasmDailyBudgetError(error) {
       "QUEUE_ACCOUNT_DAILY_LIMIT",
       "MUTATION_LANE_CAPACITY_EXHAUSTED",
       "MUTATION_PROVIDER_HEADROOM_RESERVED",
+      "MUTATION_PROVIDER_OBSERVATION_MISSING",
+      "MUTATION_PROVIDER_OBSERVATION_STALE",
+      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
     ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
@@ -2391,9 +2394,13 @@ async function reserveIconoplasmMutationWrites(
   const payload = await response.json().catch(() => null)
   if (
     response.status === 429 &&
-    ["MUTATION_LANE_CAPACITY_EXHAUSTED", "MUTATION_PROVIDER_HEADROOM_RESERVED"].includes(
-      payload?.code,
-    )
+    [
+      "MUTATION_LANE_CAPACITY_EXHAUSTED",
+      "MUTATION_PROVIDER_HEADROOM_RESERVED",
+      "MUTATION_PROVIDER_OBSERVATION_MISSING",
+      "MUTATION_PROVIDER_OBSERVATION_STALE",
+      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
+    ].includes(payload?.code)
   ) {
     return payload
   }
@@ -12049,6 +12056,12 @@ async function recordCompactDiscoveryEncounters(
   // The cutover fence is deliberately first: a pending migration performs no
   // dictionary mutation and consumes no mutation-lane reservation.
   await assertCompactDiscoveryActivated(db)
+  const names = encounters.map((encounter) => encounter.symbol)
+  const beforeDictionary = await loadDiscoveryDictionaryForNames(db, names)
+  const unresolvedNames = beforeDictionary.names.filter(
+    (name) => !beforeDictionary.byName.has(name),
+  )
+  const dictionaryWriteUnits = unresolvedNames.length ? 1 + unresolvedNames.length : 0
   const operationId = `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`
   const admission = await reserveIconoplasmMutationWrites(env, {
     lane: "user_action",
@@ -12056,7 +12069,7 @@ async function recordCompactDiscoveryEncounters(
     // Real D1 receipts: three writes for the compact personal batch, one
     // receipt and one indexed outbox delete for its shared delivery, plus one
     // conservative unit for the page-level shared-state update.
-    units: 6,
+    units: 6 + dictionaryWriteUnits,
   })
   if (admission?.ok !== true) {
     const error = new Error(
@@ -12066,8 +12079,9 @@ async function recordCompactDiscoveryEncounters(
     error.mutation_lane = admission
     throw error
   }
-  const names = encounters.map((encounter) => encounter.symbol)
-  const lookup = await ensureDiscoveryDictionaryForNames(db, names)
+  const lookup = await ensureDiscoveryDictionaryForNames(db, names, {
+    maxMutationWrites: dictionaryWriteUnits,
+  })
   const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
   const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
   if (!known.length) {
@@ -20000,6 +20014,9 @@ function isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error) {
 export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
   constructor(state, env = {}) {
     this.state = state
+    this.env = env
+    this.providerObservationCache = null
+    this.providerObservationCheckedAt = 0
     this.mutationReservations = new DailyMutationLaneReservations(state.storage)
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
       initializeCatalog: initializePublishedHydratedCatalog,
@@ -20215,6 +20232,72 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
         )
         .toArray()[0] || null
     )
+  }
+
+  async providerD1Observation(dayKey) {
+    const now = Date.now()
+    if (
+      this.providerObservationCache &&
+      now - this.providerObservationCheckedAt < 60_000 &&
+      this.providerObservationCache.day_key === dayKey
+    ) {
+      return this.providerObservationCache
+    }
+    this.providerObservationCheckedAt = now
+    if (!this.env?.KV || typeof this.env.KV.get !== "function") {
+      this.providerObservationCache = {
+        ok: false,
+        code: "MUTATION_PROVIDER_OBSERVATION_MISSING",
+        day_key: dayKey,
+      }
+      return this.providerObservationCache
+    }
+    let snapshot
+    try {
+      snapshot = await this.env.KV.get(KV_OBSERVABILITY_SNAPSHOT, "json")
+    } catch {
+      snapshot = null
+    }
+    const provider = snapshot?.providerAdmission
+    const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
+    const accountId = String(provider?.accountId || "").trim()
+    const observedDay = String(provider?.dayKey || "").trim()
+    const rowsWritten = Number(provider?.rowsWritten)
+    if (
+      !provider ||
+      !Number.isFinite(observedAt) ||
+      !accountId ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(observedDay) ||
+      !Number.isSafeInteger(rowsWritten) ||
+      rowsWritten < 0
+    ) {
+      this.providerObservationCache = {
+        ok: false,
+        code: snapshot
+          ? "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
+          : "MUTATION_PROVIDER_OBSERVATION_MISSING",
+        day_key: dayKey,
+      }
+      return this.providerObservationCache
+    }
+    if (observedDay !== dayKey || observedAt > now + 60_000 || now - observedAt > 90 * 60_000) {
+      this.providerObservationCache = {
+        ok: false,
+        code: "MUTATION_PROVIDER_OBSERVATION_STALE",
+        day_key: dayKey,
+        observed_day_key: observedDay,
+        observed_at: new Date(observedAt).toISOString(),
+      }
+      return this.providerObservationCache
+    }
+    this.providerObservationCache = {
+      ok: true,
+      day_key: dayKey,
+      account_id: accountId,
+      rows_written: rowsWritten,
+      observed_at: new Date(observedAt).toISOString(),
+    }
+    return this.providerObservationCache
   }
 
   cycleUsageRow(cycleKey) {
@@ -20565,7 +20648,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/reserve-mutation-writes") {
-      const providerRowsWritten = Math.max(0, Number(this.usageRow(dayKey)?.rows_written || 0) || 0)
+      const providerObservation = await this.providerD1Observation(dayKey)
+      if (providerObservation.ok !== true) {
+        return Response.json(
+          {
+            ...providerObservation,
+            disposition: "pending_or_retryable_refusal",
+          },
+          { status: 429 },
+        )
+      }
+      const providerRowsWritten = Math.max(
+        Math.max(0, Number(this.usageRow(dayKey)?.rows_written || 0) || 0),
+        providerObservation.rows_written,
+      )
       const reservation = this.mutationReservations.reserve({
         day: dayKey,
         lane: payload?.lane,
@@ -25970,16 +26066,15 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   if (result?.ok !== true) return result
   await completeIconoplasmMutationReservation(env, operationId)
   const rowsPerDay = 8 * 4 * 24
-  const remainingRows = Math.max(
-    0,
-    activation.total_legacy_rows - activation.migrated_rows - Number(result.migrated_rows || 0),
-  )
   return {
     ...result,
     pending: !result.complete,
-    measured_legacy_rows: activation.total_legacy_rows,
+    measured_legacy_rows: Number(result.measured_legacy_rows || 0),
+    denominator_complete: Boolean(result.complete),
     bounded_rows_per_day: rowsPerDay,
-    maximum_remaining_days: Math.ceil(remainingRows / rowsPerDay),
+    maximum_remaining_days: result.complete ? 0 : null,
+    minimum_remaining_rows: result.complete ? 0 : 1,
+    next_page_due_within_minutes: result.complete ? 0 : 15,
   }
 }
 
@@ -35815,7 +35910,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         if (
           code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
-          code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
+          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
+          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
         ) {
           return done(
             "discoveries_batch_capacity",

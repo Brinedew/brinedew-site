@@ -5,10 +5,10 @@ import {
   COMPACT_DISCOVERY_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 
-// The admitted compact-discovery migration is schema and singleton state only.
-// Ordinals are appended on demand by the bounded dictionary resolver, so this
-// adapter never seeds one row per catalog gene and its measured cost does not
-// grow with catalog size.
+// The admitted compact-discovery migration is schema and constant singleton
+// state only. It neither counts legacy discoveries nor seeds catalog ordinals.
+// The bounded executor establishes its denominator from admitted eight-row
+// page receipts, so this adapter's measured cost cannot grow with either table.
 //
 // One bounded schema guard. It accepts at most 1024 existing schema objects
 // and proves the v2 tables are not already present. The schema is scanned
@@ -50,7 +50,9 @@ export function createCompactDiscoveryMigrationCostAdapter({
         },
       ]
       // DDL only: one bounded single-pass schema guard, fifteen
-      // schema/singleton statements and the migration receipt. The guard
+      // schema/singleton statements and the migration receipt. Activation
+      // starts with a zero observed denominator; no legacy table is scanned.
+      // The guard
       // accepts at most 1024 schema objects and reads at most 1025 schema rows
       // before its cap; the catalog is never read. Increasing an operation's
       // honest reservation inside the existing daily allowance does not change

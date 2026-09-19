@@ -107,6 +107,9 @@ test(
 
       const shared = await readSharedCompactState(db)
       assert.equal(shared.state_version, 0)
+      const activationBeforeExecutor = await readCompactDiscoveryActivation(db)
+      assert.equal(activationBeforeExecutor.total_legacy_rows, 0)
+      assert.equal(activationBeforeExecutor.migrated_rows, 0)
       assert.deepEqual(await readDiscoveryDictionaryMeta(db), { version: 1 })
       const seeded = await loadDiscoveryDictionaryForNames(db, ["BRCA1", "TP53", "RETIRED1"])
       assert.equal(seeded.byName.size, 0)
@@ -253,12 +256,16 @@ test(
       const first = await migrateIconoplasmCompactDiscoveryForScheduled(env)
       assert.equal(first.pending, true)
       assert.equal(first.migrated_rows, 8)
-      assert.equal(first.measured_legacy_rows, 9)
+      assert.equal(first.measured_legacy_rows, 8)
+      assert.equal(first.denominator_complete, false)
       assert.equal(first.bounded_rows_per_day, 768)
-      assert.equal(first.maximum_remaining_days, 1)
+      assert.equal(first.maximum_remaining_days, null)
       const resumed = await migrateIconoplasmCompactDiscoveryForScheduled({ ...env })
       assert.equal(resumed.complete, true)
       assert.equal(resumed.migrated_rows, 1)
+      assert.equal(resumed.measured_legacy_rows, 9)
+      assert.equal(resumed.denominator_complete, true)
+      assert.equal(resumed.maximum_remaining_days, 0)
       assert.equal(
         authorityCalls.filter((call) => call.path === "/reserve-mutation-writes").length,
         2,

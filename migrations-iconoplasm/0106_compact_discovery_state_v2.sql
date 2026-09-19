@@ -27,7 +27,7 @@ CREATE TABLE icono_discovery_compact_activation_v2 (
 
 INSERT INTO icono_discovery_compact_activation_v2 (
   singleton, status, cursor_user_id, cursor_gene_symbol, migrated_users, total_legacy_rows
-) VALUES (1, 'pending', '', '', 0, (SELECT COUNT(*) FROM icono_gene_discoveries));
+) VALUES (1, 'pending', '', '', 0, 0);
 
 CREATE TABLE icono_discovery_cas_guard (
   ok INTEGER NOT NULL CONSTRAINT DISCOVERY_COMPACT_CAS_CONFLICT CHECK(ok = 1)
