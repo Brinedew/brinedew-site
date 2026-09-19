@@ -1680,29 +1680,15 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(block, /classList\.remove\("icono-static-shell-only"\)/)
   assert.doesNotMatch(head, /not\(\[data-icono-startup-route="gene"\]\) \.icono-static-shell-only/)
   assert.match(head, /\^\\\\\/gene\\\\\/\(\[\^\/\?#\]\+\)/)
-  assert.match(
-    head,
-    /"\/api\/iconoplasm\/site\/genes\/" \+[\s\S]{0,120}encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
-  )
   assert.match(head, /geneCardPromise: null/)
   assert.match(head, /getElementById\("iconoplasm-card-bootstrap"\)/)
   assert.match(head, /embeddedGeneCardPayload\.symbol === bootstrap\.geneDetailSymbol/)
-  assert.match(
+  assert.doesNotMatch(
     head,
-    /\/api\/iconoplasm\/cards\/" \+ encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
+    /\/api\/iconoplasm\/(?:cards|site\/genes)/,
+    "the static gene document must leave public data loading to the immutable publication reader",
   )
-  assert.match(head, /var startGeneDetailFetch = function \(\)/)
-  assert.match(head, /startGeneDetailFetch\(\)/)
-  assert.match(
-    head,
-    /var isCompleteGeneDetail = function \(data\)[\s\S]*Array\.isArray\(data\.portrait_candidates\)/,
-    "the head bootstrap must distinguish a complete gene detail from the lean first-paint card",
-  )
-  assert.match(
-    head,
-    /if \(isCompleteGeneDetail\(embeddedGeneCard\)\)[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
-    "the complete embedded page contract should satisfy the detail promise without a second read",
-  )
+  assert.doesNotMatch(head, /startGeneDetailFetch/)
   assert.doesNotMatch(
     head,
     /portraitSourcePromise|iconoplasmportraits\.b-cdn\.net[\s\S]*new Image\(\)/,

@@ -1451,17 +1451,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         })
       } else {
         setPrintCopyTriggerState(symbol, "idle")
-        var route = getRoute()
-        if (route.page === "gene" && normalizedSymbol(route.symbol) === normalizedSymbol(symbol)) {
-          void fetchPrintCopyStatus(normalizedSymbol(symbol))
-            .then(function (payload) {
-              if (payload.status === "ready") setPrintCopyTriggerState(symbol, "ready", payload)
-            })
-            .catch(function () {
-              // Status is optional presentation state. The explicit request path
-              // remains available and is the only path allowed to mutate.
-            })
-        }
       }
     })
   }
