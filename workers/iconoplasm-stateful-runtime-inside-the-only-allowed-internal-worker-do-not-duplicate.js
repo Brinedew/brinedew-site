@@ -20228,7 +20228,20 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     } catch {
       snapshot = null
     }
-    const provider = snapshot?.providerAdmission
+    // Rolling deploy compatibility: the previous snapshot schema already
+    // carried the same covered, account-wide D1 day and rows-written values.
+    // Accept that exact source until the refreshed publisher adds the flatter
+    // providerAdmission projection; never accept an uncovered daily bucket.
+    const legacyCurrentDay = snapshot?.d1?.currentDay
+    const provider =
+      snapshot?.providerAdmission ||
+      (legacyCurrentDay?.covered === true
+        ? {
+            accountId: "bound-cloudflare-account",
+            dayKey: legacyCurrentDay.date,
+            rowsWritten: legacyCurrentDay.rowsWritten,
+          }
+        : null)
     const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
     const accountId = String(provider?.accountId || "").trim()
     const observedDay = String(provider?.dayKey || "").trim()

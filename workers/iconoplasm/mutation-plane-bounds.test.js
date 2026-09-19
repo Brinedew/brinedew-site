@@ -500,6 +500,53 @@ test("staging admission reads the shared account-wide provider observation from 
   assert.equal((await response.json()).ok, true)
 })
 
+test("mutation admission accepts the equivalent legacy snapshot during rolling deployment", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const generatedAt = new Date().toISOString()
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
+    },
+    {
+      KV: {
+        async get(key, type) {
+          assert.equal(key, "iconoplasm:observability-snapshot:v1")
+          assert.equal(type, "json")
+          return {
+            schemaVersion: 3,
+            generatedAt,
+            d1: {
+              currentDay: {
+                date: generatedAt.slice(0, 10),
+                rowsWritten: 14,
+                covered: true,
+              },
+            },
+          }
+        },
+      },
+    },
+  )
+  const response = await owner.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: generatedAt.slice(0, 10),
+        lane: "user_action",
+        operation_id: "provider-observation:legacy-rollout",
+        units: 1,
+      }),
+    }),
+  )
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).ok, true)
+})
+
 test("mutation admission fails closed when the account-wide provider observation is stale", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
