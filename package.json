@@ -33,6 +33,7 @@
     "check:format:changed": "node ./scripts/run-prettier.mjs --check --changed",
     "benchmark:iconoplasm-extension": "node ./scripts/benchmark-iconoplasm-extension.mjs",
     "model:iconoplasm-capacity": "node ./scripts/iconoplasm-first-principles-capacity.mjs",
+    "gate:iconoplasm-viral-load": "node ./scripts/iconoplasm-viral-load-release-gate.mjs",
     "verify:iconoplasm-publication-aliases": "node ./scripts/verify-iconoplasm-publication-aliases.mjs",
     "validate:iconoplasm-topology": "node ./scripts/validate-iconoplasm-deployment-topology.mjs",
     "format": "node ./scripts/run-prettier.mjs --write",

@@ -12,6 +12,7 @@ import {
   readerGrowthAssessment,
   firstPersonaOverLimit,
   notificationInboxCost,
+  releaseTierAssessment,
   votingCost,
   websiteGuestDiscoveryMergeCost,
   websiteExplorerCost,
@@ -21,45 +22,69 @@ function first(perUser, base) {
   return firstPersonaOverLimit(perUser, base)[0]
 }
 
-test("growth assessment describes readers and ordinary voting, not a synthetic user ceiling", () => {
+test("10,000 readers use measured mutation receipts instead of the obsolete 172,000-write estimate", () => {
   const result = readerGrowthAssessment(10_000)
   assert.equal(result.activity.articleLoads, 50_000)
   assert.equal(result.activity.voters, 500)
   assert.equal(result.activity.votes, 1_000)
   assert.equal(result.activity.winningImageChanges, 200)
   assert.equal(result.activity.savedDiscoveries, 20_000)
-  assert.equal(result.components.discoveries.d1RowsWritten, 160_000)
-  assert.equal(result.modeledWork.d1RowsWritten, 172_000)
-  assert.equal(result.verdict, "redesign_required_by_model")
-  assert.ok(result.exceeded.some(({ resource }) => resource === "d1RowsWritten"))
-  assert.ok(result.unmodeled.length > 0)
+  assert.equal(result.mutations.lanes.user_action.reserved, 16_000)
+  assert.equal(result.mutations.lanes.user_action.actualMeasured, 14_016)
+  assert.equal(result.mutations.lanes.publication.reserved, 8_800)
+  assert.deepEqual(result.mutations.measuredOperations, {
+    discoveryD1RowsRead: 6_000,
+    discoveryD1RowsWritten: 10_016,
+    voteCommandReservedD1RowsWritten: 4_000,
+    publicationD1RowsWritten: 8_800,
+  })
+  assert.equal(result.mutations.provider.reserved, 24_800)
+  assert.equal(result.mutations.provider.headroom, 75_200)
+  assert.equal(result.mutations.provider.headroomFraction, 0.752)
+  assert.equal(result.verdict, "fits_measured_isolated_lanes")
+  assert.equal(result.evidence.productionWiringCertified, false)
+  assert.deepEqual(result.reads.portraitFallbacksByFraction, {
+    0.02: 1_000,
+    0.1: 5_000,
+  })
 })
 
-test("small growth scenarios never certify capacity from partial arithmetic", () => {
-  for (const readers of [0, 10, 1_000]) {
-    const result = readerGrowthAssessment(readers)
-    assert.equal(result.exceeded.length, 0)
-    assert.equal(result.verdict, "not_certified")
-  }
+test("release tiers separate static read availability from mutation completion", () => {
+  const tenThousand = releaseTierAssessment(10_000)
+  assert.equal(tenThousand.readAvailability, "complete")
+  assert.equal(tenThousand.mutationCompletion, "fits_measured_isolated_lanes")
+  assert.equal(tenThousand.verdict, "pass")
+
+  const million = releaseTierAssessment(1_000_000)
+  assert.equal(million.readAvailability, "complete")
+  assert.equal(million.mutationCompletion, "pending_or_refused_without_loss")
+  assert.ok(million.mutations.pendingOrRefusedUnits > 0)
+  assert.equal(million.mutations.lostAcceptedCommands, 0)
+  assert.equal(million.verdict, "read_pass_mutation_overflow")
+
+  const anonymous = releaseTierAssessment(100_000)
+  assert.equal(anonymous.activity.articleLoads, 500_000)
+  assert.equal(anonymous.activity.signedInReaders, 0)
+  assert.equal(anonymous.activity.savedDiscoveries, 0)
+  assert.equal(anonymous.activity.votes, 0)
 })
 
 test("healthy CDN delivery does not erase discovery or vote costs", () => {
   const result = readerGrowthAssessment(10_000, { bunnyBlockedFraction: 0 })
-  assert.equal(result.components.fallback.workerRequests, 0)
-  assert.equal(result.modeledWork.d1RowsWritten, 172_000)
-  assert.equal(result.verdict, "redesign_required_by_model")
+  assert.equal(result.reads.portraitFallbacks, 0)
+  assert.equal(result.mutations.lanes.user_action.reserved, 16_000)
+  assert.equal(result.verdict, "fits_measured_isolated_lanes")
 })
 
 test("regional fallback and voter participation are explicit independent growth axes", () => {
   const baseline = readerGrowthAssessment(10_000)
   const regional = readerGrowthAssessment(10_000, { bunnyBlockedFraction: 0.1 })
-  assert.equal(regional.components.fallback.workerRequests, 90_000)
+  assert.equal(regional.reads.portraitFallbacks, 5_000)
+  assert.equal(regional.reads.statefulOperations, 0)
   assert.equal(regional.activity.votes, baseline.activity.votes)
-  assert.ok(regional.exceeded.some(({ resource }) => resource === "workerRequests"))
   const engaged = readerGrowthAssessment(10_000, { voterFraction: 0.2 })
   assert.equal(engaged.activity.votes, 4_000)
-  assert.equal(engaged.modeledWork.queueOperations, 12_000)
-  assert.ok(engaged.exceeded.some(({ resource }) => resource === "queueOperations"))
+  assert.equal(engaged.mutations.lanes.user_action.reserved, 28_000)
 })
 
 test("growth assumptions reject invalid input and preserve fractional expected cohorts", () => {
@@ -79,7 +104,9 @@ test("default capacity report leads with reader verdicts and hides isolated pers
   const options = { encoding: "utf8", timeout: 10_000, maxBuffer: 32_768, windowsHide: true }
   const report = execFileSync(process.execPath, [script], options)
   assert.match(report, /10,000 daily readers/)
-  assert.match(report, /REDESIGN REQUIRED/)
+  assert.match(report, /100,000 daily readers/)
+  assert.match(report, /1,000,000 daily readers/)
+  assert.match(report, /measured isolated mutation lanes/)
   assert.doesNotMatch(report, /first exceeds at complete synthetic persona/)
   const engineering = execFileSync(process.execPath, [script, "--components"], options)
   assert.match(engineering, /NOT alternative product user limits/)
