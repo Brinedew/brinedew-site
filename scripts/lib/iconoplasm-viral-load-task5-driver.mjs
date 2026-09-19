@@ -1,5 +1,22 @@
 import { createHash } from "node:crypto"
 
+export function mapExecutedOperationsToProviderMeters(actualOperations) {
+  return {
+    workerRequests: actualOperations.workerRequests,
+    kvReads: 0,
+    kvWrites: 0,
+    kvLists: 0,
+    d1RowsRead: actualOperations.d1RowsRead,
+    d1RowsWritten: actualOperations.d1RowsWritten,
+    durableObjectRequests: actualOperations.durableObjectRequests,
+    durableObjectRowsRead: actualOperations.durableObjectRowsRead,
+    durableObjectRowsWritten: actualOperations.durableObjectRowsWritten,
+    queueOperations: actualOperations.queueOperations,
+    externalRequests: 0,
+    transferBytes: null,
+  }
+}
+
 export function hostedCommandId({ day, index }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("day must be YYYY-MM-DD")
   if (!Number.isSafeInteger(index) || index < 0 || index >= 60_000)

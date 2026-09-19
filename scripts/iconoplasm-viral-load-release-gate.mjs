@@ -148,8 +148,9 @@ export async function runViralLoadReleaseGate({
               ...tier.resources.transferBytes,
               operations: Math.ceil(driver.transferBytes * (readers / 100_000)),
               evidence: {
-                status: readers === 100_000 ? "measured_hosted" : "reviewed_projection",
+                status: "pending_external",
                 source: task5.evidence.digest,
+                observation: "client_bytes_not_provider_cdn_meter",
                 observedAtReaders: 100_000,
               },
             },
@@ -160,7 +161,7 @@ export async function runViralLoadReleaseGate({
         verdict: topologyProof.verified ? "topology_proven" : "blocked_missing_topology_proof",
         evidence: { topologyProof },
       }
-      const tierVerdict =
+      let tierVerdict =
         topologyProof.verified && externalEvidenceVerified
           ? readers === 10_000
             ? "pass"
@@ -194,7 +195,7 @@ export async function runViralLoadReleaseGate({
           coverageVerified:
             requiredReceiptOperations.every((operation) =>
               matching.some((receipt) => receipt.operation === operation),
-            ) && observedShedUnits >= requiredOperations,
+            ) && observedShedUnits === requiredOperations,
         }
       }
       const mutationResourceDisposition = Object.fromEntries(
@@ -222,6 +223,13 @@ export async function runViralLoadReleaseGate({
             },
           ]),
       )
+      if (
+        task5.verified &&
+        [...Object.values(mutationResourceDisposition), ...Object.values(laneDisposition)].some(
+          (entry) => !entry.coverageVerified,
+        )
+      )
+        tierVerdict = "blocked_invalid_shed_coverage"
       return [
         String(readers),
         {
