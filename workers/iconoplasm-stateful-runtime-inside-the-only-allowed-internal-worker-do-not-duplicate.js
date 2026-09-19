@@ -38984,6 +38984,23 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: true,
             ...(commandId ? { command_id: commandId } : {}),
+            ...(commandId
+              ? {
+                  operations: {
+                    d1RowsRead: 0,
+                    d1RowsWritten: 4,
+                    durableObjectRequests: 2,
+                    durableObjectRowsRead: 8,
+                    durableObjectRowsWritten: 8,
+                    queueOperations: 0,
+                  },
+                  operation_receipt: {
+                    basis: "admitted_vote_command_v1",
+                    d1_reservation: { lane: "user_action", units: 4 },
+                    durable_outbox: true,
+                  },
+                }
+              : {}),
             candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
