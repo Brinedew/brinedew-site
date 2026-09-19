@@ -39,6 +39,21 @@ const D1_DAILY_QUERY = `query IconoplasmD1Daily($accountTag: string, $databaseId
   }
 }`
 
+const D1_ACCOUNT_DAILY_QUERY = `query IconoplasmD1AccountDaily($accountTag: string, $startDate: Date, $endDate: Date) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      d1AnalyticsAdaptiveGroups(
+        limit: 1000
+        filter: { date_geq: $startDate, date_leq: $endDate }
+        orderBy: [date_ASC]
+      ) {
+        dimensions { date }
+        sum { rowsWritten }
+      }
+    }
+  }
+}`
+
 const D1_STORAGE_QUERY = `query IconoplasmD1Storage($accountTag: string, $databaseId: string, $startDate: Date, $endDate: Date) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
@@ -931,16 +946,23 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     startDate: cycle.cycleStartDate,
     endDate: cycle.cycleEndDate,
   }
-  const [analyticsPayload, storagePayload, databaseMetadata] = await Promise.all([
-    callGraphQL(apiToken, D1_DAILY_QUERY, variables),
-    callGraphQL(apiToken, D1_STORAGE_QUERY, variables),
-    fetchD1DatabaseMetadata({
-      apiToken,
-      accountId,
-      databaseId: config.databaseId,
-    }),
-  ])
+  const [analyticsPayload, accountAnalyticsPayload, storagePayload, databaseMetadata] =
+    await Promise.all([
+      callGraphQL(apiToken, D1_DAILY_QUERY, variables),
+      callGraphQL(apiToken, D1_ACCOUNT_DAILY_QUERY, {
+        accountTag: accountId,
+        startDate: cycle.cycleStartDate,
+        endDate: cycle.cycleEndDate,
+      }),
+      callGraphQL(apiToken, D1_STORAGE_QUERY, variables),
+      fetchD1DatabaseMetadata({
+        apiToken,
+        accountId,
+        databaseId: config.databaseId,
+      }),
+    ])
   const analyticsAccount = firstAccount(analyticsPayload)
+  const accountAnalytics = firstAccount(accountAnalyticsPayload)
   const storageAccount = firstAccount(storagePayload)
   const rawDaily = Array.isArray(analyticsAccount.d1AnalyticsAdaptiveGroups)
     ? analyticsAccount.d1AnalyticsAdaptiveGroups.map((row) => ({
@@ -1037,6 +1059,11 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     },
   )
   const currentDayRow = cycleDaily.find((row) => row.date === cycle.cycleEndDate) || null
+  const accountCurrentDayRowsWritten = Array.isArray(accountAnalytics.d1AnalyticsAdaptiveGroups)
+    ? accountAnalytics.d1AnalyticsAdaptiveGroups
+        .filter((row) => String(row?.dimensions?.date || "") === cycle.cycleEndDate)
+        .reduce((sum, row) => sum + asNumber(row?.sum?.rowsWritten), 0)
+    : 0
   const currentDayRowsRead = asNumber(currentDayRow?.rowsRead)
   const currentDayRowsWritten = asNumber(currentDayRow?.rowsWritten)
   const cycleRowsReadBeforeToday = Math.max(0, cycleTotalsBase.rowsRead - currentDayRowsRead)
@@ -1110,6 +1137,7 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
           : Math.max(0, currentDayRowsWrittenDailySmartLimit - currentDayRowsWritten),
       covered: Boolean(currentDayRow),
     },
+    accountCurrentDayRowsWritten,
     periodTotals,
     cycleTotals: {
       ...cycleTotalsBase,
@@ -1509,6 +1537,11 @@ async function main() {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     environment: envName,
+    providerAdmission: {
+      accountId,
+      dayKey: d1.cycleEndDate,
+      rowsWritten: d1.accountCurrentDayRowsWritten,
+    },
     source: {
       mode: "out_of_band_snapshot",
       analyticsTruth: "Cloudflare GraphQL analytics",

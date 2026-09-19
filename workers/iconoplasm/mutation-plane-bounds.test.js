@@ -133,6 +133,50 @@ class MeteredSqliteD1 extends SqliteD1 {
   }
 }
 
+function providerObservationKv({ rowsWritten = 0, generatedAt = new Date().toISOString() } = {}) {
+  return {
+    async get(key, type) {
+      assert.equal(key, "iconoplasm:observability-snapshot:v1")
+      assert.equal(type, "json")
+      return {
+        schemaVersion: 3,
+        generatedAt,
+        providerAdmission: {
+          accountId: "account-test",
+          dayKey: new Date(generatedAt).toISOString().slice(0, 10),
+          rowsWritten,
+        },
+      }
+    },
+  }
+}
+
+function discoveryAdmissionFixtureDb(onMutation) {
+  return {
+    prepare(sql) {
+      const text = String(sql)
+      if (text.includes("icono_discovery_compact_activation_v2")) {
+        return { first: async () => ({ status: "complete" }) }
+      }
+      if (text.includes("FROM icono_discovery_ordinals_v2")) {
+        return {
+          bind() {
+            return this
+          },
+          all: async () => ({ results: [] }),
+        }
+      }
+      if (text.includes("icono_discovery_dictionary_meta_v2")) {
+        return { first: async () => ({ version: 1 }) }
+      }
+      throw new Error(`Unexpected discovery admission query: ${text}`)
+    },
+    batch() {
+      onMutation()
+    },
+  }
+}
+
 function sqliteDoStorage(raw) {
   return {
     sql: {
@@ -343,12 +387,15 @@ test("authoritative provider writes consume the same 70 percent ordinary ceiling
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
   const storage = sqliteDoStorage(raw)
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate({
-    storage,
-    blockConcurrencyWhile(callback) {
-      return callback()
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage,
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
     },
-  })
+    { KV: providerObservationKv({ rowsWritten: 0 }) },
+  )
   const post = (path, body) =>
     owner.fetch(
       new Request(`https://iconoplasm-d1-daily-budget-kill-switch${path}`, {
@@ -395,6 +442,90 @@ test("authoritative provider writes consume the same 70 percent ordinary ceiling
       ordinary_ceiling: 70_000,
     },
   )
+})
+
+test("mutation admission fails closed when the account-wide provider observation is missing", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate({
+    storage: sqliteDoStorage(raw),
+    blockConcurrencyWhile(callback) {
+      return callback()
+    },
+  })
+  const response = await owner.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: new Date().toISOString().slice(0, 10),
+        lane: "user_action",
+        operation_id: "provider-observation:missing",
+        units: 1,
+      }),
+    }),
+  )
+  assert.equal(response.status, 429)
+  assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_MISSING")
+})
+
+test("mutation admission fails closed when the account-wide provider observation is stale", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const staleAt = new Date(Date.now() - 91 * 60_000).toISOString()
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
+    },
+    { KV: providerObservationKv({ generatedAt: staleAt }) },
+  )
+  const response = await owner.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: new Date().toISOString().slice(0, 10),
+        lane: "user_action",
+        operation_id: "provider-observation:stale",
+        units: 1,
+      }),
+    }),
+  )
+  assert.equal(response.status, 429)
+  assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_STALE")
+})
+
+test("fresh account-wide provider writes from other databases consume ordinary headroom", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
+    },
+    { KV: providerObservationKv({ rowsWritten: 69_999 }) },
+  )
+  const response = await owner.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: new Date().toISOString().slice(0, 10),
+        lane: "user_action",
+        operation_id: "provider-observation:cross-database",
+        units: 2,
+      }),
+    }),
+  )
+  assert.equal(response.status, 429)
+  const payload = await response.json()
+  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+  assert.equal(payload.provider_rows_written, 69_999)
 })
 
 test("daily-budget owner schedules terminal compaction at the next no-traffic eligibility", async (t) => {
@@ -506,7 +637,7 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
         assert.equal(new URL(request.url).pathname, "/reserve-mutation-writes")
         const body = await request.json()
         assert.equal(body.lane, "user_action")
-        assert.equal(body.units, 6)
+        assert.equal(body.units, 8)
         return Response.json(
           {
             ok: false,
@@ -540,15 +671,9 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
         },
       ),
       {
-        ICONOPLASM_DB: {
-          prepare(sql) {
-            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
-            return { first: async () => ({ status: "complete" }) }
-          },
-          batch() {
-            d1Mutations += 1
-          },
-        },
+        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
+          d1Mutations += 1
+        }),
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: capacity,
         GAME_SESSIONS: {
           idFromName: () => "session",
@@ -589,15 +714,9 @@ test("provider headroom refusal reaches discovery unchanged before D1 dispatch",
         },
       ),
       {
-        ICONOPLASM_DB: {
-          prepare(sql) {
-            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
-            return { first: async () => ({ status: "complete" }) }
-          },
-          batch() {
-            d1Mutations += 1
-          },
-        },
+        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
+          d1Mutations += 1
+        }),
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
           idFromName: () => "global",
           get: () => ({
@@ -651,15 +770,9 @@ test("discovery request fails closed before D1 when the shared mutation authorit
         },
       ),
       {
-        ICONOPLASM_DB: {
-          prepare(sql) {
-            assert.match(String(sql), /icono_discovery_compact_activation_v2/)
-            return { first: async () => ({ status: "complete" }) }
-          },
-          batch() {
-            d1Mutations += 1
-          },
-        },
+        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
+          d1Mutations += 1
+        }),
         GAME_SESSIONS: {
           idFromName: () => "session",
           get: () => ({ fetch: async () => Response.json({ user_id: "reader-1" }) }),
@@ -671,6 +784,83 @@ test("discovery request fails closed before D1 when the shared mutation authorit
   assert.equal(response.status, 503)
   assert.equal(payload.code, "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR")
   assert.equal(d1Mutations, 0)
+})
+
+test("cold ten-symbol discovery reserves measured dictionary writes while the warm retry reserves six", async (t) => {
+  const migrationRoot = new URL("../../migrations-iconoplasm/", import.meta.url)
+  const schema = readdirSync(migrationRoot)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(new URL(name, migrationRoot), "utf8"))
+    .join("\n")
+  const db = new MeteredSqliteD1(schema)
+  t.after(() => db.raw.close())
+  const symbols = Array.from({ length: 10 }, (_, index) => `COLD${index}`)
+  const insert = db.raw.prepare(
+    "INSERT INTO icono_gene_catalog(gene_symbol, full_name) VALUES (?, ?)",
+  )
+  for (const symbol of symbols) insert.run(symbol, symbol)
+  db.raw
+    .prepare(
+      "UPDATE icono_discovery_compact_activation_v2 SET status='complete', completed_at=CURRENT_TIMESTAMP WHERE singleton=1",
+    )
+    .run()
+  const reservations = []
+  const env = {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+      idFromName: () => "global",
+      get: () => ({
+        async fetch(request) {
+          const body = await request.json()
+          if (new URL(request.url).pathname === "/reserve-mutation-writes") reservations.push(body)
+          return Response.json({ ok: true })
+        },
+      }),
+    },
+    GAME_SESSIONS: {
+      idFromName: () => "session",
+      get: () => ({ fetch: async () => Response.json({ user_id: "reader-cold" }) }),
+    },
+  }
+  const send = (batchId) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: "session=test" },
+          body: JSON.stringify({
+            batch_id: batchId,
+            encounters: symbols.map((symbol, index) => ({
+              symbol,
+              at: 1_800_000_000 + index,
+              source: "extension_hover",
+              trigger: "hover_dwell",
+              dwell_ms: 900,
+            })),
+          }),
+        },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+
+  const beforeCold = db.rowsWritten
+  assert.equal((await send("cold:1")).status, 200)
+  const coldWrites = db.rowsWritten - beforeCold
+  assert.equal(reservations[0].units, 17)
+  assert.ok(reservations[0].units >= coldWrites, JSON.stringify({ coldWrites }))
+
+  const beforeWarm = db.rowsWritten
+  assert.equal((await send("warm:2")).status, 200)
+  const warmWrites = db.rowsWritten - beforeWarm
+  assert.equal(reservations[1].units, 6)
+  assert.ok(reservations[1].units >= warmWrites, JSON.stringify({ warmWrites }))
+  assert.ok(coldWrites > warmWrites, JSON.stringify({ coldWrites, warmWrites }))
+  t.diagnostic(
+    JSON.stringify({ operation: "discovery-batch-10", coldWrites, warmWrites, coldUnits: 17 }),
+  )
 })
 
 test("finalization recovery lane refuses a durable phase before its first mutation", async () => {
