@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -16,6 +17,7 @@ import {
 } from "../../../workers/test-helpers/throwing-state-bindings.js"
 
 const appPath = new URL("./app.js", import.meta.url)
+const diagramStudioPath = new URL("./diagram-studio.js", import.meta.url)
 const headPath = new URL("../../components/Head.tsx", import.meta.url)
 const wranglerPath = new URL(
   "../../../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -56,6 +58,15 @@ test("anonymous gene detail asks the immutable publication reader instead of a s
   assert.equal(payload.symbol, "TP53")
   assert.equal(readerCalls.length, 1)
   assert.deepEqual(load.calls, [])
+})
+
+test("publication reader imports carry its current content hash", async () => {
+  const source = await readFile(new URL("./publication-reader.js", import.meta.url), "utf8")
+  const version = createHash("sha256").update(source).digest("hex").slice(0, 16)
+  for (const consumerPath of [appPath, diagramStudioPath]) {
+    const consumer = await readFile(consumerPath, "utf8")
+    assert.match(consumer, new RegExp(`publication-reader\\.js\\?v=${version}`))
+  }
 })
 
 test("gene document head-start never calls the stateful card or detail APIs", async () => {
