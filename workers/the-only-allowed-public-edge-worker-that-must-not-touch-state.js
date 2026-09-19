@@ -191,11 +191,13 @@ function publicStaticDocumentPath(url) {
   }
   if (!MAIN_SITE_HOSTS.has(url.hostname)) return ""
   if (ROOT_DOCUMENT_PATHS.has(url.pathname)) return "/index.html"
-  // The Iconoplasm asset bundle also contains privacy.html. The main site has
-  // no /privacy document, so route these aliases to Pages and preserve its 404
-  // instead of leaking Iconoplasm's privacy page onto the wrong hostname.
-  if (PRIVACY_DOCUMENT_PATHS.has(url.pathname)) return url.pathname
-  return ""
+  // The apex hostname belongs to the Pages site for every public read. Only
+  // the explicitly namespaced API is allowed to enter the stateful service
+  // binding. Sending an unknown document or asset through that binding lets
+  // Iconoplasm's SPA fallback capture unrelated paths (for example
+  // /settings/index), reconnecting ordinary readers to the control plane.
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return ""
+  return url.pathname
 }
 
 async function maybeServeHostnameSensitiveStaticDocument(request) {
@@ -275,10 +277,11 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
   // bundle intentionally owns `/` and `/privacy` on the Iconoplasm hostname,
   // but those same filenames must never capture Brinedew or GeneGuessr.
   //
-  // This edge owns only the hostname-sensitive public HTML documents. It has no
-  // state bindings and fetches the canonical Pages deployment directly. Every
-  // API, authenticated request, draft check, and non-colliding static path
-  // continues through the single internal stateful Worker.
+  // This edge owns every public apex read and the hostname-sensitive
+  // GeneGuessr documents. It has no state bindings and fetches the canonical
+  // Pages deployment directly. Only explicitly namespaced API traffic and
+  // Iconoplasm-host traffic continue through the single internal stateful
+  // Worker.
   const publicDocumentResponse = await maybeServeHostnameSensitiveStaticDocument(request)
   if (publicDocumentResponse) return publicDocumentResponse
 
