@@ -4960,51 +4960,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  function primeGeneVoteBoxGroups(groups) {
-    if (!currentUser) return Promise.resolve()
-    var voteGroups = (Array.isArray(groups) ? groups : []).filter(Boolean)
-    if (!voteGroups.length) return Promise.resolve()
-    var uniqueItems = []
-    var seen = Object.create(null)
-    for (var i = 0; i < voteGroups.length; i++) {
-      var group = voteGroups[i]
-      if (!group.item || seen[group.candidateRef]) continue
-      seen[group.candidateRef] = true
-      uniqueItems.push(group.item)
-    }
-    return fetchJSON("/api/iconoplasm/votes/snapshots", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: uniqueItems }),
-    })
-      .then(function (data) {
-        var snapshots = Array.isArray(data && data.snapshots) ? data.snapshots : []
-        var byCandidate = Object.create(null)
-        for (var i = 0; i < snapshots.length; i++) {
-          var row = snapshots[i]
-          if (row && row.candidate_ref) byCandidate[row.candidate_ref] = row.snapshot
-        }
-        for (var i = 0; i < voteGroups.length; i++) {
-          var group = voteGroups[i]
-          var snapshot = byCandidate[group.candidateRef]
-          var handle = group.handles && group.handles[0]
-          if (snapshot && handle && typeof handle.setSnapshot === "function") {
-            handle.setSnapshot(snapshot, { authenticated: !!data.authenticated })
-          }
-        }
-      })
-      .catch(function (err) {
-        console.error("[Iconoplasm] batched vote snapshot error:", err)
-      })
-  }
-
   function wireGeneVoteControls(container, genePayload) {
-    var groups = []
-    var leadGroup = wireGeneVoteBox(container, genePayload)
-    if (leadGroup) groups.push(leadGroup)
-    groups = groups.concat(wireCandidateVoteBoxes(container, genePayload))
-    primeGeneVoteBoxGroups(groups)
+    wireGeneVoteBox(container, genePayload)
+    wireCandidateVoteBoxes(container, genePayload)
   }
 
   function wireCandidateRemoveButtons(container, genePayload) {
