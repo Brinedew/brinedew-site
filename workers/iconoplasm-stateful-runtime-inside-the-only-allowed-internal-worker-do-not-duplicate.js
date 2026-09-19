@@ -1256,7 +1256,7 @@ const ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH = Symbol(
 const ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_SYNC_GOVERNOR_TARGET_UTILIZATION = 0.93
-const ICONOPLASM_SYNC_GOVERNOR_MIN_BATCH_PERMITS = 1
+const ICONOPLASM_SYNC_GOVERNOR_MIN_BATCH_PERMITS = 0
 const ICONOPLASM_SYNC_GOVERNOR_MAX_BATCH_PERMITS = 250
 
 const catalogCache = {
@@ -20510,7 +20510,8 @@ function iconoplasmSyncGovernorDefaultState() {
     last_error_rate: 0,
     last_latency_ms: 0,
     public_health: "unknown",
-    updated_at: new Date().toISOString(),
+    provider_observed_at: "",
+    updated_at: new Date(Date.now()).toISOString(),
   }
 }
 
@@ -20543,8 +20544,31 @@ function iconoplasmSyncGovernorStateFromRaw(raw) {
       Number(raw.target_utilization || base.target_utilization) || base.target_utilization,
     observed_utilization: Math.max(0, Math.min(1, Number(raw.observed_utilization || 0) || 0)),
     active_consumers: Math.max(0, Number.parseInt(String(raw.active_consumers || 0), 10) || 0),
+    provider_observed_at: String(raw.provider_observed_at || raw.updated_at || ""),
     updated_at: String(raw.updated_at || base.updated_at),
   }
+}
+
+function iconoplasmSyncGovernorAdmission(state) {
+  const now = Date.now()
+  const observedAt = Date.parse(String(state.provider_observed_at || ""))
+  const stale =
+    !Number.isFinite(observedAt) || now - observedAt > 60_000 || observedAt > now + 60_000
+  const health = String(state.public_health || "unknown")
+    .trim()
+    .toLowerCase()
+  const permits = clampIconoplasmSyncGovernorPermits(state.batch_permits)
+  let reason = ""
+  if (stale) reason = "provider_observation_stale"
+  else if (!health || health === "unknown") reason = "provider_health_unknown"
+  else if (health === "exhausted" || permits <= 0) reason = "provider_capacity_exhausted"
+  else if (health !== "healthy") reason = "public_health"
+  const configuredNextAdmission = Number(state.next_admission_at || 0) || 0
+  const nextAdmissionAt =
+    configuredNextAdmission > now
+      ? configuredNextAdmission
+      : now + secondsUntilCloudflareDailyReset() * 1000
+  return { admitted: !reason, permits, reason, nextAdmissionAt }
 }
 
 export class IconoplasmSyncGovernor {
@@ -20554,11 +20578,20 @@ export class IconoplasmSyncGovernor {
   }
 
   async deferFinalizationToReset(message) {
-    return this.deferQueueToReset("finalization_reset_wake", message)
+    const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+    return this.deferQueueUntil("finalization_reset_wake", message, dueAt)
+  }
+
+  async deferFinalizationUntil(message, dueAt) {
+    const admissionAt = Number(dueAt || 0) || 0
+    if (!Number.isFinite(admissionAt) || admissionAt <= Date.now())
+      throw new Error("Finalization admission time must be in the future")
+    return this.deferQueueUntil("finalization_reset_wake", message, admissionAt)
   }
 
   async deferVoteProjectionToReset() {
-    return this.deferQueueToReset("vote_projection_reset_wake")
+    const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+    return this.deferQueueUntil("vote_projection_reset_wake", null, dueAt)
   }
 
   async schedulePendingResetAlarm(txn) {
@@ -20571,8 +20604,7 @@ export class IconoplasmSyncGovernor {
     if (pending.length) await txn.setAlarm(Math.min(...pending.map((wake) => wake.due_at)))
   }
 
-  async deferQueueToReset(key, message = null) {
-    const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
+  async deferQueueUntil(key, message, dueAt) {
     const day = new Date(dueAt).toISOString().slice(0, 10)
     const isFinalization = key === "finalization_reset_wake"
     const safeMessage = isFinalization
@@ -20598,7 +20630,8 @@ export class IconoplasmSyncGovernor {
           }
           messages.push(safeMessage)
         }
-        const resetAt = current?.day === day ? current.due_at : dueAt
+        const resetAt =
+          current?.day === day ? Math.max(Number(current.due_at || 0) || 0, dueAt) : dueAt
         const next = { ...current, day, due_at: resetAt, messages }
         if (JSON.stringify(next) !== JSON.stringify(current)) {
           await txn.put(key, next)
@@ -20732,7 +20765,7 @@ export class IconoplasmSyncGovernor {
     const next = this.pruneLeases(
       iconoplasmSyncGovernorStateFromRaw({
         ...state,
-        updated_at: new Date().toISOString(),
+        updated_at: new Date(Date.now()).toISOString(),
       }),
     )
     await this.state.storage.put("state", next)
@@ -20768,26 +20801,35 @@ export class IconoplasmSyncGovernor {
       const payload = await request.json().catch(() => ({}))
       return Response.json(await this.deferFinalizationToReset(payload))
     }
+    if (request.method === "POST" && url.pathname === "/defer-finalization-until") {
+      const payload = await request.json().catch(() => ({}))
+      return Response.json(
+        await this.deferFinalizationUntil(payload, Number(payload?.next_admission_at || 0)),
+      )
+    }
     if (request.method === "POST" && url.pathname === "/defer-vote-projection")
       return Response.json(await this.deferVoteProjectionToReset())
     if (request.method === "POST" && url.pathname === "/permit") {
       const stored = await this.storedState()
       const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
       const requested = Math.max(1, Math.min(100, Math.floor(requestedRaw)))
-      const updatedAtMs = Date.parse(String(stored.updated_at || ""))
-      const staleMs = Number.isFinite(updatedAtMs)
-        ? Date.now() - updatedAtMs
-        : Number.POSITIVE_INFINITY
-      const stalePublicBrake = stored.public_health !== "healthy" && staleMs > 60_000
-      const state = stalePublicBrake
-        ? {
-            ...stored,
-            batch_permits: Math.max(4, Number(stored.batch_permits || 0) || 0),
-            current_bottleneck: "cloudflare_queue_consumer",
-            public_health: "healthy",
-          }
-        : stored
-      const granted = Math.max(1, Math.min(requested, state.batch_permits))
+      const admission = iconoplasmSyncGovernorAdmission(stored)
+      if (!admission.admitted) {
+        const next = await this.persistState({
+          ...stored,
+          current_bottleneck: admission.reason,
+          next_admission_at: admission.nextAdmissionAt,
+        })
+        return Response.json({
+          ok: true,
+          granted: 0,
+          admission_reason: admission.reason,
+          next_admission_at: admission.nextAdmissionAt,
+          governor: next,
+        })
+      }
+      const state = stored
+      const granted = Math.min(requested, admission.permits)
       const leaseId = createIconoplasmSyncGovernorLeaseId()
       const activeConsumerLeases = {
         ...(state.active_consumer_leases || {}),
@@ -20817,7 +20859,8 @@ export class IconoplasmSyncGovernor {
       const failed = Math.max(0, Number(payload?.failed || 0) || 0)
       const retrying = Math.max(0, Number(payload?.retrying || 0) || 0)
       const latencyMs = Math.max(0, Number(payload?.latency_ms || payload?.latencyMs || 0) || 0)
-      const publicHealth = String(payload?.public_health || "healthy").trim() || "healthy"
+      const publicHealth =
+        String(payload?.public_health || state.public_health || "unknown").trim() || "unknown"
       const total = Math.max(1, processed + failed + retrying)
       const errorRate = Math.min(1, (failed + retrying) / total)
       let permits = clampIconoplasmSyncGovernorPermits(state.batch_permits)
@@ -20851,6 +20894,10 @@ export class IconoplasmSyncGovernor {
         last_error_rate: errorRate,
         last_latency_ms: latencyMs,
         public_health: publicHealth,
+        provider_observed_at: Object.hasOwn(payload, "public_health")
+          ? new Date(Date.now()).toISOString()
+          : state.provider_observed_at,
+        next_admission_at: Number(payload?.next_admission_at || 0) || 0,
       })
       return Response.json({ ok: true, governor: next })
     }
@@ -24355,9 +24402,12 @@ function iconoplasmSyncGovernorStub(env) {
 async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
   const stub = iconoplasmSyncGovernorStub(env)
   if (!stub || typeof stub.fetch !== "function") {
+    const nextAdmissionAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
     return {
-      ok: true,
-      granted: Math.max(1, Number(payload?.requested || payload?.messages || 1) || 1),
+      ok: false,
+      granted: 0,
+      admission_reason: "sync_governor_unavailable",
+      next_admission_at: nextAdmissionAt,
       governor: iconoplasmSyncGovernorDefaultState(),
       unavailable: true,
     }
@@ -24372,7 +24422,9 @@ async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
   if (!response.ok) {
     return {
       ok: false,
-      granted: 1,
+      granted: 0,
+      admission_reason: "sync_governor_unavailable",
+      next_admission_at: Date.now() + secondsUntilCloudflareDailyReset() * 1000,
       governor: iconoplasmSyncGovernorDefaultState(),
       unavailable: true,
     }
@@ -24384,6 +24436,20 @@ async function deferFinalizationThroughExistingGovernor(env, message) {
   const result = await iconoplasmSyncGovernorJson(env, "/defer-finalization", message)
   if (result?.ok !== true || result?.deferred !== true || !Number.isFinite(result?.reset_at))
     throw new Error("Existing SyncGovernor did not retain the finalization reset wake")
+  return result
+}
+
+async function deferFinalizationUntilExistingGovernor(env, message, nextAdmissionAt) {
+  const result = await iconoplasmSyncGovernorJson(env, "/defer-finalization-until", {
+    ...message,
+    next_admission_at: nextAdmissionAt,
+  })
+  if (
+    result?.ok !== true ||
+    result?.deferred !== true ||
+    Number(result?.reset_at || 0) < nextAdmissionAt
+  )
+    throw new Error("Existing SyncGovernor did not retain the owned finalization admission wake")
   return result
 }
 
@@ -25193,11 +25259,30 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   )
   const leaseId = String(permit?.lease_id || permit?.leaseId || "").trim()
   let retrying = 0
+  let deferred = 0
   const permittedMessages = messages.slice(0, permitGranted)
   const delayedMessages = messages.slice(permitGranted)
+  const nextAdmissionAt = Math.max(
+    Date.now() + 1000,
+    Number(permit?.next_admission_at || 0) ||
+      Date.now() + secondsUntilCloudflareDailyReset() * 1000,
+  )
   for (const message of delayedMessages) {
-    retrying += 1
-    if (typeof message?.retry === "function") message.retry({ delaySeconds: 30 })
+    try {
+      await deferFinalizationUntilExistingGovernor(
+        env,
+        bodyForFinalizationReset(message?.body),
+        nextAdmissionAt,
+      )
+      if (typeof message?.ack !== "function")
+        throw new Error("Finalization transport cannot transfer its durable identity")
+      message.ack()
+      deferred += 1
+    } catch (error) {
+      retrying += 1
+      if (typeof message?.retry !== "function") throw error
+      message.retry({ delaySeconds: Math.max(1, Math.ceil((nextAdmissionAt - Date.now()) / 1000)) })
+    }
   }
   if (permitGranted <= 0) {
     if (leaseId) {
@@ -25215,9 +25300,12 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       processed: 0,
       failed: 0,
       retrying,
+      deferred,
       finalized: 0,
       granted: 0,
       permit_granted: permitGranted,
+      next_admission_at: nextAdmissionAt,
+      admission_reason: String(permit?.admission_reason || "sync_governor_unavailable"),
       error: "Iconoplasm sync governor granted no Queue finalization permits.",
     }
   }
