@@ -1,8 +1,26 @@
+import { createHash } from "node:crypto"
+
 export function hostedCommandId({ day, index }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("day must be YYYY-MM-DD")
   if (!Number.isSafeInteger(index) || index < 0 || index >= 60_000)
     throw new Error("index must identify one of the 60,000 staged commands")
   return `viral-load:tp53:${day}:${String(index).padStart(6, "0")}`
+}
+
+export function summarizeHostedCommandIdentity(day) {
+  const first = hostedCommandId({ day, index: 0 })
+  const last = hostedCommandId({ day, index: 59_999 })
+  const prefix = first.slice(0, -6)
+  const digest = createHash("sha256")
+  for (let index = 0; index < 60_000; index++) digest.update(`${hostedCommandId({ day, index })}\n`)
+  return {
+    prefix,
+    first,
+    last,
+    count: 60_000,
+    digestAlgorithm: "sha256-newline-delimited",
+    digest: digest.digest("hex"),
+  }
 }
 
 export function buildHostedCommand({ day, index, assetSha256 }) {

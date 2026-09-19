@@ -78,6 +78,32 @@ const TASK5_EXTERNAL_GATES = Object.freeze([
   "multiRegion",
   "bunnyDelivery",
 ])
+const TASK5_FAILURE_PROFILES = Object.freeze([
+  "stale_pointer",
+  "bunny_outage",
+  "expired_artifact",
+  "laptop_off_accumulation",
+  "d1_exhaustion",
+  "queue_exhaustion",
+  "delayed_projection",
+])
+
+function validCommandIdentity(hostedLoad) {
+  const day = hostedLoad?.day
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day || "")) return false
+  const prefix = `viral-load:tp53:${day}:`
+  const digest = createHash("sha256")
+  for (let index = 0; index < 60_000; index++)
+    digest.update(`${prefix}${String(index).padStart(6, "0")}\n`)
+  return (
+    hostedLoad.commandIdentity?.prefix === prefix &&
+    hostedLoad.commandIdentity?.first === `${prefix}000000` &&
+    hostedLoad.commandIdentity?.last === `${prefix}059999` &&
+    hostedLoad.commandIdentity?.count === 60_000 &&
+    hostedLoad.commandIdentity?.digestAlgorithm === "sha256-newline-delimited" &&
+    hostedLoad.commandIdentity?.digest === digest.digest("hex")
+  )
+}
 
 function sha256Receipt(artifact) {
   const { digest, digestAlgorithm, ...receipt } = artifact || {}
@@ -108,7 +134,24 @@ export function validateTask5ViralLoadEvidence(evidence) {
     started < ended &&
     evidence.hostedLoad?.physicalRequests >= 500_000 &&
     evidence.hostedLoad?.commandsAttempted === 60_000 &&
+    evidence.hostedLoad?.concurrentStaticChecks > 0 &&
+    validCommandIdentity(evidence.hostedLoad) &&
+    evidence.commandReceipts?.acceptedCommands +
+      evidence.commandReceipts?.capacityRefusedCommands ===
+      60_000 &&
     evidence.commandReceipts?.lostAcceptedCommands === 0 &&
+    evidence.commandReceipts?.digestAlgorithm === "sha256-tab-newline-delimited" &&
+    /^[a-f0-9]{64}$/.test(evidence.commandReceipts?.digest || "") &&
+    evidence.failureProfiles?.length === TASK5_FAILURE_PROFILES.length &&
+    TASK5_FAILURE_PROFILES.every((name) => {
+      const matches = evidence.failureProfiles.filter((profile) => profile?.name === name)
+      return (
+        matches.length === 1 &&
+        matches[0].verdict === "verified" &&
+        matches[0].anonymousStatefulOperations === 0 &&
+        matches[0].lostAcceptedCommands === 0
+      )
+    }) &&
     evidence.provider?.identity?.accountIdHash === evidence.run.accountIdHash &&
     evidence.provider?.identity?.environment === evidence.run.environment &&
     evidence.provider?.identity?.runId === evidence.run.id &&
