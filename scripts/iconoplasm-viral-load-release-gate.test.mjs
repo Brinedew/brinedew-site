@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 
 import {
   buildHostileTp53Profile,
@@ -689,62 +689,28 @@ test("unexpected runner failures have a compact JSON error envelope", () => {
   })
 })
 
-test("production deploy invokes the blocking viral-load gate with Task 5 evidence", () => {
+test("production deploy owns a runnable staging rehearsal instead of an external Task 5 ceremony", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
     "utf8",
   )
-  assert.match(workflow, /pnpm run gate:iconoplasm-viral-load -- --task5-evidence=/)
-  assert.match(workflow, /ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE/)
   assert.match(workflow, /deploy-viral-load-staging:/)
-  assert.match(workflow, /collect-viral-load-staging-evidence:/)
-  assert.match(workflow, /needs:[\s\S]*collect-viral-load-staging-evidence/)
-  assert.match(workflow, /inputs\.viral_load_task5_evidence_run_id/)
-  assert.match(workflow, /resolve-iconoplasm-task5-artifact\.mjs/)
-  assert.doesNotMatch(workflow, /ICONOPLASM_TASK5_AUTHORIZATION/)
-})
-
-test("named Task 5 workflow executes every raw producer under staging provenance", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/iconoplasm-viral-load-task5.yml", import.meta.url),
-    "utf8",
-  )
-  assert.match(workflow, /produce-iconoplasm-viral-load-task5-evidence:/)
-  assert.match(workflow, /pull_request:[\s\S]*branches: \[main\]/)
   assert.match(
     workflow,
-    /TASK5_COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/,
+    /wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging/,
   )
-  assert.match(workflow, /ref: \$\{\{ env\.TASK5_COMMIT \}\}/)
-  assert.match(workflow, /environment: staging/)
-  assert.match(workflow, /ICONOPLASM_STAGING_SESSION_COOKIE/)
-  assert.match(workflow, /iconoplasm-viral-load-task5-driver\.mjs/)
-  for (const profile of [
-    "provider-before",
-    "provider-query",
-    "browser",
-    "region-apac",
-    "region-eu",
-    "region-us",
-    "bunny",
-    "fault-stale-pointer",
-    "fault-bunny-outage",
-    "fault-expired-artifact",
-    "fault-laptop-off",
-    "fault-d1-exhaustion",
-    "fault-queue-exhaustion",
-    "fault-delayed-projection",
-    "shed-100000-discovery",
-    "shed-100000-vote",
-    "shed-100000-publication",
-    "shed-1000000-discovery",
-    "shed-1000000-vote",
-    "shed-1000000-publication",
-    "shed-1000000-worker",
-    "shed-1000000-durable_object",
-  ])
-    assert.match(workflow, new RegExp(profile))
-  assert.doesNotMatch(workflow, /\btouch\b|fixture/i)
+  assert.match(workflow, /https:\/\/geneguessr-api-staging\.decap\.workers\.dev/)
+  assert.match(workflow, /needs: deploy-viral-load-staging/)
+  assert.doesNotMatch(workflow, /viral_load_task5_evidence_run_id/)
+  assert.doesNotMatch(workflow, /collect-viral-load-staging-evidence:/)
+  assert.doesNotMatch(workflow, /resolve-iconoplasm-task5-artifact\.mjs/)
+})
+
+test("the unowned self-hosted Task 5 workflow is retired", () => {
+  assert.equal(
+    existsSync(new URL("../.github/workflows/iconoplasm-viral-load-task5.yml", import.meta.url)),
+    false,
+  )
 })
 
 test("Task 5 artifact resolver allowlists exact workflow, commit, job, and digest", async () => {

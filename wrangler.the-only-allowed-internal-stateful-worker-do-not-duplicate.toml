@@ -282,7 +282,10 @@ crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,6,7,8,10,11,13,1
 
 [env.staging]
 name = "geneguessr-api-staging"
-workers_dev = false
+# Staging owns no production route, no cron, and separate mutable stores. Its
+# checked-in workers.dev URL is the executable rehearsal surface used before
+# production activation; production remains workers_dev=false above.
+workers_dev = true
 preview_urls = false
 # Wrangler inherits top-level routes unless an environment replaces them.
 # Staging owns queue consumers and test data only; it must never contend for
@@ -438,6 +441,9 @@ destination_address = "brinedew@proton.me"
 allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [env.staging.vars]
+ICONOPLASM_SCHEMA_TRANSITION = "0"
+ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
+ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
 ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"

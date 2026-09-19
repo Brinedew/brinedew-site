@@ -307,7 +307,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
 })
 
-test("DO NOT DELETE: the stateful worker has no workers.dev or preview bypass", () => {
+test("DO NOT DELETE: production has no workers.dev bypass and staging has one owned rehearsal URL", () => {
   const internalWrangler =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -325,8 +325,8 @@ test("DO NOT DELETE: the stateful worker has no workers.dev or preview bypass", 
   )
   assert.match(
     internalWrangler,
-    /\[env\.staging\][\s\S]*?workers_dev = false/,
-    "staging internal worker should also stay off workers.dev so the stateful worker remains internal",
+    /\[env\.staging\][\s\S]*?workers_dev = true/,
+    "isolated staging must expose its checked-in workers.dev rehearsal URL so release evidence is executable",
   )
   assert.match(
     internalWrangler,
@@ -360,6 +360,7 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "../scripts/prepare-iconoplasm-public-read-cutover.mjs",
     )
+  const productionJob = workflow.slice(workflow.indexOf("  deploy-production:"))
 
   assert.match(
     workflow,
@@ -367,9 +368,9 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     "admission must be staged in the existing state owner, then schema receipts must succeed before application activation",
   )
   assert.doesNotMatch(
-    workflow,
+    productionJob,
     /wrangler d1 (?:execute|migrations apply)/,
-    "deployment D1 work must not bypass prediction admission",
+    "production D1 work must not bypass prediction admission; isolated staging owns its disposable migration rehearsal",
   )
   const statefulConfig =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(

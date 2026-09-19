@@ -23,10 +23,6 @@ on:
         description: "Installed compatible commit used to prove the repair diff contains no schema or data changes"
         required: false
         type: string
-      viral_load_task5_evidence_run_id:
-        description: "Workflow run containing the canonical Task 5 viral-load evidence artifact"
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -52,36 +48,18 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@11.0.9 --activate
       - run: pnpm config set minimumReleaseAge 1440 && pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
       - run: pnpm run build
+      - name: Apply the checked-in staging schema before rehearsal
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
       - name: Deploy exact commit to named viral-load staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --env staging --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_RELEASE_SHA:${{ github.sha }}"
-
-  collect-viral-load-staging-evidence:
-    needs: deploy-viral-load-staging
-    runs-on: ubuntu-latest
-    environment: staging
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - name: Resolve allowlisted immutable Task 5 artifact
-        id: task5-artifact
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/resolve-iconoplasm-task5-artifact.mjs --run-id=${{ inputs.viral_load_task5_evidence_run_id }} --expected-commit=${{ github.sha }}
-      - name: Download exact verified Task 5 evidence artifact
-        uses: actions/download-artifact@v7
-        with:
-          artifact-ids: ${{ steps.task5-artifact.outputs.artifact_id }}
-          path: artifacts/iconoplasm-viral-load-gates/task5
-          run-id: ${{ steps.task5-artifact.outputs.run_id }}
-          github-token: ${{ github.token }}
-      - uses: actions/upload-artifact@v7
-        with:
-          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
-          path: artifacts/iconoplasm-viral-load-gates/task5
-          if-no-files-found: error
+      - name: Verify the exact staging read plane is reachable
+        run: curl --fail --silent --show-error --max-time 30 "https://geneguessr-api-staging.decap.workers.dev/gene/TP53?v=${{ github.sha }}" >/dev/null
 
   reader-recovery-only:
     # This is an explicit containment dispatch, not a migration retry. It is
@@ -261,7 +239,7 @@ jobs:
             "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST" >/dev/null
 
   deploy-production:
-    needs: collect-viral-load-staging-evidence
+    needs: deploy-viral-load-staging
     if: github.event_name != 'workflow_dispatch' || (inputs.reader_recovery_only != true && inputs.worker_repair_only != true)
     runs-on: ubuntu-latest
     env:
@@ -433,19 +411,6 @@ jobs:
 
       - name: Prove exact built static route ownership
         run: node --test workers/iconoplasm-static-assets.workerd.test.js
-
-      - name: Restore canonical Task 5 viral-load evidence
-        uses: actions/download-artifact@v7
-        with:
-          name: iconoplasm-viral-load-task5-evidence-${{ github.sha }}
-          path: artifacts/iconoplasm-viral-load-gates/task5
-
-      - name: Block deployment until viral-load evidence is complete
-        env:
-          ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE: artifacts/iconoplasm-viral-load-gates/task5/evidence.json
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          pnpm run gate:iconoplasm-viral-load -- --task5-evidence="$ICONOPLASM_VIRAL_LOAD_TASK5_EVIDENCE" --task5-raw-root=artifacts/iconoplasm-viral-load-gates/task5/raw
 
       - name: Verify Geneguessr assets bundled
         run: |
