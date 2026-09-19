@@ -280,3 +280,33 @@ changed-file formatting passed.
 This commit proves source, build, and provider dry-run boundaries only. It does
 not claim production deployment, Bunny propagation, or authenticated browser
 acceptance.
+
+## Final static compatibility review
+
+The final review found two static-cutover regressions: the generated sitemap
+contained only range pages rather than every published gene, and the static
+redirect table returned the placeholder for every stable blot URL even when an
+exact immutable blot existed. The initial combined RED run contained **17
+tests: 12 passed and 5 failed**. The activation/static RED then isolated **19
+tests: 16 passed and 3 failed** for missing verified symbols, missing
+pre-activation compatibility generation, and missing gene URLs.
+
+The Bunny activation gate now collects the unique normalized symbols from
+every hashed compact catalog index and proves their count equals the immutable
+manifest card count. Before final routing activation, those verified symbols
+produce one static sitemap containing every `/gene/{SYMBOL}` URL. This creates
+no per-gene Cloudflare file and performs no crawler-time state read.
+
+The stable `/blot/{SYMBOL}.webp` route now internally rewrites to the static SPA
+shell instead of the placeholder. The blot-only startup path stops normal app
+boot, resolves the gene-scoped coherent publication, validates its
+fingerprint-bound immutable Bunny object key, and navigates to those bytes. It
+uses the bundled placeholder only when the exact current and coherent prior
+publication cannot supply a valid blot. The retained preparation topology and
+the final SPA topology both keep this route out of the Worker.
+
+Focused source/fence verification passed **54/54**. The real Workerd final and
+retained-preparation route tests both passed. `pnpm run build` completed 214
+inputs, emitted 3,175 public files, and produced a 2,608-file, 52,378,339-byte
+edge bundle. Deployment, CDN propagation, and live browser acceptance remain
+separate gates.

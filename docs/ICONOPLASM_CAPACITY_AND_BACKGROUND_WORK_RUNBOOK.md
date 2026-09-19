@@ -391,8 +391,13 @@ primary D1 projection.
 anonymous documents no longer belong to its stateful request path. Workers
 Static Assets serves one SPA shell for `/`, `/gene/*`, `/genes/*`, and other
 documents before Worker code executes. `robots.txt`, `sitemap.xml`, and
-`llms.txt` are static build artifacts. Missing first-party portrait/blot aliases
-rewrite to a bundled placeholder. The browser loads dossiers, catalog search,
+`llms.txt` are static build artifacts. The final activation derives every
+published `/gene/{SYMBOL}` sitemap entry from the already verified immutable
+compact catalog indexes; it emits one sitemap and no per-gene Cloudflare files.
+The stable `/blot/{SYMBOL}.webp` URL rewrites internally to the same static
+shell, which resolves the gene-scoped coherent publication to its exact
+content-addressed Bunny blot and uses the bundled placeholder only when that
+artifact is genuinely absent. The browser loads dossiers, catalog search,
 gallery pages, portraits, blots, and passive vote totals from content-addressed
 Sysop V2 Bunny artifacts. Only explicit mutation and administrator `/api/*`
 paths enter the existing stateful Worker.
@@ -453,8 +458,10 @@ look simpler.
    its at-most-128-entry pages, all committed by the same publisher. Those pages
    include passive candidate summaries and shared vote totals; personal vote
    state is not loaded.
-5. Portrait and blot bytes use immutable Bunny URLs. Failure shows the bundled
-   placeholder and never invokes a Worker or reconstructs state.
+5. Portrait and blot bytes use immutable Bunny URLs. A stable blot request keeps
+   its first-party route while the static shell resolves that same immutable
+   identity; failure shows the bundled placeholder and never invokes a Worker
+   or reconstructs state.
 
 The throwing-bindings regression harness makes D1, Durable Objects, Queues, KV
 writes, sessions, Browser Rendering, and service bindings throw on access while

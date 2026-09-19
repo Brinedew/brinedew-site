@@ -64,7 +64,10 @@ Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
 The stable first-party `/blot/{SYMBOL}.webp` route resolves only the immutable
-object referenced by the card artifact selected by `KV_GALLERY_VERSION`; it is
+object referenced by the current coherent Sysop V2 gene artifact. Static Assets
+keeps the semantic URL and serves the application shell; its resolver validates
+the content-addressed Bunny blot URL and uses a bundled placeholder only if the
+current and gene-scoped prior publications cannot supply the exact object. It is
 not a second selection timeline and never consults live D1 portrait state.
 
 When a complete, indexable gene page has an exact ready blot, that blot must be
@@ -173,32 +176,20 @@ API: cold-agent retrieval is a separate release test. Do not publish a fake
 `/.well-known/ai` or agent card; unimplemented experimental well-known routes
 must return an explicit 404 rather than the application shell.
 
-Crawler GET and HEAD paths remain projections, not workflows. Sitemap and
-archive generation continue to read the shared versioned KV catalog and must
-add no D1 scan. A canonical gene document may retain its existing bounded exact
-D1 identity/detail reads under IPD-009, but discovery rendering must add no
-request-time write, enrollment, vote lookup, Queue send, repair, or Browser
-Rendering work.
+Crawler GET and HEAD paths remain static projections, not workflows. After the
+single publisher completes, the activation gate hashes every compact catalog
+index and proves its unique symbol count equals the manifest card count. Those
+verified symbols produce one static sitemap containing every canonical
+`/gene/{SYMBOL}` URL. Cloudflare stores that sitemap plus one SPA shell; it does
+not store 19,023 gene documents and no crawler request reads KV, D1, a Durable
+Object, a Queue, a session, or Browser Rendering.
 
-Before a gene-sitemap shard is emitted, one range-batched exact-shard read from
-the card artifact selected by `KV_GALLERY_VERSION` must resolve a structurally
-valid card for every catalog identity candidate. Every complete card remains a
-gene URL entry; only cards with exact ready blots receive an image child. A
-missing requested card or failed artifact read returns uncached `503` for the
-whole shard. Catalog/D1
-portrait SHAs are never compared or substituted. The response exposes both
-catalog and card versions so a crawler
-cache validator advances with either publication surface. The static blot
-discovery contract version is also part of the validator, so a blot renderer
-release itself is truthfully visible even when catalog data did not change.
-
-Corpus uploads intentionally do not republish KV card shards. After the exact
-published cards are loaded, a sitemap range may therefore batch-read only the
-matching symbol rows from `icono_gene_blot_materializations` in D1. Each row is
-accepted only when its portrait SHA, renderer fingerprint, dimensions, and
-immutable object key all match the selected card. This is a bounded readiness
-projection, not a D1 scan or an image-selection authority; missing or stale rows
-simply omit that gene's optional image child.
+Blot readiness does not control text-gene sitemap membership. The stable blot
+route resolves the same gene-scoped immutable publication in the browser and
+redirects to its fingerprint-bound Bunny bytes. If neither the current nor the
+coherent prior gene artifact has a valid blot, it selects the bundled static
+placeholder. It never reconstructs identity or readiness from a runtime
+database.
 
 The crawl frontier exists for search indexing and user-directed retrieval, not
 for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot
@@ -250,8 +241,9 @@ unmatched or multiply matched eligible symbol is a failed inventory migration
 and must stop release work until a deliberate rebaseline updates the table,
 documentation, sitemap expectations, and tests together.
 
-Archive and sitemap requests read the shared versioned KV catalog artifact.
-They must never add an on-request whole-catalog D1 scan.
+Archive browsing and sitemap generation use the immutable compact catalog
+projection. The browser requests bounded ranges; final activation writes the
+complete static sitemap once. Neither path performs an on-request catalog scan.
 
 ## Workstation-materialized gene blots
 
