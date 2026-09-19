@@ -174,3 +174,10 @@ test(
     assert.equal(proof.verified, true)
   },
 )
+
+test("the topology proof rejects an asset build from another commit", async () => {
+  await assert.rejects(
+    proveAnonymousRouteTopology({ expectedCommit: "f".repeat(40) }),
+    /STALE_PRODUCTION_STATIC_BUILD/,
+  )
+})

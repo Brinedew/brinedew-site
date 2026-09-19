@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import {
+  assessHostedSchedule,
   buildHostedCommand,
   classifyHostedResponse,
   summarizeHostedCommandIdentity,
@@ -59,13 +60,27 @@ export async function runHostedTask5Load({
     throw new Error("certification profile must issue 500,000 anonymous article loads")
 
   const receiptDigest = createHash("sha256")
+  const scheduleDigest = createHash("sha256")
   const counts = { acceptedDurable: 0, capacityRefused: 0, invalidCommandReceipts: 0 }
+  const commandLatenciesMs = []
+  const windows = []
   let staticFailures = 0
   let physicalStaticRequests = 0
+  let transferBytes = 0
   const startedAt = new Date().toISOString()
+  const runStartedMs = Date.now()
 
   for (let second = 0; second < durationSeconds; second++) {
+    const targetStart = runStartedMs + second * 1_000
+    if (Date.now() < targetStart) await wait(targetStart - Date.now())
     const secondStarted = Date.now()
+    const window = {
+      second,
+      scheduled: commandsPerSecond,
+      started: 0,
+      startedAtOffsetMs: secondStarted - runStartedMs,
+    }
+    windows.push(window)
     const firstCommand = second * commandsPerSecond
     const commands = Array.from({ length: commandsPerSecond }, (_, offset) =>
       buildHostedCommand({ day, index: firstCommand + offset, assetSha256 }),
@@ -79,6 +94,8 @@ export async function runHostedTask5Load({
 
     await Promise.all([
       pooled(commands, concurrency, async (command) => {
+        window.started++
+        const commandStarted = Date.now()
         const response = await fetchImpl(`${baseUrl}/api/iconoplasm/votes/set`, {
           method: "POST",
           headers: {
@@ -89,6 +106,8 @@ export async function runHostedTask5Load({
           body: JSON.stringify(command.body),
         })
         const body = await response.json().catch(() => null)
+        transferBytes += Buffer.byteLength(JSON.stringify(body || null))
+        commandLatenciesMs.push(Date.now() - commandStarted)
         const classification = classifyHostedResponse(command.id, { status: response.status, body })
         receiptDigest.update(`${command.id}\t${classification.verdict}\t${response.status}\n`)
         if (classification.verdict === "accepted_durable") counts.acceptedDurable++
@@ -101,12 +120,22 @@ export async function runHostedTask5Load({
           headers: { "x-iconoplasm-task5-static-request": String(index) },
         })
         physicalStaticRequests++
+        transferBytes += (await response.arrayBuffer()).byteLength
         if (!response.ok) staticFailures++
       }),
     ])
-    const remaining = 1_000 - (Date.now() - secondStarted)
-    if (remaining > 0 && second + 1 < durationSeconds) await wait(remaining)
+    scheduleDigest.update(
+      `${window.second}\t${window.scheduled}\t${window.started}\t${window.startedAtOffsetMs}\n`,
+    )
   }
+
+  const elapsedMs = Date.now() - runStartedMs
+  const schedule = assessHostedSchedule(windows, elapsedMs)
+  const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)
+  const percentile = (fraction) =>
+    sortedLatencies[
+      Math.min(sortedLatencies.length - 1, Math.floor(fraction * sortedLatencies.length))
+    ]
 
   return {
     schemaVersion: 1,
@@ -115,17 +144,27 @@ export async function runHostedTask5Load({
     startedAt,
     endedAt: new Date().toISOString(),
     physicalStaticRequests,
+    transferBytes,
     staticFailures,
     commandsAttempted: expectedCommands,
     commandIdentity: summarizeHostedCommandIdentity(day),
     commandOutcomes: counts,
+    schedule: {
+      ...schedule,
+      windowCount: windows.length,
+      windows,
+      digestAlgorithm: "sha256-tab-newline-delimited",
+      digest: scheduleDigest.digest("hex"),
+      latencyMs: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99) },
+    },
     commandReceiptDigestAlgorithm: "sha256-tab-newline-delimited",
     commandReceiptDigest: receiptDigest.digest("hex"),
     certificationReady:
       physicalStaticRequests === anonymousArticleLoads &&
       staticFailures === 0 &&
       counts.invalidCommandReceipts === 0 &&
-      counts.acceptedDurable + counts.capacityRefused === expectedCommands,
+      counts.acceptedDurable + counts.capacityRefused === expectedCommands &&
+      schedule.verified,
   }
 }
 

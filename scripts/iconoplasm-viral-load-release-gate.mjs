@@ -9,6 +9,7 @@ import {
   releaseTierAssessment,
 } from "./iconoplasm-first-principles-capacity.mjs"
 import {
+  createGitHubActionsRunVerifier,
   reconcileProviderAttribution,
   validateTask5ViralLoadEvidence,
 } from "./lib/iconoplasm-release-evidence.mjs"
@@ -105,12 +106,48 @@ export async function runViralLoadReleaseGate({
   outputPath,
   task5Evidence,
   runTopologyProof = true,
+  expectedCommit = process.env.GITHUB_SHA,
+  trustedRunVerifier,
+  rawArtifacts,
+  now = Date.now(),
 } = {}) {
   const topologyProof = runTopologyProof
-    ? await proveAnonymousRouteTopology()
+    ? await proveAnonymousRouteTopology({ expectedCommit })
     : { kind: "exact_build_topology_proof", verified: false, reason: "not_run" }
-  const task5 = validateTask5ViralLoadEvidence(task5Evidence)
-  const attribution = reconcileProviderAttribution(task5.verified ? task5.evidence.provider : null)
+  const task5 = await validateTask5ViralLoadEvidence(task5Evidence, {
+    expectedCommit,
+    trustedRunVerifier,
+    rawArtifacts,
+    now,
+  })
+  const tenThousandModel = releaseTierAssessment(10_000)
+  const driver = task5.verified ? task5.raw.hostedDriver : null
+  const expectedProviderOperations = driver
+    ? {
+        ...Object.fromEntries(
+          Object.entries(tenThousandModel.resources)
+            .filter(([, resource]) => resource.limit != null)
+            .map(([name, resource]) => [name, resource.operations]),
+        ),
+        workerRequests:
+          tenThousandModel.resources.workerRequests.operations + driver.commandsAttempted,
+        durableObjectRequests:
+          tenThousandModel.resources.durableObjectRequests.operations +
+          driver.commandOutcomes.acceptedDurable * 2,
+        durableObjectRowsRead:
+          tenThousandModel.resources.durableObjectRowsRead.operations +
+          driver.commandOutcomes.acceptedDurable * 8,
+        durableObjectRowsWritten:
+          tenThousandModel.resources.durableObjectRowsWritten.operations +
+          driver.commandOutcomes.acceptedDurable * 8,
+        externalRequests: driver.physicalStaticRequests,
+        transferBytes: driver.transferBytes,
+      }
+    : null
+  const attribution = reconcileProviderAttribution(
+    task5.verified ? task5.evidence.provider : null,
+    { now, expectedOperations: expectedProviderOperations },
+  )
   const externalEvidenceVerified =
     task5.verified &&
     attribution.verified &&
@@ -118,6 +155,28 @@ export async function runViralLoadReleaseGate({
   const tiers = Object.fromEntries(
     [10_000, 100_000, 1_000_000].map((readers) => {
       const tier = releaseTierAssessment(readers)
+      const resources = task5.verified
+        ? {
+            ...tier.resources,
+            externalRequests: {
+              ...tier.resources.externalRequests,
+              evidence: {
+                status: "measured_hosted",
+                source: task5.evidence.digest,
+                observedAtReaders: 100_000,
+              },
+            },
+            transferBytes: {
+              ...tier.resources.transferBytes,
+              operations: Math.ceil(driver.transferBytes * (readers / 100_000)),
+              evidence: {
+                status: readers === 100_000 ? "measured_hosted" : "reviewed_projection",
+                source: task5.evidence.digest,
+                observedAtReaders: 100_000,
+              },
+            },
+          }
+        : tier.resources
       const readPlane = {
         ...tier.readPlane,
         verdict: topologyProof.verified ? "topology_proven" : "blocked_missing_topology_proof",
@@ -135,6 +194,7 @@ export async function runViralLoadReleaseGate({
         String(readers),
         {
           ...tier,
+          resources,
           readAvailability: topologyProof.verified ? "topology_proven" : "blocked",
           readPlane,
           interactionPlane: {
@@ -158,7 +218,28 @@ export async function runViralLoadReleaseGate({
   const failureProfiles = evaluateFailureProfiles(
     task5.verified ? task5.evidence.failureProfiles : undefined,
   )
-  const overallPass = topologyProof.verified && externalEvidenceVerified
+  const tenThousand = tiers["10000"]
+  const overallChecks = {
+    tenThousandLanesFit: Object.values(tenThousand.mutations.lanes).every((lane) => lane.fits),
+    tenThousandBoundedResourcesFit: Object.values(tenThousand.resources)
+      .filter((resource) => resource.limit != null)
+      .every((resource) => resource.withinLimit),
+    externalResourcesResolved:
+      externalEvidenceVerified &&
+      expectedProviderOperations?.externalRequests > 0 &&
+      expectedProviderOperations?.transferBytes > 0 &&
+      Object.values(tenThousand.resources).every(
+        (resource) => resource.evidence.status !== "pending_external",
+      ),
+    hundredThousandHostedReadObserved:
+      topologyProof.verified && driver?.physicalStaticRequests >= 500_000,
+    millionReadAndNoLoss:
+      topologyProof.verified &&
+      task5.verified &&
+      task5.evidence.commandReceipts.lostAcceptedCommands === 0,
+    attributionVerified: attribution.verified,
+  }
+  const overallPass = Object.values(overallChecks).every(Boolean)
   const report = {
     schemaVersion: 2,
     gate: "iconoplasm_viral_load_release",
@@ -166,6 +247,7 @@ export async function runViralLoadReleaseGate({
     hostileProfile,
     failureProfiles,
     attribution,
+    overallChecks,
     task5Evidence: {
       verdict: task5.verdict,
       verified: task5.verified,
@@ -202,9 +284,26 @@ async function main() {
   const task5Evidence = task5EvidencePath
     ? JSON.parse(await readFile(path.resolve(task5EvidencePath), "utf8"))
     : undefined
+  const task5RawRoot = valueFor("--task5-raw-root")
+  const rawArtifacts = {}
+  if (task5Evidence && task5RawRoot) {
+    for (const artifact of task5Evidence.rawArtifacts || []) {
+      rawArtifacts[artifact.name] = await readFile(
+        path.join(path.resolve(task5RawRoot), artifact.name),
+        "utf8",
+      )
+    }
+  }
+  const trustedRunVerifier = createGitHubActionsRunVerifier({
+    token: process.env.GITHUB_TOKEN,
+    repository: process.env.GITHUB_REPOSITORY,
+  })
   const report = await runViralLoadReleaseGate({
     outputPath,
     task5Evidence,
+    rawArtifacts,
+    trustedRunVerifier,
+    expectedCommit: process.env.GITHUB_SHA,
     runTopologyProof: !args.includes("--skip-topology-proof"),
   })
   process.stdout.write(`${JSON.stringify(report)}\n`)
