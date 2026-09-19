@@ -20604,6 +20604,16 @@ export class IconoplasmSyncGovernor {
     if (pending.length) await txn.setAlarm(Math.min(...pending.map((wake) => wake.due_at)))
   }
 
+  async accelerateFinalizationWake(dueAt = Date.now()) {
+    return this.state.storage.transaction(async (txn) => {
+      const current = await txn.get("finalization_reset_wake")
+      if (!current || Number(current.due_at || 0) <= dueAt) return false
+      await txn.put("finalization_reset_wake", { ...current, due_at: dueAt })
+      await this.schedulePendingResetAlarm(txn)
+      return true
+    })
+  }
+
   async deferQueueUntil(key, message, dueAt) {
     const day = new Date(dueAt).toISOString().slice(0, 10)
     const isFinalization = key === "finalization_reset_wake"
@@ -20622,7 +20632,8 @@ export class IconoplasmSyncGovernor {
         // Keep every unsent identity until the Queue has accepted that message.
         const messages = Array.isArray(current?.messages) ? current.messages.slice() : []
         const identity = JSON.stringify(safeMessage)
-        if (!messages.some((item) => JSON.stringify(item) === identity)) {
+        const messageAdded = !messages.some((item) => JSON.stringify(item) === identity)
+        if (messageAdded) {
           if (messages.length >= 8) {
             const error = new Error("Finalization reset wake scope capacity exceeded")
             error.code = "FINALIZATION_RESET_SCOPE_CAPACITY"
@@ -20631,7 +20642,11 @@ export class IconoplasmSyncGovernor {
           messages.push(safeMessage)
         }
         const resetAt =
-          current?.day === day ? Math.max(Number(current.due_at || 0) || 0, dueAt) : dueAt
+          current?.day === day
+            ? messageAdded
+              ? Math.max(Number(current.due_at || 0) || 0, dueAt)
+              : current.due_at
+            : dueAt
         const next = { ...current, day, due_at: resetAt, messages }
         if (JSON.stringify(next) !== JSON.stringify(current)) {
           await txn.put(key, next)
@@ -20851,6 +20866,24 @@ export class IconoplasmSyncGovernor {
       })
       return Response.json({ ok: true, granted, lease_id: leaseId, governor: next })
     }
+    if (request.method === "POST" && url.pathname === "/provider-observation") {
+      const payload = await request.json().catch(() => ({}))
+      const state = await this.storedState()
+      const publicHealth = String(payload?.public_health || "unknown").trim() || "unknown"
+      const next = await this.persistState({
+        ...state,
+        public_health: publicHealth,
+        provider_observed_at: new Date(Date.now()).toISOString(),
+        next_admission_at:
+          publicHealth === "healthy"
+            ? 0
+            : Number(payload?.next_admission_at || state.next_admission_at || 0) || 0,
+      })
+      if (iconoplasmSyncGovernorAdmission(next).admitted) {
+        await this.accelerateFinalizationWake(Date.now())
+      }
+      return Response.json({ ok: true, governor: next })
+    }
     if (request.method === "POST" && url.pathname === "/release") {
       const payload = await request.json().catch(() => ({}))
       const state = await this.storedState()
@@ -20859,8 +20892,7 @@ export class IconoplasmSyncGovernor {
       const failed = Math.max(0, Number(payload?.failed || 0) || 0)
       const retrying = Math.max(0, Number(payload?.retrying || 0) || 0)
       const latencyMs = Math.max(0, Number(payload?.latency_ms || payload?.latencyMs || 0) || 0)
-      const publicHealth =
-        String(payload?.public_health || state.public_health || "unknown").trim() || "unknown"
+      const publicHealth = String(state.public_health || "unknown").trim() || "unknown"
       const total = Math.max(1, processed + failed + retrying)
       const errorRate = Math.min(1, (failed + retrying) / total)
       let permits = clampIconoplasmSyncGovernorPermits(state.batch_permits)
@@ -20894,10 +20926,8 @@ export class IconoplasmSyncGovernor {
         last_error_rate: errorRate,
         last_latency_ms: latencyMs,
         public_health: publicHealth,
-        provider_observed_at: Object.hasOwn(payload, "public_health")
-          ? new Date(Date.now()).toISOString()
-          : state.provider_observed_at,
-        next_admission_at: Number(payload?.next_admission_at || 0) || 0,
+        provider_observed_at: state.provider_observed_at,
+        next_admission_at: Number(state.next_admission_at || 0) || 0,
       })
       return Response.json({ ok: true, governor: next })
     }
@@ -24400,36 +24430,35 @@ function iconoplasmSyncGovernorStub(env) {
 }
 
 async function iconoplasmSyncGovernorJson(env, path, payload = {}) {
+  const unavailable = () => ({
+    ok: false,
+    granted: 0,
+    admission_reason: "sync_governor_unavailable",
+    next_admission_at: Date.now() + secondsUntilCloudflareDailyReset() * 1000,
+    governor: iconoplasmSyncGovernorDefaultState(),
+    unavailable: true,
+  })
   const stub = iconoplasmSyncGovernorStub(env)
   if (!stub || typeof stub.fetch !== "function") {
-    const nextAdmissionAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
-    return {
-      ok: false,
-      granted: 0,
-      admission_reason: "sync_governor_unavailable",
-      next_admission_at: nextAdmissionAt,
-      governor: iconoplasmSyncGovernorDefaultState(),
-      unavailable: true,
-    }
+    return unavailable()
   }
-  const response = await stub.fetch(
-    new Request(`https://iconoplasm-sync-governor${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload || {}),
-    }),
-  )
-  if (!response.ok) {
-    return {
-      ok: false,
-      granted: 0,
-      admission_reason: "sync_governor_unavailable",
-      next_admission_at: Date.now() + secondsUntilCloudflareDailyReset() * 1000,
-      governor: iconoplasmSyncGovernorDefaultState(),
-      unavailable: true,
-    }
+  try {
+    const response = await stub.fetch(
+      new Request(`https://iconoplasm-sync-governor${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+      }),
+    )
+    if (!response.ok) return unavailable()
+    return await response.json()
+  } catch (error) {
+    console.warn("Iconoplasm sync governor request unavailable", {
+      path,
+      error: sanitizeText(String(error?.message || error || "unknown governor failure"), 500),
+    })
+    return unavailable()
   }
-  return response.json()
 }
 
 async function deferFinalizationThroughExistingGovernor(env, message) {
@@ -25194,7 +25223,11 @@ function bodyForFinalizationReset(rawBody) {
     error.code = "FINALIZATION_SCOPE_REQUIRED"
     throw error
   }
-  return { runId, symbols }
+  return buildSyncFinalizationDrainQueueMessage({
+    ...body,
+    runId,
+    symbols,
+  })
 }
 
 export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
@@ -25292,7 +25325,6 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
         failed: 0,
         retrying,
         latency_ms: 0,
-        public_health: "healthy",
       }).catch((error) => console.warn("Iconoplasm sync governor release failed", error))
     }
     return {
@@ -25382,11 +25414,6 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
         failed,
         retrying,
         latency_ms: Date.now() - started,
-        // Queue message failures are retry pressure, not public-route health.
-        // The workstation and live probes report public health separately; feeding
-        // retry pressure into this field parks the whole factory even when public
-        // routes are responding normally.
-        public_health: "healthy",
       })
     } catch (error) {
       console.warn("Iconoplasm sync governor release failed", error)
