@@ -8,6 +8,7 @@ import {
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
+  hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
@@ -44,21 +45,6 @@ import {
     error: "",
     emulsion: null,
     history: [],
-  }
-
-  function fetchIconoplasmAdminState() {
-    return fetch("/api/iconoplasm/admin/me", {
-      credentials: "include",
-    })
-      .then(function (response) {
-        if (!response.ok) return { authenticated: false, is_admin: false, user: null }
-        return response.json().catch(function () {
-          return { authenticated: false, is_admin: false, user: null }
-        })
-      })
-      .catch(function () {
-        return { authenticated: false, is_admin: false, user: null }
-      })
   }
 
   function esc(value) {
@@ -483,13 +469,10 @@ import {
     wireSharedUserPanel(stack, {
       onAuthChanged: function (user) {
         currentUser = user
+        currentUserIsIconoAdmin = !!(currentUser && currentUser.is_admin)
         imageProviderState.loaded = false
         userEmulsionState.loaded = false
-        void fetchIconoplasmAdminState()
-          .then(function (state) {
-            currentUserIsIconoAdmin = !!(state && state.is_admin)
-            return Promise.all([loadImageProviders(), loadUserEmulsion()])
-          })
+        void Promise.all([loadImageProviders(), loadUserEmulsion()])
           .then(function () {
             render()
           })
@@ -848,15 +831,11 @@ import {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     render()
-    void Promise.all([
-      fetchAuthenticatedUser().catch(function () {
-        return currentUser
-      }),
-      fetchIconoplasmAdminState(),
-    ])
-      .then(function (results) {
-        currentUser = results[0] || null
-        currentUserIsIconoAdmin = !!(results[1] && results[1].is_admin)
+    if (!hasSharedSessionPresenceHint()) return
+    void fetchAuthenticatedUser()
+      .then(function (user) {
+        currentUser = user || null
+        currentUserIsIconoAdmin = !!(currentUser && currentUser.is_admin)
         return Promise.all([loadImageProviders(), loadUserEmulsion()]).then(render)
       })
       .catch(function () {
