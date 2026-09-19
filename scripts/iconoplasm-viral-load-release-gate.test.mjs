@@ -110,3 +110,22 @@ test("release gate emits tier counts and fails closed without external Task 5 ev
     report,
   )
 })
+
+test("Task 4 callers cannot self-certify hosted Task 5 gates", async () => {
+  const report = await runViralLoadReleaseGate({
+    runRouteReplay: false,
+    externalEvidence: {
+      hostedExecution: "verified",
+      authenticatedBrowser: "verified",
+      multiRegion: "verified",
+      bunnyDelivery: "verified",
+    },
+  })
+  assert.deepEqual(report.externalGates, {
+    hostedExecution: "pending_task_5",
+    authenticatedBrowser: "pending_task_5",
+    multiRegion: "pending_task_5",
+    bunnyDelivery: "pending_task_5",
+  })
+  assert.equal(report.overallVerdict, "blocked")
+})

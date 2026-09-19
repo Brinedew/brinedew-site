@@ -82,7 +82,6 @@ function defaultExternalGates() {
 export async function runViralLoadReleaseGate({
   outputPath,
   providerEvidence,
-  externalEvidence,
   runRouteReplay = true,
 } = {}) {
   const tenThousand = releaseTierAssessment(10_000)
@@ -99,7 +98,9 @@ export async function runViralLoadReleaseGate({
         statefulOperations: null,
       }
   const attribution = reconcileProviderAttribution(providerEvidence)
-  const externalGates = { ...defaultExternalGates(), ...externalEvidence }
+  // Task 5 must add evidence readers for these gates. Task 4 deliberately has
+  // no caller override that could relabel an unrun hosted/browser check.
+  const externalGates = defaultExternalGates()
   const tier100000Verdict = routeReplay.verified ? "pass" : "blocked_missing_route_replay"
   const externalVerified = Object.values(externalGates).every((value) => value === "verified")
   const report = {
