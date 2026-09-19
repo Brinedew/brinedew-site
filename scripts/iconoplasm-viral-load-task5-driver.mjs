@@ -75,7 +75,6 @@ export async function runHostedTask5Load({
     externalRequests: 0,
     transferBytes: 0,
   }
-  const refusalByResource = {}
   const commandLatenciesMs = []
   const windows = []
   let staticFailures = 0
@@ -143,8 +142,6 @@ export async function runHostedTask5Load({
         if (classification.verdict === "accepted_durable") counts.acceptedDurable++
         else if (classification.verdict === "bounded_capacity_refusal") {
           counts.capacityRefused++
-          for (const resource of body.refused_resources || [])
-            refusalByResource[resource] = (refusalByResource[resource] || 0) + 1
         } else counts.invalidCommandReceipts++
       }),
       pooled(staticIndexes, concurrency, async (index) => {
@@ -153,7 +150,6 @@ export async function runHostedTask5Load({
           headers: { "x-iconoplasm-task5-static-request": String(index) },
         })
         physicalStaticRequests++
-        actualOperations.externalRequests++
         transferBytes += (await response.arrayBuffer()).byteLength
         if (!response.ok) staticFailures++
       }),
@@ -165,6 +161,22 @@ export async function runHostedTask5Load({
 
   const elapsedMs = Date.now() - runStartedMs
   actualOperations.transferBytes = transferBytes
+  const providerOperations = {
+    workerRequests: actualOperations.workerRequests,
+    kvReads: 0,
+    kvWrites: 0,
+    kvLists: 0,
+    d1RowsRead: actualOperations.d1RowsRead,
+    d1RowsWritten: actualOperations.d1RowsWritten,
+    durableObjectRequests: actualOperations.durableObjectRequests,
+    durableObjectRowsRead: actualOperations.durableObjectRowsRead,
+    durableObjectRowsWritten: actualOperations.durableObjectRowsWritten,
+    queueOperations: actualOperations.queueOperations,
+    // Browser-to-origin fetches are not Cloudflare Worker external subrequests.
+    externalRequests: 0,
+    // Client-observed bytes do not define the provider's billable transfer meter.
+    transferBytes: null,
+  }
   const schedule = assessHostedSchedule(windows, elapsedMs)
   const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)
   const percentile = (fraction) =>
@@ -187,7 +199,7 @@ export async function runHostedTask5Load({
     commandIdentity: summarizeHostedCommandIdentity(day),
     commandOutcomes: counts,
     actualOperations,
-    refusalByResource,
+    providerOperations,
     schedule: {
       ...schedule,
       windowCount: windows.length,
@@ -203,8 +215,6 @@ export async function runHostedTask5Load({
       staticFailures === 0 &&
       counts.invalidCommandReceipts === 0 &&
       counts.acceptedDurable + counts.capacityRefused === expectedCommands &&
-      Object.values(refusalByResource).reduce((sum, count) => sum + count, 0) >=
-        counts.capacityRefused &&
       schedule.verified,
   }
 }

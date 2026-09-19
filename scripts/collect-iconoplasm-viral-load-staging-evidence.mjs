@@ -37,6 +37,14 @@ const requiredReceipts = [
   "fault-d1-exhaustion.json",
   "fault-queue-exhaustion.json",
   "fault-delayed-projection.json",
+  "shed-100000-discovery.json",
+  "shed-100000-vote.json",
+  "shed-100000-publication.json",
+  "shed-1000000-discovery.json",
+  "shed-1000000-vote.json",
+  "shed-1000000-publication.json",
+  "shed-1000000-worker.json",
+  "shed-1000000-durable_object.json",
 ]
 const rawArtifacts = {}
 for (const name of requiredReceipts) {
@@ -68,7 +76,9 @@ const kindFor = (name) =>
           ? "region"
           : name === "bunny.json"
             ? "bunny_delivery"
-            : "fault_injection"
+            : name.startsWith("shed-")
+              ? "operation_shed_receipt"
+              : "fault_injection"
 const rawManifest = []
 for (const [name, text] of Object.entries(rawArtifacts)) {
   await writeFile(path.join(rawRoot, name), text, "utf8")
