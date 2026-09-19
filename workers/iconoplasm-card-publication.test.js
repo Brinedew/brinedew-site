@@ -399,6 +399,27 @@ test("an explicit publication migration keeps the old head until the new catalog
   assert.equal(migrated.previous.version, original.current.version)
 })
 
+test("a compatible publication migration reuses immutable per-gene objects", async () => {
+  const f = fixture()
+  f.source.buildRevision = 1
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const writesBeforeMigration = f.writes.length
+
+  f.source.buildRevision = 2
+  f.source.reuseExistingCardObjectsForMigration = true
+  await p.migrate()
+  await drain(p)
+
+  const migrationKinds = f.writes.slice(writesBeforeMigration).map((write) => write.kind)
+  assert.equal(migrationKinds.includes("cards"), false)
+  assert.equal(migrationKinds.includes("genes"), false)
+  assert.equal(migrationKinds.includes("portraits"), false)
+  assert.ok(migrationKinds.includes("manifests"))
+  assert.equal(p.status().head.current.manifest.build_revision, 2)
+})
+
 test("failed bytes never advance head or watermark; a recreated publisher resumes durable progress", async () => {
   const f = fixture()
   const p = f.create()
