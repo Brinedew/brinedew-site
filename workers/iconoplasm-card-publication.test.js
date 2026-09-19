@@ -180,6 +180,57 @@ test("bootstrap keeps legacy public until every object is prepared and atomicall
   assert.equal(p.status().requested, null)
 })
 
+test("the committed manifest atomically names a bounded compact public catalog index", async () => {
+  const f = fixture(2)
+  f.cards[0].payload = {
+    symbol: "G0000",
+    full_name: "First gene",
+    color: "#123456",
+    portrait: { status: "published", asset_sha256: "a".repeat(64) },
+    portrait_candidates: [
+      {
+        candidate_image_id: 7,
+        asset_sha256: "b".repeat(64),
+        image_upvotes: 12,
+        image_downvotes: 2,
+        image_score: 10,
+        is_current: true,
+      },
+    ],
+  }
+  const p = f.create()
+
+  await p.bootstrap()
+  await drain(p)
+
+  const manifest = p.status().head.current.manifest
+  assert.equal(manifest.catalog_pages, undefined, "page refs must not inflate the root manifest")
+  assert.equal(manifest.shards.length, 1)
+  const catalogIndexRef = manifest.shards[0].catalog_index
+  assert.equal(catalogIndexRef.page_count, 1)
+  const catalogIndex = (await f.objects.read(catalogIndexRef.key)).value
+  assert.equal(catalogIndex.schema_version, 1)
+  assert.equal(catalogIndex.pages.length, 1)
+  const pageRef = catalogIndex.pages[0]
+  assert.equal(pageRef.first_symbol, "G0000")
+  assert.equal(pageRef.last_symbol, "G0001")
+  const page = (await f.objects.read(pageRef.key)).value
+  assert.equal(page.schema_version, 1)
+  assert.equal(page.entries[0].symbol, "G0000")
+  assert.equal(page.entries[0].full_name, "First gene")
+  assert.equal(page.entries[0].portrait.asset_sha256, "a".repeat(64))
+  assert.deepEqual(page.entries[0].candidate_summaries, [
+    {
+      candidate_image_id: 7,
+      asset_sha256: "b".repeat(64),
+      image_upvotes: 12,
+      image_downvotes: 2,
+      image_score: 10,
+      is_current: true,
+    },
+  ])
+})
+
 test("a 750-card post-cutover repair resumes through bounded materialization pages", async () => {
   const f = fixture(750)
   const materialize = f.source.materialize

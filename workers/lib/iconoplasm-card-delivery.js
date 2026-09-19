@@ -48,7 +48,7 @@ export function createPublishedCardDeliveryHandlers({ barrier, readerView = null
     },
     async object({ request, env, ctx, match }) {
       const { kind, hash } = match.params
-      if (!["cards", "genes", "portraits", "indexes", "manifests"].includes(kind))
+      if (!["cards", "genes", "portraits", "indexes", "catalogs", "manifests"].includes(kind))
         return new Response(null, { status: 404 })
       const url = new URL(request.url)
       url.search = ""

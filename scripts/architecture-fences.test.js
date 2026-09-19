@@ -87,15 +87,12 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
     "IconoplasmCardPublicationCoordinator",
     "authenticated Bunny GET/hash verification",
     "frozen migration evidence",
-    "gene-page standard images and metadata",
-    "structured data",
-    "Massive gene-range pages remain text-only",
-    "image-sitemap children",
-    "public media",
-    "matching immutable blot WebP",
-    "does not require a blot-only KV publication",
-    "Every derived cache and ETag includes the selected card version",
-    "fails closed",
+    "content-addressed catalog pages",
+    "passive candidate summaries",
+    "shared vote totals",
+    "directly from Bunny",
+    "static placeholder",
+    "explicit-intent only",
   ]) {
     assert.match(
       fence.decision,
@@ -105,7 +102,6 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   }
   assert.match(fence.reason, /publishedPortraitRefs/)
   assert.match(fence.reason, /raw D1 portrait/)
-  assert.match(fence.decision, /remains an indexable gene profile and sitemap\/archive member/)
   assert.match(fence.change_control, /raw icono_publish_state as a public image source/)
   assert.match(fence.change_control, /Worker-side blot rendering/)
   assert.match(fence.change_control, /page, sitemap, and public media agree/)
@@ -385,10 +381,7 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
     /per-gene Worker transport is an implementation, not a fence/,
   )
   assert.match(canon.decision, /Byte-equivalent CDN caches are allowed/)
-  assert.match(
-    canon.decision,
-    /Independent immutable detail and locator projections share the named card authority/,
-  )
+  assert.match(canon.decision, /catalog pages[\s\S]*projections, never another publisher/)
   const instructions = readRepositoryFile("AGENTS.md")
   assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
   assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)
@@ -525,27 +518,20 @@ test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger 
 test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-009")
   assert.ok(fence, "IPD-009 must remain registered")
+  assert.match(fence.decision, /one static SPA shell/)
   assert.match(
     fence.decision,
-    /route index and discovery\/catalog rows establish identity and membership only/,
+    /exact immutable manifest, directory, per-gene record, and optional delta chain directly from Bunny/,
   )
   assert.match(
     fence.decision,
-    /requested exact card from the artifact selected by KV_GALLERY_VERSION[\s\S]*sole public portrait authority/,
+    /catalog pages[\s\S]*passive candidate summaries, and shared vote totals/,
   )
   assert.match(
     fence.decision,
-    /complete detail response ETag and HTML cache key include the selected card version/,
+    /never resolve identity, rich detail, candidates, votes, sessions, or images from D1/,
   )
-  assert.match(
-    fence.decision,
-    /valid exact card without a published portrait produces a noindex gene page/,
-  )
-  assert.match(
-    fence.decision,
-    /missing requested card or missing or invalid selected artifact produces an uncached 503/,
-  )
-  assert.match(fence.decision, /advertised per-gene publication view names the symbol/)
+  assert.match(fence.decision, /failed CDN head retains the coherent prior immutable publication/)
 
   const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
   assert.equal(topology.architectureFence, "IPD-009")
@@ -555,12 +541,11 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   assert.equal(topology.stateOwner.publicProxyAllowed, false)
 
   const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
-  assert.match(lifecycle, /HTML cache before parsing JSON or rendering/i)
-  assert.match(lifecycle, /Login can enable private action\s+islands/i)
-  assert.match(lifecycle, /icono_published_gene_routes/)
+  assert.match(lifecycle, /Static Assets serves the one SPA application shell/i)
+  assert.match(lifecycle, /Login can\s+enable private action islands/i)
   assert.match(
     lifecycle,
-    /detail response[\s\S]*card shard selected by `KV_GALLERY_VERSION`[\s\S]*ETag[\s\S]*card version/i,
+    /content hash[\s\S]*root\s+manifest[\s\S]*directory[\s\S]*requested gene object/i,
   )
 
   const runtime = readRepositoryFile(

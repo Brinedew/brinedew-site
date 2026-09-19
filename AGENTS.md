@@ -51,15 +51,15 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-006]** — One completed workstation publication yields one bounded receipt per recipient and gene; never infer groups. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-007]** — Iconoplasm is static-first with one dynamic Worker invocation; never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-007]** — Iconoplasm anonymous documents use one Static Assets SPA shell; public artifacts and crawler files bypass Worker execution, while explicit mutation/admin APIs enter the single stateful Worker. Never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-008]** — Anonymous startup and extension hover read the published plane; a guest page never probes identity or D1. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`, `docs/ICONOPLASM_CARD_PUBLICATION_V2.md`.
 
-**ARCHITECTURE FENCE [IPD-009]** — Public gene reads stay cold-safe inside the one loudly named stateful Worker; never create a second state owner. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`.
+**ARCHITECTURE FENCE [IPD-009]** — Anonymous gene, search, gallery, portrait, blot, crawler, and passive-vote reads use Static Assets plus immutable Sysop V2 Bunny artifacts and never touch state; authenticated mutations remain inside the one loudly named stateful Worker. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`.
 
 **ARCHITECTURE FENCE [IPD-010]** — Routine gallery publication is dirty-shard-only; a scheduled step is bounded and never rebuilds the corpus. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-011]** — Every public canonical blot comes from the one exact published card artifact: the canonical public machine image is the Iconoplasm gene blot, not its source portrait; the source portrait remains available as subordinate source material. On any healthy network, IPD-001 selects Bunny's byte-equivalent accelerator URL; a failed Bunny probe selects first-party for that tab only. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_HOME_PERFORMANCE.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-011]** — The canonical public machine image is the Iconoplasm gene blot. Every public canonical blot, gene record, compact catalog page, passive candidate summary, and shared vote total comes from the one exact published card artifact. The source portrait remains available as subordinate source material. On any healthy network, website readers use Bunny's content-addressed bytes; failure retains a coherent prior artifact or static placeholder and never reconstructs from state. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_HOME_PERFORMANCE.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [GG-001]** — Automatic GeneGuessr daily selection gives each normalized surname exactly one lottery slot. Registry: `architecture-fences.json`; runbook: `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`.
 

@@ -161,9 +161,10 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.equal(publicPatterns.includes("iconoplasm.brinedew.bio/*"), false)
   assert.deepEqual(statefulPatterns, ["iconoplasm.brinedew.bio/*"])
   assert.equal(statefulConfig.assets.directory, "./public-iconoplasm-edge")
-  assert.equal(statefulConfig.assets.not_found_handling, "none")
+  assert.equal(statefulConfig.assets.not_found_handling, "single-page-application")
   assert.ok(statefulConfig.assets.run_worker_first.includes("/api/*"))
-  assert.ok(statefulConfig.assets.run_worker_first.includes("/gene/*"))
+  assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)
+  assert.equal(statefulConfig.assets.run_worker_first.includes("/portraits/*"), false)
 })
 
 test("the deterministic asset bundle is complete, secure, and within Free-plan limits", async (t) => {
@@ -205,7 +206,7 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const caretakerTerms = readFileSync(path.join(target, "caretaker-terms.html"), "utf8")
   const headers = readFileSync(path.join(target, "_headers"), "utf8")
 
-  assert.equal(report.fileCount, 9)
+  assert.equal(report.fileCount, 13)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
