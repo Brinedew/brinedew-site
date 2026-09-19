@@ -75,7 +75,6 @@ jobs:
           ICONOPLASM_TASK5_AUTHORIZATION: ${{ secrets.ICONOPLASM_STAGING_TASK5_AUTHORIZATION }}
           ICONOPLASM_STAGING_BASE_URL: ${{ vars.ICONOPLASM_STAGING_BASE_URL }}
           ICONOPLASM_TASK5_ASSET_SHA256: ${{ vars.ICONOPLASM_TASK5_TP53_ASSET_SHA256 }}
-          ICONOPLASM_TASK5_RAW_RECEIPT_URLS: ${{ secrets.ICONOPLASM_TASK5_RAW_RECEIPT_URLS }}
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/collect-iconoplasm-viral-load-staging-evidence.mjs --commit=${{ github.sha }} --environment=staging
@@ -388,7 +387,6 @@ jobs:
             scripts/architecture-fences.test.js \
             scripts/iconoplasm-first-principles-capacity.test.mjs \
             scripts/iconoplasm-viral-load-release-gate.test.mjs \
-            workers/iconoplasm-static-assets.workerd.test.js \
             iconoplasm-extension/immutable-response-cache.test.js \
             iconoplasm-extension/content-portrait-cache.test.js \
             iconoplasm-extension/content-reading-session.test.js \
@@ -433,6 +431,9 @@ jobs:
 
       - name: Build Quartz site
         run: pnpm run build
+
+      - name: Prove exact built static route ownership
+        run: node --test workers/iconoplasm-static-assets.workerd.test.js
 
       - name: Restore canonical Task 5 viral-load evidence
         uses: actions/download-artifact@v7

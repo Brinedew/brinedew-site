@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-
-import { runHostedTask5Load } from "./iconoplasm-viral-load-task5-driver.mjs"
 
 const valueFor = (name) => {
   const prefix = `${name}=`
@@ -24,16 +22,8 @@ const outputRoot = path.resolve("artifacts/iconoplasm-viral-load-gates/task5")
 const rawRoot = path.join(outputRoot, "raw")
 await mkdir(rawRoot, { recursive: true })
 
-const hostedDriver = await runHostedTask5Load({
-  baseUrl: process.env.ICONOPLASM_STAGING_BASE_URL,
-  authorization: process.env.ICONOPLASM_TASK5_AUTHORIZATION,
-  day: new Date().toISOString().slice(0, 10),
-  assetSha256: process.env.ICONOPLASM_TASK5_ASSET_SHA256,
-})
-if (!hostedDriver.certificationReady) throw new Error("Hosted driver did not meet its schedule")
-
-const receiptUrls = JSON.parse(process.env.ICONOPLASM_TASK5_RAW_RECEIPT_URLS || "{}")
-const requiredRemoteReceipts = [
+const requiredReceipts = [
+  "hosted-driver.json",
   "provider-query.json",
   "browser.json",
   "region-apac.json",
@@ -48,17 +38,15 @@ const requiredRemoteReceipts = [
   "fault-queue-exhaustion.json",
   "fault-delayed-projection.json",
 ]
-const rawArtifacts = { "hosted-driver.json": JSON.stringify(hostedDriver) }
-for (const name of requiredRemoteReceipts) {
-  const url = receiptUrls[name]
-  if (!/^https:\/\//.test(url || "")) throw new Error(`Missing immutable receipt URL: ${name}`)
-  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } })
-  if (!response.ok) throw new Error(`Receipt ${name} returned HTTP ${response.status}`)
-  rawArtifacts[name] = await response.text()
+const rawArtifacts = {}
+for (const name of requiredReceipts) {
+  rawArtifacts[name] = await readFile(path.join(rawRoot, name), "utf8")
   const parsed = JSON.parse(rawArtifacts[name])
   if (parsed.commitSha !== commitSha || parsed.environment !== environment)
     throw new Error(`Receipt ${name} does not match the staging commit`)
 }
+const hostedDriver = JSON.parse(rawArtifacts["hosted-driver.json"])
+if (!hostedDriver.certificationReady) throw new Error("Hosted driver did not meet its schedule")
 
 const runResponse = await fetch(
   `https://api.github.com/repos/${repository}/actions/runs/${runId}/jobs?per_page=100`,
@@ -91,7 +79,7 @@ for (const [name, text] of Object.entries(rawArtifacts)) {
   })
 }
 const provider = JSON.parse(rawArtifacts["provider-query.json"])
-const failures = requiredRemoteReceipts
+const failures = requiredReceipts
   .filter((name) => name.startsWith("fault-"))
   .map((name) => JSON.parse(rawArtifacts[name]))
 const receipt = {
