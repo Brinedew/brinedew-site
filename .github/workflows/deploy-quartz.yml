@@ -560,40 +560,19 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/run-admitted-catalog-initialization.mjs
 
-      # Publish the new immutable artifacts while the previous public route
-      # contract remains active. A failed migration or CDN verification leaves
-      # the legacy routing in place; the later canonical deploy is the only
-      # step that activates static SPA ownership for anonymous reads.
-      - name: Prepare immutable public-read publication
+      # Deploy the publisher while retaining the exact currently active asset
+      # bundle and pre-cutover routing, then run its existing Durable Object
+      # owner and wait for Bunny. Only the final activation uploads this build's
+      # SPA assets and static-first routing. The 68-minute bound is the 20k-card
+      # ceiling (3,334 six-card alarms + 27 shard seals + 2 control alarms + two
+      # 30s CDN windows) plus the two five-minute-bounded Wrangler deploys and
+      # the 30-second migration request.
+      - name: Publish, verify, and activate immutable public reads
         if: steps.migrations.outputs.continuation_required != 'true'
-        timeout-minutes: 5
+        timeout-minutes: 68
         env:
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-        run: |
-          set -euo pipefail
-          config="wrangler.iconoplasm-public-read-preparation.generated.toml"
-          node scripts/prepare-iconoplasm-public-read-cutover.mjs --write "$config"
-          trap 'rm -f "$config"' EXIT
-          pnpm exec wrangler deploy --config "$config" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
-          curl \
-            --fail \
-            --max-time 30 \
-            --retry 3 \
-            --retry-all-errors \
-            --silent \
-            --show-error \
-            --request POST \
-            --header "x-iconoplasm-admin-token: $ICONOPLASM_ADMIN_TOKEN" \
-            "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/migrate-card-storage"
-
-      - name: Verify immutable public-read activation gate
-        if: steps.migrations.outputs.continuation_required != 'true'
-        timeout-minutes: 5
-        run: node scripts/prepare-iconoplasm-public-read-cutover.mjs --verify
-
-      - name: Activate immutable public-read routing
-        if: steps.migrations.outputs.continuation_required != 'true'
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+        run: node scripts/prepare-iconoplasm-public-read-cutover.mjs --release "$CACHE_BUST"
 
       - name: Ensure Iconoplasm finalization Queue consumer is bound
         if: steps.migrations.outputs.continuation_required != 'true'

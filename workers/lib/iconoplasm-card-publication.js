@@ -12,7 +12,7 @@ import {
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 export const CARD_PUBLICATION_BATCH = 6
 const CARD_PUBLICATION_CONCURRENCY = 2
-const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
+export const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
 const UTF8 = new TextEncoder()
 export const CARD_DELIVERY_INDEX_SIZE = 128
 // This publisher's allocation, NOT an account entitlement. Leave 45k of the

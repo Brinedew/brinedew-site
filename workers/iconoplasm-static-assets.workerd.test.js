@@ -6,40 +6,41 @@ import { createRequire } from "node:module"
 import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
+import { preparePublicReadCutoverConfig } from "../scripts/prepare-iconoplasm-public-read-cutover.mjs"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
 const { Miniflare, convertV4MiniflareOptions } = wranglerRequire("miniflare")
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/(.:)/, "$1"))
 
+async function makeAssetFixture() {
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-assets-"))
+  const sourceRoot = path.join(temporaryRoot, "public")
+  const outputRoot = path.join(temporaryRoot, "public-iconoplasm-edge")
+  await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
+  await mkdir(path.join(sourceRoot, "static"), { recursive: true })
+  await cp(
+    path.join(repoRoot, "quartz", "static", "iconoplasm"),
+    path.join(sourceRoot, "static", "iconoplasm"),
+    { recursive: true },
+  )
+  const shell = `<!doctype html><script type="module" src="/static/iconoplasm/app.js"></script>`
+  for (const page of ["index", "privacy", "license", "caretaker-terms"])
+    await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
+  await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
+  const summary = await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot })
+  assert.ok(summary.fileCount > 10, "the prepared bundle contains the actual Iconoplasm modules")
+  return { temporaryRoot, outputRoot }
+}
+
 test(
   "real workerd static asset routing keeps every anonymous read route out of the Worker",
   { timeout: 30_000 },
   async () => {
-    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-assets-"))
-    const sourceRoot = path.join(temporaryRoot, "public")
-    const outputRoot = path.join(temporaryRoot, "public-iconoplasm-edge")
-    await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
-    await mkdir(path.join(sourceRoot, "static"), { recursive: true })
-    await cp(
-      path.join(repoRoot, "quartz", "static", "iconoplasm"),
-      path.join(sourceRoot, "static", "iconoplasm"),
-      {
-        recursive: true,
-      },
-    )
-    const shell = `<!doctype html><script type="module" src="/static/iconoplasm/app.js"></script>`
-    for (const page of ["index", "privacy", "license", "caretaker-terms"])
-      await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
-    await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
+    const { temporaryRoot, outputRoot } = await makeAssetFixture()
 
     let runtime
     try {
-      const summary = await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot })
-      assert.ok(
-        summary.fileCount > 10,
-        "the prepared bundle contains the actual Iconoplasm modules",
-      )
       const config = parseToml(
         await readFile(
           path.join(
@@ -82,6 +83,63 @@ test(
       }
       const apiResponse = await runtime.dispatchFetch("https://iconoplasm.test/api/auth/me")
       assert.equal(apiResponse.status, 599, await apiResponse.text())
+    } finally {
+      await runtime?.dispose()
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  "real workerd preparation topology is exactly the retained pre-cutover route contract",
+  { timeout: 30_000 },
+  async () => {
+    const { temporaryRoot, outputRoot } = await makeAssetFixture()
+    let runtime
+    try {
+      const canonical = await readFile(
+        path.join(
+          repoRoot,
+          "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+        ),
+        "utf8",
+      )
+      const config = parseToml(preparePublicReadCutoverConfig(canonical))
+      const retained = config.unsafe.metadata.assets.config
+      assert.equal(config.unsafe.metadata.keep_assets, true)
+      runtime = new Miniflare(
+        convertV4MiniflareOptions({
+          name: "iconoplasm-preparation-preview-test",
+          modules: true,
+          script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+          compatibilityDate: "2026-08-01",
+          assets: {
+            directory: outputRoot,
+            run_worker_first: retained.run_worker_first,
+            routerConfig: { has_user_worker: true },
+            assetConfig: { not_found_handling: retained.not_found_handling },
+          },
+        }),
+      )
+
+      for (const pathname of ["/", "/blot/TP53.webp"])
+        assert.notEqual(
+          (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
+          599,
+          pathname,
+        )
+      for (const pathname of [
+        "/search?q=TP53",
+        "/gene/TP53",
+        "/genes",
+        "/robots.txt",
+        "/api/auth/me",
+      ])
+        assert.equal(
+          (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
+          599,
+          pathname,
+        )
     } finally {
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })

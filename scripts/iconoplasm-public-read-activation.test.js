@@ -2,21 +2,39 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { parse as parseToml } from "toml"
-import {
-  preparePublicReadCutoverConfig,
-  verifyPublicReadArtifacts,
-  waitForPublicReadArtifacts,
-} from "./prepare-iconoplasm-public-read-cutover.mjs"
+import * as cutover from "./prepare-iconoplasm-public-read-cutover.mjs"
+
+const { preparePublicReadCutoverConfig, verifyPublicReadArtifacts, waitForPublicReadArtifacts } =
+  cutover
 
 const configUrl = new URL(
   "../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
   import.meta.url,
 )
 
-test("preparation config keeps legacy public reads Worker-first until artifact proof", async () => {
+test("preparation retains the live asset bundle and exact pre-cutover route topology", async () => {
   const prepared = parseToml(preparePublicReadCutoverConfig(await readFile(configUrl, "utf8")))
-  assert.equal(prepared.assets.not_found_handling, "none")
-  assert.equal(prepared.assets.run_worker_first, true)
+  assert.equal(prepared.routes.length, 1)
+  assert.equal(prepared.routes[0].pattern, "iconoplasm.brinedew.bio/*")
+  assert.equal(prepared.routes[0].zone_name, "brinedew.bio")
+  assert.equal(prepared.preview_urls, false)
+  assert.equal(prepared.assets, undefined)
+  assert.equal(prepared.unsafe.metadata.keep_assets, true)
+  assert.equal(prepared.unsafe.metadata.assets.config.not_found_handling, "none")
+  assert.deepEqual(prepared.unsafe.metadata.assets.config.run_worker_first, [
+    "/api/*",
+    "/portraits/*",
+    "/published-cards/v2/immutable/*",
+    "/admin*",
+    "/blocklist*",
+    "/artist-styles*",
+    "/health",
+    "/gene/*",
+    "/genes*",
+    "/sitemap*",
+    "/robots.txt",
+    "/llms.txt",
+  ])
 })
 
 test("activation gate reads and hashes every advertised compact index", async () => {
@@ -94,15 +112,36 @@ test("activation gate waits for the CDN head to expose one coherent publication"
   assert.equal(waits, 2)
 })
 
-test("release prepares publication before it verifies and activates SPA routing", async () => {
-  const workflow = await readFile(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
+test("migration verification deadline is derived from catalog work instead of a short constant", () => {
+  assert.equal(typeof cutover.migrationVerificationPlan, "function")
+  assert.deepEqual(cutover.migrationVerificationPlan(19_023), {
+    cardCount: 19_023,
+    prepareRounds: 3_171,
+    sealRounds: 26,
+    controlRounds: 2,
+    cadenceMs: 1_000,
+    propagationMs: 60_000,
+    intervalMs: 10_000,
+    deadlineMs: 3_259_000,
+    attempts: 327,
+  })
+})
+
+test("failed artifact verification leaves production on the retained pre-cutover assets", async () => {
+  assert.equal(typeof cutover.releasePublicReadCutover, "function")
+  const operations = []
+  await assert.rejects(
+    cutover.releasePublicReadCutover({
+      deployPreparation: async () => operations.push("deploy-retained-assets"),
+      currentCardCount: async () => 19_023,
+      startMigration: async () => operations.push("migrate-existing-owner"),
+      verify: async () => {
+        operations.push("verify-bunny")
+        throw new Error("Bunny artifacts incomplete")
+      },
+      activate: async () => operations.push("activate-production"),
+    }),
+    /Bunny artifacts incomplete/,
   )
-  const prepare = workflow.indexOf("Prepare immutable public-read publication")
-  const verify = workflow.indexOf("Verify immutable public-read activation gate")
-  const activate = workflow.indexOf("Activate immutable public-read routing")
-  assert.equal(prepare > 0, true)
-  assert.equal(verify > prepare, true)
-  assert.equal(activate > verify, true)
+  assert.deepEqual(operations, ["deploy-retained-assets", "migrate-existing-owner", "verify-bunny"])
 })
