@@ -249,7 +249,7 @@ test("production hands off the existing route before Wrangler reconciles statefu
   )
   const handoffIndex = workflow.indexOf("Hand off Iconoplasm route to the prepared stateful worker")
   const statefulDeployIndex = workflow.indexOf(
-    "Deploy the only allowed internal stateful worker (production)",
+    "Publish, verify, and activate immutable public reads",
   )
 
   assert.ok(handoffIndex > 0)

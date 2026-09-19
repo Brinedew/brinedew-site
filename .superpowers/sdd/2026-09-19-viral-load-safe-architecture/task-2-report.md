@@ -167,3 +167,53 @@ rebuilt that worktree-local plugin and reran the production build successfully.
 
 Deployment, CDN propagation, and live browser acceptance remain separate gates;
 this review-fix commit does not claim them.
+
+## Review remediation, round 2
+
+The second review found that the last-good publication cache was still global,
+the four-minute artifact poll could not outwait a 19,023-card migration, and the
+preparation deployment could leave production on a newly uploaded
+`run_worker_first = true` topology after a failed Bunny gate. Focused tests were
+red for all three findings before the corrections.
+
+The browser now retains an independently validated last-good head for gene,
+search, gallery, and metadata dependency sets. A successful search against a
+partially propagated new publication therefore cannot erase the older coherent
+gene fallback. The added regression proves the requested sequence: new search
+succeeds, the new gene child is missing, and the older gene still serves.
+
+The migration deadline is derived from the publisher's executable constants and
+the measured live manifest shape. For 19,023 cards, six cards per alarm, a
+one-second rearm, 26 shard seals, two control alarms, and two 30-second CDN
+windows produce 3,259,000 ms and 327 ten-second verification attempts. The
+workflow's 68-minute outer deadline additionally includes both five-minute
+bounded Wrangler deployments and the 30-second migration request; it is no
+longer an invented four-minute constant.
+
+Cloudflare's current platform contract ruled out the initially considered
+route-less Preview URL: Workers that implement Durable Objects do not receive
+Preview URLs. The final preparation path instead uses the provider's
+`keep_assets` upload metadata. It deploys the new publisher/runtime code into
+the existing single owner while retaining the exact asset bytes currently
+active in production and the exact pre-cutover asset-routing list. It neither
+uploads the new SPA bundle nor broadens routing to `run_worker_first = true`.
+The existing publication Durable Object performs the migration. Only after the
+Bunny head, manifest, and every advertised compact index validate does the
+canonical deployment attach the new SPA assets and static-first routing. A
+failed gate leaves the active frontend and route topology unchanged.
+
+The schema-transition staging configuration uses the same retained-assets
+contract, so the earlier migration-admission deploy cannot accidentally expose
+the not-yet-activated frontend. A real Miniflare/Workerd test executes the exact
+pre-cutover `not_found_handling` and route list, while a workflow-unit test
+proves a failed Bunny gate never calls final activation. Wrangler 4.123.0 also
+accepted the generated production config in a real dry run and printed
+`keep_assets: true` with the exact retained route policy.
+
+Round-2 verification completed with **97 affected tests passed, 0 failed** in
+17.07 seconds. The focused topology/coherence suite passed **26/26** in 10.47
+seconds. `pnpm run build` completed 214 source files and emitted 3,174 files in
+10 seconds, followed by a 2,606-file, 52,371,031-byte Iconoplasm edge bundle.
+`git diff --check` passed; changed-file formatting was applied and rechecked.
+No production deployment, CDN propagation, or live browser claim is made by
+this source commit.

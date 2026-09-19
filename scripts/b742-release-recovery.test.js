@@ -19,7 +19,26 @@ test("schema staging preserves every production binding", () => {
     "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
   )
   assert.equal(SCHEMA_TRANSITION_MODE, "reader-recovery")
-  assert.deepEqual({ ...prepared, main: canonical.main }, { ...canonical })
+  const canonicalState = { ...canonical }
+  delete canonicalState.assets
+  const { unsafe: preparedUnsafe, ...preparedState } = prepared
+  assert.deepEqual({ ...preparedState, main: canonical.main }, canonicalState)
+  assert.equal(preparedUnsafe.metadata.keep_assets, true)
+  assert.equal(preparedUnsafe.metadata.assets.config.not_found_handling, "none")
+  assert.deepEqual(preparedUnsafe.metadata.assets.config.run_worker_first, [
+    "/api/*",
+    "/portraits/*",
+    "/published-cards/v2/immutable/*",
+    "/admin*",
+    "/blocklist*",
+    "/artist-styles*",
+    "/health",
+    "/gene/*",
+    "/genes*",
+    "/sitemap*",
+    "/robots.txt",
+    "/llms.txt",
+  ])
   assert.throws(() => prepareSchemaTransitionConfig(""), /exactly one/)
   assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)
   assert.throws(
@@ -46,7 +65,7 @@ test("migration staging preserves the fallback and all release gates", () => {
     "Stage migration admission in the existing state owner",
     "Apply reviewed D1 migrations through prediction admission",
     "Prepare the published catalog through shared KV admission",
-    "Deploy the only allowed internal stateful worker (production)",
+    "Publish, verify, and activate immutable public reads",
   ]
   let previous = -1
   for (const name of names) {

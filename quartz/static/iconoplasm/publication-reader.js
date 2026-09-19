@@ -114,17 +114,18 @@ export function createIconoplasmPublicationReader(options = {}) {
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
-  function storedHead() {
+  function storedHead(scope = "") {
     try {
-      return parseHead(JSON.parse(storage?.getItem?.(HEAD_STORAGE_KEY) || "null"))
+      const scoped = scope ? storage?.getItem?.(`${HEAD_STORAGE_KEY}.${scope}`) : null
+      return parseHead(JSON.parse(scoped || storage?.getItem?.(HEAD_STORAGE_KEY) || "null"))
     } catch {
       return null
     }
   }
 
-  function rememberHead(head) {
+  function rememberHead(head, scope) {
     try {
-      storage?.setItem?.(HEAD_STORAGE_KEY, JSON.stringify(head))
+      storage?.setItem?.(`${HEAD_STORAGE_KEY}.${scope}`, JSON.stringify(head))
     } catch {
       // Storage is an availability optimization; immutable identity is in the value.
     }
@@ -191,14 +192,14 @@ export function createIconoplasmPublicationReader(options = {}) {
     return { head, base, manifest }
   }
 
-  async function fromCoherentPublication(operation) {
-    const prior = storedHead()
+  async function fromCoherentPublication(scope, operation) {
+    const prior = storedHead(scope)
     let candidate = null
     let candidateError = null
     try {
       candidate = await currentHead()
       const result = await operation(candidate)
-      rememberHead(candidate)
+      rememberHead(candidate, scope)
       return result
     } catch (error) {
       candidateError = error
@@ -244,7 +245,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   async function gene(symbol) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
-    return fromCoherentPublication(async (head) => {
+    return fromCoherentPublication("gene", async (head) => {
       const { manifest } = await publication(head)
       const delta = await viewEntry(head, key)
       if (delta?.status === "withdrawn") return null
@@ -323,7 +324,7 @@ export function createIconoplasmPublicationReader(options = {}) {
       .toLowerCase()
     if (!needle) return { genes: [], query: "" }
     const allowed = symbols ? new Set(symbols.map(normalizedSymbol).filter(Boolean)) : null
-    return fromCoherentPublication(async (head) => {
+    return fromCoherentPublication("search", async (head) => {
       const { indexes } = await catalogIndexes(head)
       const ranked = []
       indexes.forEach((index, indexNumber) => {
@@ -353,7 +354,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   }
 
   async function gallery({ order = "votes", offset = 0, limit = 24, seed = "" } = {}) {
-    return fromCoherentPublication(async (head) => {
+    return fromCoherentPublication("gallery", async (head) => {
       const { version, indexes } = await catalogIndexes(head)
       const rows = indexes.flatMap((index, indexNumber) =>
         index.gallery_entries.map(
@@ -449,7 +450,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   }
 
   async function metadata() {
-    return fromCoherentPublication(async (head) => {
+    return fromCoherentPublication("metadata", async (head) => {
       await publication(head)
       return {
         card_snapshot_version: head.reader_view || head.current,
