@@ -18,7 +18,8 @@ export const DISCOVERY_MIGRATION_ROW_PAGE_LIMIT = 8
 export async function readCompactDiscoveryActivation(db) {
   const row = await db
     .prepare(
-      `SELECT status, cursor_user_id, cursor_gene_symbol, migrated_users, completed_at
+      `SELECT status, cursor_user_id, cursor_gene_symbol, migrated_users, completed_at,
+              lease_token, lease_until, total_legacy_rows, migrated_rows
        FROM icono_discovery_compact_activation_v2 WHERE singleton = 1`,
     )
     .first()
@@ -29,6 +30,10 @@ export async function readCompactDiscoveryActivation(db) {
         cursor_gene_symbol: String(row.cursor_gene_symbol || ""),
         migrated_users: Math.max(0, Number(row.migrated_users || 0) || 0),
         completed_at: row.completed_at ? String(row.completed_at) : null,
+        lease_token: String(row.lease_token || ""),
+        lease_until: String(row.lease_until || ""),
+        total_legacy_rows: Math.max(0, Number(row.total_legacy_rows || 0) || 0),
+        migrated_rows: Math.max(0, Number(row.migrated_rows || 0) || 0),
       }
     : null
 }
@@ -170,10 +175,14 @@ export async function migrateLegacyDiscoveryPage({
   db,
   rowLimit = DISCOVERY_MIGRATION_ROW_PAGE_LIMIT,
   nowSeconds = Math.floor(Date.now() / 1000),
+  leaseToken = "",
 }) {
   const activation = await readCompactDiscoveryActivation(db)
   if (!activation) throw new Error("Compact discovery activation schema is missing")
   if (activation.status === "complete") return { ok: true, complete: true, migrated_users: 0 }
+  if (!leaseToken || activation.lease_token !== leaseToken) {
+    return { ok: false, pending: true, code: "DISCOVERY_MIGRATION_LEASE_LOST" }
+  }
   const limit = Math.max(1, Math.min(8, Number.parseInt(String(rowLimit), 10) || 8))
   const selected = await db
     .prepare(
@@ -232,17 +241,20 @@ export async function migrateLegacyDiscoveryPage({
     .prepare(
       `UPDATE icono_discovery_compact_activation_v2
        SET status = ?, cursor_user_id = ?, cursor_gene_symbol = ?,
-           migrated_users = migrated_users + ?,
+           migrated_users = migrated_users + ?, migrated_rows = migrated_rows + ?,
            completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE singleton = 1 AND status = 'pending'`,
+           updated_at = CURRENT_TIMESTAMP,
+           lease_token = '', lease_until = ''
+       WHERE singleton = 1 AND status = 'pending' AND lease_token = ?`,
     )
     .bind(
       complete ? "complete" : "pending",
       cursorUserId,
       cursorGeneSymbol,
       migratedUsers,
+      page.length,
       complete ? 1 : 0,
+      leaseToken,
     )
     .run()
   return {
@@ -253,4 +265,21 @@ export async function migrateLegacyDiscoveryPage({
     cursor_user_id: cursorUserId,
     cursor_gene_symbol: cursorGeneSymbol,
   }
+}
+
+export async function claimCompactDiscoveryMigrationLease(
+  db,
+  { token, now = new Date().toISOString(), leaseMilliseconds = 120000 } = {},
+) {
+  const until = new Date(Date.parse(now) + leaseMilliseconds).toISOString()
+  return db
+    .prepare(
+      `UPDATE icono_discovery_compact_activation_v2
+       SET lease_token = ?, lease_until = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE singleton = 1 AND status = 'pending'
+         AND (lease_token = '' OR lease_until <= ?)
+       RETURNING cursor_user_id, cursor_gene_symbol`,
+    )
+    .bind(token, until, now)
+    .first()
 }

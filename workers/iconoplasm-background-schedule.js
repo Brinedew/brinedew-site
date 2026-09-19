@@ -5,6 +5,7 @@ const quarterHours = (minute) => Object.freeze([minute, minute + 15, minute + 30
 
 export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   sharedDiscovery: Object.freeze([0]),
+  discoveryMigration: Object.freeze([1, 16, 33, 48]),
   sharedDelivery: Object.freeze([10, 28, 46]),
   caretakerComments: quarterHours(2),
   fulfillment: quarterHours(5),
@@ -19,7 +20,6 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({
   archive: Object.freeze([56]),
-  discoveryMigration: Object.freeze([57]),
   canonRepair: Object.freeze([58]),
   gallery: Object.freeze([59]),
 })
@@ -40,7 +40,7 @@ function jobsByMinute(schedule) {
 const recurringJobs = jobsByMinute(ICONOPLASM_BACKGROUND_MINUTES)
 const nightlyJobs = jobsByMinute(ICONOPLASM_NIGHTLY_MINUTES)
 export const ICONOPLASM_RECURRING_CRON = `${[...recurringJobs.keys()].sort((a, b) => a - b).join(",")} * * * *`
-export const ICONOPLASM_NIGHTLY_CRON = "56,57,58,59 23 * * *"
+export const ICONOPLASM_NIGHTLY_CRON = "56,58,59 23 * * *"
 export const ICONOPLASM_BACKGROUND_INVOCATIONS_PER_DAY = recurringJobs.size * 24 + nightlyJobs.size
 
 export function iconoplasmBackgroundJob(event) {

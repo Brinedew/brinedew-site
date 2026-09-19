@@ -12,7 +12,7 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   DailyMutationLaneReservations,
-  MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY,
+  MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
   MUTATION_LANE_DAILY_LIMITS,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
 
@@ -397,6 +397,36 @@ test("authoritative provider writes consume the same 70 percent ordinary ceiling
   )
 })
 
+test("daily-budget owner schedules terminal compaction at the next no-traffic eligibility", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const alarms = []
+  const storage = {
+    ...sqliteDoStorage(raw),
+    async setAlarm(at) {
+      alarms.push(at)
+    },
+  }
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate({
+    storage,
+    blockConcurrencyWhile(callback) {
+      return callback()
+    },
+  })
+  owner.mutationReservations.reserve({
+    day: "2026-09-19",
+    lane: "user_action",
+    operation_id: "no-traffic-aging",
+    units: 1,
+  })
+  owner.mutationReservations.complete({
+    operation_id: "no-traffic-aging",
+    completed_at: "2026-09-19T00:00:00.000Z",
+  })
+  await owner.alarm()
+  assert.equal(alarms.at(-1), Date.parse("2026-10-21T00:00:00.000Z"))
+})
+
 test("unresolved reservations survive indefinitely while old completed identities compact to anti-reuse tombstones", () => {
   const raw = new DatabaseSync(":memory:")
   const storage = sqliteDoStorage(raw)
@@ -463,7 +493,7 @@ test("unresolved reservations survive indefinitely while old completed identitie
       .get().n,
     0,
   )
-  assert.equal(MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY, 2_560_000)
+  assert.equal(MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY, 4_480_000)
   raw.close()
 })
 
@@ -953,6 +983,33 @@ test("publication reservation covers the measured worst accepted projection on r
       measured: db.rowsWritten - beforeOverflow,
     }),
   )
+
+  const auditAssets = Array.from({ length: 65 }, (_, index) => ({
+    asset_sha256: (index + 100).toString(16).padStart(64, "0"),
+    vision_id: `anima-audit-${index + 1}`,
+    upvotes: 0,
+    downvotes: 0,
+    score: 0,
+    vote_count: 0,
+  }))
+  const auditRequired = await processVoteProjectionRefreshJobBatch(
+    {
+      ICONOPLASM_DB: db,
+      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+        idFromName: () => "global",
+        get: () => ({ fetch: async () => assert.fail("audit refusal must precede admission") }),
+      },
+      ICONOPLASM_VOTE_COORDINATORS: {
+        idFromName: (name) => name,
+        get: () => ({
+          fetch: async () => Response.json({ ok: true, symbol, asset_summaries: auditAssets }),
+        }),
+      },
+    },
+    [{ gene_symbol: symbol, actor_id: "audit", reason: "vote_auto_promote", job_version: 99 }],
+  )
+  assert.equal(auditRequired[0].ok, false)
+  assert.match(auditRequired[0].error, /VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED/)
 
   db.raw.exec("DELETE FROM icono_vote_projection_refresh_jobs")
   db.raw
