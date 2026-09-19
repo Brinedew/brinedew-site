@@ -96,7 +96,9 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
   let statefulWorkerRouteEvents = 0
   try {
     for (const pathname of ANONYMOUS_ROUTE_CLASSES) {
-      const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)
+      const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+        redirect: "manual",
+      })
       if (response.status >= 500) statefulWorkerRouteEvents += 1
     }
   } finally {
