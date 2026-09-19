@@ -639,3 +639,17 @@ test("B-774 forbids catalog-wide alias scans in discovery resolution", () => {
     assert.doesNotMatch(source, /resolveCatalogAliases/, file)
   }
 })
+
+// B-764: D1 records migration filenames, not their later contents. Production
+// missed the activation table when 0106 was edited after application. Lock the
+// applied bytes; every future repair must use a new forward-only migration.
+test("B-764 locks the applied compact-discovery migration bytes", () => {
+  const migration = readFileSync(
+    path.join(REPOSITORY_ROOT, "migrations-iconoplasm/0106_compact_discovery_state_v2.sql"),
+  )
+  assert.equal(
+    createHash("sha256").update(migration).digest("hex"),
+    "bf13d7e18d332494ffa2a194b49296b3a419a756757e34afac76221455b9acb3",
+    "0106 was already applied; add a new migration instead of editing history",
+  )
+})
