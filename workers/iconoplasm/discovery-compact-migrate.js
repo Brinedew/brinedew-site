@@ -242,6 +242,7 @@ export async function migrateLegacyDiscoveryPage({
       `UPDATE icono_discovery_compact_activation_v2
        SET status = ?, cursor_user_id = ?, cursor_gene_symbol = ?,
            migrated_users = migrated_users + ?, migrated_rows = migrated_rows + ?,
+           total_legacy_rows = total_legacy_rows + ?,
            completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
            updated_at = CURRENT_TIMESTAMP,
            lease_token = '', lease_until = ''
@@ -252,6 +253,7 @@ export async function migrateLegacyDiscoveryPage({
       cursorUserId,
       cursorGeneSymbol,
       migratedUsers,
+      page.length,
       page.length,
       complete ? 1 : 0,
       leaseToken,
@@ -265,6 +267,7 @@ export async function migrateLegacyDiscoveryPage({
     complete,
     migrated_users: migratedUsers,
     migrated_rows: page.length,
+    measured_legacy_rows: activation.total_legacy_rows + page.length,
     cursor_user_id: cursorUserId,
     cursor_gene_symbol: cursorGeneSymbol,
   }
