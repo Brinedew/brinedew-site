@@ -469,6 +469,37 @@ test("mutation admission fails closed when the account-wide provider observation
   assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_MISSING")
 })
 
+test("staging admission reads the shared account-wide provider observation from PROD_KV", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
+    },
+    {
+      KV: { get: async () => null },
+      PROD_KV: providerObservationKv({ rowsWritten: 0 }),
+    },
+  )
+  const response = await owner.fetch(
+    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day_key: new Date().toISOString().slice(0, 10),
+        lane: "user_action",
+        operation_id: "provider-observation:shared-production-kv",
+        units: 1,
+      }),
+    }),
+  )
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).ok, true)
+})
+
 test("mutation admission fails closed when the account-wide provider observation is stale", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
