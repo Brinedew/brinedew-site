@@ -177,6 +177,38 @@ test("slow migration keeps waiting while monotonic owner receipts make progress"
   assert.equal(now, 1_020_000, "status retries are bounded by the remaining stall window")
 })
 
+test("an already activated catalog does not restart migration during an unrelated release", async () => {
+  let starts = 0
+  const status = { current: "ccv2-current", build_revision: 4, failure: null, job: null }
+
+  const result = await cutover.startPublicationMigrationIfRequired({
+    readStatus: async () => status,
+    startMigration: async () => {
+      starts += 1
+    },
+  })
+
+  assert.equal(result.started, false)
+  assert.equal(result.status, status)
+  assert.equal(starts, 0)
+})
+
+test("an incomplete catalog starts migration through its existing owner", async () => {
+  let starts = 0
+  const status = { current: "ccv2-old", build_revision: 2, failure: null, job: null }
+
+  const result = await cutover.startPublicationMigrationIfRequired({
+    readStatus: async () => status,
+    startMigration: async () => {
+      starts += 1
+    },
+  })
+
+  assert.equal(result.started, true)
+  assert.equal(result.status, status)
+  assert.equal(starts, 1)
+})
+
 test("stalled migration fails closed before activation", async () => {
   assert.equal(typeof cutover.releasePublicReadCutover, "function")
   const operations = []
