@@ -190,7 +190,11 @@ export default (() => {
   }
   var host = String(window.location.hostname || "").toLowerCase()
   var origin = window.location.origin
-  if (host !== "iconoplasm.brinedew.bio" && host !== "staging.brinedew.bio") {
+  if (
+    host !== "iconoplasm.brinedew.bio" &&
+    host !== "staging.brinedew.bio" &&
+    host !== "geneguessr-api-staging.decap.workers.dev"
+  ) {
     origin = "https://iconoplasm.brinedew.bio"
   }
   var bootstrap = {

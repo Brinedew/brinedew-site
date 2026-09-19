@@ -44,7 +44,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=3986208c76e2d74f"
+} from "./diagram-studio.js?v=102455497aff337e"
 import {
   iconoplasmPublicationReader,
   immutableBlotByteUrl,
@@ -206,6 +206,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var host = String(window.location.hostname || "").toLowerCase()
     if (host === "iconoplasm.brinedew.bio") return window.location.origin
     if (host === "staging.brinedew.bio") return window.location.origin
+    if (host === "geneguessr-api-staging.decap.workers.dev") return window.location.origin
     if (host === "brinedew.bio" || host === "www.brinedew.bio")
       return "https://iconoplasm.brinedew.bio"
     return "https://iconoplasm.brinedew.bio"
