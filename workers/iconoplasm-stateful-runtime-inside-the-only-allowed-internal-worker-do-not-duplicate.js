@@ -1154,7 +1154,7 @@ const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // deployment migration instead of silently mixing cards produced by two mappers.
 // `blot` is an additive, optional projection on the revision-2 card artifact so it can be
 // backfilled shard-by-shard without taking every existing published card offline.
-const CARD_CATALOG_BUILD_REVISION = 2
+const CARD_CATALOG_BUILD_REVISION = 3
 const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
 const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
 // Content-addressed shard storage (B-530). Shards are keyed by the sha256 of their
@@ -34974,7 +34974,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   "admin_gallery.migrate_card_storage": async ({ request, env, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done("admin_gallery_storage_migration_403", json({ error: "Unauthorized" }, 403))
-    const result = await callCardPublication(env, "/bootstrap", { method: "POST" })
+    const result = await callCardPublication(env, "/migrate", { method: "POST" })
     return done(
       "admin_gallery_storage_migration",
       json(result, 202, { "Cache-Control": "no-store" }),

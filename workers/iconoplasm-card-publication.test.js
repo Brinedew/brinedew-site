@@ -208,9 +208,29 @@ test("the committed manifest atomically names a bounded compact public catalog i
   assert.equal(manifest.shards.length, 1)
   const catalogIndexRef = manifest.shards[0].catalog_index
   assert.equal(catalogIndexRef.page_count, 1)
+  assert.match(catalogIndexRef.key, /\/catalogindexes\/[a-f0-9]{64}\.json$/)
   const catalogIndex = (await f.objects.read(catalogIndexRef.key)).value
-  assert.equal(catalogIndex.schema_version, 1)
+  assert.equal(
+    new TextEncoder().encode(canonicalPublishedJson(catalogIndex)).byteLength <=
+      PUBLISHED_CARD_OBJECT_LIMITS.catalogindexes,
+    true,
+  )
+  assert.equal(catalogIndex.schema_version, 2)
   assert.equal(catalogIndex.pages.length, 1)
+  assert.deepEqual(catalogIndex.search_entries[0], ["G0000", "First gene", 0, 0])
+  assert.deepEqual(catalogIndex.gallery_entries[0], [
+    "G0000",
+    0,
+    0,
+    0,
+    10,
+    "",
+    10,
+    null,
+    null,
+    null,
+    1,
+  ])
   const pageRef = catalogIndex.pages[0]
   assert.equal(pageRef.first_symbol, "G0000")
   assert.equal(pageRef.last_symbol, "G0001")
@@ -291,6 +311,26 @@ test("storage bootstrap cannot silently acknowledge a mapping migration", async 
   p.wake()
   await assert.rejects(p.step(), /explicit catalog migration required/)
   assert.deepEqual(p.status().head, original)
+})
+
+test("an explicit publication migration keeps the old head until the new catalog projection commits", async () => {
+  const f = fixture()
+  f.source.buildRevision = 1
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const original = p.status().head
+  f.source.buildRevision = 2
+
+  await p.migrate()
+  assert.equal(p.status().job.migration, true)
+  assert.deepEqual(p.status().head, original)
+  await drain(p)
+
+  const migrated = p.status().head
+  assert.equal(migrated.current.manifest.build_revision, 2)
+  assert.equal(migrated.current.manifest.shards[0].catalog_index.page_count, 1)
+  assert.equal(migrated.previous.version, original.current.version)
 })
 
 test("failed bytes never advance head or watermark; a recreated publisher resumes durable progress", async () => {

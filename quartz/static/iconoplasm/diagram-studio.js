@@ -11,6 +11,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=20385023f660f19c"
 import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=994290448fb10093"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=20260919-static-read-plane"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -49,6 +50,11 @@ function publicApiOrigin() {
   return host === "iconoplasm.brinedew.bio" || host === "staging.brinedew.bio"
     ? window.location.origin
     : "https://iconoplasm.brinedew.bio"
+}
+
+export function searchPublishedGenes(query, { limit = 8 } = {}) {
+  const reader = globalThis.IconoplasmPublicationReader || iconoplasmPublicationReader
+  return reader.search(String(query || ""), { limit })
 }
 
 function readStoredDocument() {
@@ -409,12 +415,9 @@ async function refreshStudioSearch(query) {
     closeStudioSearch()
     return
   }
-  const response = await fetch(
-    `${publicApiOrigin()}/api/public/v1/genes/search?q=${encodeURIComponent(query)}&limit=8&scope=catalog`,
-  )
-  const payload = await response.json().catch(() => null)
+  const payload = await searchPublishedGenes(query, { limit: 8 }).catch(() => null)
   if (requestId !== studioSearchRequest) return
-  if (!response.ok || !payload) {
+  if (!payload) {
     closeStudioSearch()
     return
   }

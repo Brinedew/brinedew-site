@@ -5,7 +5,11 @@ import path from "node:path"
 import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../../../scripts/prepare-iconoplasm-edge-assets.mjs"
-import { createIconoplasmPublicationReader, immutableBlotByteUrl } from "./publication-reader.js"
+import {
+  createIconoplasmPublicationReader,
+  immutableBlotByteUrl,
+  PUBLIC_READ_REQUEST_BOUNDS,
+} from "./publication-reader.js"
 import {
   createThrowingStateBindings,
   serveStaticFirstRequest,
@@ -164,20 +168,21 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
   assert.doesNotMatch(sitemap, /<main>Iconoplasm<\/main>/)
 })
 
-async function immutableFixture() {
-  const encode = (value) => JSON.stringify(value)
-  const object = async (kind, value) => {
-    const body = encode(value)
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
-    const hash = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("")
-    return {
-      hash,
-      path: `/published-cards/v2/immutable/${kind}/${hash}.json`,
-      body,
-    }
+async function immutableFixtureObject(kind, value) {
+  const body = JSON.stringify(value)
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
+  const hash = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")
+  return {
+    hash,
+    path: `/published-cards/v2/immutable/${kind}/${hash}.json`,
+    body,
   }
+}
+
+async function immutableFixture() {
+  const object = immutableFixtureObject
   const gene = {
     symbol: "TP53",
     full_name: "tumor protein p53",
@@ -212,9 +217,11 @@ async function immutableFixture() {
       },
     ],
   })
-  const catalogIndexObject = await object("catalogs", {
-    schema_version: 1,
+  const catalogIndexObject = await object("catalogindexes", {
+    schema_version: 2,
     pages: [{ first_symbol: "TP53", last_symbol: "TP53", key: catalogObject.path.slice(1) }],
+    search_entries: [["TP53", "tumor protein p53", 0, 0]],
+    gallery_entries: [["TP53", 0, 0, 100, 5]],
   })
   const manifestObject = await object("manifests", {
     storage: "bunny_card_catalog_v2",
@@ -242,7 +249,7 @@ async function immutableFixture() {
       manifestObject,
     ].map((entry) => [entry.path, entry.body]),
   )
-  return { gene, head, objects }
+  return { gene, head, objects, manifestObject }
 }
 
 test("the browser resolves gene, search, and gallery from one immutable publication", async () => {
@@ -298,11 +305,10 @@ test("the browser resolves gene, search, and gallery from one immutable publicat
   )
 })
 
-test("a healthy Bunny response cancels the canonical hedge", async () => {
+test("a healthy Bunny response never starts a browser-side canonical-origin hedge", async () => {
   const fixture = await immutableFixture()
   let originRequests = 0
   const reader = createIconoplasmPublicationReader({
-    hedgeMs: 20,
     fetchImpl: async (url) => {
       const parsed = new URL(url)
       if (parsed.origin === "https://iconoplasm.brinedew.bio") originRequests += 1
@@ -324,7 +330,6 @@ test("a failed Bunny head keeps the coherent prior publication without stateful 
   const storage = new Map([["iconoplasm.publication-head.v1", fixture.head]])
   const requested = []
   const reader = createIconoplasmPublicationReader({
-    hedgeMs: 0,
     storage: {
       getItem(key) {
         return storage.get(key) || null
@@ -349,15 +354,99 @@ test("a failed Bunny head keeps the coherent prior publication without stateful 
     requested.some((request) => request.pathname.startsWith("/api/iconoplasm/")),
     false,
   )
+  assert.equal(
+    requested.every((request) => request.origin === "https://iconoplasmportraits.b-cdn.net"),
+    true,
+    "a Bunny failure must not fan readers into the Worker/KV origin",
+  )
+})
+
+test("a valid new head with a missing child retains the last fully coherent publication", async () => {
+  const prior = await immutableFixture()
+  const brokenManifest = await immutableFixtureObject("manifests", {
+    storage: "bunny_card_catalog_v2",
+    card_count: 1,
+    shards: [
+      {
+        first_symbol: "TP53",
+        last_symbol: "TP53",
+        delivery_indexes: [
+          {
+            first_symbol: "TP53",
+            last_symbol: "TP53",
+            key: `published-cards/v2/immutable/indexes/${"f".repeat(64)}.json`,
+          },
+        ],
+      },
+    ],
+  })
+  const nextHead = JSON.stringify({ schema_version: 2, current: `ccv2-${brokenManifest.hash}` })
+  const stored = new Map([["iconoplasm.publication-head.v1", prior.head]])
+  const reader = createIconoplasmPublicationReader({
+    storage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, value),
+    },
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") return new Response(nextHead)
+      if (pathname === brokenManifest.path) return new Response(brokenManifest.body)
+      const body = prior.objects.get(pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  assert.equal((await reader.gene("TP53")).symbol, "TP53")
+  assert.equal(stored.get("iconoplasm.publication-head.v1"), prior.head)
+})
+
+test("search and gallery fetch compact indexes plus only result pages", async () => {
+  const fixture = await immutableFixture()
+  const requested = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      requested.push(pathname)
+      if (pathname === "/api/public/v1/card-current") return new Response(fixture.head)
+      const body = fixture.objects.get(pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  await reader.search("tumor", { limit: 12 })
+  await reader.gallery({ order: "votes", offset: 0, limit: 24 })
+  const catalogReads = requested.filter((pathname) => pathname.includes("/catalog"))
+  assert.equal(catalogReads.length, 2, "one compact index plus one selected rich page")
+  assert.deepEqual(PUBLIC_READ_REQUEST_BOUNDS, {
+    catalogIndexes: 32,
+    compactIndexBytes: 131072,
+    resultPageBytes: 524288,
+    searchRequests: 46,
+    searchBytes: 10_553_344,
+    galleryRequests: 58,
+    galleryBytes: 16_844_800,
+  })
 })
 
 test("blot bytes use immutable CDN identity or a static placeholder, never the semantic Worker route", () => {
+  const fingerprint = "1".repeat(32)
+  const objectKey = `blots/v1/T/TP53/${fingerprint}/TP53-iconoplasm-gene-blot.webp`
   assert.equal(
     immutableBlotByteUrl({
+      blot_fingerprint: fingerprint,
+      object_key: objectKey,
       semantic_url: "https://iconoplasm.brinedew.bio/blot/TP53.webp",
-      image_url: "https://iconoplasmportraits.b-cdn.net/blots/TP53/hash.webp",
+      image_url: `https://iconoplasmportraits.b-cdn.net/${objectKey}`,
     }),
-    "https://iconoplasmportraits.b-cdn.net/blots/TP53/hash.webp",
+    `https://iconoplasmportraits.b-cdn.net/${objectKey}`,
+  )
+  assert.equal(
+    immutableBlotByteUrl({
+      blot_fingerprint: fingerprint,
+      object_key: objectKey,
+      image_url: "https://iconoplasmportraits.b-cdn.net/not-the-published-object.webp",
+    }),
+    "/static/iconoplasm/blot-placeholder.svg",
   )
   assert.equal(
     immutableBlotByteUrl({ semantic_url: "/blot/TP53.webp" }),
