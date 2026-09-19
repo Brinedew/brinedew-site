@@ -240,6 +240,13 @@ test("anonymous homepage bootstrap skips session and settings traffic", async ()
   assert.doesNotMatch(app, /\/api\/iconoplasm\/admin\/me/)
 })
 
+test("the isolated staging hostname never dispatches mutations to production", async () => {
+  const [app, head] = await Promise.all([readFile(appPath, "utf8"), readFile(headPath, "utf8")])
+  const stagingHost = "geneguessr-api-staging.decap.workers.dev"
+  assert.match(app, new RegExp(stagingHost.replaceAll(".", "\\.")))
+  assert.match(head, new RegExp(stagingHost.replaceAll(".", "\\.")))
+})
+
 test("shared sidebar imports use the module content hash as their immutable cache key", async () => {
   const [app, geneguessrApp, settingsApp, sidebarShell] = await Promise.all([
     readFile(appPath, "utf8"),
