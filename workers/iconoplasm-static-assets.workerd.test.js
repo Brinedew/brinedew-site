@@ -82,7 +82,6 @@ test(
         "/gene/TP53",
         "/portrait/TP53.webp",
         "/portraits/TP53.webp",
-        "/blot/TP53.webp",
         "/sitemap.xml",
         "/robots.txt",
         "/llms.txt",
@@ -93,8 +92,17 @@ test(
       }
       const apiResponse = await runtime.dispatchFetch("https://iconoplasm.test/api/auth/me")
       assert.equal(apiResponse.status, 599, await apiResponse.text())
-      const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp")
-      assert.match(await blotResponse.text(), /static\/iconoplasm\/app\.js/)
+      for (const method of ["GET", "HEAD"]) {
+        const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp", {
+          method,
+          redirect: "manual",
+        })
+        assert.equal(blotResponse.status, 302)
+        assert.equal(
+          blotResponse.headers.get("location"),
+          "https://iconoplasmportraits.b-cdn.net/blot/TP53.webp",
+        )
+      }
     } finally {
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
@@ -134,12 +142,23 @@ test(
         }),
       )
 
-      for (const pathname of ["/", "/blot/TP53.webp"])
+      for (const pathname of ["/"])
         assert.notEqual(
           (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
           599,
           pathname,
         )
+      for (const method of ["GET", "HEAD"]) {
+        const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp", {
+          method,
+          redirect: "manual",
+        })
+        assert.equal(blotResponse.status, 302)
+        assert.equal(
+          blotResponse.headers.get("location"),
+          "https://iconoplasmportraits.b-cdn.net/blot/TP53.webp",
+        )
+      }
       for (const pathname of [
         "/search?q=TP53",
         "/gene/TP53",

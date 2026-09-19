@@ -310,3 +310,33 @@ retained-preparation route tests both passed. `pnpm run build` completed 214
 inputs, emitted 3,175 public files, and produced a 2,608-file, 52,378,339-byte
 edge bundle. Deployment, CDN propagation, and live browser acceptance remain
 separate gates.
+
+## Final HTTP blot compatibility repair
+
+The preceding SPA-based blot resolver was not valid for non-JavaScript image
+clients: GET returned HTML before client code navigated elsewhere. The focused
+RED run recorded **47 tests: 42 passed and 5 failed** after the missing alias
+API/phase and HTTP redirect were introduced as executable expectations.
+
+The final asset bundle now emits one wildcard HTTP 302 from
+`/blot/*` to `https://iconoplasmportraits.b-cdn.net/blot/:splat`; it creates no
+per-gene Cloudflare file or rule. The single card publisher processes a bounded
+six-gene alias phase before shard sealing and head commit. For a ready blot it
+reads and hashes the exact content-addressed WebP, writes the gene alias, and
+verifies that exact hash through every configured Bunny read source. For a gene
+without a blot it writes and verifies bundled static SVG placeholder image
+bytes at the same image alias. Failed or incomplete alias verification leaves
+the prior publication head untouched.
+
+The obsolete JavaScript semantic-route module and application startup branch
+were removed. Real Miniflare/Workerd tests now exercise GET and HEAD for the
+stable route under both final and retained preparation route configurations,
+assert the exact Bunny Location, and retain the throwing stateful Worker. The
+focused GREEN rerun passed **47/47** in 22.54 seconds. Deployment, Bunny alias
+migration/propagation, and live non-JavaScript retrieval remain separate gates.
+The expanded source, architecture-fence, static-bundle, and Workerd run passed
+71/72; its sole failure was the fence test still requiring the removed phrase
+`static application shell`. After changing that assertion to the actual
+`Static Assets wildcard` boundary, the complete architecture-fence suite passed
+16/16. `pnpm run build` then completed 214 inputs, emitted 3,174 public files,
+and produced a 2,607-file, 52,375,755-byte Iconoplasm edge bundle.

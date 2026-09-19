@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   createPublishedCardObjectStore,
+  publishedGeneBlotAliasKey,
   publishedCardObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
 
@@ -125,4 +126,45 @@ test("a transient storage timeout is retried and the publication commits (B-753)
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test("the publisher advances a verified stable blot alias from exact immutable bytes", async () => {
+  const { store, objects, calls } = fixture()
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const bytes = new TextEncoder().encode("webp-fixture")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", bytes)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  objects.set(objectKey, bytes)
+
+  const receipt = await store.publishBlotAlias(symbol, {
+    status: "ready",
+    blot_fingerprint: fingerprint,
+    asset_sha256: assetSha,
+    object_key: objectKey,
+  })
+
+  assert.equal(receipt.key, publishedGeneBlotAliasKey(symbol))
+  assert.deepEqual(objects.get(receipt.key), bytes)
+  assert.deepEqual(
+    calls.slice(-3).map((call) => [call.method, call.key]),
+    [
+      ["GET", objectKey],
+      ["PUT", "blot/TP53.webp"],
+      ["GET", "blot/TP53.webp"],
+    ],
+  )
+})
+
+test("a published gene without a blot receives verified placeholder image bytes", async () => {
+  const { store, objects } = fixture()
+  const receipt = await store.publishBlotAlias("RB1", null)
+  const bytes = objects.get(receipt.key)
+  assert.equal(receipt.key, "blot/RB1.webp")
+  assert.match(new TextDecoder().decode(bytes), /^<svg/)
+  assert.equal(receipt.contentType, "image/svg+xml")
 })
