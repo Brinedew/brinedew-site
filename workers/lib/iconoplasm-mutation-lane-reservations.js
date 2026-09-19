@@ -9,6 +9,9 @@ export const MUTATION_UNALLOCATED_HEADROOM = 30_000
 export const MUTATION_ORDINARY_DAILY_CEILING =
   D1_PROVIDER_DAILY_WRITE_LIMIT - MUTATION_UNALLOCATED_HEADROOM
 export const MUTATION_COMPLETED_RETRY_HORIZON_DAYS = 32
+export const MUTATION_TOMBSTONE_RETENTION_DAYS = 32
+export const MUTATION_MAX_TRACKED_IDENTITIES_AT_40K_PER_DAY =
+  40_000 * (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS)
 export const MUTATION_LANE_DAILY_LIMITS = Object.freeze({
   user_action: 40_000,
   publication: 10_000,
@@ -274,6 +277,34 @@ export class DailyMutationLaneReservations {
     ).toISOString()
     const safeLimit = Math.max(1, Math.min(5000, Number.parseInt(String(limit), 10) || 1000))
     return this.transactionSync(() => {
+      // Operation ids are globally unique and may be retried for 32 days.
+      // A second 32-day anti-reuse window catches stale clients, after which
+      // reuse is a protocol violation rather than permanent per-command state.
+      const tombstoneBeforeTime = new Date(
+        nowMs -
+          (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS) *
+            24 *
+            60 *
+            60 *
+            1000,
+      ).toISOString()
+      const expired = this.storage.sql
+        .exec(
+          `SELECT operation_id
+           FROM daily_mutation_lane_reservation_tombstones
+           WHERE completed_at < ?
+           ORDER BY completed_at, operation_id
+           LIMIT ?`,
+          tombstoneBeforeTime,
+          safeLimit,
+        )
+        .toArray()
+      for (const row of expired) {
+        this.storage.sql.exec(
+          `DELETE FROM daily_mutation_lane_reservation_tombstones WHERE operation_id = ?`,
+          row.operation_id,
+        )
+      }
       const rows = this.storage.sql
         .exec(
           `SELECT operation_id, day, lane, reserved_units, completed_at
@@ -303,7 +334,7 @@ export class DailyMutationLaneReservations {
           row.operation_id,
         )
       }
-      return { ok: true, compacted: rows.length }
+      return { ok: true, compacted: rows.length, expired_tombstones: expired.length }
     })
   }
 
