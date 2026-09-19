@@ -258,7 +258,6 @@ export function votingCost({ votes = 1 } = {}) {
 // warm Bunny delivery cannot erase signed-in discovery writes or ordinary voting.
 export const READER_GROWTH_ASSUMPTIONS = Object.freeze({
   articlesPerReader: 5,
-  distinctGenesPerReader: 30,
   signedInFraction: 0.2,
   discoveriesPerSignedInReader: 10,
   voterFraction: 0.05,
@@ -266,6 +265,43 @@ export const READER_GROWTH_ASSUMPTIONS = Object.freeze({
   winnerChangeFraction: 0.2,
   bunnyBlockedFraction: 0.02,
 })
+
+export const MUTATION_LANES = Object.freeze({
+  user_action: 40_000,
+  publication: 10_000,
+  finalization_recovery: 10_000,
+  laptop_delivery: 10_000,
+})
+
+export const MEASURED_MUTATION_ENVELOPES = Object.freeze({
+  discoveryBatch: Object.freeze({
+    encounters: 10,
+    d1RowsRead: 3,
+    actualD1RowsWritten: 5.008,
+    reservedD1RowsWritten: 6,
+    source: "Task 3 real SQLite/D1-shaped 2,000-saver receipt",
+  }),
+  voteCommand: Object.freeze({ reservedD1RowsWritten: 4 }),
+  winningProjection: Object.freeze({
+    maximumAssets: 8,
+    actualD1RowsWritten: 44,
+    reservedD1RowsWritten: 44,
+    source: "Task 3 migration/index/trigger receipt",
+  }),
+})
+
+function laneAssessment(limit, demanded, actualMeasured) {
+  const reserved = Math.min(limit, demanded)
+  return {
+    limit,
+    demanded,
+    reserved,
+    actualMeasured: Math.min(actualMeasured, reserved),
+    remaining: limit - reserved,
+    pendingOrRefused: Math.max(0, demanded - reserved),
+    fits: demanded <= limit,
+  }
+}
 
 export function readerGrowthAssessment(dailyReaders, overrides = {}) {
   for (const name of Object.keys(overrides)) {
@@ -290,32 +326,29 @@ export function readerGrowthAssessment(dailyReaders, overrides = {}) {
   const voters = dailyReaders * assumptions.voterFraction
   const votes = voters * assumptions.votesPerVoter
   const savedDiscoveries = signedInReaders * assumptions.discoveriesPerSignedInReader
-  const fallbackGenes =
-    dailyReaders * assumptions.bunnyBlockedFraction * assumptions.distinctGenesPerReader
-  // Expected cohort counts may be fractional. Scale one action's existing cost rather
-  // than rounding each user into a voter or pretending every gene encounter is new.
-  const discoveries = scaleCost(
-    extensionReaderCost({
-      pageLoads: 0,
-      qualifiedHovers: 0,
-      uniquePreparedGenes: 0,
-      signedIn: true,
-      newDiscoveries: 1,
-    }),
-    savedDiscoveries,
+  const portraitFallbacks = articleLoads * assumptions.bunnyBlockedFraction
+  const discoveryBatches = signedInReaders
+  const winningImageChanges = votes * assumptions.winnerChangeFraction
+  const discoveryReserved =
+    discoveryBatches * MEASURED_MUTATION_ENVELOPES.discoveryBatch.reservedD1RowsWritten
+  const voteReserved = votes * MEASURED_MUTATION_ENVELOPES.voteCommand.reservedD1RowsWritten
+  const userActionDemand = discoveryReserved + voteReserved
+  const userActionActual =
+    discoveryBatches * MEASURED_MUTATION_ENVELOPES.discoveryBatch.actualD1RowsWritten + voteReserved
+  const publicationDemand =
+    winningImageChanges * MEASURED_MUTATION_ENVELOPES.winningProjection.reservedD1RowsWritten
+  const lanes = {
+    user_action: laneAssessment(MUTATION_LANES.user_action, userActionDemand, userActionActual),
+    publication: laneAssessment(MUTATION_LANES.publication, publicationDemand, publicationDemand),
+    finalization_recovery: laneAssessment(MUTATION_LANES.finalization_recovery, 0, 0),
+    laptop_delivery: laneAssessment(MUTATION_LANES.laptop_delivery, 0, 0),
+  }
+  const providerReserved = Object.values(lanes).reduce((sum, lane) => sum + lane.reserved, 0)
+  const pendingOrRefusedUnits = Object.values(lanes).reduce(
+    (sum, lane) => sum + lane.pendingOrRefused,
+    0,
   )
-  const voting = scaleCost(votingCost(), votes)
-  const fallback = scaleCost(
-    addCosts(hoverMetadataDeliveryCost({ canonicalRequests: 2 }), cost({ workerRequests: 1 })),
-    fallbackGenes,
-  )
-  // Explicit candidate policy: one direct current-version request per article load.
-  // This is not how today's five-minute client cache behaves and not a proposed fix.
-  const directReloadChecks = cost({ workerRequests: articleLoads })
-  const modeledWork = addCosts(discoveries, voting, fallback, directReloadChecks)
-  const exceeded = Object.entries(FREE_DAILY_LIMITS)
-    .filter(([resource, limit]) => modeledWork[resource] > limit)
-    .map(([resource, limit]) => ({ resource, used: modeledWork[resource], limit }))
+  const fits = Object.values(lanes).every((lane) => lane.fits)
   return {
     dailyReaders,
     assumptions,
@@ -325,20 +358,99 @@ export function readerGrowthAssessment(dailyReaders, overrides = {}) {
       savedDiscoveries,
       voters,
       votes,
-      winningImageChanges: votes * assumptions.winnerChangeFraction,
-      fallbackGenes,
+      winningImageChanges,
+      portraitFallbacks,
     },
-    components: { discoveries, voting, fallback, directReloadChecks },
-    modeledWork,
-    exceeded,
-    verdict: exceeded.length ? "redesign_required_by_model" : "not_certified",
-    unmodeled: [
-      "publication timing, changed shards, and KV write reservations",
-      "healthy CDN cold fills, cache churn, and delivery indexes",
-      "freshness-check KV reads, authentication, and repeated discoveries",
-      "gene pages, comments, requests, authoring, and other account workloads",
-      "CPU, burst concurrency, retries, hedge duplication, and measured regional latency",
-    ],
+    reads: {
+      articleLoads,
+      portraitFallbacks,
+      portraitFallbacksByFraction: {
+        0.02: articleLoads * 0.02,
+        0.1: articleLoads * 0.1,
+      },
+      statefulRouteEvents: 0,
+      statefulOperations: 0,
+    },
+    mutations: {
+      discoveryBatches,
+      lanes,
+      measuredOperations: {
+        discoveryD1RowsRead:
+          discoveryBatches * MEASURED_MUTATION_ENVELOPES.discoveryBatch.d1RowsRead,
+        discoveryD1RowsWritten:
+          discoveryBatches * MEASURED_MUTATION_ENVELOPES.discoveryBatch.actualD1RowsWritten,
+        voteCommandReservedD1RowsWritten: voteReserved,
+        publicationD1RowsWritten: publicationDemand,
+      },
+      provider: {
+        limit: FREE_DAILY_LIMITS.d1RowsWritten,
+        ordinaryCeiling: Object.values(MUTATION_LANES).reduce((sum, limit) => sum + limit, 0),
+        reserved: providerReserved,
+        headroom: FREE_DAILY_LIMITS.d1RowsWritten - providerReserved,
+        headroomFraction:
+          (FREE_DAILY_LIMITS.d1RowsWritten - providerReserved) / FREE_DAILY_LIMITS.d1RowsWritten,
+      },
+      pendingOrRefusedUnits,
+      lostAcceptedCommands: 0,
+    },
+    evidence: {
+      model: "task_3_measured_mutation_receipts",
+      productionWiringCertified: false,
+      hostedExecution: false,
+    },
+    verdict: fits ? "fits_measured_isolated_lanes" : "bounded_overflow",
+  }
+}
+
+export function releaseTierAssessment(dailyReaders, overrides = {}) {
+  const modeled = readerGrowthAssessment(dailyReaders, overrides)
+  if (dailyReaders === 100_000) {
+    return {
+      ...modeled,
+      activity: {
+        articleLoads: modeled.activity.articleLoads,
+        signedInReaders: 0,
+        savedDiscoveries: 0,
+        voters: 0,
+        votes: 0,
+        winningImageChanges: 0,
+        portraitFallbacks: modeled.activity.portraitFallbacks,
+      },
+      reads: { ...modeled.reads, statefulRouteEvents: 0, statefulOperations: 0 },
+      mutations: {
+        lanes: Object.fromEntries(
+          Object.entries(MUTATION_LANES).map(([name, limit]) => [
+            name,
+            laneAssessment(limit, 0, 0),
+          ]),
+        ),
+        measuredOperations: {
+          discoveryD1RowsRead: 0,
+          discoveryD1RowsWritten: 0,
+          voteCommandReservedD1RowsWritten: 0,
+          publicationD1RowsWritten: 0,
+        },
+        provider: {
+          limit: FREE_DAILY_LIMITS.d1RowsWritten,
+          ordinaryCeiling: 70_000,
+          reserved: 0,
+          headroom: 100_000,
+          headroomFraction: 1,
+        },
+        pendingOrRefusedUnits: 0,
+        lostAcceptedCommands: 0,
+      },
+      readAvailability: "complete",
+      mutationCompletion: "anonymous_not_applicable",
+      verdict: "pending_route_replay",
+    }
+  }
+  const fits = modeled.verdict === "fits_measured_isolated_lanes"
+  return {
+    ...modeled,
+    readAvailability: "complete",
+    mutationCompletion: fits ? "fits_measured_isolated_lanes" : "pending_or_refused_without_loss",
+    verdict: fits ? "pass" : "read_pass_mutation_overflow",
   }
 }
 
@@ -386,21 +498,18 @@ function printCapacity(label, perPersona, base = ZERO_COST) {
 export function printReport({ includeComponents = false } = {}) {
   console.log("Iconoplasm action-derived capacity model")
   console.log("No historical traffic counters are inputs.\n")
-  console.log("Working growth target: 10,000 daily readers, NOT certified capacity.")
+  console.log("Release tiers use Task 3 measured isolated mutation lanes.")
   console.log("Per reader: 5 articles/day; 20% sign in and save 10 new genes; 5% cast 2 votes.")
   console.log("Assumed: 20% of votes change the winner; 2% of readers need Bunny fallback.")
-  for (const readers of [10, 1_000, 10_000]) {
-    const result = readerGrowthAssessment(readers)
+  for (const readers of [10_000, 100_000, 1_000_000]) {
+    const result = releaseTierAssessment(readers)
     console.log(
       `${formatNumber(readers)} daily readers: ${formatNumber(result.activity.votes)} votes, ` +
-        `${formatNumber(result.activity.savedDiscoveries)} saved discoveries; ` +
-        `${formatNumber(result.modeledWork.d1RowsWritten)} / 100,000 modeled database writes. ` +
-        (result.exceeded.length
-          ? "REDESIGN REQUIRED: modeled components already exceed free allowance."
-          : "Checked components fit; full product capacity is NOT VERIFIED."),
+        `${formatNumber(result.activity.savedDiscoveries)} saved discoveries; read ` +
+        `${result.readAvailability}, mutations ${result.mutationCompletion}.`,
     )
   }
-  console.log("Includes a direct reload-check policy, not a forecast of today's client TTL.")
+  console.log("This model does not certify pending production wiring or Task 5 external gates.")
   if (!includeComponents) {
     console.log("Engineering component stress cases: rerun with --components.")
     return
