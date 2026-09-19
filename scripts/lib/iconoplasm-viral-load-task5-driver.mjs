@@ -66,8 +66,8 @@ export function assessHostedSchedule(windows, elapsedMs, { toleranceMs = 10_000 
         window.second === second &&
         window.scheduled === 100 &&
         window.started === 100 &&
-        (window.startedAtOffsetMs == null ||
-          Math.abs(window.startedAtOffsetMs - second * 1_000) <= 100),
+        Number.isFinite(window.startedAtOffsetMs) &&
+        Math.abs(window.startedAtOffsetMs - second * 1_000) <= 100,
     )
   const withinElapsedTolerance =
     Number.isFinite(elapsedMs) && elapsedMs >= 599_000 && elapsedMs <= 600_000 + toleranceMs
