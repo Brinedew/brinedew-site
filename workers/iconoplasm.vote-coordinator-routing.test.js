@@ -2,14 +2,23 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
+import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
 import {
   IconoplasmVoteCoordinator,
   handleIconoplasmQueue,
-  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmVoteProjectionQueue,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as handleIconoplasmRequestInsideProduction,
+  handleIconoplasmVoteProjectionQueue as handleIconoplasmVoteProjectionQueueProduction,
   resolveDesiredVoteValue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const handleIconoplasmVoteProjectionQueue = (batch, env, ctx) =>
+  handleIconoplasmVoteProjectionQueueProduction(batch, withTestMutationAuthority(env), ctx)
+const handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate = (
+  request,
+  env,
+  ctx,
+) => handleIconoplasmRequestInsideProduction(request, withTestMutationAuthority(env), ctx)
 
 class DurableObjectSqlForTest {
   constructor() {
@@ -73,6 +82,81 @@ function fakeVoteCoordinatorState() {
   return { state, alarms }
 }
 
+test("VoteCoordinator refuses a ninth newly-created active asset while preserving historical rows", async (t) => {
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  coordinator.setMeta("authority_epoch", "v2")
+  const activeCandidates = []
+  for (let index = 0; index < 8; index += 1) {
+    const assetSha = index.toString(16).padStart(64, "0")
+    coordinator.ensureAssetSummaryRow(assetSha, {
+      visionId: `anima-v1-${index + 1}`,
+    })
+    activeCandidates.push({ asset_sha256: assetSha, status: "ready" })
+  }
+  coordinator.importGeneCandidateAuthority(activeCandidates)
+  assert.throws(
+    () =>
+      coordinator.applyVoteMutation({
+        assetSha256: "f".repeat(64),
+        userId: "reader-9",
+        requestedVoteValue: 1,
+        visionId: "anima-v1-9",
+      }),
+    /VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED/,
+  )
+  assert.equal(coordinator.exportAssetSummaries().length, 8)
+})
+
+test("vote set and import routes reject a ninth asset before inserting it", async (t) => {
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {})
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  coordinator.setMeta("authority_epoch", "v2")
+  const activeCandidates = []
+  for (let index = 0; index < 8; index += 1) {
+    const assetSha = index.toString(16).padStart(64, "0")
+    coordinator.ensureAssetSummaryRow(assetSha, {
+      visionId: `anima-v1-${index + 1}`,
+    })
+    activeCandidates.push({ asset_sha256: assetSha, status: "ready" })
+  }
+  coordinator.importGeneCandidateAuthority(activeCandidates)
+  const ninth = "f".repeat(64)
+  const setResponse = await coordinator.fetch(
+    new Request("https://coordinator/vote/set", {
+      method: "POST",
+      body: JSON.stringify({
+        symbol: "TP53",
+        asset_sha256: ninth,
+        user_id: "reader-9",
+        vote_value: 1,
+      }),
+    }),
+  )
+  assert.equal(setResponse.status, 409)
+  assert.equal((await setResponse.json()).code, "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
+  const importResponse = await coordinator.fetch(
+    new Request("https://coordinator/vote/import", {
+      method: "POST",
+      body: JSON.stringify({
+        symbol: "TP53",
+        items: [{ asset_sha256: ninth, user_id: "reader-9", vote_value: 1 }],
+      }),
+    }),
+  )
+  assert.equal(importResponse.status, 409)
+  assert.equal((await importResponse.json()).code, "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
+  assert.equal(coordinator.exportAssetSummaries().length, 8)
+})
+
 test("vote alarm preserves every outbox identity through a daily pause, new votes, restart and automatic reset wakeup", async (t) => {
   let now = Date.parse("2026-09-12T20:00:00Z"),
     exhausted = true
@@ -83,7 +167,17 @@ test("vote alarm preserves every outbox identity through a daily pause, new vote
     get: () => ({
       fetch: async (request) => {
         const body = await request.json()
-        budgetCalls.push({ path: new URL(request.url).pathname, body })
+        const path = new URL(request.url).pathname
+        budgetCalls.push({ path, body })
+        if (path === "/reserve-mutation-writes") {
+          return Response.json({
+            ok: true,
+            replayed: false,
+            lane: body.lane,
+            operation_id: body.operation_id,
+            reserved_units: body.units,
+          })
+        }
         return Response.json({
           day_key: body.day_key,
           cycle_key: body.cycle_key,
@@ -159,6 +253,72 @@ test("vote alarm preserves every outbox identity through a daily pause, new vote
   assert.equal(coordinator.getMeta("outbox_budget_retry_at"), "")
 })
 
+test("vote alarm keeps the exact outbox command pending when provider headroom is reserved", async (t) => {
+  const calls = []
+  const budget = {
+    idFromName: () => "global",
+    get: () => ({
+      async fetch(request) {
+        const path = new URL(request.url).pathname
+        const body = await request.json()
+        calls.push({ path, body })
+        if (path === "/reserve-mutation-writes") {
+          return Response.json(
+            { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+            { status: 429 },
+          )
+        }
+        return Response.json({
+          day_key: body.day_key,
+          cycle_key: body.cycle_key,
+          rows_read: 0,
+          rows_written: 0,
+          rows_read_daily_smart_limit: 1000000,
+          rows_written_daily_smart_limit: 100000,
+          exhausted: false,
+          exhausted_by: null,
+        })
+      },
+    }),
+  }
+  const db = new RecordingDb()
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+  })
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  const assetSha = "d".repeat(64)
+  const asset = coordinator.ensureAssetSummaryRow(assetSha, { visionId: "anima-v1-9" })
+  coordinator.applyVoteMutation({
+    assetSha256: assetSha,
+    userId: "reader-1",
+    requestedVoteValue: 1,
+    ensuredAsset: asset,
+  })
+  const mutationId = coordinator.pendingOutboxRows()[0].mutation_id
+
+  const result = await coordinator.alarm()
+
+  assert.equal(result.reason, "daily_d1_budget")
+  assert.equal(coordinator.pendingOutboxRows().length, 1)
+  assert.equal(db.calls.length, 0)
+  const reservation = calls.find((call) => call.path === "/reserve-mutation-writes")
+  assert.deepEqual(
+    {
+      lane: reservation?.body?.lane,
+      operation_id: reservation?.body?.operation_id,
+      units: reservation?.body?.units,
+    },
+    { lane: "user_action", operation_id: `vote:${mutationId}`, units: 4 },
+  )
+})
+
 test("vote alarms preserve queued work without D1 traffic during schema transition", async (t) => {
   const db = new RecordingDb()
   const { state, alarms } = fakeVoteCoordinatorState()
@@ -195,6 +355,22 @@ class RecordingStatement {
 
   async first() {
     this.db.calls.push({ type: "first", sql: this.sql, args: this.args })
+    if (
+      /UPDATE icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING wake_version/i.test(this.sql)
+    ) {
+      return { wake_version: 1 }
+    }
+    if (
+      /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING\s+job_version/i.test(this.sql)
+    ) {
+      if (this.db.runHandler) {
+        const result = await this.db.runHandler({ sql: this.sql, args: this.args })
+        if (result?.job_version) return { job_version: result.job_version }
+      }
+      return { job_version: 1 }
+    }
     for (const [needle, result] of this.db.firstResults) {
       if (this.sql.includes(needle)) {
         return typeof result === "function" ? result(this.sql, this.args) : result
@@ -208,6 +384,22 @@ class RecordingStatement {
 
   async all() {
     this.db.calls.push({ type: "all", sql: this.sql, args: this.args })
+    if (
+      /UPDATE icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING wake_version/i.test(this.sql)
+    ) {
+      return { results: [{ wake_version: 1 }], meta: { changes: 1, rows_written: 1 } }
+    }
+    if (
+      /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING\s+job_version/i.test(this.sql)
+    ) {
+      if (this.db.runHandler) {
+        const result = await this.db.runHandler({ sql: this.sql, args: this.args })
+        if (result?.job_version) return { results: [{ job_version: result.job_version }] }
+      }
+      return { results: [{ job_version: 1 }], meta: { changes: 1, rows_written: 1 } }
+    }
     for (const [needle, results] of this.db.allResults) {
       if (this.sql.includes(needle)) {
         return { results: typeof results === "function" ? results(this.sql, this.args) : results }
@@ -568,10 +760,13 @@ test("VoteCoordinator outbox survives a partial D1 handoff and replays with one 
   })
   const queue = fakeQueue()
   const { state } = fakeVoteCoordinatorState()
-  const coordinator = new IconoplasmVoteCoordinator(state, {
-    ICONOPLASM_DB: db,
-    ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
-  })
+  const coordinator = new IconoplasmVoteCoordinator(
+    state,
+    withTestMutationAuthority({
+      ICONOPLASM_DB: db,
+      ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
+    }),
+  )
   await state.ready
   const assetSha = "e".repeat(64)
   coordinator.setMeta("symbol", "SOX4")
@@ -673,8 +868,10 @@ test("public vote set is routed through the vote coordinator instead of reading 
           headers: {
             "Content-Type": "application/json",
             Cookie: "session=abc123",
+            "x-iconoplasm-command-id": "viral-load:tp53:2026-09-19:000000",
           },
           body: JSON.stringify({
+            command_id: "viral-load:tp53:2026-09-19:000000",
             symbol: "TP53",
             asset_sha256: assetSha,
             candidate_ref: `a:TP53|${assetSha}`,
@@ -698,6 +895,20 @@ test("public vote set is routed through the vote coordinator instead of reading 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
+  assert.equal(payload?.command_id, "viral-load:tp53:2026-09-19:000000")
+  assert.deepEqual(payload?.operations, {
+    d1RowsRead: 0,
+    d1RowsWritten: 4,
+    durableObjectRequests: 2,
+    durableObjectRowsRead: 8,
+    durableObjectRowsWritten: 8,
+    queueOperations: 0,
+  })
+  assert.deepEqual(payload?.operation_receipt, {
+    basis: "admitted_vote_command_v1",
+    d1_reservation: { lane: "user_action", units: 4 },
+    durable_outbox: true,
+  })
   assert.equal(coordinator.calls.length, 1)
   assert.equal(coordinator.calls[0]?.pathname, "/vote/set")
   assert.equal(queue.messages.length, 0)
@@ -2164,7 +2375,7 @@ test("admin reconciliation durably requeues an explicit bounded gene set", async
   assert.equal(
     db.calls.filter(
       (call) =>
-        call.type === "run" && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(call.sql),
+        call.type === "first" && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(call.sql),
     ).length,
     2,
   )

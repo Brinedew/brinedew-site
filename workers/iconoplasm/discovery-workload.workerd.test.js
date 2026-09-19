@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
 import { createRequire } from "node:module"
+import { createHash } from "node:crypto"
+import { mkdirSync, writeFileSync } from "node:fs"
+import path from "node:path"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { createDiscoveryOrdinalDictionary } from "./discovery-compact-state.js"
@@ -34,10 +37,35 @@ function encountersFor(userIndex) {
 }
 
 function measuredDb(db, receipts) {
+  const wrap = (statement) => ({
+    __raw: statement,
+    bind(...args) {
+      return wrap(statement.bind(...args))
+    },
+    async all() {
+      const result = await statement.all()
+      receipts.push({
+        reads: Number(result.meta?.rows_read || 0),
+        writes: Number(result.meta?.rows_written || 0),
+      })
+      return result
+    },
+    async first(column) {
+      return statement.first(column)
+    },
+    async run() {
+      const result = await statement.run()
+      receipts.push({
+        reads: Number(result.meta?.rows_read || 0),
+        writes: Number(result.meta?.rows_written || 0),
+      })
+      return result
+    },
+  })
   return {
-    prepare: (sql) => db.prepare(sql),
+    prepare: (sql) => wrap(db.prepare(sql)),
     batch: async (statements) => {
-      const results = await db.batch(statements)
+      const results = await db.batch(statements.map((statement) => statement.__raw || statement))
       receipts.push(
         results.reduce(
           (sum, result) => ({
@@ -78,7 +106,7 @@ test(
       const receipts = []
       const measured = measuredDb(db, receipts)
       const startedAt = Date.now()
-      const SAVERS = 200
+      const SAVERS = 2_000
       for (let user = 0; user < SAVERS; user++) {
         await recordCompactDiscoveryBatch(measured, {
           userId: `saver-${user}`,
@@ -93,13 +121,15 @@ test(
         { reads: 0, writes: 0 },
       )
       assert.equal(receipts.length, SAVERS * 2, "one read batch and one commit batch per saver")
-      assert.ok(
-        personal.writes >= SAVERS * 2,
-        `personal writes ${personal.writes} must include every personal row and outbox row`,
+      assert.equal(
+        personal.reads,
+        SAVERS * 3,
+        "the production compact schema must retain exactly three D1 rows read per saver batch",
       )
-      assert.ok(
-        personal.writes <= SAVERS * 4,
-        `personal writes ${personal.writes} exceed the accepted envelope`,
+      assert.equal(
+        personal.writes,
+        SAVERS * 3,
+        "the production compact schema and outbox index must retain exactly three D1 writes per saver batch",
       )
 
       const firstUser = await readCompactUserState(db, "saver-0")
@@ -135,21 +165,50 @@ test(
         )
       }
       const drainWrites = drainReceipts.reduce((sum, entry) => sum + entry.writes, 0)
-      console.log(
-        "B764_WORKLOAD_RECEIPT",
-        JSON.stringify({
+      assert.equal(
+        drainWrites,
+        SAVERS * 2 + Math.ceil(SAVERS / 128),
+        "real D1 bills one shared update per drain page plus one receipt and one indexed outbox delete per delivery",
+      )
+      const receipt = {
+        schemaVersion: 1,
+        kind: "iconoplasm_task3_mutation_measurement",
+        generatedAt: new Date().toISOString(),
+        provenance: {
+          task3Commit: "02a39908",
+          runtime: "miniflare_d1",
+          harness: "workers/iconoplasm/discovery-workload.workerd.test.js",
+          command:
+            "node --test workers/iconoplasm/discovery-workload.workerd.test.js --test-name-pattern=real D1 prints exact per-saver row receipts",
+        },
+        workload: {
           savers: SAVERS,
           encounters: SAVERS * 10,
-          personal_batches: SAVERS,
-          personal_reads: personal.reads,
-          personal_writes: personal.writes,
-          personal_ms: personalMs,
-          drain_writes: drainWrites,
-          drain_batches: Math.ceil(drained / 128),
-          projected_2000_saver_reads: (personal.reads / SAVERS) * 2000,
-          projected_2000_saver_writes: (personal.writes / SAVERS) * 2000 + 2000,
-        }),
-      )
+          personalBatches: SAVERS,
+          drainBatches: Math.ceil(drained / 128),
+        },
+        meters: {
+          d1RowsRead: personal.reads,
+          d1RowsWritten: personal.writes + drainWrites,
+        },
+        components: {
+          personalReads: personal.reads,
+          personalWrites: personal.writes,
+          drainWrites,
+        },
+        timing: { personalMs },
+      }
+      const artifact = {
+        ...receipt,
+        digestAlgorithm: "sha256",
+        digest: createHash("sha256").update(JSON.stringify(receipt)).digest("hex"),
+      }
+      console.log("B764_WORKLOAD_RECEIPT", JSON.stringify(artifact))
+      if (process.env.ICONOPLASM_MEASUREMENT_OUTPUT) {
+        const output = path.resolve(process.env.ICONOPLASM_MEASUREMENT_OUTPUT)
+        mkdirSync(path.dirname(output), { recursive: true })
+        writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`, "utf8")
+      }
     } finally {
       await runtime.dispose()
     }

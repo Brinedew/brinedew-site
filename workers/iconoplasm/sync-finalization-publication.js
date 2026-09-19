@@ -141,7 +141,7 @@ async function readScopedRemainder(db, symbols) {
 
 export async function drainCompletedFinalization(
   db,
-  { symbols = [], notifyPublisher, now = new Date().toISOString() },
+  { symbols = [], rows: suppliedRows = null, notifyPublisher, now = new Date().toISOString() },
 ) {
   if (!Array.isArray(symbols) || symbols.length < 1 || symbols.length > 5000)
     throw new RangeError("An explicit non-empty finalization scope is required")
@@ -150,9 +150,12 @@ export async function drainCompletedFinalization(
   if (typeof notifyPublisher !== "function")
     throw new TypeError("A durable per-gene publication handoff is required")
 
-  const rows = await readReadyFinalizationPage(db, symbols)
+  const rows = suppliedRows === null ? await readReadyFinalizationPage(db, symbols) : suppliedRows
+  if (!Array.isArray(rows) || rows.length > FINALIZATION_COMPLETION_PAGE_SIZE)
+    throw new RangeError("Invalid supplied finalization completion page")
   let finalized = 0
   let retryAt = null
+  let handoffAccepted = rows.length === 0
   if (rows.length) {
     // The V2 owner durably accepts before the exact D1 versions are acknowledged.
     // If a newer version wins concurrently, the re-read below retains its work.
@@ -164,6 +167,7 @@ export async function drainCompletedFinalization(
       })),
     })
     if (notification?.accepted === true) {
+      handoffAccepted = true
       finalized = await completeReadyFinalizationRows(db, rows, now)
     } else {
       retryAt = notification?.nextAttemptAt
@@ -181,5 +185,7 @@ export async function drainCompletedFinalization(
     publication_next_attempt_at: retryAt,
     ready_remaining: remaining.ready_remaining,
     broaden_next_drain: false,
+    handoff_accepted: handoffAccepted,
+    terminal_noop: handoffAccepted && rows.length > 0 && finalized === 0,
   }
 }

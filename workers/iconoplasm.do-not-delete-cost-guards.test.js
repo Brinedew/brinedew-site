@@ -272,8 +272,13 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.match(
     internalWrangler,
-    /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "none"/,
+    /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "single-page-application"[\s\S]*run_worker_first = \[[\s\S]*"\/api\/\*"[\s\S]*\]/,
     "matching Iconoplasm files must bypass Worker execution through the asset-first binding",
+  )
+  assert.doesNotMatch(
+    internalWrangler.match(/\[assets\][\s\S]*?(?=\n\[observability\])/u)?.[0] || "",
+    /"\/(?:gene|genes|portraits|published-cards|sitemap|robots\.txt|llms\.txt)/,
+    "anonymous reader routes must never re-enter the Worker-first list",
   )
   assert.match(
     internalWrangler,
@@ -302,7 +307,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
 })
 
-test("DO NOT DELETE: the only allowed internal stateful worker should stay non-public even in staging", () => {
+test("DO NOT DELETE: production has no workers.dev bypass and staging has one owned rehearsal URL", () => {
   const internalWrangler =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "../wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -311,7 +316,7 @@ test("DO NOT DELETE: the only allowed internal stateful worker should stay non-p
   assert.match(
     internalWrangler,
     /^workers_dev = false$/m,
-    "prod internal worker should not expose a workers.dev URL",
+    "production must not expose a workers.dev bypass around the owned custom-domain route",
   )
   assert.match(
     internalWrangler,
@@ -320,8 +325,8 @@ test("DO NOT DELETE: the only allowed internal stateful worker should stay non-p
   )
   assert.match(
     internalWrangler,
-    /\[env\.staging\][\s\S]*?workers_dev = false/,
-    "staging internal worker should also stay off workers.dev so the stateful worker remains internal",
+    /\[env\.staging\][\s\S]*?workers_dev = true/,
+    "isolated staging must expose its checked-in workers.dev rehearsal URL so release evidence is executable",
   )
   assert.match(
     internalWrangler,
@@ -351,16 +356,21 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "../.github/workflows/deploy-quartz.yml",
     )
+  const cutover =
+    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
+      "../scripts/prepare-iconoplasm-public-read-cutover.mjs",
+    )
+  const productionJob = workflow.slice(workflow.indexOf("  deploy-production:"))
 
   assert.match(
     workflow,
-    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Deploy the only allowed internal stateful worker/,
+    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Publish, verify, and activate immutable public reads/,
     "admission must be staged in the existing state owner, then schema receipts must succeed before application activation",
   )
   assert.doesNotMatch(
-    workflow,
+    productionJob,
     /wrangler d1 (?:execute|migrations apply)/,
-    "deployment D1 work must not bypass prediction admission",
+    "production D1 work must not bypass prediction admission; isolated staging owns its disposable migration rehearsal",
   )
   const statefulConfig =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
@@ -372,13 +382,13 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     "normal backend activation must clear the transition gate",
   )
   assert.match(
-    workflow,
-    /Deploy the only allowed internal stateful worker \(production\)[\s\S]*?wrangler deploy --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml/,
-    "production workflow should deploy the internal stateful worker explicitly before the public edge worker",
+    cutover,
+    /preparePublicReadCutoverConfig[\s\S]*"wrangler",\s*"deploy"[\s\S]*"wrangler",\s*"deploy"[\s\S]*fileURLToPath\(MANIFEST\)/,
+    "the owned cutover must prepare the publisher and then activate the canonical static-first config",
   )
   assert.match(
     workflow,
-    /Hand off Iconoplasm route to the prepared stateful worker[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*[\s\S]*?Deploy the only allowed internal stateful worker \(production\)/,
+    /Hand off Iconoplasm route to the prepared stateful worker[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*[\s\S]*?Publish, verify, and activate immutable public reads/,
     "Cloudflare route ownership must move to the prepared stateful target before Wrangler reconciles the route declared by that script",
   )
   assert.match(

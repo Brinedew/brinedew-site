@@ -9,6 +9,10 @@ import {
   publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
+import {
+  claimCompactDiscoveryMigrationLease,
+  migrateLegacyDiscoveryPage,
+} from "./iconoplasm/discovery-compact-migrate.js"
 import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
@@ -156,8 +160,27 @@ class FakeGameSessions {
   }
 }
 
-async function buildEnv({ sessions } = {}) {
+function acceptingMutationAuthority() {
+  return {
+    idFromName: () => "global",
+    get: () => ({
+      fetch: async () => Response.json({ ok: true, replayed: false }),
+    }),
+  }
+}
+
+async function buildEnv({
+  sessions,
+  migrationComplete = true,
+  mutationAuthority = acceptingMutationAuthority(),
+} = {}) {
   const db = new D1Like()
+  if (migrationComplete) {
+    db.raw.exec(
+      `UPDATE icono_discovery_compact_activation_v2
+       SET status='complete', completed_at=CURRENT_TIMESTAMP WHERE singleton=1`,
+    )
+  }
   const insertCatalog = db.raw.prepare(
     "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)",
   )
@@ -177,6 +200,7 @@ async function buildEnv({ sessions } = {}) {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: mutationAuthority,
     KV: new FakeKv(),
   }
   const env = {
@@ -345,8 +369,8 @@ test("a ten-hover batch commits one compact state and replays without duplicates
   )
 })
 
-test("membership reads compact state and imports legacy rows exactly once", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+test("activation blocks incomplete legacy migration, then migrated membership remains visible without request-time scans", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader"), migrationComplete: false })
   env.gatewayDb.raw
     .prepare(
       `INSERT INTO icono_gene_discoveries
@@ -360,10 +384,25 @@ test("membership reads compact state and imports legacy rows exactly once", asyn
     `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
     { cookie: "session=abc" },
   )
+  const blocked = await invoke(request, env)
+  assert.equal(blocked.status, 503)
+  assert.equal((await blocked.json()).code, "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE")
+  assert.equal(await compactRowCount(env), 0)
+
+  const leaseToken = "discovery-test-lease"
+  await claimCompactDiscoveryMigrationLease(env.gatewayDb, { token: leaseToken })
+  const migration = await migrateLegacyDiscoveryPage({
+    db: env.gatewayDb,
+    rowLimit: 8,
+    leaseToken,
+  })
+  assert.equal(migration.complete, true)
   const payload = await (await invoke(request, env)).json()
   assert.deepEqual(payload.discovered_symbols, ["TP53"])
   assert.equal(await compactRowCount(env), 1)
-  // Legacy rows vanish; membership must still answer from compact state.
+
+  // After the activation receipt is complete, request membership stays on the
+  // compact record even when the retired source rows are removed.
   env.gatewayDb.raw.exec("DELETE FROM icono_gene_discoveries")
   const again = await (
     await invoke(
@@ -467,6 +506,37 @@ test("guest merge converges into compact membership without double counting", as
   assert.equal(JSON.parse(after.active_events_json).length, 2)
 })
 
+test("guest merge reports capacity refusal as retryable pending work instead of a crash", async () => {
+  const env = await buildEnv({
+    sessions: sessionFor("reader"),
+    mutationAuthority: {
+      idFromName: () => "global",
+      get: () => ({
+        fetch: async () =>
+          Response.json(
+            { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+            { status: 429 },
+          ),
+      }),
+    },
+  })
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53"] },
+    }),
+    env,
+  )
+  const payload = await response.json()
+  assert.equal(response.status, 429)
+  assert.equal(payload.ok, false)
+  assert.equal(payload.pending, true)
+  assert.equal(payload.persisted, false)
+  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+  assert.deepEqual(payload.symbols, ["TP53"])
+  assert.equal(await compactRowCount(env), 0)
+})
+
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {
   const env = await buildEnv({ sessions: sessionFor("reader") })
   await postBatch(env, {
@@ -493,27 +563,14 @@ test("discoveries me returns the compact shelf with exact first/last and counts"
   assert.equal(egfr.encounter_count, 1)
 })
 
-test("starter seeding adds only missing membership bits and is write-free afterwards", async () => {
+test("passive discovery reads never manufacture starter membership", async () => {
   const env = await buildEnv({ sessions: sessionFor("reader") })
   const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
   const firstPayload = await first.json()
-  assert.deepEqual(firstPayload.discovered_symbols.slice().sort(), ["INS", "PRL", "RHO"])
-  const versionAfterSeed = Number(
-    (
-      await env.gatewayDb
-        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
-        .first()
-    ).state_version,
-  )
+  assert.deepEqual(firstPayload.discovered_symbols, [])
+  assert.equal(await compactRowCount(env), 0)
   await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
-  const versionAfterSecond = Number(
-    (
-      await env.gatewayDb
-        .prepare("SELECT state_version FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
-        .first()
-    ).state_version,
-  )
-  assert.equal(versionAfterSecond, versionAfterSeed)
+  assert.equal(await compactRowCount(env), 0)
 })
 
 test("the hourly symbol publisher reads compact shared state", async () => {

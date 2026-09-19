@@ -83,6 +83,14 @@ test("background schedules retain bounded cadence and never repeat nightly work 
       )
       continue
     }
+    if (job === "discoveryMigration") {
+      minutes.forEach((minute, i) =>
+        assert.ok(
+          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 17,
+        ),
+      )
+      continue
+    }
     const expectedGap =
       job === "sharedDiscovery"
         ? 60

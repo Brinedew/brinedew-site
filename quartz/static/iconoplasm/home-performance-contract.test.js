@@ -240,6 +240,13 @@ test("anonymous homepage bootstrap skips session and settings traffic", async ()
   assert.doesNotMatch(app, /\/api\/iconoplasm\/admin\/me/)
 })
 
+test("the isolated staging hostname never dispatches mutations to production", async () => {
+  const [app, head] = await Promise.all([readFile(appPath, "utf8"), readFile(headPath, "utf8")])
+  const stagingHost = "geneguessr-api-staging.decap.workers.dev"
+  assert.match(app, new RegExp(stagingHost.replaceAll(".", "\\.")))
+  assert.match(head, new RegExp(stagingHost.replaceAll(".", "\\.")))
+})
+
 test("shared sidebar imports use the module content hash as their immutable cache key", async () => {
   const [app, geneguessrApp, settingsApp, sidebarShell] = await Promise.all([
     readFile(appPath, "utf8"),
@@ -1494,7 +1501,7 @@ test("mobile home collection always uses the lit-archival card contract", async 
   )
 })
 
-test("mobile home collection refreshes card VMs from the manifest before painting", async () => {
+test("guest mobile collection reads immutable publication while accounts refresh from manifest", async () => {
   const app = await readFile(appPath, "utf8")
   const start = app.indexOf("function loadMobileCardPageVM(pageEntries, options)")
   const end = app.indexOf("function prewarmMobileCardPageVM(pageEntries)", start)
@@ -1505,6 +1512,12 @@ test("mobile home collection refreshes card VMs from the manifest before paintin
   assert.match(app, /var MOBILE_CARD_VM_IDB_NAME = "iconoplasm-mobile-card-vms"/)
   assert.match(app, /function mobileCardCacheGetMany\(version, symbols\)/)
   assert.match(app, /function mobileCardCacheSetMany\(version, cards\)/)
+  const guestGuard = block.indexOf("if (!currentUser)")
+  const manifestFetch = block.indexOf('fetchAuthedJSON("/api/iconoplasm/mobile-card-manifest"')
+  assert.notEqual(guestGuard, -1, "guest collection needs a stateless branch")
+  assert.notEqual(manifestFetch, -1, "signed-in collection still needs the current manifest")
+  assert.ok(guestGuard < manifestFetch, "guest branch must return before the stateful manifest")
+  assert.match(block.slice(guestGuard, manifestFetch), /publicationReader\.genes\(symbols/)
   assert.match(block, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(block, /symbols:\s*symbols/)
   assert.match(block, /mobileCardCacheSetMany\(manifest\.snapshot_version, cards\)/)
@@ -1680,29 +1693,15 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(block, /classList\.remove\("icono-static-shell-only"\)/)
   assert.doesNotMatch(head, /not\(\[data-icono-startup-route="gene"\]\) \.icono-static-shell-only/)
   assert.match(head, /\^\\\\\/gene\\\\\/\(\[\^\/\?#\]\+\)/)
-  assert.match(
-    head,
-    /"\/api\/iconoplasm\/site\/genes\/" \+[\s\S]{0,120}encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
-  )
   assert.match(head, /geneCardPromise: null/)
   assert.match(head, /getElementById\("iconoplasm-card-bootstrap"\)/)
   assert.match(head, /embeddedGeneCardPayload\.symbol === bootstrap\.geneDetailSymbol/)
-  assert.match(
+  assert.doesNotMatch(
     head,
-    /\/api\/iconoplasm\/cards\/" \+ encodeURIComponent\(bootstrap\.geneDetailSymbol\)/,
+    /\/api\/iconoplasm\/(?:cards|site\/genes)/,
+    "the static gene document must leave public data loading to the immutable publication reader",
   )
-  assert.match(head, /var startGeneDetailFetch = function \(\)/)
-  assert.match(head, /startGeneDetailFetch\(\)/)
-  assert.match(
-    head,
-    /var isCompleteGeneDetail = function \(data\)[\s\S]*Array\.isArray\(data\.portrait_candidates\)/,
-    "the head bootstrap must distinguish a complete gene detail from the lean first-paint card",
-  )
-  assert.match(
-    head,
-    /if \(isCompleteGeneDetail\(embeddedGeneCard\)\)[\s\S]*bootstrap\.geneDetailPromise = Promise\.resolve\(embeddedGeneCard\)/,
-    "the complete embedded page contract should satisfy the detail promise without a second read",
-  )
+  assert.doesNotMatch(head, /startGeneDetailFetch/)
   assert.doesNotMatch(
     head,
     /portraitSourcePromise|iconoplasmportraits\.b-cdn\.net[\s\S]*new Image\(\)/,
@@ -2115,6 +2114,33 @@ test("gene votes batch initial snapshots and give responsive copies one controll
   const primeStart = app.indexOf("function primeGeneVoteBoxGroups")
   const primeEnd = app.indexOf("function wireGeneVoteControls", primeStart)
   const primeBlock = app.slice(primeStart, primeEnd)
+  assert.match(
+    primeBlock,
+    /function primeGeneVoteBoxGroups\(groups\) \{\s*if \(!currentUser\) return Promise\.resolve\(\)/,
+    "anonymous gene readers must not fetch personalized vote snapshots",
+  )
   assert.match(primeBlock, /fetchJSON\("\/api\/iconoplasm\/votes\/snapshots"/)
   assert.equal((primeBlock.match(/fetchJSON\(/g) || []).length, 1)
+})
+
+test("anonymous gene suggestions remain off the stateful comments API", async () => {
+  const app = await readFile(appPath, "utf8")
+  const wireStart = app.indexOf("function wireGeneSuggestions")
+  const wireEnd = app.indexOf("function publicManifestationMarkup", wireStart)
+  assert.notEqual(wireStart, -1, "missing gene suggestion wiring")
+  assert.notEqual(wireEnd, -1, "missing gene suggestion wiring boundary")
+  const wireBlock = app.slice(wireStart, wireEnd)
+  const guestGuard = wireBlock.indexOf("if (!currentUser)")
+  const commentsFetch = wireBlock.indexOf("fetchAuthedJSON(commentsPath)")
+  assert.notEqual(guestGuard, -1, "anonymous suggestions need a current-user guard")
+  assert.notEqual(commentsFetch, -1, "signed-in suggestions still need the comments fetch")
+  assert.ok(
+    guestGuard < commentsFetch,
+    "the anonymous guard must run before the stateful comments request",
+  )
+  assert.match(
+    wireBlock.slice(guestGuard, commentsFetch),
+    /renderSuggestList\(listEl, \[\], countEl\)[\s\S]*return/,
+    "guest readers should receive a deterministic empty public state without a network request",
+  )
 })

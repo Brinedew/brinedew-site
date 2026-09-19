@@ -49,6 +49,7 @@ test("the actual governor exposes and exhausts the capped allowance, not just th
   let today = { rows_read: 0, rows_written: 100_000 }
   governor.usageRow = () => today
   governor.cycleUsageRow = () => ({ rows_read: 20_000_000, rows_written: 1_000_000 })
+  governor.mutationReservations = { snapshot: () => ({}) }
   const budgets = {
     rowsReadMonthlyLimit: 24_000_000_000,
     rowsWrittenMonthlyLimit: 40_000_000,

@@ -91,7 +91,7 @@ test(
           }),
         })
       ).json()
-      assert.equal(vote.status, 200)
+      assert.equal(vote.status, 200, JSON.stringify(vote))
       assert.equal(vote.body.final_vote_value, 1)
       assert.equal(vote.body.snapshot.image_score, 1)
       assert.equal(Object.hasOwn(vote.body, "asset_summaries"), false)

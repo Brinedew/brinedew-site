@@ -79,6 +79,9 @@ jobs:
           node scripts/generate-operation-cost-migrations.mjs --check
           node scripts/generate-operation-cost-identities.mjs --check
 
+      - name: Build exact HEAD before topology tests
+        run: pnpm run build
+
       - name: Test
         id: tests
         shell: bash
@@ -109,9 +112,6 @@ jobs:
           path: ${{ runner.temp }}/repository-tests.log
           if-no-files-found: error
           retention-days: 3
-
-      - name: Ensure Quartz builds
-        run: pnpm run build
 
       # Reader containment must never need to rebuild the corpus while D1 is
       # impaired. Preserve the exact tested static asset bundle so the separate

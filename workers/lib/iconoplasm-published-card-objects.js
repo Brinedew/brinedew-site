@@ -25,11 +25,19 @@ export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   genes: 65536,
   portraits: 8192,
   indexes: 65536,
+  catalogindexes: 128 * 1024,
+  catalogs: 512 * 1024,
   manifests: 65536,
   shards: 4 * 1024 * 1024,
 })
 const HASH = /^[a-f0-9]{64}$/
+const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
+const BLOT_FINGERPRINT = /^[a-f0-9]{32,64}$/
 const encoder = new TextEncoder()
+const BLOT_PLACEHOLDER_BYTES = encoder.encode(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 4"><rect width="3" height="4" fill="#171714"/><path d="M.5 2h2" stroke="#d8d0bd" stroke-width=".08" opacity=".55"/></svg>',
+)
+const BLOT_BYTE_LIMIT = 5 * 1024 * 1024
 
 export function canonicalPublishedJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalPublishedJson).join(",")}]`
@@ -50,6 +58,26 @@ export function publishedCardObjectKey(kind, hash) {
     throw new Error("Invalid published card object identity")
   }
   return `${PUBLISHED_CARD_OBJECT_PREFIX}/${kind}/${hash}.json`
+}
+
+export function publishedGeneBlotAliasKey(symbol) {
+  const normalized = String(symbol || "")
+    .trim()
+    .toUpperCase()
+  if (!SYMBOL.test(normalized)) throw new Error("Invalid published blot alias symbol")
+  return `blot/${normalized}.webp`
+}
+
+function immutableBlotIdentity(symbol, blot) {
+  if (!blot || blot.status !== "ready") return null
+  const fingerprint = String(blot.blot_fingerprint || "").toLowerCase()
+  const hash = String(blot.asset_sha256 || blot.blot_asset_sha256 || "").toLowerCase()
+  if (!BLOT_FINGERPRINT.test(fingerprint) || !HASH.test(hash)) {
+    throw new Error("Invalid published blot identity")
+  }
+  const key = `blots/v1/${symbol.slice(0, 1)}/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  if (blot.object_key !== key) throw new Error("Invalid published blot object key")
+  return { key, hash }
 }
 
 function objectIdentity(key) {
@@ -185,9 +213,68 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     }
   }
 
+  async function readImageBytes(key, expectedHash, { storageOnly = false } = {}) {
+    let candidates = externalPortraitReadCandidates(env, key, { accept: "image/*" })
+    if (storageOnly)
+      candidates = candidates.filter((candidate) => candidate.source === "authenticated_storage")
+    if (!candidates.length) throw new Error("Bunny blot storage is not configured")
+    const verifiedSources = {}
+    let bytes = null
+    for (const candidate of candidates) {
+      const response = await send(candidate.url, { method: "GET", headers: candidate.headers }, key)
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {})
+        throw new Error(`Published blot GET failed (${response.status})`)
+      }
+      const candidateBytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
+      if ((await publishedObjectHash(candidateBytes)) !== expectedHash) {
+        throw new Error("Published blot hash mismatch")
+      }
+      bytes ||= candidateBytes
+      verifiedSources[candidate.source] = true
+    }
+    return { bytes, verifiedSources }
+  }
+
+  async function publishBlotAlias(symbol, blot) {
+    const normalized = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    const key = publishedGeneBlotAliasKey(normalized)
+    const immutable = immutableBlotIdentity(normalized, blot)
+    let bytes = BLOT_PLACEHOLDER_BYTES
+    let contentType = "image/svg+xml"
+    if (immutable) {
+      bytes = (await readImageBytes(immutable.key, immutable.hash, { storageOnly: true })).bytes
+      contentType = "image/webp"
+    }
+    const hash = await publishedObjectHash(bytes)
+    const url = externalPortraitStorageUrl(env, key)
+    const password = externalPortraitStoragePassword(env)
+    if (!url || !password) throw new Error("Bunny published blot writes are not configured")
+    const response = await send(
+      url,
+      {
+        method: "PUT",
+        headers: {
+          AccessKey: password,
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=30, must-revalidate",
+        },
+        body: bytes,
+      },
+      key,
+    )
+    await response.body?.cancel().catch(() => {})
+    if (!response.ok) throw new Error(`Published blot alias PUT failed (${response.status})`)
+    const verified = await readImageBytes(key, hash)
+    return { key, hash, size: bytes.byteLength, contentType, sources: verified.verifiedSources }
+  }
+
   return {
     read,
     verifyReaderResolvable,
+    publishBlotAlias,
     async write(kind, value) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")

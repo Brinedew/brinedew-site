@@ -171,6 +171,11 @@ class FakeSearchDb {
     this.publishedPortraits = new Map()
     this.compactRaw = new DatabaseSync(":memory:")
     this.compactRaw.exec(DISCOVERY_COMPACT_SCHEMA_SQL)
+    this.compactRaw
+      .prepare(
+        "UPDATE icono_discovery_compact_activation_v2 SET status = 'complete', completed_at = CURRENT_TIMESTAMP WHERE singleton = 1",
+      )
+      .run()
     this.compactDirty = true
     this.setPublishedPortraits(publishedPortraits)
   }
@@ -879,7 +884,7 @@ test("guest discovery search falls back to the starter trio instead of the full 
   assert.deepEqual(hiddenPayload?.genes, [])
 })
 
-test("signed-in discovery search searches the user's shelf and seeds starters for empty accounts", async () => {
+test("signed-in discovery search uses virtual starters without mutating an empty account", async () => {
   const env = buildEnv({
     sessions: {
       "session:abc": { user_id: "user-123", username: "alex" },
@@ -904,7 +909,7 @@ test("signed-in discovery search searches the user's shelf and seeds starters fo
   )
   assert.deepEqual(
     env.gatewayDb.listDiscoverySymbols("user-123").map((row) => row.gene_symbol),
-    ["INS", "RHO", "PRL"],
+    [],
   )
 
   env.gatewayDb.seedDiscovery("user-123", "TP53")
