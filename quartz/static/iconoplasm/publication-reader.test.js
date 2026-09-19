@@ -181,10 +181,10 @@ async function immutableFixtureObject(kind, value) {
   }
 }
 
-async function immutableFixture({ fullName = "tumor protein p53" } = {}) {
+async function immutableFixture({ symbol = "TP53", fullName = "tumor protein p53" } = {}) {
   const object = immutableFixtureObject
   const gene = {
-    symbol: "TP53",
+    symbol,
     full_name: fullName,
     color: "#223344",
     essence: { summary: "Guardian of the genome" },
@@ -193,19 +193,19 @@ async function immutableFixture({ fullName = "tumor protein p53" } = {}) {
   }
   const geneObject = await object("genes", gene)
   const portraitObject = await object("portraits", {
-    symbol: "TP53",
+    symbol,
     portrait: gene.portrait,
   })
-  const cardObject = await object("cards", { symbol: "TP53", payload: gene })
+  const cardObject = await object("cards", { symbol, payload: gene })
   const indexObject = await object("indexes", {
     schema_version: 2,
-    entries: [["TP53", cardObject.hash, geneObject.hash, portraitObject.hash]],
+    entries: [[symbol, cardObject.hash, geneObject.hash, portraitObject.hash]],
   })
   const catalogObject = await object("catalogs", {
     schema_version: 1,
     entries: [
       {
-        symbol: "TP53",
+        symbol,
         full_name: fullName,
         color: "#223344",
         popularity_score: 100,
@@ -219,19 +219,19 @@ async function immutableFixture({ fullName = "tumor protein p53" } = {}) {
   })
   const catalogIndexObject = await object("catalogindexes", {
     schema_version: 2,
-    pages: [{ first_symbol: "TP53", last_symbol: "TP53", key: catalogObject.path.slice(1) }],
-    search_entries: [["TP53", fullName, 0, 0]],
-    gallery_entries: [["TP53", 0, 0, 100, 5]],
+    pages: [{ first_symbol: symbol, last_symbol: symbol, key: catalogObject.path.slice(1) }],
+    search_entries: [[symbol, fullName, 0, 0]],
+    gallery_entries: [[symbol, 0, 0, 100, 5]],
   })
   const manifestObject = await object("manifests", {
     storage: "bunny_card_catalog_v2",
     card_count: 1,
     shards: [
       {
-        first_symbol: "TP53",
-        last_symbol: "TP53",
+        first_symbol: symbol,
+        last_symbol: symbol,
         delivery_indexes: [
-          { first_symbol: "TP53", last_symbol: "TP53", key: indexObject.path.slice(1) },
+          { first_symbol: symbol, last_symbol: symbol, key: indexObject.path.slice(1) },
         ],
         catalog_index: { key: catalogIndexObject.path.slice(1), page_count: 1 },
       },
@@ -249,7 +249,7 @@ async function immutableFixture({ fullName = "tumor protein p53" } = {}) {
       manifestObject,
     ].map((entry) => [entry.path, entry.body]),
   )
-  return { gene, head, objects, geneObject, manifestObject }
+  return { gene, head, objects, geneObject, catalogObject, manifestObject }
 }
 
 test("the browser resolves gene, search, and gallery from one immutable publication", async () => {
@@ -423,6 +423,103 @@ test("a search on a partially propagated head cannot erase the prior coherent ge
     ["next tumor protein p53"],
   )
   assert.equal((await reader.gene("TP53")).full_name, "prior tumor protein p53")
+})
+
+test("a successful gene cannot evict another symbol's coherent fallback", async () => {
+  const priorTp53 = await immutableFixture({ symbol: "TP53", fullName: "prior TP53" })
+  const priorRb1 = await immutableFixture({ symbol: "RB1", fullName: "prior RB1" })
+  const brokenTp53 = await immutableFixture({ symbol: "TP53", fullName: "broken TP53" })
+  let head = priorTp53.head
+  const stored = new Map()
+  const fixtures = [priorTp53, priorRb1, brokenTp53]
+  const reader = createIconoplasmPublicationReader({
+    storage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, value),
+    },
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") return new Response(head)
+      if (pathname === brokenTp53.geneObject.path) return new Response(null, { status: 404 })
+      for (const fixture of fixtures) {
+        const body = fixture.objects.get(pathname)
+        if (body) return new Response(body)
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  assert.equal((await reader.gene("TP53")).full_name, "prior TP53")
+  head = priorRb1.head
+  assert.equal((await reader.gene("RB1")).full_name, "prior RB1")
+  head = brokenTp53.head
+  assert.equal((await reader.gene("TP53")).full_name, "prior TP53")
+})
+
+test("a successful search query cannot evict another query's coherent fallback", async () => {
+  const priorBeta = await immutableFixture({ fullName: "prior beta protein" })
+  const nextAlpha = await immutableFixture({ fullName: "next alpha protein" })
+  const brokenBeta = await immutableFixture({ fullName: "next beta protein" })
+  let head = priorBeta.head
+  const stored = new Map()
+  const reader = createIconoplasmPublicationReader({
+    storage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, value),
+    },
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") return new Response(head)
+      if (head === brokenBeta.head && pathname === brokenBeta.catalogObject.path)
+        return new Response(null, { status: 404 })
+      for (const fixture of [brokenBeta, nextAlpha, priorBeta]) {
+        const body = fixture.objects.get(pathname)
+        if (body) return new Response(body)
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  assert.equal((await reader.search("beta")).genes[0].full_name, "prior beta protein")
+  head = nextAlpha.head
+  assert.equal((await reader.search("alpha")).genes[0].full_name, "next alpha protein")
+  head = brokenBeta.head
+  assert.equal((await reader.search("beta")).genes[0].full_name, "prior beta protein")
+})
+
+test("a successful gallery page cannot evict another page's coherent fallback", async () => {
+  const prior = await immutableFixture({ fullName: "prior gallery item" })
+  const next = await immutableFixture({ fullName: "next gallery item" })
+  let head = prior.head
+  const stored = new Map()
+  const reader = createIconoplasmPublicationReader({
+    storage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, value),
+    },
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      if (pathname === "/api/public/v1/card-current") return new Response(head)
+      if (head === next.head && pathname === next.catalogObject.path)
+        return new Response(null, { status: 404 })
+      for (const fixture of [next, prior]) {
+        const body = fixture.objects.get(pathname)
+        if (body) return new Response(body)
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  assert.equal(
+    (await reader.gallery({ offset: 0, limit: 1 })).items[0].full_name,
+    "prior gallery item",
+  )
+  head = next.head
+  await reader.gallery({ offset: 1, limit: 1 })
+  assert.equal(
+    (await reader.gallery({ offset: 0, limit: 1 })).items[0].full_name,
+    "prior gallery item",
+  )
 })
 
 test("search and gallery fetch compact indexes plus only result pages", async () => {

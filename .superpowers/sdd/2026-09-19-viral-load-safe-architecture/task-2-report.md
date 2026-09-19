@@ -217,3 +217,66 @@ seconds. `pnpm run build` completed 214 source files and emitted 3,174 files in
 `git diff --check` passed; changed-file formatting was applied and rechecked.
 No production deployment, CDN propagation, or live browser claim is made by
 this source commit.
+
+## Review remediation, round 3
+
+The third review correctly rejected two claims from round 2. The calculated
+3,259,000 ms migration deadline counted alarm cadence but not the owner's
+sequential Bunny writes, verification reads, retries, or delayed alarms. The
+last-good cache was also scoped only by operation, so one successful gene,
+search, or gallery request could replace the fallback needed by a different
+symbol, query, or page.
+
+The first focused RED run contained **23 tests: 16 passed and 7 failed**. The
+failures proved cross-symbol, cross-query, and cross-gallery-page fallback
+collisions, the absence of an executable progress-aware migration wait, and
+activation orchestration that still depended on the false calculated
+deadline. A later, narrower RED run contained **9 activation tests: 7 passed
+and 2 failed**; it proved that the separate read-only owner-status route did
+not yet exist and that a transient owner-status timeout aborted an otherwise
+progressing migration.
+
+Last-good publication identity is now stored by the dependency scope actually
+validated: normalized gene symbol; normalized search query, bounded result
+limit, and allowed-symbol set; or gallery order, offset, bounded page size, and
+seed. A successful request in one scope cannot evict another scope's coherent
+fallback. The regression sequence covers a new search followed by a missing
+gene child, plus distinct genes, search queries, and gallery pages.
+
+The release gate no longer predicts migration completion from alarm count. It
+polls a dedicated authenticated GET status route on the existing publication
+Durable Object and consumes monotonic receipts containing build revision, job
+identity, group, offset, seal offset, and failure state. Progress resets a
+five-minute stall clock. Transient status-read failures retry only inside the
+remaining stall and execution windows. Regression or job-identity changes fail
+closed. A 50-minute workflow execution window is explicitly an opportunity to
+make progress, not a completion estimate: expiration leaves the retained
+frontend and exact pre-cutover routing live, and an idempotent rerun continues
+the same owner job. Final activation remains unreachable until the owner has no
+job at build revision 3 and Bunny independently validates the head, manifest,
+and every compact index.
+
+Migration remains POST-only. Polling uses the distinct
+`/api/iconoplasm/admin/gallery/migrate-card-storage/status` GET route, which is
+administrator-authenticated, read-only, and classified as an admin dashboard
+read rather than a migration mutation. Preparation still deploys publisher
+runtime code with `keep_assets = true`, the exact existing asset bytes, and the
+exact pre-cutover route list. It does not attach the new frontend or static SPA
+topology before proof.
+
+Round-3 verification completed with **90 affected tests passed, 0 failed** in
+16.60 seconds. This includes actual browser-module startup, dependency-scoped
+fallbacks, slow progress, transient status failure, stalled progress,
+execution-window exhaustion, no-activation failure paths, route contracts,
+architecture fences, publisher behavior, and both real Workerd preparation
+and final static-asset topologies. `pnpm run build` completed and emitted 3,174
+public files plus a 2,606-file, 52,375,298-byte Iconoplasm edge bundle. The
+first Wrangler 4.123.0 dry run encountered a transient Windows
+asset traversal race even though the named file existed afterward; the
+identical settled-bundle rerun succeeded, reading 2,642 edge assets and
+producing a 6,315.75 KiB upload (1,248.46 KiB gzip). `git diff --check` and
+changed-file formatting passed.
+
+This commit proves source, build, and provider dry-run boundaries only. It does
+not claim production deployment, Bunny propagation, or authenticated browser
+acceptance.

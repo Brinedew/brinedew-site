@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import { parse as parseToml } from "toml"
+import { matchIconoplasmRouteContract } from "../workers/iconoplasm-route-contract.js"
 import * as cutover from "./prepare-iconoplasm-public-read-cutover.mjs"
 
 const { preparePublicReadCutoverConfig, verifyPublicReadArtifacts, waitForPublicReadArtifacts } =
@@ -35,6 +36,15 @@ test("preparation retains the live asset bundle and exact pre-cutover route topo
     "/robots.txt",
     "/llms.txt",
   ])
+})
+
+test("migration progress is read from the existing authenticated owner route", () => {
+  const match = matchIconoplasmRouteContract(
+    "/api/iconoplasm/admin/gallery/migrate-card-storage/status",
+    "GET",
+  )
+  assert.equal(match?.methodAllowed, true)
+  assert.equal(match?.route.auth, "administrator")
 })
 
 test("activation gate reads and hashes every advertised compact index", async () => {
@@ -112,30 +122,115 @@ test("activation gate waits for the CDN head to expose one coherent publication"
   assert.equal(waits, 2)
 })
 
-test("migration verification deadline is derived from catalog work instead of a short constant", () => {
-  assert.equal(typeof cutover.migrationVerificationPlan, "function")
-  assert.deepEqual(cutover.migrationVerificationPlan(19_023), {
-    cardCount: 19_023,
-    prepareRounds: 3_171,
-    sealRounds: 26,
-    controlRounds: 2,
-    cadenceMs: 1_000,
-    propagationMs: 60_000,
-    intervalMs: 10_000,
-    deadlineMs: 3_259_000,
-    attempts: 327,
+function migrating({ group = 0, offset = 0, sealOffset = 0 } = {}) {
+  return {
+    current: "ccv2-old",
+    build_revision: 2,
+    failure: null,
+    job: {
+      migration: true,
+      group,
+      groups: 26,
+      offset,
+      seal_offset: sealOffset,
+      started_at: "2026-09-19T00:00:00.000Z",
+    },
+  }
+}
+
+test("slow migration keeps waiting while monotonic owner receipts make progress", async () => {
+  let now = 0
+  const statuses = [
+    migrating(),
+    new Error("transient owner status timeout"),
+    migrating({ offset: 6 }),
+    migrating({ offset: 12 }),
+    migrating({ offset: 12, sealOffset: 128 }),
+    { current: "ccv2-new", build_revision: 3, failure: null, job: null },
+  ]
+  const result = await cutover.waitForPublicationMigration({
+    readStatus: async () => {
+      const status = statuses.shift()
+      if (status instanceof Error) throw status
+      return status
+    },
+    intervalMs: 240_000,
+    stallMs: 300_000,
+    windowMs: 1_500_000,
+    now: () => now,
+    wait: async (milliseconds) => {
+      now += milliseconds
+    },
   })
+  assert.equal(result.current, "ccv2-new")
+  assert.equal(now, 1_020_000, "status retries are bounded by the remaining stall window")
 })
 
-test("failed artifact verification leaves production on the retained pre-cutover assets", async () => {
+test("stalled migration fails closed before activation", async () => {
   assert.equal(typeof cutover.releasePublicReadCutover, "function")
+  const operations = []
+  let now = 0
+  await assert.rejects(
+    cutover.releasePublicReadCutover({
+      deployPreparation: async () => operations.push("deploy-retained-assets"),
+      startMigration: async () => operations.push("migrate-existing-owner"),
+      waitForMigration: () =>
+        cutover.waitForPublicationMigration({
+          readStatus: async () => migrating(),
+          intervalMs: 60_000,
+          stallMs: 180_000,
+          windowMs: 600_000,
+          now: () => now,
+          wait: async (milliseconds) => {
+            now += milliseconds
+          },
+        }),
+      verifyArtifacts: async () => operations.push("verify-bunny"),
+      activate: async () => operations.push("activate-production"),
+    }),
+    /stalled/i,
+  )
+  assert.deepEqual(operations, ["deploy-retained-assets", "migrate-existing-owner"])
+})
+
+test("workflow-window exhaustion preserves retained assets and never activates", async () => {
+  const operations = []
+  let now = 0
+  let offset = 0
+  await assert.rejects(
+    cutover.releasePublicReadCutover({
+      deployPreparation: async () => operations.push("deploy-retained-assets"),
+      startMigration: async () => operations.push("migrate-existing-owner"),
+      waitForMigration: () =>
+        cutover.waitForPublicationMigration({
+          readStatus: async () => {
+            offset += 6
+            return migrating({ offset })
+          },
+          intervalMs: 60_000,
+          stallMs: 180_000,
+          windowMs: 240_000,
+          now: () => now,
+          wait: async (milliseconds) => {
+            now += milliseconds
+          },
+        }),
+      verifyArtifacts: async () => operations.push("verify-bunny"),
+      activate: async () => operations.push("activate-production"),
+    }),
+    /execution window/i,
+  )
+  assert.deepEqual(operations, ["deploy-retained-assets", "migrate-existing-owner"])
+})
+
+test("completed owner migration still requires exact Bunny proof before activation", async () => {
   const operations = []
   await assert.rejects(
     cutover.releasePublicReadCutover({
       deployPreparation: async () => operations.push("deploy-retained-assets"),
-      currentCardCount: async () => 19_023,
       startMigration: async () => operations.push("migrate-existing-owner"),
-      verify: async () => {
+      waitForMigration: async () => ({ current: "ccv2-new", build_revision: 3, job: null }),
+      verifyArtifacts: async () => {
         operations.push("verify-bunny")
         throw new Error("Bunny artifacts incomplete")
       },

@@ -3,11 +3,6 @@ import { execFile } from "node:child_process"
 import { readFile, rm, writeFile } from "node:fs/promises"
 import { promisify } from "node:util"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import {
-  CARD_PUBLICATION_BATCH,
-  CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT,
-} from "../workers/lib/iconoplasm-card-publication.js"
-import { CARD_PUBLICATION_ALARM_CADENCE_MS } from "../workers/lib/iconoplasm-card-publication-coordinator.js"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const HASH = /^[a-f0-9]{64}$/
@@ -16,7 +11,8 @@ const MANIFEST = new URL(
   import.meta.url,
 )
 const VERIFY_INTERVAL_MS = 10_000
-const CDN_PROPAGATION_MS = 2 * 30_000
+const MIGRATION_STALL_MS = 5 * 60_000
+const MIGRATION_EXECUTION_WINDOW_MS = 50 * 60_000
 const execFileAsync = promisify(execFile)
 
 export function preparePublicReadCutoverConfig(source) {
@@ -98,58 +94,6 @@ export async function verifyPublicReadArtifacts({
   }
 }
 
-export async function currentPublicCatalogShape({
-  fetchImpl = globalThis.fetch,
-  verifyHash = true,
-} = {}) {
-  const head = await exactJson(fetchImpl, `${CDN}/api/public/v1/card-current`, null, false)
-  const match = /^ccv2-([a-f0-9]{64})$/.exec(String(head?.current || ""))
-  if (!match) throw new Error("Public read head is unavailable")
-  const manifest = await exactJson(
-    fetchImpl,
-    `${CDN}/published-cards/v2/immutable/manifests/${match[1]}.json`,
-    match[1],
-    verifyHash,
-  )
-  if (
-    !Number.isSafeInteger(manifest?.card_count) ||
-    manifest.card_count < 1 ||
-    !Array.isArray(manifest.shards) ||
-    !manifest.shards.length
-  )
-    throw new Error("Current public catalog shape is invalid")
-  return { cardCount: manifest.card_count, shardCount: manifest.shards.length }
-}
-
-export function migrationVerificationPlan(cardCount, shardCount = null) {
-  const count = Number(cardCount)
-  if (!Number.isSafeInteger(count) || count < 1 || count > 20_000)
-    throw new Error("Catalog card count is outside the reviewed bound")
-  const measuredShards =
-    shardCount == null
-      ? Math.ceil(count / CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT)
-      : Number(shardCount)
-  if (!Number.isSafeInteger(measuredShards) || measuredShards < 1 || measuredShards > count)
-    throw new Error("Catalog shard count is outside the reviewed bound")
-  const prepareRounds = Math.ceil(count / CARD_PUBLICATION_BATCH)
-  const sealRounds = measuredShards
-  const controlRounds = 2
-  const deadlineMs =
-    (prepareRounds + sealRounds + controlRounds) * CARD_PUBLICATION_ALARM_CADENCE_MS +
-    CDN_PROPAGATION_MS
-  return {
-    cardCount: count,
-    prepareRounds,
-    sealRounds,
-    controlRounds,
-    cadenceMs: CARD_PUBLICATION_ALARM_CADENCE_MS,
-    propagationMs: CDN_PROPAGATION_MS,
-    intervalMs: VERIFY_INTERVAL_MS,
-    deadlineMs,
-    attempts: Math.ceil(deadlineMs / VERIFY_INTERVAL_MS) + 1,
-  }
-}
-
 export async function waitForPublicReadArtifacts({
   attempts = 24,
   intervalMs = 10_000,
@@ -168,27 +112,126 @@ export async function waitForPublicReadArtifacts({
   throw lastError
 }
 
+function migrationReceipt(status) {
+  const buildRevision = Number(status?.build_revision || 0)
+  const job = status?.job
+  if (!job && buildRevision >= 3) return { complete: true, status }
+  if (!job) {
+    return { complete: false, identity: "pending", progress: [0, 0, 0], status }
+  }
+  return {
+    complete: false,
+    identity: String(job.started_at || ""),
+    progress: [
+      Math.max(0, Number(job.group || 0)),
+      Math.max(0, Number(job.offset || 0)),
+      Math.max(0, Number(job.seal_offset || 0)),
+    ],
+    status,
+  }
+}
+
+function compareProgress(left, right) {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index]
+  }
+  return 0
+}
+
+export async function waitForPublicationMigration({
+  readStatus,
+  intervalMs = VERIFY_INTERVAL_MS,
+  stallMs = MIGRATION_STALL_MS,
+  windowMs = MIGRATION_EXECUTION_WINDOW_MS,
+  now = Date.now,
+  wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
+  if (typeof readStatus !== "function") throw new Error("Migration progress reader is required")
+  const startedAt = now()
+  let lastProgressAt = startedAt
+  let previous = null
+  while (true) {
+    let status
+    try {
+      status = await readStatus()
+    } catch (error) {
+      const failedAt = now()
+      if (failedAt - startedAt >= windowMs) {
+        throw new Error("Publication migration execution window exhausted; rerun to continue", {
+          cause: error,
+        })
+      }
+      if (failedAt - lastProgressAt >= stallMs) {
+        throw new Error("Publication migration stalled: owner status remained unavailable", {
+          cause: error,
+        })
+      }
+      await wait(
+        Math.min(
+          intervalMs,
+          windowMs - (failedAt - startedAt),
+          stallMs - (failedAt - lastProgressAt),
+        ),
+      )
+      continue
+    }
+    const receipt = migrationReceipt(status)
+    if (receipt.complete) return receipt.status
+    const observedAt = now()
+    if (previous) {
+      if (receipt.identity !== previous.identity) {
+        throw new Error("Publication migration identity changed before completion")
+      }
+      const comparison = compareProgress(receipt.progress, previous.progress)
+      if (comparison < 0) throw new Error("Publication migration progress regressed")
+      if (comparison > 0) lastProgressAt = observedAt
+    } else {
+      previous = receipt
+      lastProgressAt = observedAt
+    }
+    previous = receipt
+    if (observedAt - startedAt >= windowMs) {
+      throw new Error("Publication migration execution window exhausted; rerun to continue")
+    }
+    if (observedAt - lastProgressAt >= stallMs) {
+      const failure = receipt.status?.failure?.message || receipt.status?.failure?.code || ""
+      throw new Error(`Publication migration stalled${failure ? `: ${failure}` : ""}`)
+    }
+    await wait(Math.min(intervalMs, windowMs - (observedAt - startedAt)))
+  }
+}
+
 export async function releasePublicReadCutover({
   deployPreparation,
-  currentCardCount,
   startMigration,
-  verify,
+  waitForMigration,
+  verifyArtifacts,
   activate,
 }) {
   await deployPreparation()
-  const shape = await currentCardCount()
-  const cardCount = typeof shape === "number" ? shape : shape.cardCount
-  const shardCount = typeof shape === "number" ? null : shape.shardCount
-  const plan = migrationVerificationPlan(cardCount, shardCount)
   await startMigration()
-  const verification = await verify(plan)
+  const migration = await waitForMigration()
+  const verification = await verifyArtifacts()
   await activate(verification)
-  return { plan, verification }
+  return { migration, verification }
 }
 
 async function runPnpm(args, timeoutMs = 300_000) {
   const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
   return execFileAsync(executable, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 })
+}
+
+async function publicationMigrationStatus(adminToken) {
+  const response = await fetch(
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/migrate-card-storage/status",
+    {
+      method: "GET",
+      headers: { "x-iconoplasm-admin-token": adminToken, Accept: "application/json" },
+      signal: AbortSignal.timeout(30_000),
+    },
+  )
+  if (!response.ok) throw new Error(`Publication migration status failed (${response.status})`)
+  return response.json()
 }
 
 async function releaseFromCli(cacheBust) {
@@ -219,7 +262,6 @@ async function releaseFromCli(cacheBust) {
           "6 12 * * *",
         ])
       },
-      currentCardCount: () => currentPublicCatalogShape(),
       startMigration: async () => {
         const response = await fetch(
           "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/migrate-card-storage",
@@ -232,8 +274,11 @@ async function releaseFromCli(cacheBust) {
         if (!response.ok)
           throw new Error(`Publication migration request failed (${response.status})`)
       },
-      verify: (plan) =>
-        waitForPublicReadArtifacts({ attempts: plan.attempts, intervalMs: plan.intervalMs }),
+      waitForMigration: () =>
+        waitForPublicationMigration({
+          readStatus: () => publicationMigrationStatus(adminToken),
+        }),
+      verifyArtifacts: () => waitForPublicReadArtifacts(),
       activate: () =>
         runPnpm([
           "exec",
@@ -264,13 +309,7 @@ async function main() {
     return
   }
   if (mode === "--verify") {
-    const shape = await currentPublicCatalogShape()
-    const plan = migrationVerificationPlan(shape.cardCount, shape.shardCount)
-    console.log(
-      JSON.stringify(
-        await waitForPublicReadArtifacts({ attempts: plan.attempts, intervalMs: plan.intervalMs }),
-      ),
-    )
+    console.log(JSON.stringify(await waitForPublicReadArtifacts()))
     return
   }
   if (mode === "--release") {

@@ -415,13 +415,16 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           watermark: head?.watermark || null,
           published_at: head?.current.published_at || null,
           card_count: head?.current.manifest.card_count || 0,
+          build_revision: head?.current.manifest.build_revision || null,
           requested: Boolean(requested),
           job: job
             ? {
                 bootstrap: job.bootstrap,
+                migration: job.migration === true,
                 group: job.group,
                 groups: job.groups.length,
                 offset: job.offset,
+                seal_offset: job.seal_offset || 0,
                 started_at: job.started_at,
               }
             : null,
