@@ -83,7 +83,17 @@ test("vote alarm preserves every outbox identity through a daily pause, new vote
     get: () => ({
       fetch: async (request) => {
         const body = await request.json()
-        budgetCalls.push({ path: new URL(request.url).pathname, body })
+        const path = new URL(request.url).pathname
+        budgetCalls.push({ path, body })
+        if (path === "/reserve-mutation-writes") {
+          return Response.json({
+            ok: true,
+            replayed: false,
+            lane: body.lane,
+            operation_id: body.operation_id,
+            reserved_units: body.units,
+          })
+        }
         return Response.json({
           day_key: body.day_key,
           cycle_key: body.cycle_key,
@@ -159,6 +169,72 @@ test("vote alarm preserves every outbox identity through a daily pause, new vote
   assert.equal(coordinator.getMeta("outbox_budget_retry_at"), "")
 })
 
+test("vote alarm keeps the exact outbox command pending when the user-action lane is full", async (t) => {
+  const calls = []
+  const budget = {
+    idFromName: () => "global",
+    get: () => ({
+      async fetch(request) {
+        const path = new URL(request.url).pathname
+        const body = await request.json()
+        calls.push({ path, body })
+        if (path === "/reserve-mutation-writes") {
+          return Response.json(
+            { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+            { status: 429 },
+          )
+        }
+        return Response.json({
+          day_key: body.day_key,
+          cycle_key: body.cycle_key,
+          rows_read: 0,
+          rows_written: 0,
+          rows_read_daily_smart_limit: 1000000,
+          rows_written_daily_smart_limit: 100000,
+          exhausted: false,
+          exhausted_by: null,
+        })
+      },
+    }),
+  }
+  const db = new RecordingDb()
+  const { state } = fakeVoteCoordinatorState()
+  t.after(() => state.storage.sql.db.close())
+  const coordinator = new IconoplasmVoteCoordinator(state, {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget,
+    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
+    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
+  })
+  await state.ready
+  coordinator.setMeta("symbol", "TP53")
+  coordinator.setMeta("bootstrapped", "1")
+  const assetSha = "d".repeat(64)
+  const asset = coordinator.ensureAssetSummaryRow(assetSha, { visionId: "anima-v1-9" })
+  coordinator.applyVoteMutation({
+    assetSha256: assetSha,
+    userId: "reader-1",
+    requestedVoteValue: 1,
+    ensuredAsset: asset,
+  })
+  const mutationId = coordinator.pendingOutboxRows()[0].mutation_id
+
+  const result = await coordinator.alarm()
+
+  assert.equal(result.reason, "daily_d1_budget")
+  assert.equal(coordinator.pendingOutboxRows().length, 1)
+  assert.equal(db.calls.length, 0)
+  const reservation = calls.find((call) => call.path === "/reserve-mutation-writes")
+  assert.deepEqual(
+    {
+      lane: reservation?.body?.lane,
+      operation_id: reservation?.body?.operation_id,
+      units: reservation?.body?.units,
+    },
+    { lane: "user_action", operation_id: `vote:${mutationId}`, units: 4 },
+  )
+})
+
 test("vote alarms preserve queued work without D1 traffic during schema transition", async (t) => {
   const db = new RecordingDb()
   const { state, alarms } = fakeVoteCoordinatorState()
@@ -195,6 +271,16 @@ class RecordingStatement {
 
   async first() {
     this.db.calls.push({ type: "first", sql: this.sql, args: this.args })
+    if (
+      /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING\s+job_version/i.test(this.sql)
+    ) {
+      if (this.db.runHandler) {
+        const result = await this.db.runHandler({ sql: this.sql, args: this.args })
+        if (result?.job_version) return { job_version: result.job_version }
+      }
+      return { job_version: 1 }
+    }
     for (const [needle, result] of this.db.firstResults) {
       if (this.sql.includes(needle)) {
         return typeof result === "function" ? result(this.sql, this.args) : result
@@ -208,6 +294,16 @@ class RecordingStatement {
 
   async all() {
     this.db.calls.push({ type: "all", sql: this.sql, args: this.args })
+    if (
+      /INSERT INTO icono_vote_projection_refresh_jobs/i.test(this.sql) &&
+      /RETURNING\s+job_version/i.test(this.sql)
+    ) {
+      if (this.db.runHandler) {
+        const result = await this.db.runHandler({ sql: this.sql, args: this.args })
+        if (result?.job_version) return { results: [{ job_version: result.job_version }] }
+      }
+      return { results: [{ job_version: 1 }], meta: { changes: 1, rows_written: 1 } }
+    }
     for (const [needle, results] of this.db.allResults) {
       if (this.sql.includes(needle)) {
         return { results: typeof results === "function" ? results(this.sql, this.args) : results }
@@ -2164,7 +2260,7 @@ test("admin reconciliation durably requeues an explicit bounded gene set", async
   assert.equal(
     db.calls.filter(
       (call) =>
-        call.type === "run" && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(call.sql),
+        call.type === "first" && /INSERT INTO icono_vote_projection_refresh_jobs/i.test(call.sql),
     ).length,
     2,
   )

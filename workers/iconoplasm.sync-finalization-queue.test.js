@@ -1171,7 +1171,17 @@ test("finalization hands an exhausted day to a durable reset wake before D1 and 
     idFromName: () => "global",
     get: () => ({
       fetch: async (request) => {
+        const path = new URL(request.url).pathname
         const body = await request.json()
+        if (path === "/reserve-mutation-writes") {
+          return Response.json({
+            ok: true,
+            replayed: false,
+            lane: body.lane,
+            operation_id: body.operation_id,
+            reserved_units: body.units,
+          })
+        }
         return Response.json({
           day_key: body.day_key,
           cycle_key: body.cycle_key,

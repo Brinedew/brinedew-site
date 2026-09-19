@@ -397,9 +397,26 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
+  const lanes = readRepositoryFile("workers/lib/iconoplasm-mutation-lane-reservations.js")
   assert.match(runtime, /queueDelaySecondsUntil\(drainResult\?\.next_attempt_at\)/)
   assert.match(runtime, /voteProjectionQueueRetryDelaySeconds/)
   assert.doesNotMatch(runtime, /Math\.min\(300, secondsUntilDue\)/)
+  assert.doesNotMatch(runtime, /icono_gene_discoveries/)
+  assert.match(runtime, /wake_required: jobVersion === 1/)
+  assert.match(runtime, /lane: "user_action"/)
+  assert.match(runtime, /lane: "publication"/)
+  assert.match(runtime, /lane: "finalization_recovery"/)
+  assert.match(runtime, /lane: "laptop_delivery"/)
+  assert.match(lanes, /MUTATION_UNALLOCATED_HEADROOM = 30_000/)
+  assert.match(lanes, /user_action: 40_000/)
+  assert.match(lanes, /publication: 10_000/)
+  assert.match(lanes, /finalization_recovery: 10_000/)
+  assert.match(lanes, /laptop_delivery: 10_000/)
+  assert.doesNotMatch(
+    lanes,
+    /previous\.day === day\s*&&/,
+    "an uncertain exact command must replay its original reservation after UTC rollover",
+  )
 })
 
 // ARCHITECTURE FENCE [IPD-005]
