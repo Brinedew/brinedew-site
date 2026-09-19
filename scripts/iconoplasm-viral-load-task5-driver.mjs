@@ -166,7 +166,7 @@ export async function runHostedTask5Load({
   const elapsedMs = Date.now() - runStartedMs
   actualOperations.transferBytes = transferBytes
   const providerOperations = mapExecutedOperationsToProviderMeters(actualOperations, {
-    mutationOperationsKnown: operationReceiptResponses === expectedCommands,
+    mutationOperationsKnown: operationReceiptResponses === counts.acceptedDurable,
   })
   const schedule = assessHostedSchedule(windows, elapsedMs)
   const sortedLatencies = commandLatenciesMs.toSorted((left, right) => left - right)

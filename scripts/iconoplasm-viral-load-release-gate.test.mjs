@@ -704,6 +704,43 @@ test("production deploy invokes the blocking viral-load gate with Task 5 evidenc
   assert.doesNotMatch(workflow, /ICONOPLASM_TASK5_AUTHORIZATION/)
 })
 
+test("named Task 5 workflow executes every raw producer under staging provenance", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/iconoplasm-viral-load-task5.yml", import.meta.url),
+    "utf8",
+  )
+  assert.match(workflow, /produce-iconoplasm-viral-load-task5-evidence:/)
+  assert.match(workflow, /environment: staging/)
+  assert.match(workflow, /ICONOPLASM_STAGING_SESSION_COOKIE/)
+  assert.match(workflow, /iconoplasm-viral-load-task5-driver\.mjs/)
+  for (const profile of [
+    "provider-before",
+    "provider-query",
+    "browser",
+    "region-apac",
+    "region-eu",
+    "region-us",
+    "bunny",
+    "fault-stale-pointer",
+    "fault-bunny-outage",
+    "fault-expired-artifact",
+    "fault-laptop-off",
+    "fault-d1-exhaustion",
+    "fault-queue-exhaustion",
+    "fault-delayed-projection",
+    "shed-100000-discovery",
+    "shed-100000-vote",
+    "shed-100000-publication",
+    "shed-1000000-discovery",
+    "shed-1000000-vote",
+    "shed-1000000-publication",
+    "shed-1000000-worker",
+    "shed-1000000-durable_object",
+  ])
+    assert.match(workflow, new RegExp(profile))
+  assert.doesNotMatch(workflow, /\btouch\b|fixture/i)
+})
+
 test("Task 5 artifact resolver allowlists exact workflow, commit, job, and digest", async () => {
   const commit = "c".repeat(40)
   const responses = [
