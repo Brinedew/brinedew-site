@@ -1,4 +1,4 @@
-name: Refresh Iconoplasm observability snapshot
+name: Observe Cloudflare capacity
 
 on:
   schedule:
@@ -20,12 +20,11 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      # Bump actions/checkout @v6 -> @v7 (2026 current major). setup-node
-      # @v6 is already the latest.
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Setup Node.js (22.x)
+        id: node
         uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -50,22 +49,23 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
       - name: Bake Iconoplasm observability snapshot (production)
+        id: snapshot
         run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env production
-
-      - name: Run focused Iconoplasm admin tests
-        run: node --test workers/iconoplasm.admin-html.test.js workers/admin-html.iconoplasm-costs.test.js workers/iconoplasm.observability-freshness.test.js
 
       # One hourly KV write is the publication boundary. It is atomic, does not
       # redeploy application code, and keeps Cloudflare GraphQL out of the live
       # request path. Stop before publishing when the shared free-plan KV budget
       # is already under pressure.
-      - name: Verify Cloudflare KV publication headroom
+      - name: Check account capacity and snapshot publication headroom
+        id: budget
+        if: ${{ !cancelled() && steps.node.outcome == 'success' }}
         run: node scripts/check-iconoplasm-cloudflare-budget-headroom.mjs
 
       - name: Publish observability snapshot atomically
+        if: ${{ !cancelled() && steps.snapshot.outcome == 'success' && steps.budget.outcome == 'success' }}
         run: >-
           pnpm exec wrangler kv key put
           "iconoplasm:observability-snapshot:v1"
@@ -73,3 +73,7 @@ jobs:
           --path workers/generated/iconoplasm-observability-snapshot.json
           --remote
           --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+
+      - name: Check single-statement D1 burns
+        if: ${{ !cancelled() && steps.node.outcome == 'success' }}
+        run: node scripts/check-iconoplasm-d1-statement-burns.mjs

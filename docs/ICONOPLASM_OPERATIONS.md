@@ -368,7 +368,7 @@ The admin Observability tab is fed by Cloudflare GraphQL data collected out of b
 
 Publication contract:
 
-- `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` runs at minute 17 every hour and can also be dispatched manually.
+- `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It can also be dispatched manually. Both checks still run if collection or publication fails; cancellation stops them.
 - The generator writes one JSON snapshot, the workflow verifies current Cloudflare KV headroom, and one atomic KV write publishes `iconoplasm:observability-snapshot:v1`.
 - The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
 - The application-owned usage ledger is intentionally retired. Cloudflare GraphQL and product dashboards remain the source of operational truth.
