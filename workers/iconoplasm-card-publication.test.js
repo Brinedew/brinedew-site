@@ -208,6 +208,25 @@ test("stable blot alias backfill reuses immutable cards without republishing aut
   assert.equal(p.status().job, null)
 })
 
+test("only a compatibility alias backfill can be preempted for user publication", async () => {
+  const f = fixture(9)
+  const p = f.create()
+  await p.bootstrap()
+  assert.deepEqual(p.cancelBlotAliasBackfill(), { accepted: false })
+  assert.ok(p.status().job, "a real bootstrap job cannot be cancelled by the alias control")
+  await drain(p)
+  const head = p.status().head
+
+  await p.backfillBlotAliases()
+  await p.step()
+  assert.ok(f.repository.prepared().length > 0)
+  assert.deepEqual(p.cancelBlotAliasBackfill(), { accepted: true, cleared_prepared_rows: 9 })
+
+  assert.equal(p.status().job, null)
+  assert.equal(f.repository.prepared().length, 0)
+  assert.deepEqual(p.status().head, head)
+})
+
 async function drain(publisher) {
   for (let i = 0; i < 500; i++) if (!(await publisher.step()).more) return
   throw new Error("publication failed to drain")

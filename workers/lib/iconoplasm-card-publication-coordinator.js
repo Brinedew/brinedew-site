@@ -548,6 +548,13 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             }
           } else if (path === "/backfill-blot-aliases") {
             await this.publisher.backfillBlotAliases()
+          } else if (path === "/cancel-blot-alias-backfill") {
+            const result = this.publisher.cancelBlotAliasBackfill()
+            if (result.accepted) {
+              this.repo.reserveWrites(2, { control: true })
+              await this.state.storage.deleteAlarm()
+            }
+            return reply({ ok: true, ...result }, 200)
           } else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)
