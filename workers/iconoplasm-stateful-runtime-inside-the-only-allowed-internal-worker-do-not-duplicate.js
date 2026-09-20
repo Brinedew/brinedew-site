@@ -72,6 +72,7 @@ import {
   createOperationCostAuthority,
   OPERATION_COST_ROUTE_PREFIX,
 } from "./iconoplasm/operation-cost-http.js"
+import { createOperationCostAccountUsageReader } from "./iconoplasm/operation-cost-account-usage.js"
 import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.js"
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
@@ -19979,11 +19980,17 @@ function isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error) {
 }
 
 export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
-  constructor(state, env = {}) {
+  constructor(state, env = {}, options = {}) {
     this.state = state
     this.env = env
     this.providerObservationCache = null
     this.providerObservationCheckedAt = 0
+    this.accountUsage =
+      options.accountUsage ||
+      createOperationCostAccountUsageReader({
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+      })
     this.mutationReservations = new DailyMutationLaneReservations(state.storage)
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
       initializeCatalog: initializePublishedHydratedCatalog,
@@ -20203,9 +20210,17 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
 
   async providerD1Observation(dayKey) {
     const now = Date.now()
+    const cachedObservedAt = Date.parse(String(this.providerObservationCache?.observed_at || ""))
+    const cachedObservationIsFresh =
+      Number.isFinite(cachedObservedAt) &&
+      cachedObservedAt <= now + 60_000 &&
+      now - cachedObservedAt <= 90 * 60_000
+    const cacheReusable = this.providerObservationCache?.ok
+      ? cachedObservationIsFresh
+      : now - this.providerObservationCheckedAt < 60_000
     if (
       this.providerObservationCache &&
-      now - this.providerObservationCheckedAt < 60_000 &&
+      cacheReusable &&
       this.providerObservationCache.day_key === dayKey
     ) {
       return this.providerObservationCache
@@ -20215,72 +20230,113 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     // but must admit mutations against the same provider observation as
     // production; otherwise every staging mutation fails closed forever.
     const providerObservationKv = this.env?.PROD_KV || this.env?.KV
+    let failure = null
     if (!providerObservationKv || typeof providerObservationKv.get !== "function") {
-      this.providerObservationCache = {
+      failure = {
         ok: false,
         code: "MUTATION_PROVIDER_OBSERVATION_MISSING",
         day_key: dayKey,
       }
-      return this.providerObservationCache
     }
     let snapshot
+    if (!failure) {
+      try {
+        snapshot = await providerObservationKv.get(KV_OBSERVABILITY_SNAPSHOT, "json")
+      } catch {
+        snapshot = null
+      }
+      // Rolling deploy compatibility: the previous snapshot schema already
+      // carried the same covered, account-wide D1 day and rows-written values.
+      // Accept that exact source until the refreshed publisher adds the flatter
+      // providerAdmission projection; never accept an uncovered daily bucket.
+      const legacyCurrentDay = snapshot?.d1?.currentDay
+      const provider =
+        snapshot?.providerAdmission ||
+        (legacyCurrentDay?.covered === true
+          ? {
+              accountId: "bound-cloudflare-account",
+              dayKey: legacyCurrentDay.date,
+              rowsWritten: legacyCurrentDay.rowsWritten,
+            }
+          : null)
+      const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
+      const accountId = String(provider?.accountId || "").trim()
+      const observedDay = String(provider?.dayKey || "").trim()
+      const rowsWritten = Number(provider?.rowsWritten)
+      if (
+        !provider ||
+        !Number.isFinite(observedAt) ||
+        !accountId ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(observedDay) ||
+        !Number.isSafeInteger(rowsWritten) ||
+        rowsWritten < 0
+      ) {
+        failure = {
+          ok: false,
+          code: snapshot
+            ? "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
+            : "MUTATION_PROVIDER_OBSERVATION_MISSING",
+          day_key: dayKey,
+        }
+      } else if (
+        observedDay !== dayKey ||
+        observedAt > now + 60_000 ||
+        now - observedAt > 90 * 60_000
+      ) {
+        failure = {
+          ok: false,
+          code: "MUTATION_PROVIDER_OBSERVATION_STALE",
+          day_key: dayKey,
+          observed_day_key: observedDay,
+          observed_at: new Date(observedAt).toISOString(),
+        }
+      } else {
+        this.providerObservationCache = {
+          ok: true,
+          day_key: dayKey,
+          account_id: accountId,
+          rows_written: rowsWritten,
+          observed_at: new Date(observedAt).toISOString(),
+          source: "projected_provider",
+        }
+        return this.providerObservationCache
+      }
+    }
+
+    // The scheduled projection is a cache, not the authority. GitHub can delay
+    // scheduled workflows for nearly an hour, especially around UTC rollover.
+    // Ask Cloudflare's live account-wide meter once from this singleton and
+    // cache a valid sample for the same 90-minute admission window. If the live
+    // authority is unavailable or malformed, retain the projection's exact
+    // fail-closed result.
     try {
-      snapshot = await providerObservationKv.get(KV_OBSERVABILITY_SNAPSHOT, "json")
+      const live = await this.accountUsage.refresh()
+      const measuredAt = Number(live?.measured_at)
+      const liveDay = String(live?.day || "").trim()
+      const liveRowsWritten = Number(live?.rows_written)
+      if (
+        liveDay === dayKey &&
+        Number.isFinite(measuredAt) &&
+        measuredAt <= now + 60_000 &&
+        now - measuredAt <= 90 * 60_000 &&
+        Number.isSafeInteger(liveRowsWritten) &&
+        liveRowsWritten >= 0
+      ) {
+        this.providerObservationCache = {
+          ok: true,
+          day_key: dayKey,
+          account_id: String(this.env.CLOUDFLARE_ACCOUNT_ID || "live-provider"),
+          rows_written: liveRowsWritten,
+          observed_at: new Date(measuredAt).toISOString(),
+          source: "live_provider",
+        }
+        return this.providerObservationCache
+      }
     } catch {
-      snapshot = null
+      // Keep the original projection failure below. Unknown capacity must never
+      // become admitted capacity merely because both observation paths failed.
     }
-    // Rolling deploy compatibility: the previous snapshot schema already
-    // carried the same covered, account-wide D1 day and rows-written values.
-    // Accept that exact source until the refreshed publisher adds the flatter
-    // providerAdmission projection; never accept an uncovered daily bucket.
-    const legacyCurrentDay = snapshot?.d1?.currentDay
-    const provider =
-      snapshot?.providerAdmission ||
-      (legacyCurrentDay?.covered === true
-        ? {
-            accountId: "bound-cloudflare-account",
-            dayKey: legacyCurrentDay.date,
-            rowsWritten: legacyCurrentDay.rowsWritten,
-          }
-        : null)
-    const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
-    const accountId = String(provider?.accountId || "").trim()
-    const observedDay = String(provider?.dayKey || "").trim()
-    const rowsWritten = Number(provider?.rowsWritten)
-    if (
-      !provider ||
-      !Number.isFinite(observedAt) ||
-      !accountId ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(observedDay) ||
-      !Number.isSafeInteger(rowsWritten) ||
-      rowsWritten < 0
-    ) {
-      this.providerObservationCache = {
-        ok: false,
-        code: snapshot
-          ? "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
-          : "MUTATION_PROVIDER_OBSERVATION_MISSING",
-        day_key: dayKey,
-      }
-      return this.providerObservationCache
-    }
-    if (observedDay !== dayKey || observedAt > now + 60_000 || now - observedAt > 90 * 60_000) {
-      this.providerObservationCache = {
-        ok: false,
-        code: "MUTATION_PROVIDER_OBSERVATION_STALE",
-        day_key: dayKey,
-        observed_day_key: observedDay,
-        observed_at: new Date(observedAt).toISOString(),
-      }
-      return this.providerObservationCache
-    }
-    this.providerObservationCache = {
-      ok: true,
-      day_key: dayKey,
-      account_id: accountId,
-      rows_written: rowsWritten,
-      observed_at: new Date(observedAt).toISOString(),
-    }
+    this.providerObservationCache = failure
     return this.providerObservationCache
   }
 
