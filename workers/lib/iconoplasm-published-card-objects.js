@@ -324,7 +324,15 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     )
     await response.body?.cancel().catch(() => {})
     if (!response.ok) throw new Error(`Published blot alias PUT failed (${response.status})`)
-    const verified = await readImageBytes(key, hash)
+    // The stable /blot/{symbol}.webp object is a compatibility projection, not
+    // publication authority. Bunny does not invalidate Pull Zone or Origin
+    // Shield caches when Storage bytes change, and this zone can legitimately
+    // return the previous alias for its configured cache lifetime. Requiring
+    // the public cache to agree here couples the immutable publication commit
+    // to an independently cached mutable URL and can stall every later gene.
+    // Verify the exact bytes through authenticated Storage; reader-critical
+    // card artifacts continue to name the content-addressed immutable blot.
+    const verified = await readImageBytes(key, hash, { storageOnly: true })
     return { key, hash, size: bytes.byteLength, contentType, sources: verified.verifiedSources }
   }
 
