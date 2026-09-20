@@ -704,9 +704,7 @@ class FakeStatement {
         phase: preserveCursor ? previous.phase : String(phase),
         keep_assets_json: String(keepAssetsJson || "[]"),
         legacy_assets_json: String(legacyAssetsJson || "[]"),
-        vision_ids_json: preserveCursor
-          ? previous.vision_ids_json
-          : String(visionIdsJson || "[]"),
+        vision_ids_json: preserveCursor ? previous.vision_ids_json : String(visionIdsJson || "[]"),
         requested_at: String(requestedAt || ""),
         updated_at: String(updatedAt || ""),
         last_attempt_at: "",
