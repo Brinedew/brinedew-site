@@ -25552,6 +25552,12 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(
           { symbol, job_version: job.job_version },
         )
         if (response?.accepted !== true) {
+          console.warn("Iconoplasm finalization publisher handoff deferred", {
+            symbol,
+            job_version: Number(job.job_version),
+            code: sanitizeText(String(response?.code || "PUBLISHER_HANDOFF_DEFERRED"), 100),
+            error: sanitizeText(String(response?.error || ""), 300),
+          })
           const retryAfterMs = Math.max(
             1000,
             Math.min(900000, Number(response?.retry_after_ms || 300000) || 300000),
