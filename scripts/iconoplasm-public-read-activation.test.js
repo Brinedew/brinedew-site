@@ -193,6 +193,41 @@ test("an already activated catalog does not restart migration during an unrelate
   assert.equal(starts, 0)
 })
 
+test("a compatibility alias backfill cannot hold an activated catalog release open", async () => {
+  let starts = 0
+  let reads = 0
+  const status = {
+    current: "ccv2-current",
+    build_revision: 4,
+    failure: null,
+    job: {
+      alias_backfill: true,
+      group: 0,
+      groups: 29,
+      offset: 421,
+      started_at: "2026-09-20T04:38:16.168Z",
+    },
+  }
+
+  const start = await cutover.startPublicationMigrationIfRequired({
+    readStatus: async () => status,
+    startMigration: async () => {
+      starts += 1
+    },
+  })
+  const completed = await cutover.waitForPublicationMigration({
+    readStatus: async () => {
+      reads += 1
+      return status
+    },
+  })
+
+  assert.equal(start.started, false)
+  assert.equal(starts, 0)
+  assert.equal(reads, 1)
+  assert.equal(completed, status)
+})
+
 test("an incomplete catalog starts migration through its existing owner", async () => {
   let starts = 0
   const status = { current: "ccv2-old", build_revision: 2, failure: null, job: null }
