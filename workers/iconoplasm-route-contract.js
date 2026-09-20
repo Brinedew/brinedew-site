@@ -1444,6 +1444,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   adminApiContract("admin_artist_styles_remove", "/artist-styles/remove", POST),
   adminApiContract("admin_artist_blacklist_pending", "/artist-blacklist-submissions/pending", GET),
   adminApiContract("admin_artist_blacklist_ack", "/artist-blacklist-submissions/ack", POST),
+  adminApiContract("admin_discovery_migration_run", "/discovery-migration/run", POST),
   adminApiContract("admin_finalization_pending", "/finalization/pending", GET),
   adminApiContract("admin_finalization_enqueue", "/finalization/enqueue", POST),
   adminApiContract(
