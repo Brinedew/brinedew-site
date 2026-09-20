@@ -234,7 +234,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
         )
         if (!response.ok) {
           await response.body?.cancel().catch(() => {})
-          throw new Error(`Published blot GET failed (${response.status}) for ${key}`)
+          const error = new Error(`Published blot GET failed (${response.status}) for ${key}`)
+          error.code =
+            response.status === 404 ? "PUBLISHED_BLOT_NOT_FOUND" : "PUBLISHED_BLOT_READ_FAILED"
+          error.status = response.status
+          throw error
         }
         const candidateBytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
         if ((await publishedObjectHash(candidateBytes)) !== expectedHash) {
@@ -292,7 +296,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return { bytes, verifiedSources }
   }
 
-  async function publishBlotAlias(symbol, blot) {
+  async function publishBlotAlias(symbol, blot, { allowMissingImmutablePlaceholder = false } = {}) {
     const normalized = String(symbol || "")
       .trim()
       .toUpperCase()
@@ -301,9 +305,15 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     let bytes = BLOT_PLACEHOLDER_BYTES
     let contentType = "image/svg+xml"
     if (immutable) {
-      bytes = (await readImageBytes(immutable.key, immutable.hash, { repairStorageFromCdn: true }))
-        .bytes
-      contentType = "image/webp"
+      try {
+        bytes = (
+          await readImageBytes(immutable.key, immutable.hash, { repairStorageFromCdn: true })
+        ).bytes
+        contentType = "image/webp"
+      } catch (error) {
+        if (!(allowMissingImmutablePlaceholder && error?.code === "PUBLISHED_BLOT_NOT_FOUND"))
+          throw error
+      }
     }
     const hash = await publishedObjectHash(bytes)
     const url = externalPortraitStorageUrl(env, key)

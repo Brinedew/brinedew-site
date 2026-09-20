@@ -97,9 +97,9 @@ function fixture(count = 9) {
     async read(key) {
       return bytes.has(key) ? { value: JSON.parse(bytes.get(key)) } : null
     },
-    async publishBlotAlias(symbol, blot) {
+    async publishBlotAlias(symbol, blot, options) {
       if (failure === "blot-alias") throw new Error("injected alias failure")
-      aliases.push({ symbol, blot: structuredClone(blot) })
+      aliases.push({ symbol, blot: structuredClone(blot), options: structuredClone(options) })
       return { key: `blot/${symbol}.webp` }
     },
   }
@@ -197,6 +197,10 @@ test("stable blot alias backfill reuses immutable cards without republishing aut
   assert.deepEqual(
     f.aliases.map((item) => item.symbol),
     f.cards.map((item) => item.symbol),
+  )
+  assert.equal(
+    f.aliases.every((item) => item.options.allowMissingImmutablePlaceholder === true),
+    true,
   )
   assert.equal(f.writes.length, immutableWrites)
   assert.equal(CARD_BLOT_ALIAS_BACKFILL_BATCH * 3 + 1 < 50, true)
