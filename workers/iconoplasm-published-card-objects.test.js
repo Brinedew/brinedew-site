@@ -266,3 +266,22 @@ test("a published gene without a blot receives verified placeholder image bytes"
   assert.match(new TextDecoder().decode(bytes), /^<svg/)
   assert.equal(receipt.contentType, "image/svg+xml")
 })
+
+test("alias backfill may replace a genuinely missing immutable blot with the placeholder", async () => {
+  const { store, objects } = fixture()
+  const missing = {
+    status: "ready",
+    blot_fingerprint: "b".repeat(64),
+    asset_sha256: "c".repeat(64),
+    object_key: `blots/v1/A/ADAP1/${"b".repeat(64)}/ADAP1-iconoplasm-gene-blot.webp`,
+  }
+
+  await assert.rejects(store.publishBlotAlias("ADAP1", missing), /GET failed \(404\)/)
+  const receipt = await store.publishBlotAlias("ADAP1", missing, {
+    allowMissingImmutablePlaceholder: true,
+  })
+
+  assert.equal(receipt.key, "blot/ADAP1.webp")
+  assert.equal(receipt.contentType, "image/svg+xml")
+  assert.match(new TextDecoder().decode(objects.get(receipt.key)), /^<svg/)
+})
