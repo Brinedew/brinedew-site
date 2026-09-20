@@ -1,7 +1,11 @@
+import { appendFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { readAccountBudget, accountBudgetChecks } from "./lib/cloudflare-account-budget.mjs"
 
-export async function checkCloudflareBudget({ usageReader = readAccountBudget } = {}) {
+export async function checkCloudflareBudget({
+  usageReader = readAccountBudget,
+  githubOutput = process.env.GITHUB_OUTPUT,
+} = {}) {
   const usage = await usageReader({
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     token: process.env.CLOUDFLARE_API_TOKEN,
@@ -13,6 +17,12 @@ export async function checkCloudflareBudget({ usageReader = readAccountBudget } 
   const failures = checks.filter((check) => !check.ok)
   const result = { day: usage.day, usage, checks, ok: failures.length === 0 }
   console.log(JSON.stringify(result, null, 2))
+  // Publishing this observation spends one KV write, not D1 or Worker capacity.
+  if (githubOutput)
+    appendFileSync(
+      githubOutput,
+      `snapshot_publication_allowed=${checks.find((check) => check.meter === "kv_writes").ok}\n`,
+    )
   if (failures.length)
     throw new Error(
       `Cloudflare account headroom: ${failures.map((f) => `${f.meter} ${f.used}/${f.limit}`).join(", ")}`,
