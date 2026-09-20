@@ -54,8 +54,8 @@ test("recovery uploads contain cron work while normal activation restores the ow
   assert.equal(
     (cutover.match(/"--triggers",\s*"55 23 \* \* \*",\s*"3 0 \* \* \*",\s*"6 12 \* \* \*"/g) || [])
       .length,
-    2,
-    "both cutover deploys must retain the three independent GeneGuessr schedules",
+    0,
+    "public-read cutover deploys must retain the checked-in full production schedule",
   )
 })
 
