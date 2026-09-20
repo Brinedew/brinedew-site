@@ -26,6 +26,16 @@ test("exhausted-capacity repair accepts the shipped static app bundle", () => {
   assert.deepEqual(verifyWorkerRepairPaths(paths), [...paths].sort())
 })
 
+test("exhausted-capacity repair accepts deterministic public bundle sources", () => {
+  const paths = [
+    "content/apps/iconoplasm/index.md",
+    "quartz/static/iconoplasm/publication-reader.test.js",
+    "scripts/prepare-iconoplasm-edge-assets.mjs",
+    "workers/seo-discovery.test.js",
+  ]
+  assert.deepEqual(verifyWorkerRepairPaths(paths), [...paths].sort())
+})
+
 test("exhausted-capacity repair refuses schema, data and dependency changes", () => {
   const base = ["workers/iconoplasm/discovery-ordinal-store.js"]
   for (const forbidden of [
