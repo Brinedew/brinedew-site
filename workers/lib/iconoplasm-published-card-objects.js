@@ -213,26 +213,82 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     }
   }
 
-  async function readImageBytes(key, expectedHash, { storageOnly = false } = {}) {
+  async function readImageBytes(
+    key,
+    expectedHash,
+    { storageOnly = false, repairStorageFromCdn = false } = {},
+  ) {
     let candidates = externalPortraitReadCandidates(env, key, { accept: "image/*" })
     if (storageOnly)
       candidates = candidates.filter((candidate) => candidate.source === "authenticated_storage")
     if (!candidates.length) throw new Error("Bunny blot storage is not configured")
     const verifiedSources = {}
     let bytes = null
+    let storageFailure = null
     for (const candidate of candidates) {
-      const response = await send(candidate.url, { method: "GET", headers: candidate.headers }, key)
-      if (!response.ok) {
-        await response.body?.cancel().catch(() => {})
-        throw new Error(`Published blot GET failed (${response.status})`)
+      try {
+        const response = await send(
+          candidate.url,
+          { method: "GET", headers: candidate.headers },
+          key,
+        )
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {})
+          throw new Error(`Published blot GET failed (${response.status}) for ${key}`)
+        }
+        const candidateBytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
+        if ((await publishedObjectHash(candidateBytes)) !== expectedHash) {
+          throw new Error(`Published blot hash mismatch for ${key} from ${candidate.source}`)
+        }
+        if (repairStorageFromCdn && storageFailure && candidate.source === "public_cdn") {
+          const storageUrl = externalPortraitStorageUrl(env, key)
+          const password = externalPortraitStoragePassword(env)
+          if (!storageUrl || !password) throw storageFailure
+          const repaired = await send(
+            storageUrl,
+            {
+              method: "PUT",
+              headers: { AccessKey: password, "Content-Type": "image/webp" },
+              body: candidateBytes,
+            },
+            key,
+          )
+          if (!repaired.ok) {
+            await repaired.body?.cancel().catch(() => {})
+            throw new Error(`Published blot origin repair failed (${repaired.status}) for ${key}`)
+          }
+          await repaired.body?.cancel().catch(() => {})
+          const verified = await send(
+            storageUrl,
+            { method: "GET", headers: { AccessKey: password, Accept: "image/*" } },
+            key,
+          )
+          if (!verified.ok) {
+            await verified.body?.cancel().catch(() => {})
+            throw new Error(
+              `Published blot origin repair verification failed (${verified.status}) for ${key}`,
+            )
+          }
+          const verifiedBytes = await boundedBytes(verified, BLOT_BYTE_LIMIT, bodyTimeoutMs)
+          if ((await publishedObjectHash(verifiedBytes)) !== expectedHash) {
+            throw new Error(`Published blot origin repair hash mismatch for ${key}`)
+          }
+          verifiedSources.authenticated_storage = true
+        }
+        bytes ||= candidateBytes
+        verifiedSources[candidate.source] = true
+        if (repairStorageFromCdn && candidate.source === "authenticated_storage") {
+          return { bytes, verifiedSources }
+        }
+      } catch (error) {
+        if (repairStorageFromCdn && candidate.source === "authenticated_storage") {
+          storageFailure = error
+          continue
+        }
+        throw error
       }
-      const candidateBytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
-      if ((await publishedObjectHash(candidateBytes)) !== expectedHash) {
-        throw new Error("Published blot hash mismatch")
-      }
-      bytes ||= candidateBytes
-      verifiedSources[candidate.source] = true
     }
+    if (!bytes && storageFailure) throw storageFailure
     return { bytes, verifiedSources }
   }
 
@@ -245,7 +301,8 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     let bytes = BLOT_PLACEHOLDER_BYTES
     let contentType = "image/svg+xml"
     if (immutable) {
-      bytes = (await readImageBytes(immutable.key, immutable.hash, { storageOnly: true })).bytes
+      bytes = (await readImageBytes(immutable.key, immutable.hash, { repairStorageFromCdn: true }))
+        .bytes
       contentType = "image/webp"
     }
     const hash = await publishedObjectHash(bytes)

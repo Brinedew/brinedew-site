@@ -160,6 +160,99 @@ test("the publisher advances a verified stable blot alias from exact immutable b
   )
 })
 
+test("a canonical CDN copy repairs a divergent blot origin before alias publication", async () => {
+  const repairEnv = {
+    ...env,
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://cdn.example.test",
+  }
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const canonical = new TextEncoder().encode("canonical-webp")
+  const divergent = new TextEncoder().encode("divergent-origin-webp")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", canonical)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  const origin = new Map([[objectKey, divergent]])
+  const cdn = new Map([[objectKey, canonical]])
+  const calls = []
+  const store = createPublishedCardObjectStore(repairEnv, {
+    request: async (url, init, key) => {
+      const source = String(url).startsWith("https://cdn.example.test") ? "cdn" : "origin"
+      calls.push({ method: init.method, key, source })
+      if (init.method === "PUT") {
+        origin.set(key, init.body.slice())
+        cdn.set(key, init.body.slice())
+        return new Response(null, { status: 201 })
+      }
+      const bytes = source === "cdn" ? cdn.get(key) : origin.get(key)
+      return bytes ? new Response(bytes) : new Response(null, { status: 404 })
+    },
+  })
+
+  const receipt = await store.publishBlotAlias(symbol, {
+    status: "ready",
+    blot_fingerprint: fingerprint,
+    asset_sha256: assetSha,
+    object_key: objectKey,
+  })
+
+  assert.deepEqual(origin.get(objectKey), canonical)
+  assert.deepEqual(origin.get(receipt.key), canonical)
+  assert.deepEqual(
+    calls.slice(0, 4).map(({ method, key, source }) => [method, key, source]),
+    [
+      ["GET", objectKey, "origin"],
+      ["GET", objectKey, "cdn"],
+      ["PUT", objectKey, "origin"],
+      ["GET", objectKey, "origin"],
+    ],
+  )
+})
+
+test("divergent origin is not repaired from CDN bytes that fail the canonical hash", async () => {
+  const repairEnv = {
+    ...env,
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://cdn.example.test",
+  }
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const expected = new TextEncoder().encode("expected-webp")
+  const divergent = new TextEncoder().encode("divergent-origin-webp")
+  const staleCdn = new TextEncoder().encode("wrong-cdn-webp")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", expected)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  const calls = []
+  const store = createPublishedCardObjectStore(repairEnv, {
+    request: async (url, init, key) => {
+      const source = String(url).startsWith("https://cdn.example.test") ? "cdn" : "origin"
+      calls.push({ method: init.method, key, source })
+      const bytes = source === "cdn" ? staleCdn : divergent
+      return new Response(bytes)
+    },
+  })
+
+  await assert.rejects(
+    store.publishBlotAlias(symbol, {
+      status: "ready",
+      blot_fingerprint: fingerprint,
+      asset_sha256: assetSha,
+      object_key: objectKey,
+    }),
+    /hash mismatch/,
+  )
+  assert.equal(
+    calls.some(({ method }) => method === "PUT"),
+    false,
+  )
+})
+
 test("a published gene without a blot receives verified placeholder image bytes", async () => {
   const { store, objects } = fixture()
   const receipt = await store.publishBlotAlias("RB1", null)
