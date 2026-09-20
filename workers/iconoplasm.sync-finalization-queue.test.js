@@ -1593,6 +1593,11 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
 
 test("admin finalization kick only enqueues the canonical Queue drain message", async () => {
   const queue = buildFakeQueue()
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  const { values } = finalizationGovernorForTest(env, { providerHealthy: false })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
@@ -1607,10 +1612,7 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
           symbols: ["TP53"],
         }),
       }),
-      {
-        ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-        ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
-      },
+      env,
       { waitUntil() {} },
     )
   const payload = await response.json()
@@ -1622,12 +1624,19 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
   assert.equal(queue.sent.length, 1)
   assert.equal(queue.sent[0]?.kind, "drain_finalization_ledger")
   assert.deepEqual(queue.sent[0]?.symbols, ["TP53"])
+  assert.equal(values.get("state")?.public_health, "healthy")
+  assert.ok(Date.parse(values.get("state")?.provider_observed_at || "") > 0)
 })
 
 test("admin finalization kick fails loud with the Cloudflare Queue send error", async () => {
   const queue = buildFakeQueue({
     failMessage: "Cloudflare API error: 429: daily Queue operations limit exceeded",
   })
+  const env = {
+    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+  }
+  bindHealthySyncGovernorForTest(env)
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
@@ -1642,6 +1651,30 @@ test("admin finalization kick fails loud with the Cloudflare Queue send error", 
           symbols: ["TP53"],
         }),
       }),
+      env,
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 503)
+  assert.equal(payload?.ok, false)
+  assert.equal(payload?.code, "QUEUE_SEND_FAILED")
+  assert.match(payload?.queue_send_error?.detail || "", /daily Queue operations limit exceeded/)
+  assert.deepEqual(queue.sent, [])
+})
+
+test("admin finalization kick refuses before Queue dispatch when the governor cannot retain provider truth", async () => {
+  const queue = buildFakeQueue()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
+        method: "POST",
+        headers: {
+          "x-iconoplasm-admin-token": "secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ run_id: "pytest-run", symbols: ["TP53"] }),
+      }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
         ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
@@ -1651,9 +1684,7 @@ test("admin finalization kick fails loud with the Cloudflare Queue send error", 
   const payload = await response.json()
 
   assert.equal(response.status, 503)
-  assert.equal(payload?.ok, false)
-  assert.equal(payload?.code, "QUEUE_SEND_FAILED")
-  assert.match(payload?.queue_send_error?.detail || "", /daily Queue operations limit exceeded/)
+  assert.equal(payload?.code, "SYNC_GOVERNOR_OBSERVATION_REQUIRED")
   assert.deepEqual(queue.sent, [])
 })
 
