@@ -184,7 +184,6 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
       calls.push({ method: init.method, key, source })
       if (init.method === "PUT") {
         origin.set(key, init.body.slice())
-        cdn.set(key, init.body.slice())
         return new Response(null, { status: 201 })
       }
       const bytes = source === "cdn" ? cdn.get(key) : origin.get(key)
@@ -201,6 +200,8 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
 
   assert.deepEqual(origin.get(objectKey), canonical)
   assert.deepEqual(origin.get(receipt.key), canonical)
+  assert.equal(cdn.has(receipt.key), false, "the mutable CDN alias may remain stale after origin PUT")
+  assert.deepEqual(receipt.sources, { authenticated_storage: true })
   assert.deepEqual(
     calls.slice(0, 4).map(({ method, key, source }) => [method, key, source]),
     [
