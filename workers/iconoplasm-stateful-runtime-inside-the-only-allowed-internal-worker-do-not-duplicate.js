@@ -25074,10 +25074,24 @@ async function enqueueSyncFinalizationJobs(
          actor_id = excluded.actor_id,
          reason = excluded.reason,
          status = 'queued',
-         phase = excluded.phase,
+         phase = CASE
+           WHEN icono_sync_finalization_jobs.status <> 'completed'
+             AND icono_sync_finalization_jobs.reason = excluded.reason
+             AND icono_sync_finalization_jobs.keep_assets_json = excluded.keep_assets_json
+             AND icono_sync_finalization_jobs.legacy_assets_json = excluded.legacy_assets_json
+           THEN icono_sync_finalization_jobs.phase
+           ELSE excluded.phase
+         END,
          keep_assets_json = excluded.keep_assets_json,
          legacy_assets_json = excluded.legacy_assets_json,
-         vision_ids_json = excluded.vision_ids_json,
+         vision_ids_json = CASE
+           WHEN icono_sync_finalization_jobs.status <> 'completed'
+             AND icono_sync_finalization_jobs.reason = excluded.reason
+             AND icono_sync_finalization_jobs.keep_assets_json = excluded.keep_assets_json
+             AND icono_sync_finalization_jobs.legacy_assets_json = excluded.legacy_assets_json
+           THEN icono_sync_finalization_jobs.vision_ids_json
+           ELSE excluded.vision_ids_json
+         END,
          requested_at = excluded.requested_at,
          updated_at = excluded.updated_at,
          last_attempt_at = NULL,
