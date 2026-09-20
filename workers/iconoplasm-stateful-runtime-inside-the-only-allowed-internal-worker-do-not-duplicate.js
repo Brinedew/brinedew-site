@@ -40518,6 +40518,31 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       } catch {
         p = {}
       }
+      // A finalization kick is issued only after Website Ops has refreshed the
+      // account-wide Worker/KV/D1/DO/Queue meters and admitted this bounded
+      // slice. Carry that fresh owned observation into the existing
+      // SyncGovernor before the Queue message is sent. Without this handoff the
+      // governor's 60-second freshness fence can only expire: production had no
+      // caller for /provider-observation, so every otherwise-safe message was
+      // retained until the next UTC reset.
+      const providerObservation = await iconoplasmSyncGovernorJson(env, "/provider-observation", {
+        public_health: "healthy",
+      })
+      if (providerObservation?.ok !== true) {
+        return done(
+          "admin_finalization_kick_governor_unavailable",
+          json(
+            {
+              ok: false,
+              code: "SYNC_GOVERNOR_OBSERVATION_REQUIRED",
+              error:
+                "The bounded finalization kick passed provider admission, but the existing SyncGovernor could not retain that fresh observation. No Queue message was sent.",
+            },
+            503,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       const sentQueueMessage = await sendSyncFinalizationDrainQueueMessage(env, {
         runId: p?.run_id ?? p?.runId ?? p?.reason ?? "admin_finalization_kick",
         reason: p?.reason ?? "admin_finalization_kick",
