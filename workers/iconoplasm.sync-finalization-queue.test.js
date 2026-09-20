@@ -688,16 +688,23 @@ class FakeStatement {
         updatedAt,
         nextAttemptAt,
       ] = this.args
+      const previous = this.db.jobs.get(String(symbol))
+      const preserveCursor =
+        Boolean(previous) &&
+        previous.status !== "completed" &&
+        previous.reason === String(reason) &&
+        previous.keep_assets_json === String(keepAssetsJson || "[]") &&
+        previous.legacy_assets_json === String(legacyAssetsJson || "[]")
       this.db.jobs.set(String(symbol), {
         gene_symbol: String(symbol),
-        job_version: (this.db.jobs.get(String(symbol))?.job_version || 0) + 1,
+        job_version: (previous?.job_version || 0) + 1,
         actor_id: String(actorId),
         reason: String(reason),
         status: "queued",
-        phase: String(phase),
+        phase: preserveCursor ? previous.phase : String(phase),
         keep_assets_json: String(keepAssetsJson || "[]"),
         legacy_assets_json: String(legacyAssetsJson || "[]"),
-        vision_ids_json: String(visionIdsJson || "[]"),
+        vision_ids_json: preserveCursor ? previous.vision_ids_json : String(visionIdsJson || "[]"),
         requested_at: String(requestedAt || ""),
         updated_at: String(updatedAt || ""),
         last_attempt_at: "",
@@ -1509,6 +1516,40 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
     { symbol: "TP53", asset_sha256: "b".repeat(64) },
   ])
   assert.deepEqual(JSON.parse(String(stored?.vision_ids_json || "[]")), ["anima-v1-1"])
+
+  stored.phase = "vision_rollups"
+  stored.vision_ids_json = "[]"
+  const progressedVersion = stored.job_version
+  const retryResponse =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reason: "pytest_sync_finalization",
+          rows: [
+            {
+              symbol: "TP53",
+              phase: "gene_rollups",
+              keep: [{ symbol: "TP53", asset_sha256: "a".repeat(64) }],
+              legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
+              vision_ids: ["anima-v1-1"],
+            },
+          ],
+        }),
+      }),
+      env,
+      {},
+    )
+  const retained = env.gatewayDb.jobs.get("TP53")
+
+  assert.equal(retryResponse.status, 200)
+  assert.equal(retained?.job_version, progressedVersion + 1)
+  assert.equal(retained?.phase, "vision_rollups")
+  assert.deepEqual(JSON.parse(String(retained?.vision_ids_json || "[]")), [])
 })
 
 test("admin finalization enqueue returns current mutation-limiter telemetry for workstation accounting", async () => {
