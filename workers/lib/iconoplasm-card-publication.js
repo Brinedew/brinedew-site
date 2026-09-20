@@ -320,6 +320,18 @@ export function createCardPublication({
     })
     return status()
   }
+  function cancelBlotAliasBackfill() {
+    const job = repo.get("job")
+    if (job?.alias_backfill !== true) return { accepted: false }
+    const preparedRows = repo.prepared().length
+    repo.reserveWrites?.(preparedRows + 3, { control: true })
+    repo.transaction(() => {
+      repo.remove("job")
+      repo.remove("failure")
+      repo.clearPrepared()
+    })
+    return { accepted: true, cleared_prepared_rows: preparedRows }
+  }
   async function start() {
     const head = repo.get("head")
     if (!head) throw new Error("Card publication storage migration has not been initialized")
@@ -688,6 +700,7 @@ export function createCardPublication({
     bootstrap,
     migrate,
     backfillBlotAliases,
+    cancelBlotAliasBackfill,
     materializeSymbol,
     async step() {
       const effects = repo.get("effects")
