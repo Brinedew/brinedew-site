@@ -71,7 +71,7 @@ test("exhausted-capacity repair refuses an empty or test-only diff", () => {
   )
 })
 
-test("the repair workflow stays exact-CI gated and D1-mutation free", () => {
+test("the repair workflow publishes both Worker owners without touching D1 or Pages", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
     "utf8",
@@ -87,7 +87,13 @@ test("the repair workflow stays exact-CI gated and D1-mutation free", () => {
   assert.match(repair, /Restore immutable static assets required by the Worker bundle/)
   assert.match(repair, /run-id: \$\{\{ steps\.exact-ci\.outputs\.ci_run_id \}\}/)
   assert.match(repair, /Deploy the zero-D1 stateful Worker repair/)
-  assert.match(repair, /wrangler deploy --env=""/)
+  assert.match(repair, /Deploy the zero-D1 public edge Worker repair/)
+  assert.match(
+    repair,
+    /pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST"/,
+  )
+  assert.match(repair, /Verify live Worker owners without application mutation/)
+  assert.match(repair, /pdbe-molstar@3\.8\.0\/build\/pdbe-molstar\.css/)
   assert.doesNotMatch(repair, /d1 migrations|run-admitted-d1|publish-dirty|pages deploy/i)
 })
 
