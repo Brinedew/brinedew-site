@@ -1793,6 +1793,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_reconcile" ||
     family === "admin_read_models" ||
     family === "admin_read_models_bootstrap" ||
+    family === "admin_discovery_migration_run" ||
     family === "admin_finalization_enqueue" ||
     family === "admin_finalization_process" ||
     family === "admin_catalog" ||
@@ -40334,6 +40335,27 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/discovery-migration/run" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_discovery_migration_run_403", json({ error: "Unauthorized" }, 403))
+      if (!env.ICONOPLASM_DB)
+        return done(
+          "admin_discovery_migration_run_500",
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
+        )
+
+      // This is an operator trigger for the one existing scheduled owner, not
+      // a second migration path. Every page keeps the same cursor-derived
+      // reservation, lease and independently reviewed write bound.
+      const result = await migrateIconoplasmCompactDiscoveryForScheduled(env)
+      return done(
+        result?.ok === true
+          ? "admin_discovery_migration_run"
+          : "admin_discovery_migration_run_pending",
+        json(result, result?.ok === true ? 200 : 503, { "Cache-Control": "no-store" }),
       )
     }
 
