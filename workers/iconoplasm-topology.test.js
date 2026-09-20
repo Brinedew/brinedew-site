@@ -30,7 +30,10 @@ test("IPD-009 keeps the protected filenames and one-owner topology executable", 
 
   const lifecycle = read("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
   assert.match(lifecycle, /ARCHITECTURE FENCE \[IPD-009\]|IPD-009/)
-  assert.match(lifecycle, /Static Assets serves the one SPA application shell/i)
-  assert.match(lifecycle, /content hash[\s\S]*root manifest[\s\S]*directory/i)
-  assert.match(lifecycle, /never enters a Worker, D1, Queue, Durable Object/i)
+  assert.match(
+    lifecycle,
+    /anonymous reader[\s\S]*application shell[\s\S]*published Iconoplasm[\s\S]*artifacts/i,
+  )
+  assert.match(lifecycle, /without consulting mutable application state/i)
+  assert.match(lifecycle, /D1, Durable Object, or Queue access/i)
 })
