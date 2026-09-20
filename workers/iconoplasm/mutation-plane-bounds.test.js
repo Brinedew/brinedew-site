@@ -579,6 +579,59 @@ test("mutation admission fails closed when the account-wide provider observation
   assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_STALE")
 })
 
+test("stale projected telemetry is refreshed once from the live provider authority", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const staleAt = new Date(Date.now() - 91 * 60_000).toISOString()
+  const day = new Date().toISOString().slice(0, 10)
+  let refreshes = 0
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
+    },
+    { KV: providerObservationKv({ generatedAt: staleAt }) },
+    {
+      accountUsage: {
+        async refresh() {
+          refreshes += 1
+          return {
+            day,
+            measured_at: Date.now(),
+            rows_read: 0,
+            rows_written: 123,
+            requests: 1,
+          }
+        },
+      },
+    },
+  )
+  const reserve = (operationId) =>
+    owner.fetch(
+      new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day_key: day,
+          lane: "user_action",
+          operation_id: operationId,
+          units: 1,
+        }),
+      }),
+    )
+
+  const first = await reserve("provider-observation:live-refresh:first")
+  assert.equal(first.status, 200)
+  assert.equal((await first.json()).ok, true)
+  assert.equal(owner.providerObservationCache?.rows_written, 123)
+  assert.equal(owner.providerObservationCache?.source, "live_provider")
+  const second = await reserve("provider-observation:live-refresh:second")
+  assert.equal(second.status, 200)
+  assert.equal(refreshes, 1)
+})
+
 test("fresh account-wide provider writes from other databases consume ordinary headroom", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
