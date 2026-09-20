@@ -26195,6 +26195,16 @@ export async function migrateIconoplasmCompactDiscoveryForScheduled(env) {
   }
 }
 
+export function mutationLaneForSyncFinalizationRows(rows) {
+  const finalizationRows = Array.isArray(rows) ? rows : []
+  return finalizationRows.length > 0 &&
+    finalizationRows.every(
+      (row) => sanitizeText(row?.reason || "", 2000) === "generation_session_publish",
+    )
+    ? "laptop_delivery"
+    : "finalization_recovery"
+}
+
 export async function processPendingSyncFinalizationJobs(
   env,
   ctx,
@@ -26244,7 +26254,7 @@ export async function processPendingSyncFinalizationJobs(
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
     const reservationOperationId = `finalization:${job.symbol}:${job.job_version}:${job.phase}`
     const admission = await reserveIconoplasmMutationWrites(env, {
-      lane: "finalization_recovery",
+      lane: mutationLaneForSyncFinalizationRows([job]),
       operationId: reservationOperationId,
       // The queue invocation is already hard-limited to 50 D1 statements. A
       // complete phase keeps that full reservation because indexed/triggered
@@ -26391,7 +26401,7 @@ export async function processPendingSyncFinalizationJobs(
       )
       completionOperationId = `finalization-complete-page:${completionDigest}`
       const admission = await reserveIconoplasmMutationWrites(env, {
-        lane: "finalization_recovery",
+        lane: mutationLaneForSyncFinalizationRows(readyFinalizations),
         operationId: completionOperationId,
         units: 50,
       })

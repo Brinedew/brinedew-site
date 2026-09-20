@@ -6,6 +6,7 @@ import test from "node:test"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
+  mutationLaneForSyncFinalizationRows,
   processPendingSyncFinalizationJobs,
   processVoteProjectionRefreshJobBatch,
   scheduleVoteProjectionRefresh,
@@ -36,6 +37,21 @@ const voteProjectionSchema = [
     "utf8",
   ),
 ].join("\n")
+
+test("laptop publications spend only the laptop-delivery mutation lane", () => {
+  assert.equal(
+    mutationLaneForSyncFinalizationRows([
+      { reason: "generation_session_publish" },
+      { reason: "generation_session_publish" },
+    ]),
+    "laptop_delivery",
+  )
+  assert.equal(
+    mutationLaneForSyncFinalizationRows([{ reason: "workstation_sync_finalization" }]),
+    "finalization_recovery",
+  )
+  assert.equal(mutationLaneForSyncFinalizationRows([]), "finalization_recovery")
+})
 
 class BoundStatement {
   constructor(raw, sql, args = []) {
@@ -1091,8 +1107,16 @@ test("completed-pending finalization reserves once for one bounded completion pa
           ) {
             return {
               results: [
-                { gene_symbol: "BRCA1", job_version: 12 },
-                { gene_symbol: "TP53", job_version: 11 },
+                {
+                  gene_symbol: "BRCA1",
+                  job_version: 12,
+                  reason: "generation_session_publish",
+                },
+                {
+                  gene_symbol: "TP53",
+                  job_version: 11,
+                  reason: "generation_session_publish",
+                },
               ],
             }
           }
@@ -1134,7 +1158,7 @@ test("completed-pending finalization reserves once for one bounded completion pa
   )
   assert.equal(mutations, 0)
   assert.equal(reservations.length, 1)
-  assert.equal(reservations[0].lane, "finalization_recovery")
+  assert.equal(reservations[0].lane, "laptop_delivery")
   assert.equal(reservations[0].units, 50)
   assert.match(reservations[0].operation_id, /^finalization-complete-page:[a-f0-9]{64}$/)
 })
