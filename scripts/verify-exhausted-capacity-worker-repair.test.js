@@ -6,7 +6,7 @@ import { requireNormalWorkerRepairState } from "./verify-exhausted-capacity-work
 
 test("exhausted-capacity repair accepts a schema-free worker diff", () => {
   const paths = [
-    ".github/workflows/iconoplasm-d1-statement-burn-watch.yml",
+    ".github/workflows/refresh-iconoplasm-observability-snapshot.yml",
     "docs/ICONOPLASM_OPERATIONS.md",
     "scripts/verify-exhausted-capacity-worker-repair.mjs",
     "workers/generated/operation-cost-identities.js",

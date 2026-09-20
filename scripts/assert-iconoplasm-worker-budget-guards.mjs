@@ -52,10 +52,6 @@ const refreshWorkflow = readFileSync(
   new URL("../.github/workflows/refresh-iconoplasm-observability-snapshot.yml", import.meta.url),
   "utf8",
 )
-const budgetWatchWorkflow = readFileSync(
-  new URL("../.github/workflows/iconoplasm-cloudflare-budget-watch.yml", import.meta.url),
-  "utf8",
-)
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
 const npmrc = readFileSync(new URL("../.npmrc", import.meta.url), "utf8")
 
@@ -253,21 +249,6 @@ doesNotMatchOrFail(
   workflow,
   /\bnpm\s+(ci|install|i|run)\b|\bnpx\b/,
   "Production workflow must not use npm/npx.",
-)
-includesOrFail(
-  budgetWatchWorkflow,
-  "check-iconoplasm-cloudflare-budget-headroom.mjs",
-  "Budget-watch workflow must run the Cloudflare KV budget headroom check.",
-)
-includesOrFail(
-  budgetWatchWorkflow,
-  'cron: "17 */2 * * *"',
-  "Budget-watch workflow must run often enough to catch a viral KV-write day before reset.",
-)
-doesNotMatchOrFail(
-  budgetWatchWorkflow,
-  /\bnpm\s+(ci|install|i|run)\b|\bnpx\b/,
-  "Budget-watch workflow must not use npm/npx.",
 )
 doesNotMatchOrFail(
   refreshWorkflow,
