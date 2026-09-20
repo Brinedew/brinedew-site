@@ -199,10 +199,12 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
   const llms = await readFile(path.join(outputRoot, "llms.txt"), "utf8")
   const redirects = await readFile(path.join(outputRoot, "_redirects"), "utf8")
   assert.match(robots, /Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml/)
-  assert.match(sitemap, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes\/A1-AG<\/loc>/)
+  assert.doesNotMatch(sitemap, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes/)
   assert.match(llms, /# Iconoplasm/)
   assert.match(redirects, /\/blot\/\* https:\/\/iconoplasmportraits\.b-cdn\.net\/blot\/:splat 302/)
   assert.match(redirects, /\/portraits\/\* \/static\/iconoplasm\/blot-placeholder\.svg 200/)
+  assert.match(redirects, /\/genes \/ 301/)
+  assert.match(redirects, /\/genes\/\* \/ 301/)
   assert.doesNotMatch(sitemap, /<main>Iconoplasm<\/main>/)
 })
 

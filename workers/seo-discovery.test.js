@@ -1234,7 +1234,7 @@ test("homepage discovery links the raw archive without adding immersive navigati
   assert.doesNotMatch(html, />Gene index<\/a>/)
   assert.match(
     contentSource,
-    /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/genes" tabindex="-1">published human gene cards<\/a>/,
+    /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/" tabindex="-1">published human gene cards<\/a>/,
   )
   const directBlotIndex = contentSource.indexOf(
     "https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp",

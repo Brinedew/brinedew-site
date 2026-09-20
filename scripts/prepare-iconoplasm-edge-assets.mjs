@@ -2,7 +2,6 @@ import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "nod
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
-import { ICONOPLASM_GENE_RANGES } from "../workers/iconoplasm-gene-discovery.js"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -109,10 +108,6 @@ function iconoplasmSitemap(symbols) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iconoplasm.brinedew.bio/</loc></url>
-  <url><loc>https://iconoplasm.brinedew.bio/genes</loc></url>
-${ICONOPLASM_GENE_RANGES.map(
-  (range) => `  <url><loc>https://iconoplasm.brinedew.bio/genes/${range.slug}</loc></url>`,
-).join("\n")}
 ${symbols
   .map(
     (symbol) =>
@@ -129,7 +124,7 @@ const iconoplasmLlms = `# Iconoplasm
 
 Iconoplasm maps human-gene biology onto memorable visual character cards called blots.
 
-- [Gene reference catalog](https://iconoplasm.brinedew.bio/genes)
+- [Published gene-card archive](https://iconoplasm.brinedew.bio/)
 - [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
 - Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
@@ -137,6 +132,8 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 const redirectsFile = `/blot/* https://iconoplasmportraits.b-cdn.net/blot/:splat 302
 /portraits/* /static/iconoplasm/blot-placeholder.svg 200
+/genes / 301
+/genes/* / 301
 `
 
 export async function writeIconoplasmCompatibilityArtifacts({
