@@ -32,7 +32,7 @@ const readyPhases = ["completed_pending_finalize", "completed"]
 export const GLOBAL_READY_FINALIZATION_SQL = `SELECT * FROM (${readyPhases
   .map(
     (phase, priority) => `
-  SELECT * FROM (SELECT gene_symbol, job_version, next_attempt_at, requested_at, ${priority} AS priority
+  SELECT * FROM (SELECT gene_symbol, job_version, reason, next_attempt_at, requested_at, ${priority} AS priority
   FROM icono_sync_finalization_jobs INDEXED BY idx_icono_finalization_unfinished
   WHERE status <> 'completed' AND phase = '${phase}'
   ORDER BY next_attempt_at, requested_at, gene_symbol LIMIT ${FINALIZATION_COMPLETION_PAGE_SIZE})
@@ -42,7 +42,7 @@ export const GLOBAL_READY_FINALIZATION_SQL = `SELECT * FROM (${readyPhases
     " UNION ALL ",
   )}) ORDER BY priority, next_attempt_at, requested_at, gene_symbol LIMIT ${FINALIZATION_COMPLETION_PAGE_SIZE}`
 
-export const SCOPED_READY_FINALIZATION_SQL = `SELECT gene_symbol, job_version
+export const SCOPED_READY_FINALIZATION_SQL = `SELECT gene_symbol, job_version, reason
   FROM icono_sync_finalization_jobs INDEXED BY sqlite_autoindex_icono_sync_finalization_jobs_1
   WHERE gene_symbol IN (SELECT value FROM json_each(?))
     AND status <> 'completed' AND phase IN ('completed_pending_finalize', 'completed')
