@@ -299,10 +299,6 @@ async function releaseFromCli(cacheBust) {
           configPath,
           "--var",
           `ICONOPLASM_HTML_SHELL_CACHE_VERSION:${cacheBust}-backend`,
-          "--triggers",
-          "55 23 * * *",
-          "3 0 * * *",
-          "6 12 * * *",
         ])
       },
       startMigration: async () => {
@@ -339,10 +335,6 @@ async function releaseFromCli(cacheBust) {
           fileURLToPath(MANIFEST),
           "--var",
           `ICONOPLASM_HTML_SHELL_CACHE_VERSION:${cacheBust}-backend`,
-          "--triggers",
-          "55 23 * * *",
-          "3 0 * * *",
-          "6 12 * * *",
         ]),
     })
   } finally {

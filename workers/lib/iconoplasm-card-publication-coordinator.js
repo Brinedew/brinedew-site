@@ -532,8 +532,20 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
       try {
         return await this.exclusive(async () => {
           if (path === "/bootstrap") await this.publisher.bootstrap()
-          else if (path === "/migrate") await this.publisher.migrate()
-          else if (path === "/wake") {
+          else if (path === "/migrate") {
+            await this.publisher.migrate()
+            if (this.repo.get("job") && this.repo.get("failure")) {
+              // An authenticated release retry means the deployed publisher or
+              // its dependencies changed. Keeping the previous code version's
+              // exponential retry timestamp can make the release's five-minute
+              // progress gate fail before the repaired job gets one attempt.
+              // Clear only the retained failure receipt; the exact durable job,
+              // cursor, and identities remain. The arm below then schedules one
+              // immediate bounded attempt through the same publisher owner.
+              this.repo.reserveWrites(2, { control: true })
+              this.repo.remove("failure")
+            }
+          } else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)
             this.publisher.wake()

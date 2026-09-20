@@ -117,6 +117,16 @@ test(
               this.repo.put('job',{migration:true,bootstrap:false,group:2,groups:[{},{},{}],offset:12,seal_offset:128,started_at:'2026-09-19T00:01:00.000Z'});
               return super.fetch(new Request('https://test/status'));
             }
+            if(new URL(request.url).pathname === '/operator-retry-test') {
+              const future=Date.now()+15*60*1000;
+              const day=new Date().toISOString().slice(0,10);
+              this.repo.put('write_allocation',{day,reserved:0,accounting_version:2});
+              this.repo.put('job',{migration:true,bootstrap:false,group:0,groups:[{}],offset:0,seal_offset:0,started_at:'2026-09-19T00:01:00.000Z'});
+              this.repo.put('failure',{attempts:5,message:'old deployed failure',retry_at:future});
+              await this.state.storage.setAlarm(future);
+              const response=await super.fetch(new Request('https://test/migrate',{method:'POST'}));
+              return Response.json({status:response.status,failure:this.repo.get('failure'),alarm:await this.state.storage.getAlarm(),future});
+            }
             return super.fetch(request);
           }
         }
@@ -228,6 +238,12 @@ test(
         seal_offset: 128,
         started_at: "2026-09-19T00:01:00.000Z",
       })
+      const operatorRetry = await (
+        await runtime.dispatchFetch("https://test/operator-retry-test")
+      ).json()
+      assert.equal(operatorRetry.status, 202)
+      assert.equal(operatorRetry.failure, null)
+      assert.ok(operatorRetry.alarm < operatorRetry.future)
       assert.equal(quota.reset.day, new Date().toISOString().slice(0, 10))
     } finally {
       await runtime.dispose()
