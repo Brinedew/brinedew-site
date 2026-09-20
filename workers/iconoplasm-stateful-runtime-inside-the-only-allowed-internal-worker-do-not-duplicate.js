@@ -18391,24 +18391,39 @@ export class IconoplasmVoteCoordinator {
       await this.publication.commitSelection(() => {
         if ((Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision)
           throw new Error("FINALIZATION_AUTHORITY_MOVED")
-        // Retained finalization may introduce accepted candidates. It cannot
-        // remove or edit candidates already governed by V2. Such conflicts
-        // require an exact authoring-authority command under B-726.
+        // Retained finalization may introduce accepted candidates. Existing
+        // V2 rows remain authoritative: an omitted or divergent legacy copy
+        // is evidence to retain in the receipt, never permission to erase or
+        // overwrite the newer authority.
         const incoming = new Map(
           second.items.map((raw) => {
             const item = normalizeCandidate(raw)
-            return [item.asset_sha256, JSON.stringify(item)]
+            return [item.asset_sha256, item]
           }),
         )
+        const existingAssetShas = new Set()
+        let candidateConflictCount = 0
+        let candidateOmittedCount = 0
         for (const raw of this.state.storage.sql
           .exec("SELECT * FROM gene_candidate_authority")
           .toArray()) {
           const item = normalizeCandidate(raw)
-          if (incoming.get(item.asset_sha256) !== JSON.stringify(item))
-            throw new Error("FINALIZATION_AUTHORITY_CONFLICT")
+          existingAssetShas.add(item.asset_sha256)
+          const legacyCopy = incoming.get(item.asset_sha256)
+          if (!legacyCopy) candidateOmittedCount += 1
+          else if (JSON.stringify(legacyCopy) !== JSON.stringify(item)) candidateConflictCount += 1
         }
-        imported = this.applyCandidateAuthorityCore(second.items, { replace: false })
-        receipt.candidate_count = Number(imported?.candidate_count || 0) || 0
+        const newCandidates = second.items.filter(
+          (raw) => !existingAssetShas.has(normalizeSha256(raw?.asset_sha256 || "")),
+        )
+        imported = this.applyCandidateAuthorityCore(newCandidates, { replace: false })
+        const total = this.state.storage.sql
+          .exec("SELECT COUNT(*) AS candidate_count FROM gene_candidate_authority")
+          .toArray()[0]
+        receipt.candidate_count = Number(total?.candidate_count || 0) || 0
+        receipt.candidate_imported_count = Number(imported?.candidate_count || 0) || 0
+        receipt.candidate_conflict_count = candidateConflictCount
+        receipt.candidate_omitted_count = candidateOmittedCount
         receipt.candidate_changed = imported?.changed === true
         // The receipt, candidate mutation and publication intent share the
         // existing owner's transaction. A failed intent/alarm rolls all back.
