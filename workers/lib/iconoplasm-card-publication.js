@@ -565,9 +565,15 @@ export function createCardPublication({
     repo.reserveWrites?.(2)
     for (let index = 0; index < slice.length; index += CARD_PUBLICATION_CONCURRENCY) {
       await settlePublicationWrites(
-        slice
-          .slice(index, index + CARD_PUBLICATION_CONCURRENCY)
-          .map((item) => objects.publishBlotAlias(item.symbol, item.card?.payload?.blot || null)),
+        slice.slice(index, index + CARD_PUBLICATION_CONCURRENCY).map((item) =>
+          objects.publishBlotAlias(item.symbol, item.card?.payload?.blot || null, {
+            // Backfill is a compatibility projection over an already committed
+            // immutable head. A historical 404 gets the static placeholder;
+            // ordinary publication remains strict and cannot commit a missing
+            // immutable source.
+            allowMissingImmutablePlaceholder: job.alias_backfill === true,
+          }),
+        ),
       )
     }
     repo.put("job", { ...job, alias_offset: offset + slice.length })
