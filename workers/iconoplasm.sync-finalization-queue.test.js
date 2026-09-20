@@ -1361,10 +1361,10 @@ test("admin finalization pending exposes queued, retrying, and pending-finalize 
     pending_finalize: 1,
     completed: 1,
     unfinished: 3,
-    pending_handoffs: 1,
+    pending_handoffs: 0,
     publication_next_attempt_at: null,
     last_completed_at: "2026-04-16T00:04:00.000Z",
-    total_pending: 4,
+    total_pending: 3,
   })
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),
@@ -1427,10 +1427,10 @@ test("admin finalization pending can scope the snapshot to selected symbols", as
     pending_finalize: 1,
     completed: 0,
     unfinished: 1,
-    pending_handoffs: 1,
+    pending_handoffs: 0,
     publication_next_attempt_at: null,
     last_completed_at: "",
-    total_pending: 2,
+    total_pending: 1,
   })
   assert.deepEqual(
     (payload?.jobs || []).map((job) => job.symbol),

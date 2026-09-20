@@ -47,7 +47,6 @@ import {
 import {
   drainCompletedFinalization,
   readReadyFinalizationPage,
-  readFinalizationPublicationBarrier,
 } from "./iconoplasm/sync-finalization-publication.js"
 import {
   runningFinalizationJobsSql,
@@ -40413,9 +40412,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       const jobs = await listPendingSyncFinalizationJobs(env, { limit, symbols: scopedSymbols })
       const summary = await readSyncFinalizationSummary(env.ICONOPLASM_DB, scopedSymbols)
-      const handoff = await readFinalizationPublicationBarrier(env.ICONOPLASM_DB)
-      const pendingHandoffs =
-        Number(handoff.enqueued_version) > Number(handoff.notified_version) ? 1 : 0
       const queuedCount = summary.queued_count
       const runningCount = summary.running_count
       const retryingCount = summary.retrying_count
@@ -40462,10 +40458,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               pending_finalize: pendingFinalizeCount,
               completed: completedCount,
               unfinished: unfinishedCount,
-              pending_handoffs: pendingHandoffs,
-              publication_next_attempt_at: handoff.next_attempt_at || null,
+              // Publication completion is owned by each gene's V2 coordinator.
+              // The legacy singleton remains queryable for migrations, but it
+              // must never hold workstation completion open after all scoped
+              // finalization rows have finished.
+              pending_handoffs: 0,
+              publication_next_attempt_at: null,
               last_completed_at: latestCompletedAt,
-              total_pending: Number(unfinishedCount) + pendingHandoffs,
+              total_pending: Number(unfinishedCount),
             },
           },
           200,
