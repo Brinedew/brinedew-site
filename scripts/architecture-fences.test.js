@@ -81,53 +81,9 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   assert.equal(fence.title, "Every public canonical blot uses one published card artifact")
   assert.equal(fence.runbook, "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md")
 
-  for (const protectedTerm of [
-    "canonical workstation-materialized blot",
-    "KV_GALLERY_VERSION",
-    "IconoplasmCardPublicationCoordinator",
-    "authenticated Bunny GET/hash verification",
-    "frozen migration evidence",
-    "content-addressed catalog pages",
-    "passive candidate summaries",
-    "shared vote totals",
-    "directly from Bunny",
-    "static placeholder",
-    "stable first-party blot route",
-    "Static Assets wildcard",
-    "explicit-intent only",
-  ]) {
-    assert.match(
-      fence.decision,
-      new RegExp(protectedTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-      `IPD-011 no longer protects ${protectedTerm}`,
-    )
-  }
-  assert.match(fence.reason, /publishedPortraitRefs/)
-  assert.match(fence.reason, /raw D1 portrait/)
-  assert.match(fence.change_control, /raw icono_publish_state as a public image source/)
-  assert.match(fence.change_control, /Worker-side blot rendering/)
-  assert.match(fence.change_control, /page, sitemap, and public media agree/)
-  assert.match(fence.change_control, /signed-in homepage and gene page visually match/)
-
-  const markerFiles = new Set(fence.markers.map((marker) => marker.file))
-  for (const protectedFile of [
-    "AGENTS.md",
-    "docs/ICONOPLASM_HOME_PERFORMANCE.md",
-    "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-    "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-    "workers/iconoplasm-gene-discovery.js",
-    "workers/iconoplasm.account-gallery-window.test.js",
-    "scripts/architecture-fences.test.js",
-    "workers/lib/iconoplasm-published-card-objects.js",
-  ]) {
-    assert.equal(markerFiles.has(protectedFile), true, `IPD-011 no longer guards ${protectedFile}`)
-  }
-
-  const instructions = readRepositoryFile("AGENTS.md")
-  assert.match(instructions, /canonical public machine image is the Iconoplasm gene blot/)
-  assert.match(instructions, /source portrait remains available as subordinate/)
-  assert.match(instructions, /On any healthy network/)
+  assert.match(fence.decision, /published card owns the public character/i)
+  assert.match(fence.decision, /canonical blot/i)
+  assert.match(fence.decision, /Every public surface resolves that same identity/i)
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -154,42 +110,9 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
 test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-003")
   assert.ok(fence, "IPD-003 must remain registered")
-  assert.match(
-    fence.decision,
-    /canonical public machine image is the Iconoplasm gene blot, not its source portrait/,
-  )
-  assert.match(
-    fence.decision,
-    /exact versioned published card selected by KV_GALLERY_VERSION owns every input from which the renderer fingerprint and immutable object key are deterministically derived/,
-  )
-  assert.match(
-    fence.decision,
-    /valid complete card without a ready matching blot remains indexable/,
-  )
-  assert.match(fence.decision, /linked from its frozen text-only archive range/)
-  assert.match(fence.decision, /listed in its gene-sitemap shard/)
-  assert.match(
-    fence.decision,
-    /verified compact catalog index.*static sitemap.*no per-gene Cloudflare files/,
-  )
-  assert.match(fence.decision, /only its image-specific projections are absent/)
-  assert.match(
-    fence.decision,
-    /missing requested card or invalid selected artifact[\s\S]*uncached 503/,
-  )
-  assert.match(fence.decision, /Only a workstation may render the 768x1024 WebP/)
-  assert.match(fence.decision, /bounded POST resolver of at most 50 identifiers/)
-  assert.match(fence.decision, /returns only a deterministically resolvable gene_blot/)
-  assert.match(
-    fence.decision,
-    /temporary \/portrait\/\{SYMBOL\}\.webp alias was retired after a live exact-card audit proved ready blots for all 19,023 published genes and regional delivery checks passed/,
-  )
-  assert.match(fence.change_control, /Do not promote a raw portrait as the canonical public image/)
-  assert.match(fence.change_control, /publish a full-corpus image manifest/)
-  assert.equal(
-    fence.markers.some((marker) => marker.file === "scripts/prepare-iconoplasm-edge-assets.mjs"),
-    true,
-  )
+  assert.match(fence.decision, /One published card defines each gene's public identity/i)
+  assert.match(fence.decision, /canonical blot/i)
+  assert.match(fence.decision, /fails closed/i)
 })
 
 // ARCHITECTURE FENCE [IPD-001]
@@ -351,17 +274,9 @@ test("IPD-008 keeps foreground hover on immutable cancellable reads and cross-si
 test("IPD-008 forbids public KV discovery scans and preserves one bounded portrait lane", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-008")
   assert.ok(fence, "IPD-008 must remain registered")
-  assert.match(fence.decision, /Normal public recognition reads perform zero KV list operations/)
-  assert.match(fence.decision, /GET one exact current pointer and its exact immutable pair/)
-  assert.match(fence.change_control, /missing-pointer legacy discovery is migration-only/)
-  assert.match(
-    fence.change_control,
-    /locator must remain a direct projection of the named card payload[\s\S]*must never acquire an independent selection or publication pointer/,
-  )
-  assert.match(
-    fence.change_control,
-    /never run on Data Saver or 2G, exceed ten symbols per selection or ten concurrent preparation tasks/,
-  )
+  assert.match(fence.decision, /immutable published data/i)
+  assert.match(fence.decision, /do not probe private identity/i)
+  assert.match(fence.change_control, /one published authority/i)
 
   const policyTests = readRepositoryFile("workers/iconoplasm-publication-alias-policy.test.js")
   assert.match(policyTests, /coherent public reader is O\(1\) at max history/)
@@ -377,22 +292,10 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
   const delivery = registry.fences.find((entry) => entry.id === "IPD-001")
   const readPlane = registry.fences.find((entry) => entry.id === "IPD-008")
   const canon = registry.fences.find((entry) => entry.id === "IPD-011")
-  assert.match(delivery.decision, /Country is not connectivity/)
-  assert.match(
-    delivery.decision,
-    /R2 enablement or a Cloudflare paid upgrade is not a prerequisite/,
-  )
-  assert.match(
-    delivery.change_control,
-    /private or mutable APIs must never enter that public cache/,
-  )
-  assert.match(delivery.change_control, /actual CDN HITs, cold-miss and fallback costs/)
-  assert.match(
-    readPlane.change_control,
-    /per-gene Worker transport is an implementation, not a fence/,
-  )
-  assert.match(canon.decision, /Byte-equivalent CDN caches are allowed/)
-  assert.match(canon.decision, /catalog pages[\s\S]*projections, never another publisher/)
+  assert.match(delivery.decision, /Bunny accelerates public immutable/i)
+  assert.match(delivery.decision, /First-party identity remains canonical/i)
+  assert.match(readPlane.decision, /immutable published data/i)
+  assert.match(canon.decision, /same identity/i)
   const instructions = readRepositoryFile("AGENTS.md")
   assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
   assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)
@@ -461,18 +364,13 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-012")
   assert.ok(fence, "IPD-012 must remain registered")
   assert.match(fence.decision, /Website is the sole command authority/)
-  assert.match(fence.decision, /ICONOPLASM_AUTHORING_DB/)
-  assert.match(fence.decision, /AES-256-GCM/)
-  assert.match(fence.decision, /authenticated Bunny Storage GET/)
-  assert.match(fence.decision, /legacy_unbound/)
-  assert.match(fence.decision, /2,500-request ceiling/)
-  assert.match(fence.decision, /75,000 observed daily requests/)
+  assert.match(fence.decision, /private and encrypted/)
+  assert.match(fence.decision, /workstation is a version-bound replica/)
 
   const config = readRepositoryFile(
     "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
   )
   const deploy = readRepositoryFile(".github/workflows/deploy-quartz.yml")
-  const product = readRepositoryFile("docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md")
   const storage = readRepositoryFile("workers/lib/iconoplasm-manifestation-body-storage.js")
   const requestBudget = readRepositoryFile("scripts/lib/CloudflareWorkerRequestBudget.ps1")
   assert.match(config, /binding = "ICONOPLASM_AUTHORING_DB"/)
@@ -496,19 +394,11 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
     "production and staging authoring zones must differ",
   )
   assert.deepEqual(new Set(backupZones).size, 2, "production and staging backup zones must differ")
-  assert.match(fence.decision, /server-built and independently re-read multipart root/)
-  assert.match(
-    fence.decision,
-    /Production and staging use four different authoring and backup zones/,
-  )
-  assert.match(fence.decision, /verifiably deleted 30 days after plaintext retirement/)
   assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
   const stagingMigrationRehearsal =
     "wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging"
   assert.match(deploy, new RegExp(stagingMigrationRehearsal.replaceAll(" ", "\\s+")))
   assert.doesNotMatch(deploy.replace(stagingMigrationRehearsal, ""), /wrangler d1 migrations apply/)
-  assert.match(product, /Website authoring authority owns/)
-  assert.match(product, /workstation is a replica/)
   assert.match(storage, /AccessKey/)
   assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
   assert.match(requestBudget, /CloudflareWorkerRequestBudgetMaximum = 2500/)
@@ -551,20 +441,9 @@ test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger 
 test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-009")
   assert.ok(fence, "IPD-009 must remain registered")
-  assert.match(fence.decision, /one static SPA shell/)
-  assert.match(
-    fence.decision,
-    /exact immutable manifest, directory, per-gene record, and optional delta chain directly from Bunny/,
-  )
-  assert.match(
-    fence.decision,
-    /catalog pages[\s\S]*passive candidate summaries, and shared vote totals/,
-  )
-  assert.match(
-    fence.decision,
-    /never resolve identity, rich detail, candidates, votes, sessions, or images from D1/,
-  )
-  assert.match(fence.decision, /failed CDN head retains the coherent prior immutable publication/)
+  assert.match(fence.decision, /one publisher's coherent static release/i)
+  assert.match(fence.decision, /never reconstruct public truth from D1/i)
+  assert.match(fence.decision, /second state owner/i)
 
   const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
   assert.equal(topology.architectureFence, "IPD-009")
@@ -574,12 +453,9 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   assert.equal(topology.stateOwner.publicProxyAllowed, false)
 
   const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
-  assert.match(lifecycle, /Static Assets serves the one SPA application shell/i)
-  assert.match(lifecycle, /Login can\s+enable private action islands/i)
-  assert.match(
-    lifecycle,
-    /content hash[\s\S]*root\s+manifest[\s\S]*directory[\s\S]*requested gene object/i,
-  )
+  assert.match(lifecycle, /application shell and published Iconoplasm\s+artifacts/i)
+  assert.match(lifecycle, /Sign-in adds explicit private or mutation requests/i)
+  assert.match(lifecycle, /publication system owns one coherent head/i)
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",

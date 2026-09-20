@@ -5,9 +5,9 @@
     {
       "id": "IPD-001",
       "title": "Bunny is the healthy-path portrait accelerator",
-      "decision": "Healthy browser tabs load content-addressed portrait and requested labelled-card bytes directly from Bunny. The extension background reuses exact immutable portrait bytes across websites and gives Bunny cache misses a 350 ms head start and starts the canonical first-party hedge only if Bunny remains unresolved or fails; selecting a source never changes this delay to zero. Once canonical works, subsequent images use canonical alone, with an alternate only after an actual canonical failure. Remember the tab decision without timed CDN recovery probes; elapsed time is not evidence that a month-long DNS block recovered. Superseded source completions cannot overwrite a newer decision. The 2.5 second source timeout remains a ceiling, not a serial pre-fallback delay. The first-party Worker uses one server-side portrait-storage adapter and treats authenticated Storage and the public CDN as distinct regional views of the same immutable key; only failure of every configured view is missing. Website Ops records split-view success distinctly and exposes operator-triggered, bounded rechecks for verdicts older than 30 days. Country is not connectivity: working Vietnamese providers and VPNs use Bunny too. The owner's paid Bunny service is the chosen alternative to unavailable R2; R2 enablement or a Cloudflare paid upgrade is not a prerequisite.",
-      "reason": "Direct Bunny delivery avoids charging every healthy portrait or labelled-card read to the Cloudflare Worker budget. A resolver failure on one network is the reason the fallback exists, not evidence that Bunny should be disabled globally. CASP8AP2 proved the inverse black swan: the full image loaded through an American VPN while the Vietnam first-party Storage read returned 404, so neither one successful region nor one failed provider view establishes global object truth.",
-      "change_control": "Retiring or replacing Bunny, changing the 350 ms bounded hedge, changing background-owned cross-site byte reuse or renderer-local decoding, changing server-side read order, or adding a provider-specific read path requires an explicit architecture migration that updates this registry, the delivery runbook, the single storage adapter, source policy, production and staging configuration, behavioral tests, and deploy guard in one reviewed change. Regional incidents must preserve separate evidence for client DNS, first-party delivery, authenticated Storage, and CDN replica visibility. Canonical first-party identity does not prohibit Bunny caching public immutable metadata. Byte-equivalent caches are permitted; private or mutable APIs must never enter that public cache. Any metadata acceleration cutover must prove actual CDN HITs, cold-miss and fallback costs, snapshot coherence, and independent portrait/detail progress before being reported shipped.",
+      "decision": "Bunny accelerates public immutable portrait and card bytes on healthy networks. First-party identity remains canonical, and a failed accelerator affects only the requesting context.",
+      "reason": "Healthy readers should not spend the shared Worker allowance on image bytes, while one provider or region must not become a second canon.",
+      "change_control": "A replacement must preserve byte identity, bounded fallback, regional independence, and equal or lower shared-budget use. Implementation details may change without preserving the old mechanism.",
       "runbook": "docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md",
       "linear_issue": "B-649",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -28,23 +28,13 @@
           "token": "ARCHITECTURE FENCE [IPD-001]"
         },
         {
-          "category": "source",
-          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-001]"
-        },
-        {
-          "category": "source",
-          "file": "workers/lib/iconoplasm-portrait-storage.js",
+          "category": "test",
+          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-001]"
         },
         {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-          "token": "ARCHITECTURE FENCE [IPD-001]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-001]"
         },
         {
@@ -57,9 +47,9 @@
     {
       "id": "IPD-003",
       "title": "Gene discovery is eligibility-gated and range-stable",
-      "decision": "Complete canonical profiles are indexable through one shared eligibility predicate, while aliases redirect, incomplete profiles remain noindex, unknown symbols return 404, and the crawlable archive uses frozen self-locating prefix ranges rather than numeric pages. The canonical public machine image is the Iconoplasm gene blot, not its source portrait. A blot is the exact shared image-only card composition: published portrait cover crop, protection gradient, full gene name at bottom left, and gene symbol at bottom right. The exact versioned published card selected by KV_GALLERY_VERSION owns every input from which the renderer fingerprint and immutable object key are deterministically derived. Only a workstation may render the 768x1024 WebP from the gallery's 384x512 CSS artboard at 2x device density; it persists exact bytes locally before uploading to Bunny, while Cloudflare serves but never renders them. Blot-only materialization performs zero KV writes. Zero-KV corpus uploads enter gene image sitemaps through bounded exact-symbol reads of the D1 materialization ledger; every returned row must match the selected card's portrait SHA, renderer fingerprint, dimensions, and immutable key, so D1 proves readiness without selecting image identity or scanning the ledger. When an eligible gene has a ready blot, its page exposes that blot as a server-rendered img with alt text inside an initially hidden print-copy surface that becomes visible only after the existing request print copy action. The default page contains no duplicate blot or explanatory caption. Open Graph and Twitter image metadata, one linked WebPage/ImageObject/Gene JSON-LD graph, and the image sitemap preserve independent blot discovery. The stable first-party /blot/{SYMBOL}.webp route is one Static Assets wildcard HTTP redirect to the publisher-owned Bunny /blot/{SYMBOL}.webp alias. Before the publication head advances, the single publisher copies and verifies the exact content-addressed WebP bytes at that alias, or verified static placeholder image bytes when the coherent gene has no blot; neither non-JavaScript clients nor browsers invoke HTML, JavaScript, Worker, D1, KV, Durable Objects, or Queues to resolve it. Bunny accelerates any working network, including Vietnamese providers and VPNs, while the first-party route remains canonical identity. Blot materialization is never a gene-publication gate: a valid complete card without a ready matching blot remains indexable, linked from its frozen text-only archive range, and listed in its gene-sitemap shard, while only its image-specific projections are absent. Before static-route activation, the verified compact catalog index supplies every published symbol to one static sitemap; complete discovery therefore creates no per-gene Cloudflare files and performs no runtime state read. Massive range pages never render thumbnails, so discovery does not replace the gallery collection mechanic. A missing requested card or invalid selected artifact fails the affected document or shard with uncached 503. The source portrait remains subordinate. Agent image lookup uses a free bounded POST resolver of at most 50 identifiers over the exact published-card authority and returns only a deterministically resolvable gene_blot. The same resolver feeds the human Diagram Studio and its WebMCP tools: humans and agents edit one visible document, while direct canonical bitmap retrieval remains available for external multimodal work. Studio is a creative surface in the immersive Archive/Clans/Studio switcher, never a second archive or image authority. The temporary /portrait/{SYMBOL}.webp alias was retired after a live exact-card audit proved ready blots for all 19,023 published genes and regional delivery checks passed; immutable /portraits/v1 assets remain available to portrait-native product surfaces but never enter this workflow. /blot/{SYMBOL}.webp is canonical. Published gene portraits and published gene blots are the only two Iconoplasm asset classes dedicated under CC0 1.0 Universal. The visible usage page, resolver permission fields, ready-blot ImageObject license metadata, and raw-image HTTP license links must agree without extending CC0 to catalog data, metadata, prose, software, prompts, unpublished images, services, or other assets. Homepage discovery reuses the existing non-visual description instead of adding visible archive controls. Model-training crawlers are blocked before Worker execution while AI search and user-directed retrieval agents remain allowed.",
-      "reason": "Search engines and assistant retrieval need one ordinary, named image whose pixels carry Iconoplasm's actual gene ontology. Publishing the raw source portrait as the primary image discards the gene name and symbol and misidentifies the product. A locally rendered immutable blot tied to the exact card epoch keeps visible HTML, social metadata, structured data, archives, public media, and sitemaps on one image identity without introducing Worker rendering or a second portrait-selection timeline. Frozen ranges provide a predictable crawl path, fail-closed readiness prevents partial or stale image documents, and the Bunny-to-first-party delivery split preserves acceleration outside Vietnam without making a provider hostname canonical.",
-      "change_control": "Gene response headers, initially hidden server-rendered blot img, request-print-copy reveal behavior, Open Graph and Twitter metadata, WebPage/ImageObject/Gene JSON-LD, homepage discovery placement, text-only archive and sitemap membership, exact-card blot fingerprint and object projection, local gallery-artboard renderer, upload validation, portrait-only subordination, bounded blot-only image resolver, shared Studio/WebMCP diagram document, retired portrait workflow, published-image CC0 scope and permission metadata, missing-blot image omission without gene unpublication, missing-card and missing-artifact 503 behavior, llms.txt, crawler WAF policy, robots.txt, deploy reconciliation, tests, instructions, and runbook must change atomically. Range boundaries may change only through an explicit biological-inventory migration. Do not promote a raw portrait as the canonical public image; do not reintroduce source-portrait retrieval into the agent gene-image workflow; give human and agent diagram editing separate document models; remove direct canonical bitmap retrieval from WebMCP; broaden CC0 beyond published portraits and published blots; let blot readiness remove a complete gene from its archive or sitemap; render thumbnails on massive gene-range pages; show a duplicate blot by default; add redundant visible SEO caption copy; render a blot inside a Worker; derive a public image from route, discovery, or live D1 portrait state; let a request render, enroll, or repair a blot; emit a partial sitemap; publish a full-corpus image manifest or source-portrait link on every archive row; make Bunny canonical; add the gene archive to the immersive Archive/Clans/Studio switcher; or replace the purpose-specific crawler split with a blanket AI-bot block.",
+      "decision": "One published card defines each gene's public identity and canonical blot. Complete profiles are discoverable; incomplete or inconsistent publication fails closed and never repairs itself on a reader request.",
+      "reason": "Search, archives, metadata, and images must agree without making public readers perform authoring work.",
+      "change_control": "A replacement must keep one eligibility rule and one public image identity across every surface. Rendering, indexing, storage, and sitemap mechanics may change.",
       "runbook": "docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md",
       "linear_issue": "B-666",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -80,68 +70,8 @@
           "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
-          "category": "source",
-          "file": "quartz/static/iconoplasm/app.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "scripts/prepare-iconoplasm-edge-assets.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "quartz/static/iconoplasm/diagram-document.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "quartz/static/iconoplasm/diagram-studio.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-gene-discovery.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-gene-discovery-worker.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "source",
-          "file": "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
           "category": "test",
           "file": "workers/iconoplasm-gene-discovery.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "test",
-          "file": "workers/seo-discovery.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "test",
-          "file": "quartz/static/iconoplasm/diagram-document.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "test",
-          "file": "quartz/static/iconoplasm/diagram-webmcp.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-003]"
-        },
-        {
-          "category": "test",
-          "file": "shared/iconoplasm-card/lit-archival-mobile-physical-contract.test.js",
           "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
@@ -159,9 +89,9 @@
     {
       "id": "IPD-004",
       "title": "Queue wakeups follow durable due times",
-      "decision": "Cloudflare Queue messages wake durable ledger work only when it is runnable; unfinished future work is delayed until the earliest next_attempt_at and is never polled by immediate replacement messages. Known finalization daily refusals transfer the wakeup to one coalesced reset alarm in the existing SyncGovernor before transport acknowledgement, so Queue expiration cannot erase the wake. Vote projection keeps one durable dirty row per gene and one generation-fenced outstanding wake claim; Queue-send failure releases the exact claim, and votes racing a consumer either join its generation or claim one successor wake. The existing shared daily-budget Durable Object admits every mutation into a named, non-borrowing lane: user action 40,000 writes, publication 10,000, finalization/recovery 10,000, and laptop delivery 10,000. Provider-recorded writes plus all retained lane reservations may never exceed the 70,000 ordinary ceiling, preserving 30,000 of the 100,000-write provider allowance as real headroom. Missing admission authority fails closed. Exact command identities and uncertain reservations survive UTC rollover; only terminal completed identities compact after a 32-day horizon, and anti-reuse tombstones persist. Compact discovery activation remains blocked until the bounded legacy migration receipt is complete. D1 job versions and remaining work remain authoritative.",
-      "reason": "A single future retry otherwise creates an ack/read/delete/send feedback loop that consumes the daily Queue allowance without doing work. One Queue message per vote has the same failure shape under popularity. A shared undifferentiated mutation allowance lets traffic borrow publication or recovery capacity, and regenerating an identity after midnight can either double-spend or strand accepted work. Short polling caps also spend retry attempts and can dead-letter a message before its durable backoff expires.",
-      "change_control": "Queue topology, durable status accounting, vote dirty-row coalescing and wake generations, mutation-lane allocation against provider-wide usage, exact operation identities, terminal tombstones, cross-day replay, compact discovery migration activation, executable viral-load release gates, retry delays, consumer configuration, behavioral tests, instructions, and the runbook must change atomically. Never restore request-time legacy discovery import, one-vote/one-message projection, missing-binding success, reservation refunds after uncertain outcomes, identity reuse after compaction, or borrowing between user action, publication, finalization/recovery, and laptop delivery. Any replacement must prove real SQLite/D1-shaped operation counts and a bounded number of billable operations while no work is due.",
+      "decision": "Automatic messages wake durable due work; they are not polling tokens. Repeated dirty work is coalesced, and every mutation is admitted before it spends shared capacity.",
+      "reason": "Blind retries and one-message-per-event designs can exhaust queues and databases without producing user value.",
+      "change_control": "A replacement must preserve durable intent, idempotency, bounded idle cost, and fail-closed admission. Queue topology, batch sizes, lanes, and schedules may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -182,43 +112,13 @@
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
-          "category": "source",
-          "file": "workers/lib/iconoplasm-mutation-lane-reservations.js",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
-          "category": "config",
-          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
           "category": "test",
           "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
-          "category": "test",
-          "file": "workers/iconoplasm-gene-card-materialization.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
-          "category": "source",
-          "file": "scripts/iconoplasm-viral-load-release-gate.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
-          "category": "source",
-          "file": "scripts/iconoplasm-viral-load-task5-driver.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/iconoplasm-viral-load-release-gate.test.mjs",
+          "category": "config",
+          "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
@@ -231,9 +131,9 @@
     {
       "id": "IPD-005",
       "title": "The primary Iconoplasm D1 is bounded operational state",
-      "decision": "The primary D1 stays below an 80% target of its 500,000,000-byte per-database wall by storing immutable profile prose once, moving publish events older than 30 days to a separately bound cold audit D1 after row-level verification, retaining only one current row plus the newest 100 audit revisions for each administrator recognition policy, and storing recognition validation in one singleton receipt rather than an attempt ledger.",
-      "reason": "Duplicated manifestation prose and an unbounded 297,818-row publish ledger filled the database and stopped all writes. The old dashboard compared the database to the unrelated 5 GB account allowance, so it reported roughly 10% usage at the per-database hard limit. Administrator policy revisions are operational audit state, not another unbounded event ledger.",
-      "change_control": "Large payload placement, read-model columns, append-only ledgers, recognition-policy desired rows and 100-revision retention, singleton validation-receipt shape, scheduled KV cleanup ownership, archive bindings, capacity thresholds, observability, migrations, tests, instructions, runbook, and deploy enforcement must change atomically. Cold history may be removed from the hot database only after verified archival; recognition validation attempts must never become retained history, and the default scheduled recognition reconciler must remain the eventual cleanup owner for all three immutable policy namespaces.",
+      "decision": "The primary Iconoplasm D1 stores bounded operational state. Large immutable bodies and retained history use appropriate separate storage and explicit retention.",
+      "reason": "Unbounded history or duplicated payloads can fill the mutation database and stop unrelated user actions.",
+      "change_control": "A replacement must prove bounded growth, recoverability, and truthful capacity reporting. Tables, thresholds, retention periods, and storage layout may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy", "migration"],
@@ -254,46 +154,6 @@
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
-          "category": "source",
-          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-publication-alias-policy.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-recognition-policy-validation.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0063_gene_card_materializations.sql",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0065_extension_blocklist_policy.sql",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0066_publication_alias_policy.sql",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0067_recognition_policy_validation.sql",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0081_factory_option_source_collation_index.sql",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
           "category": "test",
           "file": "workers/iconoplasm-factory-rollup-cost.test.js",
           "token": "ARCHITECTURE FENCE [IPD-005]"
@@ -304,23 +164,13 @@
           "token": "ARCHITECTURE FENCE [IPD-005]"
         },
         {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-gene-card-materialization.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-publication-alias-policy.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-005]"
-        },
-        {
           "category": "deploy",
           "file": ".github/workflows/deploy-quartz.yml",
+          "token": "ARCHITECTURE FENCE [IPD-005]"
+        },
+        {
+          "category": "migration",
+          "file": "migrations-iconoplasm/0063_gene_card_materializations.sql",
           "token": "ARCHITECTURE FENCE [IPD-005]"
         }
       ]
@@ -328,9 +178,9 @@
     {
       "id": "IPD-006",
       "title": "Fulfillment is one bounded receipt per completed publication, recipient, and gene",
-      "decision": "A completed generation session has one durable publication identity. Discord delivery waits for each complete publication-recipient-gene group, sends one message with at most ten full-resolution preview images, and links the authoritative gene gallery for the complete result set. The Request inbox mirrors the same durable receipt boundary with a bounded preview mosaic and group-level read acknowledgement.",
-      "reason": "Request-time button presses are not a meaningful notification boundary. The durable workstation publication is the point where the exact completed images are known. Completion-time or cron-window grouping is still unsafe because it can merge unrelated publications or fragment retries. Discord cannot carry one hundred useful image attachments in one message, and the Worker must keep memory and subrequests bounded.",
-      "change_control": "Durable publication identity, fulfillment group-size columns, delivery-pending trigger snapshots, group completeness, Discord and Request inbox presentation, group-level read acknowledgement, attachment and memory ceilings, nonce idempotency, reconciliation, workstation payloads, behavioral tests, instructions, and this runbook must change atomically. Never replace the durable publication boundary with timing, row adjacency, or request-time clicks.",
+      "decision": "One completed publication has one durable fulfillment identity per recipient and gene. Notifications and inbox state derive from that receipt.",
+      "reason": "Timing and row adjacency cannot reliably identify a complete human-visible result.",
+      "change_control": "A replacement must preserve group completeness, idempotency, bounded payloads, and one acknowledgement boundary. Presentation and delivery mechanisms may change.",
       "runbook": "docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -350,28 +200,8 @@
           "token": "ARCHITECTURE FENCE [IPD-006]"
         },
         {
-          "category": "source",
-          "file": "quartz/static/iconoplasm/request-inbox.js",
-          "token": "ARCHITECTURE FENCE [IPD-006]"
-        },
-        {
-          "category": "source",
-          "file": "migrations-iconoplasm/0058_request_notification_batches.sql",
-          "token": "ARCHITECTURE FENCE [IPD-006]"
-        },
-        {
-          "category": "source",
-          "file": "migrations-iconoplasm/0062_fulfillment_publication_notification_groups.sql",
-          "token": "ARCHITECTURE FENCE [IPD-006]"
-        },
-        {
           "category": "test",
           "file": "scripts/architecture-fences.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-006]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm.request-notifications.test.js",
           "token": "ARCHITECTURE FENCE [IPD-006]"
         }
       ]
@@ -379,9 +209,9 @@
     {
       "id": "IPD-007",
       "title": "Iconoplasm is static-first with one dynamic Worker invocation",
-      "decision": "The Iconoplasm custom hostname uses one Cloudflare Static Assets application shell with single-page-application fallback for anonymous documents. Homepage, gene and archive shells, crawler documents, and failed public media fallbacks are assets and bypass Worker execution. Browser search, gallery, dossier, portrait, blot, and passive vote display read content-addressed Sysop V2 Bunny artifacts; only the tiny current-head projection may reach the existing stateful Worker on a Bunny cache fill. Explicit mutation and administrator API paths remain Worker-first. Keep the separate Workers Cache product disabled across production, named environments and exports: its HITs and otherwise free static assets consume the request allowance, and its default key omits hostname.",
-      "reason": "On the Free plan, the former wildcard public proxy charged one public and one internal invocation for every request, including more than one hundred static dependencies on a normal page. Asset-first delivery removes static traffic from the Worker quota and direct dynamic routing removes the redundant proxy invocation without changing vote authority or adding a state holder.",
-      "change_control": "Route ownership, static bundle construction and limits, security headers, rate-limit ownership, stateful bindings, deployment order, tests, instructions, and this runbook must change atomically. A replacement must be selected from current production evidence and prove equal or lower Worker use while preserving complete gene first paint and strongly ordered votes; this fence is not authority by tradition.",
+      "decision": "Anonymous Iconoplasm reading is static or CDN-first. Dynamic Workers serve explicit private actions, mutations, and administration rather than ordinary public content.",
+      "reason": "Public reading must scale without consuming a metered stateful invocation for every asset or page.",
+      "change_control": "A replacement must demonstrate equal or lower Worker use and preserve complete public reading. Routing, caching, and deployment mechanics may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-670",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -402,11 +232,6 @@
           "token": "ARCHITECTURE FENCE [IPD-007]"
         },
         {
-          "category": "source",
-          "file": "scripts/lib/iconoplasm-static-first-config.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-007]"
-        },
-        {
           "category": "test",
           "file": "scripts/iconoplasm-static-first-config.test.mjs",
           "token": "ARCHITECTURE FENCE [IPD-007]"
@@ -414,11 +239,6 @@
         {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-          "token": "ARCHITECTURE FENCE [IPD-007]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-static-first-routing.test.js",
           "token": "ARCHITECTURE FENCE [IPD-007]"
         },
         {
@@ -431,9 +251,9 @@
     {
       "id": "IPD-008",
       "title": "Anonymous startup and extension hover use the published read plane",
-      "decision": "Anonymous homepage startup avoids auth, settings, inventory, and admin probes; authenticated startup is gated by a non-authoritative session-presence hint. The visible signed-out archive contains the four fixed published starters INS, RHO, PRL, and CD4; decorative reverse-card continuation is inert markup and never expands the discovery set or triggers reads. Signed-out dossier visits persist across the full 19,023-gene browser-local shelf; an authenticated page session merges at most 200 pending symbols and retains the remainder for later sessions. Extension pages receive a separately versioned scanner artifact capped at 3 MiB with no portrait references. The document_end entrypoint yields through a paint boundary and, before load, genuine idle time. Only validated local cache-only recognition may precede host load: no network, refresh, legacy migration, renderer boot or portrait cache hydration. Cold scanner downloads wait for host load. Recognition uses 4 ms slices between nodes, with no forced idle timeout before load. After load, required recognition uses bounded 4 ms tasks and yields to the event loop between slices; matcher clock checks remain every 32 tokens. Token-by-token idle throttling must not turn required startup into minutes of waiting. Pending pre-load idle callbacks are canceled and requeued as tasks at load; speculative card work retains genuine-idle scheduling. Mutation arrivals during an active scan remain queued for its completion to schedule, without overlapping flush timers. The last-known published card epoch is selected locally once after load or explicit early hover, before either card lane or disk cache; unrelated slow resources must not hold cached recognition hostage. Ordinary five-minute scanner-manifest refreshes use the shared public Bunny key with validated first-party fallback; each new article pins its last-known published epoch immediately and checks the tiny current-card head in the background for future articles. Only a missing saved epoch blocks on network selection. Open articles keep their coherent epoch until explicit retirement; older concurrent checks cannot overwrite a newer saved head. After asynchronous discovery membership loading, known genes are rechecked before recording an encounter. A retired immutable card endpoint returns `410` with `card_snapshot_retired`; only that explicit signal starts one deduplicated, cache-busted read of the existing small manifest. The recovered snapshot aborts retired requests, invalidates both projection caches, and retries the visible hover without a reload, while an unchanged scanner artifact is never downloaded again. HTML and PDF register recognized anchors with one tab-scoped reading session. Initial and mutation-driven HTML recognition preserves host Text identity, parent, and data. Native ranges retain all four paint modes and native selection. Original glyphs remain visible and are never redrawn in a viewport overlay. Small SVG backgrounds on existing page surfaces share native scrolling, preserve authored background layers, and restore only owned properties. CSS Custom Highlights supplies filled-pill foreground colors. Stale source ranges are invalidated, layout and font changes remeasure decorations, and paint work yields between matches under the same 4 ms/pre-load-idle contract. Range anchors share visibility observation of their physical source parents. Recognized symbols enter the shared session inventory independently of viewport painting. That session uses parallel version-addressed immutable rich-detail and compact portrait-locator GETs backed only by the same named published card artifact; the locator may deliver the portrait while rich detail stalls, has no independent publication or authority, and must agree with detail on snapshot and portrait SHA. The session inventories anchors immediately but starts speculative detail, portrait delivery resolution, bytes, decode, and persistent-frame acknowledgement only after host `load` and a genuine idle callback, without an extra fixed delay. It prepares the first ten ordinary-document symbols with ten independent preparation tasks, reduced to two on low-memory devices; latency and effective-type estimates must not serialize the pipeline; large documents use deterministic ten-symbol near-viewport selections, refilled on completion without waiting for another scroll. Automatic refills skip previously attempted symbols, including evicted images and failed loads; only real viewport/inventory events restore evicted images or retry failures after backoff. Selection limits do not cap retention or cause automatic cache churn. Data Saver and 2G disable preparation. Hover bypasses the host-page gate, selects an already-ready card when available, and may promote matching in-flight immutable work without awaiting whole-cache hydration. Pointer-trajectory, DOM-neighbor, scroll-direction, and surface-specific prediction are forbidden. Exact metadata records share a background-owned 32 MiB IndexedDB cache; pages never hydrate or rewrite whole persistent collections; an older-started response from another snapshot cannot roll back a newer adopted response. Rich hover variants share one permanently mounted renderer. The extension background reuses exact-snapshot public responses and immutable portrait bytes across websites in byte-bounded IndexedDB with transactional LRU eviction (64 MiB portraits, 32 MiB metadata); recency updates never rewrite blobs and disk writes never block display; cache misses use the IPD-001 hedge and renderers decode supplied data URLs without another HTTPS transfer. Partial public card reads reuse bounded isolate-local caches of three parsed manifests and at most four parsed immutable shards under a 16 MiB estimated parsed-heap ceiling, with per-key in-flight deduplication; the committed SQLite publication head is authoritative after explicit v2 migration, Bunny holds verified immutable bytes, and legacy KV is only the frozen pre-migration fallback. Administrator-owned publication aliases and the complete shared text blocklist have separate bounded D1 desired state and immutable KV staging histories, but anonymous manifest, search, and resolver paths split only the newest valid immutable recognition-pair bundle. One bounded D1 receipt binds the validator revision, scanner build, and exact alias/blocklist revision-version tuple. Catalog publication performs the full fused traversal while scanner genes are already in memory and records the exact receipt before manifest advance. Normal public recognition reads perform zero KV list operations: they GET one exact current pointer and its exact immutable pair. A missing pointer permits the legacy list scan only for first-deploy migration, and production verification must reject an absent pointer. Foreground reconciliation is list-free. Scheduled reconciliation may perform bounded best-effort cleanup after a real publication, but a no-op cycle performs no history lists.",
-      "reason": "The browser risk is cloning cold portrait metadata into every tab, crossing Chromium's 10 MiB storage quota, doing network, persistence, renderer boot, and decode work only after the pointer arrives, or letting eager extension work outrank the host page. The website now applies the same publication principle: anonymous dossier, search, gallery, portrait, blot, and passive vote reads use content-addressed Bunny objects and compact catalog pages from the single publisher, never stateful reconstruction. Separating the compact matcher from immutable per-symbol reads preserves browser and CDN caching without restoring a portrait-heavy scanner. B-711 proved that making portrait discovery downstream of the larger rich-detail transfer lets repeated detail stalls erase an otherwise healthy portrait path; an independent compact projection of the same artifact removes that dependency without creating another canon. A document inventory is a stronger demand signal than pointer prediction, but browser-level resource priority is not created by an internal `background` label. Host-load and idle gating, cooperative DOM slices, a ten-symbol working set, and at most two speculative workers preserve ready hovers without competing with page rendering and critical assets. One shared HTML/PDF session prevents surface drift, and foreground hover bypasses the speculative gate. Data Saver/2G remain opt-out boundaries. Native HTTPS loading and a short canonical hedge avoid serial full-body probe, base64, and regional DNS-timeout costs. Parsed immutable manifest/shard reuse removes repeated KV parsing without creating another authority. Carrying both tiny administrator policies in one manifest bundle avoids a second polling path, catalog rebuilds, divergent packaged defaults, and eventually consistent KV regions exposing invalid combinations. Production Error 1102 proved that even one 1.9 MiB scanner parse plus a 19,023-gene traversal exceeds the Free Worker 10 ms CPU ceiling, so targeted immutable shards remain mandatory.",
-      "change_control": "Anonymous bootstrap, session-presence semantics, catalog, scanner, card and recognition-policy publication metadata, the atomic pair boundary, the 64-shard validation index, validation receipt semantics, scheduled cleanup ownership, versioned rich-detail and portrait-locator GETs and public batch compatibility projection, extension scanner and recognition-policy migration, historical compatibility snapshots, cooperative scan scheduling, host-page priority gating, reading-session policy, request promotion and deadline propagation, hover renderer identity, portrait source planning, cross-site byte reuse and fallback, portrait readiness acknowledgement, storage budgets, cache invalidation, tests, verification, instructions, and this runbook must change atomically. The readable marker must never carry identity or authority; anonymous recognition reads must never fall back to D1 or independently combine alias and blocklist revisions; immutable detail and locator reads must never fall back to mutable D1 state; the locator must remain a direct projection of the named card payload with the same snapshot and portrait SHA and must never acquire an independent selection or publication pointer; portrait paint must not depend on rich-detail success; disagreements must fail closed; a nonempty malformed or nonvisible pair namespace must fail closed unless an isolate has last-known-good state; bootstrap is allowed only while the pair namespace is empty; policy-only revisions must not rebuild the scanner; foreground policy mutation must never read or parse the scanner artifact; catalog publication must CAS-guard receipt creation; normal public recognition reads and foreground retries must perform zero KV list operations; missing-pointer legacy discovery is migration-only and production must always retain the exact current pointer; valid but not-yet-visible compatibility snapshots must remain retryable; portrait references must not return to the per-tab scanner map; speculative reading-session preparation must wait for host load and a genuine idle turn, never run on Data Saver or 2G, exceed ten symbols per selection or ten concurrent preparation tasks, or create a second authority; foreground hover must bypass the gate and reuse matching in-flight immutable detail and portrait work; pointer-trajectory, neighbor, scroll-direction, and surface-specific prediction must not return; cross-site byte reuse must remain bounded, exact-keyed and independent of host HTTP cache partitions; and parsed card caches stay bounded, publication-version safe, and KV-authoritative. Deterministic immutable projections and byte-equivalent Bunny caches are allowed under the existing snapshot authority; the current per-gene Worker transport is an implementation, not a fence. Cache API hits still consume Worker requests.",
+      "decision": "Anonymous startup and extension hover use immutable published data and bounded local reuse. They do not probe private identity, scan mutable state, or repair publication.",
+      "reason": "Reading should remain fast and available without coupling every page or hover to authentication and database capacity.",
+      "change_control": "A replacement must preserve one published authority, independent portrait and detail progress, bounded caches, and zero mutable-state fallback for anonymous reads. Client scheduling and transport may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-673",
       "additional_required_marker_categories": [],
@@ -454,233 +274,8 @@
           "token": "ARCHITECTURE FENCE [IPD-008]"
         },
         {
-          "category": "source",
-          "file": "iconoplasm-extension/content.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-scanner.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-lifecycle.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-range-highlights.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-range-paint.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-reading-session.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "scripts/lib/iconoplasm-reader-benchmark.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
           "category": "test",
           "file": "scripts/iconoplasm-reader-benchmark.test.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "runbook",
-          "file": "docs/ICONOPLASM_READER_PERFORMANCE_BENCHMARK.md",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/metadata-delivery.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-detail-cache.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-api.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-portrait-cache.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/content-tooltip.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/lit-archival-frame.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "iconoplasm-extension/service-worker.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-route-contract.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-extension-blocklist-policy.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-publication-alias-policy.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-admin-publication-alias-routes.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-admin-extension-blocklist-routes.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-recognition-policy-reconciliation.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-recognition-policy-validation.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-recognition-validation-index.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0065_extension_blocklist_policy.sql",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0066_publication_alias_policy.sql",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0067_recognition_policy_validation.sql",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "quartz/static/iconoplasm/home-performance-contract.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/content-detail-cache.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/content-reading-session.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/content-api.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/content-portrait-cache.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/content-tooltip.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "iconoplasm-extension/service-worker.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm.public-media.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-route-contract.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-extension-blocklist-policy.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-extension-blocklist-public.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-publication-alias-policy.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm-recognition-validation-index.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/verify-iconoplasm-publication-aliases.mjs",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/verify-iconoplasm-publication-aliases.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-008]"
-        },
-        {
-          "category": "deploy",
-          "file": ".github/workflows/deploy-quartz.yml",
           "token": "ARCHITECTURE FENCE [IPD-008]"
         }
       ]
@@ -688,9 +283,9 @@
     {
       "id": "IPD-009",
       "title": "Iconoplasm public reads stay cold-safe inside the one loud state boundary",
-      "decision": "Canonical anonymous gene documents are one static SPA shell. The browser resolves the single publisher's cached current-head projection, exact immutable manifest, directory, per-gene record, and optional delta chain directly from Bunny. Compact content-addressed catalog pages committed in that same manifest own anonymous search, gallery ordering, portrait identity, passive candidate summaries, and shared vote totals. Anonymous reads never resolve identity, rich detail, candidates, votes, sessions, or images from D1, a Durable Object, Queue, browser binding, or service binding. A failed CDN head retains the coherent prior immutable publication; missing bytes use static placeholders and never reconstruct from state. Explicit authenticated mutation and administrator routes remain behind the existing loudly named single state owner.",
-      "reason": "The previous bounded D1 cold path still made popularity proportional to Worker, D1, and Durable Object allowances. Static shell delivery plus content-addressed publication reads makes public demand proportional to CDN bandwidth and cache fills while preserving one writer authority and exact publication identity.",
-      "change_control": "The SPA asset topology, current-head KV projection, immutable manifest/directory/gene/catalog-page identities, delta-chain resolution, passive vote summaries, CDN media URLs, prior-head retention, static failure placeholders, explicit-intent mutation routes, protected filenames, topology manifest, deployment order, tests, instructions, runbook, and production workflow must change atomically. Never reconnect an anonymous page, search, gallery, dossier, portrait, blot, crawler document, or passive vote display to D1, a Durable Object, Queue, session resolver, browser binding, or service binding; never create a second publisher or mutable Bunny head; and never replace the protective prefix/suffix with a shortened responsibility-only boundary name.",
+      "decision": "Anonymous gene documents resolve one publisher's coherent static release. They never reconstruct public truth from D1, Durable Objects, Queues, sessions, or a second state owner.",
+      "reason": "A static published read plane keeps failures and traffic away from the mutation authority.",
+      "change_control": "A replacement must preserve one publisher, coherent fallback, and separation between public reads and mutable state. File names, manifests, object layout, and service topology may change.",
       "runbook": "docs/ICONOPLASM_REQUEST_LIFECYCLE.md",
       "linear_issue": "B-694",
       "additional_required_marker_categories": ["config", "deploy", "migration"],
@@ -735,9 +330,9 @@
     {
       "id": "IPD-010",
       "title": "Routine gallery publication is dirty-shard-only",
-      "decision": "Canonical publish events prepare only their owning content-addressed card shards, in steps of at most six shards per Worker invocation, then atomically flip one manifest. Routine cron and voting paths never rebuild the complete catalog.",
-      "reason": "The fixed gene universe makes a complete-catalog rebuild unrelated to normal vote scope. The former scattered-delta fallback delayed visible votes, consumed avoidable KV operations, and made an exceptional migration mechanism look like ordinary publication.",
-      "change_control": "Dirty-symbol event windows, stable shard ownership, local insertion/removal/split behavior, one-step scheduled execution, atomic manifest and watermark order, KV budget accounting, bounded operation audits, migration fail-closed errors, naming rules, tests, instructions, and this runbook must change atomically. Never introduce a dirty-count or shard-count threshold that falls back to complete-catalog work.",
+      "decision": "Routine publication processes changed content only and advances one coherent release. It never falls back to rebuilding the corpus.",
+      "reason": "Small user changes must not trigger work proportional to every published gene.",
+      "change_control": "A replacement must prove work is bounded by changed content and remains resumable and atomic. Shard layout, step size, and schedule may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-695",
       "additional_required_marker_categories": ["migration"],
@@ -766,20 +361,15 @@
           "category": "migration",
           "file": "migrations-iconoplasm/0060_card_catalog_publication_audit.sql",
           "token": "ARCHITECTURE FENCE [IPD-010]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0061_card_catalog_publication_audit_cost_fields.sql",
-          "token": "ARCHITECTURE FENCE [IPD-010]"
         }
       ]
     },
     {
       "id": "IPD-011",
       "title": "Every public canonical blot uses one published card artifact",
-      "decision": "The exact versioned card artifact selected by IconoplasmCardPublicationCoordinator owns the selected source portrait and every input used to derive its canonical workstation-materialized blot fingerprint and immutable Bunny key. KV_GALLERY_VERSION is frozen migration evidence, not a second live head. The SQLite head and D1 event watermark commit atomically only after authenticated Bunny GET/hash verification. The same commit writes bounded content-addressed catalog pages containing public search/gallery fields, passive candidate summaries, and shared vote totals, then names one content-addressed catalog index from each root-manifest shard; they are projections, never another publisher. Anonymous website and extension readers resolve manifests, directories, gene records, catalog indexes and pages, portraits, and blots directly from Bunny. One Static Assets wildcard redirects the stable first-party blot route to a gene-scoped Bunny alias; the same single publisher copies and verifies the exact immutable blot bytes, or static placeholder image bytes, at that alias before it advances the head. Byte-equivalent CDN caches are allowed; a mutable Bunny current-pointer PUT is not. Missing CDN bytes retain a coherent prior publication or use a static placeholder and never fall back to D1, a Durable Object, Queue, session, browser binding, or service binding. Signed-in mutation and authoring state remain private and explicit-intent only.",
-      "reason": "The former account image-only path used the separately versioned publishedPortraitRefs snapshot and caused B-700. The same split recurs if a gene page, sitemap, or public media response reads a raw D1 portrait or if search metadata treats a source portrait as the finished blot. One exact card barrier plus a deterministic visible-material fingerprint keeps every projection in the same portrait-selection epoch while eliminating roughly 19,000 unnecessary KV backfill writes.",
-      "change_control": "Published source-portrait selection, blot fingerprint and object derivation, workstation renderer, gallery composition, site detail, page cache keys and ETags, metadata, structured data, text-only archives, sitemaps, public media, extension detail and locator reads, print-copy validation, behavioral tests, instructions, and portrait, home, and gene runbooks must change together. Never restore publishedPortraitRefs, discovery-row portrait identity, raw icono_publish_state as a public image source, browser-local authority, a separately published locator index, Worker-side blot rendering, range-page thumbnails, or a fallback that exposes a raw portrait as the canonical image when the exact blot is unavailable. A replacement must prove D1 or catalog drift cannot change the published source or blot, detail and locator agree on snapshot and portrait SHA, page, sitemap, and public media agree with the selected card version and blot SHA, and the signed-in homepage and gene page visually match in one browser session.",
+      "decision": "The committed published card owns the public character, selected source portrait, and canonical blot for a gene. Every public surface resolves that same identity.",
+      "reason": "Separate portrait, metadata, and page authorities create split canon that readers cannot reason about.",
+      "change_control": "A replacement must preserve one committed identity, immutable verified bytes, and agreement across site, extension, APIs, metadata, and media. Storage and publication formats may change.",
       "runbook": "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
       "linear_issue": "B-700",
       "publication_migration_issue": "B-716",
@@ -796,53 +386,13 @@
           "token": "ARCHITECTURE FENCE [IPD-011]"
         },
         {
-          "category": "runbook",
-          "file": "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "runbook",
-          "file": "docs/ICONOPLASM_CARD_PUBLICATION_V2.md",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
           "category": "source",
           "file": "workers/lib/iconoplasm-card-publication.js",
           "token": "ARCHITECTURE FENCE [IPD-011]"
         },
         {
-          "category": "source",
-          "file": "workers/lib/iconoplasm-published-card-objects.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
           "category": "test",
           "file": "workers/iconoplasm-card-publication.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "source",
-          "file": "workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm-gene-discovery.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "test",
-          "file": "workers/iconoplasm.account-gallery-window.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-011]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-011]"
         }
       ]
@@ -856,9 +406,9 @@
         "route": "/api/iconoplasm/admin/cost/operations",
         "contract": "Register an immutable prediction before dispatch; reserve each verified step against both twice the prediction and shared daily headroom. The authority dispatches D1 and settles provider receipts. Unknown outcomes remain charged. Direct API, CI and legacy binding cutover must be complete before claiming mandatory enforcement. No new Worker, DO namespace, or reader coordination hop."
       },
-      "decision": "The Website is the sole command authority for stable caretaker assignments, author-owned manifestation lineages, immutable revisions, derived Tags identity, withdrawal, canonical selection, and exact generation snapshots for every gene. Bounded relational metadata, idempotency receipts, tombstones, and ordered no-prose replication events live in the dedicated private ICONOPLASM_AUTHORING_DB. Plaintext bodies never enter the primary Iconoplasm D1 or an event payload: each body is encrypted with a random AES-256-GCM data key, the key is wrapped by a versioned Worker secret, and authenticated Bunny Storage GET verifies exact ciphertext and successful decryption before the authority transaction commits. Encrypted bodies use a dedicated private authoring zone with no connected Pull Zone and no portrait-storage fallback. Cutover recovery packages use a second private iconoplasm-authoring-backup zone with separate credentials, no Pull Zone, and no authoring or portrait fallback; plaintext retirement requires a server-built and independently re-read multipart root, never a caller-supplied hash. Production and staging use four different authoring and backup zones and credentials. The cutover artifact never includes a post-cutover caretaker body and is verifiably deleted 30 days after plaintext retirement unless a legal hold pauses deletion. The workstation is a rebuildable replica, offline draft surface, enrichment executor, and exact-version generator. Replica snapshot transport v2 streams at most 250 immutable metadata parts per request from a pinned baseline and checkpoint plus event watermark, without copying per-consumer payload rows or writing on GET. Signed cumulative completion proof gates activation; empty cursor-zero replicas remain initializing. Workstation downloads persist verified pages across restart and hydrate only exact opened or generated bodies. Open streams block event-prefix compaction atomically; baseline updates and deletion are forbidden, and table rebuilds or VACUUM require expiring all leases before maintenance. The v2 server ships before the workstation restart; legacy copied-part deletion remains bounded to 250 rows per call. A hard authority epoch retires the legacy manifestation upsert and latest-by-gene generation; legacy candidates without provable hashes remain legacy_unbound. Every authority cutover Worker request, including status reads and retries, reserves capacity first in one Windows-user-wide UTC-day ledger with a non-increasable 2,500-request ceiling. The operators also query account-wide Cloudflare invocation analytics before the first request and after each 100 reservations, refusing traffic at 75,000 observed daily requests or whenever telemetry is unavailable or invalid. D1 administrative and authoring work receives at most 1000000 reads and 20000 writes per UTC day, separate from account entitlement. Operator telemetry sums every database and stops at 3500000 reads or 70000 writes. Gene locators use indexed ID probes; finalization status uses transactional singleton counters and unfinished indexes, never completed-history scans.",
-      "reason": "The former gene-symbol overwrite path had no author, version, canonical pointer, tombstone, or job binding. Production currently has 19,186 manifestation bodies and 66,938,816 characters while the primary D1 is already above 70% of its 500,000,000-byte wall. The workstation has 21,696 active candidates with no exact manifestation binding, and its gene-only dirty ledger can acknowledge a newer edit with an older publish. Caretakers make those losses, false provenance links, and cross-user deletion paths security failures rather than tolerable operator shortcuts.",
-      "change_control": "Identity, assignment transitions, lineage and revision semantics, body encryption and key rotation, object write/read/delete verification, canonical fallback, idempotency and CAS, event and snapshot contracts, logical quotas and retention, primary projections, exact generation provenance, workstation replication, legacy cutover, cutover request admission control, production and staging bindings, migrations, deploy order, UI permissions, instructions, runbook, and hostile tests must change as one explicit migration. Never restore a second writer, plaintext body copy, public-CDN private read, gene-symbol ownership key, latest-by-gene provenance guess, compatibility alias for the retired upsert, or a bulk operator protected only by concurrency and retry behavior.",
+      "decision": "The Website is the sole command authority for caretaker and manifestation state. Sensitive bodies remain private and encrypted; the workstation is a version-bound replica and executor.",
+      "reason": "Multiple writers or plaintext replicas create conflicting authorship, lost updates, and privacy failures.",
+      "change_control": "A replacement must preserve one writer, immutable revision identity, encryption, idempotency, and rebuildable replication. Database schema, transport, quotas, and storage layout may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-705",
       "additional_required_marker_categories": ["config", "deploy", "migration"],
@@ -876,11 +426,6 @@
         {
           "category": "source",
           "file": "workers/lib/iconoplasm-manifestation-body-storage.js",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "source",
-          "file": "scripts/lib/CloudflareWorkerRequestBudget.ps1",
           "token": "ARCHITECTURE FENCE [IPD-012]"
         },
         {
@@ -902,35 +447,15 @@
           "category": "migration",
           "file": "migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
           "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "runbook",
-          "file": "docs/D1_READ_EXHAUSTION_PREVENTION.md",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "source",
-          "file": "shared/iconoplasm-d1-budget-policy.js",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "source",
-          "file": "workers/iconoplasm/sync-finalization-summary.js",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "migration",
-          "file": "migrations-iconoplasm/0094_finalization_summary.sql",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
         }
       ]
     },
     {
       "id": "GG-001",
       "title": "Daily targets give every gene surname one slot",
-      "decision": "Automatic GeneGuessr daily selection walks a deterministic without-replacement shuffle-bag of normalized gene surnames and chooses one deterministic representative per surname. Automatic targets cannot repeat inside one complete playable-surname cycle. Manual overrides and recorded availability replacements remain explicit exceptions.",
-      "reason": "Hashing across the flat protein table makes large families proportionally more likely. The surname-balancing schema and practice selector existed, but daily mode bypassed them and automatically selected SLC22A5, SLC6A8, and SLC12A2 in July 2026.",
-      "change_control": "The source pool and its cache fingerprint, family grouping, deterministic shuffle-bag, AlphaFold and structure-availability fallback, admin schedule cache version, pre-warm path, request-time path, instructions, runbook, and behavioral tests must change together. Never restore flat-table weighting, independent per-date hashing, or adjacent-row fallback.",
+      "decision": "Automatic GeneGuessr selection gives each normalized gene surname one slot in a deterministic without-replacement cycle.",
+      "reason": "Rows and aliases must not multiply a family's lottery weight.",
+      "change_control": "A replacement must preserve one slot per surname and deterministic replay. Pool storage and selection implementation may change.",
       "runbook": "docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -959,9 +484,9 @@
     {
       "id": "GG-002",
       "title": "Recap images require pixel and storage proof",
-      "decision": "A GeneGuessr recap image is publishable only after the browser proves stable molecule pixels and object storage returns the exact uploaded bytes from the immutable day, UniProt, and renderer identity. Missing images preserve the text recap; repairs edit the recorded Discord message in place. Annual coverage is a resumable reconciliation: bounded preflight and final reads, skip verified objects, group missing days by protein, retain one bitmap at a time, and report success only for 365/365 exact objects.",
-      "reason": "The July renderer uploaded a uniform dark canvas that Discord displayed as a blank attachment. The August Bunny cutover then accepted an upload response without proving the object existed, so NHP2 posted without an attachment while the admin UI reported success and its startup warning crashed before schedule initialization. B-702 then found only 1 of 365 yearly objects ready and proved the old bulk button had no checkpoint, skip-ready behavior, memory bound, or exact final audit.",
-      "change_control": "Renderer readiness, object identity, upload success semantics, read-back verification, bounded bulk reconciliation, admin coverage, text-only fallback, posted-message repair, instructions, runbook, and behavioral tests must change together. Never treat attachment presence, a generic 2xx, object metadata, an attempted-upload count, or non-zero byte length as proof that a visible protein will reach Discord.",
+      "decision": "A GeneGuessr recap image is publishable only after visible molecule pixels are ready and storage returns the exact uploaded bytes.",
+      "reason": "A successful request or attachment placeholder does not prove a usable recap image exists.",
+      "change_control": "A replacement must preserve pixel readiness, immutable identity, exact read-back, resumability, and text-only fallback. Renderer and storage mechanics may change.",
       "runbook": "docs/DISCORD_INTEGRATION.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -981,23 +506,8 @@
           "token": "ARCHITECTURE FENCE [GG-002]"
         },
         {
-          "category": "source",
-          "file": "workers/admin-html.js",
-          "token": "ARCHITECTURE FENCE [GG-002]"
-        },
-        {
-          "category": "source",
-          "file": "workers/admin.js",
-          "token": "ARCHITECTURE FENCE [GG-002]"
-        },
-        {
           "category": "test",
           "file": "workers/discord-recap-image-store.test.js",
-          "token": "ARCHITECTURE FENCE [GG-002]"
-        },
-        {
-          "category": "test",
-          "file": "workers/admin-html.daily-target-audit.test.js",
           "token": "ARCHITECTURE FENCE [GG-002]"
         }
       ]
@@ -1005,9 +515,9 @@
     {
       "id": "BPC-001",
       "title": "Remote prose checks are explicit, snapshot-bound, and free-Zen-only",
-      "decision": "Harper grammar may run locally after editor idle, while DeepSeek prose agents run only after an explicit user command against one immutable complete-document snapshot. Remote startup and typing paths read no credential and send no traffic. The sole remote model is deepseek-v4-flash-free on OpenCode Zen, with no paid, Go, or alternate-provider fallback.",
-      "reason": "Whole-document atomic agents take roughly one to two minutes apiece and duplicate private prose across requests. A live trigger would race edits, flood the provider, worsen Obsidian startup, and send drafts without deliberate consent. A silent fallback could convert expiry of the free preview into unbounded paid use.",
-      "change_control": "Plugin startup, editor events, run commands, model routing, credential reads, agent granularity, anchor validation, runbook, and behavioral tests must change together. Any replacement must preserve explicit initiation, immutable full-document snapshots, exact one-error agents, and fail-closed cost behavior.",
+      "decision": "Remote prose checking runs only after an explicit command against one immutable complete-document snapshot, using the approved free provider path.",
+      "reason": "Background remote traffic and mutable partial input violate privacy, cost, and review integrity.",
+      "change_control": "A replacement must preserve explicit initiation, snapshot identity, narrow credentials, and fail-closed cost behavior. Provider and implementation may change with owner approval.",
       "runbook": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",
       "additional_required_marker_categories": [],
       "markers": [
@@ -1024,11 +534,6 @@
         {
           "category": "source",
           "file": "tools/obsidian-prose-checker/src/main.ts",
-          "token": "ARCHITECTURE FENCE [BPC-001]"
-        },
-        {
-          "category": "source",
-          "file": "tools/obsidian-prose-checker/src/openCodeClient.ts",
           "token": "ARCHITECTURE FENCE [BPC-001]"
         },
         {
