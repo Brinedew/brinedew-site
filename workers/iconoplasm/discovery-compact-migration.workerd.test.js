@@ -15,7 +15,10 @@ import {
   migrateLegacyDiscoveryPage,
   readCompactDiscoveryActivation,
 } from "./discovery-compact-migrate.js"
-import { migrateIconoplasmCompactDiscoveryForScheduled } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  migrateIconoplasmCompactDiscoveryForScheduled,
+} from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   ensureDiscoveryDictionaryForNames,
   loadDiscoveryDictionaryForNames,
@@ -389,6 +392,64 @@ test(
       assert.equal(reservations[0].units, 204)
       assert.ok(actual.rows_written <= reservations[0].units, JSON.stringify(actual))
       t.diagnostic(JSON.stringify({ actual, reserved: reservations[0].units }))
+    })
+  },
+)
+
+test(
+  "the authenticated admin trigger advances the existing bounded compact migration owner",
+  { timeout: 60000 },
+  async () => {
+    await withD1(async (db) => {
+      for (const migration of [
+        "0007_add_gene_catalog.sql",
+        "0018_add_gene_catalog_aliases.sql",
+        "0023_add_gene_discoveries.sql",
+        "0041_shared_gene_discovery_rollup.sql",
+      ])
+        await applyStatements(db, legacyStatements(migration))
+      await db
+        .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53','TP53')")
+        .run()
+      await db
+        .prepare(
+          `INSERT INTO icono_gene_discoveries
+           (user_id, gene_symbol, first_source, last_source, first_trigger, last_trigger)
+           VALUES ('reader','TP53','extension_hover','extension_hover','hover_dwell','hover_dwell')`,
+        )
+        .run()
+      await applyStatements(db, compactMigrationStatements())
+      const response =
+        await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+          new Request(
+            "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/discovery-migration/run",
+            {
+              method: "POST",
+              headers: { Authorization: "Bearer test-admin" },
+            },
+          ),
+          {
+            ICONOPLASM_ADMIN_TOKEN: "test-admin",
+            ICONOPLASM_DB: db,
+            ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
+              idFromName: () => "global",
+              get: () => ({
+                async fetch(request) {
+                  const body = await request.json()
+                  return Response.json({ ok: true, operation_id: body.operation_id })
+                },
+              }),
+            },
+          },
+          {},
+        )
+      const payload = await response.json()
+
+      assert.equal(response.status, 200)
+      assert.equal(payload.ok, true)
+      assert.equal(payload.complete, true)
+      assert.equal(payload.migrated_rows, 1)
+      assert.equal((await readCompactDiscoveryActivation(db)).status, "complete")
     })
   },
 )
