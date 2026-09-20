@@ -1,5 +1,9 @@
 import assert from "node:assert/strict"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import test from "node:test"
+import { checkCloudflareBudget } from "./check-iconoplasm-cloudflare-budget-headroom.mjs"
 import {
   parseAccountBudget,
   accountBudgetChecks,
@@ -97,4 +101,30 @@ test("telemetry uses one deadline-bound request and rejects a non-successful res
     /HTTP_503/,
   )
   assert.equal(calls, 1)
+})
+
+test("D1 exhaustion alerts without suppressing a snapshot's available KV write", async (t) => {
+  t.mock.method(console, "log", () => {})
+  const directory = mkdtempSync(join(tmpdir(), "cloudflare-budget-"))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const githubOutput = join(directory, "output")
+  const usage = { ...parseAccountBudget(fixture(), day, 1), rows_read: 5054124 }
+  let reads = 0
+  const check = () =>
+    checkCloudflareBudget({
+      githubOutput,
+      usageReader: async () => {
+        reads++
+        return usage
+      },
+    })
+  await assert.rejects(check, /rows_read 5054124\/5000000/)
+  assert.equal(reads, 1, "publication reuses the same account observation")
+  assert.equal(readFileSync(githubOutput, "utf8"), "snapshot_publication_allowed=true\n")
+
+  for (const kvWrites of [800, undefined]) {
+    usage.kv_writes = kvWrites
+    await assert.rejects(check, /kv_writes/)
+    assert.ok(readFileSync(githubOutput, "utf8").endsWith("snapshot_publication_allowed=false\n"))
+  }
 })

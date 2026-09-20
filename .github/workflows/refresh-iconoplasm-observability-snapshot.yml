@@ -65,7 +65,7 @@ jobs:
         run: node scripts/check-iconoplasm-cloudflare-budget-headroom.mjs
 
       - name: Publish observability snapshot atomically
-        if: ${{ !cancelled() && steps.snapshot.outcome == 'success' && steps.budget.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.snapshot.outcome == 'success' && steps.budget.outputs.snapshot_publication_allowed == 'true' }}
         run: >-
           pnpm exec wrangler kv key put
           "iconoplasm:observability-snapshot:v1"
