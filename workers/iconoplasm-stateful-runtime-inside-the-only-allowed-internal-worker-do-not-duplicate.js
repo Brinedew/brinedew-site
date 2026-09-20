@@ -26088,7 +26088,10 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
 // The one production owner for the legacy cutover. Each invocation advances
 // at most eight legacy rows, persists its lexicographic cursor, and activates
 // request traffic only after reconciliation reaches the end.
-const ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE = 64
+// Production measured roughly 31 pages before a request hit the Worker runtime
+// ceiling. Keep the owned operator wake below 30 seconds while retaining the
+// exact per-page reservation, lease, and cursor semantics.
+const ICONOPLASM_DISCOVERY_MIGRATION_PAGES_PER_WAKE = 12
 
 async function migrateIconoplasmCompactDiscoveryPage(env) {
   if (!env?.ICONOPLASM_DB) return { ok: false, pending: true, code: "NO_DB" }
