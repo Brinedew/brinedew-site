@@ -200,7 +200,11 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
 
   assert.deepEqual(origin.get(objectKey), canonical)
   assert.deepEqual(origin.get(receipt.key), canonical)
-  assert.equal(cdn.has(receipt.key), false, "the mutable CDN alias may remain stale after origin PUT")
+  assert.equal(
+    cdn.has(receipt.key),
+    false,
+    "the mutable CDN alias may remain stale after origin PUT",
+  )
   assert.deepEqual(receipt.sources, { authenticated_storage: true })
   assert.deepEqual(
     calls.slice(0, 4).map(({ method, key, source }) => [method, key, source]),
