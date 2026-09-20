@@ -1391,6 +1391,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_gallery.migrate_card_storage",
   ),
   adminApiContract(
+    "admin_gallery_blot_alias_backfill",
+    "/gallery/backfill-blot-aliases",
+    POST,
+    "admin_gallery_dirty_shard_publication",
+    "admin_gallery.backfill_blot_aliases",
+  ),
+  adminApiContract(
     "admin_gallery_storage_migration_status",
     "/gallery/migrate-card-storage/status",
     GET,

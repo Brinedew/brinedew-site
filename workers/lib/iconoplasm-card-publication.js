@@ -11,6 +11,7 @@ import {
 // complete after a newer PUT. HTTP caching of the ordered head has no such race.
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 export const CARD_PUBLICATION_BATCH = 6
+export const CARD_BLOT_ALIAS_BACKFILL_BATCH = 12
 const CARD_PUBLICATION_CONCURRENCY = 2
 export const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
 const UTF8 = new TextEncoder()
@@ -298,6 +299,27 @@ export function createCardPublication({
     })
     return status()
   }
+  async function backfillBlotAliases() {
+    const head = repo.get("head")
+    if (!head) throw new Error("Card publication storage migration has not been initialized")
+    if (repo.get("job")) return status()
+    repo.reserveWrites?.(3)
+    repo.transaction(() => {
+      repo.put("job", {
+        bootstrap: false,
+        alias_backfill: true,
+        baseline: head.current.manifest,
+        baseline_version: head.current.version,
+        watermark: head.watermark,
+        groups: head.current.manifest.shards.map((_, index) => ({ index, symbols: null })),
+        group: 0,
+        offset: 0,
+        alias_offset: 0,
+        started_at: now(),
+      })
+    })
+    return status()
+  }
   async function start() {
     const head = repo.get("head")
     if (!head) throw new Error("Card publication storage migration has not been initialized")
@@ -538,7 +560,8 @@ export function createCardPublication({
   async function publishBlotAliases(job) {
     const prepared = repo.prepared()
     const offset = job.alias_offset || 0
-    const slice = prepared.slice(offset, offset + CARD_PUBLICATION_BATCH)
+    const batchSize = job.alias_backfill ? CARD_BLOT_ALIAS_BACKFILL_BATCH : CARD_PUBLICATION_BATCH
+    const slice = prepared.slice(offset, offset + batchSize)
     repo.reserveWrites?.(2)
     for (let index = 0; index < slice.length; index += CARD_PUBLICATION_CONCURRENCY) {
       await settlePublicationWrites(
@@ -548,6 +571,26 @@ export function createCardPublication({
       )
     }
     repo.put("job", { ...job, alias_offset: offset + slice.length })
+  }
+  function prepareAliasBackfill(job, oldCards) {
+    const slice = oldCards.slice(job.offset, job.offset + CARD_BLOT_ALIAS_BACKFILL_BATCH)
+    repo.reserveWrites?.(slice.length + 1)
+    repo.transaction(() => {
+      for (const card of slice) repo.prepare(card.symbol, { symbol: card.symbol, card })
+      repo.put("job", { ...job, offset: job.offset + slice.length })
+    })
+  }
+  function advanceAliasBackfillGroup(job) {
+    repo.reserveWrites?.(2)
+    repo.transaction(() => {
+      repo.put("job", {
+        ...job,
+        group: job.group + 1,
+        offset: 0,
+        alias_offset: 0,
+      })
+      repo.clearPrepared()
+    })
   }
   async function commit(job) {
     repo.reserveWrites?.(6)
@@ -638,6 +681,7 @@ export function createCardPublication({
     wake,
     bootstrap,
     migrate,
+    backfillBlotAliases,
     materializeSymbol,
     async step() {
       const effects = repo.get("effects")
@@ -654,9 +698,23 @@ export function createCardPublication({
       }
       const job = repo.get("job") || (repo.get("requested") ? await start() : null)
       if (!job) return { more: false }
+      if (job.alias_backfill && job.group >= job.groups.length) {
+        repo.reserveWrites?.(2)
+        repo.transaction(() => {
+          repo.remove("job")
+          repo.clearPrepared()
+        })
+        return { more: false, alias_backfill_completed: true }
+      }
       if (job.group >= job.groups.length) return { more: true, committed: await commit(job) }
       const group = job.groups[job.group]
       const oldCards = await cardsFor(job, job.baseline.shards[group.index])
+      if (job.alias_backfill) {
+        if (job.offset < oldCards.length) prepareAliasBackfill(job, oldCards)
+        else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)
+        else advanceAliasBackfillGroup(job)
+        return { more: true }
+      }
       if (job.migration && source.reuseExistingCardObjectsForMigration) {
         await finishGroup(job, group, oldCards)
         return { more: true }

@@ -421,6 +421,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             ? {
                 bootstrap: job.bootstrap,
                 migration: job.migration === true,
+                ...(job.alias_backfill === true ? { alias_backfill: true } : {}),
                 group: job.group,
                 groups: job.groups.length,
                 offset: job.offset,
@@ -545,6 +546,8 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
               this.repo.reserveWrites(2, { control: true })
               this.repo.remove("failure")
             }
+          } else if (path === "/backfill-blot-aliases") {
+            await this.publisher.backfillBlotAliases()
           } else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)
@@ -553,7 +556,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           // Coalesce nearby votes for 10s; one person's vote never synchronously
           // pays to build the public catalog. Target 1-2min, not a strict SLA.
           await this.arm(
-            path === "/bootstrap" || path === "/migrate"
+            path === "/bootstrap" || path === "/migrate" || path === "/backfill-blot-aliases"
               ? CARD_PUBLICATION_ALARM_CADENCE_MS
               : 10000,
           )
