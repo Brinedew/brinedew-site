@@ -3,6 +3,7 @@ import test from "node:test"
 // ARCHITECTURE FENCE [IPD-011]: failed bytes and late votes cannot advance canon.
 import {
   createCardPublication,
+  CARD_BLOT_ALIAS_BACKFILL_BATCH,
   CARD_PUBLICATION_BATCH,
   CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT,
   enrichPublishedGeneCandidates,
@@ -179,6 +180,28 @@ test("an unverified blot alias leaves the prior publication head untouched", asy
   await assert.rejects(p.step(), /injected alias failure/)
   assert.equal(p.status().head, null)
   assert.equal(p.status().job.alias_offset || 0, 0)
+})
+
+test("stable blot alias backfill reuses immutable cards without republishing authority", async () => {
+  const f = fixture(9)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const head = p.status().head
+  const immutableWrites = f.writes.length
+  f.aliases.length = 0
+
+  await p.backfillBlotAliases()
+  await drain(p)
+
+  assert.deepEqual(
+    f.aliases.map((item) => item.symbol),
+    f.cards.map((item) => item.symbol),
+  )
+  assert.equal(f.writes.length, immutableWrites)
+  assert.equal(CARD_BLOT_ALIAS_BACKFILL_BATCH * 3 + 1 < 50, true)
+  assert.deepEqual(p.status().head, head)
+  assert.equal(p.status().job, null)
 })
 
 async function drain(publisher) {
