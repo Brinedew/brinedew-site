@@ -654,7 +654,11 @@ jobs:
       # only after Pages confirms the new static deployment.
       - name: Activate current Iconoplasm HTML shell cache version
         if: steps.migrations.outputs.continuation_required != 'true'
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
+        # The checked-in config owns the normal production trigger set. An
+        # explicit --triggers list here previously carried the three-cron
+        # reader-recovery containment into normal operation and silently
+        # disabled every Iconoplasm background owner after each deployment.
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
 
       - name: Verify Iconoplasm publication aliases (production)
         if: steps.migrations.outputs.continuation_required != 'true'

@@ -404,7 +404,10 @@ test("authoritative provider writes consume the same 70 percent ordinary ceiling
         body: JSON.stringify(body),
       }),
     )
-  const day = "2026-09-19"
+  // The provider observation is deliberately generated at test runtime. Keep
+  // the request on that same UTC day so this contract does not turn into a
+  // midnight-expiry test merely because the calendar advanced.
+  const day = new Date().toISOString().slice(0, 10)
   const recorded = await post("/record", {
     day_key: day,
     cycle_key: day,
