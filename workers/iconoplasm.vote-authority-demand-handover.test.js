@@ -657,9 +657,59 @@ test("finalization owner refuses a superseded job before candidate replacement",
 
 test("finalization cannot erase V2 candidates omitted by the legacy source", async (t) => {
   const { coordinator, handoff } = await finalizationFixture(t, { candidates: [] })
-  assert.equal((await handoff()).accepted, false)
+  const result = await handoff()
+  assert.equal(result.accepted, true)
+  assert.equal(result.candidate_count, 1)
   assert.equal(coordinator.sqlFirst("SELECT COUNT(*) AS n FROM gene_candidate_authority").n, 1)
-  assert.equal(coordinator.publication.read(), null)
+  assert.equal(coordinator.publication.read().pending, true)
+})
+
+test("finalization preserves newer V2 candidate edits while importing newly generated assets", async (t) => {
+  const sourceExisting = {
+    asset_sha256: sha("a"),
+    status: "rejected",
+    autopick_eligible: 0,
+    is_stale: 1,
+    is_legacy: 0,
+    created_at: "2026-09-19T00:00:00Z",
+  }
+  const sourceNew = {
+    ...sourceExisting,
+    asset_sha256: sha("b"),
+    status: "approved",
+    autopick_eligible: 1,
+    is_stale: 0,
+  }
+  const { coordinator, candidate, handoff } = await finalizationFixture(t, {
+    candidates: [sourceExisting, sourceNew],
+  })
+
+  const result = await handoff()
+
+  assert.equal(result.accepted, true)
+  assert.equal(result.candidate_count, 2)
+  assert.equal(result.candidate_imported_count, 1)
+  assert.equal(result.candidate_conflict_count, 1)
+  const existing = coordinator.sqlFirst(
+    "SELECT status, autopick_eligible, is_stale, created_at FROM gene_candidate_authority WHERE asset_sha256 = ?",
+    candidate.asset_sha256,
+  )
+  assert.deepEqual(
+    { ...existing },
+    {
+      status: candidate.status,
+      autopick_eligible: candidate.autopick_eligible,
+      is_stale: candidate.is_stale,
+      created_at: candidate.created_at,
+    },
+  )
+  assert.equal(
+    coordinator.sqlFirst(
+      "SELECT COUNT(*) AS n FROM gene_candidate_authority WHERE asset_sha256 = ?",
+      sourceNew.asset_sha256,
+    ).n,
+    1,
+  )
 })
 
 test("finalization cannot overwrite a candidate mutation accepted during source reads", async (t) => {
