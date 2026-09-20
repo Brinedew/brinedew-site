@@ -132,43 +132,44 @@ function cleanGeneSummary(summary) {
 
 export function sanitizeTargetProtein(protein, options = {}) {
   const geneSummary = cleanGeneSummary(protein?.gene_summary)
+  const revealIdentity = Boolean(options.revealIdentity)
 
   // When identity is not revealed, don't send ANY hint-source fields.
   // The client gets hints via clue.sections which are properly masked server-side.
   // Sending raw arrays (synonyms, domains, clans, GO terms, pathways, etc.) leaks the answer.
+  // The scalar clue values (length, tmh, secreted, tissue, CATH architecture) are paid
+  // hints too: before game over the client reads them only through clue.sections.
   const sanitized = {
     uniprot: null,
     hgnc: null,
     full_name: null,
-    length: protein?.length || null,
-    tmh: Boolean(protein?.tmh),
-    secreted: Boolean(protein?.secreted),
-    tissue: protein?.tissue ? { ...protein.tissue } : { label: "unknown", score: null },
+    length: revealIdentity ? protein?.length || null : null,
+    tmh: revealIdentity ? Boolean(protein?.tmh) : null,
+    secreted: revealIdentity ? Boolean(protein?.secreted) : null,
+    tissue:
+      revealIdentity && protein?.tissue ? { ...protein.tissue } : { label: "unknown", score: null },
     // All hint-source fields: only send when revealing identity
-    domains: options.revealIdentity && Array.isArray(protein?.domains) ? [...protein.domains] : [],
+    domains: revealIdentity && Array.isArray(protein?.domains) ? [...protein.domains] : [],
     domain_names:
-      options.revealIdentity && Array.isArray(protein?.domain_names)
-        ? [...protein.domain_names]
-        : [],
-    clans: options.revealIdentity && Array.isArray(protein?.clans) ? [...protein.clans] : [],
-    go_terms: options.revealIdentity ? cloneGoTerms(protein?.go_terms) : {},
-    go_terms_named: options.revealIdentity ? cloneGoTerms(protein?.go_terms_named) : {},
+      revealIdentity && Array.isArray(protein?.domain_names) ? [...protein.domain_names] : [],
+    clans: revealIdentity && Array.isArray(protein?.clans) ? [...protein.clans] : [],
+    go_terms: revealIdentity ? cloneGoTerms(protein?.go_terms) : {},
+    go_terms_named: revealIdentity ? cloneGoTerms(protein?.go_terms_named) : {},
     reactome_pathways:
-      options.revealIdentity && Array.isArray(protein?.reactome_pathways)
+      revealIdentity && Array.isArray(protein?.reactome_pathways)
         ? [...protein.reactome_pathways]
         : [],
-    structure: options.revealIdentity && protein?.structure ? protein.structure : null,
-    links: options.revealIdentity ? protein?.links || {} : {},
-    gene_summary: options.revealIdentity ? geneSummary || null : null,
-    subcell: options.revealIdentity && Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
-    synonyms:
-      options.revealIdentity && Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
-    // CATH architecture (always visible as it's a clue, not an answer)
-    cath_architecture: Array.isArray(protein?.cath_architecture)
-      ? [...protein.cath_architecture]
-      : [],
+    structure: revealIdentity && protein?.structure ? protein.structure : null,
+    links: revealIdentity ? protein?.links || {} : {},
+    gene_summary: revealIdentity ? geneSummary || null : null,
+    subcell: revealIdentity && Array.isArray(protein?.subcell) ? [...protein.subcell] : [],
+    synonyms: revealIdentity && Array.isArray(protein?.synonyms) ? [...protein.synonyms] : [],
+    cath_architecture:
+      revealIdentity && Array.isArray(protein?.cath_architecture)
+        ? [...protein.cath_architecture]
+        : [],
   }
-  if (options.revealIdentity) {
+  if (revealIdentity) {
     sanitized.uniprot = protein?.uniprot || null
     sanitized.hgnc = protein?.hgnc || null
     sanitized.full_name = protein?.full_name || null
@@ -208,19 +209,19 @@ export function maskClueSections(sections, revealedHints = new Set()) {
     items: section.items.map((item) => {
       const textValue = typeof item.text === "string" ? item.text : String(item.text ?? "")
       if (!item?.id) {
-        return {
+        const wireItem = {
           ...item,
           revealed: true,
           locked: false,
-          fullText: textValue,
           highlighted: Boolean(item.highlighted),
         }
+        hideInternalFullText(wireItem, textValue)
+        return wireItem
       }
       const locked = Boolean(item.locked)
       const revealed = !locked && revealedHints.has(item.id)
-      return {
+      const wireItem = {
         ...item,
-        fullText: locked ? undefined : textValue,
         highlighted: Boolean(item.highlighted),
         locked,
         revealed,
@@ -233,8 +234,23 @@ export function maskClueSections(sections, revealedHints = new Set()) {
           : Math.max(textValue.length, LOCKED_HINT_PLACEHOLDER.length),
         placeholder: item.placeholder || LOCKED_HINT_PLACEHOLDER,
       }
+      hideInternalFullText(wireItem, locked ? undefined : textValue)
+      return wireItem
     }),
   }))
+}
+
+// The raw hint text must stay readable by the server-side reveal passes in the
+// Worker (match reveals, latest highlights, match filtering), but it must never
+// reach a client before the hint is revealed. A non-enumerable property does
+// both: reads keep working, while JSON.stringify and object spread skip it.
+function hideInternalFullText(item, text) {
+  Object.defineProperty(item, "fullText", {
+    value: text,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  })
 }
 
 export function extractHintData(sections, hintId) {
