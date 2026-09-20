@@ -12,6 +12,7 @@ import {
 import {
   claimCompactDiscoveryMigrationLease,
   importLegacyDiscoveryUser,
+  inspectCompactDiscoveryMigrationPage,
   migrateLegacyDiscoveryPage,
   readCompactDiscoveryActivation,
 } from "./discovery-compact-migrate.js"
@@ -283,6 +284,88 @@ test(
         2,
       )
       assert.equal((await readCompactUserState(db, "reader")).member_count, 9)
+    })
+  },
+)
+
+test(
+  "late compact-discovery cursors seek the composite primary key instead of rescanning legacy history",
+  { timeout: 60000 },
+  async (t) => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, compactMigrationStatements())
+      await db
+        .prepare(
+          `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i + 1 FROM n WHERE i < 50000)
+           INSERT INTO icono_gene_discoveries (user_id, gene_symbol)
+           SELECT 'reader', printf('G%05d', i) FROM n`,
+        )
+        .run()
+      await db
+        .prepare(
+          `UPDATE icono_discovery_compact_activation_v2
+           SET cursor_user_id = 'reader', cursor_gene_symbol = 'G49990'
+           WHERE singleton = 1`,
+        )
+        .run()
+
+      const meter = createOperationCostD1Meter(db)
+      const page = await inspectCompactDiscoveryMigrationPage(meter.db, { rowLimit: 8 })
+      const actual = meter.finish()
+
+      assert.deepEqual(page, {
+        legacy_rows: 8,
+        page_users: 1,
+        cold_users: 1,
+        write_units: 36,
+      })
+      assert.ok(actual.rows_read <= 64, JSON.stringify(actual))
+      t.diagnostic(JSON.stringify({ actual, legacy_rows: 50000, cursor: "reader/G49990" }))
+    })
+  },
+)
+
+test(
+  "late compact-discovery migration pages stay bounded by page size instead of legacy history",
+  { timeout: 60000 },
+  async (t) => {
+    await withD1(async (db) => {
+      await applyStatements(db, legacyStatements("0007_add_gene_catalog.sql"))
+      await applyStatements(db, legacyStatements("0018_add_gene_catalog_aliases.sql"))
+      await applyStatements(db, legacyStatements("0023_add_gene_discoveries.sql"))
+      await applyStatements(db, compactMigrationStatements())
+      await db
+        .prepare(
+          `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i + 1 FROM n WHERE i < 50000)
+           INSERT INTO icono_gene_discoveries (user_id, gene_symbol)
+           SELECT 'reader', printf('G%05d', i) FROM n`,
+        )
+        .run()
+      await db
+        .prepare(
+          `UPDATE icono_discovery_compact_activation_v2
+           SET cursor_user_id = 'reader', cursor_gene_symbol = 'G49990'
+           WHERE singleton = 1`,
+        )
+        .run()
+      await claimCompactDiscoveryMigrationLease(db, { token: "bounded-page" })
+
+      const meter = createOperationCostD1Meter(db)
+      const page = await migrateLegacyDiscoveryPage({
+        db: meter.db,
+        leaseToken: "bounded-page",
+        rowLimit: 8,
+        nowSeconds: 1,
+      })
+      const actual = meter.finish()
+
+      assert.equal(page.migrated_rows, 8)
+      assert.equal(page.cursor_gene_symbol, "G49998")
+      assert.ok(actual.rows_read <= 512, JSON.stringify(actual))
+      t.diagnostic(JSON.stringify({ actual, legacy_rows: 50000, cursor: "reader/G49990" }))
     })
   },
 )

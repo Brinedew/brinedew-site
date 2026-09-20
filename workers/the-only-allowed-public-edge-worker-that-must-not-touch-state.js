@@ -3,6 +3,10 @@ const THE_ONLY_ALLOWED_STATEFUL_WORKER_BINDING_DO_NOT_DUPLICATE =
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
+const GENEGUESSR_MOLSTAR_VENDOR_PREFIXES = [
+  "/static/vendor/pdbe-molstar@3.8.0/",
+  "/static/vendor/pdbe-molstar@3.7.1/",
+]
 const MAIN_SITE_HOSTS = new Set(["brinedew.bio", "www.brinedew.bio", "staging.brinedew.bio"])
 const ROOT_DOCUMENT_PATHS = new Set(["/", "/index", "/index/", "/index.html"])
 const PRIVACY_DOCUMENT_PATHS = new Set(["/privacy", "/privacy/", "/privacy.html"])
@@ -253,6 +257,26 @@ async function maybeServeHostnameSensitiveStaticDocument(request) {
   return applyPublicDocumentHeaders(response, request)
 }
 
+async function maybeServeGeneguessrMolstarVendorAsset(request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null
+  const url = new URL(request.url)
+  if (url.hostname !== GENEGUESSR_HOST) return null
+  const allowedPrefix = GENEGUESSR_MOLSTAR_VENDOR_PREFIXES.find((prefix) =>
+    url.pathname.startsWith(prefix),
+  )
+  if (!allowedPrefix) return null
+
+  const upstreamUrl = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
+  const upstream = await fetch(upstreamUrl, { method: request.method })
+  const headers = new Headers(upstream.headers)
+  headers.set("Cache-Control", "public, max-age=86400")
+  return new Response(request.method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers,
+  })
+}
+
 function missingTheOnlyAllowedStatefulWorkerResponse() {
   return Response.json(
     {
@@ -282,6 +306,9 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
   // Pages deployment directly. Only explicitly namespaced API traffic and
   // Iconoplasm-host traffic continue through the single internal stateful
   // Worker.
+  const vendorAssetResponse = await maybeServeGeneguessrMolstarVendorAsset(request)
+  if (vendorAssetResponse) return vendorAssetResponse
+
   const publicDocumentResponse = await maybeServeHostnameSensitiveStaticDocument(request)
   if (publicDocumentResponse) return publicDocumentResponse
 
