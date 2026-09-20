@@ -232,11 +232,27 @@ jobs:
       - name: Deploy the zero-D1 stateful Worker repair
         run: pnpm exec wrangler deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
-      - name: Verify live Worker boot without application mutation
+      # A stateful-only repair leaves public routing fixes stranded in Git.
+      # The root config owns the stateless Brinedew/GeneGuessr edge and has no
+      # D1, KV, R2, session or queue bindings, so it remains safe to publish
+      # while the account-wide application D1 allowance is exhausted.
+      - name: Deploy the zero-D1 public edge Worker repair
+        run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
+
+      - name: Verify live Worker owners without application mutation
         timeout-minutes: 2
         run: |
+          set -euo pipefail
           curl --fail --silent --show-error --max-time 30 \
             "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST" >/dev/null
+          headers="$(mktemp)"
+          body="$(mktemp)"
+          trap 'rm -f "$headers" "$body"' EXIT
+          curl --fail --silent --show-error --max-time 30 \
+            --dump-header "$headers" --output "$body" \
+            "https://geneguessr.brinedew.bio/static/vendor/pdbe-molstar@3.8.0/build/pdbe-molstar.css?v=$CACHE_BUST"
+          grep -Eiq '^content-type:[[:space:]]*text/css' "$headers"
+          grep -Fq '.msp-plugin' "$body"
 
   deploy-production:
     needs: deploy-viral-load-staging
