@@ -101,6 +101,35 @@ test("public edge maps GeneGuessr root and privacy documents to their own Pages 
   assert.doesNotMatch(privacy.headers.get("Content-Security-Policy"), /'unsafe-eval'/)
 })
 
+test("public edge serves allowlisted GeneGuessr Molstar assets without entering stateful routing", async () => {
+  const upstreamCalls = []
+  globalThis.fetch = async (url, init) => {
+    upstreamCalls.push({ url: String(url), method: init?.method })
+    return new Response(".msp-plugin{display:block}", {
+      headers: { "Content-Type": "text/css; charset=utf-8" },
+    })
+  }
+  const stateful = statefulSpy()
+
+  const response = await worker.fetch(
+    new Request(
+      "https://geneguessr.brinedew.bio/static/vendor/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
+    ),
+    { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
+    {},
+  )
+
+  assert.deepEqual(upstreamCalls, [
+    {
+      url: "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
+      method: "GET",
+    },
+  ])
+  assert.equal(stateful.calls.length, 0)
+  assert.match(response.headers.get("Content-Type"), /^text\/css/)
+  assert.equal(await response.text(), ".msp-plugin{display:block}")
+})
+
 test("public edge preserves the main site's missing privacy document instead of leaking Iconoplasm", async () => {
   globalThis.fetch = async (url) => {
     assert.equal(String(url), "https://brinedew-bio.pages.dev/privacy")

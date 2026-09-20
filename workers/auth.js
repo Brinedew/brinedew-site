@@ -724,12 +724,15 @@ function sessionAuthorityUnavailableResponse({ dailyLimit = false, retryAfter = 
   )
 }
 
-export async function handleMe(request, env) {
+export async function resolveAuthenticatedSession(request, env) {
   const cookies = parseCookies(request.headers.get("Cookie") || "")
   const sessionId = cookies.session
 
   if (!sessionId) {
-    return Response.json({ authenticated: false }, { status: 401 })
+    return {
+      ok: false,
+      response: Response.json({ authenticated: false }, { status: 401 }),
+    }
   }
 
   const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
@@ -739,12 +742,20 @@ export async function handleMe(request, env) {
     resp = await stub.fetch(new Request("http://internal/auth/resolve", { method: "POST" }))
     if (resp.status === 404) resp = await stub.fetch("http://internal/get")
   } catch (error) {
-    return sessionAuthorityUnavailableResponse({
-      dailyLimit: isDurableObjectDailyDurationLimitError(error),
-    })
+    return {
+      ok: false,
+      response: sessionAuthorityUnavailableResponse({
+        dailyLimit: isDurableObjectDailyDurationLimitError(error),
+      }),
+    }
   }
   if (resp.status >= 500 || resp.status === 429) {
-    return sessionAuthorityUnavailableResponse({ retryAfter: resp.headers.get("Retry-After") })
+    return {
+      ok: false,
+      response: sessionAuthorityUnavailableResponse({
+        retryAfter: resp.headers.get("Retry-After"),
+      }),
+    }
   }
   const discordAuthorizationOutcome = String(
     resp.headers.get("X-Brinedew-Discord-Authorization") || "",
@@ -754,23 +765,37 @@ export async function handleMe(request, env) {
   }
   if (!resp.ok) {
     const accountStatus = String(resp.headers.get("X-Brinedew-Account-Status") || "").trim()
-    return Response.json(
-      {
-        authenticated: false,
-        code: accountStatus ? "ACCOUNT_NOT_ACTIVE" : "SESSION_INVALID",
-        ...(accountStatus ? { account_status: accountStatus } : {}),
-      },
-      { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
-    )
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          authenticated: false,
+          code: accountStatus ? "ACCOUNT_NOT_ACTIVE" : "SESSION_INVALID",
+          ...(accountStatus ? { account_status: accountStatus } : {}),
+        },
+        { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
+      ),
+    }
   }
   const session = await resp.json()
 
   if (!session || !session.user_id) {
-    return Response.json(
-      { authenticated: false },
-      { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
-    )
+    return {
+      ok: false,
+      response: Response.json(
+        { authenticated: false },
+        { status: 401, headers: expiredPersistentSessionHeaders(new URL(request.url)) },
+      ),
+    }
   }
+
+  return { ok: true, cookies, sessionId, stub, session, discordAuthorizationOutcome }
+}
+
+export async function handleMe(request, env) {
+  const resolved = await resolveAuthenticatedSession(request, env)
+  if (!resolved.ok) return resolved.response
+  const { sessionId, stub, session, discordAuthorizationOutcome } = resolved
 
   // Re-check Discord roles to detect both upgrades (registered → supporter)
   // and downgrades (supporter → registered) from external role assignment

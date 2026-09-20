@@ -26,7 +26,7 @@ export async function inspectCompactDiscoveryMigrationPage(db, { rowLimit = 8 } 
       `WITH page AS (
          SELECT user_id
          FROM icono_gene_discoveries
-         WHERE user_id > ? OR (user_id = ? AND gene_symbol > ?)
+         WHERE (user_id, gene_symbol) > (?, ?)
          ORDER BY user_id, gene_symbol
          LIMIT ?
        )
@@ -36,12 +36,7 @@ export async function inspectCompactDiscoveryMigrationPage(db, { rowLimit = 8 } 
        FROM page
        LEFT JOIN icono_discovery_user_state_v2 compact ON compact.user_id = page.user_id`,
     )
-    .bind(
-      activation.cursor_user_id,
-      activation.cursor_user_id,
-      activation.cursor_gene_symbol,
-      limit,
-    )
+    .bind(activation.cursor_user_id, activation.cursor_gene_symbol, limit)
     .first()
   const coldUsers = Math.max(0, Number(row?.cold_users || 0) || 0)
   return {
@@ -226,16 +221,11 @@ export async function migrateLegacyDiscoveryPage({
     .prepare(
       `SELECT *
        FROM icono_gene_discoveries
-       WHERE user_id > ? OR (user_id = ? AND gene_symbol > ?)
+       WHERE (user_id, gene_symbol) > (?, ?)
        ORDER BY user_id, gene_symbol
        LIMIT ?`,
     )
-    .bind(
-      activation.cursor_user_id,
-      activation.cursor_user_id,
-      activation.cursor_gene_symbol,
-      limit + 1,
-    )
+    .bind(activation.cursor_user_id, activation.cursor_gene_symbol, limit + 1)
     .all()
   const selectedRows = Array.isArray(selected?.results) ? selected.results : []
   const page = selectedRows.slice(0, limit)

@@ -3,7 +3,7 @@
  * Handles migration from localStorage and server-side stats tracking
  */
 
-import { parseCookies } from "./auth.js"
+import { resolveAuthenticatedSession } from "./auth.js"
 import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 
@@ -53,28 +53,9 @@ function getEffectiveCurrentStreak(currentStreak, lastPlayedDate, today) {
 }
 
 async function requireAuthenticatedSession(request, env) {
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = cookies.session
-  if (!sessionId) {
-    return { ok: false, response: Response.json({ error: "Unauthorized" }, { status: 401 }) }
-  }
-
-  const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-  const sessionStub = env.GAME_SESSIONS.get(id)
-  const sessionResp = await sessionStub.fetch("http://internal/get")
-  const session = await sessionResp.json()
-  if (!session || !session.user_id) {
-    return { ok: false, response: Response.json({ error: "Invalid session" }, { status: 401 }) }
-  }
-
-  return {
-    ok: true,
-    cookies,
-    sessionId,
-    session,
-    sessionStub,
-    userId: session.user_id,
-  }
+  const resolved = await resolveAuthenticatedSession(request, env)
+  if (!resolved.ok) return resolved
+  return { ...resolved, sessionStub: resolved.stub, userId: resolved.session.user_id }
 }
 
 function getGuestSessionTokenFromCookies(cookies) {
