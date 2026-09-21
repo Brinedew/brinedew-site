@@ -351,6 +351,53 @@ test("coordinator accepts revision-checked gene commits once and replays repeats
   sql.db.close()
 })
 
+test("coordinator starts a rematerialization job without touching the published head", async () => {
+  const { state, sql } = fakeCoordinatorState()
+  const source = { buildRevision: 1, highWater: async () => ({ id: 7 }) }
+  const Publisher = createCardPublicationCoordinatorClass(() => source)
+  const owner = new Publisher(state, {})
+  await state.ready
+  const head = {
+    current: {
+      version: "ccv2-" + sha("a"),
+      key: `published-cards/v2/immutable/manifests/${sha("a")}.json`,
+      published_at: "2026-09-20T00:00:00.000Z",
+      manifest: {
+        schema: "iconoplasm.cardCatalog.v2",
+        build_revision: 1,
+        storage: "bunny_card_catalog_v2",
+        card_count: 2,
+        shards: [
+          {
+            key: "shard",
+            first_symbol: "A",
+            last_symbol: "B",
+            card_count: 2,
+            delivery_indexes: [],
+          },
+        ],
+      },
+    },
+    previous: null,
+    watermark: { id: 5 },
+  }
+  owner.repo.put("head", head)
+
+  const accepted = await owner.fetch(
+    new Request("https://internal/rematerialize", { method: "POST" }),
+  )
+  assert.equal(accepted.status, 202)
+  const status = await (await owner.fetch(new Request("https://internal/status"))).json()
+  assert.equal(status.current, head.current.version, "readers stay on the previous catalog")
+  assert.equal(status.watermark.id, 5)
+  assert.equal(status.job.rematerialize, true)
+  assert.equal(status.job.migration, false)
+  assert.equal(status.job.group, 0)
+  assert.equal(status.job.groups, 1)
+  assert.ok((await state.storage.getAlarm()) > Date.now())
+  sql.db.close()
+})
+
 test("gene delta projection writes the KV document once and skips unchanged bytes", async () => {
   const values = new Map()
   let writes = 0

@@ -421,6 +421,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             ? {
                 bootstrap: job.bootstrap,
                 migration: job.migration === true,
+                ...(job.rematerialize === true ? { rematerialize: true } : {}),
                 ...(job.alias_backfill === true ? { alias_backfill: true } : {}),
                 group: job.group,
                 groups: job.groups.length,
@@ -546,6 +547,15 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
               this.repo.reserveWrites(2, { control: true })
               this.repo.remove("failure")
             }
+          } else if (path === "/rematerialize") {
+            await this.publisher.rematerialize()
+            if (this.repo.get("job") && this.repo.get("failure")) {
+              // An explicit operator re-run clears only the retained failure
+              // receipt; the durable job, cursor, and identities remain and the
+              // arm below schedules one immediate bounded attempt.
+              this.repo.reserveWrites(2, { control: true })
+              this.repo.remove("failure")
+            }
           } else if (path === "/backfill-blot-aliases") {
             await this.publisher.backfillBlotAliases()
           } else if (path === "/cancel-blot-alias-backfill") {
@@ -563,7 +573,10 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           // Coalesce nearby votes for 10s; one person's vote never synchronously
           // pays to build the public catalog. Target 1-2min, not a strict SLA.
           await this.arm(
-            path === "/bootstrap" || path === "/migrate" || path === "/backfill-blot-aliases"
+            path === "/bootstrap" ||
+              path === "/migrate" ||
+              path === "/rematerialize" ||
+              path === "/backfill-blot-aliases"
               ? CARD_PUBLICATION_ALARM_CADENCE_MS
               : 10000,
           )

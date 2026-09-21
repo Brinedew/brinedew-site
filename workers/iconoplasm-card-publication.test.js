@@ -550,3 +550,73 @@ test("idle status and steps do no publication writes", async () => {
   }
   assert.equal(f.writes.length, writes)
 })
+
+test("rematerialization republishes every page from source while the old head stays readable", async () => {
+  const f = fixture(9)
+  f.source.buildRevision = 1
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const original = p.status().head
+  const writesBefore = f.writes.length
+  const afterCommitReceipts = []
+  f.source.afterCommit = async (receipt) => afterCommitReceipts.push(receipt)
+  // A change arrives before the pass starts; the pass claims that event window
+  // so it does not leave a stale dirty set behind after it commits.
+  f.change(["G0000"])
+
+  for (const card of f.cards) {
+    card.payload.name = `${card.symbol} refreshed`
+    card.payload.portrait_candidates = [{ asset_sha256: "c".repeat(64), image_upvotes: 3 }]
+  }
+
+  await p.rematerialize()
+  assert.equal(p.status().job.rematerialize, true)
+  assert.deepEqual(p.status().head, original, "the previous catalog stays readable until commit")
+  await drain(p)
+
+  const committed = p.status().head
+  assert.notEqual(committed.current.version, original.current.version)
+  assert.equal(committed.previous.version, original.current.version)
+  assert.equal(committed.current.manifest.card_count, 9)
+  assert.equal(committed.watermark.id, 2)
+  assert.equal(p.status().job, null)
+  assert.equal(f.repository.get("effects"), null)
+  assert.deepEqual(afterCommitReceipts, [])
+
+  const kinds = f.writes.slice(writesBefore).map((write) => write.kind)
+  for (const kind of ["cards", "genes", "portraits"]) {
+    assert.equal(kinds.filter((value) => value === kind).length, 9, `${kind} rewritten per card`)
+  }
+  const shard = committed.current.manifest.shards[0]
+  const index = (await f.objects.read(shard.delivery_indexes[0].key)).value
+  const [symbol, , geneHash] = index.entries[0]
+  const gene = (await f.objects.read(publishedCardObjectKey("genes", geneHash))).value
+  assert.equal(gene.name, `${symbol} refreshed`)
+  assert.equal(gene.portrait_candidates.length, 1)
+})
+
+test("a missing source card fails a rematerialization closed instead of deleting the page", async () => {
+  const f = fixture(9)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const original = p.status().head
+  const materialize = f.source.materialize
+  f.source.materialize = async (symbols) =>
+    (await materialize(symbols)).filter((card) => card.symbol !== "G0004")
+  for (const card of f.cards) card.payload.name = `v2 ${card.symbol}`
+
+  await p.rematerialize()
+  await assert.rejects(drain(p), /returned no card for G0004/)
+  assert.deepEqual(p.status().head, original)
+  assert.equal(p.status().job.rematerialize, true)
+
+  f.source.materialize = materialize
+  const restarted = f.create()
+  await drain(restarted)
+  const committed = restarted.status().head
+  assert.equal(committed.previous.version, original.current.version)
+  assert.equal(committed.current.manifest.card_count, 9)
+  assert.equal(restarted.status().job, null)
+})
