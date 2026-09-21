@@ -559,6 +559,7 @@ test("rematerialization republishes every page from source while the old head st
   await drain(p)
   const original = p.status().head
   const writesBefore = f.writes.length
+  const aliasesBefore = f.aliases.length
   const afterCommitReceipts = []
   f.source.afterCommit = async (receipt) => afterCommitReceipts.push(receipt)
   // A change arrives before the pass starts; the pass claims that event window
@@ -588,6 +589,14 @@ test("rematerialization republishes every page from source while the old head st
   for (const kind of ["cards", "genes", "portraits"]) {
     assert.equal(kinds.filter((value) => value === kind).length, 9, `${kind} rewritten per card`)
   }
+  // A historical missing blot must not stall the catalog refresh.
+  assert.equal(f.aliases.length - aliasesBefore, 9)
+  assert.equal(
+    f.aliases
+      .slice(aliasesBefore)
+      .every((item) => item.options.allowMissingImmutablePlaceholder === true),
+    true,
+  )
   const shard = committed.current.manifest.shards[0]
   const index = (await f.objects.read(shard.delivery_indexes[0].key)).value
   const [symbol, , geneHash] = index.entries[0]

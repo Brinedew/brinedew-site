@@ -628,8 +628,11 @@ export function createCardPublication({
             // Backfill is a compatibility projection over an already committed
             // immutable head. A historical 404 gets the static placeholder;
             // ordinary publication remains strict and cannot commit a missing
-            // immutable source.
-            allowMissingImmutablePlaceholder: job.alias_backfill === true,
+            // immutable source. A full rematerialization walks every published
+            // page, so one historical missing blot must not stall the catalog
+            // refresh; it gets the same placeholder instead (#190, B-790).
+            allowMissingImmutablePlaceholder:
+              job.alias_backfill === true || job.rematerialize === true,
           }),
         ),
       )
