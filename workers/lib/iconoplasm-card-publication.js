@@ -312,6 +312,13 @@ export function createCardPublication({
    * bounded candidate snapshots published after an earlier freeze) reaches the
    * public plane. The head is only replaced by one fully verified commit; the
    * previous catalog stays readable until then.
+   *
+   * A rematerialization does not republish per-symbol blot aliases: those are
+   * the compatibility owner's job (the alias backfill). Coupling a full pass to
+   * a mutable alias object stalled it for tens of minutes when Bunny Storage
+   * kept serving a previous alias after repeated identical PUTs (CLNK,
+   * 2026-09-21); ordinary dirty publication still republishes its touched
+   * aliases strictly.
    */
   async function rematerialize() {
     const head = repo.get("head")
@@ -795,7 +802,8 @@ export function createCardPublication({
       }
       const count = group.symbols?.length ?? oldCards.length
       if (job.offset < count) await prepare(job, group, oldCards)
-      else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)
+      else if (!job.rematerialize && (job.alias_offset || 0) < repo.prepared().length)
+        await publishBlotAliases(job)
       else await finishGroup(job, group, oldCards)
       return { more: true }
     },
