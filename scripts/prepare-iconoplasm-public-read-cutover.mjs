@@ -130,10 +130,12 @@ export async function waitForPublicReadArtifacts({
 function migrationReceipt(status) {
   const buildRevision = Number(status?.build_revision || 0)
   const job = status?.job
-  // Stable blot aliases are a best-effort compatibility projection over an
-  // already activated immutable catalog. They must neither restart catalog
-  // migration nor hold the release in schema-transition mode.
-  if (job?.alias_backfill === true && buildRevision >= 3) return { complete: true, status }
+  // Stable blot aliases and a full content rematerialization are bounded
+  // projections over an already activated immutable catalog. A rematerialization
+  // keeps the previous head readable until one verified commit, so neither may
+  // restart catalog migration nor hold the release in schema-transition mode.
+  if ((job?.alias_backfill === true || job?.rematerialize === true) && buildRevision >= 3)
+    return { complete: true, status }
   if (!job && buildRevision >= 3) return { complete: true, status }
   if (!job) {
     return { complete: false, identity: "pending", progress: [0, 0, 0], status }
