@@ -206,9 +206,10 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
     "the mutable CDN alias may remain stale after origin PUT",
   )
   assert.deepEqual(receipt.sources, { authenticated_storage: true })
-  // calls[0] is the alias pre-check; the immutable repair sequence follows.
+  // calls[0..1] are the alias pre-check across both sources; the immutable
+  // repair sequence follows.
   assert.deepEqual(
-    calls.slice(1, 5).map(({ method, key, source }) => [method, key, source]),
+    calls.slice(2, 6).map(({ method, key, source }) => [method, key, source]),
     [
       ["GET", objectKey, "origin"],
       ["GET", objectKey, "cdn"],
@@ -216,6 +217,92 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
       ["GET", objectKey, "origin"],
     ],
   )
+})
+
+test("a stale storage alias is skipped when the public copy already serves the exact bytes", async () => {
+  const repairEnv = {
+    ...env,
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://cdn.example.test",
+  }
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const exact = new TextEncoder().encode("webp-fixture")
+  const stale = new TextEncoder().encode("stale-placeholder")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", exact)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  const aliasKey = publishedGeneBlotAliasKey(symbol)
+  const calls = []
+  const store = createPublishedCardObjectStore(repairEnv, {
+    request: async (url, init, key) => {
+      const source = String(url).startsWith("https://cdn.example.test") ? "cdn" : "origin"
+      calls.push({ method: init.method, key, source })
+      if (init.method === "PUT") return new Response(null, { status: 201 })
+      if (key === objectKey && source === "origin") return new Response(exact)
+      if (key === aliasKey) return new Response(source === "cdn" ? exact : stale)
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  const receipt = await store.publishBlotAlias(symbol, {
+    status: "ready",
+    blot_fingerprint: fingerprint,
+    asset_sha256: assetSha,
+    object_key: objectKey,
+  })
+
+  assert.equal(receipt.skipped, true)
+  assert.deepEqual(receipt.sources, { public_cdn: true })
+  assert.equal(
+    calls.some((call) => call.method === "PUT"),
+    false,
+    "an alias correct on any configured source never pays a storage write",
+  )
+})
+
+test("a lagging storage read-back verifies through another configured source", async () => {
+  const repairEnv = {
+    ...env,
+    ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://cdn.example.test",
+  }
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const bytes = new TextEncoder().encode("webp-fixture")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", bytes)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  const aliasKey = publishedGeneBlotAliasKey(symbol)
+  let aliasPut = false
+  const calls = []
+  const store = createPublishedCardObjectStore(repairEnv, {
+    request: async (url, init, key) => {
+      const source = String(url).startsWith("https://cdn.example.test") ? "cdn" : "origin"
+      calls.push({ method: init.method, key, source })
+      if (init.method === "PUT") {
+        if (key === aliasKey) aliasPut = true
+        return new Response(null, { status: 201 })
+      }
+      if (key === objectKey && source === "origin") return new Response(bytes)
+      if (key === aliasKey && source === "cdn" && aliasPut) return new Response(bytes)
+      return new Response(null, { status: 404 })
+    },
+  })
+
+  const receipt = await store.publishBlotAlias(symbol, {
+    status: "ready",
+    blot_fingerprint: fingerprint,
+    asset_sha256: assetSha,
+    object_key: objectKey,
+  })
+
+  assert.deepEqual(receipt.sources, { public_cdn: true })
+  assert.equal(calls.filter((call) => call.method === "PUT").length, 1)
 })
 
 test("an alias already serving the exact immutable bytes skips the idempotent PUT", async () => {
