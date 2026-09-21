@@ -20,25 +20,25 @@ export const CARD_DELIVERY_INDEX_SIZE = 128
 // 100k SQLite DO writes per day. The former 55k cap was derived from a bootstrap
 // estimate (~2.3 writes/card) that under-predicted a full-catalog
 // rematerialization. The live pass then exhausted 70k at group 27 of 29
-// (69,002 reserved, 855 cards left); groups 8-27 measured ~4.2 writes/card
-// (alarm arms, prepared rows and sealing included), making the full pass cost
-// ~73k. 76k covers that measured cost with retry margin while keeping a 24k
+// (69,002 reserved, 855 cards left) and measured ~4.2 writes/card over groups
+// 8-27, making the full pass cost ~73k. 85k covers that measured cost plus the
+// candidate-completeness backfill pass with retry margin while keeping a 15k
 // floor for votes, other coordinators and recovery; measured non-publisher use
 // is ~1k on a normal day.
-export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 76000
+export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 85000
 export const CARD_PUBLICATION_CONTROL_WRITE_RESERVE = 1000
-export const CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT = 24
 
 export async function enrichPublishedGeneCandidates(records, loadCandidates) {
   const enriched = []
   for (const record of Array.isArray(records) ? records : []) {
     const candidates = await loadCandidates(record)
+    // The published record carries the complete candidate pool. A silent slice
+    // hid candidates whenever a pool grew past a fixed number (B-792); the
+    // published object limits are the boundary instead, and exceeding one fails
+    // the publication loudly rather than truncating what readers see.
     enriched.push({
       ...record,
-      portrait_candidates: (Array.isArray(candidates) ? candidates : []).slice(
-        0,
-        CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT,
-      ),
+      portrait_candidates: Array.isArray(candidates) ? candidates : [],
     })
   }
   return enriched
