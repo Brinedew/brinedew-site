@@ -9,6 +9,10 @@ import {
   projectGeneDelta,
   projectPublicCardHead,
 } from "./lib/iconoplasm-card-publication-coordinator.js"
+import {
+  CARD_PUBLICATION_CONTROL_WRITE_RESERVE,
+  CARD_PUBLICATION_DAILY_WRITE_ALLOCATION,
+} from "./lib/iconoplasm-card-publication.js"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -67,6 +71,7 @@ test(
         resolveDir: fileURLToPath(new URL("..", import.meta.url)),
         contents: `
         import { createCardPublicationCoordinatorClass } from './workers/lib/iconoplasm-card-publication-coordinator.js';
+        import { CARD_PUBLICATION_DAILY_WRITE_ALLOCATION, CARD_PUBLICATION_CONTROL_WRITE_RESERVE } from './workers/lib/iconoplasm-card-publication.js';
         const cards = [{symbol:'EZH2', payload:{symbol:'EZH2', portrait:'original'}}];
         const Base = createCardPublicationCoordinatorClass(() => ({
           legacyBaseline: async () => ({manifest:{schema:'test', build_revision:1, shards:[{key:'legacy', first_symbol:'EZH2',last_symbol:'EZH2',card_count:1}]},watermark:{id:1}}),
@@ -92,7 +97,7 @@ test(
               const recoveredPastDueAlarm=await this.state.storage.getAlarm();
               const afterPastDueRecovery=this.repo.get('write_allocation');
               await this.state.storage.deleteAlarm();
-              this.repo.put('write_allocation',{day,reserved:54000,accounting_version:2});
+              this.repo.put('write_allocation',{day,reserved:CARD_PUBLICATION_DAILY_WRITE_ALLOCATION - CARD_PUBLICATION_CONTROL_WRITE_RESERVE,accounting_version:2});
               this.repo.put('requested',true);
               await this.alarm();
               const retryAlarm=await this.state.storage.getAlarm();
@@ -101,11 +106,11 @@ test(
             }
             if(new URL(request.url).pathname === '/quota-test') {
               const day = new Date().toISOString().slice(0,10);
-              this.repo.put('write_allocation',{day,reserved:55000,limit:55000});
+              this.repo.put('write_allocation',{day,reserved:CARD_PUBLICATION_DAILY_WRITE_ALLOCATION,limit:CARD_PUBLICATION_DAILY_WRITE_ALLOCATION});
               let rejected = false;
               try {this.repo.reserveWrites(2)} catch {rejected=true}
               const retained=this.repo.get('write_allocation');
-              this.repo.put('write_allocation',{day:'2000-01-01',reserved:55000,limit:55000});
+              this.repo.put('write_allocation',{day:'2000-01-01',reserved:CARD_PUBLICATION_DAILY_WRITE_ALLOCATION,limit:CARD_PUBLICATION_DAILY_WRITE_ALLOCATION});
               this.repo.reserveWrites(2);
               return Response.json({rejected,retained,reset:this.repo.get('write_allocation')});
             }
@@ -210,7 +215,7 @@ test(
       )
       assert.equal(
         alarmBudget.allocation.reserved,
-        54004,
+        CARD_PUBLICATION_DAILY_WRITE_ALLOCATION - CARD_PUBLICATION_CONTROL_WRITE_RESERVE + 4,
         "failure record and recovery alarm use protected control headroom",
       )
       const nextUtcDay = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 86400000
@@ -225,7 +230,7 @@ test(
       assert.equal(retainedHead.current, head.current, "quota recovery must leave readers online")
       const quota = await (await runtime.dispatchFetch("https://test/quota-test")).json()
       assert.equal(quota.rejected, true)
-      assert.equal(quota.retained.reserved, 55000)
+      assert.equal(quota.retained.reserved, CARD_PUBLICATION_DAILY_WRITE_ALLOCATION)
       assert.equal(quota.reset.reserved, 2)
       const progress = await (await runtime.dispatchFetch("https://test/progress-test")).json()
       assert.equal(progress.build_revision, 2)
