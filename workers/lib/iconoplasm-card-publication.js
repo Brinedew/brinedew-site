@@ -16,10 +16,15 @@ const CARD_PUBLICATION_CONCURRENCY = 2
 export const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
 const UTF8 = new TextEncoder()
 export const CARD_DELIVERY_INDEX_SIZE = 128
-// This publisher's allocation, NOT an account entitlement. Leave 45k of the
-// Free plan's 100k SQLite DO writes for votes, other coordinators and recovery.
-// Bootstrap ~19k cards reserves ~44k; ordinary winner changes are much smaller.
-export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 55000
+// This publisher's allocation, NOT an account entitlement. The Free plan allows
+// 100k SQLite DO writes per day. The former 55k cap was derived from a bootstrap
+// estimate (~2.3 writes/card) that under-predicted a full-catalog
+// rematerialization: the live pass measured ~3.4 writes/card (alarm arms,
+// prepared rows and sealing included), which suspended a legitimate pass
+// mid-way and added a reset-day tail. 70k covers the measured ~65k for 19k
+// cards with retry margin while keeping a 30k floor for votes, other
+// coordinators and recovery; measured non-publisher use is ~1k on a normal day.
+export const CARD_PUBLICATION_DAILY_WRITE_ALLOCATION = 70000
 export const CARD_PUBLICATION_CONTROL_WRITE_RESERVE = 1000
 export const CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT = 24
 
