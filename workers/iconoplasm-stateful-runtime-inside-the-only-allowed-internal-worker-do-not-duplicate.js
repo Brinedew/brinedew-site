@@ -35682,6 +35682,18 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
       json(result, 202, { "Cache-Control": "no-store" }),
     )
   },
+  "admin_gallery.rematerialize_card_candidates": async ({ request, env, done }) => {
+    if (!(await isIconoplasmAdmin(request, env)))
+      return done(
+        "admin_gallery_rematerialize_candidates_403",
+        json({ error: "Unauthorized" }, 403),
+      )
+    const result = await callCardPublication(env, "/rematerialize", { method: "POST" })
+    return done(
+      "admin_gallery_rematerialize_candidates",
+      json(result, 202, { "Cache-Control": "no-store" }),
+    )
+  },
   "admin_gallery.backfill_blot_aliases": async ({ request, env, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done("admin_gallery_blot_alias_backfill_403", json({ error: "Unauthorized" }, 403))

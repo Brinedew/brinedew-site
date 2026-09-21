@@ -299,6 +299,45 @@ export function createCardPublication({
     })
     return status()
   }
+  /**
+   * B-790: re-materialize every published card from the current source without
+   * changing the mapping revision. Unlike `migrate()`, which deliberately
+   * reuses compatible immutable objects, this walk calls `source.materialize`
+   * for every symbol, so content that only exists in the source (for example
+   * bounded candidate snapshots published after an earlier freeze) reaches the
+   * public plane. The head is only replaced by one fully verified commit; the
+   * previous catalog stays readable until then.
+   */
+  async function rematerialize() {
+    const head = repo.get("head")
+    if (!head) throw new Error("Card publication storage migration has not been initialized")
+    if (repo.get("job")) return status()
+    if (
+      source.buildRevision != null &&
+      head.current.manifest.build_revision !== source.buildRevision
+    )
+      throw new Error("Card mapping revision changed; explicit catalog migration required")
+    // Claim the event window this pass will cover so the post-pass dirty set
+    // only contains events received while the pass was preparing.
+    const through = await source.highWater()
+    repo.reserveWrites?.(3)
+    repo.transaction(() => {
+      repo.put("job", {
+        bootstrap: false,
+        rematerialize: true,
+        baseline: head.current.manifest,
+        baseline_version: head.current.version,
+        watermark: through,
+        groups: head.current.manifest.shards.map((_, index) => ({ index, symbols: null })),
+        group: 0,
+        offset: 0,
+        refs: [],
+        started_at: now(),
+      })
+      repo.put("requested", true)
+    })
+    return status()
+  }
   async function backfillBlotAliases() {
     const head = repo.get("head")
     if (!head) throw new Error("Card publication storage migration has not been initialized")
@@ -391,7 +430,14 @@ export function createCardPublication({
       const group = await settlePublicationWrites(
         slice.slice(offset, offset + CARD_PUBLICATION_CONCURRENCY).map(async (symbol) => {
           const card = bySymbol.get(symbol)
-          if (!card) return { symbol, card: null, entry: null }
+          if (!card) {
+            // A full rematerialization never deletes a published page: a
+            // missing source card fails the phase closed so the previous
+            // complete catalog stays readable and the pass retries.
+            if (job.rematerialize)
+              throw new Error(`Rematerialization source returned no card for ${symbol}`)
+            return { symbol, card: null, entry: null }
+          }
           if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
           const stable = source.stable(card)
           const [full, gene, portrait] = await settlePublicationWrites([
@@ -638,7 +684,7 @@ export function createCardPublication({
         previous: head?.current.version === version ? head.previous : head?.current || null,
         watermark: job.watermark,
       })
-      if (!job.bootstrap && !job.migration && source.afterCommit)
+      if (!job.bootstrap && !job.migration && !job.rematerialize && source.afterCommit)
         repo.put("effects", {
           version,
           after: head.watermark,
@@ -699,6 +745,7 @@ export function createCardPublication({
     wake,
     bootstrap,
     migrate,
+    rematerialize,
     backfillBlotAliases,
     cancelBlotAliasBackfill,
     materializeSymbol,
