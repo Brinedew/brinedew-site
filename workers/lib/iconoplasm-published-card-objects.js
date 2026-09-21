@@ -305,6 +305,27 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     let bytes = BLOT_PLACEHOLDER_BYTES
     let contentType = "image/svg+xml"
     if (immutable) {
+      // A catalog-wide rematerialization republishes the alias for every
+      // published card. When authenticated Storage already serves the exact
+      // immutable bytes under the alias key, that read IS the verification;
+      // skipping the idempotent PUT cuts a full pass from three storage round
+      // trips per card to one. Missing, mismatched or unreadable bytes fall
+      // through to the authoritative publish path below.
+      try {
+        const existing = await readImageBytes(key, immutable.hash, { storageOnly: true })
+        if (existing?.bytes) {
+          return {
+            key,
+            hash: immutable.hash,
+            size: existing.bytes.byteLength,
+            contentType: "image/webp",
+            sources: existing.verifiedSources,
+            skipped: true,
+          }
+        }
+      } catch {
+        // Publish below.
+      }
       try {
         bytes = (
           await readImageBytes(immutable.key, immutable.hash, { repairStorageFromCdn: true })

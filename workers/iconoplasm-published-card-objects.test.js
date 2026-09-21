@@ -206,14 +206,47 @@ test("a canonical CDN copy repairs a divergent blot origin before alias publicat
     "the mutable CDN alias may remain stale after origin PUT",
   )
   assert.deepEqual(receipt.sources, { authenticated_storage: true })
+  // calls[0] is the alias pre-check; the immutable repair sequence follows.
   assert.deepEqual(
-    calls.slice(0, 4).map(({ method, key, source }) => [method, key, source]),
+    calls.slice(1, 5).map(({ method, key, source }) => [method, key, source]),
     [
       ["GET", objectKey, "origin"],
       ["GET", objectKey, "cdn"],
       ["PUT", objectKey, "origin"],
       ["GET", objectKey, "origin"],
     ],
+  )
+})
+
+test("an alias already serving the exact immutable bytes skips the idempotent PUT", async () => {
+  const { store, objects, calls } = fixture()
+  const symbol = "TP53"
+  const fingerprint = "b".repeat(64)
+  const bytes = new TextEncoder().encode("webp-fixture")
+  const assetSha = await crypto.subtle
+    .digest("SHA-256", bytes)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    )
+  const objectKey = `blots/v1/T/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
+  const aliasKey = publishedGeneBlotAliasKey(symbol)
+  objects.set(objectKey, bytes)
+  objects.set(aliasKey, bytes)
+
+  const receipt = await store.publishBlotAlias(symbol, {
+    status: "ready",
+    blot_fingerprint: fingerprint,
+    asset_sha256: assetSha,
+    object_key: objectKey,
+  })
+
+  assert.equal(receipt.skipped, true)
+  assert.equal(receipt.key, aliasKey)
+  assert.equal(receipt.hash, assetSha)
+  assert.equal(
+    calls.some((call) => call.method === "PUT"),
+    false,
+    "an exact existing alias never pays a storage write",
   )
 })
 
