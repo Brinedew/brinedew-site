@@ -22,7 +22,12 @@ import { migrationSizePrerequisites } from "./operation-cost-release-prerequisit
 
 // Two inventory preflights, schema inspection, migrations, and catalog
 // initialization each own a bounded sender. Budget their cumulative requests.
+// The migration sender is inert when nothing is pending; measured releases
+// without pending migrations spend well under a hundred authority requests
+// (2026-09-21: ~60/release across the day's deploys), so the full migration
+// reserve applies only when a migration actually runs.
 const RELEASE_CONTROL_REQUESTS = 4 * RELEASE_REQUEST_LIMIT + MIGRATION_RELEASE_REQUEST_LIMIT
+const RELEASE_CONTROL_REQUESTS_NO_MIGRATIONS = 4 * RELEASE_REQUEST_LIMIT
 
 // The installed reader-recovery state has already selected the retained origin
 // before this preflight runs. A successful origin is admissible only when
@@ -89,7 +94,10 @@ export async function preflightOperationCostRelease({
       if (!Number.isSafeInteger(required[meter])) throw new Error("COST_PREDICTION_REQUIRED")
     }
   }
-  required.requests = Math.max(required.requests, RELEASE_CONTROL_REQUESTS)
+  required.requests = Math.max(
+    required.requests,
+    pendingMigrations.length ? RELEASE_CONTROL_REQUESTS : RELEASE_CONTROL_REQUESTS_NO_MIGRATIONS,
+  )
   // Preparation is pure: these adapters have no database binding here. Use the
   // server's actual maximum calculation, not a second copy of its formulas.
   const adapters = createMigrationOperationCostAdapters(
@@ -115,7 +123,13 @@ export async function preflightOperationCostRelease({
       resource: key.split("/")[0],
     })),
   ]
-  const maximum = { rows_read: 0, rows_written: 0, requests: RELEASE_CONTROL_REQUESTS }
+  const maximum = {
+    rows_read: 0,
+    rows_written: 0,
+    requests: pendingMigrations.length
+      ? RELEASE_CONTROL_REQUESTS
+      : RELEASE_CONTROL_REQUESTS_NO_MIGRATIONS,
+  }
   for (const step of steps) {
     const adapter = adapters.get(step.adapter_id)
     if (!adapter || adapter.resource !== step.resource)
