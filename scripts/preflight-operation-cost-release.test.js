@@ -404,7 +404,7 @@ test("applied migrations do not consume new-release headroom; unknown or duplica
       now: () => time,
     })
   const none = await verify([])
-  assert.deepEqual(none.required, { rows_read: 15900, rows_written: 0, requests: 416 })
+  assert.deepEqual(none.required, { rows_read: 15900, rows_written: 0, requests: 160 })
   assert.equal(none.maximum.rows_written, 0)
   const key = "iconoplasm-authoring/0013_strict_upload_reservations.sql"
   const one = await verify([key])
