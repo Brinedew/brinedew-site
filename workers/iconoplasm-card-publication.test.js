@@ -5,7 +5,6 @@ import {
   createCardPublication,
   CARD_BLOT_ALIAS_BACKFILL_BATCH,
   CARD_PUBLICATION_BATCH,
-  CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT,
   enrichPublishedGeneCandidates,
   projectCardBlot,
 } from "./lib/iconoplasm-card-publication.js"
@@ -30,7 +29,7 @@ test("blot projection clones authoritative hydrated cards instead of mutating fr
   assert.equal("blot" in withoutBlot, false)
 })
 
-test("public gene publication adds bounded candidate snapshots sequentially", async () => {
+test("public gene publication adds complete candidate snapshots sequentially", async () => {
   const records = [
     { symbol: "TP53", portrait: { asset_sha256: "a".repeat(64) } },
     { symbol: "BRCA1", portrait: { asset_sha256: "b".repeat(64) } },
@@ -42,15 +41,15 @@ test("public gene publication adds bounded candidate snapshots sequentially", as
     assert.equal(active, 1, "candidate projection must not fan out D1 reads")
     calls.push(record.symbol)
     active -= 1
-    return Array.from({ length: CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT + 3 }, (_, index) => ({
+    return Array.from({ length: 30 }, (_, index) => ({
       asset_sha256: String(index).padStart(64, "0"),
       image_score: index,
     }))
   })
 
   assert.deepEqual(calls, ["TP53", "BRCA1"])
-  assert.equal(enriched[0].portrait_candidates.length, CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT)
-  assert.equal(enriched[1].portrait_candidates.length, CARD_PUBLICATION_PUBLIC_CANDIDATE_LIMIT)
+  assert.equal(enriched[0].portrait_candidates.length, 30)
+  assert.equal(enriched[1].portrait_candidates.length, 30)
   assert.equal("portrait_candidates" in records[0], false, "source records stay immutable")
 })
 
