@@ -589,14 +589,9 @@ test("rematerialization republishes every page from source while the old head st
   for (const kind of ["cards", "genes", "portraits"]) {
     assert.equal(kinds.filter((value) => value === kind).length, 9, `${kind} rewritten per card`)
   }
-  // A historical missing blot must not stall the catalog refresh.
-  assert.equal(f.aliases.length - aliasesBefore, 9)
-  assert.equal(
-    f.aliases
-      .slice(aliasesBefore)
-      .every((item) => item.options.allowMissingImmutablePlaceholder === true),
-    true,
-  )
+  // A catalog-wide rematerialization never republishes mutable per-symbol
+  // aliases; that compatibility plane belongs to the alias backfill owner.
+  assert.equal(f.aliases.length - aliasesBefore, 0)
   const shard = committed.current.manifest.shards[0]
   const index = (await f.objects.read(shard.delivery_indexes[0].key)).value
   const [symbol, , geneHash] = index.entries[0]
