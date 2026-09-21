@@ -296,6 +296,36 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return { bytes, verifiedSources }
   }
 
+  /**
+   * The exact bytes are verified through any configured read source. Bunny
+   * Storage reads and the public pull zone can each lag the other after a
+   * write (both directions observed live), so requiring one named source
+   * couples a catalog-wide pass to whichever cache happens to be behind.
+   */
+  async function firstMatchingCandidate(key, expectedHash) {
+    const candidates = externalPortraitReadCandidates(env, key, { accept: "image/*" })
+    for (const candidate of candidates) {
+      try {
+        const response = await send(
+          candidate.url,
+          { method: "GET", headers: candidate.headers },
+          key,
+        )
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {})
+          continue
+        }
+        const bytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
+        if ((await publishedObjectHash(bytes)) === expectedHash) {
+          return { bytes, source: candidate.source }
+        }
+      } catch {
+        // Try the next configured source.
+      }
+    }
+    return null
+  }
+
   async function publishBlotAlias(symbol, blot, { allowMissingImmutablePlaceholder = false } = {}) {
     const normalized = String(symbol || "")
       .trim()
@@ -306,25 +336,21 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     let contentType = "image/svg+xml"
     if (immutable) {
       // A catalog-wide rematerialization republishes the alias for every
-      // published card. When authenticated Storage already serves the exact
+      // published card. When any configured source already serves the exact
       // immutable bytes under the alias key, that read IS the verification;
-      // skipping the idempotent PUT cuts a full pass from three storage round
-      // trips per card to one. Missing, mismatched or unreadable bytes fall
-      // through to the authoritative publish path below.
-      try {
-        const existing = await readImageBytes(key, immutable.hash, { storageOnly: true })
-        if (existing?.bytes) {
-          return {
-            key,
-            hash: immutable.hash,
-            size: existing.bytes.byteLength,
-            contentType: "image/webp",
-            sources: existing.verifiedSources,
-            skipped: true,
-          }
+      // skipping the idempotent PUT cuts a full pass from three round trips
+      // per card to one. Missing, mismatched or unreadable bytes fall through
+      // to the authoritative publish path below.
+      const existing = await firstMatchingCandidate(key, immutable.hash)
+      if (existing?.bytes) {
+        return {
+          key,
+          hash: immutable.hash,
+          size: existing.bytes.byteLength,
+          contentType: "image/webp",
+          sources: { [existing.source]: true },
+          skipped: true,
         }
-      } catch {
-        // Publish below.
       }
       try {
         bytes = (
@@ -340,31 +366,37 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     const url = externalPortraitStorageUrl(env, key)
     const password = externalPortraitStoragePassword(env)
     if (!url || !password) throw new Error("Bunny published blot writes are not configured")
-    const response = await send(
-      url,
-      {
-        method: "PUT",
-        headers: {
-          AccessKey: password,
-          "Content-Type": contentType,
-          "Cache-Control": "public, max-age=30, must-revalidate",
-        },
-        body: bytes,
-      },
-      key,
-    )
-    await response.body?.cancel().catch(() => {})
-    if (!response.ok) throw new Error(`Published blot alias PUT failed (${response.status})`)
     // The stable /blot/{symbol}.webp object is a compatibility projection, not
-    // publication authority. Bunny does not invalidate Pull Zone or Origin
-    // Shield caches when Storage bytes change, and this zone can legitimately
-    // return the previous alias for its configured cache lifetime. Requiring
-    // the public cache to agree here couples the immutable publication commit
-    // to an independently cached mutable URL and can stall every later gene.
-    // Verify the exact bytes through authenticated Storage; reader-critical
-    // card artifacts continue to name the content-addressed immutable blot.
-    const verified = await readImageBytes(key, hash, { storageOnly: true })
-    return { key, hash, size: bytes.byteLength, contentType, sources: verified.verifiedSources }
+    // publication authority, and each read source can lag a write
+    // independently: requiring one named source once stalled a catalog-wide
+    // pass for tens of minutes on a key whose public bytes were already
+    // correct (CLNK, 2026-09-21). Repeat the identical PUT a bounded number of
+    // times and accept the first source that serves the exact expected bytes;
+    // an unverifiable alias still fails closed.
+    let verified = null
+    for (let attempt = 1; attempt <= 3 && !verified; attempt += 1) {
+      const response = await send(
+        url,
+        {
+          method: "PUT",
+          headers: {
+            AccessKey: password,
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=30, must-revalidate",
+          },
+          body: bytes,
+        },
+        key,
+      )
+      await response.body?.cancel().catch(() => {})
+      if (!response.ok) throw new Error(`Published blot alias PUT failed (${response.status})`)
+      verified = await firstMatchingCandidate(key, hash)
+      if (!verified && attempt < 3)
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+    }
+    if (!verified)
+      throw new Error(`Published blot alias PUT is not readable as ${hash.slice(0, 12)}`)
+    return { key, hash, size: bytes.byteLength, contentType, sources: { [verified.source]: true } }
   }
 
   return {
