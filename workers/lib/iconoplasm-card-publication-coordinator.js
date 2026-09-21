@@ -426,6 +426,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
                 group: job.group,
                 groups: job.groups.length,
                 offset: job.offset,
+                alias_offset: job.alias_offset || 0,
                 seal_offset: job.seal_offset || 0,
                 started_at: job.started_at,
               }
