@@ -240,6 +240,7 @@ test(
         group: 2,
         groups: 3,
         offset: 12,
+        alias_offset: 0,
         seal_offset: 128,
         started_at: "2026-09-19T00:01:00.000Z",
       })
