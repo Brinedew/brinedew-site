@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { createRequire } from "node:module"
@@ -297,6 +298,9 @@ function fakeCoordinatorState() {
     },
     async setAlarm(value) {
       alarm = value
+    },
+    async deleteAlarm() {
+      alarm = null
     },
   }
   const state = {
@@ -600,5 +604,137 @@ test(
     assert.equal(idle.skipped, true)
     assert.equal(writes, 2)
     sql.db.close()
+  },
+)
+
+test(
+  "an oversized published document is recorded once as permanent and never re-armed by a restart (B-792)",
+  { timeout: 60000 },
+  async () => {
+    const shard = { cards: [{ symbol: "EZH2" }] }
+    const shardBytes = new TextEncoder().encode(JSON.stringify(shard))
+    const shardHash = createHash("sha256").update(shardBytes).digest("hex")
+    const stored = new Map()
+    stored.set(`/test-zone/published-cards/v2/immutable/shards/${shardHash}.json`, shardBytes)
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, init = {}) => {
+      const key = new URL(url).pathname
+      if (init.method === "PUT") {
+        stored.set(key, new Uint8Array(init.body))
+        return new Response(null, { status: 201 })
+      }
+      const bytes = stored.get(key)
+      return bytes ? new Response(bytes) : new Response(null, { status: 404 })
+    }
+
+    const env = {
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+    }
+    let materialized = 0
+    const source = {
+      buildRevision: 1,
+      highWater: async () => ({ id: 5 }),
+      changed: async () => ({ symbols: [], truncated: false }),
+      materialize: async (symbols) => {
+        materialized += 1
+        return symbols.map((symbol) => ({ symbol }))
+      },
+      complete: (card) => Boolean(card?.symbol),
+      // The card view stays small; the gene projection carries the oversized
+      // complete candidate pool, exactly like a real 72-candidate gene.
+      stable: (card) => ({ symbol: card.symbol, payload: { symbol: card.symbol } }),
+      project: (payload) => ({ symbol: payload.symbol, filler: "x".repeat(300 * 1024) }),
+      locator: (card) => ({ symbol: card.symbol, portrait: null }),
+    }
+    try {
+      const { state, sql } = fakeCoordinatorState()
+      const Publisher = createCardPublicationCoordinatorClass(() => source)
+      const owner = new Publisher(state, env)
+      await state.ready
+      owner.repo.put("head", {
+        current: {
+          version: "ccv2-" + sha("a"),
+          key: `published-cards/v2/immutable/manifests/${sha("a")}.json`,
+          published_at: "2026-09-22T00:00:00.000Z",
+          manifest: {
+            schema: "iconoplasm.cardCatalog.v2",
+            build_revision: 1,
+            storage: "bunny_card_catalog_v2",
+            card_count: 1,
+            shards: [
+              {
+                key: `published-cards/v2/immutable/shards/${shardHash}.json`,
+                first_symbol: "EZH2",
+                last_symbol: "EZH2",
+                card_count: 1,
+                delivery_indexes: [],
+              },
+            ],
+          },
+        },
+        previous: null,
+        watermark: { id: 5 },
+      })
+
+      const accepted = await owner.fetch(
+        new Request("https://internal/rematerialize", { method: "POST" }),
+      )
+      assert.equal(accepted.status, 202)
+      const armed = await state.storage.getAlarm()
+      assert.ok(armed > Date.now(), "the pass is armed through the existing owner")
+
+      await owner.alarm()
+
+      const status = await (await owner.fetch(new Request("https://internal/status"))).json()
+      assert.equal(status.failure.permanent, true)
+      assert.equal(status.failure.retry_at, 0)
+      assert.equal(status.failure.attempts, 1)
+      assert.equal(status.failure.details.gene, "EZH2")
+      assert.equal(status.failure.details.object_kind, "genes")
+      assert.equal(status.failure.details.limit, 262144)
+      assert.ok(status.failure.details.bytes > 262144)
+      assert.equal(status.failure.details.run.group, 0)
+      assert.equal(status.failure.details.run.rematerialize, true)
+      assert.equal(materialized, 1)
+      assert.equal(
+        await state.storage.getAlarm(),
+        armed,
+        "a permanent failure must not re-arm another identical attempt",
+      )
+
+      // A process restart must not restart identical uploads: the retained
+      // receipt is durable state, and the constructor must not re-arm it.
+      await state.storage.deleteAlarm()
+      const restarted = new Publisher(state, env)
+      await state.ready
+      assert.equal(
+        await state.storage.getAlarm(),
+        null,
+        "a restart does not re-arm a permanent failure",
+      )
+      await restarted.alarm()
+      const afterRestart = await (
+        await restarted.fetch(new Request("https://internal/status"))
+      ).json()
+      assert.equal(materialized, 1, "no identical upload runs after a restart")
+      assert.equal(afterRestart.failure.attempts, 1)
+
+      // The existing operator recovery path clears the receipt and resumes the
+      // durable job through the same owner.
+      const rerun = await restarted.fetch(
+        new Request("https://internal/rematerialize", { method: "POST" }),
+      )
+      assert.equal(rerun.status, 202)
+      const cleared = await (await restarted.fetch(new Request("https://internal/status"))).json()
+      assert.equal(cleared.failure, null)
+      assert.ok((await state.storage.getAlarm()) > Date.now())
+      await restarted.alarm()
+      assert.equal(materialized, 2, "the recovery path resumes the same durable job")
+      sql.db.close()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   },
 )

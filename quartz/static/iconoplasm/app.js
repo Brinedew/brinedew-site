@@ -48,7 +48,7 @@ import {
 import {
   iconoplasmPublicationReader,
   immutableBlotByteUrl,
-} from "./publication-reader.js?v=166919f6b7358465"
+} from "./publication-reader.js?v=a51003fbb0c26d71"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm

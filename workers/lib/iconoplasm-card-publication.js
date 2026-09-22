@@ -234,6 +234,24 @@ export function createCardPublication({
   async function cardsFor(job, ref) {
     return job.bootstrap ? source.legacyCards(ref) : (await readValue(ref.key)).cards
   }
+  // B-792: the coordinator records a failed publication durably. Attach the
+  // exact gene and run identity here, where both are known, so a permanent
+  // oversized document names its input rather than a bare object kind.
+  async function writeCardObjects(symbol, stable, identity) {
+    try {
+      return await settlePublicationWrites([
+        objects.write("cards", stable),
+        objects.write("genes", source.project(stable.payload)),
+        objects.write("portraits", source.stable(source.locator(stable))),
+      ])
+    } catch (error) {
+      if (error && typeof error === "object") {
+        if (!error.gene) error.gene = symbol
+        if (!error.run) error.run = identity
+      }
+      throw error
+    }
+  }
   function status() {
     return {
       head: repo.get("head"),
@@ -439,6 +457,15 @@ export function createCardPublication({
     // before retrying so an earlier phase cannot retain invisible in-flight work.
     // https://developers.cloudflare.com/changelog/post/2026-04-09-relaxed-connection-limiting/
     const prepared = []
+    // Captured before the loop: the per-phase settlement variable below is also
+    // named `group`, and an identity read inside its own initializer would hit
+    // the temporal dead zone.
+    const runIdentity = {
+      group: group.index,
+      offset: job.offset,
+      started_at: job.started_at,
+      rematerialize: job.rematerialize === true,
+    }
     for (let offset = 0; offset < slice.length; offset += CARD_PUBLICATION_CONCURRENCY) {
       const group = await settlePublicationWrites(
         slice.slice(offset, offset + CARD_PUBLICATION_CONCURRENCY).map(async (symbol) => {
@@ -453,11 +480,7 @@ export function createCardPublication({
           }
           if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
           const stable = source.stable(card)
-          const [full, gene, portrait] = await settlePublicationWrites([
-            objects.write("cards", stable),
-            objects.write("genes", source.project(stable.payload)),
-            objects.write("portraits", source.stable(source.locator(stable))),
-          ])
+          const [full, gene, portrait] = await writeCardObjects(symbol, stable, runIdentity)
           return { symbol, card, entry: [symbol, full.hash, gene.hash, portrait.hash] }
         }),
       )
@@ -743,11 +766,10 @@ export function createCardPublication({
     if (!card) return { symbol: cleanSymbol, withdrawn: true, receipts: null }
     if (!source.complete(card)) throw new Error(`Invalid canonical card: ${cleanSymbol}`)
     const stable = source.stable(card)
-    const [full, gene, portrait] = await settlePublicationWrites([
-      objects.write("cards", stable),
-      objects.write("genes", source.project(stable.payload)),
-      objects.write("portraits", source.stable(source.locator(stable))),
-    ])
+    const [full, gene, portrait] = await writeCardObjects(cleanSymbol, stable, {
+      per_symbol: true,
+      selected_asset_sha256: cleanAssetSha ? cleanAssetSha.toLowerCase() : null,
+    })
     return {
       symbol: cleanSymbol,
       withdrawn: false,

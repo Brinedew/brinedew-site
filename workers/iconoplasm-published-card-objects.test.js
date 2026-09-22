@@ -71,6 +71,34 @@ test("namespace and byte limits fail before an unsafe storage write", async () =
   assert.equal(calls.length, 0)
 })
 
+test("cards and genes accept a complete candidate pool up to 256 KiB (B-792)", async () => {
+  const { store } = fixture()
+  // A document between the old 64 KiB bound and the new one is a legitimate
+  // published pool, not an error.
+  const written = await store.write("genes", { value: "x".repeat(100 * 1024) })
+  assert.equal(written.size > 64 * 1024, true)
+  const read = await store.read(written.key)
+  assert.equal(read.value.value.length, 100 * 1024)
+})
+
+test("an oversized document is a permanent failure that names its input (B-792)", async () => {
+  const { store, calls } = fixture()
+  await assert.rejects(store.write("genes", { value: "x".repeat(256 * 1024) }), (error) => {
+    assert.match(error.message, /byte limit: kind=genes/)
+    assert.equal(error.code, "PUBLISHED_OBJECT_OVERSIZED")
+    assert.equal(error.permanent, true)
+    assert.deepEqual(error.details, {
+      object_kind: "genes",
+      bytes: error.details.bytes,
+      limit: 262144,
+    })
+    assert.ok(error.details.bytes > 262144)
+    return true
+  })
+  // The rejected document never reached storage.
+  assert.equal(calls.length, 0)
+})
+
 test("a stalled response body has a deadline", async () => {
   let cancelled = false
   const store = createPublishedCardObjectStore(env, {

@@ -167,9 +167,17 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (objects.has(cacheKey)) return objects.get(cacheKey)
     const path = `/published-cards/v2/immutable/${cacheKey}.json`
     const promise = (async () => {
+      // B-792: cards and genes carry the complete published candidate pool, so
+      // they share the publisher's 256 KiB bound. Other kinds keep theirs.
       const { value, text } = await fetchJson(
         CDN + path,
-        kind === "catalogs" ? 512 * 1024 : kind === "catalogindexes" ? 128 * 1024 : 65536,
+        kind === "cards" || kind === "genes"
+          ? 256 * 1024
+          : kind === "catalogs"
+            ? 512 * 1024
+            : kind === "catalogindexes"
+              ? 128 * 1024
+              : 65536,
       )
       if ((await sha256(text)) !== hash) throw new Error("Publication hash mismatch")
       return value
