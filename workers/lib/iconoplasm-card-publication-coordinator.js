@@ -155,7 +155,10 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             this.deltaDeferred = String(error.message || error).slice(0, 500)
           }
         }
-        if (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects")) {
+        if (
+          (this.repo.get("job") || this.repo.get("requested") || this.repo.get("effects")) &&
+          this.repo.get("failure")?.permanent !== true
+        ) {
           const retryAt = Number(this.repo.get("failure")?.retry_at || 0)
           try {
             await this.arm(CARD_PUBLICATION_ALARM_CADENCE_MS, {
@@ -201,6 +204,27 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
     }
     async scheduleRetry(error) {
       const attempts = Number(this.repo.get("failure")?.attempts || 0) + 1
+      // B-792: a permanent validation failure cannot succeed on a later attempt
+      // with unchanged input. Record the exact cause durably and do not re-arm,
+      // so a process restart does not restart identical uploads. The existing
+      // recovery paths (/migrate, /rematerialize) clear this receipt once the
+      // cause changed, and the durable job then resumes through the same owner.
+      if (error?.permanent === true) {
+        this.repo.reserveWrites(2, { control: true })
+        this.repo.put("failure", {
+          attempts,
+          message: String(error.message || error).slice(0, 500),
+          at: new Date().toISOString(),
+          retry_at: 0,
+          permanent: true,
+          details: {
+            ...(error.details && typeof error.details === "object" ? error.details : {}),
+            gene: error.gene || null,
+            run: error.run || null,
+          },
+        })
+        return
+      }
       const retryAt =
         Number(error.retryAt) ||
         Date.now() + Math.min(900000, 30000 * 2 ** Math.min(attempts - 1, 5))
@@ -367,13 +391,17 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
             this.projectedHeadVersion = projection?.current || null
             this.projectionDeferred = null
           }
-          const result = await this.publisher.step()
+          // B-792: a retained permanent failure means the exact durable job
+          // cannot progress with unchanged input. Skip the identical attempt;
+          // only the existing recovery paths clear the receipt.
+          const permanentFailure = this.repo.get("failure")?.permanent === true
+          const result = permanentFailure ? { more: false } : await this.publisher.step()
           const delta = await this.projectGeneDeltaStep()
           if (result.committed) {
             const projection = await projectPublicCardHead(this.env, this.repo.get("head"))
             this.projectedHeadVersion = projection?.current || null
           }
-          if (this.repo.get("failure")) {
+          if (!permanentFailure && this.repo.get("failure")) {
             this.repo.reserveWrites(2)
             this.repo.remove("failure")
           }

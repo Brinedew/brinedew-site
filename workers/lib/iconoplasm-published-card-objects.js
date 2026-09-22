@@ -20,9 +20,13 @@ export const PUBLISHED_OBJECT_STORAGE_UNAVAILABLE = "PUBLISHED_OBJECT_STORAGE_UN
 // publication coordinator's own bounded backoff remains the outer retry bound.
 // Linear B-753.
 export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
+// B-792: cards and genes carry the complete published candidate pool, so
+// their bound is sized for the largest supported pool rather than the
+// pre-candidate record. 256 KiB is a proposed application setting with
+// headroom, not a provider requirement; unrelated kinds keep their bound.
 export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
-  cards: 65536,
-  genes: 65536,
+  cards: 256 * 1024,
+  genes: 256 * 1024,
   portraits: 8192,
   indexes: 65536,
   catalogindexes: 128 * 1024,
@@ -408,9 +412,21 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
         throw new Error("Unknown published object kind")
       const bytes = encoder.encode(canonicalPublishedJson(value))
       if (bytes.byteLength > PUBLISHED_CARD_OBJECT_LIMITS[kind]) {
-        throw new Error(
+        // B-792: an oversized serialized document is not a transient failure.
+        // The exact input cannot succeed on a later attempt, so the coordinator
+        // records it durably as permanent instead of re-uploading and retrying
+        // the same bytes. The caller attaches the gene and run identity.
+        const error = new Error(
           `Published object exceeds its byte limit: kind=${kind}, bytes=${bytes.byteLength}, limit=${PUBLISHED_CARD_OBJECT_LIMITS[kind]}`,
         )
+        error.code = "PUBLISHED_OBJECT_OVERSIZED"
+        error.permanent = true
+        error.details = {
+          object_kind: kind,
+          bytes: bytes.byteLength,
+          limit: PUBLISHED_CARD_OBJECT_LIMITS[kind],
+        }
+        throw error
       }
       const hash = await publishedObjectHash(bytes)
       const key = publishedCardObjectKey(kind, hash)
