@@ -211,7 +211,11 @@
           controller.signal,
           tab,
           (value) => Boolean(value && typeof value === "object"),
-          { hash },
+          // B-792: the genes lane carries the complete published candidate
+          // pool, so it shares the publisher's 256 KiB bound. A released
+          // extension that still holds the older 64 KiB limit degrades to the
+          // service worker's direct fetch fallback; it is never broken by it.
+          { hash, limit: kind === "genes" ? 256 * 1024 : 65536 },
         )
           .then((value) => {
             if (kind === "manifests" || kind === "indexes") boundedSet(objects, key, value, 16)
