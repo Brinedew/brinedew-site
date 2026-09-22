@@ -1412,6 +1412,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_gallery.cancel_blot_alias_backfill",
   ),
   adminApiContract(
+    "admin_gallery_card_rematerialization_cancel",
+    "/gallery/cancel-card-rematerialization",
+    POST,
+    "admin_gallery_dirty_shard_publication",
+    "admin_gallery.cancel_card_rematerialization",
+  ),
+  adminApiContract(
     "admin_gallery_storage_migration_status",
     "/gallery/migrate-card-storage/status",
     GET,

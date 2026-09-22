@@ -594,6 +594,15 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
               await this.state.storage.deleteAlarm()
             }
             return reply({ ok: true, ...result }, 200)
+          } else if (path === "/cancel-rematerialization") {
+            // B-795: a full pass costs a platform day; the operator must be able
+            // to stop one. A stopped job must not re-arm from a retained retry.
+            const result = this.publisher.cancelRematerialization()
+            if (result.accepted) {
+              this.repo.reserveWrites(2, { control: true })
+              await this.state.storage.deleteAlarm()
+            }
+            return reply({ ok: true, ...result }, 200)
           } else if (path === "/wake") {
             if (!this.repo.get("head") && !this.repo.get("job"))
               return reply({ accepted: false, migration_pending: true }, 200)

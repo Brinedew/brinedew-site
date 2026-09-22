@@ -408,6 +408,63 @@ test("coordinator starts a rematerialization job without touching the published 
   sql.db.close()
 })
 
+test("an operator stop control clears a running rematerialization job and its alarm", async () => {
+  const { state, sql } = fakeCoordinatorState()
+  const source = { buildRevision: 1, highWater: async () => ({ id: 7 }) }
+  const Publisher = createCardPublicationCoordinatorClass(() => source)
+  const owner = new Publisher(state, {})
+  await state.ready
+  owner.repo.put("head", {
+    current: {
+      version: "ccv2-" + sha("a"),
+      key: `published-cards/v2/immutable/manifests/${sha("a")}.json`,
+      published_at: "2026-09-20T00:00:00.000Z",
+      manifest: {
+        schema: "iconoplasm.cardCatalog.v2",
+        build_revision: 1,
+        storage: "bunny_card_catalog_v2",
+        card_count: 2,
+        shards: [
+          {
+            key: "shard",
+            first_symbol: "A",
+            last_symbol: "B",
+            card_count: 2,
+            delivery_indexes: [],
+          },
+        ],
+      },
+    },
+    previous: null,
+    watermark: { id: 5 },
+  })
+  const accepted = await owner.fetch(
+    new Request("https://internal/rematerialize", { method: "POST" }),
+  )
+  assert.equal(accepted.status, 202)
+  assert.equal(owner.repo.get("job").rematerialize, true)
+  assert.ok((await state.storage.getAlarm()) > Date.now())
+  // A retained retry receipt must not survive the stop either.
+  owner.repo.put("failure", { attempts: 3, retry_at: Date.now() + 60000 })
+
+  const cancelled = await (
+    await owner.fetch(new Request("https://internal/cancel-rematerialization", { method: "POST" }))
+  ).json()
+  assert.equal(cancelled.ok, true)
+  assert.equal(cancelled.accepted, true)
+  assert.equal(cancelled.stopped_at.group, 0)
+  assert.equal(owner.repo.get("job"), null)
+  assert.equal(owner.repo.get("failure"), null)
+  assert.equal(owner.repo.prepared().length, 0)
+  assert.equal(await state.storage.getAlarm(), null, "a stopped pass must not re-arm")
+
+  const repeat = await (
+    await owner.fetch(new Request("https://internal/cancel-rematerialization", { method: "POST" }))
+  ).json()
+  assert.equal(repeat.accepted, false, "no job is a no-op")
+  sql.db.close()
+})
+
 test("gene delta projection writes the KV document once and skips unchanged bytes", async () => {
   const values = new Map()
   let writes = 0
