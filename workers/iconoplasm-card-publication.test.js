@@ -390,6 +390,24 @@ test("a 750-card post-cutover repair resumes through bounded materialization pag
   assert.equal(p.status().job, null)
 })
 
+test("a publication phase fits the platform subrequest budget", () => {
+  // B-793: each card now writes four objects (cards, genes, portraits and one
+  // candidate gallery page), each a PUT plus a verified GET. The phase must
+  // leave room for the old-shard read, source materialization, redirects and
+  // provider variance inside Cloudflare Free's 50 subrequests per invocation.
+  // Six cards cost 48-52 and failed live with "Too many subrequests by single
+  // Worker invocation" (2026-09-22 07:15 UTC). Adding a fifth object or
+  // raising the batch must revisit this arithmetic, not silently overflow it.
+  const PHASE_SUBREQUEST_LIMIT = 50
+  const PHASE_SUBREQUEST_RESERVE = 18
+  const objectsPerCard = 4
+  assert.equal(
+    CARD_PUBLICATION_BATCH * objectsPerCard * 2 + PHASE_SUBREQUEST_RESERVE <=
+      PHASE_SUBREQUEST_LIMIT,
+    true,
+  )
+})
+
 test("packed shards split on canonical UTF-8 bytes before immutable storage rejects them", async () => {
   const f = fixture(750)
   for (const card of f.cards) card.payload.name = `Gene ${card.symbol} ${"x".repeat(7000)}`
