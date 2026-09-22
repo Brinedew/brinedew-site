@@ -1546,17 +1546,46 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  // B-793: the published gene record keeps its complete candidate pool in
+  // immutable gallery pages. Hydrate it here, at the one place every dossier
+  // load funnels through, so each existing synchronous consumer keeps working;
+  // a record without a gallery reference (embedded pool or an older
+  // publication) passes through unchanged. A failed page fetch rejects this
+  // load, so the page shows its error state instead of silently rendering an
+  // empty gallery.
+  function hydratePublishedCandidateGallery(payload) {
+    var publicationReader = window.IconoplasmPublicationReader
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      !payload.candidate_gallery ||
+      !publicationReader ||
+      typeof publicationReader.candidateGallery !== "function"
+    ) {
+      return Promise.resolve(payload)
+    }
+    return publicationReader.candidateGallery(payload).then(function (gallery) {
+      return Object.assign({}, payload, {
+        portrait_candidates: gallery.candidates,
+        candidate_count: gallery.count,
+      })
+    })
+  }
+
   function fetchCompleteGeneDetailFromEndpoint(key, options) {
     var publicationReader = window.IconoplasmPublicationReader
     if (!publicationReader || typeof publicationReader.gene !== "function") {
       return Promise.reject(new Error("Immutable Iconoplasm publication reader is unavailable"))
     }
-    return publicationReader.gene(key, options || {}).then(function (data) {
-      if (!isCompleteGeneDetailPayload(data, key)) {
-        throw new Error("Incomplete gene detail response for " + key)
-      }
-      return data
-    })
+    return publicationReader
+      .gene(key, options || {})
+      .then(hydratePublishedCandidateGallery)
+      .then(function (data) {
+        if (!isCompleteGeneDetailPayload(data, key)) {
+          throw new Error("Incomplete gene detail response for " + key)
+        }
+        return data
+      })
   }
 
   function fetchGeneDetail(symbol, options) {
