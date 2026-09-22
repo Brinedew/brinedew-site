@@ -8,6 +8,7 @@ const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const MAX_CATALOG_INDEXES = 32
 const MAX_SEARCH_RESULTS = 12
 const MAX_GALLERY_PAGE_SIZE = 24
+const MAX_CANDIDATE_GALLERY_PAGES = 64
 export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   catalogIndexes: MAX_CATALOG_INDEXES,
   compactIndexBytes: 128 * 1024,
@@ -57,7 +58,7 @@ async function sha256(text) {
 
 function objectIdentity(key, expectedKind = "") {
   const match = String(key || "").match(
-    /^published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|catalogindexes|catalogs|manifests)\/([a-f0-9]{64})\.json$/,
+    /^published-cards\/v2\/immutable\/(cards|genes|galleries|portraits|indexes|catalogindexes|catalogs|manifests)\/([a-f0-9]{64})\.json$/,
   )
   if (!match || (expectedKind && match[1] !== expectedKind)) {
     throw new Error("Invalid immutable publication object key")
@@ -90,8 +91,16 @@ export function immutableBlotByteUrl(blot) {
 
 function withImmutableMedia(record) {
   if (!record || typeof record !== "object") return record
-  const candidates = Array.isArray(record.portrait_candidates) ? record.portrait_candidates : []
-  const projected = { ...record, portrait_candidates: candidates }
+  // B-793: a record with a gallery reference must not carry a fabricated empty
+  // pool — that would read as "no candidates" instead of "fetch the pages".
+  const projected = record.candidate_gallery
+    ? { ...record }
+    : {
+        ...record,
+        portrait_candidates: Array.isArray(record.portrait_candidates)
+          ? record.portrait_candidates
+          : [],
+      }
   const portrait = record.portrait && typeof record.portrait === "object" ? record.portrait : null
   const sha = String(portrait?.asset_sha256 || "").toLowerCase()
   if (!HASH.test(sha) || portrait?.status !== "published") return projected
@@ -167,11 +176,11 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (objects.has(cacheKey)) return objects.get(cacheKey)
     const path = `/published-cards/v2/immutable/${cacheKey}.json`
     const promise = (async () => {
-      // B-792: cards and genes carry the complete published candidate pool, so
-      // they share the publisher's 256 KiB bound. Other kinds keep theirs.
+      // B-792/B-793: cards, genes and immutable candidate gallery pages share
+      // the publisher's 256 KiB bound. Other kinds keep theirs.
       const { value, text } = await fetchJson(
         CDN + path,
-        kind === "cards" || kind === "genes"
+        kind === "cards" || kind === "genes" || kind === "galleries"
           ? 256 * 1024
           : kind === "catalogs"
             ? 512 * 1024
@@ -268,6 +277,49 @@ export function createIconoplasmPublicationReader(options = {}) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
     return fromCoherentPublication(`gene:${key}`, (head) => geneFromPublication(head, key))
+  }
+
+  // B-793: the gene record stays small; its complete candidate pool lives in
+  // immutable gallery pages reached from `candidate_gallery`. A core gene
+  // render never fetches a page — only a gallery that actually renders one
+  // calls this. Pages are content-addressed and immutable, so the existing
+  // object cache makes a repeat call free. A failed or malformed page throws:
+  // callers show an unavailable/error state, never "no candidates".
+  async function candidateGallery(record) {
+    const symbol = normalizedSymbol(record?.symbol)
+    if (!symbol) throw new Error("Invalid candidate gallery symbol")
+    let reference = record?.candidate_gallery || null
+    if (!reference && Array.isArray(record?.portrait_candidates)) {
+      // Transition compatibility: records published before the split embed
+      // their pool directly.
+      return { candidates: record.portrait_candidates, count: record.portrait_candidates.length }
+    }
+    const declared = Number.isSafeInteger(record?.candidate_count)
+      ? Number(record.candidate_count)
+      : null
+    const candidates = []
+    let page = 0
+    while (reference) {
+      if (page >= MAX_CANDIDATE_GALLERY_PAGES)
+        throw new Error("Candidate gallery chain exceeds its page bound")
+      const identity = objectIdentity(reference.key, "galleries")
+      const value = await immutableObject("galleries", identity.hash)
+      if (
+        value?.schema_version !== 1 ||
+        value.symbol !== symbol ||
+        value.page !== page ||
+        !Array.isArray(value.candidates)
+      ) {
+        throw new Error("Invalid candidate gallery page")
+      }
+      candidates.push(...value.candidates)
+      reference = value.next
+      page += 1
+    }
+    if (declared != null && candidates.length !== declared) {
+      throw new Error("Candidate gallery count mismatch")
+    }
+    return { candidates, count: candidates.length }
   }
 
   async function genes(symbols) {
@@ -482,7 +534,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
-  return { currentHead, gene, genes, search, gallery, metadata }
+  return { currentHead, gene, genes, candidateGallery, search, gallery, metadata }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
