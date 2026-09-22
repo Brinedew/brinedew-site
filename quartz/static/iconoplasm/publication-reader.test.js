@@ -44,6 +44,7 @@ test("anonymous gene detail asks the immutable publication reader instead of a s
       function isCompleteGeneDetailPayload(payload, symbol) {
         return payload && payload.symbol === symbol && payload.essence && Array.isArray(payload.portrait_candidates);
       }
+      function hydratePublishedCandidateGallery(payload) { return Promise.resolve(payload) }
       ${source.slice(start, end)}
       return { fetchCompleteGeneDetailFromEndpoint, calls };
     `,
@@ -695,4 +696,92 @@ test("homepage and crawler-facing reads short-circuit before every throwing stat
     assert.equal(response.status, status, label)
     assert.match(await response.text(), new RegExp(body), label)
   }
+})
+
+// B-793: the published gene record keeps its complete candidate pool in
+// immutable gallery pages. The dossier hydrates it at the one funnel every
+// load passes through, so no synchronous consumer changes shape.
+function loadDossierFunnel(reader) {
+  return readFile(appPath, "utf8").then((source) => {
+    const start = source.indexOf("function isCompleteGeneDetailPayload")
+    const end = source.indexOf("function fetchGeneDetail", start)
+    assert.notEqual(start, -1, "missing gene detail payload guard")
+    assert.notEqual(end, -1, "missing gene detail funnel boundary")
+    return new Function(
+      "reader",
+      `
+        var window = { IconoplasmPublicationReader: reader };
+        function normalizedSymbol(value) { return String(value || "").trim().toUpperCase() }
+        ${source.slice(start, end)}
+        return { fetchCompleteGeneDetailFromEndpoint };
+      `,
+    )(reader)
+  })
+}
+
+function pagedRecord(symbol) {
+  return {
+    symbol,
+    essence: { summary: "p53" },
+    candidate_count: 72,
+    candidate_gallery: {
+      key: `published-cards/v2/immutable/galleries/${"a".repeat(64)}.json`,
+      hash: "a".repeat(64),
+      page_count: 1,
+    },
+  }
+}
+
+test("a paged gene record hydrates its gallery at the dossier funnel", async () => {
+  const calls = []
+  const load = await loadDossierFunnel({
+    gene(symbol) {
+      calls.push(["gene", symbol])
+      return Promise.resolve(pagedRecord(symbol))
+    },
+    candidateGallery(record) {
+      calls.push(["candidateGallery", record.symbol])
+      return Promise.resolve({ candidates: [{ candidate_image_id: 7 }], count: 1 })
+    },
+  })
+  const data = await load.fetchCompleteGeneDetailFromEndpoint("TP53")
+  assert.equal(data.portrait_candidates.length, 1)
+  assert.equal(data.candidate_count, 1)
+  assert.equal(data.essence.summary, "p53")
+  assert.deepEqual(calls, [
+    ["gene", "TP53"],
+    ["candidateGallery", "TP53"],
+  ])
+})
+
+test("an embedded or older record passes the funnel without a gallery fetch", async () => {
+  let galleryCalls = 0
+  const load = await loadDossierFunnel({
+    gene(symbol) {
+      return Promise.resolve({
+        symbol,
+        essence: {},
+        portrait_candidates: [{ candidate_image_id: 1 }],
+      })
+    },
+    candidateGallery() {
+      galleryCalls += 1
+      return Promise.resolve({ candidates: [], count: 0 })
+    },
+  })
+  const data = await load.fetchCompleteGeneDetailFromEndpoint("TP53")
+  assert.equal(data.portrait_candidates.length, 1)
+  assert.equal(galleryCalls, 0)
+})
+
+test("a failed gallery page rejects the dossier load instead of rendering an empty gallery", async () => {
+  const load = await loadDossierFunnel({
+    gene(symbol) {
+      return Promise.resolve(pagedRecord(symbol))
+    },
+    candidateGallery() {
+      return Promise.reject(new Error("Publication HTTP 404"))
+    },
+  })
+  await assert.rejects(load.fetchCompleteGeneDetailFromEndpoint("TP53"), /HTTP 404/)
 })
