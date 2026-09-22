@@ -27,6 +27,10 @@ export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
 export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   cards: 256 * 1024,
   genes: 256 * 1024,
+  // B-793: immutable candidate gallery pages. A page is capped at 128
+  // candidates or this bound, whichever is reached first; a single candidate
+  // that cannot fit a page is a permanent validation error, never a truncation.
+  galleries: 256 * 1024,
   portraits: 8192,
   indexes: 65536,
   catalogindexes: 128 * 1024,
