@@ -1,3 +1,4 @@
+import { writeCandidateGallery } from "./iconoplasm-candidate-gallery.js"
 import {
   canonicalPublishedJson,
   PUBLISHED_CARD_OBJECT_LIMITS,
@@ -237,13 +238,30 @@ export function createCardPublication({
   // B-792: the coordinator records a failed publication durably. Attach the
   // exact gene and run identity here, where both are known, so a permanent
   // oversized document names its input rather than a bare object kind.
+  //
+  // B-793: the gene record stays small. Its complete candidate pool moves into
+  // immutable gallery pages written and verified in this same phase, and the
+  // record carries the count plus a reference to the first page. The card VM
+  // keeps its embedded payload until B-794 retires the duplicate publication.
   async function writeCardObjects(symbol, stable, identity) {
     try {
-      return await settlePublicationWrites([
+      const projected = source.project(stable.payload)
+      const candidates = Array.isArray(projected?.portrait_candidates)
+        ? projected.portrait_candidates
+        : []
+      const gallery = await writeCandidateGallery(symbol, candidates, (kind, body) =>
+        objects.write(kind, body),
+      )
+      const geneRecord = { ...projected }
+      delete geneRecord.portrait_candidates
+      geneRecord.candidate_count = gallery.candidate_count
+      geneRecord.candidate_gallery = gallery.candidate_gallery
+      const [full, gene, portrait] = await settlePublicationWrites([
         objects.write("cards", stable),
-        objects.write("genes", source.project(stable.payload)),
+        objects.write("genes", geneRecord),
         objects.write("portraits", source.stable(source.locator(stable))),
       ])
+      return [full, gene, portrait]
     } catch (error) {
       if (error && typeof error === "object") {
         if (!error.gene) error.gene = symbol
