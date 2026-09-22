@@ -596,7 +596,23 @@ test("rematerialization republishes every page from source while the old head st
   const [symbol, , geneHash] = index.entries[0]
   const gene = (await f.objects.read(publishedCardObjectKey("genes", geneHash))).value
   assert.equal(gene.name, `${symbol} refreshed`)
-  assert.equal(gene.portrait_candidates.length, 1)
+  // B-793: the record carries the count and a reference; the pool lives in one
+  // immutable gallery page written in the same phase.
+  assert.equal("portrait_candidates" in gene, false, "the record stays small")
+  assert.equal(gene.candidate_count, 1)
+  assert.equal(
+    kinds.filter((value) => value === "galleries").length,
+    9,
+    "one page per one-candidate pool",
+  )
+  const page = (await f.objects.read(gene.candidate_gallery.key)).value
+  assert.equal(page.schema_version, 1)
+  assert.equal(page.symbol, symbol)
+  assert.equal(page.page, 0)
+  assert.equal(page.next, null)
+  assert.equal(page.candidates.length, 1)
+  assert.equal(page.candidates[0].asset_sha256, "c".repeat(64))
+  assert.equal(page.candidates[0].image_upvotes, 3)
 })
 
 test("a missing source card fails a rematerialization closed instead of deleting the page", async () => {
