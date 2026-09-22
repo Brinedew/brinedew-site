@@ -425,6 +425,30 @@ export function createCardPublication({
     })
     return { accepted: true, cleared_prepared_rows: preparedRows }
   }
+  /**
+   * B-795: an operator stop control for a running catalog rematerialization. A
+   * full pass costs a platform day and previously had no way to halt it; this
+   * removes the durable job, its prepared entries and any retained retry
+   * receipt, so the coordinator performs no further phases for it. Already
+   * written objects stay as unreferenced content-addressed bytes; the next
+   * operator action starts a fresh pass.
+   */
+  function cancelRematerialization() {
+    const job = repo.get("job")
+    if (job?.rematerialize !== true) return { accepted: false }
+    const preparedRows = repo.prepared().length
+    repo.reserveWrites?.(preparedRows + 3, { control: true })
+    repo.transaction(() => {
+      repo.remove("job")
+      repo.remove("failure")
+      repo.clearPrepared()
+    })
+    return {
+      accepted: true,
+      cleared_prepared_rows: preparedRows,
+      stopped_at: { group: job.group, offset: job.offset, started_at: job.started_at },
+    }
+  }
   async function start() {
     const head = repo.get("head")
     if (!head) throw new Error("Card publication storage migration has not been initialized")
@@ -808,6 +832,7 @@ export function createCardPublication({
     rematerialize,
     backfillBlotAliases,
     cancelBlotAliasBackfill,
+    cancelRematerialization,
     materializeSymbol,
     async step() {
       const effects = repo.get("effects")
