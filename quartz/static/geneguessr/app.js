@@ -4463,6 +4463,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
 
     const startTime = performance.now()
+    redaction.parentElement?.querySelector(".pg-hint-error")?.remove()
     redaction.dataset.loading = "true"
     redaction.classList.add("pg-redaction-loading")
     try {
@@ -4520,6 +4521,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     } catch (err) {
       console.warn("Geneguessr: hint reveal failed", err)
       flashHintsWarning()
+      const notice = document.createElement("span")
+      notice.className = "pg-hint-error"
+      notice.setAttribute("role", "status")
+      notice.textContent = "Hint temporarily unavailable. Please try again."
+      redaction.parentElement?.querySelector(".pg-hint-error")?.remove()
+      redaction.insertAdjacentElement("afterend", notice)
     } finally {
       redaction.dataset.loading = "false"
       redaction.classList.remove("pg-redaction-loading")
@@ -4848,6 +4855,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       }
       if (err.name !== "AbortError") {
         console.warn("Geneguessr: protein search failed", err)
+        throw err
       }
       return []
     }
@@ -4869,6 +4877,17 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       parts.push(firstSynonym)
     }
     return parts.filter(Boolean).join(" • ")
+  }
+
+  function showProteinInputNotice(message) {
+    const suggestionsEl = document.getElementById("pg-suggestions")
+    if (!suggestionsEl) return
+    const notice = document.createElement("div")
+    notice.className = "pg-suggestion"
+    notice.setAttribute("role", "status")
+    notice.textContent = message
+    suggestionsEl.replaceChildren(notice)
+    suggestionsEl.style.display = "block"
   }
 
   function setupAutocomplete(inputEl, suggestionsEl) {
@@ -4919,7 +4938,15 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       debounceHandle = setTimeout(async () => {
         suggestionsEl.innerHTML = '<div class="pg-suggestion">Searching...</div>'
         suggestionsEl.style.display = "block"
-        const matches = await searchProteins(query)
+        let matches
+        try {
+          matches = await searchProteins(query)
+        } catch {
+          if (currentToken === requestToken) {
+            showProteinInputNotice("Protein search is temporarily unavailable. Please try again.")
+          }
+          return
+        }
         if (currentToken !== requestToken) {
           return
         }
@@ -5251,7 +5278,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       await handleGuessPayload(uniprot, payload, null)
     } catch (err) {
       console.error("[Geneguessr] Guess submission failed", err)
-      alert("Failed to submit guess. Please try again.")
+      showProteinInputNotice(err?.message || "Guess temporarily unavailable. Please try again.")
     }
   }
 
@@ -5287,6 +5314,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         }
       } catch (err) {
         console.warn("Auto-resolution failed", err)
+        showProteinInputNotice("Protein search is temporarily unavailable. Please try again.")
+        return
       } finally {
         submitBtn.disabled = false
         submitBtn.textContent = originalText
@@ -5313,6 +5342,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     const previousLabel = submitBtn.textContent
     submitBtn.textContent = "Submitting..."
     const guessT0 = performance.now()
+    let submitted = false
 
     try {
       console.log(`[TIMING] guess-submit | start`)
@@ -5321,16 +5351,17 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         `[TIMING] guess-submit | API returned | ${Math.round(performance.now() - guessT0)}ms`,
       )
       await handleGuessPayload(uniprot, payload, guessT0)
+      submitted = true
     } catch (err) {
       console.error("Geneguessr: failed to submit guess", err)
-      alert(err?.message || "Failed to submit guess. Please try again.")
+      showProteinInputNotice(err?.message || "Guess temporarily unavailable. Please try again.")
     } finally {
       submitBtn.disabled = false
       submitBtn.textContent = previousLabel
-      submitBtn.removeAttribute("data-uniprot")
-      const inputEl = document.getElementById("pg-input")
-      if (inputEl) {
-        inputEl.value = ""
+      if (submitted) {
+        submitBtn.removeAttribute("data-uniprot")
+        const inputEl = document.getElementById("pg-input")
+        if (inputEl) inputEl.value = ""
       }
     }
   }
