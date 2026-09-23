@@ -67,7 +67,7 @@ jobs:
         run: node scripts/wait-for-iconoplasm-release-ci.mjs
 
       - name: Restore immutable static assets from the exact tested CI run
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: iconoplasm-edge-assets-${{ github.sha }}
           path: public-iconoplasm-edge
@@ -83,7 +83,7 @@ jobs:
           done
 
       - name: Setup Node.js (22.x)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -186,7 +186,7 @@ jobs:
         run: node scripts/early-release-capacity-sentinel.mjs
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -206,7 +206,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Setup Node.js (22.x)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
