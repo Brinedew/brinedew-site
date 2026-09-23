@@ -45,10 +45,7 @@ import {
   renderDiagramStudio,
   unmountDiagramStudio,
 } from "./diagram-studio.js?v=f48d5ad336a47959"
-import {
-  iconoplasmPublicationReader,
-  immutableBlotByteUrl,
-} from "./publication-reader.js?v=928a3c86120d1383"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=136e2ca3de421c42"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -955,11 +952,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return portraitDelivery.resolve(rawPublishedPortraitUrl(genePayload, preferredSize))
   }
 
-  function publishedGeneBlot(genePayload) {
-    var blot = genePayload && genePayload.blot
-    return blot && blot.status === "ready" && blot.canonical_url && blot.semantic_url ? blot : null
-  }
-
   function canonicalGeneBlotMarkup(genePayload) {
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     if (!symbol) return ""
@@ -969,7 +961,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // image-vs-placeholder at load time: the route resolves the exact published
     // card's blot, so this never trusts a possibly stale card blot field and
     // never leaves the surface blank.
-    var semanticUrl = immutableBlotByteUrl(genePayload && genePayload.blot)
+    var semanticUrl = "/blot/" + encodeURIComponent(symbol) + ".webp"
     var fullName = String(
       (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
     ).trim()
@@ -9415,26 +9407,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
     }
     container._iconoGenePayload = genePayload
-    var blot = publishedGeneBlot(genePayload)
-    var blotImage = container.querySelector(
-      ".icono-canonical-gene-blot-image[data-iconoplasm-canonical-image-src]",
-    )
-    if (blot && blotImage) {
-      // Hydration must preserve the same current-renderer route emitted by the
-      // server. Replacing it with the immutable card's historical URL would
-      // visibly roll the blot back after page load.
-      var canonicalBlotUrl = immutableBlotByteUrl(blot)
-      var currentBlotUrl = blotImage.currentSrc || blotImage.getAttribute("src") || ""
-      if (blotImage.complete && blotImage.naturalWidth === 0 && currentBlotUrl) {
-        portraitDelivery.reportFailure(currentBlotUrl)
-      }
-      // Server markup always starts first-party so Vietnam never depends on an
-      // accelerator decision made before the delivery handler is installed.
-      blotImage.setAttribute("src", canonicalBlotUrl)
-      portraitDelivery.ensure(canonicalBlotUrl).then(function () {
-        portraitDelivery.bind(blotImage, canonicalBlotUrl)
-      })
-    }
     syncServerGenePortraitUrls(container, genePayload)
     hydrateGeneInteractiveIslands(container, genePayload)
     wireGeneVoteControls(container, genePayload)

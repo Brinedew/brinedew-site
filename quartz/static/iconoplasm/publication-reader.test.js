@@ -8,7 +8,6 @@ import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../../../scripts/prepare-iconoplasm-edge-assets.mjs"
 import {
   createIconoplasmPublicationReader,
-  immutableBlotByteUrl,
   PUBLIC_READ_REQUEST_BOUNDS,
 } from "./publication-reader.js"
 import {
@@ -624,32 +623,6 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
     galleryRequests: 58,
     galleryBytes: 16_844_800,
   })
-})
-
-test("the browser uses an exact immutable blot object or a placeholder, never the mutable alias", () => {
-  const fingerprint = "1".repeat(32)
-  const objectKey = `blots/v1/T/TP53/${fingerprint}/TP53-iconoplasm-gene-blot.webp`
-  assert.equal(
-    immutableBlotByteUrl({
-      blot_fingerprint: fingerprint,
-      object_key: objectKey,
-      semantic_url: "https://iconoplasm.brinedew.bio/blot/TP53.webp",
-      image_url: `https://iconoplasmportraits.b-cdn.net/${objectKey}`,
-    }),
-    `https://iconoplasmportraits.b-cdn.net/${objectKey}`,
-  )
-  assert.equal(
-    immutableBlotByteUrl({
-      blot_fingerprint: fingerprint,
-      object_key: objectKey,
-      image_url: "https://iconoplasmportraits.b-cdn.net/not-the-published-object.webp",
-    }),
-    "/static/iconoplasm/blot-placeholder.svg",
-  )
-  assert.equal(
-    immutableBlotByteUrl({ semantic_url: "/blot/TP53.webp" }),
-    "/static/iconoplasm/blot-placeholder.svg",
-  )
 })
 
 test("homepage and crawler-facing reads short-circuit before every throwing state binding", async () => {
