@@ -1,4 +1,4 @@
-import { writeCandidateGallery } from "./iconoplasm-candidate-gallery.js"
+import { planCandidateGalleryPages, writeCandidateGallery } from "./iconoplasm-candidate-gallery.js"
 import {
   canonicalPublishedJson,
   PUBLISHED_CARD_OBJECT_LIMITS,
@@ -11,14 +11,37 @@ import {
 // Do not replace the head with a mutable Bunny PUT: a timed-out old PUT can
 // complete after a newer PUT. HTTP caching of the ordered head has no such race.
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
-// B-793: a phase now writes four objects per card (cards, genes, portraits and
-// one candidate gallery page) at two subrequests each. Six cards made the phase
-// 48-52 of Cloudflare Free's 50 subrequests and failed live with "Too many
-// subrequests by single Worker invocation" (2026-09-22 07:15 UTC). Four cards
-// cost 32 and leave eighteen for the old-shard read and provider variance.
+// Four ordinary cards fit one phase. Larger galleries consume more than one
+// object per card, so prepare() sizes its actual prefix before any upload.
 export const CARD_PUBLICATION_BATCH = 4
 export const CARD_BLOT_ALIAS_BACKFILL_BATCH = 12
 const CARD_PUBLICATION_CONCURRENCY = 2
+// Cloudflare Free allows 50 external subrequests per invocation. Each immutable
+// object costs a PUT and verified GET; leave 18 for old-shard reads, redirects
+// and provider variance. Gallery pages cannot consume this reserve.
+const CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE = 16
+
+function publicationObjectPlan(symbol, projected) {
+  const candidates = Array.isArray(projected?.portrait_candidates)
+    ? projected.portrait_candidates
+    : []
+  const pages = planCandidateGalleryPages(symbol, candidates)
+  const count = 3 + pages.length
+  if (count > CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE) {
+    const error = new Error(
+      `Candidate gallery for ${symbol} needs ${count} verified objects; one publication phase supports at most ${CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE}`,
+    )
+    error.code = "CARD_PUBLICATION_PHASE_TOO_LARGE"
+    error.permanent = true
+    error.gene = symbol
+    error.details = {
+      required_objects: count,
+      max_objects: CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE,
+    }
+    throw error
+  }
+  return { projected, candidates, pages, count }
+}
 export const CARD_PUBLICATION_PACKED_SHARD_CARD_LIMIT = 750
 const UTF8 = new TextEncoder()
 export const CARD_DELIVERY_INDEX_SIZE = 128
@@ -248,16 +271,17 @@ export function createCardPublication({
   // immutable gallery pages written and verified in this same phase, and the
   // record carries the count plus a reference to the first page. The card VM
   // keeps its embedded payload until B-794 retires the duplicate publication.
-  async function writeCardObjects(symbol, stable, identity) {
+  async function writeCardObjects(symbol, stable, identity, precomputed = null) {
     try {
-      const projected = source.project(stable.payload)
-      const candidates = Array.isArray(projected?.portrait_candidates)
-        ? projected.portrait_candidates
-        : []
-      const gallery = await writeCandidateGallery(symbol, candidates, (kind, body) =>
-        objects.write(kind, body),
+      const publication =
+        precomputed || publicationObjectPlan(symbol, source.project(stable.payload))
+      const gallery = await writeCandidateGallery(
+        symbol,
+        publication.candidates,
+        (kind, body) => objects.write(kind, body),
+        publication.pages,
       )
-      const geneRecord = { ...projected }
+      const geneRecord = { ...publication.projected }
       delete geneRecord.portrait_candidates
       geneRecord.candidate_count = gallery.candidate_count
       geneRecord.candidate_gallery = gallery.candidate_gallery
@@ -482,19 +506,36 @@ export function createCardPublication({
   }
   async function prepare(job, group, oldCards) {
     const symbols = group.symbols || oldCards.map((card) => card.symbol)
-    const slice = symbols.slice(job.offset, job.offset + CARD_PUBLICATION_BATCH)
-    repo.reserveWrites?.(slice.length + 2)
+    const candidateSymbols = symbols.slice(job.offset, job.offset + CARD_PUBLICATION_BATCH)
+    // Admit the bounded write work before source materialization can spend D1.
+    // A large gallery may use fewer cards; this existing reservation is an
+    // upper bound, and publication still records only the selected prefix.
+    repo.reserveWrites?.(candidateSymbols.length + 2)
     const cards =
       job.bootstrap || job.migration
-        ? oldCards.filter((card) => slice.includes(card.symbol))
-        : await source.materialize(slice)
+        ? oldCards.filter((card) => candidateSymbols.includes(card.symbol))
+        : await source.materialize(candidateSymbols)
     const bySymbol = new Map(cards.map((card) => [card.symbol, card]))
-    // 4 cards * 4 independent objects * (PUT + verified GET) = 32 fetches.
-    // Leave eighteen of Cloudflare Free's fifty subrequests for the old-shard
-    // read, source materialization, redirects, and storage-provider variance.
-    // Six cards cost 48-52 and failed live with "Too many subrequests by single
-    // Worker invocation" once the gallery page joined the phase (2026-09-22).
-    // Index/packed-shard/root publication is a separate invocation.
+    const slice = []
+    const projections = new Map()
+    let objectsInPhase = 0
+    for (const symbol of candidateSymbols) {
+      const card = bySymbol.get(symbol)
+      if (card) {
+        if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
+        const stable = source.stable(card)
+        const publication = publicationObjectPlan(symbol, source.project(stable.payload))
+        if (
+          slice.length &&
+          objectsInPhase + publication.count > CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE
+        )
+          break
+        objectsInPhase += publication.count
+        projections.set(symbol, { stable, publication })
+      }
+      slice.push(symbol)
+    }
+    // Index, packed-shard and root publication use separate invocations.
     // Cloudflare's April 2026 limit is six requests WAITING FOR HEADERS,
     // not six full response bodies. Starting many PUTs at once can consume the
     // 8-second request deadline while most waited in the platform queue.
@@ -524,9 +565,13 @@ export function createCardPublication({
               throw new Error(`Rematerialization source returned no card for ${symbol}`)
             return { symbol, card: null, entry: null }
           }
-          if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
-          const stable = source.stable(card)
-          const [full, gene, portrait] = await writeCardObjects(symbol, stable, runIdentity)
+          const { stable, publication } = projections.get(symbol)
+          const [full, gene, portrait] = await writeCardObjects(
+            symbol,
+            stable,
+            runIdentity,
+            publication,
+          )
           return { symbol, card, entry: [symbol, full.hash, gene.hash, portrait.hash] }
         }),
       )
