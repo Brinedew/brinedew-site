@@ -101,7 +101,11 @@ test(
           "https://iconoplasm.test/portraits/v1/aa/" + "a".repeat(64) + "/full.webp",
           { method, redirect: "manual" },
         )
-        assert.equal(portraitResponse.status, 599, "the first-party portrait route owns the fallback")
+        assert.equal(
+          portraitResponse.status,
+          599,
+          "the first-party portrait route owns the fallback",
+        )
       }
     } finally {
       await runtime?.dispose()
