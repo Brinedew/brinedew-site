@@ -30751,7 +30751,10 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
         new Map(records.map((record) => [normalizeSymbol(record?.symbol || ""), record])),
       )
       const currentRecords = records.map((record) =>
-        projectCardBlot(record, readyBlots.get(normalizeSymbol(record?.symbol || ""))),
+        projectCardBlot(
+          record,
+          readyBlots.get(normalizeSymbol(record?.symbol || "")) || record.blot,
+        ),
       )
       return {
         ok: true,
