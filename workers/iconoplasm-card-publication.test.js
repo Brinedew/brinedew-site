@@ -390,14 +390,9 @@ test("a 750-card post-cutover repair resumes through bounded materialization pag
   assert.equal(p.status().job, null)
 })
 
-test("a publication phase fits the platform subrequest budget", () => {
-  // B-793: each card now writes four objects (cards, genes, portraits and one
-  // candidate gallery page), each a PUT plus a verified GET. The phase must
-  // leave room for the old-shard read, source materialization, redirects and
-  // provider variance inside Cloudflare Free's 50 subrequests per invocation.
-  // Six cards cost 48-52 and failed live with "Too many subrequests by single
-  // Worker invocation" (2026-09-22 07:15 UTC). Adding a fifth object or
-  // raising the batch must revisit this arithmetic, not silently overflow it.
+test("ordinary one-page publication fits the platform subrequest budget", () => {
+  // One page is the measured current shape; multi-page pools are covered below.
+  // Keep room for the old-shard read, source materialization and redirects.
   const PHASE_SUBREQUEST_LIMIT = 50
   const PHASE_SUBREQUEST_RESERVE = 18
   const objectsPerCard = 4
@@ -406,6 +401,68 @@ test("a publication phase fits the platform subrequest budget", () => {
       PHASE_SUBREQUEST_LIMIT,
     true,
   )
+})
+
+test("multi-page galleries finish in smaller phases without crossing the Free subrequest budget", async () => {
+  const f = fixture(4)
+  for (const card of f.cards) {
+    card.payload.portrait_candidates = Array.from({ length: 129 }, (_, index) => ({
+      candidate_image_id: index,
+      asset_sha256: index.toString(16).padStart(64, "0"),
+    }))
+  }
+  const p = f.create()
+  await p.bootstrap()
+  let previousWrites = 0
+  for (const [offset, expectedWrites] of [
+    [3, 15],
+    [4, 5],
+  ]) {
+    await p.step()
+    const phaseWrites = f.writes.length - previousWrites
+    assert.equal(p.status().job.offset, offset)
+    assert.equal(phaseWrites, expectedWrites)
+    assert.ok(phaseWrites * 2 + 18 <= 50)
+    assert.equal(p.status().head, null, "partial phases must not become public")
+    previousWrites = f.writes.length
+  }
+  await drain(p)
+  assert.equal(p.status().head.current.manifest.card_count, 4)
+  assert.equal(f.writes.filter((write) => write.kind === "galleries").length, 8)
+})
+
+test("a thousand candidates publish in one bounded phase and the next phase continues", async () => {
+  const f = fixture(2)
+  f.cards[0].payload.portrait_candidates = Array.from({ length: 1000 }, (_, index) => ({
+    candidate_image_id: index,
+    asset_sha256: index.toString(16).padStart(64, "0"),
+  }))
+  f.cards[1].payload.portrait_candidates = Array.from({ length: 257 }, (_, index) => ({
+    candidate_image_id: index,
+    asset_sha256: index.toString(16).padStart(64, "0"),
+  }))
+  const p = f.create()
+  await p.bootstrap()
+  await p.step()
+  assert.equal(p.status().job.offset, 1)
+  assert.equal(f.writes.length, 11, "eight gallery pages and three core objects")
+  assert.equal(p.status().head, null)
+  await drain(p)
+  assert.equal(p.status().head.current.manifest.card_count, 2)
+})
+
+test("an oversized single gallery refuses before writing or advancing the public head", async () => {
+  const f = fixture(1)
+  f.cards[0].payload.portrait_candidates = Array.from({ length: 1665 }, (_, index) => ({
+    candidate_image_id: index,
+    asset_sha256: index.toString(16).padStart(64, "0"),
+  }))
+  const p = f.create()
+  await p.bootstrap()
+  await assert.rejects(p.step(), (error) => error.code === "CARD_PUBLICATION_PHASE_TOO_LARGE")
+  assert.equal(f.writes.length, 0)
+  assert.equal(p.status().job.offset, 0)
+  assert.equal(p.status().head, null)
 })
 
 test("packed shards split on canonical UTF-8 bytes before immutable storage rejects them", async () => {
