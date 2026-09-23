@@ -1,4 +1,4 @@
-import { siteSettingsUrl } from "../site-preferences.js?v=20260520stylecookie"
+import { siteSettingsUrl } from "../site-preferences.js?v=2624be2e2b452a30"
 
 export var COMMUNITY_URL = "https://discord.com/invite/kx8FVzUrpf"
 var SHARED_SESSION_PRESENCE_COOKIE = "brinedew_session_present"

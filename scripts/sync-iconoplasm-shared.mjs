@@ -271,14 +271,19 @@ if (!extensionOnly) {
   const { syncStaticImportVersions, syncStudioImportVersions } =
     await import("./lib/static-import-versions.mjs")
   const staticRoot = path.join(repoRoot, "quartz", "static")
+  // THE ONLY BROWSER MODULE VERSION GRAPH — DO NOT HAND-BUMP IMPORT URLS.
+  // Hash leaves before their consumers so a source edit reaches the entrypoint
+  // that fresh HTML loads. The HTML itself is stamped with the release SHA.
+  await syncStaticImportVersions(staticRoot, "site-preferences.js", [
+    "shared/sidebar-shell.js",
+    "iconoplasm/app.js",
+    "site-settings/app.js",
+  ])
   await syncStaticImportVersions(staticRoot, "shared/sidebar-shell.js", [
     "iconoplasm/app.js",
     "geneguessr/app.js",
     "site-settings/app.js",
   ])
-  // Version from leaves to entrypoints: a core edit must change the adapter's
-  // URL as well. Updating only the leaf leaves returning browsers on the old
-  // year-cached adapter and its old import. The HTML versions app.js per build.
   await syncStaticImportVersions(staticRoot, "iconoplasm/generated/portrait-delivery-core.js", [
     "iconoplasm/portrait-delivery.js",
   ])
@@ -286,5 +291,73 @@ if (!extensionOnly) {
     "iconoplasm/app.js",
     "iconoplasm/gene-card-thumb-delivery.js",
   ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/publication-reader.js", [
+    "iconoplasm/diagram-studio.js",
+    "iconoplasm/app.js",
+  ])
   await syncStudioImportVersions(staticRoot)
+
+  // The caretaker editor was stranded on a cached pre-fix view module even
+  // though the current source and API were healthy. Cover the full lazy graph.
+  await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-manifestations-model.js", [
+    "iconoplasm/caretaker-manifestations-view.js",
+    "iconoplasm/caretaker-manifestations-events.js",
+    "iconoplasm/caretaker-manifestations-controller.js",
+    "iconoplasm/caretaker-manifestations.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-manifestations-view.js", [
+    "iconoplasm/caretaker-manifestations-events.js",
+    "iconoplasm/caretaker-manifestations-controller.js",
+    "iconoplasm/caretaker-manifestations.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-manifestations-events.js", [
+    "iconoplasm/caretaker-manifestations-controller.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-tag-editor.js", [
+    "iconoplasm/caretaker-manifestations-controller.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-manifestations-controller.js", [
+    "iconoplasm/caretaker-manifestations.js",
+  ])
+  for (const asset of [
+    "caretaker-manifestations.js",
+    "caretaker-supervote.js",
+    "caretaker-manifestations.css",
+    "caretaker-supervote.css",
+  ]) {
+    await syncStaticImportVersions(staticRoot, `iconoplasm/${asset}`, ["iconoplasm/app.js"])
+  }
+
+  for (const asset of ["photoswipe.css", "photoswipe.esm.js"]) {
+    await syncStaticImportVersions(staticRoot, `iconoplasm/vendor/${asset}`, [
+      "iconoplasm/lightbox.js",
+    ])
+  }
+  await syncStaticImportVersions(staticRoot, "iconoplasm/lightbox.js", [
+    "iconoplasm/lightbox-bootstrap.js",
+    "iconoplasm/app.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/home-orders.js", [
+    "iconoplasm/discovery-collection.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/guest-discovery-contract.js", [
+    "iconoplasm/guest-discovery-store.js",
+  ])
+  for (const asset of [
+    "discovery-collection.js",
+    "home-orders.js",
+    "request-inbox.js",
+    "emulsion-favorites.js",
+    "collection-feed.js",
+    "iconoplasm-collection-route-state.js",
+    "guest-discovery-store.js",
+    "vote-login-dialog.js",
+    "candidate-delete-dialog.js",
+    "generated/anima-emulsion-slot-contract.js",
+    "vendor/img-comparison-slider.js",
+    "vendor/masonry.pkgd.min.js",
+    "vendor/imagesloaded.pkgd.min.js",
+  ]) {
+    await syncStaticImportVersions(staticRoot, `iconoplasm/${asset}`, ["iconoplasm/app.js"])
+  }
 }

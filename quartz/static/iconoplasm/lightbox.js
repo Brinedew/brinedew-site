@@ -7,7 +7,7 @@ function ensureStylesheet(documentRef) {
   if (documentRef.querySelector('link[data-icono-style="photoswipe"]')) return
   var link = documentRef.createElement("link")
   link.rel = "stylesheet"
-  link.href = new URL("./vendor/photoswipe.css?v=20260311a", import.meta.url).href
+  link.href = new URL("./vendor/photoswipe.css?v=bb5e956812a813e1", import.meta.url).href
   link.setAttribute("data-icono-style", "photoswipe")
   documentRef.head.appendChild(link)
 }
@@ -15,7 +15,7 @@ function ensureStylesheet(documentRef) {
 function ensurePhotoSwipe(documentRef) {
   ensureStylesheet(documentRef)
   if (photoSwipeModulePromise) return photoSwipeModulePromise
-  photoSwipeModulePromise = import("./vendor/photoswipe.esm.js?v=20260306d")
+  photoSwipeModulePromise = import("./vendor/photoswipe.esm.js?v=db760debd3b8c0df")
     .then(function (module) {
       return module && module.default ? module.default : module
     })
