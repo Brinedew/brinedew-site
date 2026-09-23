@@ -193,6 +193,7 @@ import {
   requireManifestationAuthorityWriteMode,
 } from "./lib/iconoplasm-manifestation-authority-projection.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
+import { FREE_DAILY_LIMITS, readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
 import {
@@ -1595,6 +1596,32 @@ async function readPublishedIconoplasmObservabilitySnapshot(env) {
       source: "worker_bundle",
       key: KV_OBSERVABILITY_SNAPSHOT,
     },
+  }
+}
+
+async function readLiveCloudflareAccountBudget(env) {
+  try {
+    // One account-wide control-plane read when an admin opens this tab. No
+    // application D1/DO read, public-request polling, or second budget owner.
+    const usage = await readAccountBudget({
+      accountId: env.CLOUDFLARE_ACCOUNT_ID,
+      token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+      fetcher: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(8000) }),
+    })
+    return {
+      state: "queried",
+      day: usage.day,
+      queriedAt: new Date(usage.measured_at).toISOString(),
+      usage,
+      limits: FREE_DAILY_LIMITS,
+    }
+  } catch {
+    return {
+      state: "unavailable",
+      day: new Date().toISOString().slice(0, 10),
+      queriedAt: new Date().toISOString(),
+      usage: null,
+    }
   }
 }
 
@@ -41012,7 +41039,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/cost/snapshot" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_cost_snapshot_403", json({ error: "Unauthorized" }, 403))
-      const publishedSnapshot = await readPublishedIconoplasmObservabilitySnapshot(env)
+      const [publishedSnapshot, liveProvider] = await Promise.all([
+        readPublishedIconoplasmObservabilitySnapshot(env),
+        readLiveCloudflareAccountBudget(env),
+      ])
       return done(
         "admin_cost_snapshot",
         json(
@@ -41021,6 +41051,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             snapshot: {
               ...iconoplasmObservabilitySnapshotForAdmin(publishedSnapshot.snapshot),
               publication: publishedSnapshot.publication,
+              liveProvider,
             },
           },
           200,
