@@ -99,9 +99,9 @@ export function planCandidateGalleryPages(symbol, candidates) {
  * is the shared published-object writer; it verifies each object's bytes are
  * readable before returning, so a written chain is a validated chain.
  */
-export async function writeCandidateGallery(symbol, candidates, write) {
+export async function writeCandidateGallery(symbol, candidates, write, plannedPages) {
   const cleanSymbol = normalizeSymbol(symbol)
-  const planned = planCandidateGalleryPages(cleanSymbol, candidates)
+  const planned = plannedPages ?? planCandidateGalleryPages(cleanSymbol, candidates)
   let next = null
   const pages = []
   for (let page = planned.length - 1; page >= 0; page -= 1) {
