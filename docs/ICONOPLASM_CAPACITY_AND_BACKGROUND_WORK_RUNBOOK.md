@@ -51,6 +51,30 @@ These are durable boundaries. Batch sizes, schemas, schedules, cache lifetimes,
 retry counts, and provider-operation estimates are implementation choices and
 belong in code and tests.
 
+## Production release path
+
+The one production workflow is `.github/workflows/deploy-quartz.yml`. A push to
+`main` releases compatible code and static assets: it checks the installed
+revision, runs the exact-commit CI gate, builds, uploads and activates Worker
+versions, then deploys Pages. Worker versions preserve the installed routes,
+Cron triggers, and Queue consumers. The push does not stage a schema transition,
+run D1 migrations, rebuild the publication catalog, or reconcile provider
+topology. It refuses if the changes since the installed revision include a
+migration, Worker binding, route, or named provider policy change, or if an
+active schema transition makes the code release incompatible.
+
+For a reviewed data or topology change, dispatch that same workflow with
+`data_maintenance=true`. This is the only path that runs provider capacity
+admission, schema migration, catalog publication, and topology reconciliation.
+It is intentionally explicit because those operations consume the shared
+account allowance and can pause application work. The separate
+`reader_recovery_only=true` dispatch remains a D1-free containment action for
+an active incident. Neither dispatch is a routine code-release fallback.
+
+Record source revision, exact CI result, provider deployment, activated
+revision, and a fresh user-visible operation separately. If a push refuses,
+inspect the reason and use the owned change path; do not replay it blindly.
+
 ## Before any capacity-consuming operation
 
 Verify all of the following from current sources:
@@ -75,7 +99,7 @@ Run the action-derived model:
 pnpm run model:iconoplasm-capacity
 ```
 
-Run the release-oriented capacity gate:
+Run the capacity gate before explicit data or topology maintenance:
 
 ```powershell
 pnpm run gate:iconoplasm-viral-load

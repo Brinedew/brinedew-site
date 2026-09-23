@@ -689,23 +689,6 @@ test("unexpected runner failures have a compact JSON error envelope", () => {
   })
 })
 
-test("production deploy owns a runnable staging rehearsal instead of an external Task 5 ceremony", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
-  )
-  assert.match(workflow, /deploy-viral-load-staging:/)
-  assert.match(
-    workflow,
-    /wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging/,
-  )
-  assert.match(workflow, /https:\/\/geneguessr-api-staging\.decap\.workers\.dev/)
-  assert.match(workflow, /needs: deploy-viral-load-staging/)
-  assert.doesNotMatch(workflow, /viral_load_task5_evidence_run_id/)
-  assert.doesNotMatch(workflow, /collect-viral-load-staging-evidence:/)
-  assert.doesNotMatch(workflow, /resolve-iconoplasm-task5-artifact\.mjs/)
-})
-
 test("the unowned self-hosted Task 5 workflow is retired", () => {
   assert.equal(
     existsSync(new URL("../.github/workflows/iconoplasm-viral-load-task5.yml", import.meta.url)),
