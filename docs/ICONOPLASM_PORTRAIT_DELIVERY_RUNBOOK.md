@@ -82,15 +82,16 @@ runtime with the authenticated Storage API credential. One server-side adapter,
 requests, GET/HEAD source selection, PUT, and DELETE. Routes and notification
 senders must not reconstruct those operations independently.
 
-Authenticated authoring and verification continue to use Bunny Storage through
-the one server-side adapter. Anonymous delivery does not. Stable
-`/blot/<SYMBOL>.webp` requests are internally rewritten by Static Assets to the
-application shell without changing their first-party URL. The browser reads the
-gene-scoped coherent Sysop V2 artifact from Bunny, validates its fingerprint and
-immutable object key, and navigates to those exact Bunny bytes. If neither the
-current nor prior coherent gene publication has a valid blot, it uses the
-bundled static placeholder. It never falls into the Worker, Storage API, D1,
-Durable Objects, Queues, or a repair path.
+Authenticated authoring and verification use Bunny Storage through the one
+server-side adapter. Healthy browsers load immutable portraits directly from
+Bunny. When Bunny is unreachable from a browser, canonical first-party
+`/portraits/*` requests reach the existing Worker, which reads the same
+immutable key through that adapter. The build must not redirect those URLs to
+the static placeholder: that old redirect returned SVG with HTTP 200 under a
+`.webp` name and also broke workstation blot rendering. The mutable
+`/blot/<SYMBOL>.webp` alias enters the same Worker, reads the exact published
+card, and serves only its matching immutable WebP. Neither route elects a
+portrait from D1 or starts a repair.
 
 Website Ops stores `regionally_divergent` separately from ordinary
 `renderable`. Its existing storage-audit action always prioritizes unknown rows,

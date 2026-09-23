@@ -11,7 +11,9 @@ An anonymous reader receives the application shell and published Iconoplasm
 artifacts without consulting mutable application state. The stable
 `/blot/{symbol}.webp` alias enters the existing Worker to select the exact
 published card and its immutable WebP object. It does not use D1, a session,
-or a second publication owner. The shell and immutable artifacts stay static.
+or a second publication owner. The shell stays static. Healthy portraits use
+Bunny directly; their canonical first-party URLs reach the same Worker only
+when that browser needs byte delivery from the fallback.
 
 The publication system owns one coherent head. Immutable records beneath that
 head provide search, gallery, gene dossiers, passive candidate and vote
