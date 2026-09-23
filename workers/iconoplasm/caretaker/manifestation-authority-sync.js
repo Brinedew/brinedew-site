@@ -13,6 +13,65 @@ import { readActiveManifestationEventCheckpoint } from "./manifestation-authorit
 import { advanceManifestationSnapshotChain } from "./manifestation-snapshot-hash.js"
 import { bytesToBase64Url, utf8Bytes } from "./manifestation-sync-encoding.js"
 
+// The only cold event source for replica history. Commands still write only to
+// iconoplasm-authoring; a verified fixed prefix is read from this sealed D1.
+const EVENT_COLUMNS = `event_sequence, event_uuid, event_type, gene_id, gene_revision,
+  manifestation_id, manifestation_revision_id, canonical_selection_id,
+  caretaker_assignment_id, payload_json, created_at`
+
+async function eventArchiveBoundary(state, archiveDb) {
+  const through = Number(state?.event_archive_through || 0)
+  if (!through) return 0
+  if (!archiveDb || !state?.event_archive_sha256) {
+    throw authorityError("EVENT_ARCHIVE_UNAVAILABLE", "Verified event archive is unavailable", 503)
+  }
+  const manifest = await first(
+    archiveDb,
+    `SELECT authority_epoch, through_sequence, event_count, source_sha256
+       FROM icono_event_archive_manifest WHERE singleton = 1`,
+  )
+  if (
+    Number(manifest?.authority_epoch) !== Number(state.authority_epoch) ||
+    Number(manifest?.through_sequence) !== through ||
+    Number(manifest?.event_count) !== through ||
+    manifest?.source_sha256 !== state.event_archive_sha256
+  ) {
+    throw authorityError("EVENT_ARCHIVE_UNAVAILABLE", "Event archive does not match authority", 503)
+  }
+  return through
+}
+
+async function readEventRows(db, archiveDb, archiveThrough, after, watermark, limit) {
+  const rows = []
+  if (after < archiveThrough) {
+    rows.push(
+      ...(await all(
+        archiveDb,
+        `SELECT ${EVENT_COLUMNS} FROM icono_manifestation_events
+          WHERE event_sequence > ? AND event_sequence <= ?
+          ORDER BY event_sequence LIMIT ?`,
+        after,
+        Math.min(archiveThrough, watermark),
+        limit,
+      )),
+    )
+  }
+  if (rows.length < limit && watermark > archiveThrough) {
+    rows.push(
+      ...(await all(
+        db,
+        `SELECT ${EVENT_COLUMNS} FROM icono_manifestation_events
+          WHERE event_sequence > ? AND event_sequence <= ?
+          ORDER BY event_sequence LIMIT ?`,
+        Math.max(after, archiveThrough),
+        watermark,
+        limit - rows.length,
+      )),
+    )
+  }
+  return rows
+}
+
 export async function readManifestationEventPage(db, input = {}) {
   requireDatabase(db)
   const decoded = await decodeCursor(input.cursorSecret, input.cursor, "events")
@@ -22,7 +81,8 @@ export async function readManifestationEventPage(db, input = {}) {
   }
   const authority = await first(
     db,
-    "SELECT authority_epoch, event_retention_floor FROM icono_authority_state WHERE singleton = 1",
+    `SELECT authority_epoch, event_retention_floor, event_archive_through,
+            event_archive_sha256 FROM icono_authority_state WHERE singleton = 1`,
   )
   if (decoded && Number(decoded.authority_epoch) !== Number(authority.authority_epoch)) {
     throw authorityError(
@@ -40,14 +100,16 @@ export async function readManifestationEventPage(db, input = {}) {
     )
   }
   const limit = Math.max(1, Math.min(250, Math.trunc(Number(input.limit)) || 100))
-  const rows = await all(
+  const archiveThrough =
+    afterSequence < Number(authority.event_archive_through || 0)
+      ? await eventArchiveBoundary(authority, input.archiveDb)
+      : Number(authority.event_archive_through || 0)
+  const rows = await readEventRows(
     db,
-    `SELECT event_sequence, event_uuid, event_type, gene_id, gene_revision,
-            manifestation_id, manifestation_revision_id, canonical_selection_id,
-            caretaker_assignment_id, payload_json, created_at
-       FROM icono_manifestation_events
-      WHERE event_sequence > ? ORDER BY event_sequence LIMIT ?`,
+    input.archiveDb,
+    archiveThrough,
     afterSequence,
+    Number.MAX_SAFE_INTEGER,
     limit + 1,
   )
   const page = rows.slice(0, limit).map((row) => ({
@@ -177,13 +239,15 @@ export async function createManifestationSnapshot(db, input = {}) {
   }
   const state = await first(
     db,
-    `SELECT event_retention_floor, authority_epoch,
+    `SELECT event_retention_floor, authority_epoch, event_archive_through,
+            event_archive_sha256,
             (SELECT COALESCE(MAX(rowid), 0) FROM icono_gene_identity_baselines) AS baseline_rowid,
-            MAX(event_retention_floor,
+            MAX(event_retention_floor, event_archive_through,
               (SELECT COALESCE(MAX(event_sequence), 0) FROM icono_manifestation_events)
             ) AS watermark
        FROM icono_authority_state WHERE singleton = 1`,
   )
+  await eventArchiveBoundary(state, input.archiveDb)
   const floor = Number(state?.event_retention_floor || 0)
   const checkpoint = floor > 0 ? await readActiveManifestationEventCheckpoint(db) : null
   if (
@@ -290,7 +354,7 @@ function requireSnapshotCursor(cursor, lease) {
   }
 }
 
-async function sourcePage(db, lease, phase, after, limit) {
+async function sourcePage(db, archiveDb, archiveThrough, lease, phase, after, limit) {
   if (phase === "baselines")
     return all(
       db,
@@ -317,17 +381,15 @@ async function sourcePage(db, lease, phase, after, limit) {
       Number(after),
       limit,
     )
-  return all(
+  const rows = await readEventRows(
     db,
-    `SELECT event_sequence AS source_ordinal, event_sequence, event_uuid, event_type, gene_id,
-            gene_revision, manifestation_id, manifestation_revision_id, canonical_selection_id,
-            caretaker_assignment_id, payload_json, created_at
-       FROM icono_manifestation_events WHERE event_sequence > ? AND event_sequence <= ?
-       ORDER BY event_sequence LIMIT ?`,
+    archiveDb,
+    archiveThrough,
     Number(after),
     Number(lease.watermark_event_sequence),
     limit,
   )
+  return rows.map((row) => ({ ...row, source_ordinal: row.event_sequence }))
 }
 
 export async function readManifestationSnapshotPage(db, input = {}) {
@@ -351,6 +413,12 @@ export async function readManifestationSnapshotPage(db, input = {}) {
   }
   const cursor = await decodeCursor(input.cursorSecret, input.cursor, "snapshot_stream")
   requireSnapshotCursor(cursor, lease)
+  const archiveState = await first(
+    db,
+    `SELECT authority_epoch, event_archive_through, event_archive_sha256
+       FROM icono_authority_state WHERE singleton = 1`,
+  )
+  const archiveThrough = await eventArchiveBoundary(archiveState, input.archiveDb)
   const limit = Math.max(1, Math.min(250, Math.trunc(Number(input.limit)) || 100))
   let phase = cursor?.phase || (lease.source_checkpoint_id ? "checkpoint_entities" : "baselines")
   let after = Number(cursor?.after_key || 0)
@@ -359,7 +427,15 @@ export async function readManifestationSnapshotPage(db, input = {}) {
   let done = Boolean(cursor?.done)
   const parts = []
   while (!done && parts.length < limit) {
-    const rows = await sourcePage(db, lease, phase, after, limit - parts.length + 1)
+    const rows = await sourcePage(
+      db,
+      input.archiveDb,
+      archiveThrough,
+      lease,
+      phase,
+      after,
+      limit - parts.length + 1,
+    )
     const selected = rows.slice(0, limit - parts.length)
     for (const row of selected) {
       const payload =

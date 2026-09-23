@@ -139,7 +139,7 @@ test(
         modules: true,
         script: "export default {fetch(){return new Response('local cost verification')}}",
         compatibilityDate: "2025-11-12",
-        d1Databases: ["DB", "AUTHORING", "PRIMARY"],
+        d1Databases: ["DB", "AUTHORING", "PRIMARY", "ARCHIVE"],
       }),
     )
     try {
@@ -281,13 +281,23 @@ test(
         .run()
       await authoring
         .prepare(
+          "ALTER TABLE icono_authority_state ADD COLUMN event_archive_through INTEGER NOT NULL DEFAULT 0",
+        )
+        .run()
+      await authoring
+        .prepare("ALTER TABLE icono_authority_state ADD COLUMN event_archive_sha256 TEXT")
+        .run()
+      await authoring
+        .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<20000)
       INSERT INTO icono_gene_identities(gene_id,canonical_symbol) SELECT 'gene-'||n, 'SYMBOL'||n FROM ids`,
         )
         .run()
+      const archive = await runtime.getD1Database("ARCHIVE")
       const replica = createReplicaOperationCostAdapter({
         env: {
           ICONOPLASM_AUTHORING_DB: authoring,
+          ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB: archive,
           ICONOPLASM_AUTHORITY_REPLICA_TOKEN: "test-replica",
           ICONOPLASM_AUTHORING_CURSOR_SECRET: "s".repeat(64),
         },
@@ -348,6 +358,36 @@ test(
       t.diagnostic(
         JSON.stringify({ operation: "complete-20000-gene-replica", pages, actual: total }),
       )
+      await archive
+        .prepare(
+          "CREATE TABLE icono_event_archive_manifest(singleton INTEGER PRIMARY KEY, authority_epoch INTEGER NOT NULL, through_sequence INTEGER NOT NULL, event_count INTEGER NOT NULL, source_sha256 TEXT NOT NULL)",
+        )
+        .run()
+      await archive
+        .prepare(
+          "CREATE TABLE icono_manifestation_events(event_sequence INTEGER PRIMARY KEY, event_uuid TEXT NOT NULL, event_type TEXT NOT NULL, gene_id TEXT NOT NULL, gene_revision INTEGER NOT NULL, manifestation_id TEXT, manifestation_revision_id TEXT, canonical_selection_id TEXT, caretaker_assignment_id TEXT, payload_json TEXT NOT NULL, created_at TEXT NOT NULL)",
+        )
+        .run()
+      await archive
+        .prepare(
+          "INSERT INTO icono_manifestation_events(event_sequence,event_uuid,event_type,gene_id,gene_revision,payload_json,created_at) VALUES(1,'archived-probe','archive_probe','gene-1',1,'{}','2026-09-01')",
+        )
+        .run()
+      await archive
+        .prepare("INSERT INTO icono_event_archive_manifest VALUES(1,1,1,1,?)")
+        .bind("a".repeat(64))
+        .run()
+      await authoring
+        .prepare(
+          "UPDATE icono_authority_state SET event_archive_through=1,event_archive_sha256=? WHERE singleton=1",
+        )
+        .bind("a".repeat(64))
+        .run()
+      const archived = await runReplica({
+        method: "GET",
+        path: "/api/iconoplasm/authority/events?limit=1",
+      })
+      assert.equal(archived.events[0].event_id, "archived-probe")
 
       const primary = await runtime.getD1Database("PRIMARY")
       const primarySchema = new DatabaseSync(":memory:")
