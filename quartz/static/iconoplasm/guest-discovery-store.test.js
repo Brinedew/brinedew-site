@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
@@ -165,8 +166,12 @@ test("website guest discovery store stays usable when localStorage is unavailabl
   assert.deepEqual(store.pendingSymbols(), ["INS"])
 })
 
-test("the app imports this module under a stamp bumped for the durable discovery queue", () => {
+test("the app imports the current guest discovery store", () => {
   const source = readFileSync(new URL("./app.js", import.meta.url), "utf8")
-  assert.match(source, /from "\.\/guest-discovery-store\.js\?v=20260915-durable-discovery-queue"/)
+  const version = createHash("sha256")
+    .update(readFileSync(new URL("./guest-discovery-store.js", import.meta.url)))
+    .digest("hex")
+    .slice(0, 16)
+  assert.ok(source.includes(`from "./guest-discovery-store.js?v=${version}"`))
   assert.match(source, /createWebsiteDiscoveryBatchQueue/)
 })

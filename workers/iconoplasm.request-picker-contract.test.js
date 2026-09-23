@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 
@@ -111,10 +112,15 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     favoriteHandler,
     /if \(!currentUser\)[\s\S]*openVoteLoginDialog\(\{[\s\S]*returnFocus: button/,
   )
-  assert.match(
-    app,
-    /vote-login-dialog\.js\?v=20260829-favorite-action/,
-    "the immutable modal module URL must advance when its guest-action contract changes",
+  const voteLoginDialogVersion = createHash("sha256")
+    .update(
+      readFileSync(new URL("../quartz/static/iconoplasm/vote-login-dialog.js", import.meta.url)),
+    )
+    .digest("hex")
+    .slice(0, 16)
+  assert.ok(
+    app.includes(`vote-login-dialog.js?v=${voteLoginDialogVersion}`),
+    "the modal URL must match the current module content",
   )
   assert.doesNotMatch(
     favoriteHandler,
