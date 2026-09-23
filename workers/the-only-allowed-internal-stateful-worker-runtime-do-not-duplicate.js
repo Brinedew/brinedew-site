@@ -5788,10 +5788,8 @@ function isForbiddenByAvailabilityPin(protein, availabilityPin) {
 }
 
 async function getDailyTargetProtein(env, options = {}) {
-  const eligibleIds = options.practice
-    ? await getEligibleProteinIds(env.DB)
-    : await getDailySelectionProteinIds(env.DB)
-  if (!eligibleIds.length) {
+  const eligibleIds = options.practice ? await getEligibleProteinIds(env.DB) : []
+  if (options.practice && !eligibleIds.length) {
     return null
   }
 
@@ -5801,6 +5799,8 @@ async function getDailyTargetProtein(env, options = {}) {
   let explicitOverrideSelected = false
   let dailyCandidateIds = eligibleIds
   let availabilityPin = null
+  let computedDailySelection = null
+  let dailySelectionAttempted = false
 
   const wantsAudit = Boolean(options.returnAudit)
   const audit = wantsAudit
@@ -5833,13 +5833,11 @@ async function getDailyTargetProtein(env, options = {}) {
       protein = await fetchProteinByUniprot(env.DB, randomId)
     }
   } else {
-    // Daily mode: check for manual override first
+    // THE ONLY DAILY TARGET SELECTION PATH — DO NOT DUPLICATE. Read the
+    // recorded server-side pick before loading the full eligible protein pool.
+    // The pool is needed only to choose a new pick or replace an unplayable one.
     const today = new Date().toISOString().slice(0, 10)
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-    const computedDailySelection = await pickDailyTarget(env.DB, salt, today)
-    dailyCandidateIds = Array.isArray(computedDailySelection?.candidateIds)
-      ? computedDailySelection.candidateIds
-      : eligibleIds
     if (audit) {
       audit.date = today
     }
@@ -5853,8 +5851,6 @@ async function getDailyTargetProtein(env, options = {}) {
       if (overrideProtein) {
         protein = overrideProtein
         explicitOverrideSelected = true
-        startIdx = eligibleIds.indexOf(protein.uniprot)
-        if (startIdx < 0) startIdx = 0
         if (audit) {
           audit.source = "override"
           audit.override_id = overrideId
@@ -5881,8 +5877,6 @@ async function getDailyTargetProtein(env, options = {}) {
               protein = actualProtein
               explicitOverrideSelected =
                 actual?.source === "override" || Boolean(actual?.override_id)
-              startIdx = eligibleIds.indexOf(actualProtein.uniprot)
-              if (startIdx < 0) startIdx = 0
               if (audit) {
                 audit.source = actual?.source || "recorded_actual"
                 audit.override_id = actual?.override_id || null
@@ -5898,6 +5892,53 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
+    // Staging uses the same recorded production answer when it has no local
+    // pick. Check that server-side record before considering a fresh full-pool
+    // selection; otherwise a staging cache miss burns the shared D1 allowance.
+    if (!protein && env.PROD_KV?.get) {
+      try {
+        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
+        if (prodActualRaw) {
+          const prodActual = JSON.parse(prodActualRaw)
+          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
+          if (prodUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
+            if (prodProtein) {
+              protein = prodProtein
+              if (audit) {
+                audit.source = "prod_actual"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
+            }
+          }
+        }
+
+        // The verified production bootstrap can name the pick before its
+        // puzzle_actual record appears.
+        if (!protein) {
+          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
+          const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
+            .toString()
+            .trim()
+            .toUpperCase()
+          if (prodDailyUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
+            if (prodProtein) {
+              protein = prodProtein
+              if (audit) {
+                audit.source = "prod_daily_cache"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to mirror prod daily pick", err?.message || err)
+      }
+    }
+
     // A future availability replacement is an automatic operational pin, not
     // a manual override. It keeps a dead curated structure out of the mystery
     // game without switching that protein to AlphaFold. The pin is valid only
@@ -5905,11 +5946,16 @@ async function getDailyTargetProtein(env, options = {}) {
     // it; algorithm or pool changes fall back to normal computed selection.
     if (!protein) {
       try {
-        availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
-          date: today,
-          salt,
-          selectionPoolFingerprint: computedDailySelection?.poolFingerprint,
-        })
+        dailySelectionAttempted = true
+        computedDailySelection = await pickDailyTarget(env.DB, salt, today)
+        dailyCandidateIds = computedDailySelection?.candidateIds || []
+        if (computedDailySelection) {
+          availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
+            date: today,
+            salt,
+            selectionPoolFingerprint: computedDailySelection.poolFingerprint,
+          })
+        }
         if (availabilityPin?.uniprot_id) {
           const pinnedProtein = await fetchProteinByUniprot(env.DB, availabilityPin.uniprot_id)
           if (pinnedProtein && !isAlphaFoldOnlyProtein(pinnedProtein)) {
@@ -5930,57 +5976,12 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
-    // If prod has already served today's puzzle (no override needed), mirror that pick in staging.
-    // This keeps `?gg_api=...staging...` usable for comparing visuals without changing live behavior.
-    if (!protein && env.PROD_KV?.get) {
-      try {
-        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
-        if (prodActualRaw) {
-          const prodActual = JSON.parse(prodActualRaw)
-          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
-          if (prodUniprot) {
-            const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
-            if (prodProtein) {
-              protein = prodProtein
-              startIdx = eligibleIds.indexOf(protein.uniprot)
-              if (startIdx < 0) startIdx = 0
-              if (audit) {
-                audit.source = "prod_actual"
-                audit.override_id = null
-                audit.skipped_alpha_fold = 0
-              }
-            }
-          }
-        }
-
-        // Fallback: mirror prod's daily bootstrap cache if it exists (often available even when
-        // puzzle_actual hasn't been recorded yet).
-        if (!protein) {
-          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
-          const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
-            .toString()
-            .trim()
-            .toUpperCase()
-          if (prodDailyUniprot) {
-            const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
-            if (prodProtein) {
-              protein = prodProtein
-              startIdx = eligibleIds.indexOf(protein.uniprot)
-              if (startIdx < 0) startIdx = 0
-              if (audit) {
-                audit.source = "prod_daily_cache"
-                audit.override_id = null
-                audit.skipped_alpha_fold = 0
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("GeneGuessr: failed to mirror prod daily pick", err?.message || err)
-      }
-    }
-
     if (!protein) {
+      if (!dailySelectionAttempted) {
+        dailySelectionAttempted = true
+        computedDailySelection = await pickDailyTarget(env.DB, salt, today)
+      }
+      dailyCandidateIds = computedDailySelection?.candidateIds || []
       protein = computedDailySelection?.protein || null
       if (audit) {
         audit.source = "computed"
@@ -5988,8 +5989,6 @@ async function getDailyTargetProtein(env, options = {}) {
           ? computedDailySelection.skippedAlphaFold
           : null
       }
-      startIdx = eligibleIds.indexOf(protein?.uniprot)
-      if (startIdx < 0) startIdx = 0
     }
   }
 
@@ -5998,26 +5997,41 @@ async function getDailyTargetProtein(env, options = {}) {
   // curated source decision, reject the whole protein when that source is
   // unreachable, and advance through the deterministic pool.
   if (protein && env) {
+    const selectAvailable = (ids) =>
+      selectAvailableDailyTarget({
+        initialProtein: protein,
+        eligibleIds: ids,
+        startIndex: options.practice ? startIdx : 0,
+        loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
+        resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
+        isStructureAvailable: (structureMeta, candidate) =>
+          verifyDailyTargetStructure(env, structureMeta, candidate),
+        isCandidateIneligible:
+          options.practice || explicitOverrideSelected
+            ? () => false
+            : (candidate) =>
+                isAlphaFoldOnlyProtein(candidate) ||
+                (candidate.uniprot !== availabilityPin?.uniprot_id &&
+                  isForbiddenByAvailabilityPin(candidate, availabilityPin)),
+        maxCandidates: 10,
+      })
     const availabilityIds = options.practice
       ? eligibleIds
       : [protein.uniprot, ...dailyCandidateIds.filter((uniprot) => uniprot !== protein.uniprot)]
-    const availableTarget = await selectAvailableDailyTarget({
-      initialProtein: protein,
-      eligibleIds: availabilityIds,
-      startIndex: options.practice ? startIdx : 0,
-      loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
-      resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
-      isStructureAvailable: (structureMeta, candidate) =>
-        verifyDailyTargetStructure(env, structureMeta, candidate),
-      isCandidateIneligible:
-        options.practice || explicitOverrideSelected
-          ? () => false
-          : (candidate) =>
-              isAlphaFoldOnlyProtein(candidate) ||
-              (candidate.uniprot !== availabilityPin?.uniprot_id &&
-                isForbiddenByAvailabilityPin(candidate, availabilityPin)),
-      maxCandidates: 10,
-    })
+    let availableTarget = await selectAvailable(availabilityIds)
+    if (!options.practice && !availableTarget.protein && !dailySelectionAttempted) {
+      const today = new Date().toISOString().slice(0, 10)
+      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+      dailySelectionAttempted = true
+      computedDailySelection = await pickDailyTarget(env.DB, salt, today)
+      dailyCandidateIds = computedDailySelection?.candidateIds || []
+      if (dailyCandidateIds.length) {
+        availableTarget = await selectAvailable([
+          protein.uniprot,
+          ...dailyCandidateIds.filter((uniprot) => uniprot !== protein.uniprot),
+        ])
+      }
+    }
     if (audit) {
       audit.rejected.push(...availableTarget.rejected)
       audit.skipped_alpha_fold =
