@@ -3,6 +3,7 @@ const THE_ONLY_ALLOWED_STATEFUL_WORKER_BINDING_DO_NOT_DUPLICATE =
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
+const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const GENEGUESSR_MOLSTAR_VENDOR_PREFIXES = [
   "/static/vendor/pdbe-molstar@3.8.0/",
   "/static/vendor/pdbe-molstar@3.7.1/",
@@ -147,6 +148,22 @@ function applyPublicDocumentHeaders(response, request) {
 }
 
 function canonicalDocumentRedirect(url) {
+  // Quartz still emits the app document under /apps/iconoplasm, but readers
+  // must use its own hostname: the apex document has the wrong CSP and origin
+  // for the app's API and published-card requests.
+  if (
+    (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
+    (url.pathname === "/apps/iconoplasm" || url.pathname.startsWith("/apps/iconoplasm/"))
+  ) {
+    const suffix = url.pathname.slice("/apps/iconoplasm".length)
+    const target = new URL(`https://${ICONOPLASM_HOST}/`)
+    if (suffix && !["/", "/index", "/index/", "/index.html"].includes(suffix)) {
+      target.pathname = suffix
+    }
+    target.search = url.search
+    return Response.redirect(target.toString(), 301)
+  }
+
   // Keep human-facing support aliases as HTTP redirects. The Quartz alias
   // emitter uses a noindex meta-refresh shell, which browsers follow but many
   // AI fetchers do not; a direct 301 preserves one crawlable canonical page.

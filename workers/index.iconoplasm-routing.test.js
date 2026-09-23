@@ -224,6 +224,36 @@ test("public edge canonicalizes document aliases without invoking either upstrea
   assert.equal(stateful.calls.length, 0)
 })
 
+test("apex Iconoplasm routes send readers to the one working app host", async () => {
+  globalThis.fetch = async () => {
+    throw new Error("apex Iconoplasm documents must redirect before a Pages fetch")
+  }
+  const stateful = statefulSpy()
+  const env = { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding }
+  for (const [path, canonical] of [
+    ["/apps/iconoplasm", "/"],
+    ["/apps/iconoplasm/", "/"],
+    ["/apps/iconoplasm/index", "/"],
+    ["/apps/iconoplasm/index.html", "/"],
+    ["/apps/iconoplasm/gene/TP53", "/gene/TP53"],
+    ["/apps/iconoplasm/privacy", "/privacy"],
+    ["/apps/iconoplasm/license", "/license"],
+  ]) {
+    const response = await worker.fetch(
+      new Request(`https://brinedew.bio${path}?utm_source=site`),
+      env,
+      {},
+    )
+    assert.equal(response.status, 301, path)
+    assert.equal(
+      response.headers.get("location"),
+      `https://iconoplasm.brinedew.bio${canonical}?utm_source=site`,
+      path,
+    )
+  }
+  assert.equal(stateful.calls.length, 0)
+})
+
 test("public document responses inject analytics consent only when the visitor requires it", async () => {
   globalThis.fetch = async () =>
     new Response("<html><head></head><body></body></html>", {
