@@ -623,6 +623,13 @@ jobs:
           fetch_document iconoplasm "https://iconoplasm.brinedew.bio/?v=$CACHE_BUST"
           fetch_document settings "https://brinedew.bio/settings/index?v=$CACHE_BUST"
 
+          # The old Quartz path must lead to the app's own hostname, where its
+          # API and published-card requests share the correct origin and CSP.
+          alias_result="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code} %{redirect_url}' "https://brinedew.bio/apps/iconoplasm/?v=$CACHE_BUST")"
+          test "$alias_result" = "301 https://iconoplasm.brinedew.bio/?v=$CACHE_BUST"
+          gene_alias_result="$(curl --silent --show-error --max-time 30 --output /dev/null --write-out '%{http_code} %{redirect_url}' "https://brinedew.bio/apps/iconoplasm/gene/TP53?v=$CACHE_BUST")"
+          test "$gene_alias_result" = "301 https://iconoplasm.brinedew.bio/gene/TP53?v=$CACHE_BUST"
+
           grep -Fq 'data-slug="index"' "$smoke_dir/brinedew.html"
           grep -Fq 'data-slug="apps/geneguessr/index"' "$smoke_dir/geneguessr.html"
           grep -Fq 'data-slug="apps/iconoplasm/index"' "$smoke_dir/iconoplasm.html"

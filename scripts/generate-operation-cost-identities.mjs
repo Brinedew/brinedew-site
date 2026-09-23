@@ -17,6 +17,9 @@ function runtimeSources(sourceRoot, directory) {
     return /\.(?:[cm]?js|json)$/.test(name) &&
       !/\.(?:test|spec)\.[cm]?js$/.test(name) &&
       name !== "workers/generated/operation-cost-identities.js" &&
+      // This Worker has no state binding. Its redirects cannot change the
+      // per-operation D1 plans guarded by this identity.
+      name !== "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js" &&
       !name.startsWith("workers/generated/iconoplasm-observability-snapshot.")
       ? [name]
       : []
