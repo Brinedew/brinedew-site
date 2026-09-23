@@ -720,6 +720,129 @@ test("browser claim route exposes exact terms and atomically activates an availa
   assert.equal((await noLongerAvailable.json()).claim.reason, "already_caretaking")
 })
 
+test("a browser caretaker switch keeps the old tenure if the new claim cannot commit", async (t) => {
+  const context = await bootstrap(t, "7015")
+  const seedTarget = async (suffix) => {
+    const geneId = `gene_switch_${suffix}`
+    const symbol = `SW${suffix}`
+    await registerGeneIdentity(context.db, { geneId, canonicalSymbol: symbol, now: NOW })
+    await seedSystemManifestation(context.db, {
+      geneId,
+      storage: storage(Number(suffix)),
+      expectedHeadVersion: 0,
+      expectedCanonicalRevisionId: null,
+      manifestationId: `manifestation_switch_seed_${suffix}`,
+      revisionId: `revision_switch_seed_${suffix}`,
+      selectionId: `selection_switch_seed_${suffix}`,
+      eventUuid: `event_switch_seed_${suffix}`,
+      now: NOW,
+      ...command(`command_switch_seed_${suffix}`, "4", null, "migration"),
+    })
+    return { geneId, symbol, path: `/api/iconoplasm/caretaker/genes/${symbol}/claim` }
+  }
+  const target = await seedTarget("7015")
+  const failingTarget = await seedTarget("7016")
+  context.db.raw
+    .prepare(
+      "UPDATE icono_authority_state SET authority_mode = 'authoritative' WHERE singleton = 1",
+    )
+    .run()
+  const projected = []
+  const handler = createCaretakerManifestationHttpHandler({
+    db: context.db,
+    env: {},
+    resolveSession: async () => ({ account_id: USER }),
+    onAuthorityEvent: async (event) => {
+      projected.push({ gene_id: event.gene_id, status: event.payload.assignment?.status })
+    },
+    idFactory: ids(),
+    now: () => "2026-09-01T00:00:01.000Z",
+  })
+  const available = await (
+    await handler(new Request(`https://iconoplasm.test${target.path}`))
+  ).json()
+  assert.equal(available.claim.available, true)
+  assert.equal(available.claim.mode, "switch")
+  assert.equal(available.claim.switch_from.caretaker_assignment_id, context.assignmentId)
+  const switchBody = (claim, commandId) => ({
+    command_id: commandId,
+    expected_gene_revision: claim.gene_revision,
+    terms_version_id: claim.terms.terms_version_id,
+    terms_accepted: true,
+    entitlement_policy_version: claim.entitlement_policy_version,
+    default_leave_policy: "retain",
+    previous_assignment_id: claim.switch_from.caretaker_assignment_id,
+    expected_previous_assignment_version: claim.switch_from.assignment_version,
+    expected_previous_gene_revision: claim.switch_from.gene_revision,
+  })
+  const claimBody = switchBody(available.claim, "browser_switch_7015")
+  const switchedResponse = await handler(browserRequest(target.path, claimBody))
+  const switched = await switchedResponse.json()
+  assert.ok([200, 202].includes(switchedResponse.status), JSON.stringify(switched))
+  assert.equal(switched.status, "active")
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status, relinquish_policy FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
+      context.assignmentId,
+    ).status,
+    "ended",
+  )
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status FROM icono_caretaker_assignments WHERE gene_id = ?",
+      target.geneId,
+    ).status,
+    "active",
+  )
+  assert.deepEqual(projected, [
+    { gene_id: context.geneId, status: "ended" },
+    { gene_id: target.geneId, status: "active" },
+  ])
+  const replay = await handler(browserRequest(target.path, claimBody))
+  assert.ok([200, 202].includes(replay.status))
+  assert.equal((await replay.json()).replayed, true)
+
+  const next = await (
+    await handler(new Request(`https://iconoplasm.test${failingTarget.path}`))
+  ).json()
+  assert.equal(next.claim.mode, "switch")
+  const currentAssignmentId = next.claim.switch_from.caretaker_assignment_id
+  const oldRevision = next.claim.switch_from.gene_revision
+  const eventCount = row(
+    context.db,
+    "SELECT count(*) AS total FROM icono_manifestation_events",
+  ).total
+  context.db.raw
+    .exec(`CREATE TRIGGER reject_switch_target BEFORE INSERT ON icono_caretaker_assignments
+    WHEN NEW.gene_id = '${failingTarget.geneId}' BEGIN SELECT RAISE(ABORT, 'test_target_insert_failed'); END`)
+  const failed = await handler(
+    browserRequest(failingTarget.path, switchBody(next.claim, "browser_switch_fail_7016")),
+  )
+  assert.equal(failed.status, 500)
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
+      currentAssignmentId,
+    ).status,
+    "active",
+  )
+  assert.equal(
+    row(
+      context.db,
+      "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
+      target.geneId,
+    ).gene_revision,
+    oldRevision,
+  )
+  assert.equal(
+    row(context.db, "SELECT count(*) AS total FROM icono_manifestation_events").total,
+    eventCount,
+  )
+})
+
 test("caretaker browser routes persist manual Tags on the exact autosaved revision", async (t) => {
   installMemoryBodyStorage(t)
   const context = await bootstrap(t, "7011")

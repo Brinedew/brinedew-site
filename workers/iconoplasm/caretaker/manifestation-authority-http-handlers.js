@@ -168,12 +168,25 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
   )
   const accountAssignment = await first(
     db,
-    `SELECT caretaker_assignment_id, gene_id, status
-       FROM icono_caretaker_assignments
-      WHERE account_id = ? AND status IN ('pending_acceptance', 'active', 'suspended')
+    `SELECT assignment.caretaker_assignment_id, assignment.gene_id, assignment.status,
+            assignment.assignment_version, gene.canonical_symbol, head.gene_revision
+       FROM icono_caretaker_assignments assignment
+       JOIN icono_gene_identities gene ON gene.gene_id = assignment.gene_id
+       JOIN icono_manifestation_heads head ON head.gene_id = assignment.gene_id
+      WHERE assignment.account_id = ?
+        AND assignment.status IN ('pending_acceptance', 'active', 'suspended')
       LIMIT 1`,
     account.account_id,
   )
+  const switchFrom =
+    accountAssignment?.status === "active" && accountAssignment.gene_id !== gene.gene_id
+      ? {
+          caretaker_assignment_id: accountAssignment.caretaker_assignment_id,
+          canonical_symbol: accountAssignment.canonical_symbol,
+          assignment_version: Number(accountAssignment.assignment_version),
+          gene_revision: Number(accountAssignment.gene_revision),
+        }
+      : null
   const terms = await first(
     db,
     `SELECT terms_version_id, terms_sha256, document_url, display_label, effective_at
@@ -188,7 +201,7 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
     reason = "gene_not_ready"
   } else if (geneAssignment) {
     reason = geneAssignment.account_id === account.account_id ? "already_caretaking" : "gene_taken"
-  } else if (accountAssignment) {
+  } else if (accountAssignment && !switchFrom) {
     reason = "account_already_caretaking"
   } else if (!terms) {
     reason = "terms_unavailable"
@@ -199,6 +212,8 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
     claim: {
       available: reason == null,
       reason,
+      mode: switchFrom && reason == null ? "switch" : "claim",
+      switch_from: switchFrom,
       gene_revision: Number(head.gene_revision || 0),
       entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
       terms: terms
@@ -340,6 +355,8 @@ function createCaretakerManifestationHttpHandler({
             400,
           )
         }
+        const replay = await resolveCommandReplay(db, command, command)
+        if (replay) return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, replay)
         const availability = await readCaretakerClaimAvailability(
           db,
           segment(claim[1]),
@@ -350,6 +367,16 @@ function createCaretakerManifestationHttpHandler({
           throw authorityError(
             "CARETAKER_CLAIM_UNAVAILABLE",
             "Caretaking is no longer available for this gene or account",
+            409,
+          )
+        }
+        if (
+          (body.previous_assignment_id || null) !==
+          (availability.claim.switch_from?.caretaker_assignment_id || null)
+        ) {
+          throw authorityError(
+            "CARETAKER_CLAIM_UNAVAILABLE",
+            "The current caretaker role changed; refresh the gene page",
             409,
           )
         }
@@ -367,6 +394,9 @@ function createCaretakerManifestationHttpHandler({
           relinquishPolicy: body.default_leave_policy,
           entitlementPolicyVersion: body.entitlement_policy_version,
           expectedGeneRevision: body.expected_gene_revision,
+          previousAssignmentId: body.previous_assignment_id,
+          expectedPreviousAssignmentVersion: body.expected_previous_assignment_version,
+          expectedPreviousGeneRevision: body.expected_previous_gene_revision,
           ...auditIds(body),
           idFactory,
           ...command,
