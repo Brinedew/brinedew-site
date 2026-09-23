@@ -331,6 +331,8 @@ export async function offerCaretakerAssignment(
   })
 }
 
+// THE ONLY CARETAKER CLAIM AND GENE SWITCH COMMAND — DO NOT DUPLICATE.
+// A switch ends the old tenure and claims the new gene in one D1 batch.
 export async function claimCaretakerAssignment(
   db,
   {
