@@ -1,10 +1,17 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import test from "node:test"
-import { TestD1, row } from "./manifestation-authority-test-support.js"
-import { registerGeneIdentity } from "./manifestation-authority.js"
+import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
+import {
+  offerCaretakerAssignment,
+  readCanonicalProjectionRecord,
+  registerAuthorityAccount,
+  registerGeneIdentity,
+  seedSystemManifestation,
+} from "./manifestation-authority.js"
 import {
   createManifestationSnapshot,
+  readManifestationEventPage,
   readManifestationSnapshotPage,
   completeManifestationSnapshot,
 } from "./manifestation-authority-sync.js"
@@ -145,4 +152,142 @@ test("foreign, expired and changed-epoch streams fail closed", async (t) => {
   })
   assert.notEqual(replacement.snapshot_id, a.snapshot_id)
   assert.equal(replacement.authority_epoch, 2)
+})
+
+test("a sealed event archive preserves the exact replica stream while the writer retains current heads", async (t) => {
+  const db = new TestD1()
+  const archiveDb = new TestD1()
+  t.after(() => db.close())
+  t.after(() => archiveDb.close())
+  for (const target of [db, archiveDb]) {
+    await registerAuthorityAccount(target, {
+      accountId: "archive_admin",
+      publicCreditLabel: "Archive administrator",
+    })
+    await registerAuthorityAccount(target, {
+      accountId: "archive_caretaker",
+      publicCreditLabel: "Archive caretaker",
+    })
+    await registerGeneIdentity(target, { geneId: "archive_gene_one", canonicalSymbol: "ARC1" })
+    await seedSystemManifestation(target, {
+      geneId: "archive_gene_one",
+      storage: storage(201),
+      expectedHeadVersion: 0,
+      expectedCanonicalRevisionId: null,
+      manifestationId: "archive_manifestation_one",
+      revisionId: "archive_revision_one",
+      selectionId: "archive_selection_one",
+      eventUuid: "archive_event_one",
+      ...command("archive_command_one", "1", null, "migration"),
+    })
+    await offerCaretakerAssignment(target, {
+      geneId: "archive_gene_one",
+      accountId: "archive_caretaker",
+      invitedByAccountId: "archive_admin",
+      entitlementPolicyVersion: "entitlement-v1",
+      expectedGeneRevision: 1,
+      assignmentId: "archive_assignment_one",
+      eventUuid: "archive_event_two",
+      ...command("archive_command_two", "2", "archive_admin", "administrator"),
+    })
+  }
+  const archiveHash = sha("a")
+  archiveDb.raw.exec(
+    `CREATE TABLE icono_event_archive_manifest (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      authority_epoch INTEGER NOT NULL,
+      through_sequence INTEGER NOT NULL,
+      event_count INTEGER NOT NULL,
+      source_sha256 TEXT NOT NULL
+    )`,
+  )
+  archiveDb.raw
+    .prepare("INSERT INTO icono_event_archive_manifest VALUES (1, 1, 2, 2, ?)")
+    .run(archiveHash)
+  db.raw
+    .prepare(
+      "UPDATE icono_authority_state SET event_archive_through=2, event_archive_sha256=? WHERE singleton=1",
+    )
+    .run(archiveHash)
+  db.raw.prepare("UPDATE icono_manifestation_events SET projection_status='published'").run()
+  db.raw.prepare("DELETE FROM icono_manifestation_events WHERE event_sequence=1").run()
+  assert.throws(
+    () => db.raw.prepare("DELETE FROM icono_manifestation_events WHERE event_sequence=2").run(),
+    /manifestation_events_are_immutable/,
+  )
+  await registerGeneIdentity(db, { geneId: "archive_gene_two", canonicalSymbol: "ARC2" })
+  await seedSystemManifestation(db, {
+    geneId: "archive_gene_two",
+    storage: storage(202),
+    expectedHeadVersion: 0,
+    expectedCanonicalRevisionId: null,
+    manifestationId: "archive_manifestation_two",
+    revisionId: "archive_revision_two",
+    selectionId: "archive_selection_two",
+    eventUuid: "archive_event_three",
+    ...command("archive_command_three", "3", null, "migration"),
+  })
+  const projection = await readCanonicalProjectionRecord(db, "archive_gene_one")
+  assert.equal(projection.last_event_id, "archive_event_two")
+
+  await assert.rejects(readManifestationEventPage(db, { cursorSecret, limit: 1 }), /archive/i)
+  const eventIds = []
+  let cursor = null
+  for (let pageNumber = 0; pageNumber < 4; pageNumber += 1) {
+    const page = await readManifestationEventPage(db, {
+      archiveDb,
+      cursorSecret,
+      cursor,
+      limit: 1,
+    })
+    eventIds.push(...page.events.map((event) => event.event_id))
+    cursor = page.resume_cursor
+    if (!page.has_more) break
+  }
+  assert.deepEqual(eventIds, ["archive_event_one", "archive_event_two", "archive_event_three"])
+
+  const snapshot = await createManifestationSnapshot(db, {
+    archiveDb,
+    consumerId: "archive_replica",
+    cursorSecret,
+    now,
+  })
+  const parts = []
+  let partsCursor = null
+  for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+    const page = await readManifestationSnapshotPage(db, {
+      archiveDb,
+      snapshotId: snapshot.snapshot_id,
+      cursorSecret,
+      cursor: partsCursor,
+      now,
+      limit: 2,
+    })
+    parts.push(...page.parts)
+    partsCursor = page.parts_resume_cursor
+    if (!page.has_more) break
+  }
+  assert.deepEqual(
+    parts.map((part) => part.source_key),
+    ["archive_gene_one", "archive_gene_two", "1", "2", "3"],
+  )
+  let chain = "0".repeat(64)
+  for (const part of parts)
+    chain = createHash("sha256")
+      .update(`${chain}\n${part.ordinal}\n${part.payload_sha256}`)
+      .digest("hex")
+  const last = await readManifestationSnapshotPage(db, {
+    archiveDb,
+    snapshotId: snapshot.snapshot_id,
+    cursorSecret,
+    cursor: partsCursor,
+    now,
+    limit: 2,
+  })
+  assert.equal(last.manifest_sha256, chain)
+  archiveDb.raw.prepare("UPDATE icono_event_archive_manifest SET source_sha256=?").run(sha("b"))
+  await assert.rejects(
+    readManifestationEventPage(db, { archiveDb, cursorSecret, limit: 1 }),
+    /does not match authority/,
+  )
 })
