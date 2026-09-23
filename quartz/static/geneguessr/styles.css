@@ -1458,6 +1458,12 @@ body:has(.pg-modal-dialog[open]) {
   -webkit-font-kerning: none;
 }
 
+.pg-hint-error {
+  margin-left: 0.4em;
+  color: var(--secondary);
+  font-size: 0.85em;
+}
+
 .pg-redaction:hover,
 .pg-redaction:focus-visible {
   opacity: 0.85;
