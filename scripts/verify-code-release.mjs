@@ -4,8 +4,10 @@ import { pathToFileURL } from "node:url"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
+// Wrangler route/config edits ship with the tested code. Only data migrations
+// and the named account policy/topology owners require a maintenance release.
 const MAINTENANCE_PATH =
-  /^(?:cloudflare\/(?:operation-cost-migration-plan|deployment-topology|iconoplasm-crawler-policy)\.json$|wrangler[^/]*\.toml$)|\.sql$/i
+  /^(?:cloudflare\/(?:operation-cost-migration-plan|deployment-topology|iconoplasm-crawler-policy)\.json$)|\.sql$/i
 const MIGRATION_BINDINGS = Object.freeze({
   migrations: "DB",
   "workers/benchmark/migrations": "DB",
