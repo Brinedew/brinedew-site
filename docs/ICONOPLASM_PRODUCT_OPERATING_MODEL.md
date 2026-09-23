@@ -54,26 +54,14 @@ healthy operation. An already-open article does not need continuous polling.
 A slower coherent update is better than quota exhaustion, mixed canon, or
 interrupting reading.
 
-### Free-plan growth boundary
+### Affordable growth boundary
 
-The engineering target is 10,000 daily active readers on the current Cloudflare
-Free allowances, using the already-paid Bunny service where appropriate. Normal
-reading, discovery, voting, and publication must all be represented in
-acceptance evidence.
-
-This is a product target, not a fixed workload recipe. It does not prescribe:
-
-- articles, genes, discoveries, or votes per reader;
-- sign-in or regional-fallback percentages;
-- database schemas, indexes, queues, cache lifetimes, batch sizes, or schedules;
-- a required number of provider operations per user action.
-
-Those are test inputs and implementation choices. They must be measured,
-challenged, and replaced when the architecture changes.
-
-No paid Cloudflare upgrade, R2 reactivation, or larger allowance is an assumed
-solution. If the product cannot meet the target, the report must identify the
-specific user behavior and irreducible resource cost that fails.
+Keep ordinary reading available on the account's current plan. Do not treat a
+synthetic visitor count, recent agent-driven maintenance traffic, or a paid
+Cloudflare upgrade as the product goal. Measure actual reader and editor
+journeys separately from migrations, backfills, publication, tests, and other
+operator work. When capacity fails, identify the action and query consuming it,
+then remove needless work before proposing a larger allowance.
 
 ## Surface ownership
 
@@ -110,7 +98,7 @@ When prose and executable reality disagree:
 
 ## Evidence required for a capacity claim
 
-A claim that the target is supported must include:
+A claim that a measured reader workload is supported must include:
 
 - the tested reader journeys and their declared assumptions;
 - current provider allowances and account-wide competing use;
@@ -120,8 +108,7 @@ A claim that the target is supported must include:
 - enough margin that ordinary variation does not consume the entire allowance.
 
 A passing component benchmark is not whole-product proof. A failing synthetic
-scenario is not a product requirement. The capacity testing guide is
-[ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md](ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md).
+scenario is not a product requirement.
 
 ## Current-state entrypoints
 

@@ -228,9 +228,9 @@ architecture and later account conditions. It is historical incident evidence,
 not planning authority, and has been removed so it cannot be mistaken for a
 current recommendation.
 
-Use `docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md` for action-derived
-limits. Historical usage may reveal an unmodeled path, but it may not forecast a
-changed runtime or justify paid capacity.
+Use current provider telemetry and the actual user action when investigating
+capacity. Historical usage may reveal an unmodeled path, but it may not forecast
+a changed runtime or justify paid capacity.
 
 The configured stateful Worker uses Cloudflare's five cron slots:
 

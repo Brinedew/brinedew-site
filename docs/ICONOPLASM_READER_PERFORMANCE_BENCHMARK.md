@@ -159,7 +159,7 @@ The 50 ms prepared-image criterion passed; the earlier 200 ms criterion is retir
 Raw observations, including earlier failed iterations, remain in
 `artifacts/hover-recovery-audit-20260828/`. This verifies the reported HTML hover
 regression in this browser/network; it does not certify Vietnam ISP reachability,
-the full PDF/low-bandwidth matrix, store propagation, or 10,000-reader capacity.
+the full PDF/low-bandwidth matrix, store propagation, or site-wide capacity.
 
 - No highlight: separate host-load gate, scanner response, matching and scan work.
 - Highlighted but not ready after lead: inspect speculation policy/gate, queue,
@@ -173,6 +173,6 @@ policy, bounded concurrency and canonical epoch fences. Do not improve scores by
 preloading the entire article, stealing host rendering turns, restoring pointer
 trajectory prediction, or bypassing Bunny with unlimited Worker reads.
 
-Record findings in B-716. Passing local latency tests does not establish 10,000
-reader capacity, global CDN freshness, Firefox store propagation or debt-free
+Record findings in B-716. Passing local latency tests does not establish
+site-wide capacity, global CDN freshness, Firefox store propagation or debt-free
 Cloudflare headroom; those have independent acceptance evidence.

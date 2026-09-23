@@ -78,8 +78,7 @@ That describes existing implementation, not the current product target: the
 2026-08-27 owner clarification in `ICONOPLASM_PRODUCT_OPERATING_MODEL.md` targets
 one-to-two-minute availability for fresh loads/reloads while allowing unreloaded
 articles to keep their images. Scale and smooth reading take priority over a
-strict timer; the working 10,000-daily-reader scenario includes votes and saved
-discoveries, not just image traffic. Bringing the publisher/reload path into compliance
+strict timer. Bringing the publisher/reload path into compliance
 still requires implementation and measured verification; do not bypass budget
 guards or introduce a second publisher. Each bounded step rewrites at most six
 dirty shards and publishes through one `KV_GALLERY_VERSION` barrier. The extension portrait
