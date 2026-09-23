@@ -41,6 +41,43 @@ test("immutable object identity ignores property order and changes with actual c
   )
 })
 
+test("a rematerialization can reuse exact immutable bytes and uploads a genuine miss", async () => {
+  const { store, calls } = fixture()
+  const value = { symbol: "EZH2", name: "same" }
+  const first = await store.write("genes", value, { reuseExisting: true })
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ["GET", "PUT", "GET"],
+  )
+
+  calls.length = 0
+  const second = await store.write(
+    "genes",
+    { name: "same", symbol: "EZH2" },
+    { reuseExisting: true },
+  )
+  assert.equal(second.key, first.key)
+  assert.equal(second.skipped, true)
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ["GET"],
+  )
+})
+
+test("a corrupt immutable object is not accepted or overwritten as a cache hit", async () => {
+  const { store, calls, objects } = fixture()
+  const value = { symbol: "EZH2", name: "same" }
+  const receipt = await store.write("genes", value)
+  objects.set(receipt.key, new TextEncoder().encode("{}"))
+  calls.length = 0
+
+  await assert.rejects(store.write("genes", value, { reuseExisting: true }), /hash mismatch/)
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ["GET"],
+  )
+})
+
 test("PUT success without readable bytes cannot acknowledge publication", async () => {
   const { store } = fixture({ alterRead: () => null })
   await assert.rejects(store.write("genes", { symbol: "EZH2" }), /not yet readable/)

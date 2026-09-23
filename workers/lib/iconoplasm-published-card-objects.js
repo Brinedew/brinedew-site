@@ -5,7 +5,9 @@ import {
   fetchPortraitStorage,
 } from "./iconoplasm-portrait-storage.js"
 
-// ARCHITECTURE FENCE [IPD-011]: this is immutable storage, not canon selection.
+// THE ONLY published-card object writer: add reuse and verification here, not
+// in a second upload path. This is immutable storage, not canon selection.
+// ARCHITECTURE FENCE [IPD-011].
 // The publisher commits its head only after all referenced bytes are verified.
 // Never overwrite a stable URL with different bytes or repair a miss from D1.
 // Healthy CDN misses end at paid Bunny Storage, not a per-reader Worker build.
@@ -411,7 +413,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     read,
     verifyReaderResolvable,
     publishBlotAlias,
-    async write(kind, value) {
+    async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
       const bytes = encoder.encode(canonicalPublishedJson(value))
@@ -434,6 +436,13 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
       }
       const hash = await publishedObjectHash(bytes)
       const key = publishedCardObjectKey(kind, hash)
+      if (reuseExisting) {
+        // A full rematerialization commonly reaches bytes that the committed
+        // catalog already published. The authenticated origin GET verifies the
+        // exact hash; a miss follows the normal PUT and read-back path.
+        const existing = await read(key, { verifyStorageOnly: true })
+        if (existing) return { key, hash, size: bytes.byteLength, skipped: true }
+      }
       const url = externalPortraitStorageUrl(env, key)
       const password = externalPortraitStoragePassword(env)
       if (!url || !password) throw new Error("Bunny published-object writes are not configured")
