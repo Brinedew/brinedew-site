@@ -1411,6 +1411,7 @@ import {
   scoreGuess,
 } from "./lib/game-engine.js"
 import {
+  ProteinReadUnavailableError,
   fetchProteinByUniprot,
   searchProteins,
   getEligibleProteinIds,
@@ -1452,6 +1453,14 @@ const SECURITY_HEADERS = {
     "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-site",
+}
+
+function proteinReadUnavailableResponse(error, headers) {
+  if (!(error instanceof ProteinReadUnavailableError)) return null
+  return Response.json(
+    { error: "Protein data is temporarily unavailable. Please try again." },
+    { status: 503, headers: { ...headers, "Cache-Control": "no-store" } },
+  )
 }
 
 // Hard-path rationale:
@@ -3163,6 +3172,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         })
       } catch (error) {
         console.error("Failed to load protein details", error)
+        const unavailable = proteinReadUnavailableResponse(error, corsHeaders)
+        if (unavailable) return unavailable
         return Response.json(
           { error: "Failed to load protein" },
           {
@@ -3191,6 +3202,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         return Response.json(matches, { headers: corsHeaders })
       } catch (error) {
         console.error("Failed to load protein search results", error)
+        const unavailable = proteinReadUnavailableResponse(error, corsHeaders)
+        if (unavailable) return unavailable
         return Response.json(
           { error: "Failed to load protein database" },
           {
@@ -4857,9 +4870,7 @@ async function validateDailyBootstrapCache(env, date, origin, cached) {
   }
 
   const cacheKey = buildDailyBootstrapCacheKey(date, origin)
-  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot, {
-    throwOnUnavailable: true,
-  })
+  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot)
   const sourceWasExplicitOverride = cached?.audit?.source === "override"
   const currentMeta = currentProtein ? await getCanonicalStructureMeta(currentProtein, env) : null
   const canonicalStillMatches = sameStructureMeta(currentMeta, cached.structureMeta)
@@ -5517,6 +5528,8 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     return Response.json(payload, { headers: responseHeaders })
   } catch (err) {
     console.error("GeneGuessr: guess submission failed", err)
+    const unavailable = proteinReadUnavailableResponse(err, corsHeaders)
+    if (unavailable) return unavailable
     return Response.json(
       { error: "Guess submission failed" },
       { status: 500, headers: corsHeaders },
@@ -5649,6 +5662,8 @@ async function handleHintReveal(request, env, corsHeaders) {
     )
   } catch (err) {
     console.error("GeneGuessr: hint reveal failed", err)
+    const unavailable = proteinReadUnavailableResponse(err, corsHeaders)
+    if (unavailable) return unavailable
     return Response.json({ error: "Hint reveal failed" }, { status: 500, headers: corsHeaders })
   }
 }
@@ -5738,6 +5753,8 @@ async function handleGuessSimilarity(request, env, corsHeaders) {
     return Response.json({ guessId, score }, { headers: responseHeaders })
   } catch (err) {
     console.error("GeneGuessr: similarity calculation failed", err)
+    const unavailable = proteinReadUnavailableResponse(err, corsHeaders)
+    if (unavailable) return unavailable
     return Response.json(
       { error: "Similarity calculation failed" },
       { status: 500, headers: corsHeaders },
