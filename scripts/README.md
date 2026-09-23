@@ -29,9 +29,3 @@ Scripts in that pipeline:
 ## Embedding/similarity tools
 
 - `load_esm2_embeddings.py` - ESM-2 embedding loader
-
-Legacy 50/50 ESM2+HiG2Vec tooling has been archived to:
-
-- `legacy_similarity_50_50/precompute_topk_ladder.py`
-- `legacy_similarity_50_50/upload_ladder_to_kv.py`
-- `legacy_similarity_50_50/similarity_toolkit.py`

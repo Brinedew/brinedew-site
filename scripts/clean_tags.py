@@ -5,7 +5,6 @@ Tag cleanup tool for an Obsidian/Quartz vault.
 - Prompts for comma-separated tags to delete (also deletes their subtags).
 - Removes matching tags from frontmatter and body text (outside code blocks).
 - Writes timestamped backups under scripts/tag_cleanup_backups/<timestamp>/...
-- Designed for double-click via run_clean_tags.cmd (Windows).
 """
 
 import sys, re, os, shutil, subprocess, datetime
