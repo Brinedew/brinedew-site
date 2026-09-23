@@ -58,79 +58,72 @@ async function requireAuthenticatedSession(request, env) {
   return { ...resolved, sessionStub: resolved.stub, userId: resolved.session.user_id }
 }
 
-function getGuestSessionTokenFromCookies(cookies) {
-  const token = cookies.geneguessr_session
-  if (!token) return null
-  // Keep in sync with resolveSessionCookie() regex in workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js
-  if (!/^[a-zA-Z0-9_-]+$/.test(token)) return null
-  return token
-}
-
-async function loadGameState(env, sessionId) {
-  const id = env.GAME_SESSIONS.idFromName(sessionId)
+// THE ONLY projection from a player's durable completed rounds to D1 stats.
+// Each date is applied with one conditional SQLite upsert. If D1 refuses it,
+// the result stays in the existing GameSession object for the next page visit.
+async function reconcileCompletedResults(env, userId) {
+  const id = env.GAME_SESSIONS.idFromName(`user_${userId}`)
   const stub = env.GAME_SESSIONS.get(id)
-  const resp = await stub.fetch("https://sessions/game/state", { method: "GET" })
-  if (!resp.ok) return null
-  return await resp.json()
-}
-
-function validateDailyCompletedState(state) {
-  if (!state || typeof state !== "object") return { ok: false, reason: "no_state" }
-  if (state.practiceMode) return { ok: false, reason: "practice_mode" }
-  const today = new Date().toISOString().split("T")[0]
-  if (state.date !== today) return { ok: false, reason: "wrong_day" }
-  const guesses = Array.isArray(state.guesses) ? state.guesses : []
-  const completed = Boolean(state.won) || guesses.length >= 10
-  if (!completed) return { ok: false, reason: "not_completed" }
-  return { ok: true, today, won: Boolean(state.won), statsRecorded: Boolean(state.statsRecorded) }
-}
-
-async function tryLoadAuthoritativeDailyResultForUser(env, userId) {
-  const sessionId = `user_${userId}`
-  let state
+  let pending
   try {
-    state = await loadGameState(env, sessionId)
+    const response = await stub.fetch("https://sessions/game/results")
+    if (!response.ok) throw new Error("Completed game results unavailable")
+    pending = await response.json()
+    if (!Array.isArray(pending)) throw new Error("Invalid completed game results")
   } catch {
-    state = null
+    return { pendingResults: null, syncFailed: true, applied: 0 }
   }
-  const validation = validateDailyCompletedState(state)
-  if (!validation.ok) {
-    return { ok: false, reason: validation.reason }
-  }
-  return {
-    ok: true,
-    won: validation.won,
-    statsRecorded: validation.statsRecorded,
-    sessionId,
-    state,
-    today: validation.today,
-  }
-}
 
-async function tryLoadAuthoritativeDailyResultFromGuest(env, cookies) {
-  const token = getGuestSessionTokenFromCookies(cookies)
-  if (!token) {
-    return { ok: false, reason: "missing_cookie" }
+  let remaining = pending.length
+  let syncFailed = false
+  let applied = 0
+  for (const result of [...pending].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(result?.date || "") || typeof result.won !== "boolean") {
+      syncFailed = true
+      break
+    }
+    const won = Number(result.won)
+    try {
+      await env.DB.prepare(
+        `
+        INSERT INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)
+        VALUES (?, 1, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          total_played = stats.total_played + 1,
+          total_wins = stats.total_wins + excluded.total_wins,
+          current_streak = CASE
+            WHEN excluded.total_wins = 0 THEN 0
+            WHEN stats.last_played_date = date(excluded.last_played_date, '-1 day') THEN stats.current_streak + 1
+            ELSE 1 END,
+          best_streak = MAX(stats.best_streak, CASE
+            WHEN excluded.total_wins = 0 THEN 0
+            WHEN stats.last_played_date = date(excluded.last_played_date, '-1 day') THEN stats.current_streak + 1
+            ELSE 1 END),
+          last_played_date = excluded.last_played_date
+        WHERE stats.last_played_date IS NULL OR stats.last_played_date < excluded.last_played_date
+      `,
+      )
+        .bind(userId, won, won, won, result.date)
+        .run()
+      applied++
+    } catch {
+      syncFailed = true
+      break
+    }
+    try {
+      const ack = await stub.fetch("https://sessions/game/results/ack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: result.date }),
+      })
+      if (!ack.ok) throw new Error("Completed game acknowledgement failed")
+      remaining--
+    } catch {
+      // The conditional upsert makes a later acknowledgement retry safe.
+      syncFailed = true
+    }
   }
-  const sessionId = `guest_${token}`
-  let state
-  try {
-    state = await loadGameState(env, sessionId)
-  } catch {
-    state = null
-  }
-  const validation = validateDailyCompletedState(state)
-  if (!validation.ok) {
-    return { ok: false, reason: validation.reason }
-  }
-  return {
-    ok: true,
-    won: validation.won,
-    statsRecorded: validation.statsRecorded,
-    sessionId,
-    state,
-    today: validation.today,
-  }
+  return { pendingResults: remaining, syncFailed, applied }
 }
 
 /**
@@ -222,18 +215,7 @@ export async function handleMigrateStats(request, env) {
   })
 }
 
-/**
- * GET /api/stats
- * Get current user stats from D1
- */
-export async function handleGetStats(request, env) {
-  const auth = await requireAuthenticatedSession(request, env)
-  if (!auth.ok) {
-    return auth.response
-  }
-  const userId = auth.userId
-
-  // Fetch stats from D1
+async function readAccountStats(env, userId) {
   const stats = await env.DB.prepare(
     `
     SELECT total_played, total_wins, current_streak, best_streak, last_played_date, migrated_at
@@ -244,8 +226,7 @@ export async function handleGetStats(request, env) {
     .first()
 
   if (!stats) {
-    // Return empty stats if user hasn't played yet
-    return Response.json({
+    return {
       played: 0,
       won: 0,
       winRate: 0,
@@ -253,7 +234,7 @@ export async function handleGetStats(request, env) {
       maxStreak: 0,
       lastPlayedDate: null,
       migratedAt: null,
-    })
+    }
   }
 
   const winRate = stats.total_played > 0 ? stats.total_wins / stats.total_played : 0
@@ -264,15 +245,24 @@ export async function handleGetStats(request, env) {
     today,
   )
 
-  return Response.json({
+  return {
     played: stats.total_played,
     won: stats.total_wins,
-    winRate: winRate,
+    winRate,
     currentStreak: effectiveCurrentStreak,
     maxStreak: stats.best_streak,
     lastPlayedDate: stats.last_played_date,
     migratedAt: stats.migrated_at,
-  })
+  }
+}
+
+/** GET /api/stats: recover saved rounds first, then show the account's actual totals. */
+export async function handleGetStats(request, env) {
+  const auth = await requireAuthenticatedSession(request, env)
+  if (!auth.ok) return auth.response
+  const sync = await reconcileCompletedResults(env, auth.userId)
+  const stats = await readAccountStats(env, auth.userId)
+  return Response.json({ ...stats, pendingResults: sync.pendingResults })
 }
 
 /**
@@ -281,193 +271,23 @@ export async function handleGetStats(request, env) {
  */
 export async function handleUpdateStats(request, env) {
   const auth = await requireAuthenticatedSession(request, env)
-  if (!auth.ok) {
-    return auth.response
-  }
-  const userId = auth.userId
-  const cookies = auth.cookies
+  if (!auth.ok) return auth.response
 
-  // Parse update payload (kept for backwards compatibility; we prefer server-derived result).
-  let payload
-  try {
-    payload = await request.json()
-  } catch (err) {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 })
-  }
-
-  // Prefer the authenticated user session. If missing (e.g., user played as guest then logged in),
-  // migrate same-day completed state from the guest session once.
-  let authoritative = await tryLoadAuthoritativeDailyResultForUser(env, userId)
-  if (!authoritative.ok) {
-    const guest = await tryLoadAuthoritativeDailyResultFromGuest(env, cookies)
-    if (guest.ok) {
-      try {
-        const userSessionId = `user_${userId}`
-        const doId = env.GAME_SESSIONS.idFromName(userSessionId)
-        const userStub = env.GAME_SESSIONS.get(doId)
-        await withObservedGameSessionWrite(
-          env,
-          {
-            operation: "stats_guest_to_user_migration",
-            requestPath: "/api/stats/update",
-            sessionId: userSessionId,
-          },
-          async () => {
-            await userStub.fetch("https://sessions/game/state", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...guest.state,
-                statsRecorded: Boolean(guest.state?.statsRecorded),
-              }),
-            })
-          },
-        )
-      } catch {
-        // If migration fails, we can still proceed based on guest state.
-      }
-      authoritative = {
-        ...guest,
-        sessionId: `user_${userId}`,
-      }
-    }
-  }
-  if (!authoritative.ok) {
-    const status = authoritative.reason === "not_completed" ? 409 : 400
-    return Response.json(
-      {
-        error: "Unable to validate completed daily game session",
-        reason: authoritative.reason,
-      },
-      { status },
-    )
-  }
-
-  const today = authoritative.today
-  const won = authoritative.won
-
-  // Fetch current stats
-  const current = await env.DB.prepare(
-    `
-    SELECT total_played, total_wins, current_streak, best_streak
-         , last_played_date
-    FROM stats WHERE user_id = ?
-  `,
-  )
-    .bind(userId)
-    .first()
-
-  let played = current ? current.total_played : 0
-  let wins = current ? current.total_wins : 0
-  let currentStreak = current ? current.current_streak : 0
-  let bestStreak = current ? current.best_streak : 0
-
-  // Break streak if one or more full days were missed since last played date.
-  if (current?.last_played_date) {
-    const gapDays = getUtcDateGapDays(current.last_played_date, today)
-    if (Number.isFinite(gapDays) && gapDays > 1) {
-      currentStreak = 0
-    }
-  }
-
-  // Idempotence guard: allow at most one stats record per user per day.
-  if (current?.last_played_date === today) {
-    const winRate = played > 0 ? wins / played : 0
-    return Response.json({
-      success: true,
-      alreadyRecorded: true,
-      stats: {
-        played,
-        won: wins,
-        winRate,
-        currentStreak,
-        maxStreak: bestStreak,
-      },
-    })
-  }
-
-  // If we have authoritative game state and it says we already recorded stats, also treat as idempotent.
-  if (authoritative.ok && authoritative.statsRecorded) {
-    const winRate = played > 0 ? wins / played : 0
-    return Response.json({
-      success: true,
-      alreadyRecorded: true,
-      stats: {
-        played,
-        won: wins,
-        winRate,
-        currentStreak,
-        maxStreak: bestStreak,
-      },
-    })
-  }
-
-  // Update stats
-  played++
-  if (won) {
-    wins++
-    currentStreak++
-    bestStreak = Math.max(bestStreak, currentStreak)
-  } else {
-    currentStreak = 0
-  }
-
-  // Save to D1
-  await env.DB.prepare(
-    `
-    INSERT INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET
-      total_played = excluded.total_played,
-      total_wins = excluded.total_wins,
-      current_streak = excluded.current_streak,
-      best_streak = excluded.best_streak,
-      last_played_date = excluded.last_played_date
-  `,
-  )
-    .bind(userId, played, wins, currentStreak, bestStreak, today)
-    .run()
-
-  // Mark the daily game session as having recorded stats, to prevent repeat submissions.
-  if (authoritative.sessionId && authoritative.state) {
-    try {
-      const updatedState = { ...authoritative.state, statsRecorded: true }
-      const doId = env.GAME_SESSIONS.idFromName(authoritative.sessionId)
-      const stub = env.GAME_SESSIONS.get(doId)
-      await withObservedGameSessionWrite(
-        env,
-        {
-          operation: "stats_mark_recorded",
-          requestPath: "/api/stats/update",
-          sessionId: authoritative.sessionId,
-        },
-        async () => {
-          await stub.fetch("https://sessions/game/state", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updatedState),
-          })
-        },
-      )
-    } catch {
-      // Non-fatal: D1 is the source of truth for user stats.
-    }
-  }
-
-  const winRate = played > 0 ? wins / played : 0
-
-  return Response.json({
-    success: true,
-    stats: {
-      played,
-      won: wins,
-      winRate,
-      currentStreak,
-      maxStreak: bestStreak,
+  // The client may still send { won }, but only the completed result saved by
+  // the game's own session is allowed to change account statistics.
+  const sync = await reconcileCompletedResults(env, auth.userId)
+  const stats = await readAccountStats(env, auth.userId)
+  return Response.json(
+    {
+      success: !sync.syncFailed,
+      saved: sync.pendingResults !== null,
+      alreadyRecorded: sync.applied === 0 && !sync.syncFailed,
+      pendingResults: sync.pendingResults,
+      stats,
     },
-  })
+    { status: sync.syncFailed ? 202 : 200 },
+  )
 }
-
 /**
  * GET /api/stats/leaderboard?limit=5
  * Public current streak leaderboard (opt-in users only).

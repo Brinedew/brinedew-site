@@ -17,6 +17,11 @@ import {
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
 import { isD1DailyRowReadLimitError } from "./lib/cloudflare-availability.js"
+import {
+  ackCompletedResult,
+  getPendingResults,
+  storeGameState,
+} from "./lib/the-only-geneguessr-completed-result-ledger-do-not-duplicate.js"
 
 // CORS headers for frontend access - supports both main domain and subdomain
 function getCorsHeaders(origin, requestHost = "") {
@@ -3734,6 +3739,12 @@ export class GameSession {
       return this.getGameState()
     } else if (path === "/game/state" && request.method === "POST") {
       return this.setGameState(request)
+    } else if (path === "/game/results" && request.method === "GET") {
+      return Response.json(await getPendingResults(this.state.storage))
+    } else if (path === "/game/results/ack" && request.method === "POST") {
+      const { date } = await request.json()
+      await ackCompletedResult(this.state.storage, date)
+      return Response.json({ success: true })
     } else if (path === "/store" && request.method === "POST") {
       // Internal route for OAuth session storage
       return this.storeData(request)
@@ -3765,7 +3776,7 @@ export class GameSession {
 
   async setGameState(request) {
     const payload = await request.json()
-    await this.state.storage.put("game_state", payload)
+    await storeGameState(this.state.storage, payload)
     return new Response(JSON.stringify({ success: true }), {
       headers: JSON_HEADERS,
     })
@@ -6042,7 +6053,6 @@ function createInitialGameState(date, targetId, options = {}) {
     hintBalance: DEFAULT_HINT_COST,
     revealedHints: [],
     won: false,
-    statsRecorded: false,
     guessStatsRecordedThrough: 0,
     practiceMode: Boolean(options.practiceMode),
     practicePool: Array.isArray(options.practicePool) ? options.practicePool.slice() : null,

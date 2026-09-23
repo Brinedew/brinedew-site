@@ -92,6 +92,22 @@
   gap: 0.5rem;
 }
 
+.pg-stats-sync,
+.pg-sidebar-stats-sync {
+  color: var(--secondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.pg-stats-sync:empty,
+.pg-sidebar-stats-sync:empty {
+  display: none;
+}
+
+.pg-sidebar-stats-sync:not(:empty) {
+  margin-top: 0.5rem;
+}
+
 .pg-sidebar-stat-label {
   color: var(--secondary);
   font-size: 0.8rem;
@@ -2301,6 +2317,10 @@ button.pg-collapse-toggle .pg-feedback-score {
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   margin-bottom: 1rem;
+}
+
+.pg-stats-sync:not(:empty) {
+  margin: -0.5rem 0 1rem;
 }
 
 .pg-stat {

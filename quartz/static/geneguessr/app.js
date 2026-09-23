@@ -2843,10 +2843,10 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     targetId: null,
     practiceMode: false,
     maxGuesses: 10, // Default, overwritten by server on bootstrap
-    statsRecorded: false,
     revealedHints: [],
     lockedHintClicks: [],
   }
+  let statsConfirmedThisView = false
   let tutorialBootRequested = false
   const structureTokenCache = new Map()
   let targetStructureInfo = null
@@ -3050,7 +3050,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null
     gameState.practiceMode = Boolean(gameStatus.practiceMode)
     gameState.maxGuesses = gameStatus.maxGuesses || 10 // Server is single source of truth
-    gameState.statsRecorded = false
+    statsConfirmedThisView = false
     gameState.revealedHints = Array.isArray(gameStatus.revealedHints)
       ? [...gameStatus.revealedHints]
       : []
@@ -4367,7 +4367,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   function renderStats() {
-    // Load stats from localStorage
     const stats = getCurrentSidebarStats()
 
     return `
@@ -4385,6 +4384,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
           <div class="pg-stat-label">Streak</div>
         </div>
       </div>
+      <div class="pg-stats-sync" role="status">${statsSyncNotice()}</div>
     `
   }
 
@@ -4431,14 +4431,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       })
 
       if (!response.ok) {
-        console.warn("Failed to load stats from API, using localStorage")
-        return loadStats()
+        console.warn("Failed to load account stats")
+        return null
       }
 
       return await response.json()
     } catch (err) {
       console.error("Error loading stats from API:", err)
-      return loadStats()
+      return null
     }
   }
 
@@ -4457,14 +4457,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   async function updateStatsAPI(won) {
-    // Always update localStorage for offline support
-    updateStats(won)
-
-    // If authenticated, also update D1
     if (!currentUser) {
+      updateStats(won)
       sidebarStatsSnapshot = null
       updateSidebarStats()
-      return
+      return true
     }
 
     try {
@@ -4477,34 +4474,33 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
 
       if (!response.ok) {
         console.warn("Failed to update stats on server")
-        await refreshSidebarStatsSnapshot()
+        sidebarStatsSyncMessage = "Your game is saved; account stats could not be confirmed yet."
         updateSidebarStats()
-        return
+        return false
       }
       const payload = await response.json().catch(() => ({}))
       if (payload?.stats && typeof payload.stats === "object") {
-        sidebarStatsSnapshot = payload.stats
-      } else {
-        await refreshSidebarStatsSnapshot()
+        sidebarStatsSnapshot = { ...payload.stats, pendingResults: payload.pendingResults }
       }
-      void loadLeaderboardFromAPI()
+      sidebarStatsSyncMessage = ""
+      const recorded =
+        Boolean(payload.success) && (payload.pendingResults == null || payload.pendingResults === 0)
+      if (recorded) void loadLeaderboardFromAPI()
       updateSidebarStats()
+      return recorded
     } catch (err) {
       console.error("Error updating stats on server:", err)
-      await refreshSidebarStatsSnapshot()
+      sidebarStatsSyncMessage = "Your game is saved; account stats could not be confirmed yet."
       updateSidebarStats()
+      return false
     }
   }
 
   async function recordStatsOnce(won) {
-    if (gameState.practiceMode || gameState.statsRecorded) {
+    if (gameState.practiceMode || statsConfirmedThisView) {
       return
     }
-    try {
-      await updateStatsAPI(won)
-    } finally {
-      gameState.statsRecorded = true
-    }
+    statsConfirmedThisView = await updateStatsAPI(won)
   }
 
   function legacyStatsAvailableForImport() {
@@ -5223,6 +5219,7 @@ https://geneguessr.brinedew.bio/`
   // Auth state
   let currentUser = null
   let sidebarStatsSnapshot = null
+  let sidebarStatsSyncMessage = ""
   let leaderboardEntries = []
   let leaderboardLoading = false
   const LEADERBOARD_LIMIT = 5
@@ -5273,6 +5270,20 @@ https://geneguessr.brinedew.bio/`
       return sidebarStatsSnapshot
     }
     return loadStats()
+  }
+
+  function statsSyncNotice() {
+    if (!currentUser) return ""
+    if (sidebarStatsSnapshot && sidebarStatsSnapshot.pendingResults === null) {
+      return "Completed games could not be checked yet; account stats may be behind."
+    }
+    if (Number(sidebarStatsSnapshot?.pendingResults) > 0) {
+      return "Game saved. Account stats will update when the service recovers."
+    }
+    if (sidebarStatsSyncMessage) return sidebarStatsSyncMessage
+    if (!sidebarStatsSnapshot)
+      return "Account stats are unavailable; these are numbers saved on this device."
+    return ""
   }
 
   function getLeaderboardInitial(username) {
@@ -5443,6 +5454,7 @@ https://geneguessr.brinedew.bio/`
           <div><span class="pg-sidebar-stat-label">Win Rate</span><span class="pg-sidebar-stat-value">${Math.round(stats.winRate * 100)}%</span></div>
           <div><span class="pg-sidebar-stat-label">Streak</span><span class="pg-sidebar-stat-value">${stats.currentStreak}</span></div>
         </div>
+        <div class="pg-sidebar-stats-sync" role="status" aria-live="polite">${statsSyncNotice()}</div>
         ${
           legacyStats
             ? `<div class="pg-sidebar-legacy-import">
@@ -6080,6 +6092,8 @@ https://geneguessr.brinedew.bio/`
         <div><span class="pg-sidebar-stat-label">Streak</span><span class="pg-sidebar-stat-value">${stats.currentStreak}</span></div>
       `
     }
+    const statsSync = document.querySelector(".pg-sidebar-stats-sync")
+    if (statsSync) statsSync.textContent = statsSyncNotice()
 
     const legacyImport = document.querySelector(".pg-sidebar-legacy-import")
     if (legacyImport && !legacyStatsAvailableForImport()) legacyImport.remove()
@@ -6122,13 +6136,6 @@ https://geneguessr.brinedew.bio/`
     // Check auth status
     await checkAuth()
 
-    // Prefer server-authoritative stats for signed-in users
-    await refreshSidebarStatsSnapshot()
-
-    // Inject stats into sidebar
-    injectSidebarStats()
-    void loadLeaderboardFromAPI()
-
     setStatus("loading-data")
 
     const initialBootstrapOptions = initialPracticeMode
@@ -6143,6 +6150,12 @@ https://geneguessr.brinedew.bio/`
       reportError("init-game-failed", detail)
       return
     }
+
+    // Bootstrap transfers a signed-in player's completed guest round into the
+    // account session before stats recover any pending result.
+    await refreshSidebarStatsSnapshot()
+    injectSidebarStats()
+    void loadLeaderboardFromAPI()
 
     // Render
     render()
