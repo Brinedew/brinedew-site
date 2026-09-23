@@ -378,20 +378,14 @@ export function createCardPublication({
     return status()
   }
   /**
-   * B-790: re-materialize every published card from the current source without
-   * changing the mapping revision. Unlike `migrate()`, which deliberately
-   * reuses compatible immutable objects, this walk calls `source.materialize`
-   * for every symbol, so content that only exists in the source (for example
-   * bounded candidate snapshots published after an earlier freeze) reaches the
-   * public plane. The head is only replaced by one fully verified commit; the
-   * previous catalog stays readable until then.
-   *
-   * A rematerialization does not republish per-symbol blot aliases: those are
-   * the compatibility owner's job (the alias backfill). Coupling a full pass to
-   * a mutable alias object stalled it for tens of minutes when Bunny Storage
-   * kept serving a previous alias after repeated identical PUTs (CLNK,
-   * 2026-09-21); ordinary dirty publication still republishes its touched
-   * aliases strictly.
+   * Rare full-catalog repair, never the normal changed-gene publish path. The
+   * September 22 shape-uniformity pass spent about 4,200 Durable Object writes
+   * on about 900 of 19,023 genes before it was stopped; existing readers handle
+   * both shapes. Use dirty publication for actual changes. This walk is justified
+   * only by a specific reader defect that needs every source card rebuilt.
+   * The previous head stays readable until the new one is fully verified, and
+   * cancelRematerialization stops an unnecessary in-flight pass. Blot aliases
+   * have their own owner; do not couple them to this catalog walk.
    */
   async function rematerialize() {
     const head = repo.get("head")
