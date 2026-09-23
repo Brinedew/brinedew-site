@@ -209,9 +209,9 @@
     {
       "id": "IPD-007",
       "title": "Iconoplasm is static-first with one dynamic Worker invocation",
-      "decision": "Anonymous Iconoplasm documents and immutable artifacts are static or CDN-first. The stable /blot/{symbol}.webp alias uses the one existing Worker to resolve the exact published card; private actions, mutations, and administration use that Worker too.",
-      "reason": "Public reading must scale without a metered Worker invocation for every asset or page, while a mutable blot URL must not serve stale or mislabeled bytes after the published card changes.",
-      "change_control": "Keep shell and immutable asset delivery static and the blot alias tied to the exact published card. A replacement must preserve complete public reading and bound Worker use to routes that actually need it. Routing, caching, and deployment mechanics may change.",
+      "decision": "Anonymous Iconoplasm documents are static and healthy portrait reads go directly to Bunny. The stable /blot/{symbol}.webp alias uses the one existing Worker to resolve the exact published card. Canonical /portraits/* URLs use that Worker for a real Bunny-backed fallback; private actions, mutations, and administration use the same Worker.",
+      "reason": "Public reading must scale without a metered Worker invocation for every healthy asset or page. The canonical fallback must deliver actual image bytes, and a mutable blot URL must not serve stale or mislabeled bytes after the published card changes.",
+      "change_control": "Keep the shell static, healthy portrait delivery direct from Bunny, the canonical portrait fallback byte-correct, and the blot alias tied to the exact published card. A replacement must preserve complete public reading and bound Worker use to routes that actually need it. Routing, caching, and deployment mechanics may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-670",
       "additional_required_marker_categories": ["config", "deploy"],

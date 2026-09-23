@@ -44,7 +44,7 @@ async function makeAssetFixture() {
 }
 
 test(
-  "real workerd routes only the mutable blot alias through the Worker",
+  "real workerd routes the mutable blot and first-party portrait fallback through the Worker",
   { timeout: 30_000 },
   async () => {
     const { temporaryRoot, outputRoot } = await makeAssetFixture()
@@ -81,7 +81,6 @@ test(
         "/genes",
         "/gene/TP53",
         "/portrait/TP53.webp",
-        "/portraits/TP53.webp",
         "/sitemap.xml",
         "/robots.txt",
         "/llms.txt",
@@ -98,6 +97,15 @@ test(
           redirect: "manual",
         })
         assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
+        const portraitResponse = await runtime.dispatchFetch(
+          "https://iconoplasm.test/portraits/v1/aa/" + "a".repeat(64) + "/full.webp",
+          { method, redirect: "manual" },
+        )
+        assert.equal(
+          portraitResponse.status,
+          599,
+          "the first-party portrait route owns the fallback",
+        )
       }
     } finally {
       await runtime?.dispose()
@@ -183,7 +191,8 @@ test(
     )
     assert.ok(proof.physicalDispatches > 0)
     assert.equal(proof.logicalDispatches, undefined)
-    assert.equal(proof.statefulWorkerRouteEvents, 1)
+    assert.ok(proof.routeClasses.some((route) => route.startsWith("/portraits/v1/")))
+    assert.equal(proof.statefulWorkerRouteEvents, 2)
     assert.equal(proof.unexpectedStatefulWorkerRouteEvents, 0)
     assert.equal(proof.verified, true)
   },

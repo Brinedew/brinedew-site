@@ -27,6 +27,7 @@ const PLUGIN_INSTALL_TIMEOUT_MS = 120_000
 const PLUGIN_BUILD_TIMEOUT_MS = 120_000
 const PLUGIN_PRUNE_TIMEOUT_MS = 60_000
 const PLUGIN_GIT_TIMEOUT_MS = 120_000
+const DEFAULT_PLUGIN_CONCURRENCY = 2
 
 const execAsync = promisify(execCb)
 const execFileAsync = promisify(execFileCb)
@@ -490,7 +491,7 @@ export async function handlePluginInstallUnified({
     return
   }
 
-  const resolvedConcurrency = Math.max(1, concurrencyOption ?? os.cpus().length)
+  const resolvedConcurrency = Math.max(1, concurrencyOption ?? DEFAULT_PLUGIN_CONCURRENCY)
 
   const pluginsJson = readPluginsJson()
   let lockfile = readLockfile()
@@ -1359,9 +1360,17 @@ export async function handlePluginInstallUnified({
           pluginsToBuild.push({ name, pluginDir })
           installed++
         }
-      } catch {
+      } catch (error) {
+        const reason = String(error?.stderr || error?.message || "unknown Git error")
+          .trim()
+          .split(/\r?\n/)
+          .at(-1)
+          .replace(/https?:\/\/[^\s@]+@/g, "https://[redacted]@")
         console.log(
-          styleText("red", `  ✗ ${name}: failed to ${action === "update" ? "update" : "clone"}`),
+          styleText(
+            "red",
+            `  ✗ ${name}: failed to ${action === "update" ? "update" : "clone"}: ${reason}`,
+          ),
         )
         failed++
       }
@@ -1413,7 +1422,7 @@ export async function handlePluginAdd(
     return
   }
 
-  const resolvedConcurrency = Math.max(1, concurrencyOption ?? os.cpus().length)
+  const resolvedConcurrency = Math.max(1, concurrencyOption ?? DEFAULT_PLUGIN_CONCURRENCY)
 
   let lockfile = readLockfile()
   if (!lockfile) {
