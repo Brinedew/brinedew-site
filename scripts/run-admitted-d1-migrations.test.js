@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync, existsSync, readdirSync } from "node:fs"
+import { readFileSync, existsSync } from "node:fs"
 import { runAdmittedMigrations } from "./run-admitted-d1-migrations.mjs"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 
@@ -100,14 +100,36 @@ test("release manifest points only at real reviewed migration files", () => {
   }
 })
 
-test("the newest owned migration cannot exist outside the reviewed release manifest", () => {
-  for (const resource of ["iconoplasm", "iconoplasm-authoring"]) {
-    const newest = readdirSync(new URL(`../${directories[resource]}/`, import.meta.url))
-      .filter((name) => name.endsWith(".sql"))
-      .sort()
-      .at(-1)
-    assert.ok(manifest.migrations[`${resource}/${newest}`], `${resource}/${newest}`)
+test("a standard D1 migration already in the journal needs no custom release adapter", async () => {
+  const migration = "0018_assignment_manifestation_lookup.sql"
+  assert.ok(existsSync(new URL(`../migrations-iconoplasm-authoring/${migration}`, import.meta.url)))
+  assert.equal(manifest.migrations[`iconoplasm-authoring/${migration}`], undefined)
+  const h = harness()
+  const originalFiles = h.options.files
+  const originalSend = h.options.send
+  h.options.files = (directory) =>
+    directory === "migrations-iconoplasm-authoring"
+      ? [...originalFiles(directory), migration]
+      : originalFiles(directory)
+  h.options.send = async (...args) => {
+    const result = await originalSend(...args)
+    if (
+      args[0] === "/execute" &&
+      args[2]?.adapter_id === "iconoplasm-authoring-migration-inventory" &&
+      args[2]?.arguments?.statements?.[0]?.query_id === "applied-migrations"
+    )
+      result.result[0].results.push({ id: 2, name: migration })
+    return result
   }
+  const result = await runAdmittedMigrations({ ...h.options, inventoryOnly: true })
+  assert.ok(!result.pending_migrations.includes(`iconoplasm-authoring/${migration}`))
+  assert.equal(
+    h.calls.filter(
+      (call) =>
+        call.suffix === "/execute" && !call.body.adapter_id.endsWith("-migration-inventory"),
+    ).length,
+    0,
+  )
 })
 
 test("fresh inventory observations cannot change the retained migration operation identity", async () => {
