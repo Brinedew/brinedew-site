@@ -40,6 +40,7 @@ export async function readIconoplasmReleaseState({
     schema_transition: transition === "1",
     reader_recovery: setting("ICONOPLASM_SCHEMA_TRANSITION_MODE", "") === "reader-recovery",
     origin_run_id: setting("ICONOPLASM_MIGRATION_ORIGIN_RUN_ID", ""),
+    cache_version: setting("ICONOPLASM_HTML_SHELL_CACHE_VERSION", ""),
   }
 }
 

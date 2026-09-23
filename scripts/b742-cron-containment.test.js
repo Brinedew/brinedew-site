@@ -6,7 +6,7 @@ import { parse } from "yaml"
 const readWorkflow = (name) =>
   readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")
 
-test("recovery uploads contain cron work while normal activation restores the owned schedule", () => {
+test("maintenance containment uploads retain cron work and activation restores the owned schedule", () => {
   const workflow = parse(readWorkflow("deploy-quartz.yml"))
   const cutover = readFileSync(
     new URL("./prepare-iconoplasm-public-read-cutover.mjs", import.meta.url),
@@ -22,18 +22,23 @@ test("recovery uploads contain cron work while normal activation restores the ow
   assert.equal(uploads.length, 3)
   const conditional = uploads.filter((step) => step.if)
   assert.deepEqual(conditional.map((step) => step.if).sort(), [
-    "steps.migrations.outputs.continuation_required != 'true'",
-    "steps.release-state.outputs.schema_transition != 'true'",
-    "steps.release-state.outputs.schema_transition == 'true'",
+    "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
+    "inputs.data_maintenance == true && steps.release-state.outputs.schema_transition != 'true'",
+    "inputs.data_maintenance == true && steps.release-state.outputs.schema_transition == 'true'",
   ])
   assert.equal(
-    uploads.filter((step) => step.if === "steps.migrations.outputs.continuation_required != 'true'")
-      .length,
+    uploads.filter(
+      (step) =>
+        step.if ===
+        "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
+    ).length,
     1,
   )
   const containment = '--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'
   const normalActivation = uploads.find(
-    (step) => step.if === "steps.migrations.outputs.continuation_required != 'true'",
+    (step) =>
+      step.if ===
+      "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
   )
   assert.ok(normalActivation, "normal activation upload")
   assert.doesNotMatch(normalActivation.run, /--triggers\b/)

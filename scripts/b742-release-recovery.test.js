@@ -89,7 +89,7 @@ test("migration staging preserves the fallback and all release gates", () => {
   )
   assert.match(
     workflow.slice(workflow.indexOf("- name: Stage migration admission")),
-    /if: steps\.release-state\.outputs\.schema_transition != 'true'/,
+    /if: inputs\.data_maintenance == true && steps\.release-state\.outputs\.schema_transition != 'true'/,
   )
   assert.ok(
     readerRefresh <

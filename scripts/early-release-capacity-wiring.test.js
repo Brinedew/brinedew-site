@@ -7,9 +7,8 @@ import test from "node:test"
 const root = new URL("../", import.meta.url)
 const workflow = readFileSync(new URL(".github/workflows/deploy-quartz.yml", root), "utf8")
 const sentinelName = "Reject exhausted capacity before release setup"
-// The manual D1-free reader recovery intentionally repeats the exact-source
-// and exact-CI labels. The early-release sentinel applies only to the normal
-// deployment job that can reach D1, not to that isolated containment job.
+// The early-release sentinel applies only to explicit state maintenance.
+// Compatible code pushes and the reader-recovery job do no application D1 work.
 const deployProduction = workflow.slice(workflow.indexOf("  deploy-production:"))
 
 function stepPosition(name) {
@@ -24,7 +23,7 @@ function stepPosition(name) {
   return position
 }
 
-test("early refusal follows source and CI checks and precedes release setup", () => {
+test("maintenance capacity refusal follows source and CI checks and precedes release setup", () => {
   const sentinel = stepPosition(sentinelName)
   assert.ok(stepPosition("Reject stale production source before admission") < sentinel)
   assert.ok(stepPosition("Require successful tests for the exact deployed commit") < sentinel)
@@ -48,6 +47,7 @@ test("early refusal follows source and CI checks and precedes release setup", ()
     deployProduction.indexOf("\n      - name:", sentinel),
   )
   assert.match(sentinelStep, /timeout-minutes: 1/)
+  assert.match(sentinelStep, /if: inputs\.data_maintenance == true/)
   assert.doesNotMatch(sentinelStep, /continue-on-error|always\(\)/)
 })
 
