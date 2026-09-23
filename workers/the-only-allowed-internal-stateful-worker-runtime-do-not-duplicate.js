@@ -1489,13 +1489,7 @@ function shouldAllowUnsafeEval(url) {
 function isIconoplasmAdminSurface(url) {
   const host = String(url?.hostname || "").toLowerCase()
   const path = String(url?.pathname || "")
-  if (host === ICONOPLASM_HOST && path === "/admin") {
-    return true
-  }
-  return (
-    (host === "brinedew.bio" || host === "www.brinedew.bio") &&
-    (path === "/admin/iconoplasm" || path === "/admin/iconoplasm/")
-  )
+  return host === ICONOPLASM_HOST && path === "/admin"
 }
 
 function shouldAllowIconoplasmShoelaceDataIcons(url) {
@@ -2140,7 +2134,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // delegate API/published-image/admin routes to the Iconoplasm handler.
     if (isIconoplasmRequest(url.hostname)) {
       if (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") {
-        return Response.redirect("https://brinedew.bio/admin/iconoplasm#costs", 302)
+        return Response.redirect(`https://${ICONOPLASM_HOST}/admin#costs`, 302)
       }
 
       if (/^\/portrait\/[^/]+\.webp$/.test(url.pathname)) {
