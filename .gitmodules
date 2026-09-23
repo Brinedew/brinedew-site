@@ -1,3 +1,0 @@
-[submodule "iconoplasm-extension/vendor/pdfjs-src"]
-	path = iconoplasm-extension/vendor/pdfjs-src
-	url = https://github.com/mozilla/pdf.js.git
