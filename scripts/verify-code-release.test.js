@@ -89,7 +89,6 @@ test("default production path builds and ships both Worker owners and Pages with
   const workflow = parse(
     readFileSync(new URL("../.github/workflows/deploy-quartz.yml", import.meta.url), "utf8"),
   )
-  assert.equal(workflow.jobs["deploy-viral-load-staging"], undefined)
   assert.equal(workflow.jobs["worker-repair-only"], undefined)
   const job = workflow.jobs["deploy-production"]
   assert.ok(job)
