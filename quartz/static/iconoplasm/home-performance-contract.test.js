@@ -76,7 +76,7 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     readFile(stylesPath, "utf8"),
     readFile(caretakerStylesPath, "utf8"),
   ])
-  assert.match(app, /Become a ['"] \+\s*esc\(symbol\) \+\s*['"] caretaker/)
+  assert.match(app, /switchFrom \? "Switch to " \+ symbol : "Become a " \+ symbol \+ " caretaker"/)
   assert.match(app, /icono-standard-dialog icono-caretaker-claim-dialog/)
   assert.match(app, /icono-standard-dialog icono-request-dialog/)
   assert.match(
@@ -91,10 +91,11 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
   )
   assert.match(app, /For their chosen gene, caretakers can:/)
   assert.doesNotMatch(app, /Leaving options stay in caretaker settings until you need them\./)
-  assert.match(app, /<\/ul><\/div>' \+\s*'<sl-checkbox class="icono-caretaker-claim-terms"/)
+  assert.match(app, /<sl-checkbox class="icono-caretaker-claim-terms"/)
   assert.doesNotMatch(app, /<input type="checkbox" data-icono-caretaker-claim-terms>/)
   assert.match(app, /class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel/)
-  assert.match(app, /class="icono-button" data-icono-caretaker-claim-submit disabled/)
+  assert.match(app, /switchFrom \? "" : " disabled"/)
+  assert.match(app, /previous_assignment_id: switchFrom\.caretaker_assignment_id/)
   assert.doesNotMatch(app, /name="leave_policy"/)
   assert.match(app, /default_leave_policy: "retain"/)
   assert.match(app, /data-icono-caretaker-claim-action/)
