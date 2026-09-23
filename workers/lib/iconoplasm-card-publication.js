@@ -20,6 +20,10 @@ const CARD_PUBLICATION_CONCURRENCY = 2
 // object costs a PUT and verified GET; leave 18 for old-shard reads, redirects
 // and provider variance. Gallery pages cannot consume this reserve.
 const CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE = 16
+// Checking origin before upload can cost GET + PUT + verified GET on a miss.
+// Keep that optional path to 12 objects (36 requests), with 14 left for other
+// work; larger phases retain the existing PUT + verified GET path.
+const CARD_PUBLICATION_MAX_REUSED_OBJECTS_PER_PHASE = 12
 
 function publicationObjectPlan(symbol, projected) {
   const candidates = Array.isArray(projected?.portrait_candidates)
@@ -278,7 +282,8 @@ export function createCardPublication({
       const gallery = await writeCandidateGallery(
         symbol,
         publication.candidates,
-        (kind, body) => objects.write(kind, body),
+        (kind, body) =>
+          objects.write(kind, body, { reuseExisting: identity.reuseExisting === true }),
         publication.pages,
       )
       const geneRecord = { ...publication.projected }
@@ -286,9 +291,11 @@ export function createCardPublication({
       geneRecord.candidate_count = gallery.candidate_count
       geneRecord.candidate_gallery = gallery.candidate_gallery
       const [full, gene, portrait] = await settlePublicationWrites([
-        objects.write("cards", stable),
-        objects.write("genes", geneRecord),
-        objects.write("portraits", source.stable(source.locator(stable))),
+        objects.write("cards", stable, { reuseExisting: identity.reuseExisting === true }),
+        objects.write("genes", geneRecord, { reuseExisting: identity.reuseExisting === true }),
+        objects.write("portraits", source.stable(source.locator(stable)), {
+          reuseExisting: identity.reuseExisting === true,
+        }),
       ])
       return [full, gene, portrait]
     } catch (error) {
@@ -552,6 +559,9 @@ export function createCardPublication({
       offset: job.offset,
       started_at: job.started_at,
       rematerialize: job.rematerialize === true,
+      reuseExisting:
+        job.rematerialize === true &&
+        objectsInPhase <= CARD_PUBLICATION_MAX_REUSED_OBJECTS_PER_PHASE,
     }
     for (let offset = 0; offset < slice.length; offset += CARD_PUBLICATION_CONCURRENCY) {
       const group = await settlePublicationWrites(
@@ -703,10 +713,11 @@ export function createCardPublication({
       )
         catalogIndexObject = oldCatalogIndex
       else catalogIndexObject = await objects.write("catalogindexes", catalogIndexValue)
-      const packed = await objects.write("shards", {
-        schema_version: 2,
-        cards: packedChunk.stableCards,
-      })
+      const packed = await objects.write(
+        "shards",
+        { schema_version: 2, cards: packedChunk.stableCards },
+        { reuseExisting: job.rematerialize === true },
+      )
       replacements.push({
         key: packed.key,
         content_hash: packed.hash,
@@ -803,7 +814,9 @@ export function createCardPublication({
       shard_count: refs.length,
       shards: refs,
     }
-    const object = await objects.write("manifests", manifest)
+    const object = await objects.write("manifests", manifest, {
+      reuseExisting: job.rematerialize === true,
+    })
     const version = `ccv2-${object.hash}`
     const current = { version, key: object.key, manifest, published_at: now() }
     // All bytes were verified before this single transaction. Neither the
