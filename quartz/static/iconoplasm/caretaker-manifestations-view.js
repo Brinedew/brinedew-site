@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=20260905-caretaker-categories-v7"
+} from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
 // quotes. The iconoplasm app passes a text-node escaper that leaves raw

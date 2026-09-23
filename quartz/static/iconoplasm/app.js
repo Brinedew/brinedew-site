@@ -1,27 +1,27 @@
-import { readIconoplasmSettings } from "../site-preferences.js?v=20260520stylecookie"
+import { readIconoplasmSettings } from "../site-preferences.js?v=2624be2e2b452a30"
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
   normalizeHomeCollectionOrder,
-} from "./discovery-collection.js?v=20260730-module-cache"
+} from "./discovery-collection.js?v=b8fe92f593f7a045"
 import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
-} from "./home-orders.js?v=20260730-module-cache"
-import { createRequestInbox } from "./request-inbox.js?v=20260901-signed-supervote-v2"
+} from "./home-orders.js?v=97b23d988663c9b7"
+import { createRequestInbox } from "./request-inbox.js?v=f04a9f2a74e4936f"
 import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
-} from "./emulsion-favorites.js?v=20260829-factory-family"
-import { createCollectionFeedController } from "./collection-feed.js?v=20260730-module-cache"
-import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=20260801-clean-visible-url"
+} from "./emulsion-favorites.js?v=9dc72d17f083e4ba"
+import { createCollectionFeedController } from "./collection-feed.js?v=1d50b8633919419d"
+import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=35d012ba1da0d6a4"
 import {
   createWebsiteDiscoveryBatchQueue,
   createWebsiteGuestDiscoveryStore,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-store.js?v=20260915-durable-discovery-queue"
+} from "./guest-discovery-store.js?v=df8a5536754a5b3d"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -30,16 +30,16 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
-import "./vendor/img-comparison-slider.js?v=20260516b517"
-import { openVoteLoginDialog } from "./vote-login-dialog.js?v=20260829-favorite-action"
-import { installIconoplasmLightbox } from "./lightbox.js?v=20260820-admin-matrix"
+} from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
+import "./vendor/img-comparison-slider.js?v=6e01335000bbafdd"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=8968093b0fed6583"
+import { installIconoplasmLightbox } from "./lightbox.js?v=c176444f4b2570e4"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=20260821-nonblocking-delete"
-import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=20260822-immediate-picker"
+} from "./candidate-delete-dialog.js?v=52d295f4abbe2e34"
+import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
   renderDiagramStudio,
@@ -285,11 +285,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: "/static/iconoplasm/caretaker-manifestations.css?v=20260905-caretaker-categories-v7",
+        href: new URL("./caretaker-manifestations.css?v=c2a34a3b1d84a192", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
-        href: "/static/iconoplasm/caretaker-supervote.css?v=20260905-caretaker-seal-v3",
+        href: new URL("./caretaker-supervote.css?v=c3dc22c15d829a3d", import.meta.url).href,
       },
     ]
     for (var i = 0; i < stylesheets.length; i += 1) {
@@ -301,8 +301,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=20260906-caretaker-availability-v1"),
-      import("./caretaker-supervote.js?v=20260905-caretaker-seal-v3"),
+      import("./caretaker-manifestations.js?v=1f34a0347c1c57ba"),
+      import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
         fetchJSON: fetchAuthedJSON,
@@ -1186,9 +1186,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function ensureMasonryLibs() {
     if (window.Masonry && window.imagesLoaded) return Promise.resolve()
     if (masonryLibsPromise) return masonryLibsPromise
-    var masonryUrl = new URL("./vendor/masonry.pkgd.min.js?v=20260311a", import.meta.url).href
-    var imagesLoadedUrl = new URL("./vendor/imagesloaded.pkgd.min.js?v=20260311a", import.meta.url)
+    var masonryUrl = new URL("./vendor/masonry.pkgd.min.js?v=367d6afdfc741fb4", import.meta.url)
       .href
+    var imagesLoadedUrl = new URL(
+      "./vendor/imagesloaded.pkgd.min.js?v=86dacb15f649eafe",
+      import.meta.url,
+    ).href
     masonryLibsPromise = loadScriptOnce(masonryUrl, function () {
       return !!window.Masonry
     })

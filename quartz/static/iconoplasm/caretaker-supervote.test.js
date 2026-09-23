@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parseHTML } from "linkedom"
@@ -191,10 +192,15 @@ test("a pointer long press assigns once and suppresses the trailing ordinary cli
 test("the main app lazy-loads the signed control beside the existing voting authority", () => {
   const source = readFileSync(new URL("./app.js", import.meta.url), "utf8")
   const css = readFileSync(new URL("./caretaker-supervote.css", import.meta.url), "utf8")
+  const requestInboxVersion = createHash("sha256")
+    .update(readFileSync(new URL("./request-inbox.js", import.meta.url)))
+    .digest("hex")
+    .slice(0, 16)
   assert.match(source, /import\("\.\/caretaker-supervote\.js\?v=/)
-  assert.match(
-    source,
-    /import \{ createRequestInbox \} from "\.\/request-inbox\.js\?v=20260901-signed-supervote-v2"/,
+  assert.ok(
+    source.includes(
+      `import { createRequestInbox } from "./request-inbox.js?v=${requestInboxVersion}"`,
+    ),
   )
   assert.match(source, /supervoteControls\.mount\(geneContent/)
   assert.match(css, /caretaker-seal-positive\.png/)
