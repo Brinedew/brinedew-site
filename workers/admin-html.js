@@ -1438,7 +1438,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
           </p>
         </div>
         <div class="iconoplasm-cost-actions">
-          <a class="iconoplasm-cost-link" href="/admin/iconoplasm#costs">Open Iconoplasm ops</a>
+          <a class="iconoplasm-cost-link" href="https://iconoplasm.brinedew.bio/admin#costs">Open Iconoplasm ops</a>
         </div>
       </div>
     </div>

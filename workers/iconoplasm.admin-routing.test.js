@@ -18,7 +18,7 @@ test("iconoplasm top-level admin route stays wired instead of silently falling t
   assert.match(await response.text(), /403 Unauthorized/)
 })
 
-test("iconoplasm legacy admin path redirects to the apex-hosted ops page instead of going dead", async () => {
+test("iconoplasm legacy admin path redirects to its live admin owner", async () => {
   const worker = (
     await import("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js")
   ).default
@@ -32,7 +32,7 @@ test("iconoplasm legacy admin path redirects to the apex-hosted ops page instead
   )
 
   assert.equal(response.status, 302)
-  assert.equal(response.headers.get("location"), "https://brinedew.bio/admin/iconoplasm#costs")
+  assert.equal(response.headers.get("location"), "https://iconoplasm.brinedew.bio/admin#costs")
 })
 
 test("admin canon audit derives portrait URLs from asset sha even when legacy key copies are blank", async () => {
