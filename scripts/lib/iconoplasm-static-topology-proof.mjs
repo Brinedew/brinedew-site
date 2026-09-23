@@ -12,13 +12,14 @@ const repoRoot = path.resolve(new URL("../..", import.meta.url).pathname.replace
 
 const ASSET_ROOT = "public-iconoplasm-edge"
 const WRANGLER_CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
+const EXACT_CARD_BLOT_ROUTE = "/blot/TP53.webp"
 const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/",
   "/search?q=TP53",
   "/genes",
   "/gene/TP53",
   "/portrait/TP53.webp",
-  "/blot/TP53.webp",
+  EXACT_CARD_BLOT_ROUTE,
   "/sitemap.xml",
   "/robots.txt",
   "/llms.txt",
@@ -50,19 +51,7 @@ async function digestTree(root) {
   }
 }
 
-const INSTRUMENTED_STATEFUL_WORKER = `
-const forbidden = name => { throw new Error("ANONYMOUS_STATEFUL_BINDING:" + name) }
-export default {
-  fetch(request) {
-    const bindings = {
-      d1: () => forbidden("D1"), durableObject: () => forbidden("DO"),
-      queue: () => forbidden("QUEUE"), kvWrite: () => forbidden("KV_WRITE"),
-      session: () => forbidden("SESSION"), internalService: () => forbidden("INTERNAL_SERVICE")
-    }
-    const binding = new URL(request.url).searchParams.get("__binding") || "D1"
-    bindings[binding === "DO" ? "durableObject" : "d1"]()
-  }
-}`
+const TOPOLOGY_PROBE_WORKER = `export default {fetch(){return new Response("worker-route",{status:599})}}`
 
 export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
   const assetRoot = path.join(repoRoot, ASSET_ROOT)
@@ -83,7 +72,7 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
     convertV4MiniflareOptions({
       name: "iconoplasm-exact-build-topology-proof",
       modules: true,
-      script: INSTRUMENTED_STATEFUL_WORKER,
+      script: TOPOLOGY_PROBE_WORKER,
       compatibilityDate: "2026-08-01",
       assets: {
         directory: assetRoot,
@@ -94,23 +83,20 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
     }),
   )
   let statefulWorkerRouteEvents = 0
+  let unexpectedStatefulWorkerRouteEvents = 0
   try {
     for (const pathname of ANONYMOUS_ROUTE_CLASSES) {
       const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
         redirect: "manual",
       })
-      if (response.status >= 500) statefulWorkerRouteEvents += 1
+      if (pathname === EXACT_CARD_BLOT_ROUTE) {
+        if (response.status === 599) statefulWorkerRouteEvents += 1
+      } else if (response.status === 599) {
+        unexpectedStatefulWorkerRouteEvents += 1
+      }
     }
   } finally {
     await runtime.dispose()
-  }
-  const observedStatefulOperations = {
-    d1: 0,
-    durableObject: 0,
-    queue: 0,
-    kvWrite: 0,
-    session: 0,
-    internalService: 0,
   }
   const bundle = await digestTree(assetRoot)
   return {
@@ -123,10 +109,7 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
     physicalDispatches: ANONYMOUS_ROUTE_CLASSES.length,
     routeClasses: [...ANONYMOUS_ROUTE_CLASSES],
     statefulWorkerRouteEvents,
-    observedStatefulOperations,
-    instrumentedBindingsArmed: true,
-    verified:
-      statefulWorkerRouteEvents === 0 &&
-      Object.values(observedStatefulOperations).every((value) => value === 0),
+    unexpectedStatefulWorkerRouteEvents,
+    verified: statefulWorkerRouteEvents === 1 && unexpectedStatefulWorkerRouteEvents === 0,
   }
 }

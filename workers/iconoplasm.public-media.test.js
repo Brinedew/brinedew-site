@@ -19,6 +19,7 @@ import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWo
 import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  listIconoplasmGeneBlotBacklog,
   buildPublishedScannerArtifact,
   buildPortraitAwareManifestHash,
   materializePublishedCompatibilityArtifact,
@@ -157,6 +158,14 @@ class FakeStatement {
   }
 
   async all() {
+    if (this.sql.includes("FROM icono_gene_blot_materializations")) {
+      return {
+        results: this.args.flatMap((symbol) => {
+          const row = this.db.blots.get(String(symbol).trim().toUpperCase())
+          return row ? [{ gene_symbol: symbol, ...row }] : []
+        }),
+      }
+    }
     return { results: [] }
   }
 
@@ -2305,4 +2314,33 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
   assert.equal(payload?.card_snapshot_version, `test-card-v1.c${chainRef.hash}`)
   assert.equal(payload?.portrait?.asset_sha256, deltaPortrait)
   assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
+
+  const adminEnv = { ...env, ICONOPLASM_DB: env.gatewayDb }
+  const backlog = await listIconoplasmGeneBlotBacklog(adminEnv, {
+    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
+      method: "POST",
+    }),
+    payload: { scope: "published", symbols: ["A1BG"], limit: 1 },
+  })
+  assert.equal(backlog.snapshot_version, `test-card-v1.c${chainRef.hash}`)
+  assert.equal(backlog.items.length, 1)
+  assert.equal(backlog.items[0].portrait_asset_sha256, deltaPortrait)
+  assert.equal(backlog.items[0].blot_fingerprint, iconoplasmGeneBlotFingerprint(deltaCard.payload))
+
+  const fingerprint = iconoplasmGeneBlotFingerprint(deltaCard.payload)
+  env.gatewayDb.blots.set("A1BG", {
+    gene_blot_fingerprint: fingerprint,
+    gene_blot_portrait_asset_sha256: deltaPortrait,
+    gene_blot_asset_sha256: "c".repeat(64),
+    gene_blot_object_key: iconoplasmGeneBlotObjectKey("A1BG", fingerprint),
+    gene_blot_width: 768,
+    gene_blot_height: 1024,
+  })
+  const readyBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
+    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
+      method: "POST",
+    }),
+    payload: { scope: "published", symbols: ["A1BG"], limit: 1 },
+  })
+  assert.deepEqual(readyBacklog.items, [])
 })
