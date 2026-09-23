@@ -193,7 +193,7 @@ import {
   requireManifestationAuthorityWriteMode,
 } from "./lib/iconoplasm-manifestation-authority-projection.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
-import { readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
+import { FREE_DAILY_LIMITS, readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
 import { iconoplasmObservabilitySnapshotForAdmin } from "./iconoplasm-observability-freshness.js"
 import {
@@ -1613,6 +1613,7 @@ async function readLiveCloudflareAccountBudget(env) {
       day: usage.day,
       queriedAt: new Date(usage.measured_at).toISOString(),
       usage,
+      limits: FREE_DAILY_LIMITS,
     }
   } catch {
     return {

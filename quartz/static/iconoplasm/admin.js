@@ -8182,6 +8182,7 @@
     var liveProvider = snapshot && snapshot.liveProvider ? snapshot.liveProvider : {}
     var liveUsage =
       liveProvider.state === "queried" && liveProvider.usage ? liveProvider.usage : null
+    var liveLimits = liveProvider.limits || {}
     var liveDay = liveProvider.day ? formatMonthDay(liveProvider.day) : "today"
     var liveTime = String(liveProvider.queriedAt || "").slice(11, 16)
     var d1 = snapshot && snapshot.d1 ? snapshot.d1 : {}
@@ -8231,17 +8232,29 @@
         },
         {
           label: "D1 reads",
-          value: liveUsage ? compactMetricNumber(liveUsage.rows_read) + " / 5M" : "—",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.rows_read) +
+              " / " +
+              compactMetricNumber(liveLimits.rows_read)
+            : "—",
           note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
         },
         {
           label: "DO writes",
-          value: liveUsage ? compactMetricNumber(liveUsage.do_rows_written) + " / 100K" : "—",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.do_rows_written) +
+              " / " +
+              compactMetricNumber(liveLimits.do_rows_written)
+            : "—",
           note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
         },
         {
           label: "Worker requests",
-          value: liveUsage ? compactMetricNumber(liveUsage.requests) + " / 100K" : "—",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.requests) +
+              " / " +
+              compactMetricNumber(liveLimits.requests)
+            : "—",
           note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
         },
       ]

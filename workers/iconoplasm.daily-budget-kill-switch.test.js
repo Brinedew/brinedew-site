@@ -650,6 +650,7 @@ test("signed-in admin sees current account meters beside an old baked snapshot",
     assert.equal(payload.snapshot.liveProvider.day, day)
     assert.equal(payload.snapshot.liveProvider.usage.rows_read, 273944)
     assert.equal(payload.snapshot.liveProvider.usage.do_rows_written, 3071)
+    assert.equal(payload.snapshot.liveProvider.limits.rows_read, 5000000)
     assert.equal(observed.length, 1)
     assert.equal(observed[0].url, "https://api.cloudflare.com/client/v4/graphql")
     assert.deepEqual(budgetNamespace.calls, [])
