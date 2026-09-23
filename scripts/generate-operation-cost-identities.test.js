@@ -36,6 +36,11 @@ test("runtime identities ignore local caches but include new domain helpers and 
   )
   write("scripts/generate-operation-cost-migrations.mjs", "export const migration = 1;\n")
   const initial = operationCostIdentities({ sourceRoot })
+  write(
+    "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js",
+    "export const publicRedirect = 301;\n",
+  )
+  assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
   write("workers/node_modules/.cache/wrangler/account.json", '{"local":"one"}')
   write("workers/.wrangler/runtime.js", "local runtime cache")
   assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
