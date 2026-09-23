@@ -10,14 +10,25 @@ to the existing Bunny Storage zone. D1 stores plaintext hashes and byte counts
 for integrity and quota enforcement, plus the wrapped per-object data key needed
 to decrypt an eligible revision. Public CDN access can expose only ciphertext.
 
-Migrations are append-only. Production deploys apply this directory before
-uploading a Worker that can accept caretaker commands.
+The numbered SQL files here are the complete, append-only migration history;
+the production D1 migration journal records what has actually run. Use the
+`ICONOPLASM_AUTHORING_DB` binding in
+`wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`.
+For a small, measured schema change, use Cloudflare's standard commands from
+the repository root, with the config above:
 
-The only valid order is:
+```sh
+pnpm exec wrangler d1 migrations list ICONOPLASM_AUTHORING_DB --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+pnpm exec wrangler d1 migrations apply ICONOPLASM_AUTHORING_DB --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+```
 
-1. `0001_caretaker_manifestation_authority.sql` - immutable authority core.
-2. `0002_caretaker_server_boundary.sql` - bounded upload, sync, backup, and service state.
-3. `0003_manifestation_authority_cutover.sql` - resumable legacy cutover ledger.
-4. `0004_caretaker_terms_2026_08_30.sql` - immutable active public terms version.
+The apply command records the pending file in the D1 journal. Do not repeat
+the DDL in a Worker or an ad hoc API call. The existing data-maintenance
+preflight also reads this journal; a routine code-only deploy does not apply
+schema changes.
+
+`0018_assignment_manifestation_lookup.sql` indexes only manifestations with
+an assignment. The lookup still returns the latest withdrawn caretaker or fork
+manifestation; most system-seeded manifestations never enter the index.
 
 <!-- ARCHITECTURE FENCE [IPD-012] -->

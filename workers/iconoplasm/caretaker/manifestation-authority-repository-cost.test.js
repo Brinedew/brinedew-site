@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
-import { readGeneAliases } from "./manifestation-authority-repository.js"
+import {
+  readAssignmentManifestation,
+  readGeneAliases,
+} from "./manifestation-authority-repository.js"
 import { requireAdoptedManifestationUpload } from "./manifestation-upload-intents.js"
 
 test("alias envelopes preserve full ordered history and stop after 257 indexed rows on overflow", async () => {
@@ -93,6 +97,64 @@ test("upload verification probes only the current object and rejects historical 
     await assert.rejects(requireAdoptedManifestationUpload(db, "revision", "revision_cost_test"), {
       code: "UPLOAD_NOT_ADOPTED",
     })
+  } finally {
+    raw.close()
+  }
+})
+
+test("assignment manifestation lookup keeps latest history while avoiding the system-wide scan", async () => {
+  const raw = new DatabaseSync(":memory:")
+  try {
+    raw.exec(`CREATE TABLE icono_manifestations (
+      manifestation_id TEXT PRIMARY KEY, gene_id TEXT, author_account_id TEXT,
+      caretaker_assignment_id TEXT, origin TEXT, status TEXT,
+      manifestation_head_revision_id TEXT, source_manifestation_id TEXT,
+      row_version INTEGER, non_withdrawable INTEGER, public_page_visible INTEGER,
+      withdrawn_at TEXT, purge_eligible_at TEXT, created_at TEXT);
+      WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<10000)
+      INSERT INTO icono_manifestations (manifestation_id, origin, created_at)
+      SELECT 'system_'||n, 'system', '2026-09-01' FROM ids;
+      INSERT INTO icono_manifestations
+        (manifestation_id, caretaker_assignment_id, origin, status, created_at)
+      VALUES
+        ('old', 'assignment', 'caretaker', 'active', '2026-09-10'),
+        ('new', 'assignment', 'fork', 'withdrawn', '2026-09-11'),
+        ('other_origin', 'assignment', 'system', 'active', '2026-09-12')`)
+    raw.exec(
+      readFileSync(
+        new URL(
+          "../../../migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    )
+    let queryPlan
+    const db = {
+      prepare(sql) {
+        return {
+          bind(...args) {
+            queryPlan = raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args)
+            return { first: async () => raw.prepare(sql).get(...args) || null }
+          },
+        }
+      },
+    }
+    assert.equal((await readAssignmentManifestation(db, "assignment")).manifestation_id, "new")
+    assert.ok(
+      queryPlan.some((step) =>
+        /SEARCH icono_manifestations USING INDEX idx_icono_manifestations_assignment_latest/.test(
+          step.detail,
+        ),
+      ),
+    )
+    assert.ok(
+      queryPlan.every((step) => !/SCAN icono_manifestations|USE TEMP B-TREE/.test(step.detail)),
+    )
+    assert.equal(await readAssignmentManifestation(db, "missing"), null)
+    assert.ok(
+      queryPlan.every((step) => !/SCAN icono_manifestations|USE TEMP B-TREE/.test(step.detail)),
+    )
   } finally {
     raw.close()
   }
