@@ -1,5 +1,18 @@
 # GeneGuessr Data Notes
 
+## The only completed-game and account-stats path
+
+The final guess saves the round and its small `{date, won}` result together in
+the player's existing `GameSession` Durable Object. That result remains after
+midnight. `workers/lib/the-only-geneguessr-completed-result-ledger-do-not-duplicate.js`
+owns this storage;
+`workers/stats.js` is the only writer of account totals. The stats API applies
+pending dates in order with a conditional SQLite upsert and acknowledges each
+result only after D1 accepts it. A later page visit retries a refused write.
+The public app shows an explicit pending message instead of counting an
+unconfirmed account win locally. Do not add a second games table, retry worker,
+or browser-owned account total.
+
 ## Structure providers
 
 The runtime viewer now supports three structure sources, in order of preference:
