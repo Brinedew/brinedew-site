@@ -163,6 +163,7 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.equal(statefulConfig.assets.directory, "./public-iconoplasm-edge")
   assert.equal(statefulConfig.assets.not_found_handling, "single-page-application")
   assert.ok(statefulConfig.assets.run_worker_first.includes("/api/*"))
+  assert.ok(statefulConfig.assets.run_worker_first.includes("/blot/*"))
   assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)
   assert.equal(statefulConfig.assets.run_worker_first.includes("/portraits/*"), false)
 })
@@ -234,10 +235,7 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /\/static\/iconoplasm\/\*/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/RB1/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
-  assert.match(
-    redirects,
-    /^\/blot\/\* https:\/\/iconoplasmportraits\.b-cdn\.net\/blot\/:splat 302$/m,
-  )
+  assert.doesNotMatch(redirects, /^\/blot\//m)
   assert.throws(
     () => statSync(path.join(target, "gene")),
     /ENOENT/,
