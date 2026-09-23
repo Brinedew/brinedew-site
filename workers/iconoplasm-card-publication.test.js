@@ -690,6 +690,54 @@ test("rematerialization republishes every page from source while the old head st
   assert.equal(page.candidates[0].image_upvotes, 3)
 })
 
+test("repeat rematerialization verifies existing objects before upload within its phase limit", async () => {
+  const f = fixture(4)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const calls = []
+  const write = f.objects.write
+  f.objects.write = async (kind, value, options) => {
+    calls.push({ kind, options })
+    return write(kind, value)
+  }
+
+  await p.rematerialize()
+  await drain(p)
+
+  for (const call of calls)
+    assert.equal(call.options?.reuseExisting, true, `${call.kind} should check its immutable key`)
+  assert.equal(calls.filter((call) => call.kind === "cards").length, 4)
+})
+
+test("a large rematerialization phase keeps its original two-call object budget", async () => {
+  const f = fixture(3)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  for (const card of f.cards)
+    card.payload.portrait_candidates = Array.from({ length: 129 }, (_, index) => ({
+      asset_sha256: String(index).padStart(64, "0"),
+    }))
+  const calls = []
+  const write = f.objects.write
+  f.objects.write = async (kind, value, options) => {
+    calls.push({ kind, options })
+    return write(kind, value)
+  }
+
+  await p.rematerialize()
+  await drain(p)
+
+  assert.equal(calls.filter((call) => call.kind === "galleries").length, 6)
+  assert.equal(
+    calls
+      .filter((call) => ["cards", "genes", "portraits", "galleries"].includes(call.kind))
+      .every((call) => !call.options?.reuseExisting),
+    true,
+  )
+})
+
 test("a missing source card fails a rematerialization closed instead of deleting the page", async () => {
   const f = fixture(9)
   const p = f.create()
