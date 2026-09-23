@@ -438,30 +438,43 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
         var claim = payload.claim
         var terms = claim.terms
+        var switchFrom = claim.mode === "switch" ? claim.switch_from : null
+        var actionLabel = switchFrom ? "Switch to " + symbol : "Become a " + symbol + " caretaker"
         var dialogId = "icono-caretaker-claim-dialog-" + symbol
         target.innerHTML =
           '<button type="button" class="icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
           esc(dialogId) +
-          '"><span>Become a ' +
-          esc(symbol) +
-          " caretaker</span></button>" +
+          '"><span>' +
+          esc(actionLabel) +
+          "</span></button>" +
           '<sl-dialog class="icono-standard-dialog icono-caretaker-claim-dialog" id="' +
           esc(dialogId) +
-          '" data-icono-caretaker-claim-dialog label="Become a ' +
-          esc(symbol) +
-          ' caretaker">' +
+          '" data-icono-caretaker-claim-dialog label="' +
+          esc(switchFrom ? "Switch to " + symbol + "?" : actionLabel) +
+          '">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div>' +
-          '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="' +
+          (switchFrom
+            ? "<p>Your " +
+              esc(switchFrom.canonical_symbol) +
+              " caretaker role will end. Your writing there stays in the gene history. You will care for " +
+              esc(symbol) +
+              ' instead.</p><p>By confirming, you accept the <a href="'
+            : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
           esc(terms.display_label || "caretaker terms") +
-          '</a>.</sl-checkbox><p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
-          '</form><div class="icono-caretaker-claim-actions" slot="footer"><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button" data-icono-caretaker-claim-submit disabled>Become caretaker</button></div></sl-dialog>'
+          (switchFrom ? "</a>.</p>" : "</a>.</sl-checkbox>") +
+          '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
+          '</form><div class="icono-caretaker-claim-actions" slot="footer"><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button" data-icono-caretaker-claim-submit' +
+          (switchFrom ? "" : " disabled") +
+          ">" +
+          esc(actionLabel) +
+          "</button></div></sl-dialog>"
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
         var termsCheckbox = target.querySelector("[data-icono-caretaker-claim-terms]")
         var submit = target.querySelector("[data-icono-caretaker-claim-submit]")
         var status = target.querySelector("[data-icono-caretaker-claim-status]")
+        var pendingCommandId = null
         target
           .querySelector("[data-icono-caretaker-claim-open]")
           ?.addEventListener("click", function () {
@@ -482,10 +495,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           termsCheckbox?.addEventListener(eventName, syncClaimSubmitState)
         })
         submit?.addEventListener("click", function () {
-          if (!termsCheckbox?.checked || submit.disabled) return
+          if ((!switchFrom && !termsCheckbox?.checked) || submit.disabled) return
           submit.disabled = true
           status.hidden = false
-          status.textContent = "Claiming caretaking…"
+          status.textContent = switchFrom ? "Switching caretaker gene…" : "Claiming caretaking…"
+          pendingCommandId ||= caretakerCommandId()
           fetchAuthedJSON(
             "/api/iconoplasm/caretaker/genes/" + encodeURIComponent(symbol) + "/claim",
             {
@@ -493,12 +507,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               cache: "no-store",
               headers: { "Content-Type": "application/json; charset=utf-8" },
               body: JSON.stringify({
-                command_id: caretakerCommandId(),
+                command_id: pendingCommandId,
                 expected_gene_revision: claim.gene_revision,
                 terms_version_id: terms.terms_version_id,
                 terms_accepted: true,
                 entitlement_policy_version: claim.entitlement_policy_version,
                 default_leave_policy: "retain",
+                ...(switchFrom
+                  ? {
+                      previous_assignment_id: switchFrom.caretaker_assignment_id,
+                      expected_previous_assignment_version: switchFrom.assignment_version,
+                      expected_previous_gene_revision: switchFrom.gene_revision,
+                    }
+                  : {}),
               }),
             },
           )
@@ -514,7 +535,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               status.hidden = false
               status.dataset.tone = "error"
               status.textContent = String(error?.message || "Caretaking could not be claimed.")
-              submit.disabled = !termsCheckbox.checked
+              submit.disabled = switchFrom ? false : !termsCheckbox?.checked
             })
         })
       })
