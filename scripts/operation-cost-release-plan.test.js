@@ -1,10 +1,44 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { acquireReleasePlan, readReleaseOrigin } from "./operation-cost-release-plan.mjs"
 import { OperationCostLedger } from "../workers/lib/operation-cost-ledger.js"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
-import { FULL_RELEASE_STEPS } from "./lib/iconoplasm-release-evidence.mjs"
+
+test("migration checkpoint proof names follow the current deployment workflow", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
+    "utf8",
+  ).replaceAll("\r\n", "\n")
+  for (const [name, condition] of [
+    [
+      "Apply reviewed D1 migrations through prediction admission",
+      "inputs.data_maintenance == true",
+    ],
+    [
+      "Record staged migration continuation checkpoint",
+      "steps.migrations.outputs.continuation_required == 'true'",
+    ],
+    [
+      "Publish, verify, and activate immutable public reads",
+      "steps.migrations.outputs.continuation_required != 'true'",
+    ],
+    [
+      "Deploy production static site to Cloudflare Pages",
+      "steps.migrations.outputs.continuation_required != 'true'",
+    ],
+  ]) {
+    assert.ok(workflow.includes(`- name: ${name}\n`), name)
+    assert.ok(
+      workflow.includes(`- name: ${name}\n        if: ${condition}`) ||
+        workflow.includes(
+          `- name: ${name}\n        if: inputs.data_maintenance == true && ${condition}`,
+        ),
+      name,
+    )
+  }
+})
 
 test("release retry preserves unknown spending through expiry and lost continuation response", async (t) => {
   const db = new DatabaseSync(":memory:")
@@ -135,7 +169,10 @@ test("a successful staged migration origin requires exact-attempt checkpoint pro
     status: "completed",
     conclusion: "success",
     steps: [
-      ...FULL_RELEASE_STEPS.map((name) => ({ name, status: "completed", conclusion: "skipped" })),
+      ...[
+        "Publish, verify, and activate immutable public reads",
+        "Deploy production static site to Cloudflare Pages",
+      ].map((name) => ({ name, status: "completed", conclusion: "skipped" })),
       ...[
         "Apply reviewed D1 migrations through prediction admission",
         "Record staged migration continuation checkpoint",
@@ -173,8 +210,11 @@ test("a successful staged migration origin requires exact-attempt checkpoint pro
   job.steps.find(
     (step) => step.name === "Apply reviewed D1 migrations through prediction admission",
   ).conclusion = "success"
-  job.steps[0].conclusion = "success"
-  await assert.rejects(readReleaseOrigin(options), /CONTINUATION_ORIGIN_INVALID/)
+  for (const step of job.steps.slice(0, 2)) {
+    step.conclusion = "success"
+    await assert.rejects(readReleaseOrigin(options), /CONTINUATION_ORIGIN_INVALID/)
+    step.conclusion = "skipped"
+  }
 })
 
 test("a corrected canonical commit resumes the old migration identity with fresh inspection identity", async () => {

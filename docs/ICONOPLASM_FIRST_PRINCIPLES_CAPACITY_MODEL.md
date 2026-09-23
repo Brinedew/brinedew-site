@@ -59,15 +59,16 @@ The executable scenario model is:
 pnpm run model:iconoplasm-capacity
 ```
 
-The release-oriented checks are:
+Check the current ownership boundaries with:
 
 ```powershell
-pnpm run gate:iconoplasm-viral-load
 pnpm run test:architecture-fences
 ```
 
-These tools encode hypotheses. When their assumptions become wrong, update or
-delete them. Never update the product requirement to match a convenient model.
+The capacity model is a dated hypothesis; the deployment workflow runs the
+current admission checks when data maintenance is requested. Do not treat an
+old workload profile as a release requirement. When an assumption becomes
+wrong, update or delete it rather than changing the product goal to match.
 
 ## Decision rule
 

@@ -1,9 +1,32 @@
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
-import { isMigrationCheckpoint } from "./lib/iconoplasm-release-evidence.mjs"
 export const RELEASE_REQUEST_LIMIT = 40
 // Resumable migrations have at most 100 admitted steps plus per-step capacity
 // reads and inventory/registration overhead. The shared daily ceiling remains.
 export const MIGRATION_RELEASE_REQUEST_LIMIT = 256
+
+// The checkpoint step is emitted only when the admitted migration requests a
+// continuation. Check the two reader activation steps as well: a successful
+// deployment is not by itself proof that this was only a migration checkpoint.
+function isMigrationCheckpoint(run, jobs) {
+  if (run.status !== "completed" || run.conclusion !== "success") return false
+  const production = jobs.filter((job) => job.name === "deploy-production")
+  if (
+    production.length !== 1 ||
+    production[0].status !== "completed" ||
+    production[0].conclusion !== "success"
+  )
+    return false
+  const hasStep = (name, conclusion) =>
+    production[0].steps?.filter(
+      (step) => step.name === name && step.status === "completed" && step.conclusion === conclusion,
+    ).length === 1
+  return (
+    hasStep("Apply reviewed D1 migrations through prediction admission", "success") &&
+    hasStep("Record staged migration continuation checkpoint", "success") &&
+    hasStep("Publish, verify, and activate immutable public reads", "skipped") &&
+    hasStep("Deploy production static site to Cloudflare Pages", "skipped")
+  )
+}
 
 // Verified reader containment and deliberately staged migration checkpoints
 // can carry a retained migration lineage into canonical release work. Neither

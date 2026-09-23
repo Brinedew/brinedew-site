@@ -99,11 +99,10 @@ Run the action-derived model:
 pnpm run model:iconoplasm-capacity
 ```
 
-Run the capacity gate before explicit data or topology maintenance:
-
-```powershell
-pnpm run gate:iconoplasm-viral-load
-```
+For explicit data or topology maintenance, dispatch the production workflow
+with `data_maintenance=true`. That workflow refreshes account capacity and
+admits each operation before it runs. The old standalone viral-load gate had
+no staging workflow and is no longer a release command.
 
 Validate architecture ownership:
 
