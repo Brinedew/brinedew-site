@@ -479,9 +479,9 @@ jobs:
             "www.brinedew.bio/*" \
             "geneguessr.brinedew.bio/*"
 
-      # ARCHITECTURE FENCE [IPD-007]: Iconoplasm's matching static assets bypass Worker execution. Dynamic
-      # misses go directly to the stateful runtime, removing the old second
-      # public-proxy invocation from every dynamic request.
+      # ARCHITECTURE FENCE [IPD-007]: Iconoplasm's matching static assets bypass Worker execution.
+      # The mutable /blot/* alias and other dynamic routes go directly to the one
+      # stateful runtime, without the old second public-proxy invocation.
       - name: Reassign Iconoplasm route to the stateful worker
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
         run: |

@@ -29,8 +29,10 @@ retention design.
 <!-- ARCHITECTURE FENCE [IPD-007] -->
 
 Anonymous reading is static/CDN-first. Workers Cache is not a quota workaround.
-Dynamic Worker paths exist for explicit private actions, mutations, and
-administration.
+The stable `/blot/{symbol}.webp` alias uses the existing Worker to resolve the
+exact published card after a vote changes the winner. Immutable image keys,
+the site shell, and crawler files remain static/CDN routes. Dynamic Worker
+paths also exist for explicit private actions, mutations, and administration.
 
 <!-- ARCHITECTURE FENCE [IPD-008] -->
 

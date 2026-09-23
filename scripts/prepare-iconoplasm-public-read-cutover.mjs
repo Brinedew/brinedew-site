@@ -25,12 +25,13 @@ export function preparePublicReadCutoverConfig(source) {
   // Preparation deploys new publisher/runtime code but deliberately retains the
   // exact asset bytes already serving production. The explicit legacy routing
   // config is the pre-cutover topology, not a broad `run_worker_first = true`.
-  // This keeps the current site unchanged while the sole publisher emits and
-  // Bunny proves build-revision 3. The final canonical deploy is the only step
-  // allowed to attach the newly built SPA assets and static-first route list.
+  // This keeps the current shell and immutable assets unchanged while the sole
+  // publisher emits and Bunny proves build-revision 3. The mutable blot alias
+  // already belongs to the exact-card Worker handler during preparation.
+  // Final activation attaches the newly built SPA assets and route list.
   output = output.replace(
     assets[0],
-    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/portraits/*", "/published-cards/v2/immutable/*", "/admin*", "/blocklist*", "/artist-styles*", "/health", "/gene/*", "/genes*", "/sitemap*", "/robots.txt", "/llms.txt"] } }\n\n`,
+    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/published-cards/v2/immutable/*", "/admin*", "/blocklist*", "/artist-styles*", "/health", "/gene/*", "/genes*", "/sitemap*", "/robots.txt", "/llms.txt"] } }\n\n`,
   )
   return output
 }

@@ -202,7 +202,7 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
   assert.match(robots, /Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml/)
   assert.doesNotMatch(sitemap, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes/)
   assert.match(llms, /# Iconoplasm/)
-  assert.match(redirects, /\/blot\/\* https:\/\/iconoplasmportraits\.b-cdn\.net\/blot\/:splat 302/)
+  assert.doesNotMatch(redirects, /^\/blot\//m)
   assert.match(redirects, /\/portraits\/\* \/static\/iconoplasm\/blot-placeholder\.svg 200/)
   assert.match(redirects, /\/genes \/ 301/)
   assert.match(redirects, /\/genes\/\* \/ 301/)
@@ -629,7 +629,7 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
   })
 })
 
-test("blot bytes use immutable CDN identity or a static placeholder, never the semantic Worker route", () => {
+test("the browser uses an exact immutable blot object or a placeholder, never the mutable alias", () => {
   const fingerprint = "1".repeat(32)
   const objectKey = `blots/v1/T/TP53/${fingerprint}/TP53-iconoplasm-gene-blot.webp`
   assert.equal(
