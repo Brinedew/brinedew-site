@@ -3,10 +3,11 @@ name: Deploy Production (Cloudflare Pages + Worker)
 on:
   push:
     branches: ["main"]
-    # Agent runbooks are outside Quartz's `content` build input. Do not
-    # redeploy Workers and Pages for an operations-note-only change.
+    # Agent runbooks and plans are outside Quartz's `content` build input. Do
+    # not redeploy Workers and Pages for an operations-note-only change.
     paths-ignore:
       - "docs/**"
+      - "plans/**"
   workflow_dispatch:
     inputs:
       resume_run_id:
