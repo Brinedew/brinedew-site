@@ -24,6 +24,7 @@ test("preparation retains the live asset bundle and exact pre-cutover route topo
   assert.equal(prepared.unsafe.metadata.assets.config.not_found_handling, "none")
   assert.deepEqual(prepared.unsafe.metadata.assets.config.run_worker_first, [
     "/api/*",
+    "/blot/*",
     "/portraits/*",
     "/published-cards/v2/immutable/*",
     "/admin*",

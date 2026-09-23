@@ -27,6 +27,7 @@ test("schema staging preserves every production binding", () => {
   assert.equal(preparedUnsafe.metadata.assets.config.not_found_handling, "none")
   assert.deepEqual(preparedUnsafe.metadata.assets.config.run_worker_first, [
     "/api/*",
+    "/blot/*",
     "/portraits/*",
     "/published-cards/v2/immutable/*",
     "/admin*",

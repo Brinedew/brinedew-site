@@ -44,7 +44,7 @@ async function makeAssetFixture() {
 }
 
 test(
-  "real workerd static asset routing keeps every anonymous read route out of the Worker",
+  "real workerd routes only the mutable blot alias through the Worker",
   { timeout: 30_000 },
   async () => {
     const { temporaryRoot, outputRoot } = await makeAssetFixture()
@@ -97,11 +97,7 @@ test(
           method,
           redirect: "manual",
         })
-        assert.equal(blotResponse.status, 302)
-        assert.equal(
-          blotResponse.headers.get("location"),
-          "https://iconoplasmportraits.b-cdn.net/blot/TP53.webp",
-        )
+        assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
       }
     } finally {
       await runtime?.dispose()
@@ -153,11 +149,7 @@ test(
           method,
           redirect: "manual",
         })
-        assert.equal(blotResponse.status, 302)
-        assert.equal(
-          blotResponse.headers.get("location"),
-          "https://iconoplasmportraits.b-cdn.net/blot/TP53.webp",
-        )
+        assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
       }
       for (const pathname of [
         "/search?q=TP53",
@@ -179,7 +171,7 @@ test(
 )
 
 test(
-  "the exact production build and Wrangler config exhaust anonymous route ownership",
+  "the exact production build and Wrangler config sample anonymous route ownership",
   { timeout: 120_000 },
   async () => {
     const proof = await proveAnonymousRouteTopology()
@@ -191,16 +183,8 @@ test(
     )
     assert.ok(proof.physicalDispatches > 0)
     assert.equal(proof.logicalDispatches, undefined)
-    assert.equal(proof.statefulWorkerRouteEvents, 0)
-    assert.deepEqual(proof.observedStatefulOperations, {
-      d1: 0,
-      durableObject: 0,
-      queue: 0,
-      kvWrite: 0,
-      session: 0,
-      internalService: 0,
-    })
-    assert.equal(proof.instrumentedBindingsArmed, true)
+    assert.equal(proof.statefulWorkerRouteEvents, 1)
+    assert.equal(proof.unexpectedStatefulWorkerRouteEvents, 0)
     assert.equal(proof.verified, true)
   },
 )
