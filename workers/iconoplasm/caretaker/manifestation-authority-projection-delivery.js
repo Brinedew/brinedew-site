@@ -1,20 +1,9 @@
 import { authorityError } from "./manifestation-authority-contract.js"
 import { first, prepared } from "./manifestation-authority-repository.js"
 
-export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
-  if (result.accepted_event_sequence == null) return { pending: false }
-  const { onAuthorityEvent, onAssignmentEvent } = callbacks || {}
-  if (typeof onAuthorityEvent !== "function" && typeof onAssignmentEvent !== "function") {
-    return { pending: false }
-  }
-  const event = await first(
-    db,
-    `SELECT event_uuid, event_sequence, gene_id, payload_json, projection_status
-       FROM icono_manifestation_events WHERE event_sequence = ?`,
-    result.accepted_event_sequence,
-  )
-  if (!event) throw authorityError("AUTHORITY_EVENT_MISSING", "Authority event is missing", 500)
+async function deliverEvent(db, callbacks, event) {
   if (event.projection_status === "published") return { pending: false }
+  const { onAuthorityEvent, onAssignmentEvent } = callbacks
   const payload = JSON.parse(event.payload_json)
   try {
     const fullEvent = {
@@ -42,7 +31,7 @@ export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
           SET projection_status = 'published', projection_attempts = projection_attempts + 1,
               projection_next_attempt_at = NULL
         WHERE event_sequence = ? AND projection_status <> 'published'`,
-      result.accepted_event_sequence,
+      event.event_sequence,
     ).run()
     return { pending: false }
   } catch (error) {
@@ -52,10 +41,37 @@ export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
           SET projection_status = 'failed', projection_attempts = projection_attempts + 1,
               projection_next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute')
         WHERE event_sequence = ? AND projection_status <> 'published'`,
-      result.accepted_event_sequence,
+      event.event_sequence,
     )
       .run()
       .catch(() => undefined)
     return { pending: true }
   }
+}
+
+export async function deliverAcceptedAuthorityEvent(db, callbacks, result) {
+  if (result.accepted_event_sequence == null) return { pending: false }
+  const { onAuthorityEvent, onAssignmentEvent } = callbacks || {}
+  if (typeof onAuthorityEvent !== "function" && typeof onAssignmentEvent !== "function") {
+    return { pending: false }
+  }
+  const fields = `SELECT event_uuid, event_sequence, gene_id, payload_json, projection_status
+       FROM icono_manifestation_events`
+  const previous = result.previous_event_id
+    ? await first(db, `${fields} WHERE event_uuid = ?`, result.previous_event_id)
+    : null
+  if (result.previous_event_id && !previous) {
+    throw authorityError("AUTHORITY_EVENT_MISSING", "Previous authority event is missing", 500)
+  }
+  const current = await first(
+    db,
+    `${fields} WHERE event_sequence = ?`,
+    result.accepted_event_sequence,
+  )
+  if (!current) throw authorityError("AUTHORITY_EVENT_MISSING", "Authority event is missing", 500)
+  const previousDelivery = previous
+    ? await deliverEvent(db, { onAuthorityEvent, onAssignmentEvent }, previous)
+    : { pending: false }
+  const currentDelivery = await deliverEvent(db, { onAuthorityEvent, onAssignmentEvent }, current)
+  return { pending: previousDelivery.pending || currentDelivery.pending }
 }

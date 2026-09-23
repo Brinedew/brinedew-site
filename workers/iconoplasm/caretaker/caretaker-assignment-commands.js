@@ -22,6 +22,7 @@ import {
   readGene,
   readGeneAliases,
   readHead,
+  readAssignmentManifestation,
   requireActiveAccount,
   requireActiveGene,
   requireAssignment,
@@ -339,6 +340,9 @@ export async function claimCaretakerAssignment(
     relinquishPolicy,
     entitlementPolicyVersion = CARETAKER_ENTITLEMENT_POLICY_VERSION,
     expectedGeneRevision,
+    previousAssignmentId = null,
+    expectedPreviousAssignmentVersion = null,
+    expectedPreviousGeneRevision = null,
     assignmentId,
     eventUuid,
     idFactory = defaultIdFactory,
@@ -388,6 +392,40 @@ export async function claimCaretakerAssignment(
   )
   const eventUuidNorm = createId(eventUuid, "event_uuid", "event", idFactory)
   const timestamp = normalizeTimestamp(now)
+  const previousAssignment = previousAssignmentId
+    ? await requireAssignment(db, previousAssignmentId)
+    : null
+  if (
+    previousAssignment &&
+    (previousAssignment.account_id !== account.account_id ||
+      previousAssignment.status !== "active" ||
+      previousAssignment.gene_id === gene.gene_id)
+  ) {
+    throw authorityError(
+      "CARETAKER_SWITCH_UNAVAILABLE",
+      "The previous caretaker role can no longer be switched",
+      409,
+    )
+  }
+  const previousGene = previousAssignment
+    ? await requireActiveGene(db, previousAssignment.gene_id)
+    : null
+  const previousHead = previousGene ? await readHead(db, previousGene.gene_id) : null
+  const previousManifestation = previousAssignment
+    ? await readAssignmentManifestation(db, previousAssignment.caretaker_assignment_id)
+    : null
+  const previousVersion = previousAssignment
+    ? normalizeVersion(expectedPreviousAssignmentVersion, "expected_previous_assignment_version")
+    : null
+  const previousRevision = previousAssignment
+    ? normalizeVersion(expectedPreviousGeneRevision, "expected_previous_gene_revision")
+    : null
+  const previousEventId = previousAssignment
+    ? createId(undefined, "previous_event_uuid", "event", idFactory)
+    : null
+  const previousCommandId = previousAssignment
+    ? createId(undefined, "previous_command_id", "command", idFactory)
+    : null
   const terms = await first(
     db,
     `SELECT terms_version_id FROM icono_caretaker_terms_versions
@@ -427,11 +465,90 @@ export async function claimCaretakerAssignment(
     status: "active",
     assignment_version: 1,
     gene_revision: nextHead.gene_revision,
+    ...(previousEventId ? { previous_event_id: previousEventId } : {}),
   }
+  const previousStatements = previousAssignment
+    ? [
+        prepared(
+          db,
+          `INSERT INTO icono_authoring_command_receipts (
+             command_id, command_type, actor_kind, actor_account_id, gene_id,
+             request_sha256, response_json
+           ) VALUES (?, 'caretaker.assignment_switch_previous', 'account', ?, ?, ?, ?)`,
+          previousCommandId,
+          account.account_id,
+          previousGene.gene_id,
+          cmd.requestSha256,
+          JSON.stringify({
+            ok: true,
+            caretaker_assignment_id: previousAssignment.caretaker_assignment_id,
+          }),
+        ),
+        prepared(
+          db,
+          `UPDATE icono_caretaker_assignments
+              SET status = 'ended', assignment_version = assignment_version + 1,
+                  relinquish_policy = 'retain', ended_by_account_id = ?,
+                  end_reason = 'caretaker_switched_gene', ended_at = ?,
+                  suspended_at = NULL, suspension_reason = NULL,
+                  entitlement_grace_ends_at = NULL, updated_at = ?
+            WHERE caretaker_assignment_id = ?`,
+          account.account_id,
+          timestamp,
+          timestamp,
+          previousAssignment.caretaker_assignment_id,
+        ),
+        prepared(
+          db,
+          `UPDATE icono_manifestation_heads
+              SET gene_revision = gene_revision + 1, updated_at = ?
+            WHERE gene_id = ? AND gene_revision = ?`,
+          timestamp,
+          previousGene.gene_id,
+          previousRevision,
+        ),
+        eventStatement(db, {
+          eventUuid: previousEventId,
+          commandId: previousCommandId,
+          geneId: previousGene.gene_id,
+          geneRevision: Number(previousHead.gene_revision) + 1,
+          assignmentId: previousAssignment.caretaker_assignment_id,
+          manifestationId: previousManifestation?.manifestation_id || null,
+          payloadJson: eventPayload({
+            cause: "caretaker.assignment_ended",
+            gene: previousGene,
+            head: { ...previousHead, gene_revision: Number(previousHead.gene_revision) + 1 },
+            assignment: {
+              ...previousAssignment,
+              status: "ended",
+              assignment_version: Number(previousAssignment.assignment_version) + 1,
+              relinquish_policy: "retain",
+              ended_by_account_id: account.account_id,
+              end_reason: "caretaker_switched_gene",
+              ended_at: timestamp,
+            },
+            manifestation: previousManifestation,
+          }),
+        }),
+      ]
+    : []
+  const accountGuard = previousAssignment
+    ? `AND EXISTS (
+        SELECT 1 FROM icono_caretaker_assignments prior
+        JOIN icono_manifestation_heads prior_head ON prior_head.gene_id = prior.gene_id
+        WHERE prior.caretaker_assignment_id = ? AND prior.account_id = ?
+          AND prior.status = 'active' AND prior.assignment_version = ?
+          AND prior_head.gene_revision = ?
+      )`
+    : `AND NOT EXISTS (
+        SELECT 1 FROM icono_caretaker_assignments prior
+        WHERE prior.account_id = ?
+          AND prior.status IN ('pending_acceptance', 'active', 'suspended')
+      )`
   return runCommand({
     db,
     ...cmd,
-    commandType: "caretaker.assignment_claim",
+    commandType: previousAssignment ? "caretaker.assignment_switch" : "caretaker.assignment_claim",
     geneId: gene.gene_id,
     response,
     guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
@@ -442,11 +559,25 @@ export async function claimCaretakerAssignment(
           AND h.canonical_revision_id IS NOT NULL
       ) AND NOT EXISTS (
         SELECT 1 FROM icono_caretaker_assignments a
-        WHERE (a.gene_id = ? OR a.account_id = ?)
+        WHERE a.gene_id = ?
           AND a.status IN ('pending_acceptance', 'active', 'suspended')
-      ) THEN 1 ELSE 0 END`,
-    guardParams: [cmd.commandId, gene.gene_id, expectedRevision, gene.gene_id, account.account_id],
+      ) ${accountGuard} THEN 1 ELSE 0 END`,
+    guardParams: [
+      cmd.commandId,
+      gene.gene_id,
+      expectedRevision,
+      gene.gene_id,
+      ...(previousAssignment
+        ? [
+            previousAssignment.caretaker_assignment_id,
+            account.account_id,
+            previousVersion,
+            previousRevision,
+          ]
+        : [account.account_id]),
+    ],
     statements: [
+      ...previousStatements,
       prepared(
         db,
         `INSERT INTO icono_caretaker_assignments (
