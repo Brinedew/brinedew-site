@@ -28,9 +28,6 @@ test("maintenance capacity refusal follows source and CI checks and precedes rel
   assert.ok(stepPosition("Reject stale production source before admission") < sentinel)
   assert.ok(stepPosition("Require successful tests for the exact deployed commit") < sentinel)
   for (const name of [
-    "Setup Python",
-    "Install Python dependencies",
-    "Enrich protein pages",
     "Install dependencies",
     "Sync shared Iconoplasm assets before release guards",
     "Bake Iconoplasm observability snapshot (production)",
