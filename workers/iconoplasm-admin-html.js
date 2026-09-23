@@ -215,11 +215,11 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <div class="cost-toolbar">
             <div>
               <div class="cost-kicker">Iconoplasm observability</div>
-              <h2>Cloudflare snapshot, baked out of band</h2>
-              <p class="small">This tab auto-refreshes on deploy and on the hourly snapshot job. It is a baked capacity-and-signals view, not a live request probe.</p>
+              <h2>Cloudflare account capacity</h2>
+              <p class="small">Opening this tab queries current account-wide meters once. Historical charts use the last published snapshot and show its age.</p>
             </div>
             <div class="cost-toolbar-actions">
-              <button type="button" id="cost-refresh">Reload snapshot</button>
+              <button type="button" id="cost-refresh">Refresh capacity</button>
               <span class="cost-toolbar-note" id="cost-updated-at">Not loaded yet.</span>
             </div>
           </div>

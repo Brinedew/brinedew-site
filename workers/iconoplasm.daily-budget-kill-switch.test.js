@@ -583,6 +583,113 @@ test("admin cost snapshot prefers the atomically published KV artifact", async (
   assert.deepEqual(budgetNamespace.calls, [])
 })
 
+test("signed-in admin sees current account meters beside an old baked snapshot", async () => {
+  const day = new Date().toISOString().slice(0, 10)
+  const observed = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    observed.push({ url: String(url), body: JSON.parse(options.body) })
+    return Response.json({
+      data: {
+        viewer: {
+          accounts: [
+            {
+              workersInvocationsAdaptive: [{ sum: { requests: 9512 } }],
+              d1AnalyticsAdaptiveGroups: [
+                {
+                  dimensions: { date: day, databaseId: "db" },
+                  sum: { rowsRead: 273944, rowsWritten: 166 },
+                },
+              ],
+              kvOperationsAdaptiveGroups: [
+                { dimensions: { date: day, actionType: "read" }, sum: { requests: 12421 } },
+              ],
+              durableObjectsInvocationsAdaptiveGroups: [
+                { dimensions: { date: day }, sum: { requests: 1596 } },
+              ],
+              durableObjectsPeriodicGroups: [
+                {
+                  dimensions: { date: day },
+                  sum: { rowsRead: 27131, rowsWritten: 3071, duration: 594.67 },
+                },
+              ],
+              queueMessageOperationsAdaptiveGroups: [
+                { dimensions: { date: day }, sum: { billableOperations: 3 } },
+              ],
+            },
+          ],
+        },
+      },
+    })
+  }
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://internal/api/iconoplasm/admin/cost/snapshot", {
+          headers: { "x-iconoplasm-admin-token": "founder-secret" },
+        }),
+        {
+          ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+          CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: "budget-token",
+          ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+          KV: {
+            get: async () =>
+              JSON.stringify({
+                generatedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+              }),
+          },
+        },
+        { waitUntil() {} },
+      )
+    const payload = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(payload.snapshot.freshness.state, "unavailable")
+    assert.equal(payload.snapshot.liveProvider.state, "queried")
+    assert.equal(payload.snapshot.liveProvider.day, day)
+    assert.equal(payload.snapshot.liveProvider.usage.rows_read, 273944)
+    assert.equal(payload.snapshot.liveProvider.usage.do_rows_written, 3071)
+    assert.equal(observed.length, 1)
+    assert.equal(observed[0].url, "https://api.cloudflare.com/client/v4/graphql")
+    assert.deepEqual(budgetNamespace.calls, [])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("admin capacity shows provider failure instead of treating baked counts as current", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 })
+  try {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://internal/api/iconoplasm/admin/cost/snapshot", {
+          headers: { "x-iconoplasm-admin-token": "founder-secret" },
+        }),
+        {
+          ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+          CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: "budget-token",
+          KV: {
+            get: async () =>
+              JSON.stringify({
+                generatedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+              }),
+          },
+        },
+        { waitUntil() {} },
+      )
+    const payload = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(payload.snapshot.freshness.state, "unavailable")
+    assert.equal(payload.snapshot.liveProvider.state, "unavailable")
+    assert.equal(payload.snapshot.liveProvider.usage, null)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("admin mutation limiter policy reports the live limiter basis so Website Ops can fail closed", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 3 })
   const budgetNamespace = new FakeDailyBudgetNamespace()
