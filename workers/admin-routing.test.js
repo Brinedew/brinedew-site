@@ -15,9 +15,9 @@ test("an unimplemented AI well-known route is a real 404, not the app shell", as
   assert.match(response.headers.get("X-Robots-Tag") || "", /noindex/)
 })
 
-test("apex admin route stays on the worker instead of getting swallowed by the static-site proxy", async () => {
+test("GeneGuessr admin route stays on its worker instead of the static-site proxy", async () => {
   const response = await worker.fetch(
-    new Request("https://brinedew.bio/admin", { method: "GET" }),
+    new Request("https://geneguessr.brinedew.bio/admin", { method: "GET" }),
     {},
     {},
   )
