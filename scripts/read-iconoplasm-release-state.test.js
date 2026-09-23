@@ -29,6 +29,7 @@ test("release state comes from the installed setting, independent of reader avai
             bindings: [
               binding("ICONOPLASM_SCHEMA_TRANSITION", transition),
               binding("ICONOPLASM_SCHEMA_TRANSITION_MODE", "reader-recovery"),
+              binding("ICONOPLASM_HTML_SHELL_CACHE_VERSION", "a".repeat(40)),
               binding("UNRELATED_SECRET", "must-not-be-returned"),
             ],
           },
@@ -39,6 +40,7 @@ test("release state comes from the installed setting, independent of reader avai
       schema_transition: transition === "1",
       reader_recovery: true,
       origin_run_id: "",
+      cache_version: "a".repeat(40),
     })
     assert.equal(calls, 1)
     assert.doesNotMatch(JSON.stringify(state), /private|must-not/)

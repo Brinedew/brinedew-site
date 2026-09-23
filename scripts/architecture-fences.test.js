@@ -395,10 +395,11 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   )
   assert.deepEqual(new Set(backupZones).size, 2, "production and staging backup zones must differ")
   assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
-  const stagingMigrationRehearsal =
-    "wrangler d1 migrations apply iconoplasm-staging-v2 --remote --env staging"
-  assert.match(deploy, new RegExp(stagingMigrationRehearsal.replaceAll(" ", "\\s+")))
-  assert.doesNotMatch(deploy.replace(stagingMigrationRehearsal, ""), /wrangler d1 migrations apply/)
+  assert.match(
+    deploy,
+    /- name: Apply reviewed D1 migrations through prediction admission\n\s+if: inputs\.data_maintenance == true/,
+  )
+  assert.doesNotMatch(deploy, /wrangler\s+d1\s+migrations\s+apply/)
   assert.match(storage, /AccessKey/)
   assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
   assert.match(requestBudget, /CloudflareWorkerRequestBudgetMaximum = 2500/)

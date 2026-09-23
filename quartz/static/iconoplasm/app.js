@@ -44,7 +44,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=102455497aff337e"
+} from "./diagram-studio.js?v=f48d5ad336a47959"
 import {
   iconoplasmPublicationReader,
   immutableBlotByteUrl,
