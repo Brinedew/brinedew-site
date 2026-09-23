@@ -329,6 +329,29 @@
   border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
 }
 
+.pg-sidebar-legacy-import {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.pg-sidebar-legacy-import button {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.35rem;
+  background: var(--pg-panel-bg-strong);
+  color: var(--dark);
+  cursor: pointer;
+}
+
+.pg-sidebar-legacy-import button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .pg-auth-discord {
   background: var(--pg-panel-bg-strong);
   border: 1px solid var(--pg-accent-border);
