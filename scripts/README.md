@@ -1,13 +1,5 @@
 # Website Scripts
 
-## Protein data enrichment
-
-`enrich-proteins.py` - Enriches protein wiki pages with data from Cellulore.
-
-- Source: `../Datasets/cellulore/proteins_with_demographics.json`
-- Updates frontmatter in `content/wiki/*.md` files tagged as proteins
-- Generates image prompts for missing protein portraits
-
 ## Other scripts
 
 - `generate-protein-pages.py` - Creates new protein wiki pages

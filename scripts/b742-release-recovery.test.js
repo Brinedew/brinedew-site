@@ -118,8 +118,6 @@ test("manual reader recovery is exact-CI gated and never enters the D1 release p
   assert.match(recovery, /ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery/)
   assert.match(recovery, /Verify published readers and retained application protection/)
   for (const forbidden of [
-    "Install Python dependencies",
-    "Enrich protein pages",
     "Sync shared Iconoplasm assets before release guards",
     "Apply reviewed D1 migrations through prediction admission",
     "Prepare the published catalog through shared KV admission",

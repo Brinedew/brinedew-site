@@ -95,17 +95,18 @@ test("published and candidate extension contracts remain explicit", () => {
   )
 })
 
-test("release workflows cannot mask a stale checked-in catalog contract", () => {
+test("exact-head CI validates the catalog before and after shared-asset sync", () => {
   const ciWorkflow = readFileSync(".github/workflows/ci.yaml", "utf8")
   const deployWorkflow = readFileSync(".github/workflows/deploy-quartz.yml", "utf8")
   const authorityTestCommand =
     "node scripts/run-tests.mjs iconoplasm-extension.publisher-authority.test.js"
   const syncCommand = "pnpm run sync:iconoplasm-shared"
-  const releaseGuardName = "Verify Iconoplasm architecture and Worker budget guards"
+  const releaseGateName = "Require successful tests for the exact deployed commit"
   const ciAuthorityIndex = ciWorkflow.indexOf(authorityTestCommand)
   const ciSyncIndex = ciWorkflow.indexOf(syncCommand)
+  const ciFullTestIndex = ciWorkflow.indexOf("pnpm test")
   const deploySyncIndex = deployWorkflow.indexOf(syncCommand)
-  const deployGuardIndex = deployWorkflow.indexOf(releaseGuardName)
+  const deployGateIndex = deployWorkflow.indexOf(releaseGateName)
 
   assert.notEqual(ciAuthorityIndex, -1, "CI must run the publisher-authority test")
   assert.notEqual(ciSyncIndex, -1, "CI must retain the shared-asset sync")
@@ -113,10 +114,14 @@ test("release workflows cannot mask a stale checked-in catalog contract", () => 
     ciAuthorityIndex < ciSyncIndex,
     "CI must validate the checked-in generated contract before sync can rewrite it",
   )
-  assert.notEqual(deploySyncIndex, -1, "production must sync shared assets")
-  assert.notEqual(deployGuardIndex, -1, "production must retain the focused release guard")
   assert.ok(
-    deploySyncIndex < deployGuardIndex,
-    "production must sync the generated contract before the focused release guard",
+    ciSyncIndex < ciFullTestIndex,
+    "CI must test the regenerated assets before its result authorizes production",
+  )
+  assert.notEqual(deploySyncIndex, -1, "production must sync shared assets")
+  assert.notEqual(deployGateIndex, -1, "production must wait for exact-head CI")
+  assert.ok(
+    deployGateIndex < deploySyncIndex,
+    "production must require exact-head CI before it syncs release assets",
   )
 })

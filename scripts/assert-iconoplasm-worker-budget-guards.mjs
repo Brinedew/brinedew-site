@@ -48,6 +48,7 @@ const workflow = readFileSync(
   new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
   "utf8",
 )
+const ciWorkflow = readFileSync(new URL("../.github/workflows/ci.yaml", import.meta.url), "utf8")
 const refreshWorkflow = readFileSync(
   new URL("../.github/workflows/refresh-iconoplasm-observability-snapshot.yml", import.meta.url),
   "utf8",
@@ -63,7 +64,7 @@ function doesNotMatchOrFail(haystack, pattern, message) {
   assert.doesNotMatch(haystack, pattern, message)
 }
 
-// This is not a style lint. It is a deploy-drift brake.
+// This checks source behavior in the exact-head CI suite.
 //
 // The 2026-05 sync recovery was first fixed by a direct Worker deploy, then the
 // canonical deploy path later overwrote critical budget/finalization behavior.
@@ -71,17 +72,18 @@ function doesNotMatchOrFail(haystack, pattern, message) {
 // intentionally checks for loud strings that encode non-negotiable behavior:
 // pending-finalize jobs must be allowed to complete without per-scope KV
 // publishes, public hot paths must keep the shared KV barrier, and GitHub deploy
-// must run the protected cost tests under pnpm with a 24-hour release-age delay.
+// must wait for full CI at the exact source commit under pnpm with a 24-hour
+// release-age delay.
 // If one of these strings changes because the implementation legitimately moved,
 // replace this guard with an equally loud behavioral check in the same commit.
 // Do not remove it just because a refactor made the string assertion annoying.
-// ARCHITECTURE FENCE [IPD-001]: regional failure must stay tab-scoped; run the
-// actual extension adapter regression before deploying any shared policy change.
+// ARCHITECTURE FENCE [IPD-001]: the full CI test suite includes the extension
+// adapter regression; production waits for that exact commit before deployment.
+includesOrFail(ciWorkflow, "pnpm test", "CI must run the full repository test suite.")
 includesOrFail(
   workflow,
-  "iconoplasm-extension/service-worker.test.js",
-  "iconoplasm-extension/metadata-delivery.test.js",
-  "Deploy must run the extension's cross-tab Bunny isolation regression.",
+  "node scripts/wait-for-iconoplasm-release-ci.mjs",
+  "Production must wait for successful CI at the exact deployed commit.",
 )
 includesOrFail(
   worker,
@@ -98,17 +100,8 @@ includesOrFail(
   "prepare(GLOBAL_DUE_FINALIZATION_SQL)",
   "Global dispatch must use the indexed phase-priority selector.",
 )
-// The selector moved out of the runtime. Prove priority, pending-finalize
-// exclusion and durable future wakeups behaviorally in the release gate.
-for (const selectorTest of [
-  "workers/iconoplasm/sync-finalization-selection.test.js",
-  "workers/iconoplasm/sync-finalization-global-selection.test.js",
-  "workers/iconoplasm/sync-finalization-publication.test.js",
-  "workers/iconoplasm/sync-finalization-status-list.test.js",
-  "workers/iconoplasm/finalization-job-state.test.js",
-]) {
-  includesOrFail(workflow, selectorTest, `Deploy must run ${selectorTest}.`)
-}
+// Priority, pending-finalize exclusion and future wakeups are exercised by
+// their behavioral tests in the full CI suite.
 includesOrFail(
   worker,
   "drainCompletedFinalization(env.ICONOPLASM_DB",
@@ -176,31 +169,6 @@ includesOrFail(
   "Production workflow must enforce pnpm minimumReleaseAge.",
 )
 includesOrFail(
-  workflow,
-  "workers/iconoplasm.d1-cost-barrier.test.js",
-  "Production workflow must run the D1 cost barrier test.",
-)
-includesOrFail(
-  workflow,
-  "workers/iconoplasm.d1-hot-query-guard.test.js",
-  "Production workflow must run the hot-query guard test.",
-)
-includesOrFail(
-  workflow,
-  "workers/iconoplasm.do-not-delete-cost-guards.test.js",
-  "Production workflow must run the do-not-delete guard test.",
-)
-includesOrFail(
-  workflow,
-  "workers/iconoplasm.sync-finalization-queue.test.js",
-  "Production workflow must run finalization queue tests.",
-)
-includesOrFail(
-  workflow,
-  "assert-iconoplasm-worker-budget-guards.mjs",
-  "Production workflow must run this deploy drift guard.",
-)
-includesOrFail(
   publicationAliasPolicyTests,
   'test("pointer publication completes despite KV list lag and never reads the scanner artifact"',
   "The alias policy suite must keep the no-list pointer-publication regression.",
@@ -219,11 +187,6 @@ includesOrFail(
   recognitionValidationIndexTests,
   'test("cyclin P to CCNP validates from bounded lookup shards without a scanner read"',
   "The exact production 1102 alias must remain a bounded scanner-free regression.",
-)
-includesOrFail(
-  workflow,
-  "workers/iconoplasm-recognition-validation-index.test.js",
-  "Production workflow must run the targeted recognition-index gate.",
 )
 for (const [source, label] of [
   [publicationAliasRoute, "Publication-alias admin route"],
