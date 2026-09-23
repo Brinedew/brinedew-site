@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { searchProteins } from "./lib/protein-store.js"
+import { fetchProteinByGene, fetchProteinByUniprot, searchProteins } from "./lib/protein-store.js"
 
 function makeDb({ allResults = [] } = {}) {
   const calls = []
@@ -95,4 +95,30 @@ test("protein search fails loud when the search index query errors", async () =>
   }
 
   await assert.rejects(() => searchProteins(db, "TP53", 5), /no such table: protein_search/)
+})
+
+test("protein identity reads distinguish an absent row from an unavailable database", async () => {
+  const absent = {
+    prepare: () => ({ bind: () => ({ first: async () => null }) }),
+  }
+  const unavailable = {
+    prepare: () => ({
+      bind: () => ({
+        first: async () => {
+          throw new Error("D1 temporarily unavailable")
+        },
+      }),
+    }),
+  }
+
+  assert.equal(await fetchProteinByUniprot(absent, "Q99998"), null)
+  assert.equal(await fetchProteinByGene(absent, "NO_SUCH_GENE"), null)
+  await assert.rejects(
+    () => fetchProteinByUniprot(unavailable, "Q99997"),
+    /D1 temporarily unavailable/,
+  )
+  await assert.rejects(
+    () => fetchProteinByGene(unavailable, "UNAVAILABLE_GENE"),
+    /D1 temporarily unavailable/,
+  )
 })
