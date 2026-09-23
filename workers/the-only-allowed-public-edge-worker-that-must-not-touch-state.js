@@ -148,6 +148,18 @@ function applyPublicDocumentHeaders(response, request) {
 }
 
 function canonicalDocumentRedirect(url) {
+  // Iconoplasm's admin lives on its stateful hostname. Apex document reads go
+  // to Pages, so forwarding this old URL there silently returns a 404.
+  if (
+    (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") &&
+    (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/")
+  ) {
+    const target = new URL(`https://${ICONOPLASM_HOST}/admin`)
+    target.search = url.search
+    target.hash = "costs"
+    return Response.redirect(target.toString(), 301)
+  }
+
   // Quartz still emits the app document under /apps/iconoplasm, but readers
   // must use its own hostname: the apex document has the wrong CSP and origin
   // for the app's API and published-card requests.

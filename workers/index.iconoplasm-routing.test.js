@@ -53,6 +53,19 @@ test("public edge serves the Brinedew root from Pages before Iconoplasm assets c
   assert.match(response.headers.get("Content-Security-Policy"), /default-src 'self'/)
 })
 
+test("retired apex Iconoplasm admin URL points to its one live owner", async () => {
+  const stateful = statefulSpy()
+  const response = await worker.fetch(
+    new Request("https://brinedew.bio/admin/iconoplasm"),
+    { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
+    {},
+  )
+
+  assert.equal(response.status, 301)
+  assert.equal(response.headers.get("Location"), "https://iconoplasm.brinedew.bio/admin#costs")
+  assert.equal(stateful.calls.length, 0)
+})
+
 test("public edge fails closed when the canonical Pages deployment is unavailable", async () => {
   globalThis.fetch = async () => {
     throw new Error("upstream unavailable")
