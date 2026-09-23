@@ -1463,35 +1463,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     )
   }
 
-  function addMolstarPreconnectOnce() {
-    if (molstarPreconnectAdded) {
-      return
-    }
-    const link = document.createElement("link")
-    link.rel = "preconnect"
-    link.href = MOLSTAR_PRECONNECT_URL
-    link.crossOrigin = ""
-    document.head.appendChild(link)
-    molstarPreconnectAdded = true
-  }
-
-  function appendMolstarCssOnce() {
-    if (molstarCssLoaded) {
-      return
-    }
-    const link = document.createElement("link")
-    link.rel = "stylesheet"
-    link.href = MOLSTAR_CSS_URL
-    link.onload = () => {
-      molstarCssLoaded = true
-    }
-    link.onerror = () => {
-      console.warn("Geneguessr: failed to load Mol* CSS from jsDelivr")
-    }
-    document.head.appendChild(link)
-    molstarCssLoaded = true
-  }
-
   function loadScriptOnce(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script")
@@ -1504,35 +1475,21 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   async function ensureMolstarAssets() {
-    if (window.GeneguessrMolstar?.ensureMolstarAssets) {
-      return window.GeneguessrMolstar.ensureMolstarAssets()
+    // The HTML normally loads the shared initializer first. A transient failure
+    // of that one static asset may be repaired once through the same owner;
+    // loading the vendor bundle alone cannot provide initializeViewer.
+    if (!window.GeneguessrMolstar?.ensureMolstarAssets) {
+      if (!molstarInitializerPromise) {
+        molstarInitializerPromise = loadScriptOnce(
+          `${STATIC_BASE}molstar-shared.js?recover=${Date.now()}`,
+        )
+      }
+      await molstarInitializerPromise
     }
-    addMolstarPreconnectOnce()
-    appendMolstarCssOnce()
-
-    if (window.PDBeMolstarPlugin) {
-      return
+    if (!window.GeneguessrMolstar?.ensureMolstarAssets) {
+      throw new Error("GeneguessrMolstar initializer unavailable")
     }
-    if (!molstarLoaderPromise) {
-      molstarLoaderPromise = (async () => {
-        try {
-          await loadScriptOnce(MOLSTAR_SCRIPT_URL)
-        } catch (primaryErr) {
-          console.warn(
-            "Geneguessr: primary Mol* CDN load failed, trying fallback version",
-            primaryErr,
-          )
-          await loadScriptOnce(MOLSTAR_FALLBACK_SCRIPT_URL)
-        }
-        if (!window.PDBeMolstarPlugin) {
-          throw new Error("PDBeMolstarPlugin unavailable after loading scripts")
-        }
-      })().catch((err) => {
-        molstarLoaderPromise = null
-        throw err
-      })
-    }
-    return molstarLoaderPromise
+    return window.GeneguessrMolstar.ensureMolstarAssets()
   }
 
   function isDarkMode() {
@@ -1543,27 +1500,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     )
   }
 
-  function toMolstarColor(rgb) {
-    const sanitize = (value) => {
-      if (!rgb || typeof value === "undefined") {
-        return 0
-      }
-      const numeric = Number(value)
-      return Number.isFinite(numeric) ? numeric : 0
-    }
-    const convert = (value) => {
-      const rounded = Math.round(sanitize(value))
-      if (!COLOR_CLAMPING_ENABLED) {
-        return rounded
-      }
-      return Math.max(0, Math.min(255, rounded))
-    }
-    const r = convert(rgb?.r)
-    const g = convert(rgb?.g)
-    const b = convert(rgb?.b)
-    return (r << 16) | (g << 8) | b
-  }
-
   function parseColorString(value, fallback) {
     if (!value) return fallback
     const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i)
@@ -1572,39 +1508,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       r: parseInt(match[1], 10),
       g: parseInt(match[2], 10),
       b: parseInt(match[3], 10),
-    }
-  }
-
-  function getViewerThemeColors(container) {
-    const defaultLightBg = { r: 248, g: 241, b: 231 }
-    const defaultDarkBg = { r: 17, g: 12, b: 10 }
-    const defaultLightOutline = defaultLightBg
-    const defaultDarkOutline = defaultDarkBg
-    if (!container) {
-      return {
-        background: isDarkMode() ? defaultDarkBg : defaultLightBg,
-        outline: isDarkMode() ? defaultDarkOutline : defaultLightOutline,
-      }
-    }
-    try {
-      const style = window.getComputedStyle(container)
-      const bg = parseColorString(style.backgroundColor, null)
-      const outlineCandidate = parseColorString(style.color, null)
-      const outline = isDarkMode()
-        ? outlineCandidate || defaultDarkOutline
-        : outlineCandidate || defaultLightOutline
-      if (bg) {
-        return {
-          background: bg,
-          outline,
-        }
-      }
-    } catch {
-      // ignore and fall through
-    }
-    return {
-      background: isDarkMode() ? defaultDarkBg : defaultLightBg,
-      outline: isDarkMode() ? defaultDarkOutline : defaultLightOutline,
     }
   }
 
@@ -1621,27 +1524,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       g: parseInt(normalized.slice(2, 4), 16),
       b: parseInt(normalized.slice(4, 6), 16),
     }
-  }
-
-  function resolveViewerColors(container) {
-    const defaults = getViewerThemeColors(container)
-    if (!GRAPHICS_SETTINGS || !GRAPHICS_SETTINGS.background) {
-      return defaults
-    }
-    const mode = GRAPHICS_SETTINGS.background.mode || "auto"
-    if (mode === "dark") {
-      const dark = hexToRgb(GRAPHICS_SETTINGS.background.dark)
-      return dark ? { background: dark, outline: defaults.outline } : defaults
-    }
-    if (mode === "light") {
-      const light = hexToRgb(GRAPHICS_SETTINGS.background.light)
-      return light ? { background: light, outline: defaults.outline } : defaults
-    }
-    if (mode === "custom") {
-      const custom = hexToRgb(GRAPHICS_SETTINGS.background.custom)
-      return custom ? { background: custom, outline: defaults.outline } : defaults
-    }
-    return defaults
   }
 
   function getAccentColorRgb() {
@@ -1794,21 +1676,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     setTimeout(() => meter.classList.remove("pg-hints--warn"), 600)
   }
 
-  function safeApplyCanvasProps(viewer, props, label) {
-    if (!viewer?.plugin?.canvas3d) {
-      console.warn(`[GeneGuessr] canvas3d unavailable; cannot apply ${label}`)
-      return false
-    }
-    try {
-      viewer.plugin.canvas3d.setProps(props)
-      console.info(`[GeneGuessr] Applied viewer setting: ${label}`)
-      return true
-    } catch (err) {
-      console.warn(`[GeneGuessr] Failed to apply ${label}`, err)
-      return false
-    }
-  }
-
   // ==========================================
   // 3D CHAIN CALLOUTS
   // ==========================================
@@ -1913,21 +1780,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   let themeSyncInitialized = false
   const activeViewers = new Map() // Track all active viewers by container ID
 
-  function hideMolstarPanels(viewer) {
-    try {
-      viewer.plugin?.layout?.setProps?.({
-        isExpanded: false,
-        showControls: false,
-      })
-    } catch (err) {
-      console.warn("Geneguessr: unable to hide Mol* layout controls", err)
-    }
-  }
-
   // Debug flags for viewer stylization (can be disabled via URL params)
   // Graphics settings loaded from admin panel
   let GRAPHICS_SETTINGS = null
-  const numericOr = (value, fallback) => (typeof value === "number" ? value : fallback)
   let DEBUG_STYLIZATION = {
     hideAxes: true,
     orthographic: false,
@@ -1977,8 +1832,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const initialPracticeRestart =
     initialPracticeMode && (restartParam === "1" || (restartParam || "").toLowerCase() === "true")
   const initialPracticeDate = initialPracticeMode && dateParam ? dateParam : null
-  const COLOR_CLAMPING_ENABLED = !urlParams.has("no_color_clamp")
-
   if (urlParams.has("debug_viewer")) {
     Object.keys(DEBUG_STYLIZATION).forEach((key) => {
       if (urlParams.has(`no_${key}`)) {
@@ -1993,23 +1846,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   }
 
   function applyViewerThemeColors(viewer, container) {
-    if (window.GeneguessrMolstar?.applyViewerThemeColors) {
-      window.GeneguessrMolstar.applyViewerThemeColors(viewer, container)
-      return
-    }
-    const theme = resolveViewerColors(container)
-    safeApplyCanvasProps(
-      viewer,
-      {
-        renderer: {
-          backgroundColor: toMolstarColor(theme.background),
-          ambientColor: toMolstarColor(theme.background),
-          ambientIntensity: 0.55,
-          interiorDarkening: 0,
-        },
-      },
-      "theme background & ambient colors",
-    )
+    window.GeneguessrMolstar?.applyViewerThemeColors?.(viewer, container)
   }
 
   function ensureThemeSync() {
@@ -2544,64 +2381,11 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       activeViewers.set(container.id, viewer)
     }
 
-    if (window.GeneguessrMolstar?.applyViewerStylizationProfile) {
-      await window.GeneguessrMolstar.applyViewerStylizationProfile(viewer, container, {
-        graphicsSettings: GRAPHICS_SETTINGS,
-        debugStylization: DEBUG_STYLIZATION,
-        interactive: false,
-      })
-      return
-    }
-
-    // Fallback: keep the viewer usable even if molstar-shared.js fails to load.
-    hideMolstarPanels(viewer)
-    suppressViewerInteractivity(viewer)
-    applyViewerThemeColors(viewer, container)
-    safeApplyCanvasProps(viewer, { camera: { helper: { axes: { name: "off" } } } }, "axis helper")
-  }
-
-  function suppressViewerInteractivity(viewer) {
-    // Disable all interactivity
-    try {
-      viewer.plugin?.managers?.interactivity?.setProps?.({
-        granularity: "element",
-        maxFps: 0, // Disable hover updates
-      })
-      viewer.plugin?.managers?.interactivity?.lociHighlights?.setProps?.({
-        enabled: false,
-      })
-      viewer.plugin?.managers?.interactivity?.lociSelects?.setProps?.({
-        enabled: false,
-      })
-    } catch (err) {
-      console.warn("Geneguessr: unable to set interactivity props", err)
-    }
-
-    if (!viewer.plugin?.behaviors?.interaction) {
-      return
-    }
-
-    // Subscribe to hover/click events and immediately clear any highlights
-    const hoverSub = viewer.plugin.behaviors.interaction.hover.subscribe(() => {
-      try {
-        viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true)
-      } catch {
-        // ignore
-      }
+    await window.GeneguessrMolstar.applyViewerStylizationProfile(viewer, container, {
+      graphicsSettings: GRAPHICS_SETTINGS,
+      debugStylization: DEBUG_STYLIZATION,
+      interactive: false,
     })
-    const clickSub = viewer.plugin.behaviors.interaction.click.subscribe(() => {
-      try {
-        viewer.plugin?.managers?.interactivity?.lociSelects?.deselectAll?.()
-        viewer.plugin?.managers?.interactivity?.lociHighlights?.clearHighlights?.(true)
-      } catch {
-        // ignore
-      }
-    })
-
-    // Store subscriptions on the viewer instance so they can be cleaned up
-    if (!viewer._interactivityGuards) {
-      viewer._interactivityGuards = { hoverSub, clickSub }
-    }
   }
 
   function stopAutoRotationOnInteraction(viewer, containerId) {
@@ -3035,13 +2819,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const STATIC_BASE = resolveStaticBase()
 
   // Constants
-  // Pinned Mol* version for consistent load times (avoids slow @latest npm lookups)
-  const MOLSTAR_VERSION = "3.8.0"
-  const MOLSTAR_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`
-  const MOLSTAR_FALLBACK_SCRIPT_URL =
-    "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.7.1/build/pdbe-molstar-plugin.js"
-  const MOLSTAR_CSS_URL = `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar.css`
-  const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net"
   const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
   const DEFAULT_HINT_COST = 1
   const HINT_REWARD_ON_INCORRECT = 1
@@ -3056,9 +2833,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   let targetRevealSections = null
   let shareText = ""
   let targetProtein = null
-  let molstarLoaderPromise = null
-  let molstarCssLoaded = false
-  let molstarPreconnectAdded = false
+  let molstarInitializerPromise = null
   let structureViewerLoaded = false
   let interactivityGuards = null
   let gameState = {
