@@ -90,6 +90,7 @@ migrations_dir = "migrations-iconoplasm-authoring"
 binding = "ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB"
 database_name = "iconoplasm-authority-event-archive-20260831"
 database_id = "7c867585-5535-4730-8b20-d6883aefd333"
+migrations_dir = "migrations-iconoplasm-event-archive"
 
 # ARCHITECTURE FENCE [IPD-005]: immutable audit history is copied here before
 # bounded retention deletes it from the operational Iconoplasm database.

@@ -36,6 +36,7 @@ test("a routine release refuses unapplied data or owned topology changes before 
     "migrations/0100_new_field.sql",
     "migrations-iconoplasm/0100_new_field.sql",
     "migrations-iconoplasm-authoring/0100_new_field.sql",
+    "migrations-iconoplasm-event-archive/0100_new_field.sql",
     "workers/benchmark/migrations/0100_new_field.sql",
     "cloudflare/operation-cost-migration-plan.json",
     "cloudflare/deployment-topology.json",
@@ -68,6 +69,7 @@ test("a routing-only Wrangler edit is ordinary deployable code", () => {
 test("a routine release accepts a migration already recorded in its D1 journal", () => {
   const changedPaths = [
     "migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql",
+    "migrations-iconoplasm-event-archive/0001_event_archive.sql",
     "migrations-iconoplasm-authoring/README.md",
   ]
   assert.deepEqual(
@@ -76,7 +78,7 @@ test("a routine release accepts a migration already recorded in its D1 journal",
       headSha: head,
       changedPaths,
       installedIsAncestor: true,
-      appliedMigrations: new Set([changedPaths[0]]),
+      appliedMigrations: new Set(changedPaths.slice(0, 2)),
     }),
     { installed_sha: installed, head_sha: head, changed_paths: changedPaths },
   )
@@ -97,6 +99,7 @@ test("journal check reads only changed migration names from their owning databas
   const changedPaths = [
     "migrations-iconoplasm/0108_compact_discovery_activation_v2.sql",
     "migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql",
+    "migrations-iconoplasm-event-archive/0001_event_archive.sql",
   ]
   const calls = []
   const applied = await readAppliedChangedMigrations({
@@ -108,7 +111,10 @@ binding = "ICONOPLASM_DB"
 database_id = "11111111-1111-1111-1111-111111111111"
 [[d1_databases]]
 binding = "ICONOPLASM_AUTHORING_DB"
-database_id = "22222222-2222-2222-2222-222222222222"`,
+database_id = "22222222-2222-2222-2222-222222222222"
+[[d1_databases]]
+binding = "ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB"
+database_id = "33333333-3333-3333-3333-333333333333"`,
     fetcher: async (url, options) => {
       const body = JSON.parse(options.body)
       calls.push({ url, body })
@@ -122,7 +128,7 @@ database_id = "22222222-2222-2222-2222-222222222222"`,
     },
   })
   assert.deepEqual(applied, new Set(changedPaths))
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 3)
   assert.deepEqual(
     calls.map((call) => call.body),
     [
@@ -133,6 +139,10 @@ database_id = "22222222-2222-2222-2222-222222222222"`,
       {
         sql: "SELECT name FROM d1_migrations WHERE name IN (?)",
         params: ["0018_assignment_manifestation_lookup.sql"],
+      },
+      {
+        sql: "SELECT name FROM d1_migrations WHERE name IN (?)",
+        params: ["0001_event_archive.sql"],
       },
     ],
   )
