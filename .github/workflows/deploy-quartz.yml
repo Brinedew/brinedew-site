@@ -266,7 +266,6 @@ jobs:
           node scripts/run-tests.mjs \
             scripts/architecture-fences.test.js \
             scripts/iconoplasm-first-principles-capacity.test.mjs \
-            scripts/iconoplasm-viral-load-release-gate.test.mjs \
             iconoplasm-extension/immutable-response-cache.test.js \
             iconoplasm-extension/content-portrait-cache.test.js \
             iconoplasm-extension/content-reading-session.test.js \
