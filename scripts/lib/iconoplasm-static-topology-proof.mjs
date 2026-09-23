@@ -13,6 +13,8 @@ const repoRoot = path.resolve(new URL("../..", import.meta.url).pathname.replace
 const ASSET_ROOT = "public-iconoplasm-edge"
 const WRANGLER_CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
 const EXACT_CARD_BLOT_ROUTE = "/blot/TP53.webp"
+const CANONICAL_PORTRAIT_FALLBACK_ROUTE = `/portraits/v1/aa/${"a".repeat(64)}/full.webp`
+const WORKER_OWNED_ROUTES = new Set([EXACT_CARD_BLOT_ROUTE, CANONICAL_PORTRAIT_FALLBACK_ROUTE])
 const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/",
   "/search?q=TP53",
@@ -20,6 +22,7 @@ const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/gene/TP53",
   "/portrait/TP53.webp",
   EXACT_CARD_BLOT_ROUTE,
+  CANONICAL_PORTRAIT_FALLBACK_ROUTE,
   "/sitemap.xml",
   "/robots.txt",
   "/llms.txt",
@@ -89,7 +92,7 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
       const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
         redirect: "manual",
       })
-      if (pathname === EXACT_CARD_BLOT_ROUTE) {
+      if (WORKER_OWNED_ROUTES.has(pathname)) {
         if (response.status === 599) statefulWorkerRouteEvents += 1
       } else if (response.status === 599) {
         unexpectedStatefulWorkerRouteEvents += 1
@@ -110,6 +113,8 @@ export async function proveAnonymousRouteTopology({ expectedCommit } = {}) {
     routeClasses: [...ANONYMOUS_ROUTE_CLASSES],
     statefulWorkerRouteEvents,
     unexpectedStatefulWorkerRouteEvents,
-    verified: statefulWorkerRouteEvents === 1 && unexpectedStatefulWorkerRouteEvents === 0,
+    verified:
+      statefulWorkerRouteEvents === WORKER_OWNED_ROUTES.size &&
+      unexpectedStatefulWorkerRouteEvents === 0,
   }
 }

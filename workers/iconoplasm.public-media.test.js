@@ -2327,6 +2327,24 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
   assert.equal(backlog.items[0].portrait_asset_sha256, deltaPortrait)
   assert.equal(backlog.items[0].blot_fingerprint, iconoplasmGeneBlotFingerprint(deltaCard.payload))
 
+  await kv.put(
+    "iconoplasm:card-catalog-publish-watermark:v1",
+    JSON.stringify({ watermark_event_id: 10, watermark_event_at: "2026-09-23 18:00:00" }),
+  )
+  const automaticBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
+    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
+      method: "POST",
+    }),
+    payload: { scope: "candidate", limit: 25 },
+  })
+  assert.equal(
+    automaticBacklog.items.length,
+    1,
+    JSON.stringify({ scanned: automaticBacklog.scanned, symbols: automaticBacklog.symbols }),
+  )
+  assert.equal(automaticBacklog.items[0].scope, "published")
+  assert.equal(automaticBacklog.items[0].portrait_asset_sha256, deltaPortrait)
+
   const fingerprint = iconoplasmGeneBlotFingerprint(deltaCard.payload)
   env.gatewayDb.blots.set("A1BG", {
     gene_blot_fingerprint: fingerprint,
@@ -2343,4 +2361,11 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
     payload: { scope: "published", symbols: ["A1BG"], limit: 1 },
   })
   assert.deepEqual(readyBacklog.items, [])
+  const readyAutomaticBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
+    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
+      method: "POST",
+    }),
+    payload: { scope: "candidate", limit: 25 },
+  })
+  assert.deepEqual(readyAutomaticBacklog.items, [])
 })

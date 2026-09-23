@@ -277,8 +277,13 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.doesNotMatch(
     internalWrangler.match(/\[assets\][\s\S]*?(?=\n\[observability\])/u)?.[0] || "",
-    /"\/(?:gene|genes|portraits|published-cards|sitemap|robots\.txt|llms\.txt)/,
-    "anonymous reader routes must never re-enter the Worker-first list",
+    /"\/(?:gene|genes|published-cards|sitemap|robots\.txt|llms\.txt)/,
+    "static reader routes must never re-enter the Worker-first list",
+  )
+  assert.match(
+    internalWrangler,
+    /run_worker_first = \[[\s\S]*"\/portraits\/\*"[\s\S]*\]/,
+    "canonical portrait URLs must reach their existing Worker handler",
   )
   assert.match(
     internalWrangler,
