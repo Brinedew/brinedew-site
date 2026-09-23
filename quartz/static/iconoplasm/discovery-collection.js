@@ -2,7 +2,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_HOME_ORDERS,
   normalizeIconoplasmHomeOrder,
-} from "./home-orders.js"
+} from "./home-orders.js?v=97b23d988663c9b7"
 
 var HOME_COLLECTION_DEFAULT_ORDER = ICONOPLASM_DISCOVERY_DEFAULT_ORDER
 
