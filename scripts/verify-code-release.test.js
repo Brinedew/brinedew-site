@@ -31,7 +31,7 @@ test("a routine release includes every change since the installed Worker", () =>
   )
 })
 
-test("a routine release refuses unapplied data, binding, or route changes before upload", () => {
+test("a routine release refuses unapplied data or owned topology changes before upload", () => {
   for (const path of [
     "migrations/0100_new_field.sql",
     "migrations-iconoplasm/0100_new_field.sql",
@@ -39,7 +39,6 @@ test("a routine release refuses unapplied data, binding, or route changes before
     "workers/benchmark/migrations/0100_new_field.sql",
     "cloudflare/operation-cost-migration-plan.json",
     "cloudflare/deployment-topology.json",
-    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
   ]) {
     assert.throws(
       () =>
@@ -53,6 +52,17 @@ test("a routine release refuses unapplied data, binding, or route changes before
       path,
     )
   }
+})
+
+test("a routing-only Wrangler edit is ordinary deployable code", () => {
+  const changedPaths = [
+    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+  ]
+  assert.deepEqual(
+    verifyCodeReleaseScope({ state, headSha: head, changedPaths, installedIsAncestor: true }),
+    { installed_sha: installed, head_sha: head, changed_paths: changedPaths },
+  )
 })
 
 test("a routine release accepts a migration already recorded in its D1 journal", () => {
