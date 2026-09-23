@@ -95,6 +95,7 @@ import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-deliv
 import {
   parsePublishedViewId,
   readAdvertisedGeneDeltaView,
+  readGeneDeltaChain,
   readPublishedViewEntry,
   resetPublishedViewReaderCachesForTest,
 } from "./lib/iconoplasm-card-reader-view.js"
@@ -30536,6 +30537,69 @@ async function priorityGeneBlotSymbols(env) {
   }
 }
 
+async function publishedDeltaGeneBlotPriorityPage(env, { after = "", limit = 25 } = {}) {
+  const advertised = await advertisedGeneDeltaViewForDetail(env)
+  const current = await currentMobileCardSnapshotVersion(env)
+  if (!advertised || advertised.base !== String(current?.current || "")) {
+    return { symbols: new Set(), scanned: 0, items: [], hasMore: false, nextAfter: null }
+  }
+  const chainHash = parsePublishedViewId(advertised.view).chainHash
+  const chain = await readGeneDeltaChain({
+    readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
+    chainHash,
+    base: advertised.base,
+  })
+  if (!chain.ok) {
+    throw geneBlotServiceError(
+      503,
+      "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+      "The advertised published gene view is unavailable.",
+    )
+  }
+  const symbols = [...chain.entries]
+    .filter(([, entry]) => entry.status === "committed")
+    .map(([symbol]) => symbol)
+    .sort()
+  // The published chain is the authority after a vote, including when the
+  // publication watermark has advanced past that vote while Drain was asleep.
+  // One bounded page keeps Bunny reads within a free-tier Worker request.
+  const pageLimit = Math.max(1, Math.min(25, limit))
+  const remaining = symbols.filter((symbol) => symbol > after)
+  const page = remaining.slice(0, pageLimit)
+  const cards = new Map()
+  for (const symbol of page) {
+    const entry = chain.entries.get(symbol)
+    const card = await readPublishedBunnyCardObject(env, entry.card.key, (value) =>
+      Boolean(value?.symbol === symbol && value?.payload),
+    )
+    if (!card?.payload) {
+      throw geneBlotServiceError(
+        503,
+        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+        "An advertised gene card is unavailable.",
+      )
+    }
+    cards.set(symbol, card.payload)
+  }
+  const ready = await exactReadyGeneBlotsForPublishedCards(env, cards)
+  const items = page
+    .map((symbol) =>
+      geneBlotBacklogItem(
+        projectCardBlot(cards.get(symbol), ready.get(symbol) || cards.get(symbol)?.blot),
+        "published",
+      ),
+    )
+    .filter(Boolean)
+  const hasMore = remaining.length > page.length
+  return {
+    symbols: new Set(symbols),
+    scanned: page.length,
+    items,
+    hasMore,
+    nextAfter: hasMore ? page.at(-1) : null,
+  }
+}
+
 function geneBlotBacklogItem(card, scope) {
   const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
@@ -30670,8 +30734,18 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
       100,
     )
     const priority = requestedSymbols.length ? null : await priorityGeneBlotSymbols(env)
-    const symbols = requestedSymbols.length ? requestedSymbols : priority.symbols
-    if (!symbols.length) {
+    const delta = requestedSymbols.length
+      ? { symbols: new Set(), scanned: 0, items: [], hasMore: false, nextAfter: null }
+      : await publishedDeltaGeneBlotPriorityPage(env, {
+          after: normalizeSymbol(payload?.after || "") || "",
+          limit,
+        })
+    // A symbol named by the advertised view belongs to that published card;
+    // the legacy D1 candidate row can still describe its previous portrait.
+    const symbols = requestedSymbols.length
+      ? requestedSymbols
+      : priority.symbols.filter((symbol) => !delta.symbols.has(symbol))
+    if (!symbols.length && !delta.scanned) {
       return {
         ok: true,
         scope,
@@ -30687,25 +30761,31 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
         next_after: null,
       }
     }
-    const records = await cardCatalogRecordsForArtifact(env, {
-      requestUrl: request.url,
-      symbols,
-      snapshotVersion: "candidate",
-    })
-    const pendingItems = records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean)
+    const records = symbols.length
+      ? await cardCatalogRecordsForArtifact(env, {
+          requestUrl: request.url,
+          symbols,
+          snapshotVersion: "candidate",
+        })
+      : []
+    const candidateItems = records
+      .map((record) => geneBlotBacklogItem(record, scope))
+      .filter(Boolean)
+    const pendingItems = [...delta.items, ...candidateItems]
     return {
       ok: true,
       scope,
       automatic: requestedSymbols.length === 0,
       items: pendingItems.slice(0, limit),
-      symbols,
-      scanned: records.length,
+      symbols: [...new Set([...symbols, ...delta.items.map((item) => item.symbol)])],
+      candidate_symbols: symbols,
+      scanned: records.length + delta.scanned,
       pending_item_count: pendingItems.length,
-      render_queue_complete: pendingItems.length <= limit,
+      render_queue_complete: pendingItems.length <= limit && !delta.hasMore,
       through_event_id: priority?.through_event_id || null,
       through_event_at: priority?.through_event_at || null,
-      done: pendingItems.length <= limit,
-      next_after: null,
+      done: pendingItems.length <= limit && !delta.hasMore,
+      next_after: delta.nextAfter,
     }
   }
   if (scope !== "published") {
