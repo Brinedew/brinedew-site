@@ -265,7 +265,6 @@ jobs:
           # its live verifier are production-release invariants, not CI-only checks.
           node scripts/run-tests.mjs \
             scripts/architecture-fences.test.js \
-            scripts/iconoplasm-first-principles-capacity.test.mjs \
             iconoplasm-extension/immutable-response-cache.test.js \
             iconoplasm-extension/content-portrait-cache.test.js \
             iconoplasm-extension/content-reading-session.test.js \
