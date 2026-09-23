@@ -4,14 +4,14 @@ import {
   readIconoplasmSettings,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=20260520stylecookie"
+} from "../site-preferences.js?v=2624be2e2b452a30"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=99d8a08f87cc8a9d"
+} from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
 ;(function () {
   "use strict"
 
