@@ -66,13 +66,13 @@ test("retired apex Iconoplasm admin URL points to its one live owner", async () 
   assert.equal(stateful.calls.length, 0)
 })
 
-test("apex GeneGuessr admin URLs point to the owned game host", async () => {
+test("apex GeneGuessr admin URLs point to the one working operator page", async () => {
   const stateful = statefulSpy()
   const env = { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding }
   for (const path of ["/admin", "/admin-v2"]) {
     const response = await worker.fetch(new Request(`https://brinedew.bio${path}`), env, {})
     assert.equal(response.status, 301)
-    assert.equal(response.headers.get("Location"), `https://geneguessr.brinedew.bio${path}`)
+    assert.equal(response.headers.get("Location"), "https://geneguessr.brinedew.bio/admin")
   }
   assert.equal(stateful.calls.length, 0)
 })
@@ -135,23 +135,52 @@ test("public edge serves allowlisted GeneGuessr Molstar assets without entering 
   }
   const stateful = statefulSpy()
 
-  const response = await worker.fetch(
-    new Request(
-      "https://geneguessr.brinedew.bio/static/vendor/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
-    ),
-    { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
-    {},
-  )
+  for (const versionSeparator of ["@", "%40"]) {
+    const response = await worker.fetch(
+      new Request(
+        `https://geneguessr.brinedew.bio/static/vendor/pdbe-molstar${versionSeparator}3.8.0/build/pdbe-molstar.css`,
+      ),
+      { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
+      {},
+    )
+    assert.match(response.headers.get("Content-Type"), /^text\/css/)
+    assert.equal(await response.text(), ".msp-plugin{display:block}")
+  }
 
   assert.deepEqual(upstreamCalls, [
     {
       url: "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
       method: "GET",
     },
+    {
+      url: "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
+      method: "GET",
+    },
   ])
   assert.equal(stateful.calls.length, 0)
-  assert.match(response.headers.get("Content-Type"), /^text\/css/)
-  assert.equal(await response.text(), ".msp-plugin{display:block}")
+})
+
+test("public edge serves the one Pages-owned Molstar initializer", async () => {
+  const upstreamCalls = []
+  globalThis.fetch = async (url) => {
+    upstreamCalls.push(String(url))
+    return new Response("window.GeneguessrMolstar = {}", {
+      headers: { "Content-Type": "application/javascript" },
+    })
+  }
+  const stateful = statefulSpy()
+  const response = await worker.fetch(
+    new Request("https://geneguessr.brinedew.bio/static/geneguessr/molstar-shared.js"),
+    { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding },
+    {},
+  )
+
+  assert.deepEqual(upstreamCalls, [
+    "https://brinedew-bio.pages.dev/static/geneguessr/molstar-shared.js",
+  ])
+  assert.equal(stateful.calls.length, 0)
+  assert.match(response.headers.get("Content-Type"), /application\/javascript/)
+  assert.equal(await response.text(), "window.GeneguessrMolstar = {}")
 })
 
 test("public edge preserves the main site's missing privacy document instead of leaking Iconoplasm", async () => {

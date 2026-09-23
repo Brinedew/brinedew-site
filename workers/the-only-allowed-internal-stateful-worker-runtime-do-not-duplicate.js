@@ -80,10 +80,6 @@ const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 // One owner only. The 00:03 trigger belongs to GeneGuessr recap delivery and
 // must not silently repeat Iconoplasm's full maintenance eight minutes later.
-const MOLSTAR_VENDOR_ALLOWED_PREFIXES = [
-  "/static/vendor/pdbe-molstar@3.8.0/",
-  "/static/vendor/pdbe-molstar@3.7.1/",
-]
 const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
 const KATEX_VENDOR_VERSION = "0.16.21"
 const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
@@ -1398,7 +1394,6 @@ import {
 } from "./admin.js"
 // Import admin HTML
 import { ADMIN_HTML } from "./admin-html.js"
-import { ADMIN_V2_HTML } from "./admin-v2-html.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import {
@@ -1437,7 +1432,7 @@ import {
   BrinedewAccountIdentityError,
   hydrateBrinedewSessionAccountIdentity,
 } from "./lib/brinedew-account-identity.js"
-import { getMolstarSharedSource } from "./lib/molstar-shared-bundle.js"
+import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
 import {
   selectAvailableDailyTarget,
@@ -1474,7 +1469,7 @@ function shouldAllowUnsafeEval(url) {
   }
   // The general admin panels load Mol* for protein preview. Iconoplasm's admin
   // has no evaluator or WASM runtime, so never inherit that host-wide exemption.
-  if (host !== ICONOPLASM_HOST && (path === "/admin" || path === "/admin-v2")) {
+  if (host !== ICONOPLASM_HOST && path === "/admin") {
     return true
   }
   return (
@@ -1899,16 +1894,33 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       return Response.redirect(`https://${ICONOPLASM_HOST}/`, 301)
     }
 
-    // Serve the shared Mol* initializer from the Worker so staging (workers.dev) can load it.
-    // Production can still proxy /static/* from the Quartz site, but this keeps staging self-contained.
+    // Staging workers.dev and production read the same Pages-owned initializer.
+    // The old embedded base64 copy drifted from this source and was a second owner.
     if (
       url.pathname === "/static/geneguessr/molstar-shared.js" &&
       (request.method === "GET" || request.method === "HEAD")
     ) {
-      return new Response(request.method === "HEAD" ? null : getMolstarSharedSource(), {
+      let upstream
+      try {
+        upstream = await fetch(buildStaticSiteUrl(url).toString(), {
+          method: request.method,
+          cf: { cacheEverything: false, cacheTtl: 0 },
+        })
+      } catch {
+        // A missing source must not turn into a successful HTML app shell.
+      }
+      if (
+        !upstream?.ok ||
+        !String(upstream.headers.get("Content-Type") || "").includes("javascript")
+      ) {
+        return new Response("Molstar initializer temporarily unavailable", {
+          status: 503,
+          headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+        })
+      }
+      return new Response(request.method === "HEAD" ? null : upstream.body, {
         headers: {
           "Content-Type": "application/javascript; charset=utf-8",
-          // Keep this easy to update after deploys; avoid sticky CDN/browser caching of the initializer.
           "Cache-Control": "no-cache, max-age=0",
         },
       })
@@ -1917,11 +1929,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // Proxy Mol* assets through the Worker so worker-served pages do not depend on the client being
     // able to reach jsDelivr directly (helps CI screenshots and restrictive networks).
     if (request.method === "GET" || request.method === "HEAD") {
-      const allowedPrefix = MOLSTAR_VENDOR_ALLOWED_PREFIXES.find((prefix) =>
-        url.pathname.startsWith(prefix),
-      )
-      if (allowedPrefix) {
-        const upstream = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
+      const upstream = geneguessrMolstarVendorUpstreamUrl(url.pathname)
+      if (upstream) {
         const upstreamResp = await fetch(upstream, {
           cf: {
             cacheEverything: true,
@@ -2538,12 +2547,13 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     }
 
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
-    // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
+    // /admin is served here; old /admin-v2 links redirect to that same page.
     if (
       url.hostname === GENEGUESSR_HOST &&
       !url.pathname.startsWith("/api/") &&
       url.pathname !== "/admin" &&
-      url.pathname !== "/admin-v2"
+      url.pathname !== "/admin-v2" &&
+      url.pathname !== "/admin-v2/"
     ) {
       // Avoid duplicate content at multiple paths on the subdomain.
       // Keep the canonical entrypoint at `/` and normalize a few common variants.
@@ -2824,16 +2834,14 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
-    // Admin panel v2 - auto-generated controls from Mol* runtime
-    if (url.pathname === "/admin-v2" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return new Response("Unauthorized", { status: 403 })
-      }
-      return new Response(ADMIN_V2_HTML, {
-        headers: {
-          "Content-Type": "text/html;charset=UTF-8",
-        },
-      })
+    // Retired graphics experiment: the live operator page owns preview and publication.
+    if (
+      (url.pathname === "/admin-v2" || url.pathname === "/admin-v2/") &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      const target = new URL("/admin", url)
+      target.search = url.search
+      return Response.redirect(target.toString(), 301)
     }
 
     // Admin endpoints (protected by Cloudflare Access)
@@ -2946,29 +2954,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
       })
-    }
-
-    // Graphics profiles for v2 admin panel - full Mol* props snapshots
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      const stored = await env.KV.get("graphics_profiles_v2")
-      const profiles = stored ? JSON.parse(stored) : {}
-      return Response.json({ profiles }, { headers: corsHeaders })
-    }
-
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "POST") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      try {
-        const body = await request.json()
-        await env.KV.put("graphics_profiles_v2", JSON.stringify(body.profiles || {}))
-        return Response.json({ success: true }, { headers: corsHeaders })
-      } catch (err) {
-        return Response.json({ error: err.message }, { status: 400, headers: corsHeaders })
-      }
     }
 
     if (url.pathname === "/api/admin/similarity" && request.method === "GET") {

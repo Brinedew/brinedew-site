@@ -212,10 +212,7 @@ test("request history renders a bounded, keyboard-operable page", () => {
 })
 
 test("iconoplasm admin never inherits the Molstar unsafe-eval exemption", () => {
-  assert.match(
-    STATEFUL_RUNTIME_SOURCE,
-    /host !== ICONOPLASM_HOST && \(path === "\/admin" \|\| path === "\/admin-v2"\)/,
-  )
+  assert.match(STATEFUL_RUNTIME_SOURCE, /host !== ICONOPLASM_HOST && path === "\/admin"/)
   assert.match(STATEFUL_RUNTIME_SOURCE, /allowInlineScripts = !isIconoplasmAdminSurface\(url\)/)
   assert.match(STATEFUL_RUNTIME_SOURCE, /allowInlineStyles = !isIconoplasmAdminSurface\(url\)/)
   assert.match(

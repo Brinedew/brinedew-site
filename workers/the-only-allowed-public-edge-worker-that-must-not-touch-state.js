@@ -1,13 +1,11 @@
+import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
+
 const THE_ONLY_ALLOWED_STATEFUL_WORKER_BINDING_DO_NOT_DUPLICATE =
   "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
 const STATIC_SITE_ORIGIN_PROD = "https://brinedew-bio.pages.dev"
 const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
-const GENEGUESSR_MOLSTAR_VENDOR_PREFIXES = [
-  "/static/vendor/pdbe-molstar@3.8.0/",
-  "/static/vendor/pdbe-molstar@3.7.1/",
-]
 const MAIN_SITE_HOSTS = new Set(["brinedew.bio", "www.brinedew.bio", "staging.brinedew.bio"])
 const ROOT_DOCUMENT_PATHS = new Set(["/", "/index", "/index/", "/index.html"])
 const PRIVACY_DOCUMENT_PATHS = new Set(["/privacy", "/privacy/", "/privacy.html"])
@@ -159,7 +157,9 @@ function canonicalDocumentRedirect(url) {
           ? GENEGUESSR_HOST
           : null
     if (owner) {
-      const target = new URL(`https://${owner}${path === "/admin/iconoplasm" ? "/admin" : path}`)
+      const target = new URL(
+        `https://${owner}${path === "/admin/iconoplasm" || path === "/admin-v2" ? "/admin" : path}`,
+      )
       target.search = url.search
       if (path === "/admin/iconoplasm") target.hash = "costs"
       return Response.redirect(target.toString(), 301)
@@ -226,6 +226,7 @@ function publicStaticDocumentPath(url) {
   if (url.hostname === GENEGUESSR_HOST) {
     if (ROOT_DOCUMENT_PATHS.has(url.pathname)) return "/apps/geneguessr/index.html"
     if (PRIVACY_DOCUMENT_PATHS.has(url.pathname)) return "/apps/geneguessr/privacy.html"
+    if (url.pathname === "/static/geneguessr/molstar-shared.js") return url.pathname
     return ""
   }
   if (!MAIN_SITE_HOSTS.has(url.hostname)) return ""
@@ -274,6 +275,15 @@ async function maybeServeHostnameSensitiveStaticDocument(request) {
     )
   }
   const contentType = String(upstream.headers.get("content-type") || "").toLowerCase()
+  if (
+    targetPath === "/static/geneguessr/molstar-shared.js" &&
+    (!upstream.ok || !contentType.includes("javascript"))
+  ) {
+    return new Response("Molstar initializer temporarily unavailable", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    })
+  }
   if (!contentType.includes("text/html")) {
     return applyPublicDocumentHeaders(upstream, request)
   }
@@ -296,12 +306,9 @@ async function maybeServeGeneguessrMolstarVendorAsset(request) {
   if (request.method !== "GET" && request.method !== "HEAD") return null
   const url = new URL(request.url)
   if (url.hostname !== GENEGUESSR_HOST) return null
-  const allowedPrefix = GENEGUESSR_MOLSTAR_VENDOR_PREFIXES.find((prefix) =>
-    url.pathname.startsWith(prefix),
-  )
-  if (!allowedPrefix) return null
+  const upstreamUrl = geneguessrMolstarVendorUpstreamUrl(url.pathname)
+  if (!upstreamUrl) return null
 
-  const upstreamUrl = `https://cdn.jsdelivr.net/npm${url.pathname.replace("/static/vendor", "")}`
   const upstream = await fetch(upstreamUrl, { method: request.method })
   const headers = new Headers(upstream.headers)
   headers.set("Cache-Control", "public, max-age=86400")
