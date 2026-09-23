@@ -147,7 +147,7 @@ export async function handleMigrateStats(request, env) {
   // Check if already migrated
   const existing = await env.DB.prepare(
     `
-    SELECT migrated_at FROM stats WHERE user_id = ?
+    SELECT migrated_at, total_played FROM stats WHERE user_id = ?
   `,
   )
     .bind(userId)
@@ -161,6 +161,12 @@ export async function handleMigrateStats(request, env) {
         migrated_at: existing.migrated_at,
       },
       { status: 400 },
+    )
+  }
+  if (Number(existing?.total_played || 0) > 0) {
+    return Response.json(
+      { error: "This account already has saved games; importing local totals would replace them." },
+      { status: 409 },
     )
   }
 
@@ -186,7 +192,7 @@ export async function handleMigrateStats(request, env) {
   const today = new Date().toISOString().split("T")[0]
 
   // Insert or update stats with migration timestamp
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     `
     INSERT INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date, migrated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -196,10 +202,18 @@ export async function handleMigrateStats(request, env) {
       current_streak = excluded.current_streak,
       best_streak = excluded.best_streak,
       migrated_at = excluded.migrated_at
+    WHERE stats.total_played = 0 AND stats.migrated_at IS NULL
   `,
   )
     .bind(userId, played, won, currentStreak, maxStreak, today, now)
     .run()
+
+  if (Number(result?.meta?.changes) !== 1) {
+    return Response.json(
+      { error: "This account already has saved games; local totals were kept on this device." },
+      { status: 409 },
+    )
+  }
 
   return Response.json({
     success: true,
