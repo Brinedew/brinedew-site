@@ -130,8 +130,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 - Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 `
 
-const redirectsFile = `/blot/* https://iconoplasmportraits.b-cdn.net/blot/:splat 302
-/portraits/* /static/iconoplasm/blot-placeholder.svg 200
+const redirectsFile = `/portraits/* /static/iconoplasm/blot-placeholder.svg 200
 /genes / 301
 /genes/* / 301
 `
