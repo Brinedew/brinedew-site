@@ -33449,7 +33449,6 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
     snapshot_version: snapshotVersion,
     data_source: "published_card_catalog",
     card,
-    payload: card.payload || null,
     missing: [],
     diagnostics: {
       artifact_version: artifact.artifact_version,
@@ -33598,7 +33597,7 @@ async function iconoplasmPrintCopyCardFromMobileSymbol(request, env, ctx, symbol
   }
   const mobilePayload = await cardResponse.json()
   const card = mobilePayload?.card || null
-  const cardPayload = card?.payload || mobilePayload?.payload || null
+  const cardPayload = card?.payload || null
   const resolvedSymbol = normalizeSymbol(card?.symbol || cardPayload?.symbol || symbol)
   if (!card || !cardPayload || !resolvedSymbol) {
     return {
