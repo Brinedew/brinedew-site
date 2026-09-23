@@ -5892,6 +5892,53 @@ async function getDailyTargetProtein(env, options = {}) {
       }
     }
 
+    // Staging uses the same recorded production answer when it has no local
+    // pick. Check that server-side record before considering a fresh full-pool
+    // selection; otherwise a staging cache miss burns the shared D1 allowance.
+    if (!protein && env.PROD_KV?.get) {
+      try {
+        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
+        if (prodActualRaw) {
+          const prodActual = JSON.parse(prodActualRaw)
+          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
+          if (prodUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
+            if (prodProtein) {
+              protein = prodProtein
+              if (audit) {
+                audit.source = "prod_actual"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
+            }
+          }
+        }
+
+        // The verified production bootstrap can name the pick before its
+        // puzzle_actual record appears.
+        if (!protein) {
+          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
+          const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
+            .toString()
+            .trim()
+            .toUpperCase()
+          if (prodDailyUniprot) {
+            const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
+            if (prodProtein) {
+              protein = prodProtein
+              if (audit) {
+                audit.source = "prod_daily_cache"
+                audit.override_id = null
+                audit.skipped_alpha_fold = 0
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("GeneGuessr: failed to mirror prod daily pick", err?.message || err)
+      }
+    }
+
     // A future availability replacement is an automatic operational pin, not
     // a manual override. It keeps a dead curated structure out of the mystery
     // game without switching that protein to AlphaFold. The pin is valid only
@@ -5926,52 +5973,6 @@ async function getDailyTargetProtein(env, options = {}) {
         }
       } catch (err) {
         console.warn("GeneGuessr: failed to load availability replacement", err?.message || err)
-      }
-    }
-
-    // If prod has already served today's puzzle (no override needed), mirror that pick in staging.
-    // This keeps `?gg_api=...staging...` usable for comparing visuals without changing live behavior.
-    if (!protein && env.PROD_KV?.get) {
-      try {
-        const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)
-        if (prodActualRaw) {
-          const prodActual = JSON.parse(prodActualRaw)
-          const prodUniprot = (prodActual?.uniprot_id || "").toString().trim().toUpperCase()
-          if (prodUniprot) {
-            const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
-            if (prodProtein) {
-              protein = prodProtein
-              if (audit) {
-                audit.source = "prod_actual"
-                audit.override_id = null
-                audit.skipped_alpha_fold = 0
-              }
-            }
-          }
-        }
-
-        // Fallback: mirror prod's daily bootstrap cache if it exists (often available even when
-        // puzzle_actual hasn't been recorded yet).
-        if (!protein) {
-          const prodDailyCache = await getProdDailyBootstrapCache(env, today)
-          const prodDailyUniprot = (prodDailyCache?.targetProtein?.uniprot || "")
-            .toString()
-            .trim()
-            .toUpperCase()
-          if (prodDailyUniprot) {
-            const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
-            if (prodProtein) {
-              protein = prodProtein
-              if (audit) {
-                audit.source = "prod_daily_cache"
-                audit.override_id = null
-                audit.skipped_alpha_fold = 0
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("GeneGuessr: failed to mirror prod daily pick", err?.message || err)
       }
     }
 
