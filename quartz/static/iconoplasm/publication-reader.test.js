@@ -160,10 +160,7 @@ test("gene documents are one static SPA shell and never enter Worker execution",
     false,
   )
   assert.equal(config.assets.run_worker_first.includes("/robots.txt"), false)
-  assert.equal(
-    config.assets.run_worker_first.some((pattern) => pattern.startsWith("/portraits")),
-    false,
-  )
+  assert.equal(config.assets.run_worker_first.includes("/portraits/*"), true)
   assert.equal(
     config.assets.run_worker_first.some((pattern) =>
       pattern.startsWith("/published-cards/v2/immutable"),
@@ -203,7 +200,7 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
   assert.doesNotMatch(sitemap, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/genes/)
   assert.match(llms, /# Iconoplasm/)
   assert.doesNotMatch(redirects, /^\/blot\//m)
-  assert.match(redirects, /\/portraits\/\* \/static\/iconoplasm\/blot-placeholder\.svg 200/)
+  assert.doesNotMatch(redirects, /^\/portraits\//m)
   assert.match(redirects, /\/genes \/ 301/)
   assert.match(redirects, /\/genes\/\* \/ 301/)
   assert.doesNotMatch(sitemap, /<main>Iconoplasm<\/main>/)
