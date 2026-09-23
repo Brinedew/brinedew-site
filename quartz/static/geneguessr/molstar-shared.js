@@ -4,7 +4,7 @@
   // Canonical Mol* configuration and stylization shared across:
   // - Live game (quartz/static/geneguessr/app.js)
   // - Discord render page (workers/discord.js)
-  // - Admin panels (workers/admin-html.js, workers/admin-v2-html.js)
+  // - The only GeneGuessr admin page (workers/admin-html.js)
 
   // PDBeMolstarPlugin is provided by the `pdbe-molstar` package.
   // Note: `pdbe-molstar` versions are NOT the same as upstream `molstar` versions.
