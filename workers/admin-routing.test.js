@@ -26,6 +26,62 @@ test("GeneGuessr admin route stays on its worker instead of the static-site prox
   assert.match(await response.text(), /Unauthorized/)
 })
 
+test("worker-hosted Molstar assets survive an encoded version separator", async () => {
+  const originalFetch = globalThis.fetch
+  const upstreamCalls = []
+  globalThis.fetch = async (url) => {
+    upstreamCalls.push(String(url))
+    return new Response(".msp-plugin{display:block}", {
+      headers: { "Content-Type": "text/css; charset=utf-8" },
+    })
+  }
+
+  try {
+    const response = await worker.fetch(
+      new Request(
+        "https://geneguessr.brinedew.bio/static/vendor/pdbe-molstar%403.8.0/build/pdbe-molstar.css",
+      ),
+      {},
+      { waitUntil() {} },
+    )
+    assert.deepEqual(upstreamCalls, [
+      "https://cdn.jsdelivr.net/npm/pdbe-molstar@3.8.0/build/pdbe-molstar.css",
+    ])
+    assert.match(response.headers.get("Content-Type"), /^text\/css/)
+    assert.equal(await response.text(), ".msp-plugin{display:block}")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("worker-hosted Molstar initializer comes from the staging Pages source", async () => {
+  const originalFetch = globalThis.fetch
+  const upstreamCalls = []
+  globalThis.fetch = async (url) => {
+    upstreamCalls.push(String(url))
+    return new Response("window.GeneguessrMolstar = {}", {
+      headers: { "Content-Type": "application/javascript" },
+    })
+  }
+
+  try {
+    const response = await worker.fetch(
+      new Request(
+        "https://geneguessr-api-staging.brinedew.workers.dev/static/geneguessr/molstar-shared.js",
+      ),
+      {},
+      { waitUntil() {} },
+    )
+    assert.deepEqual(upstreamCalls, [
+      "https://brinedew-bio-staging.pages.dev/static/geneguessr/molstar-shared.js",
+    ])
+    assert.match(response.headers.get("Content-Type"), /application\/javascript/)
+    assert.equal(await response.text(), "window.GeneguessrMolstar = {}")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("posted recap repair is reachable only through the admin gate", async () => {
   const response = await worker.fetch(
     new Request("https://brinedew.bio/api/admin/repair-posted-recap", {
