@@ -4,38 +4,31 @@ This is the cheat sheet for answering Iconoplasm data questions from the website
 
 If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This file is for live-data operations, not for explaining the product split from scratch.
 
-## Current cutover boundary: 17 September 2026
+## Live operation boundary
 
-Read `docs/D1_READ_EXHAUSTION_PREVENTION.md` and Linear B-742/B-749 before
-recovery.
-During the current production D1 hold, use source inspection and isolated tests.
-Do not run production sync, publication retries, queue releases or diagnostic D1
-queries. Reconcile the installed revision and current incident status before any
-later live operation. A branch passing tests does not activate its behavior.
+Read the [current capacity and background-work runbook](ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
+and [D1 exhaustion guide](D1_READ_EXHAUSTION_PREVENTION.md) before a live
+capacity-consuming operation. The September 17 D1 hold and B-742 recovery
+countdown are historical evidence, not current instructions. Check the installed
+Worker mode, fresh account-wide provider meter and the operation's own durable
+state before acting. Source tests alone do not prove activation.
 
-The intended V2 workflow preserves one independently frozen session/scope and
-logical operation identity through save, authority acceptance, publication and
-fresh-reader verification. Missing V2 state must recover through its bounded
-handover/snapshot protocol or fail closed. Global `run-sync`, a catalog rebuild,
-or waiting for every unrelated finalization job is not an ordinary repair path.
-
-Current source still has separate authority mechanisms. The vote coordinator
-uses a per-gene `authority_epoch=v2`. Manifestation cutover uses singleton
-primary/authoring authority rows and verifies its entire planned set before
-activation. B-726 owns reconciling these mechanisms; the vote epoch alone does
-not prove complete authoring, caretaker or pending-obligation migration.
+A saved output, accepted selection, publication and fresh reader must retain
+the same logical operation identity and authority. Missing state requires its
+bounded handover or a visible refusal. Global `run-sync`, a catalog rebuild or
+an unrelated finalization backlog is not an ordinary per-gene repair path.
 
 Choose the authority before interpreting data. Retained D1 vote/publication rows
 are historical/projection input for migrated genes. Public image identity comes
 from the exact advertised immutable card view. A V2 view names its baseline and
 immutable delta chain; a plain baseline remains valid historical input. Neither
-D1 nor a cache may elect substitute public bytes. In the intended V2 workflow, the workstation must be an exact replica and
-draft/generation surface, never a second overwrite authority.
+D1 nor a cache may elect substitute public bytes. The workstation is an exact
+replica and draft/generation surface, never a second overwrite authority.
 
 For historical portrait incidents, read
 `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. Historical global-repair examples
-are not authorization to restore a retired writer. B-771's component status is
-recorded in `plans/B-762-DELETION-INVENTORY.md`.
+are not authorization to restore a retired writer. Inspect the current
+callable source and live operation state for a concrete repair.
 
 For gene-label recognition, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
 Curated page labels are administrator-owned desired state in the primary D1 and
@@ -47,8 +40,8 @@ alias/blocklist recognition-pair bundle and remain KV-only.
 
 Run these from `d:\Coding\Website`.
 
-Only after the production hold is lifted and provider-level admission permits
-it, use the remote database for an explicitly bounded retained-state question.
+Only when the installed mode and fresh provider-level admission permit it, use
+the remote database for an explicitly bounded retained-state question.
 First verify that the selected table is authoritative for that gene and state
 category. A `LIMIT` bounds returned rows, not scanned rows; use an indexed exact
 key and verify query plans offline. Broad analyses belong on a retained local
@@ -254,9 +247,9 @@ All three public responses must name the same artifact version and portrait SHA.
 An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
 publication failure, not permission to query D1 for substitute public bytes.
 
-After admission and only for a gene still using the legacy projection, an
-exact-key D1 read can show whether that projection is ahead. During the current
-hold, do not execute this or the following projection-job query:
+After current provider and operation admission, and only for a gene still using
+the legacy projection, an exact-key D1 read can show whether that projection is
+ahead. These remote queries consume shared D1 capacity:
 
 ```powershell
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
@@ -283,27 +276,21 @@ gene, recovery must remain on its V2 authority epoch and per-gene publication
 attempt. Verify the exact immutable object bytes and advertised view from a
 fresh reader. An unrelated gene's backlog must not become its completion gate.
 An absent object is not a successful publication and does not authorize a V1
-fallback. B-762 owns live per-gene publication acceptance; B-749 additionally
-requires the original workstation scope and repeat/restart receipts to agree.
+fallback. Check the original scope and repeat/restart receipts for the same
+logical operation.
 
-The ordinary `/api/iconoplasm/admin/read-models/sync` handler in this source
-rejects missing/empty normalized scope and rejects `full_rebuild`/`fullRebuild`
-or `full_vision`/`fullVision` when enabled. Its surviving publication wrapper
-still calls the generic gallery publisher without forwarding that scope. This
-is a remaining B-749 defect, so a successful scoped HTTP response alone is not
-proof of bounded V2 publication. Never bypass a scope refusal with a full flag,
-a newly invented operation ID, or a global recovery continuation.
+The ordinary `/api/iconoplasm/admin/read-models/sync` handler rejects
+missing/empty scope and `full_rebuild`/`full_vision` flags. The publication wake
+processes dirty canonical events under its watermark; it does not use the
+caller's scope as a catalog-wide publication instruction. If a scoped operation
+is materially charged for unrelated backlog, record its original scope,
+receipt and provider cost as a concrete defect. Never bypass a scope refusal
+with a full flag, a new operation ID or a global continuation.
 
 `scripts/repair-iconoplasm-newer-tie-canon.mjs` is permanently retired in source.
 Every flag mode exits with `LEGACY_GLOBAL_REPAIR_RETIRED` before network or D1
 access. The original May repair is preserved in git history. Its old direct D1
 writer and empty-scope final publication are not available as recovery tools.
-
-Historical PRL evidence from 2026-05-20 remains useful for reconciliation:
-artifact `mpduzx6k-9e396c96`, asset
-`c9d01e44d6ea92e2cc363ee70c50afd85bd1edc893a7ae05a207251fa5d3d576`,
-candidate image `31345`. These identifiers do not authorize replaying that
-historical repair or deleting a current projection obligation.
 
 ### do not repeat the bad repair paths
 
@@ -371,7 +358,9 @@ Publication contract:
 - `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It can also be dispatched manually. Both checks still run if collection or publication fails; cancellation stops them.
 - The generator writes one JSON snapshot. The account check reports every capacity alert but permits its one atomic KV write only when KV write headroom is available; exhausted D1 must not hide fresh telemetry. The key is `iconoplasm:observability-snapshot:v1`.
 - The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
-- The application-owned usage ledger is intentionally retired. Cloudflare GraphQL and product dashboards remain the source of operational truth.
+- The old observability-only usage ledger is retired. Cloudflare GraphQL owns
+  account-wide usage truth. The shared operation-cost admission ledger still
+  reserves work and retains uncertain reservations; it is a different owner.
 
 Freshness SLA:
 
@@ -381,26 +370,15 @@ Freshness SLA:
 
 A red scheduled workflow is the publication failure alert. If the admin shows `stale`, `unavailable`, or `deploy fallback`, inspect that workflow before touching runtime telemetry fences or increasing KV budgets.
 
-### retained V1 finalization is not the V2 recovery path
+### Retained obligations
 
-The legacy chain was `GUI Sync -> workstation run-sync -> D1 finalization ledger
--> Queue drain -> global pending count reaches zero`. Its retained jobs,
-receipts, queue messages and dead-letter state must survive until their accepted
-obligations have been reconciled. B-771 removes its executable producers,
-consumers, bindings, cron duties and recovery launchers after replacement
-consumers are verified. It must not be resumed as the normal path for migrated
-operations, and zero global pending jobs is not a V2 success criterion.
-
-No direct Queue kicks, job deletion, ad hoc `/finalization/process`, or synthetic
-completion receipts are recovery substitutes. A transport failure preserves the
-same durable obligation. Source/configuration retirement must update IPD-004,
-IPD-010 and affected authority fences together; documentation alone cannot prove
-that a queue or scheduled launcher is unavailable.
-
-The release workflow starts automatically on a push to `main`. A source-only
-review branch must stay unmerged while that automatic release would conflict
-with the production hold. Keep protected checks intact and record the exact
-reviewed revision, test results and any live work still unverified in Linear.
+Retained jobs, receipts, queue messages and dead-letter state must survive until
+their accepted obligations are reconciled. Do not resume global finalization
+as an ordinary per-gene repair, kick a Queue directly, delete a job or invent a
+completion receipt. A transport failure preserves the same durable obligation.
+The [current runbook](ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
+describes the release and background-work paths; a concrete failed operation
+belongs in its owning issue with the current source and live receipts.
 
 ## when to leave this repo
 
