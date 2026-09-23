@@ -35,6 +35,7 @@ function requireJson(request) {
 
 export function createManifestationAuthoritySyncHandler({
   db,
+  archiveDb,
   env,
   authorizeReplicaBearer,
   cursorSecret = env?.ICONOPLASM_AUTHORING_CURSOR_SECRET,
@@ -64,6 +65,7 @@ export function createManifestationAuthoritySyncHandler({
       if (request.method === "GET" && events) {
         return jsonResponse(
           await readManifestationEventPage(db, {
+            archiveDb,
             cursorSecret,
             cursor: url.searchParams.get("cursor"),
             limit: url.searchParams.get("limit"),
@@ -81,6 +83,7 @@ export function createManifestationAuthoritySyncHandler({
       if (request.method === "GET" && snapshotParts) {
         return jsonResponse(
           await readManifestationSnapshotPage(db, {
+            archiveDb,
             snapshotId: routeId(snapshotParts[1]),
             cursorSecret,
             cursor: url.searchParams.get("cursor"),
@@ -93,6 +96,7 @@ export function createManifestationAuthoritySyncHandler({
       const { value: body } = await readBoundedJson(request, 16 * 1024)
       if (snapshotRoot) {
         const result = await createManifestationSnapshot(db, {
+          archiveDb,
           cursorSecret,
           consumerId: body.consumer_id,
           snapshotId: body.snapshot_id,

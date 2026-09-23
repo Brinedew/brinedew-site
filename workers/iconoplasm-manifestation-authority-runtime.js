@@ -23,6 +23,7 @@ export function createIconoplasmManifestationAuthorityRuntimeHandler({
   }
   return createManifestationAuthorityRouteHandler({
     db: env.ICONOPLASM_AUTHORING_DB,
+    archiveDb: env.ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB,
     primaryDb: env.ICONOPLASM_DB,
     env,
     authorizeReplicaBearer: authorizeIconoplasmAuthorityReplicaBearer,

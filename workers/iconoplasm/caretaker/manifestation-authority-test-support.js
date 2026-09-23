@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite"
 const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
   "../../../migrations-iconoplasm-authoring/0002_caretaker_server_boundary.sql",
+  "../../../migrations-iconoplasm-authoring/0003_manifestation_authority_cutover.sql",
   "../../../migrations-iconoplasm-authoring/0004_caretaker_terms_2026_08_30.sql",
   "../../../migrations-iconoplasm-authoring/0005_d1_safe_object_key_fence.sql",
   "../../../migrations-iconoplasm-authoring/0006_resumable_cutover_upload_envelopes.sql",
@@ -12,6 +13,7 @@ const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql",
   "../../../migrations-iconoplasm-authoring/0016_account_assignment_lookup.sql",
   "../../../migrations-iconoplasm-authoring/0017_canonical_lifecycle_keyed_guards.sql",
+  "../../../migrations-iconoplasm-authoring/0018_immutable_event_archive.sql",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
 
 class TestStatement {

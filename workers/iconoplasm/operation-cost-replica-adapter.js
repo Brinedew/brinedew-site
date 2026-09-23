@@ -96,6 +96,9 @@ export function createReplicaOperationCostAdapter({
     },
     async dispatch(prepared) {
       const meter = createOperationCostD1Meter(env.ICONOPLASM_AUTHORING_DB)
+      const archive = env.ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB
+        ? createOperationCostD1Meter(env.ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB)
+        : null
       const primary =
         prepared.route === "derivative-select"
           ? createOperationCostD1Meter(env.ICONOPLASM_DB)
@@ -103,6 +106,7 @@ export function createReplicaOperationCostAdapter({
       const scopedEnv = {
         ...env,
         ICONOPLASM_AUTHORING_DB: meter.db,
+        ...(archive ? { ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB: archive.db } : {}),
         ...(primary ? { ICONOPLASM_DB: primary.db } : {}),
       }
       const factory =
@@ -111,6 +115,7 @@ export function createReplicaOperationCostAdapter({
           : createManifestationAuthoritySyncHandler
       const handler = factory({
         db: meter.db,
+        archiveDb: archive?.db,
         env: scopedEnv,
         authorizeReplicaBearer: authorizeIconoplasmAuthorityReplicaBearer,
         ...(primary ? { onAuthorityEvent: (event) => onAuthorityEvent(event, scopedEnv) } : {}),
@@ -130,6 +135,11 @@ export function createReplicaOperationCostAdapter({
       if (!response) throw new OperationCostError("COST_OPERATION_NOT_VERIFIED")
       const body = await response.json()
       const actual = meter.finish()
+      if (archive) {
+        const cold = archive.finish()
+        actual.rows_read += cold.rows_read
+        actual.rows_written += cold.rows_written
+      }
       if (primary) {
         const projection = primary.finish()
         actual.rows_read += projection.rows_read

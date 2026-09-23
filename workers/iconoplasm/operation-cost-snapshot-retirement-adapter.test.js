@@ -33,6 +33,10 @@ test(
         .filter((name) => name.endsWith(".sql") && Number.parseInt(name, 10) < 15)
         .sort())
         schema.exec(readFileSync(new URL(file, root), "utf8"))
+      schema.exec(
+        "ALTER TABLE icono_authority_state ADD COLUMN event_archive_through INTEGER NOT NULL DEFAULT 0",
+      )
+      schema.exec("ALTER TABLE icono_authority_state ADD COLUMN event_archive_sha256 TEXT")
       const db = await runtime.getD1Database("DB")
       const definitions = schema
         .prepare(
