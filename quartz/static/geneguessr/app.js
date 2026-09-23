@@ -4725,47 +4725,27 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
   }
 
-  async function promptStatsMigration() {
-    // Only prompt if user is authenticated and has localStorage stats
-    if (!currentUser) {
-      return
+  function legacyStatsAvailableForImport() {
+    if (
+      !currentUser ||
+      !sidebarStatsSnapshot ||
+      Number(sidebarStatsSnapshot.played) !== 0 ||
+      sidebarStatsSnapshot.migratedAt
+    ) {
+      return null
     }
-
     const localStats = loadStats()
-    if (localStats.played === 0) {
-      return // No stats to migrate
-    }
+    return Number(localStats.played) > 0 ? localStats : null
+  }
 
-    // Check if already migrated
-    try {
-      const response = await fetch(`${API_BASE}/api/stats`, {
-        method: "GET",
-        credentials: "include",
-      })
+  async function importLegacyStats(event) {
+    const localStats = legacyStatsAvailableForImport()
+    if (!localStats) return
 
-      if (response.ok) {
-        const serverStats = await response.json()
-        if (serverStats.migratedAt) {
-          return // Already migrated
-        }
-      }
-    } catch (err) {
-      console.error("Error checking migration status:", err)
-      return
-    }
-
-    // Prompt user to migrate
-    const migrate = confirm(
-      `Sync your existing stats to your Discord account?\n\n` +
-        `You have played ${localStats.played} game${localStats.played !== 1 ? "s" : ""} with ${localStats.won} win${localStats.won !== 1 ? "s" : ""}.\n\n` +
-        `This will allow your stats to persist across devices.`,
-    )
-
-    if (!migrate) {
-      return
-    }
-
-    // Migrate stats
+    const button = event.currentTarget
+    const status = document.getElementById("pg-sidebar-legacy-import-status")
+    button.disabled = true
+    if (status) status.textContent = "Importing…"
     try {
       const response = await fetch(`${API_BASE}/api/migrate-stats`, {
         method: "POST",
@@ -4773,17 +4753,13 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(localStats),
       })
-
-      if (response.ok) {
-        alert("Stats synced successfully! Your progress is now saved to your Discord account.")
-      } else {
-        const error = await response.json()
-        console.error("Migration failed:", error)
-        alert("Failed to sync stats. Please try again later.")
-      }
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || result.message || "Import failed")
+      await refreshSidebarStatsSnapshot()
+      injectSidebarStats()
     } catch (err) {
-      console.error("Error migrating stats:", err)
-      alert("Failed to sync stats. Please try again later.")
+      if (status) status.textContent = `${err.message}. Games saved on this device are untouched.`
+      button.disabled = false
     }
   }
 
@@ -5595,6 +5571,7 @@ https://geneguessr.brinedew.bio/`
     }
 
     const stats = getCurrentSidebarStats()
+    const legacyStats = legacyStatsAvailableForImport()
     const practiceMode = !!gameState?.practiceMode
     const leaderboardOptIn = currentUser ? Boolean(currentUser.leaderboard_opt_in) : false
     const consentRow = currentUser
@@ -5660,6 +5637,15 @@ https://geneguessr.brinedew.bio/`
           <div><span class="pg-sidebar-stat-label">Win Rate</span><span class="pg-sidebar-stat-value">${Math.round(stats.winRate * 100)}%</span></div>
           <div><span class="pg-sidebar-stat-label">Streak</span><span class="pg-sidebar-stat-value">${stats.currentStreak}</span></div>
         </div>
+        ${
+          legacyStats
+            ? `<div class="pg-sidebar-legacy-import">
+                 <span>${Math.floor(Number(legacyStats.played))} earlier game${Number(legacyStats.played) === 1 ? "" : "s"} saved on this device. Your account has none yet.</span>
+                 <button type="button" id="pg-sidebar-legacy-import">Import to account</button>
+                 <span id="pg-sidebar-legacy-import-status" role="status" aria-live="polite"></span>
+               </div>`
+            : ""
+        }
         <div class="pg-sidebar-stats-consent">
           ${consentRow}
         </div>
@@ -5682,6 +5668,7 @@ https://geneguessr.brinedew.bio/`
       ],
     })
     wireSharedUserPanel(stack, { authBase: API_BASE })
+    stack.querySelector("#pg-sidebar-legacy-import")?.addEventListener("click", importLegacyStats)
   }
 
   // Practice-list dialog (B-247)
@@ -6288,6 +6275,9 @@ https://geneguessr.brinedew.bio/`
       `
     }
 
+    const legacyImport = document.querySelector(".pg-sidebar-legacy-import")
+    if (legacyImport && !legacyStatsAvailableForImport()) legacyImport.remove()
+
     const leaderboardRoot = document.getElementById("pg-sidebar-leaderboard")
     if (leaderboardRoot) {
       leaderboardRoot.innerHTML = renderSidebarLeaderboardRows(
@@ -6325,9 +6315,6 @@ https://geneguessr.brinedew.bio/`
 
     // Check auth status
     await checkAuth()
-
-    // Prompt for stats migration if needed
-    await promptStatsMigration()
 
     // Prefer server-authoritative stats for signed-in users
     await refreshSidebarStatsSnapshot()
