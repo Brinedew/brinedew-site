@@ -1137,6 +1137,8 @@ const KV_CARD_CATALOG_PUBLISH_WATERMARK = "iconoplasm:card-catalog-publish-water
 // the public card catalog. Any event with one of these actions after the
 // watermark means the gallery owes that gene a rebuild. Non-canonical bookkeeping
 // actions (e.g. unstale) are deliberately excluded so the dirty signal is tight.
+// `gene_card_materialized` is print-copy bookkeeping, not a public card change;
+// including it made one publish schedule a second no-op publish.
 const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "publish",
   "auto_promote",
@@ -1148,16 +1150,8 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "rollback",
   "unpublish",
   "purge_legacy",
-  "gene_card_materialized",
   "manifestation_canonical_changed",
 ]
-// Workstation priority excludes materialization-only events. Those events are
-// the resumable corpus backfill itself and are intentionally released in
-// budgeted batches. Every other canonical-affecting event represents a human
-// or publication decision that should receive its exact blot before bulk work.
-const CARD_CATALOG_BLOT_PRIORITY_ACTIONS = CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.filter(
-  (action) => action !== "gene_card_materialized",
-)
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
 // Changes whenever source records are mapped into public card fields differently.
 // D1 publication events only detect data changes; this revision makes a deployed
@@ -30360,12 +30354,6 @@ async function cardCatalogRecordsForArtifact(
        pa.sample_label,
        pa.sample_number,
        pa.sample_text_hash,
-       gcm.state AS gene_card_state,
-       gcm.ready_card_fingerprint AS gene_card_ready_fingerprint,
-       gcm.ready_asset_sha256 AS gene_card_ready_asset_sha256,
-       gcm.object_key AS gene_card_object_key,
-       gcm.width AS gene_card_width,
-       gcm.height AS gene_card_height,
        gbm.blot_fingerprint AS gene_blot_fingerprint,
        gbm.portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
        gbm.blot_asset_sha256 AS gene_blot_asset_sha256,
@@ -30380,8 +30368,6 @@ async function cardCatalogRecordsForArtifact(
      LEFT JOIN icono_portrait_assets pa
        ON pa.gene_symbol = ps.gene_symbol
       AND pa.asset_sha256 = ps.current_asset_sha256
-     LEFT JOIN icono_gene_card_materializations gcm
-       ON gcm.gene_symbol = gc.gene_symbol
      LEFT JOIN icono_gene_blot_materializations gbm
        ON gbm.gene_symbol = gc.gene_symbol`
   // D1 caps bound parameters at 100 per query. Batch the symbol IN-list so a large
@@ -30521,7 +30507,7 @@ async function priorityGeneBlotSymbols(env) {
     throughEventId: highWater.id,
     throughEventAt: highWater.created_at,
     limit: 101,
-    actions: CARD_CATALOG_BLOT_PRIORITY_ACTIONS,
+    actions: CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS,
   })
   if (changed.truncated) {
     throw geneBlotServiceError(
