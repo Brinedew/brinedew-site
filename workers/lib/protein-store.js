@@ -1,3 +1,5 @@
+// THE ONLY GENEGUESSR PROTEIN READ BOUNDARY — DO NOT DUPLICATE.
+// A successful empty read is null; a failed read must reach every caller as an error.
 import { sanitizeProteinSummary } from "./structure-utils.js"
 
 const MAX_CACHE_SIZE = 512
@@ -19,6 +21,21 @@ const dailySelectionCache = {
   ttl: 5 * 60 * 1000,
 }
 let structureFailureTableEnsured = false
+
+export class ProteinReadUnavailableError extends Error {
+  constructor(cause) {
+    super(String(cause?.message || cause || "Protein database read failed"), { cause })
+    this.name = "ProteinReadUnavailableError"
+  }
+}
+
+async function readProteinRow(db, sql, key) {
+  try {
+    return await db.prepare(sql).bind(key).first()
+  } catch (error) {
+    throw new ProteinReadUnavailableError(error)
+  }
+}
 
 function normalizeKey(uniprot) {
   return (uniprot || "").toUpperCase()
@@ -277,7 +294,7 @@ function toProteinObject(row) {
   }
 }
 
-export async function fetchProteinByUniprot(db, uniprot, { throwOnUnavailable = false } = {}) {
+export async function fetchProteinByUniprot(db, uniprot) {
   const key = normalizeKey(uniprot)
   if (!key) {
     return null
@@ -285,17 +302,8 @@ export async function fetchProteinByUniprot(db, uniprot, { throwOnUnavailable = 
   if (proteinCache.has(key)) {
     return proteinCache.get(key)
   }
-  let protein = null
-  try {
-    const row = await db
-      .prepare(`SELECT * FROM proteins WHERE uniprot = ? LIMIT 1`)
-      .bind(key)
-      .first()
-    protein = toProteinObject(row)
-  } catch (err) {
-    console.warn("GeneGuessr: D1 fetchProteinByUniprot failed", err)
-    if (throwOnUnavailable) throw err
-  }
+  const row = await readProteinRow(db, `SELECT * FROM proteins WHERE uniprot = ? LIMIT 1`, key)
+  const protein = toProteinObject(row)
   if (protein) {
     rememberProtein(key, protein)
   }
@@ -338,13 +346,8 @@ export async function fetchProteinByGene(db, gene) {
   for (const p of proteinCache.values()) {
     if (p && (p.gene || p.hgnc || "").toUpperCase() === key) return p
   }
-  let protein = null
-  try {
-    const row = await db.prepare(`SELECT * FROM proteins WHERE gene = ? LIMIT 1`).bind(key).first()
-    protein = toProteinObject(row)
-  } catch (err) {
-    console.warn("GeneGuessr: D1 fetchProteinByGene failed", err)
-  }
+  const row = await readProteinRow(db, `SELECT * FROM proteins WHERE gene = ? LIMIT 1`, key)
+  const protein = toProteinObject(row)
   if (protein) {
     rememberProtein(normalizeKey(protein.uniprot), protein)
   }
@@ -469,7 +472,6 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
   if (!query || !query.trim()) {
     return []
   }
-  await ensureStructureFailureTable(db)
   const cleanedLimit = clampSearchLimit(limit)
   const exactUpper = query.trim().toUpperCase()
   const upperPrefixEnd = prefixUpperBound(exactUpper)
@@ -490,6 +492,7 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
   }
 
   try {
+    await ensureStructureFailureTable(db)
     // FTS5 can produce its relevance-ordered cursor without joining every
     // match to proteins/synonyms first. A CASE sort on the original full join
     // defeated that optimization (100k reads for 20 broad suggestions).
@@ -575,7 +578,7 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
     return (response?.results || []).map((row) => sanitizeProteinSummary(row))
   } catch (err) {
     console.warn("GeneGuessr: D1 searchProteins failed", err)
-    throw err
+    throw new ProteinReadUnavailableError(err)
   }
 }
 
