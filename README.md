@@ -4,16 +4,20 @@ This repo owns the deployed Brinedew sites and the Iconoplasm distribution
 plane: public gene dossiers, personal discovery shelf, voting/governance,
 published card artifacts, APIs, extension packaging, and Cloudflare runtime.
 
-Before changing Iconoplasm behavior, read:
-
-1. [Product operating model](docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md)
-2. [First-principles capacity model](docs/ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md)
-3. [Capacity and background-work runbook](docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
-4. [Publication aliases](docs/ICONOPLASM_PUBLICATION_ALIASES.md)
-
 The product is a mnemonic world for life-science readers, not a generic gene
 database. User-facing changes must preserve the recognition → discovery →
 dossier → vote → coherent publication loop.
+
+Start with the journey you are changing: open the live reader page or game,
+then trace that action into its owner. The [product operating model](docs/ICONOPLASM_PRODUCT_OPERATING_MODEL.md)
+describes the reader's job. `quartz/static/iconoplasm/` owns the public
+Iconoplasm browser code; `quartz/static/geneguessr/` owns the game browser code.
+`workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js`
+owns authenticated mutations, and `.github/workflows/deploy-quartz.yml` owns
+production deployment. Read the [capacity runbook](docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
+for capacity or background work, or [publication aliases](docs/ICONOPLASM_PUBLICATION_ALIASES.md)
+for alias changes. Historical plans and synthetic load models do not set a
+visitor target or a release requirement.
 
 ## Local verification
 
