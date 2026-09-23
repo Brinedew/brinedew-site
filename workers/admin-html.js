@@ -1,3 +1,4 @@
+// THE ONLY GENEGUESSR ADMIN UI. Add operator controls here; /admin-v2 redirects here.
 // Pure planning helpers are stringified into the inline admin runtime below.
 // Keeping one implementation makes the resumability contract directly testable
 // without exposing a production-only testing hook on window.

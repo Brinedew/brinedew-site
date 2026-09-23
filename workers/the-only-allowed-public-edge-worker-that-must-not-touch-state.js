@@ -159,7 +159,9 @@ function canonicalDocumentRedirect(url) {
           ? GENEGUESSR_HOST
           : null
     if (owner) {
-      const target = new URL(`https://${owner}${path === "/admin/iconoplasm" ? "/admin" : path}`)
+      const target = new URL(
+        `https://${owner}${path === "/admin/iconoplasm" || path === "/admin-v2" ? "/admin" : path}`,
+      )
       target.search = url.search
       if (path === "/admin/iconoplasm") target.hash = "costs"
       return Response.redirect(target.toString(), 301)

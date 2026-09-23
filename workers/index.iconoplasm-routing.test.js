@@ -66,13 +66,13 @@ test("retired apex Iconoplasm admin URL points to its one live owner", async () 
   assert.equal(stateful.calls.length, 0)
 })
 
-test("apex GeneGuessr admin URLs point to the owned game host", async () => {
+test("apex GeneGuessr admin URLs point to the one working operator page", async () => {
   const stateful = statefulSpy()
   const env = { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding }
   for (const path of ["/admin", "/admin-v2"]) {
     const response = await worker.fetch(new Request(`https://brinedew.bio${path}`), env, {})
     assert.equal(response.status, 301)
-    assert.equal(response.headers.get("Location"), `https://geneguessr.brinedew.bio${path}`)
+    assert.equal(response.headers.get("Location"), "https://geneguessr.brinedew.bio/admin")
   }
   assert.equal(stateful.calls.length, 0)
 })

@@ -1398,7 +1398,6 @@ import {
 } from "./admin.js"
 // Import admin HTML
 import { ADMIN_HTML } from "./admin-html.js"
-import { ADMIN_V2_HTML } from "./admin-v2-html.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import {
@@ -1474,7 +1473,7 @@ function shouldAllowUnsafeEval(url) {
   }
   // The general admin panels load Mol* for protein preview. Iconoplasm's admin
   // has no evaluator or WASM runtime, so never inherit that host-wide exemption.
-  if (host !== ICONOPLASM_HOST && (path === "/admin" || path === "/admin-v2")) {
+  if (host !== ICONOPLASM_HOST && path === "/admin") {
     return true
   }
   return (
@@ -2538,12 +2537,13 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     }
 
     // Handle geneguessr subdomain proxy - proxy NON-API, NON-ADMIN requests from subdomain to main site
-    // NOTE: /admin and /admin-v2 are served by the Worker and must NOT be proxied.
+    // /admin is served here; old /admin-v2 links redirect to that same page.
     if (
       url.hostname === GENEGUESSR_HOST &&
       !url.pathname.startsWith("/api/") &&
       url.pathname !== "/admin" &&
-      url.pathname !== "/admin-v2"
+      url.pathname !== "/admin-v2" &&
+      url.pathname !== "/admin-v2/"
     ) {
       // Avoid duplicate content at multiple paths on the subdomain.
       // Keep the canonical entrypoint at `/` and normalize a few common variants.
@@ -2824,16 +2824,14 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
-    // Admin panel v2 - auto-generated controls from Mol* runtime
-    if (url.pathname === "/admin-v2" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return new Response("Unauthorized", { status: 403 })
-      }
-      return new Response(ADMIN_V2_HTML, {
-        headers: {
-          "Content-Type": "text/html;charset=UTF-8",
-        },
-      })
+    // Retired graphics experiment: the live operator page owns preview and publication.
+    if (
+      (url.pathname === "/admin-v2" || url.pathname === "/admin-v2/") &&
+      (request.method === "GET" || request.method === "HEAD")
+    ) {
+      const target = new URL("/admin", url)
+      target.search = url.search
+      return Response.redirect(target.toString(), 301)
     }
 
     // Admin endpoints (protected by Cloudflare Access)
@@ -2946,29 +2944,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         status: response.status,
         headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
       })
-    }
-
-    // Graphics profiles for v2 admin panel - full Mol* props snapshots
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      const stored = await env.KV.get("graphics_profiles_v2")
-      const profiles = stored ? JSON.parse(stored) : {}
-      return Response.json({ profiles }, { headers: corsHeaders })
-    }
-
-    if (url.pathname === "/api/admin/graphics-profiles" && request.method === "POST") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-      }
-      try {
-        const body = await request.json()
-        await env.KV.put("graphics_profiles_v2", JSON.stringify(body.profiles || {}))
-        return Response.json({ success: true }, { headers: corsHeaders })
-      } catch (err) {
-        return Response.json({ error: err.message }, { status: 400, headers: corsHeaders })
-      }
     }
 
     if (url.pathname === "/api/admin/similarity" && request.method === "GET") {
