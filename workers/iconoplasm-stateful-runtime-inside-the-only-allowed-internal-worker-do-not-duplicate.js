@@ -30726,6 +30726,49 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
     100,
   )
   if (requestedSymbols.length) {
+    if (!requestedVersion) {
+      // A voted winner can live in the advertised delta while the base card
+      // still describes the previous portrait. Resolve the same exact card as
+      // the public blot URL; an old base card must not hide pending work.
+      const records = []
+      for (const symbol of requestedSymbols) {
+        const published = await readPublishedGeneCardPortraitProjection(env, symbol)
+        if (published.kind === "unavailable") {
+          throw geneBlotServiceError(
+            503,
+            "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
+            "The exact published card artifact is unavailable.",
+          )
+        }
+        if (published.kind === "available") records.push(published.payload)
+      }
+      const advertised = await advertisedGeneDeltaViewForDetail(env)
+      const symbols = records
+        .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
+        .filter(Boolean)
+      const readyBlots = await exactReadyGeneBlotsForPublishedCards(
+        env,
+        new Map(records.map((record) => [normalizeSymbol(record?.symbol || ""), record])),
+      )
+      const currentRecords = records.map((record) =>
+        projectCardBlot(record, readyBlots.get(normalizeSymbol(record?.symbol || ""))),
+      )
+      return {
+        ok: true,
+        scope,
+        automatic: false,
+        items: currentRecords
+          .map((record) => geneBlotBacklogItem(record, scope))
+          .filter(Boolean)
+          .slice(0, limit),
+        symbols,
+        snapshot_version: advertised?.base === version ? advertised.view : version,
+        scanned: symbols.length,
+        total_count: symbols.length,
+        done: true,
+        next_after: null,
+      }
+    }
     const artifact = version
       ? await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
           allowWholeArtifact: false,
