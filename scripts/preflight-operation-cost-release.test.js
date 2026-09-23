@@ -444,7 +444,7 @@ test("invalid forecast fails before contacting Cloudflare", async () => {
   assert.equal(calls, 0)
 })
 
-test("normal release checks capacity before mutations and refreshes before staging", () => {
+test("explicit maintenance checks capacity before mutations and refreshes before staging", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
     "utf8",
@@ -459,7 +459,7 @@ test("normal release checks capacity before mutations and refreshes before stagi
   assert.ok(refresh > initial && refresh < staging)
   assert.match(
     workflow.slice(staging, workflow.indexOf("ICONOPLASM_SCHEMA_TRANSITION:1", staging)),
-    /if: steps\.release-state\.outputs\.schema_transition != 'true'/,
+    /if: inputs\.data_maintenance == true && steps\.release-state\.outputs\.schema_transition != 'true'/,
   )
 })
 
