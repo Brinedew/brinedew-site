@@ -66,29 +66,6 @@ function objectIdentity(key, expectedKind = "") {
   return { kind: match[1], hash: match[2], path: `/${match[0]}` }
 }
 
-export function immutableBlotByteUrl(blot) {
-  const fingerprint = String(blot?.blot_fingerprint || "")
-    .trim()
-    .toLowerCase()
-  const objectKey = String(blot?.object_key || "").trim()
-  const match = objectKey.match(
-    /^blots\/v1\/([A-Z0-9])\/([A-Z0-9][A-Z0-9._-]{0,63})\/([a-f0-9]{32})\/([A-Z0-9][A-Z0-9._-]{0,63})-iconoplasm-gene-blot\.webp$/,
-  )
-  if (
-    !match ||
-    match[1] !== match[2].slice(0, 1) ||
-    match[2] !== match[4] ||
-    match[3] !== fingerprint
-  ) {
-    return "/static/iconoplasm/blot-placeholder.svg"
-  }
-  for (const value of [blot?.image_url, blot?.accelerator_url]) {
-    const url = String(value || "").trim()
-    if (url === `${CDN}/${objectKey}`) return url
-  }
-  return "/static/iconoplasm/blot-placeholder.svg"
-}
-
 function withImmutableMedia(record) {
   if (!record || typeof record !== "object") return record
   // B-793: a record with a gallery reference must not carry a fabricated empty
