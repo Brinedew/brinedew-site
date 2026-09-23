@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
-import { verifyCodeReleaseScope } from "./verify-code-release.mjs"
+import { readAppliedChangedMigrations, verifyCodeReleaseScope } from "./verify-code-release.mjs"
 
 const installed = "a".repeat(40)
 const head = "b".repeat(40)
@@ -53,6 +53,116 @@ test("a routine release refuses unapplied data, binding, or route changes before
       path,
     )
   }
+})
+
+test("a routine release accepts a migration already recorded in its D1 journal", () => {
+  const changedPaths = [
+    "migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql",
+    "migrations-iconoplasm-authoring/README.md",
+  ]
+  assert.deepEqual(
+    verifyCodeReleaseScope({
+      state,
+      headSha: head,
+      changedPaths,
+      installedIsAncestor: true,
+      appliedMigrations: new Set([changedPaths[0]]),
+    }),
+    { installed_sha: installed, head_sha: head, changed_paths: changedPaths },
+  )
+  assert.throws(
+    () =>
+      verifyCodeReleaseScope({
+        state,
+        headSha: head,
+        changedPaths: ["other/schema.sql"],
+        installedIsAncestor: true,
+        appliedMigrations: new Set(["other/schema.sql"]),
+      }),
+    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+  )
+})
+
+test("journal check reads only changed migration names from their owning databases", async () => {
+  const changedPaths = [
+    "migrations-iconoplasm/0108_compact_discovery_activation_v2.sql",
+    "migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql",
+  ]
+  const calls = []
+  const applied = await readAppliedChangedMigrations({
+    changedPaths,
+    accountId: "a".repeat(32),
+    token: "test-token",
+    configText: `[[d1_databases]]
+binding = "ICONOPLASM_DB"
+database_id = "11111111-1111-1111-1111-111111111111"
+[[d1_databases]]
+binding = "ICONOPLASM_AUTHORING_DB"
+database_id = "22222222-2222-2222-2222-222222222222"`,
+    fetcher: async (url, options) => {
+      const body = JSON.parse(options.body)
+      calls.push({ url, body })
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: [{ success: true, results: [{ name: body.params[0] }] }],
+        }),
+      }
+    },
+  })
+  assert.deepEqual(applied, new Set(changedPaths))
+  assert.equal(calls.length, 2)
+  assert.deepEqual(
+    calls.map((call) => call.body),
+    [
+      {
+        sql: "SELECT name FROM d1_migrations WHERE name IN (?)",
+        params: ["0108_compact_discovery_activation_v2.sql"],
+      },
+      {
+        sql: "SELECT name FROM d1_migrations WHERE name IN (?)",
+        params: ["0018_assignment_manifestation_lookup.sql"],
+      },
+    ],
+  )
+})
+
+test("missing or failed journal evidence cannot authorize a code release", async () => {
+  const changedPaths = ["migrations-iconoplasm-authoring/0018_assignment_manifestation_lookup.sql"]
+  const options = {
+    changedPaths,
+    accountId: "a".repeat(32),
+    token: "test-token",
+    configText: `[[d1_databases]]
+binding = "ICONOPLASM_AUTHORING_DB"
+database_id = "22222222-2222-2222-2222-222222222222"`,
+  }
+  const missing = await readAppliedChangedMigrations({
+    ...options,
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({ success: true, result: [{ success: true, results: [] }] }),
+    }),
+  })
+  assert.throws(
+    () =>
+      verifyCodeReleaseScope({
+        state,
+        headSha: head,
+        changedPaths,
+        installedIsAncestor: true,
+        appliedMigrations: missing,
+      }),
+    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+  )
+  await assert.rejects(
+    readAppliedChangedMigrations({
+      ...options,
+      fetcher: async () => ({ ok: false, status: 503 }),
+    }),
+    /CODE_RELEASE_MIGRATION_STATE_UNAVAILABLE/,
+  )
 })
 
 test("a routine release refuses uncertain installed lineage or active migration", () => {

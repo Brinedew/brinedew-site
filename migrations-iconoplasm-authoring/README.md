@@ -24,8 +24,8 @@ pnpm exec wrangler d1 migrations apply ICONOPLASM_AUTHORING_DB --remote --config
 
 The apply command records the pending file in the D1 journal. Do not repeat
 the DDL in a Worker or an ad hoc API call. The existing data-maintenance
-preflight also reads this journal; a routine code-only deploy does not apply
-schema changes.
+preflight also reads this journal. A normal deploy verifies that changed SQL
+files are already journaled; it does not apply schema changes.
 
 `0018_assignment_manifestation_lookup.sql` indexes only manifestations with
 an assignment. The lookup still returns the latest withdrawn caretaker or fork
