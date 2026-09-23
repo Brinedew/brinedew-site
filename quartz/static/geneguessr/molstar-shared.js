@@ -10,6 +10,9 @@
   // Note: `pdbe-molstar` versions are NOT the same as upstream `molstar` versions.
   const MOLSTAR_VERSION = "3.8.0"
   const MOLSTAR_FALLBACK_VERSION = "3.7.1"
+  // Encoded, versioned paths avoid browser-cached redirects and HTML from older asset routing.
+  const proxiedMolstarAsset = (version, file) =>
+    `/static/vendor/pdbe-molstar%40${version}/build/${file}?route=2`
 
   // In worker-served contexts (geneguessr subdomain + workers.dev), proxy Mol* assets through the
   // Worker so the page does not depend on the client being able to reach jsDelivr directly.
@@ -24,13 +27,13 @@
   })()
 
   const MOLSTAR_SCRIPT_URL = SHOULD_PROXY_MOLSTAR_ASSETS
-    ? `/static/vendor/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`
+    ? proxiedMolstarAsset(MOLSTAR_VERSION, "pdbe-molstar-plugin.js")
     : `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar-plugin.js`
   const MOLSTAR_FALLBACK_SCRIPT_URL = SHOULD_PROXY_MOLSTAR_ASSETS
-    ? `/static/vendor/pdbe-molstar@${MOLSTAR_FALLBACK_VERSION}/build/pdbe-molstar-plugin.js`
+    ? proxiedMolstarAsset(MOLSTAR_FALLBACK_VERSION, "pdbe-molstar-plugin.js")
     : `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_FALLBACK_VERSION}/build/pdbe-molstar-plugin.js`
   const MOLSTAR_CSS_URL = SHOULD_PROXY_MOLSTAR_ASSETS
-    ? `/static/vendor/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar.css`
+    ? proxiedMolstarAsset(MOLSTAR_VERSION, "pdbe-molstar.css")
     : `https://cdn.jsdelivr.net/npm/pdbe-molstar@${MOLSTAR_VERSION}/build/pdbe-molstar.css`
   const MOLSTAR_PRECONNECT_URL = "https://cdn.jsdelivr.net"
 
