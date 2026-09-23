@@ -39,7 +39,8 @@ test("admin styles sidebar stays focused on the blocklist request pipeline", () 
 test("iconoplasm admin exposes the observability snapshot as a first-class tab", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /data-tab="costs">Observability<\/button>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /id="panel-costs"/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare snapshot, baked out of band/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Cloudflare account capacity/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Historical charts use the last published snapshot/)
   assert.match(ICONOPLASM_ADMIN_HTML, /cost-cockpit/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /id="cost-budget-answer"/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /Budget answer right now/)
@@ -95,8 +96,8 @@ test("iconoplasm admin exposes the observability snapshot as a first-class tab",
     /costSnapshotTrustDetails: document\.getElementById\(["']cost-snapshot-trust-details["']\)/,
   )
   assert.match(ICONOPLASM_ADMIN_HTML, /renderObservabilityRunbook\(snapshot\)/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Snapshot unavailable · publication endpoint failed/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /Reloading baked Cloudflare snapshot…/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Current capacity unavailable · request failed/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /Refreshing account meters and history…/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewSummary\(\)/)
   assert.match(ICONOPLASM_ADMIN_HTML, /refreshOverviewCoverage\(\)/)
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /refreshOverview\(\)/)
@@ -1356,16 +1357,6 @@ test("iconoplasm admin trend chart explains the baked budget pace guide", () => 
     /baked from D1 analytics and the configured smart daily write guardrails/,
   )
   assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /No fake invocation ceiling here/)
-})
-
-test("iconoplasm admin keeps the observability chesterton fence comment", () => {
-  assert.match(ICONOPLASM_ADMIN_HTML, /Chesterton's fence:/)
-  assert.match(
-    ICONOPLASM_ADMIN_HTML,
-    /do not generate observability load from the admin page itself/,
-  )
-  assert.match(ICONOPLASM_ADMIN_HTML, /just links/)
-  assert.match(ICONOPLASM_ADMIN_HTML, /just a runbook/)
 })
 
 test("iconoplasm admin shell loads external assets and its runtime parses", () => {

@@ -8174,35 +8174,22 @@
     els.costTopRoutes.innerHTML = sections.join("")
   }
 
-  // Chesterton's fence:
-  // This panel exists because we deliberately retired the old request-path
-  // usage meter. That old path looked authoritative, but it was an
-  // app-owned telemetry story sitting in the blast radius of the product
-  // itself.
-  //
-  // The replacement has to preserve both constraints at once:
-  // 1) do not generate observability load from the admin page itself, and
-  // 2) still show real at-a-glance accountability in the UI.
-  //
-  // If this panel drifts into "just links" or "just a runbook", we have
-  // recreated the exact regression that triggered the refactor. Cloudflare
-  // links are drilldown escape hatches, not the primary content. Keep the
-  // baked D1 budget math, attribution, durable-object summary, and the
-  // zero-dollar free-plan pressure map visible in the page itself.
-  // Cloudflare Billing can be blank on the free plan; product quota pages
-  // are the operational source of truth for this account.
+  // The current account meters come from one admin-initiated Cloudflare query.
+  // Historical charts keep their separate baked timestamp and trust labels.
   function renderCostUsage(report) {
     if (state.activeTab !== "costs") return
     var snapshot = report && typeof report === "object" ? report : {}
-    var freshness = snapshot && snapshot.freshness ? snapshot.freshness : {}
+    var liveProvider = snapshot && snapshot.liveProvider ? snapshot.liveProvider : {}
+    var liveUsage =
+      liveProvider.state === "queried" && liveProvider.usage ? liveProvider.usage : null
+    var liveLimits = liveProvider.limits || {}
+    var liveDay = liveProvider.day ? formatMonthDay(liveProvider.day) : "today"
+    var liveTime = String(liveProvider.queriedAt || "").slice(11, 16)
     var d1 = snapshot && snapshot.d1 ? snapshot.d1 : {}
     var currentDay = d1 && d1.currentDay ? d1.currentDay : {}
-    var cycleTotals = d1 && d1.cycleTotals ? d1.cycleTotals : {}
     var lastDailyBucket = d1 && d1.lastDailyBucket ? d1.lastDailyBucket : null
     var daily = Array.isArray(d1 && d1.daily) ? d1.daily : []
     var automation = snapshot && snapshot.automation ? snapshot.automation : {}
-    var durableObjects = snapshot && snapshot.durableObjects ? snapshot.durableObjects : {}
-    var durableObjectTotals = durableObjects && durableObjects.totals ? durableObjects.totals : {}
     var latestDayKey = currentDay.date || (lastDailyBucket && lastDailyBucket.date) || ""
     var cycleRangeLabel =
       formatMonthDay(d1.cycleStartDate) +
@@ -8213,14 +8200,6 @@
       "/" +
       String(safeNum(automation.rollingWindowDays || d1.expectedWindowDays || 0)) +
       " days"
-    var cycleReadLimit = safeNum(cycleTotals.rowsReadMonthlyLimit)
-    var todayReadLimit = safeNum(currentDay.rowsReadDailySmartLimit)
-    var durableObjectRequests = safeNum(durableObjectTotals.requests)
-    var durableObjectErrors = safeNum(durableObjectTotals.errors)
-    var durableObjectErrorRate =
-      durableObjectRequests > 0
-        ? formatRatioPercent(durableObjectErrors, durableObjectRequests)
-        : "—"
     var trendRows = daily.map(function (row) {
       return {
         day_key: row && row.date ? row.date : "",
@@ -8231,7 +8210,7 @@
 
     if (els.costContextStrip) {
       els.costContextStrip.innerHTML = [
-        '<span class="cost-context-pill"><strong>Scope</strong>budget + platform signals</span>',
+        '<span class="cost-context-pill"><strong>Scope</strong>live account meters + historical signals</span>',
         '<span class="cost-context-pill"><strong>Cycle</strong>' + esc(cycleRangeLabel) + "</span>",
         '<span class="cost-context-pill"><strong>Latest day</strong>' +
           esc(latestDayKey ? formatMonthDay(latestDayKey) : "missing") +
@@ -8245,32 +8224,38 @@
     if (els.costMetrics) {
       els.costMetrics.innerHTML = [
         {
-          label: "Freshness",
-          value: String(freshness.headline || "Unknown"),
-          note: String(freshness.detail || "No bake timestamp yet."),
-        },
-        {
-          label: "Cycle",
-          value: cycleRangeLabel,
-          note: String(safeNum(d1.daysRemainingInCycle || 0)) + " day(s) left.",
+          label: "Cloudflare account",
+          value: liveUsage ? "Queried" : "Unavailable",
+          note: liveUsage
+            ? "All Brinedew apps · " + liveDay + " · " + liveTime + " UTC"
+            : "Current provider query failed; history below may be stale.",
         },
         {
           label: "D1 reads",
-          value:
-            todayReadLimit > 0
-              ? compactMetricNumber(currentDay.rowsRead) +
-                " / " +
-                compactMetricNumber(todayReadLimit)
-              : compactMetricNumber(currentDay.rowsRead),
-          note: currentDay.covered ? formatMonthDay(currentDay.date) : "bucket missing",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.rows_read) +
+              " / " +
+              compactMetricNumber(liveLimits.rows_read)
+            : "—",
+          note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
         },
         {
-          label: "DO traffic",
-          value: compactMetricNumber(durableObjectRequests),
-          note:
-            durableObjectErrors > 0
-              ? compactMetricNumber(durableObjectErrors) + " errors · " + durableObjectErrorRate
-              : "no errors baked",
+          label: "DO writes",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.do_rows_written) +
+              " / " +
+              compactMetricNumber(liveLimits.do_rows_written)
+            : "—",
+          note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
+        },
+        {
+          label: "Worker requests",
+          value: liveUsage
+            ? compactMetricNumber(liveUsage.requests) +
+              " / " +
+              compactMetricNumber(liveLimits.requests)
+            : "—",
+          note: liveUsage ? "Account-wide · " + liveDay : "Current count unavailable",
         },
       ]
         .map(function (metric) {
@@ -8358,17 +8343,12 @@
     if (els.costRefresh) els.costRefresh.disabled = true
     if (els.costUpdatedAt) {
       els.costUpdatedAt.textContent = state.costLoaded
-        ? "Reloading baked Cloudflare snapshot…"
-        : "Loading baked Cloudflare snapshot…"
+        ? "Refreshing account meters and history…"
+        : "Loading account meters and history…"
     }
     try {
-      // Chesterton's fence:
-      // This request reads only the already-baked snapshot payload.
-      // Pulling live telemetry here would recreate the exact budget hazard we
-      // retired: admin observability generating its own observability load.
-      // The authenticated endpoint reads one atomically-published KV value,
-      // with the deploy-time constant as a fallback. It performs no D1, DO,
-      // GraphQL, or Cloudflare analytics queries.
+      // The authenticated endpoint reads one account-wide provider snapshot
+      // and the baked history. It never polls from public pages.
       var payload = await apiJson("/cost/snapshot?ts=" + encodeURIComponent(String(Date.now())), {
         method: "GET",
         headers: {
@@ -8385,8 +8365,13 @@
       if (els.costUpdatedAt) {
         var freshness = report && report.freshness ? report.freshness : {}
         var publication = report && report.publication ? report.publication : {}
+        var provider = report && report.liveProvider ? report.liveProvider : {}
         els.costUpdatedAt.textContent =
-          String(freshness.headline || "Snapshot unavailable") +
+          (provider.state === "queried"
+            ? "Cloudflare queried " + String(provider.queriedAt || "").slice(11, 16) + " UTC"
+            : "Current Cloudflare meter unavailable") +
+          " · " +
+          String(freshness.headline || "History unavailable") +
           (Number.isFinite(Number(freshness.ageMinutes))
             ? " · " + String(freshness.ageMinutes) + " min old"
             : "") +
@@ -8396,7 +8381,7 @@
       if (isRequestCanceled(err)) return
       state.costLoaded = false
       if (els.costUpdatedAt)
-        els.costUpdatedAt.textContent = "Snapshot unavailable · publication endpoint failed"
+        els.costUpdatedAt.textContent = "Current capacity unavailable · request failed"
       if (els.costMetrics)
         els.costMetrics.innerHTML = inlineFailureMarkup(
           "Snapshot load failed",
