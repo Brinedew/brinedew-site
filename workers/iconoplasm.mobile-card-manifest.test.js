@@ -875,7 +875,8 @@ test("mobile card symbol endpoint resolves aliases before reading the published 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.card?.symbol, "SOSTDC1")
-  assert.equal(payload?.payload?.symbol, "SOSTDC1")
+  assert.equal(payload?.card?.payload?.symbol, "SOSTDC1")
+  assert.equal(Object.hasOwn(payload, "payload"), false)
   assert.deepEqual(payload?.missing, [])
 })
 
