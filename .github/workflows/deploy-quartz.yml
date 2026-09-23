@@ -165,6 +165,12 @@ jobs:
           BASE_SHA: ${{ github.event.before }}
         run: node scripts/verify-iconoplasm-release-history.mjs
 
+      # Exact-head ci.yaml already builds and runs the full test suite, including
+      # the Worker budget and architecture checks. This gate prevents deployment
+      # until that same commit passes; do not rerun a partial test list here.
+      # ARCHITECTURE FENCE [IPD-001]: keep healthy Bunny portrait delivery.
+      # ARCHITECTURE FENCE [IPD-005]: keep bounded D1 state and retention.
+      # ARCHITECTURE FENCE [IPD-008]: keep anonymous reading off mutable state.
       - name: Require successful tests for the exact deployed commit
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -184,26 +190,6 @@ jobs:
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
         run: node scripts/early-release-capacity-sentinel.mjs
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Install Python dependencies
-        run: |
-          pip install pandas pyyaml python-frontmatter requests
-
-      - name: Enrich protein pages
-        run: python scripts/enrich-proteins.py
-
-      - name: Upload image generation queue
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: image-generation-queue
-          path: image_generation_queue.txt
-          if-no-files-found: ignore
 
       - name: Setup Node.js (22.x)
         uses: actions/setup-node@v7
@@ -242,70 +228,6 @@ jobs:
 
       - name: Bake Iconoplasm observability snapshot (production)
         run: node scripts/generate-iconoplasm-observability-snapshot.mjs --env production
-
-      - name: Verify Iconoplasm architecture and Worker budget guards
-        run: |
-          # ARCHITECTURE FENCE [IPD-001]: production must not deploy a global
-          # Bunny disable based on one network's resolver failure. This focused
-          # guard also rejects zero-delay duplicate image races and timed CDN retries.
-          # test runs in the deploy job itself; parallel CI is not the release gate.
-          # This block must stay before deploy. The Iconoplasm sync fix is not
-          # just Worker code; it is the guarantee that the canonical GitHub path
-          # cannot overwrite the live Worker with a version that reintroduces
-          # per-scope KV publishes, Queue retry loops, hot D1 reads, or legacy
-          # Node package-manager installs. If a future deploy fails here, assume the
-          # guardrail caught real drift until the code proves otherwise.
-          # ARCHITECTURE FENCE [IPD-004]: due-time Queue wakeups are behavioral.
-          # ARCHITECTURE FENCE [IPD-005]: D1 capacity/retention is cross-system.
-          # ARCHITECTURE FENCE [IPD-007]: Workers Cache HITs are metered; reject
-          # enabling it across parsed production/staging/export configuration.
-          # ARCHITECTURE FENCE [IPD-003]: every complete gene profile and its
-          # canonical portrait must remain in the same crawlable sitemap shard.
-          # ARCHITECTURE FENCE [IPD-008]: the atomic alias/blocklist read pair and
-          # its live verifier are production-release invariants, not CI-only checks.
-          node scripts/run-tests.mjs \
-            scripts/architecture-fences.test.js \
-            iconoplasm-extension/immutable-response-cache.test.js \
-            iconoplasm-extension/content-portrait-cache.test.js \
-            iconoplasm-extension/content-reading-session.test.js \
-            iconoplasm-extension/service-worker.test.js \
-            scripts/iconoplasm-static-first-config.test.mjs \
-            workers/iconoplasm-d1-budget-policy.test.js \
-            workers/iconoplasm-factory-rollup-cost.test.js \
-            workers/iconoplasm-card-publication.test.js \
-            workers/iconoplasm-card-publication-runtime.test.js \
-            workers/iconoplasm-card-delivery.test.js \
-            workers/iconoplasm-published-card-objects.test.js \
-            iconoplasm-extension/service-worker.test.js \
-            iconoplasm-extension/metadata-delivery.test.js \
-            iconoplasm-extension/content-discovery.test.js \
-            iconoplasm-extension/content-detail-cache.test.js \
-            scripts/verify-iconoplasm-publication-aliases.test.js \
-            workers/iconoplasm.d1-cost-barrier.test.js \
-            workers/iconoplasm.d1-hot-query-guard.test.js \
-            workers/iconoplasm.do-not-delete-cost-guards.test.js \
-            workers/iconoplasm-gene-discovery.test.js \
-            workers/iconoplasm-gene-cold-path.test.js \
-            workers/iconoplasm.sync-finalization-queue.test.js \
-            workers/iconoplasm/sync-finalization-selection.test.js \
-            workers/iconoplasm/sync-finalization-global-selection.test.js \
-            workers/iconoplasm/sync-finalization-publication.test.js \
-            workers/iconoplasm/sync-finalization-status-list.test.js \
-            workers/iconoplasm/finalization-job-state.test.js \
-            workers/iconoplasm-publish-event-archive.test.js \
-            workers/iconoplasm-extension-blocklist-policy.test.js \
-            workers/iconoplasm-extension-blocklist-public.test.js \
-            workers/iconoplasm-publication-alias-policy.test.js \
-            workers/iconoplasm-recognition-validation-index.test.js \
-            workers/iconoplasm.publication-aliases.test.js \
-            workers/iconoplasm.public-media.test.js \
-            workers/iconoplasm.search.test.js \
-            workers/iconoplasm-admin-assets.test.js \
-            workers/iconoplasm.admin-html.test.js \
-            workers/iconoplasm.card-catalog-budget-preflight.test.js \
-            workers/seo-discovery.test.js \
-            scripts/reconcile-iconoplasm-crawler-policy.test.js
-          node scripts/assert-iconoplasm-worker-budget-guards.mjs
 
       - name: Build Quartz site
         run: pnpm run build
