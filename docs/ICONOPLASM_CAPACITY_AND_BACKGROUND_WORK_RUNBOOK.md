@@ -93,16 +93,11 @@ or waiting without a durable executor.
 
 ## Current inspection commands
 
-Run the action-derived model:
-
-```powershell
-pnpm run model:iconoplasm-capacity
-```
-
 For explicit data or topology maintenance, dispatch the production workflow
 with `data_maintenance=true`. That workflow refreshes account capacity and
-admits each operation before it runs. The old standalone viral-load gate had
-no staging workflow and is no longer a release command.
+admits each operation before it runs. Read actual D1 query and row counts from
+the provider when diagnosing exhaustion; the retired synthetic capacity model
+cannot establish current visitor demand or release readiness.
 
 Validate architecture ownership:
 
@@ -186,8 +181,6 @@ A reset creates an opportunity to verify the repair. It is not the repair.
 
 ## Capacity conclusions
 
-Use the decision rule in
-[ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md](ICONOPLASM_FIRST_PRINCIPLES_CAPACITY_MODEL.md).
 Do not call the architecture safe because current traffic is low. Do not call it
 fundamentally broken because one stale model or accidental query exceeds a
 limit.
