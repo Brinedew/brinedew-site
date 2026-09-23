@@ -13,6 +13,7 @@ const MIGRATION_BINDINGS = Object.freeze({
   "workers/benchmark/migrations": "DB",
   "migrations-iconoplasm": "ICONOPLASM_DB",
   "migrations-iconoplasm-authoring": "ICONOPLASM_AUTHORING_DB",
+  "migrations-iconoplasm-event-archive": "ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB",
 })
 
 function migrationBinding(path) {
