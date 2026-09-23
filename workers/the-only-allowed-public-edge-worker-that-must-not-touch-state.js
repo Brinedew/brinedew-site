@@ -152,8 +152,12 @@ function canonicalDocumentRedirect(url) {
   // app hosts; a direct stateful-Worker test cannot prove an apex URL works.
   if (url.hostname === "brinedew.bio" || url.hostname === "www.brinedew.bio") {
     const path = url.pathname.replace(/\/$/, "")
-    const owner = path === "/admin/iconoplasm" ? ICONOPLASM_HOST :
-      (path === "/admin" || path === "/admin-v2" ? GENEGUESSR_HOST : null)
+    const owner =
+      path === "/admin/iconoplasm"
+        ? ICONOPLASM_HOST
+        : path === "/admin" || path === "/admin-v2"
+          ? GENEGUESSR_HOST
+          : null
     if (owner) {
       const target = new URL(`https://${owner}${path === "/admin/iconoplasm" ? "/admin" : path}`)
       target.search = url.search
