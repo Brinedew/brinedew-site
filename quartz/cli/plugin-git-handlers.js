@@ -938,20 +938,14 @@ export async function handlePluginInstallUnified({
       }
     }
 
-    if (indexNeedsRegeneration) {
+    if (failed === 0 && indexNeedsRegeneration) {
       await regenerateSelectedPluginIndex()
     }
 
-    if (lockfileChanged) {
+    if (failed === 0 && lockfileChanged) {
       writeLockfile(lockfile)
       console.log()
-      if (failed === 0) {
-        console.log(styleText("green", `✓ Resolved ${installed.length} plugin(s)`))
-      } else {
-        console.log(
-          styleText("yellow", `⚠ Resolved ${installed.length} plugin(s), ${failed} failed`),
-        )
-      }
+      console.log(styleText("green", `✓ Resolved ${installed.length} plugin(s)`))
       console.log(styleText("gray", "Updated quartz.lock.json"))
     } else if (failed > 0) {
       console.log()
@@ -1090,7 +1084,7 @@ export async function handlePluginInstallUnified({
       }
     }
 
-    if (restoredPlugins.length > 0 || enabledOnly) {
+    if (failed === 0 && (restoredPlugins.length > 0 || enabledOnly)) {
       await regenerateSelectedPluginIndex()
     }
 
@@ -1213,11 +1207,11 @@ export async function handlePluginInstallUnified({
       failed += results.filter((ok) => !ok).length
     }
 
-    if (updatedPlugins.length > 0 || enabledOnly) {
+    if (failed === 0 && (updatedPlugins.length > 0 || enabledOnly)) {
       await regenerateSelectedPluginIndex()
     }
 
-    if (lockfileChanged) {
+    if (failed === 0 && lockfileChanged) {
       writeLockfile(lockfile)
       console.log()
       console.log(styleText("gray", "Updated quartz.lock.json"))
@@ -1394,7 +1388,7 @@ export async function handlePluginInstallUnified({
     }
   }
 
-  await regenerateSelectedPluginIndex()
+  if (failed === 0) await regenerateSelectedPluginIndex()
 
   console.log()
   if (failed === 0) {
