@@ -10,7 +10,6 @@
   const FRAME_PREWARMED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_PREWARMED"
   const FRAME_READY_TYPE = "ICONOPLASM_LIT_ARCHIVAL_READY"
   const FRAME_RENDERED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_RENDERED"
-  const FRAME_OPEN_TYPE = "ICONOPLASM_LIT_ARCHIVAL_OPEN"
   const FRAME_AUTH_REQUIRED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
   const shared = globalThis.IconoplasmCardShared
   const frameRoot = document.getElementById("iconoplasm-root")
@@ -574,7 +573,13 @@
     if (Date.now() < Number((currentPayload && currentPayload.navigationArmedAt) || 0)) return
     const symbol = currentSymbol()
     if (!symbol) return
-    postToParent(FRAME_OPEN_TYPE, { symbol })
+    // Open during the trusted click itself. A postMessage to the content script
+    // loses the browser's transient user activation and can be popup-blocked.
+    window.open(
+      "https://iconoplasm.brinedew.bio/gene/" + encodeURIComponent(symbol),
+      "_blank",
+      "noopener",
+    )
   })
 
   postToParent(FRAME_READY_TYPE)

@@ -19,7 +19,17 @@
     documentRef.addEventListener("mouseover", options.onMouseOver)
     documentRef.addEventListener("mouseout", options.onMouseOut)
     windowRef.addEventListener("message", options.onFrameMessage)
-    tooltip.addEventListener("click", options.onTooltipClick)
+    // Some host pages stop click propagation before it reaches an injected
+    // tooltip. Capture at the document, where the real click still arrives.
+    documentRef.addEventListener(
+      "click",
+      (event) => {
+        if (tooltip.contains(event.target) && typeof options.onTooltipClick === "function") {
+          options.onTooltipClick(event)
+        }
+      },
+      true,
+    )
     tooltip.addEventListener("keydown", options.onTooltipKeyDown)
     tooltip.addEventListener("mouseenter", options.cancelHideTimer)
     tooltip.addEventListener("mouseleave", options.onTooltipMouseLeave)
