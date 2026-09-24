@@ -139,7 +139,6 @@
   const LIT_ARCHIVAL_PREWARMED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_PREWARMED"
   const LIT_ARCHIVAL_READY_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_READY"
   const LIT_ARCHIVAL_RENDERED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_RENDERED"
-  const LIT_ARCHIVAL_OPEN_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_OPEN"
   const LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
   const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
   const DISCOVERY_HOVER_DWELL_MS = 900
@@ -2577,14 +2576,6 @@
         if (source) rememberReadyLitArchivalPrewarmSource(source)
       }
       flushLitArchivalPrewarmSources()
-      return
-    }
-    if (data.type === LIT_ARCHIVAL_OPEN_MESSAGE) {
-      openGenePage(
-        String(data.symbol || activeSymbol || "")
-          .trim()
-          .toUpperCase(),
-      )
       return
     }
     if (data.type === LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE) {
