@@ -1398,20 +1398,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_gallery.rematerialize_card_candidates",
   ),
   adminApiContract(
-    "admin_gallery_blot_alias_backfill",
-    "/gallery/backfill-blot-aliases",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.backfill_blot_aliases",
-  ),
-  adminApiContract(
-    "admin_gallery_blot_alias_backfill_cancel",
-    "/gallery/cancel-blot-alias-backfill",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.cancel_blot_alias_backfill",
-  ),
-  adminApiContract(
     "admin_gallery_card_rematerialization_cancel",
     "/gallery/cancel-card-rematerialization",
     POST,

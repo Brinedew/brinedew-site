@@ -209,9 +209,9 @@
     {
       "id": "IPD-007",
       "title": "Iconoplasm is static-first with one dynamic Worker invocation",
-      "decision": "Anonymous Iconoplasm documents are static and healthy portrait reads go directly to Bunny. The stable /blot/{symbol}.webp alias uses the one existing Worker to resolve the exact published card. Canonical /portraits/* URLs use that Worker for a real Bunny-backed fallback; private actions, mutations, and administration use the same Worker.",
+      "decision": "Anonymous Iconoplasm documents are static and healthy portrait reads go directly to Bunny. The stable first-party /blot/{symbol}.webp route uses the one existing Worker to resolve the exact published card and its immutable image. Canonical /portraits/* URLs use that Worker for a real Bunny-backed fallback; private actions, mutations, and administration use the same Worker.",
       "reason": "Public reading must scale without a metered Worker invocation for every healthy asset or page. The canonical fallback must deliver actual image bytes, and a mutable blot URL must not serve stale or mislabeled bytes after the published card changes.",
-      "change_control": "Keep the shell static, healthy portrait delivery direct from Bunny, the canonical portrait fallback byte-correct, and the blot alias tied to the exact published card. A replacement must preserve complete public reading and bound Worker use to routes that actually need it. Routing, caching, and deployment mechanics may change.",
+      "change_control": "Keep the shell static, healthy portrait delivery direct from Bunny, the canonical portrait fallback byte-correct, and the stable blot route tied to the exact published card. A replacement must preserve complete public reading and bound Worker use to routes that actually need it. Routing, caching, and deployment mechanics may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-670",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -283,7 +283,7 @@
     {
       "id": "IPD-009",
       "title": "Iconoplasm public reads stay cold-safe inside the one loud state boundary",
-      "decision": "Anonymous gene documents resolve one publisher's coherent static release. The stable blot alias may read the published head and exact card through the existing Worker. Anonymous reads never reconstruct public truth from D1, Durable Objects, Queues, sessions, or a second state owner.",
+      "decision": "Anonymous gene documents resolve one publisher's coherent static release. The stable first-party blot route may read the published head and exact card through the existing Worker. Anonymous reads never reconstruct public truth from D1, Durable Objects, Queues, sessions, or a second state owner.",
       "reason": "A static published read plane keeps failures and traffic away from the mutation authority.",
       "change_control": "A replacement must preserve one publisher, coherent fallback, and separation between public reads and mutable state. File names, manifests, object layout, and service topology may change.",
       "runbook": "docs/ICONOPLASM_REQUEST_LIFECYCLE.md",
