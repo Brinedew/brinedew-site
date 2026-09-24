@@ -319,18 +319,21 @@ async function inspectTree(directory, bundleRoot) {
   let fileCount = 0
   let totalBytes = 0
   let largest = { path: "", bytes: 0 }
+  const files = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name)
     if (entry.isDirectory()) {
       const child = await inspectTree(fullPath, bundleRoot)
       fileCount += child.fileCount
       totalBytes += child.totalBytes
+      files.push(...child.files)
       if (child.largest.bytes > largest.bytes) largest = child.largest
       continue
     }
     if (!entry.isFile()) continue
     const info = await stat(fullPath)
     fileCount += 1
+    files.push(path.relative(bundleRoot, fullPath).replaceAll(path.sep, "/"))
     totalBytes += info.size
     if (info.size > largest.bytes) {
       largest = {
@@ -339,7 +342,60 @@ async function inspectTree(directory, bundleRoot) {
       }
     }
   }
-  return { fileCount, totalBytes, largest }
+  return { fileCount, totalBytes, largest, files }
+}
+
+// B-812: the Iconoplasm documents are Quartz pages emitted for the main site.
+// On iconoplasm.brinedew.bio their main-site links (About, posts, tutorial) and
+// app-relative legal links resolved to paths this host does not serve, so the
+// SPA fallback answered with the Iconoplasm homepage. Point each at its real
+// owner, then refuse a build that still links to a local path nobody serves.
+const MAIN_SITE_ORIGIN = "https://brinedew.bio"
+const ICONOPLASM_LINK_REWRITES = Object.freeze([
+  ["../../apps/iconoplasm/privacy", "/privacy"],
+  ["../../apps/iconoplasm/license", "/license"],
+  ["../../apps/iconoplasm/caretaker-terms", "/caretaker-terms"],
+  ['href="/About.html"', `href="${MAIN_SITE_ORIGIN}/about"`],
+  ['href="/posts/support-me"', `href="${MAIN_SITE_ORIGIN}/posts/support-me"`],
+  ['href="/posts"', `href="${MAIN_SITE_ORIGIN}/posts"`],
+  [
+    'href="/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm"',
+    `href="${MAIN_SITE_ORIGIN}/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm"`,
+  ],
+])
+
+// Paths this host serves without a bundle file: SPA routes and Worker routes.
+const ICONOPLASM_SERVED_PREFIXES = Object.freeze([
+  "/gene/",
+  "/clans",
+  "/studio",
+  "/admin",
+  "/api/",
+  "/blot/",
+  "/portraits/",
+  "/published-cards/",
+  "/cdn-cgi/",
+])
+
+export function standaloneIconoplasmHtml(html) {
+  let out = String(html)
+  for (const [from, to] of ICONOPLASM_LINK_REWRITES) out = out.replaceAll(from, to)
+  return out
+}
+
+export function unservedIconoplasmLinks(html, bundleFiles) {
+  const files = new Set(bundleFiles)
+  const unserved = new Set()
+  for (const match of String(html).matchAll(/\bhref="(\/(?!\/)[^"#?]*)/g)) {
+    const target = match[1]
+    if (target === "/") continue
+    if (ICONOPLASM_SERVED_PREFIXES.some((prefix) => target.startsWith(prefix))) continue
+    const relative = target.replace(/^\//, "")
+    if (files.has(relative) || files.has(`${relative}.html`) || files.has(`${relative}/index.html`))
+      continue
+    unserved.add(target)
+  }
+  return [...unserved].sort()
 }
 
 export async function prepareIconoplasmEdgeAssets({
@@ -381,22 +437,22 @@ export async function prepareIconoplasmEdgeAssets({
     path.join(resolvedSource, "apps", "iconoplasm", "index.html"),
     "utf8",
   )
-  const standaloneHome = sourceHome
-    .replaceAll("../../apps/iconoplasm/privacy", "/privacy")
-    .replaceAll("../../apps/iconoplasm/license", "/license")
-  await writeFile(path.join(resolvedOutput, "index.html"), standaloneHome, "utf8")
-  await copyFile(
-    path.join(resolvedSource, "apps", "iconoplasm", "privacy.html"),
-    path.join(resolvedOutput, "privacy.html"),
+  await writeFile(
+    path.join(resolvedOutput, "index.html"),
+    standaloneIconoplasmHtml(sourceHome),
+    "utf8",
   )
-  await copyFile(
-    path.join(resolvedSource, "apps", "iconoplasm", "license.html"),
-    path.join(resolvedOutput, "license.html"),
-  )
-  await copyFile(
-    path.join(resolvedSource, "apps", "iconoplasm", "caretaker-terms.html"),
-    path.join(resolvedOutput, "caretaker-terms.html"),
-  )
+  for (const page of ["privacy", "license", "caretaker-terms"]) {
+    const source = await readFile(
+      path.join(resolvedSource, "apps", "iconoplasm", `${page}.html`),
+      "utf8",
+    )
+    await writeFile(
+      path.join(resolvedOutput, `${page}.html`),
+      standaloneIconoplasmHtml(source),
+      "utf8",
+    )
+  }
   await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
   await writeFile(path.join(resolvedOutput, "robots.txt"), iconoplasmRobots, "utf8")
   await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
@@ -416,6 +472,16 @@ export async function prepareIconoplasmEdgeAssets({
   )
 
   const report = await inspectTree(resolvedOutput, resolvedOutput)
+  const bundleFiles = report.files || []
+  for (const page of ["index", "privacy", "license", "caretaker-terms"]) {
+    const html = await readFile(path.join(resolvedOutput, `${page}.html`), "utf8")
+    const unserved = unservedIconoplasmLinks(html, bundleFiles)
+    if (unserved.length) {
+      throw new Error(
+        `Iconoplasm ${page}.html links to paths this host does not serve: ${unserved.join(", ")}`,
+      )
+    }
+  }
   if (report.fileCount > maxAssetFiles) {
     throw new Error(
       `Iconoplasm asset bundle has ${report.fileCount} files; Cloudflare allows ${maxAssetFiles}`,
