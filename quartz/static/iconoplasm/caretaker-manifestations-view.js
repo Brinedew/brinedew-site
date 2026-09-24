@@ -206,6 +206,16 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   const assignmentState = String(assignment?.status || "")
   const editable = dossier.viewer.can_edit && assignmentState === "active"
   const canWrite = editable && own?.status !== "withdrawn"
+  const ownHead = revisions.find(function (item) {
+    return item.revision?.manifestation_revision_id === own?.manifestation_head_revision_id
+  })
+  const savedSourceReady =
+    ownHead?.revision?.lifecycle === "active" &&
+    ownHead.revision.body_available !== false &&
+    ownHead.revision.derivative?.status === "accepted" &&
+    ownHead.revision.derivative.body_available !== false
+  const ownSourceIsCanonical =
+    own?.manifestation_head_revision_id === dossier.head?.canonical_revision_id
   let body =
     '<dialog class="icono-caretaker-dialog" data-icono-caretaker-dialog aria-labelledby="icono-caretaker-title">' +
     '<section class="icono-caretaker-panel">' +
@@ -300,6 +310,17 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     const tagsUnavailable =
       own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
     body +=
+      "<div data-icono-caretaker-generation-source>" +
+      (savedSourceReady && !ownSourceIsCanonical && !tagsUnavailable
+        ? '<p class="icono-caretaker-callout" data-tone="warn">Your latest saved tags are in your version. New candidates still use the public version. <button type="button" class="icono-button" data-icono-caretaker-select="' +
+          esc(own.manifestation_head_revision_id) +
+          '" data-manifestation-id="' +
+          esc(own.manifestation_id) +
+          '">Use my version for new candidates and the gene page</button></p>'
+        : savedSourceReady && ownSourceIsCanonical
+          ? '<p class="icono-caretaker-callout">New candidates use your saved version.</p>'
+          : "") +
+      "</div>" +
       (tagsUnavailable
         ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
         : "") +
