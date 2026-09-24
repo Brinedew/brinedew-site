@@ -4548,6 +4548,72 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const AUTOCOMPLETE_DEBOUNCE_MS = 120
   let autocompleteAbortController = null
 
+  // The guessable-protein index is one static asset (scripts/export-geneguessr-
+  // protein-index.mjs). Searching it in the browser costs no Worker request or
+  // D1 read per keystroke, so autocomplete scales with visitors for free. The
+  // server search remains only as a fallback if the file cannot load.
+  const PROTEIN_INDEX_URL = `${STATIC_BASE}protein-index.json`
+  let proteinIndexPromise = null
+
+  function loadProteinIndex() {
+    if (!proteinIndexPromise) {
+      proteinIndexPromise = fetch(PROTEIN_INDEX_URL, { credentials: "omit" })
+        .then((response) => {
+          if (!response.ok) throw new Error(`Protein index HTTP ${response.status}`)
+          return response.json()
+        })
+        .then((payload) => {
+          const fields = Array.isArray(payload?.fields) ? payload.fields : []
+          const at = (name) => fields.indexOf(name)
+          const [u, h, s, f, l, y] = [
+            "uniprot",
+            "hgnc",
+            "gene_surname",
+            "full_name",
+            "length",
+            "synonyms",
+          ].map(at)
+          if (payload?.schema_version !== 1 || u < 0 || h < 0 || !Array.isArray(payload.rows)) {
+            throw new Error("Protein index has an unknown shape")
+          }
+          return payload.rows.map((row) => ({
+            uniprot: row[u],
+            hgnc: row[h],
+            gene_surname: s >= 0 ? row[s] : null,
+            full_name: f >= 0 ? row[f] : "",
+            length: l >= 0 ? row[l] : null,
+            synonyms: y >= 0 && Array.isArray(row[y]) ? row[y] : [],
+          }))
+        })
+        .catch((error) => {
+          proteinIndexPromise = null
+          throw error
+        })
+    }
+    return proteinIndexPromise
+  }
+
+  function searchLocalProteinIndex(index, cleanedQuery, guessedSet) {
+    const query = cleanedQuery.toLowerCase()
+    const upper = cleanedQuery.toUpperCase()
+    const scored = []
+    for (const protein of index) {
+      if (guessedSet.has(normalizeUniprotId(protein.uniprot))) continue
+      let score = getSearchScore(protein, query)
+      if (score === Number.POSITIVE_INFINITY) {
+        const uniprot = String(protein.uniprot || "").toUpperCase()
+        if (uniprot === upper) score = 0
+        else if (uniprot.startsWith(upper)) score = 1
+      }
+      if (score !== Number.POSITIVE_INFINITY) scored.push({ protein, score })
+    }
+    scored.sort((a, b) => a.score - b.score || a.protein.hgnc.localeCompare(b.protein.hgnc))
+    return scored
+      .slice(0, SEARCH_MAX_RESULTS)
+      .map((entry) => rememberProteinRecord(entry.protein))
+      .filter(Boolean)
+  }
+
   function normalizeText(value) {
     return (value || "").toLowerCase()
   }
@@ -4583,6 +4649,12 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       .map((g) => normalizeUniprotId(g.uniprot))
       .filter(Boolean)
     const guessedSet = new Set(guessedIds)
+    try {
+      const index = await loadProteinIndex()
+      return searchLocalProteinIndex(index, cleanedQuery, guessedSet)
+    } catch (indexError) {
+      console.warn("Geneguessr: static protein index unavailable; using server search", indexError)
+    }
     if (autocompleteAbortController) {
       autocompleteAbortController.abort()
     }
