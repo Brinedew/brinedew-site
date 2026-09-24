@@ -59,6 +59,9 @@ ${serviceDiscoveryHeaders}
 /caretaker-terms
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
+/developers
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 /static/iconoplasm/*
   Cache-Control: public, max-age=31536000, immutable
 
@@ -72,7 +75,11 @@ ${serviceDiscoveryHeaders}
   Cache-Control: public, max-age=31536000, immutable
 `
 
-const iconoplasmRobots = `User-agent: GPTBot
+const iconoplasmRobots = `# Model-training crawlers are blocked (also at the edge, see
+# cloudflare/iconoplasm-crawler-policy.json). AI search crawlers and fetches
+# made on a user's behalf (OAI-SearchBot, Claude-SearchBot, PerplexityBot,
+# ChatGPT-User, Claude-User) are welcome. Card images are CC0; see /license.
+User-agent: GPTBot
 Disallow: /
 
 User-agent: ClaudeBot
@@ -117,6 +124,7 @@ ${symbols
   .join("\n")}
   <url><loc>https://iconoplasm.brinedew.bio/privacy</loc></url>
   <url><loc>https://iconoplasm.brinedew.bio/license</loc></url>
+  <url><loc>https://iconoplasm.brinedew.bio/developers</loc></url>
 </urlset>
 `
 }
@@ -129,6 +137,7 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 - [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
 - Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
+- [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
 `
 
 // Keep /portraits/* out of Static Assets redirects: those canonical URLs must
@@ -362,6 +371,7 @@ const MAIN_SITE_ORIGIN = "https://brinedew.bio"
 const ICONOPLASM_LINK_REWRITES = Object.freeze([
   ["../../apps/iconoplasm/privacy", "/privacy"],
   ["../../apps/iconoplasm/license", "/license"],
+  ["../../apps/iconoplasm/developers", "/developers"],
   ["../../apps/iconoplasm/caretaker-terms", "/caretaker-terms"],
   ['href="/About.html"', `href="${MAIN_SITE_ORIGIN}/about"`],
   ['href="/posts/support-me"', `href="${MAIN_SITE_ORIGIN}/posts/support-me"`],
@@ -424,6 +434,7 @@ export async function prepareIconoplasmEdgeAssets({
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "privacy.html"))
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "license.html"))
   await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "caretaker-terms.html"))
+  await ensureFile(path.join(resolvedSource, "apps", "iconoplasm", "developers.html"))
   await ensureFile(path.join(resolvedSource, "favicon.ico"))
 
   await rm(resolvedOutput, { recursive: true, force: true })
@@ -450,7 +461,7 @@ export async function prepareIconoplasmEdgeAssets({
     standaloneIconoplasmHtml(sourceHome),
     "utf8",
   )
-  for (const page of ["privacy", "license", "caretaker-terms"]) {
+  for (const page of ["privacy", "license", "caretaker-terms", "developers"]) {
     const source = await readFile(
       path.join(resolvedSource, "apps", "iconoplasm", `${page}.html`),
       "utf8",
@@ -481,7 +492,7 @@ export async function prepareIconoplasmEdgeAssets({
 
   const report = await inspectTree(resolvedOutput, resolvedOutput)
   const bundleFiles = report.files || []
-  for (const page of ["index", "privacy", "license", "caretaker-terms"]) {
+  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"]) {
     const html = await readFile(path.join(resolvedOutput, `${page}.html`), "utf8")
     const unserved = unservedIconoplasmLinks(html, bundleFiles)
     if (unserved.length) {
