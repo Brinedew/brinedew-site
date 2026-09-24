@@ -3,7 +3,6 @@ import test from "node:test"
 // ARCHITECTURE FENCE [IPD-011]: failed bytes and late votes cannot advance canon.
 import {
   createCardPublication,
-  CARD_BLOT_ALIAS_BACKFILL_BATCH,
   CARD_PUBLICATION_BATCH,
   enrichPublishedGeneCandidates,
   projectCardBlot,
@@ -58,7 +57,7 @@ function fixture(count = 9) {
   let prepared = new Map()
   const bytes = new Map()
   const writes = []
-  const aliases = []
+  const blots = []
   let failure = null
   let event = 1
   let dirty = []
@@ -96,10 +95,10 @@ function fixture(count = 9) {
     async read(key) {
       return bytes.has(key) ? { value: JSON.parse(bytes.get(key)) } : null
     },
-    async publishBlotAlias(symbol, blot, options) {
-      if (failure === "blot-alias") throw new Error("injected alias failure")
-      aliases.push({ symbol, blot: structuredClone(blot), options: structuredClone(options) })
-      return { key: `blot/${symbol}.webp` }
+    async verifyBlot(symbol, blot) {
+      if (failure === "blot") throw new Error("injected immutable blot failure")
+      blots.push({ symbol, blot: structuredClone(blot) })
+      return blot?.status === "ready" ? { key: blot.object_key } : { skipped: true }
     },
   }
   const source = {
@@ -135,7 +134,7 @@ function fixture(count = 9) {
     repository,
     objects,
     writes,
-    aliases,
+    blots,
     cards,
     source,
     fail: (kind) => {
@@ -148,7 +147,7 @@ function fixture(count = 9) {
   }
 }
 
-test("publication verifies every gene blot alias before committing its head", async () => {
+test("publication verifies ready immutable blots before committing its head", async () => {
   const f = fixture(2)
   f.cards[0].payload.blot = {
     status: "ready",
@@ -163,67 +162,22 @@ test("publication verifies every gene blot alias before committing its head", as
   await p.step()
   assert.equal(p.status().head, null)
   assert.deepEqual(
-    f.aliases.map((item) => item.symbol),
+    f.blots.map((item) => item.symbol),
     ["G0000", "G0001"],
   )
   await drain(p)
   assert.ok(p.status().head)
 })
 
-test("an unverified blot alias leaves the prior publication head untouched", async () => {
+test("an unverified immutable blot leaves the prior publication head untouched", async () => {
   const f = fixture(1)
   const p = f.create()
   await p.bootstrap()
   await p.step()
-  f.fail("blot-alias")
-  await assert.rejects(p.step(), /injected alias failure/)
+  f.fail("blot")
+  await assert.rejects(p.step(), /injected immutable blot failure/)
   assert.equal(p.status().head, null)
-  assert.equal(p.status().job.alias_offset || 0, 0)
-})
-
-test("stable blot alias backfill reuses immutable cards without republishing authority", async () => {
-  const f = fixture(9)
-  const p = f.create()
-  await p.bootstrap()
-  await drain(p)
-  const head = p.status().head
-  const immutableWrites = f.writes.length
-  f.aliases.length = 0
-
-  await p.backfillBlotAliases()
-  await drain(p)
-
-  assert.deepEqual(
-    f.aliases.map((item) => item.symbol),
-    f.cards.map((item) => item.symbol),
-  )
-  assert.equal(
-    f.aliases.every((item) => item.options.allowMissingImmutablePlaceholder === true),
-    true,
-  )
-  assert.equal(f.writes.length, immutableWrites)
-  assert.equal(CARD_BLOT_ALIAS_BACKFILL_BATCH * 3 + 1 < 50, true)
-  assert.deepEqual(p.status().head, head)
-  assert.equal(p.status().job, null)
-})
-
-test("only a compatibility alias backfill can be preempted for user publication", async () => {
-  const f = fixture(9)
-  const p = f.create()
-  await p.bootstrap()
-  assert.deepEqual(p.cancelBlotAliasBackfill(), { accepted: false })
-  assert.ok(p.status().job, "a real bootstrap job cannot be cancelled by the alias control")
-  await drain(p)
-  const head = p.status().head
-
-  await p.backfillBlotAliases()
-  await p.step()
-  assert.ok(f.repository.prepared().length > 0)
-  assert.deepEqual(p.cancelBlotAliasBackfill(), { accepted: true, cleared_prepared_rows: 9 })
-
-  assert.equal(p.status().job, null)
-  assert.equal(f.repository.prepared().length, 0)
-  assert.deepEqual(p.status().head, head)
+  assert.equal(p.status().job.blot_offset || 0, 0)
 })
 
 async function drain(publisher) {
@@ -633,7 +587,7 @@ test("rematerialization republishes every page from source while the old head st
   await drain(p)
   const original = p.status().head
   const writesBefore = f.writes.length
-  const aliasesBefore = f.aliases.length
+  const blotsBefore = f.blots.length
   const afterCommitReceipts = []
   f.source.afterCommit = async (receipt) => afterCommitReceipts.push(receipt)
   // A change arrives before the pass starts; the pass claims that event window
@@ -663,9 +617,7 @@ test("rematerialization republishes every page from source while the old head st
   for (const kind of ["cards", "genes", "portraits"]) {
     assert.equal(kinds.filter((value) => value === kind).length, 9, `${kind} rewritten per card`)
   }
-  // A catalog-wide rematerialization never republishes mutable per-symbol
-  // aliases; that compatibility plane belongs to the alias backfill owner.
-  assert.equal(f.aliases.length - aliasesBefore, 0)
+  assert.equal(f.blots.length, blotsBefore, "full rebuild avoids a per-blot storage read")
   const shard = committed.current.manifest.shards[0]
   const index = (await f.objects.read(shard.delivery_indexes[0].key)).value
   const [symbol, , geneHash] = index.entries[0]

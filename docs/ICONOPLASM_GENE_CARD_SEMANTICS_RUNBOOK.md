@@ -63,14 +63,13 @@ its clamped CSS at a 768px layout width.
 Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
-The stable first-party `/blot/{SYMBOL}.webp` route is one Static Assets wildcard
-redirect to the publisher-owned Bunny alias `/blot/{SYMBOL}.webp`; it never
-serves HTML or invokes JavaScript. Before the publication head advances, the
-single publication coordinator copies the exact verified content-addressed
-WebP bytes to that alias, or copies verified static placeholder image bytes when
-the coherent gene artifact has no blot. The alias is therefore a delivery
-projection of the publication, not a second selection timeline, and it never
-consults live D1 portrait state.
+The stable first-party `/blot/{SYMBOL}.webp` route enters the existing Worker.
+It selects the exact published card and reads its immutable WebP object from
+Bunny. Before the publication head advances, the one publication coordinator
+verifies that object's hash. A card without a blot returns an honest 404 at
+the image route. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
+to overwrite or wait for; its long-lived CDN cache stalled real publication on
+2026-09-24 while the first-party route already worked.
 
 When a complete, indexable gene page has an exact ready blot, that blot must be
 present consistently in all of these projections:
@@ -187,11 +186,9 @@ not store 19,023 gene documents and no crawler request reads KV, D1, a Durable
 Object, a Queue, a session, or Browser Rendering.
 
 Blot readiness does not control text-gene sitemap membership. GET and HEAD for
-the stable blot route receive an HTTP redirect from Static Assets to the stable
-Bunny alias. The publisher verifies that alias against the immutable blot hash
-before committing the head; when no valid blot exists, it publishes static SVG
-placeholder bytes at the same image alias. Non-JavaScript clients therefore get
-an image response without Worker execution or runtime reconstruction.
+the stable blot route read the published card through the existing Worker and
+serve its verified immutable WebP bytes. Missing blots return 404. This route
+does not read mutable D1 or create an alternate image selection timeline.
 
 The crawl frontier exists for search indexing and user-directed retrieval, not
 for unbounded model-training ingestion. On 2026-07-24, GPTBot and ClaudeBot
