@@ -149,7 +149,6 @@ test(
             content_hash: "test-hash",
           })),
         fetchEssenceStateRows: async () => [],
-        fetchManifestationStateRows: async () => [],
         isAdmin: async () => true,
         json: (data, status = 200, headers = {}) =>
           new Response(JSON.stringify(data), {
