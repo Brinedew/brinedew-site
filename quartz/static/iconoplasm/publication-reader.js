@@ -93,6 +93,29 @@ function withImmutableMedia(record) {
   }
 }
 
+// The vote view owns the selected portrait; the newer catalog owns the complete
+// candidate pool. A vote overlay can outlive a catalog publish, so copying its
+// old gallery would make a fulfilled generation invisible to every reader.
+export function mergePublishedGeneOverlay(base, overlay) {
+  if (!base || !overlay) return overlay
+  const merged = { ...overlay }
+  delete merged.candidate_count
+  delete merged.candidate_gallery
+  delete merged.portrait_candidates
+  if ("candidate_count" in base) merged.candidate_count = base.candidate_count
+  if ("candidate_gallery" in base) merged.candidate_gallery = base.candidate_gallery
+  if (Array.isArray(base.portrait_candidates)) {
+    const selected = String(overlay.portrait?.asset_sha256 || "").toLowerCase()
+    merged.portrait_candidates = base.portrait_candidates.map((item) => ({
+      ...item,
+      is_current: selected
+        ? String(item.asset_sha256 || "").toLowerCase() === selected
+        : item.is_current,
+    }))
+  }
+  return merged
+}
+
 export function createIconoplasmPublicationReader(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis)
   const storage = options.storage ?? globalThis.localStorage ?? null
@@ -245,7 +268,9 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (delta?.status === "committed") {
       const identity = objectIdentity(delta.gene?.key, "genes")
       const record = await immutableObject("genes", identity.hash)
-      return record?.symbol === key ? withImmutableMedia(record) : null
+      if (record?.symbol !== key) return null
+      const base = await baseGene(manifest, key)
+      return withImmutableMedia(mergePublishedGeneOverlay(base, record))
     }
     return withImmutableMedia(await baseGene(manifest, key))
   }
@@ -296,7 +321,16 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (declared != null && candidates.length !== declared) {
       throw new Error("Candidate gallery count mismatch")
     }
-    return { candidates, count: candidates.length }
+    const selected = String(record?.portrait?.asset_sha256 || "").toLowerCase()
+    return {
+      candidates: selected
+        ? candidates.map((item) => ({
+            ...item,
+            is_current: String(item.asset_sha256 || "").toLowerCase() === selected,
+          }))
+        : candidates,
+      count: candidates.length,
+    }
   }
 
   async function genes(symbols) {
