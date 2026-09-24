@@ -17,15 +17,10 @@ const powershellExecutable =
 const powershellTestDeadlineMs = 30_000
 
 const scriptUrl = new URL("./Invoke-ManifestationAuthorityCutover.ps1", import.meta.url)
-const shardScriptUrl = new URL("./Invoke-ManifestationAuthorityCutoverShards.ps1", import.meta.url)
 const requestBudgetUrl = new URL("./lib/CloudflareWorkerRequestBudget.ps1", import.meta.url)
 
 async function source() {
   return readFile(scriptUrl, "utf8")
-}
-
-async function shardSource() {
-  return readFile(shardScriptUrl, "utf8")
 }
 
 async function requestBudgetSource() {
@@ -77,42 +72,6 @@ test("cutover operator is resumable and bounds request, run, retry, and progress
   assert.match(text, /\[ValidateRange\(1, 2500\)\]/)
   assert.match(text, /\[int\] \$DailyWorkerRequestBudget = 2500/)
   assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*\$client\.SendAsync/)
-  assert.match(
-    text,
-    /Assert-CloudflareWorkerRequestHeadroom[\s\S]*Reserve-CloudflareWorkerRequests/,
-  )
-  assert.match(text, /workerRequestsSinceTelemetryCheck -ge 100/)
-  assert.doesNotMatch(text, /WorkerRequestBudgetStatePath/)
-})
-
-test("sharded operator accepts omitted and singleton shard selections without scalar unwrapping", async () => {
-  const text = await shardSource()
-  assert.match(text, /\[ValidateSet\('materialize', 'backup'\)\]/)
-  assert.match(text, /\[string\] \$Action = 'materialize'/)
-  assert.match(text, /@\(\$ShardIndexes \| Where-Object \{ \$null -ne \$_ \}\)/)
-  assert.match(text, /\$resolvedShardIndexes = @\(/)
-  assert.match(text, /0\.\.\(\$ShardCount - 1\)/)
-  assert.match(text, /\$ShardIndexes \| Sort-Object -Unique/)
-  assert.match(text, /\[ValidateSet\(2, 4, 8, 16, 32, 64, 128, 256\)\]/)
-  assert.match(text, /\[ValidateRange\(1, 25\)\]/)
-  assert.match(text, /\[int\] \$PageLimit = 10/)
-  assert.match(text, /\[ValidateRange\(1, 32\)\]/)
-  assert.match(text, /\[int\] \$MaxConcurrentRequests = 16/)
-  assert.match(text, /offset \+= \$MaxConcurrentRequests/)
-  assert.match(text, /measured 32-lane production tail reached 188 seconds/)
-  assert.match(text, /\[ValidateRange\(30, 300\)\]/)
-  assert.match(text, /\[int\] \$RequestTimeoutSeconds = 240/)
-  assert.match(text, /\$failedWithoutProgress -ge 12/)
-  assert.match(text, /Cutover status failed after 5 attempts/)
-  assert.match(text, /408, 429, 500, 502, 503, 504/)
-  assert.match(text, /failure_kinds\s+= @\(\$failures \| Sort-Object -Unique\)/)
-  assert.match(text, /\[Math\]::Min\(30, \[Math\]::Pow/)
-  assert.match(text, /X-Iconoplasm-Cutover-Shard/)
-  assert.match(text, /X-Iconoplasm-Cutover-Action', \$Action/)
-  assert.match(text, /backup\.verified_entries.*backup\.expected_entries/s)
-  assert.match(text, /\[int\] \$DailyWorkerRequestBudget = 2500/)
-  assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*\$client\.GetAsync/)
-  assert.match(text, /Reserve-CloudflareWorkerRequests[\s\S]*-Count \$batch\.Count/)
   assert.match(
     text,
     /Assert-CloudflareWorkerRequestHeadroom[\s\S]*Reserve-CloudflareWorkerRequests/,
