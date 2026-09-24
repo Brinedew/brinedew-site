@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=f04a9f2a74e4936f"
+import { createRequestInbox } from "./request-inbox.js?v=21fe258d32cf905c"
 import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 import {
   createEmulsionFavoriteStore,
@@ -9092,6 +9092,44 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (content) main.appendChild(content)
   }
 
+  // B-809: search engines and link unfurlers must see each route's own
+  // canonical URL and description, not the shared shell's "/" (which folds
+  // every gene into the homepage). Static per-gene documents bake these in;
+  // this keeps them correct through SPA navigation and hydration.
+  var ICONOPLASM_CANONICAL_ORIGIN = "https://iconoplasm.brinedew.bio"
+  function syncDocumentCanonical(pathname, description) {
+    try {
+      var head = document.head
+      if (!head) return
+      var link = head.querySelector('link[rel="canonical"]')
+      if (!link) {
+        link = document.createElement("link")
+        link.setAttribute("rel", "canonical")
+        head.appendChild(link)
+      }
+      link.setAttribute("href", ICONOPLASM_CANONICAL_ORIGIN + pathname)
+      if (description) {
+        var meta = head.querySelector('meta[name="description"]')
+        if (!meta) {
+          meta = document.createElement("meta")
+          meta.setAttribute("name", "description")
+          head.appendChild(meta)
+        }
+        meta.setAttribute("content", description)
+      }
+    } catch (_canonicalError) {}
+  }
+
+  function geneProfileDescription(gene, fallbackSymbol) {
+    var symbol = normalizedSymbol(gene && gene.symbol ? gene.symbol : fallbackSymbol)
+    var fullName = String((gene && gene.full_name) || "").trim()
+    return (
+      symbol +
+      (fullName ? " (" + fullName + ")" : "") +
+      " drawn as an Iconoplasm gene character card: a memorable labelled portrait for the human gene, free to reuse under CC0."
+    )
+  }
+
   function geneProfileDocumentTitle(gene, fallbackSymbol) {
     var symbol = normalizedSymbol(gene && gene.symbol ? gene.symbol : fallbackSymbol)
     var fullName = String((gene && gene.full_name) || "").trim()
@@ -9165,6 +9203,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var g = result && result.data
       if (!g) throw new Error("Gene not found")
       document.title = geneProfileDocumentTitle(g, symbol)
+      syncDocumentCanonical(
+        "/gene/" + encodeURIComponent(normalizedSymbol(g.symbol || symbol)),
+        geneProfileDescription(g, symbol),
+      )
       if (!contentEl) {
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
@@ -10464,7 +10506,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // Update page title
     if (route.page === "home") {
       document.title = "Iconoplasm - Gene character cards"
+      syncDocumentCanonical("/")
     } else if (route.page === "gene") {
+      syncDocumentCanonical("/gene/" + encodeURIComponent(normalizedSymbol(route.symbol)))
       // A direct gene response already owns the full canonical title. Preserve
       // it through hydration; SPA navigation upgrades this temporary title as
       // soon as the same shared card payload resolves below.
@@ -10473,8 +10517,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     } else if (route.page === "clans") {
       document.title = "Clans - Iconoplasm"
+      syncDocumentCanonical("/clans")
     } else if (route.page === "studio") {
       document.title = "Diagram Studio - Iconoplasm"
+      syncDocumentCanonical("/studio")
     } else {
       document.title = "Not found - Iconoplasm"
     }

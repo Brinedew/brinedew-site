@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { readFileSync, statSync } from "node:fs"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -221,7 +221,7 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const sitemap = readFileSync(path.join(target, "sitemap.xml"), "utf8")
   const redirects = readFileSync(path.join(target, "_redirects"), "utf8")
 
-  assert.ok(report.fileCount < 20)
+  assert.ok(report.fileCount < 25)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
@@ -240,11 +240,21 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
   assert.doesNotMatch(redirects, /^\/blot\//m)
   assert.doesNotMatch(redirects, /^\/portraits\//m)
-  assert.throws(
-    () => statSync(path.join(target, "gene")),
-    /ENOENT/,
-    "complete gene discovery must not create one Cloudflare file per gene",
-  )
+  // B-809: each published gene gets exactly one small static document that
+  // names it (title/canonical) and boots the single SPA shell. The build
+  // itself refuses a bundle above Cloudflare's 20,000-file Free cap.
+  const geneFiles = readdirSync(path.join(target, "gene")).sort()
+  assert.deepEqual(geneFiles, ["RB1.html", "TP53.html"])
+  for (const file of geneFiles) {
+    const html = readFileSync(path.join(target, "gene", file), "utf8")
+    const symbol = file.replace(/\.html$/, "")
+    assert.ok(Buffer.byteLength(html) < 4096, `${file} must stay tiny, not a shell copy`)
+    assert.ok(
+      html.includes(`rel="canonical" href="https://iconoplasm.brinedew.bio/gene/${symbol}"`),
+      `${file} must carry its own canonical URL`,
+    )
+    assert.doesNotMatch(html, /id="iconoplasm-root"/)
+  }
   assert.ok(statSync(path.join(target, "static", "iconoplasm", "styles.css")).isFile())
 })
 
