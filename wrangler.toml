@@ -47,11 +47,14 @@ preview_urls = false
 
 
 # Custom domain routes
+# B-834: documents and assets on brinedew.bio and geneguessr.brinedew.bio are
+# served by Cloudflare Pages directly (free, unlimited static requests). Only
+# API and admin paths run this Worker. www -> apex and the GeneGuessr "/"
+# document are zone rules owned by cloudflare/the-only-brinedew-static-edge-policy.json.
 routes = [
-  { pattern = "brinedew.bio/*", zone_name = "brinedew.bio" },
   { pattern = "brinedew.bio/api/*", zone_name = "brinedew.bio" },
-  { pattern = "www.brinedew.bio/*", zone_name = "brinedew.bio" },
-  { pattern = "geneguessr.brinedew.bio/*", zone_name = "brinedew.bio" }
+  { pattern = "geneguessr.brinedew.bio/api/*", zone_name = "brinedew.bio" },
+  { pattern = "geneguessr.brinedew.bio/admin*", zone_name = "brinedew.bio" }
 ]
 
 # Keep observability logs explicitly enabled across CLI deployments.
