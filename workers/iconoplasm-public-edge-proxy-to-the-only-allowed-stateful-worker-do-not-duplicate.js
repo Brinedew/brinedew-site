@@ -91,23 +91,14 @@ function hasTrustedIconoplasmBrowserOrigin(request) {
   return false
 }
 
-function hasAdminToken(request, env) {
-  const configured = String(env.ICONOPLASM_ADMIN_TOKEN || "").trim()
-  if (!configured) return false
-  const fromHeader = String(request.headers.get("x-iconoplasm-admin-token") || "").trim()
-  const authHeader = String(request.headers.get("Authorization") || "").trim()
-  const fromBearer = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : ""
-  return fromHeader === configured || fromBearer === configured
-}
-
 function hasExtensionClientHeader(request) {
   return Boolean(String(extVersion(request) || "").trim())
 }
 
-function canAccessRichBatchRoute(request, env) {
-  if (hasAdminToken(request, env)) return true
+// B-819: the public edge holds no admin credential. This gate only steers
+// first-party UI and extension traffic; operators and the workstation call the
+// internal Worker on iconoplasm.brinedew.bio, which owns admin authorization.
+function canAccessRichBatchRoute(request) {
   if (hasExtensionClientHeader(request)) return true
   return hasTrustedIconoplasmBrowserOrigin(request)
 }
@@ -557,7 +548,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
       const declaredRoute = matchIconoplasmRouteContract(path, request.method)
       if (
         declaredRoute?.route?.auth === "trusted-client" &&
-        !canAccessRichBatchRoute(request, env)
+        !canAccessRichBatchRoute(request)
       ) {
         return done(
           request,

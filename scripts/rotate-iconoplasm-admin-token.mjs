@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process"
 
-const flagsWithValues = new Set(["--base-url", "--edge-verify-symbol"])
+const flagsWithValues = new Set(["--base-url"])
 const booleanFlags = new Set(["--verify-only", "--include-staging"])
 
 function readFlagValue(flag) {
@@ -26,7 +26,6 @@ const args = new Set(process.argv.slice(2))
 const verifyOnly = args.has("--verify-only")
 const includeStaging = args.has("--include-staging")
 const baseUrl = readFlagValue("--base-url") || "https://iconoplasm.brinedew.bio"
-const edgeVerifySymbol = readFlagValue("--edge-verify-symbol") || "GLYAT"
 
 function fail(message) {
   console.error(`[iconoplasm-admin-token] ${message}`)
@@ -37,11 +36,9 @@ const token = String(process.env.ICONOPLASM_ADMIN_TOKEN || "").trim()
 if (!token) fail("ICONOPLASM_ADMIN_TOKEN is missing.")
 if (token.length < 32) fail("ICONOPLASM_ADMIN_TOKEN is too short to be an operational token.")
 
+// B-819: only the internal stateful Worker holds the admin token; the public
+// edge Worker never does.
 const targets = [
-  {
-    label: "public edge production",
-    config: "wrangler.the-only-allowed-public-edge-worker-upload-only.toml",
-  },
   {
     label: "stateful production",
     config: "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -50,11 +47,6 @@ const targets = [
 
 if (includeStaging) {
   targets.push(
-    {
-      label: "public edge staging",
-      config: "wrangler.the-only-allowed-public-edge-worker-upload-only.toml",
-      env: "staging",
-    },
     {
       label: "stateful staging",
       config: "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -171,18 +163,6 @@ async function verifyToken() {
     )
   }
 
-  const richGeneUrl = new URL(
-    `/api/iconoplasm/site/genes/${encodeURIComponent(edgeVerifySymbol)}`,
-    baseUrl,
-  )
-  const edgeResult = await fetchJson(richGeneUrl)
-  if (!edgeResult.response.ok) {
-    fail(
-      `public edge token-gated rich detail verification failed: HTTP ${
-        edgeResult.response.status
-      } ${JSON.stringify(edgeResult.payload).slice(0, 500)}`,
-    )
-  }
 
   console.log(
     JSON.stringify(
@@ -190,8 +170,6 @@ async function verifyToken() {
         ok: true,
         verified: {
           stateful_admin_policy: adminResult.response.status,
-          public_edge_rich_detail: edgeResult.response.status,
-          edge_verify_symbol: edgeVerifySymbol,
         },
       },
       null,
