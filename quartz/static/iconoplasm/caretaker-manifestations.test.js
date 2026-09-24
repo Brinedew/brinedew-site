@@ -173,7 +173,7 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
   assert.match(html, /data-icono-caretaker-tag-categories/)
-  assert.match(html, /Tags always stay off the gene page/)
+  assert.match(html, /Tags are never shown/)
   assert.match(html, /Use this version/)
   assert.match(html, /Compare with canonical/)
   assert.match(html, /Start from this version/)
