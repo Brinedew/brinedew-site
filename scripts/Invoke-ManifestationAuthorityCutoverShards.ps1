@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-Advances disjoint manifestation-cutover materialization or backup shards concurrently.
+Advances disjoint manifestation-cutover materialization shards concurrently.
 
 .DESCRIPTION
-Each shard owns a deterministic subset of stable gene or backup-entity IDs, so
+Each shard owns a deterministic subset of stable gene IDs, so
 requests cannot select the same work item. One bounded page runs per shard
 through the ordinary Worker request plane without consuming Durable Object
-duration. Backup shards upload packages only; one unsharded operator owns part
-numbering and the final root.
+duration. The backup uses the unsharded resumable cursor in
+Invoke-ManifestationAuthorityCutover.ps1.
 #>
 [CmdletBinding()]
 param(
@@ -15,7 +15,7 @@ param(
     [ValidatePattern('^https://')]
     [string] $BaseUri,
 
-    [ValidateSet('materialize', 'backup')]
+    [ValidateSet('materialize')]
     [string] $Action = 'materialize',
 
     [ValidateSet(2, 4, 8, 16, 32, 64, 128, 256)]
@@ -159,7 +159,7 @@ function Invoke-ShardRound {
                     shard_count = $ShardCount
                     shard_index = $shardIndex
                 }
-                if ($Action -eq 'materialize') { $body.retry_failed = $true }
+                $body.retry_failed = $true
                 $payload = $body | ConvertTo-Json -Compress
                 $request = [Net.Http.HttpRequestMessage]::new(
                     [Net.Http.HttpMethod]::Post,
@@ -201,23 +201,11 @@ function Invoke-ShardRound {
 
 function Test-ActionComplete {
     param([Parameter(Mandatory)] $Status)
-    if ($Action -eq 'backup') {
-        return (
-            $null -ne $Status.backup -and
-            (
-                [string] $Status.backup.status -ne 'building' -or
-                [int64] $Status.backup.verified_entries -ge [int64] $Status.backup.expected_entries
-            )
-        )
-    }
     return [string] $Status.status -ne 'importing'
 }
 
 function Get-ActionFingerprint {
     param([Parameter(Mandatory)] $Status)
-    if ($Action -eq 'backup') {
-        return "$($Status.backup.status)|$($Status.backup.verified_entries)|$($Status.backup.part_count)"
-    }
     return "$($Status.status)|$($Status.counts.verified)|$($Status.counts.uploading)|$($Status.counts.adopted)|$($Status.counts.projected)|$($Status.counts.failed)"
 }
 
@@ -261,16 +249,9 @@ try {
                 status         = $status.status
                 shard_failures = $failures.Count
                 failure_kinds  = @($failures | Sort-Object -Unique)
-            }
-            if ($Action -eq 'backup') {
-                $progress.verified = [int] $status.backup.verified_entries
-                $progress.expected = [int] $status.backup.expected_entries
-                $progress.parts = [int] $status.backup.part_count
-            }
-            else {
-                $progress.verified = [int] $status.counts.verified
-                $progress.uploading = [int] $status.counts.uploading
-                $progress.failed = [int] $status.counts.failed
+                verified       = [int] $status.counts.verified
+                uploading      = [int] $status.counts.uploading
+                failed         = [int] $status.counts.failed
             }
             $progress | ConvertTo-Json -Compress | Write-Output
         }
@@ -294,8 +275,8 @@ try {
         action           = $Action
         status           = $status.status
         deadline_reached = $true
-        verified         = if ($Action -eq 'backup') { [int] $status.backup.verified_entries } else { [int] $status.counts.verified }
-        expected         = if ($Action -eq 'backup') { [int] $status.backup.expected_entries } else { [int] $status.counts.total }
+        verified         = [int] $status.counts.verified
+        expected         = [int] $status.counts.total
     } | ConvertTo-Json -Compress | Write-Output
     return
 }

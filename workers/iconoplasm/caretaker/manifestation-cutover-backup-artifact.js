@@ -325,68 +325,42 @@ async function packageMetadata(db, run, kind, entityId) {
     : derivativePackage(db, run, entityId)
 }
 
-function backupShard(shardCountInput, shardIndexInput) {
-  const shardCount = Math.trunc(Number(shardCountInput)) || 1
-  const shardIndex = Math.trunc(Number(shardIndexInput)) || 0
-  if (
-    ![1, 2, 4, 8, 16, 32, 64, 128, 256].includes(shardCount) ||
-    shardIndex < 0 ||
-    shardIndex >= shardCount
-  ) {
-    throw error("INVALID_CUTOVER_BACKUP_SHARD", "Cutover backup shard identity is invalid", 400)
-  }
-  const clause =
-    shardCount === 1
-      ? ""
-      : shardCount >= 32
-        ? `AND (((instr('0123456789abcdef', substr(entity_id, -2, 1)) - 1) * 16
-              + (instr('0123456789abcdef', substr(entity_id, -1, 1)) - 1)) % ? = ?)`
-        : "AND (instr('0123456789abcdef', substr(entity_id, -1, 1)) - 1) % ? = ?"
-  return Object.freeze({ shardCount, shardIndex, clause })
-}
+export const CUTOVER_BACKUP_PAGE_SQL = `SELECT canonical_symbol, seed_revision_id, seed_tags_derivative_id
+  FROM icono_manifestation_cutover_items
+ WHERE cutover_run_id = ? AND canonical_symbol > ?
+ ORDER BY canonical_symbol LIMIT ?`
 
-async function nextCandidates(db, artifact, limit, shard) {
-  const shardParams = shard.shardCount === 1 ? [] : [shard.shardCount, shard.shardIndex]
-  const existing = await all(
+async function nextCandidates(db, artifact, limit) {
+  return all(
     db,
-    `SELECT entity_kind, entity_id FROM icono_manifestation_cutover_backup_entries
-      WHERE backup_artifact_id = ? AND status IN ('uploading', 'failed')
-        ${shard.clause}
-      ORDER BY entity_kind, entity_id LIMIT ?`,
-    artifact.backup_artifact_id,
-    ...shardParams,
+    CUTOVER_BACKUP_PAGE_SQL,
+    artifact.cutover_run_id,
+    artifact.scan_after_symbol || "",
     limit,
   )
-  if (existing.length >= limit) return existing
-  return existing.concat(
-    await all(
-      db,
-      `WITH candidates(entity_kind, entity_id) AS (
-       SELECT 'revision', seed_revision_id FROM icono_manifestation_cutover_items
-        WHERE cutover_run_id = ? AND seed_revision_id IS NOT NULL
-       UNION ALL
-       SELECT 'derivative', seed_tags_derivative_id FROM icono_manifestation_cutover_items
-        WHERE cutover_run_id = ? AND seed_tags_derivative_id IS NOT NULL
-     )
-     SELECT candidates.entity_kind, candidates.entity_id FROM candidates
-      WHERE NOT EXISTS (
-        SELECT 1 FROM icono_manifestation_cutover_backup_entries entry
-         WHERE entry.backup_artifact_id = ? AND entry.entity_kind = candidates.entity_kind
-           AND entry.entity_id = candidates.entity_id
-      )
-        ${shard.clause}
-      ORDER BY candidates.entity_kind, candidates.entity_id LIMIT ?`,
-      artifact.cutover_run_id,
-      artifact.cutover_run_id,
-      artifact.backup_artifact_id,
-      ...shardParams,
-      limit - existing.length,
-    ),
-  )
+}
+
+async function claimBackupPage(db, artifact, now) {
+  const token = crypto.randomUUID()
+  const until = new Date(Date.parse(now) + 10 * 60_000).toISOString()
+  const claim = await prepared(
+    db,
+    `UPDATE icono_manifestation_cutover_backup_artifacts
+        SET scan_lease_token = ?, scan_lease_until = ?
+      WHERE backup_artifact_id = ? AND status = 'building'
+        AND (scan_lease_until IS NULL OR scan_lease_until <= ?)`,
+    token,
+    until,
+    artifact.backup_artifact_id,
+    now,
+  ).run()
+  if (Number(claim?.meta?.changes || 0) !== 1) {
+    throw error("CUTOVER_BACKUP_BUSY", "Another backup page is running", 409)
+  }
+  return token
 }
 
 async function backupEntity(db, env, backupEnv, run, artifact, candidate, now) {
-  const metadata = await packageMetadata(db, run, candidate.entity_kind, candidate.entity_id)
   let entry = await first(
     db,
     `SELECT * FROM icono_manifestation_cutover_backup_entries
@@ -395,6 +369,8 @@ async function backupEntity(db, env, backupEnv, run, artifact, candidate, now) {
     candidate.entity_kind,
     candidate.entity_id,
   )
+  if (entry?.status === "verified") return
+  const metadata = await packageMetadata(db, run, candidate.entity_kind, candidate.entity_id)
   if (!entry) {
     const objectKey = await createManifestationBodyObjectKey()
     await prepared(
@@ -422,7 +398,6 @@ async function backupEntity(db, env, backupEnv, run, artifact, candidate, now) {
       candidate.entity_id,
     )
   }
-  if (entry.status === "verified") return
   const source = await readEncryptedManifestationBody(env, metadata.sourceObjectKey)
   if (
     !source ||
@@ -577,26 +552,21 @@ async function finalizeArtifact(db, backupEnv, artifact, now) {
   const [remaining, unparted] = await Promise.all([
     first(
       db,
-      `SELECT count(*) AS total FROM icono_manifestation_cutover_backup_entries
-        WHERE backup_artifact_id = ? AND status <> 'verified'`,
+      `SELECT 1 AS found FROM icono_manifestation_cutover_backup_entries
+        WHERE backup_artifact_id = ? AND status IN ('uploading', 'failed') LIMIT 1`,
       artifact.backup_artifact_id,
     ),
     first(
       db,
-      `SELECT count(*) AS total FROM icono_manifestation_cutover_backup_entries
-        WHERE backup_artifact_id = ? AND status = 'verified' AND part_number IS NULL`,
+      `SELECT 1 AS found FROM icono_manifestation_cutover_backup_entries
+        WHERE backup_artifact_id = ? AND status = 'verified' AND part_number IS NULL LIMIT 1`,
       artifact.backup_artifact_id,
     ),
   ])
-  const entryCount = await first(
-    db,
-    "SELECT count(*) AS total FROM icono_manifestation_cutover_backup_entries WHERE backup_artifact_id = ?",
-    artifact.backup_artifact_id,
-  )
   if (
-    Number(remaining?.total || 0) ||
-    Number(unparted?.total || 0) ||
-    Number(entryCount?.total || 0) !== Number(artifact.expected_entries)
+    remaining ||
+    unparted ||
+    Number(artifact.verified_entries) !== Number(artifact.expected_entries)
   )
     return false
   const parts = await all(
@@ -634,23 +604,12 @@ async function finalizeArtifact(db, backupEnv, artifact, now) {
   )
   const rootHash = await sha256Hex(bytes)
   await putEncryptedManifestationBody(backupEnv, rootKey, bytes, { expectedSha256: rootHash })
-  const totals = await first(
-    db,
-    `SELECT count(*) AS verified_entries, coalesce(sum(package_bytes), 0) AS package_bytes
-       FROM icono_manifestation_cutover_backup_entries
-      WHERE backup_artifact_id = ? AND status = 'verified'`,
-    artifact.backup_artifact_id,
-  )
   await prepared(
     db,
     `UPDATE icono_manifestation_cutover_backup_artifacts
-        SET status = 'verified', verified_entries = ?, package_bytes = ?, part_count = ?,
-            inventory_chain_sha256 = ?, root_sha256 = ?, root_bytes = ?,
+        SET status = 'verified', inventory_chain_sha256 = ?, root_sha256 = ?, root_bytes = ?,
             updated_at = ?, verified_at = ?
       WHERE backup_artifact_id = ? AND status = 'building'`,
-    Number(totals?.verified_entries || 0),
-    Number(totals?.package_bytes || 0),
-    parts.length,
     finalChain,
     rootHash,
     bytes.byteLength,
@@ -679,55 +638,88 @@ export async function advanceManifestationCutoverBackupArtifact(
   if (artifact.status === "verified") return safeArtifact(artifact)
   if (artifact.status !== "building")
     throw error("CUTOVER_BACKUP_NOT_RUNNABLE", "Cutover backup artifact is not runnable")
-  const shard = backupShard(shardCount, shardIndex)
-  const pageSize = Math.max(1, Math.min(10, Math.trunc(Number(limit)) || 5))
-  const candidates = await nextCandidates(db, artifact, pageSize, shard)
-  for (const candidate of candidates) {
-    await backupEntity(db, env, backupEnv, run, artifact, candidate, now)
+  if (Number(shardCount) !== 1 || Number(shardIndex) !== 0) {
+    throw error("CUTOVER_BACKUP_SHARDS_RETIRED", "The backup has one resumable cursor", 400)
   }
-  const registered = await first(
-    db,
-    "SELECT count(*) AS total FROM icono_manifestation_cutover_backup_entries WHERE backup_artifact_id = ?",
-    artifact.backup_artifact_id,
-  )
-  const totals = await first(
-    db,
-    `SELECT count(*) AS count, coalesce(sum(package_bytes), 0) AS bytes
-       FROM icono_manifestation_cutover_backup_entries
-      WHERE backup_artifact_id = ? AND status = 'verified'`,
-    artifact.backup_artifact_id,
-  )
-  const allVerified = Number(totals?.count || 0) === Number(artifact.expected_entries)
-  // Sharded requests own package uploads only. A single unsharded operator
-  // serializes part numbering and the final root so multipart identity cannot
-  // race even when all 256 package lanes finish together.
-  if (shard.shardCount === 1) {
-    await writePendingPart(db, backupEnv, artifact, now, allVerified)
-    if (allVerified) {
-      const pending = await first(
-        db,
-        `SELECT
-           (SELECT count(*) FROM icono_manifestation_cutover_backup_entries
-             WHERE backup_artifact_id = ? AND part_number IS NULL) AS unassigned,
-           (SELECT count(*) FROM icono_manifestation_cutover_backup_parts
-             WHERE backup_artifact_id = ? AND status <> 'verified') AS unfinished_parts`,
-        artifact.backup_artifact_id,
-        artifact.backup_artifact_id,
-      )
-      if (Number(pending?.unassigned || 0) === 0 && Number(pending?.unfinished_parts || 0) === 0) {
-        await finalizeArtifact(db, backupEnv, artifact, now)
+  const pageSize = Math.max(1, Math.min(10, Math.trunc(Number(limit)) || 5))
+  const leaseToken = await claimBackupPage(db, artifact, now)
+  try {
+    const candidates = await nextCandidates(db, artifact, pageSize)
+    for (const item of candidates) {
+      if (item.seed_revision_id) {
+        await backupEntity(
+          db,
+          env,
+          backupEnv,
+          run,
+          artifact,
+          { entity_kind: "revision", entity_id: item.seed_revision_id },
+          now,
+        )
+      }
+      if (item.seed_tags_derivative_id) {
+        await backupEntity(
+          db,
+          env,
+          backupEnv,
+          run,
+          artifact,
+          { entity_kind: "derivative", entity_id: item.seed_tags_derivative_id },
+          now,
+        )
       }
     }
+    if (candidates.length) {
+      const cursor = await prepared(
+        db,
+        `UPDATE icono_manifestation_cutover_backup_artifacts
+            SET scan_after_symbol = ?, updated_at = ?
+          WHERE backup_artifact_id = ? AND status = 'building' AND scan_lease_token = ?`,
+        candidates.at(-1).canonical_symbol,
+        now,
+        artifact.backup_artifact_id,
+        leaseToken,
+      ).run()
+      if (Number(cursor?.meta?.changes || 0) !== 1) {
+        throw error("CUTOVER_BACKUP_CURSOR_LOST", "Backup cursor ownership changed", 409)
+      }
+    }
+    const progress = await readArtifact(db, cutoverRunId)
+    const allVerified = Number(progress.verified_entries) === Number(progress.expected_entries)
+    if (candidates.length < pageSize && !allVerified) {
+      throw error("CUTOVER_BACKUP_INCOMPLETE", "Backup source ended before every package verified")
+    }
+    await writePendingPart(db, backupEnv, artifact, now, allVerified)
+    if (allVerified) {
+      const [unassigned, unfinished] = await Promise.all([
+        first(
+          db,
+          `SELECT 1 AS found FROM icono_manifestation_cutover_backup_entries
+            WHERE backup_artifact_id = ? AND status = 'verified' AND part_number IS NULL LIMIT 1`,
+          artifact.backup_artifact_id,
+        ),
+        first(
+          db,
+          `SELECT 1 AS found FROM icono_manifestation_cutover_backup_parts
+            WHERE backup_artifact_id = ? AND status = 'uploading' LIMIT 1`,
+          artifact.backup_artifact_id,
+        ),
+      ])
+      if (!unassigned && !unfinished) {
+        await finalizeArtifact(db, backupEnv, progress, now)
+      }
+    }
+    return safeArtifact(await readArtifact(db, cutoverRunId))
+  } finally {
+    await prepared(
+      db,
+      `UPDATE icono_manifestation_cutover_backup_artifacts
+            SET scan_lease_token = NULL, scan_lease_until = NULL
+          WHERE backup_artifact_id = ? AND scan_lease_token = ?`,
+      artifact.backup_artifact_id,
+      leaseToken,
+    ).run()
   }
-  const refreshed = await readArtifact(db, cutoverRunId)
-  if (refreshed.status === "building") {
-    return safeArtifact({
-      ...refreshed,
-      verified_entries: Number(totals?.count || 0),
-      package_bytes: Number(totals?.bytes || 0),
-    })
-  }
-  return safeArtifact(refreshed)
 }
 
 export async function requireVerifiedManifestationCutoverBackupArtifact(
@@ -794,6 +786,7 @@ export function safeArtifact(artifact) {
     cutover_run_id: artifact.cutover_run_id,
     source_snapshot_sha256: artifact.source_snapshot_sha256,
     status: artifact.status,
+    scan_after_symbol: artifact.scan_after_symbol || null,
     expected_entries: Number(artifact.expected_entries),
     verified_entries: Number(artifact.verified_entries || 0),
     package_bytes: Number(artifact.package_bytes || 0),

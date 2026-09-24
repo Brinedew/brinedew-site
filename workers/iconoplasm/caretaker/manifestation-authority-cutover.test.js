@@ -34,6 +34,13 @@ const AUTHORING_CUTOVER = readFileSync(
   ),
   "utf8",
 )
+const AUTHORING_BACKUP_BOUNDS = readFileSync(
+  new URL(
+    "../../../migrations-iconoplasm-authoring/0019_bounded_cutover_backup.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const AUTHORING_BOUNDARY = readFileSync(
   new URL(
     "../../../migrations-iconoplasm-authoring/0002_caretaker_server_boundary.sql",
@@ -544,7 +551,9 @@ test("bounded planning is resumable, hash-only, and detects a changed frozen sou
 })
 
 test("legacy plaintext retirement requires an authoritative snapshot and verified backup identity", async (t) => {
-  const authority = new TestD1(`${AUTHORING_BASE}\n${AUTHORING_CUTOVER}`)
+  const authority = new TestD1(
+    `${AUTHORING_BASE}\n${AUTHORING_CUTOVER}\n${AUTHORING_BACKUP_BOUNDS}`,
+  )
   const primary = new TestD1(`CREATE TABLE icono_gene_essence (
     gene_symbol TEXT PRIMARY KEY,
     manifestation TEXT,
@@ -681,7 +690,7 @@ test("legacy plaintext retirement requires an authoritative snapshot and verifie
 
 test("bounded operator resumes through encrypted materialization, shadow projection, activation, and backup-gated retirement", async (t) => {
   const authority = new TestD1(
-    `${AUTHORING_BASE}\n${AUTHORING_BOUNDARY}\n${AUTHORING_CUTOVER}\n${AUTHORING_RESUMABLE_UPLOADS}`,
+    `${AUTHORING_BASE}\n${AUTHORING_BOUNDARY}\n${AUTHORING_CUTOVER}\n${AUTHORING_RESUMABLE_UPLOADS}\n${AUTHORING_BACKUP_BOUNDS}`,
   )
   const primary = new TestD1(`CREATE TABLE icono_gene_essence (
     gene_symbol TEXT PRIMARY KEY,
@@ -978,37 +987,38 @@ test("bounded operator resumes through encrypted materialization, shadow project
     },
   })
   assert.equal(status.backup.status, "building")
-  const backupEntityIds = authority.raw
-    .prepare(
-      `SELECT seed_revision_id AS entity_id FROM icono_manifestation_cutover_items
-        WHERE cutover_run_id = 'cutover_run_operator' AND seed_revision_id IS NOT NULL
-       UNION ALL
-       SELECT seed_tags_derivative_id AS entity_id FROM icono_manifestation_cutover_items
-        WHERE cutover_run_id = 'cutover_run_operator' AND seed_tags_derivative_id IS NOT NULL`,
-    )
-    .all()
-    .map((value) => value.entity_id)
-  const backupShards = [
-    ...new Set(backupEntityIds.map((value) => Number.parseInt(value.slice(-2), 16))),
-  ]
-  for (const shardIndex of backupShards) {
-    status = await advanceManifestationAuthorityCutover({
+  await assert.rejects(
+    advanceManifestationAuthorityCutover({
       ...base,
       input: {
         action: "backup",
         cutoverRunId: "cutover_run_operator",
-        limit: 5,
+        limit: 1,
         shardCount: 256,
-        shardIndex,
+        shardIndex: 0,
         now,
       },
-    })
-  }
-  assert.equal(status.backup.status, "building")
-  assert.equal(status.backup.verified_entries, 2)
+    }),
+    (error) => error?.code === "CUTOVER_BACKUP_SHARDS_RETIRED",
+  )
   status = await advanceManifestationAuthorityCutover({
     ...base,
-    input: { action: "backup", cutoverRunId: "cutover_run_operator", limit: 5, now },
+    input: { action: "backup", cutoverRunId: "cutover_run_operator", limit: 1, now },
+  })
+  assert.equal(status.backup.status, "building")
+  assert.equal(status.backup.verified_entries, 0)
+  assert.equal(status.backup.scan_after_symbol, "BRCA1")
+  assert.equal(
+    authority.raw
+      .prepare(
+        "SELECT scan_after_symbol FROM icono_manifestation_cutover_backup_artifacts WHERE backup_artifact_id = 'backup_artifact_operator'",
+      )
+      .get().scan_after_symbol,
+    "BRCA1",
+  )
+  status = await advanceManifestationAuthorityCutover({
+    ...base,
+    input: { action: "backup", cutoverRunId: "cutover_run_operator", limit: 1, now },
   })
   assert.equal(status.backup.status, "verified")
   assert.equal(status.backup.expected_entries, 2)
