@@ -95,6 +95,12 @@ function fixture(count = 9) {
     async read(key) {
       return bytes.has(key) ? { value: JSON.parse(bytes.get(key)) } : null
     },
+    async verifyReaderResolvable(key) {
+      return {
+        ready: failure !== "manifest_cdn" && bytes.has(key),
+        sources: { authenticated_storage: bytes.has(key), public_cdn: failure !== "manifest_cdn" },
+      }
+    },
     async verifyBlot(symbol, blot) {
       if (failure === "blot") throw new Error("injected immutable blot failure")
       blots.push({ symbol, blot: structuredClone(blot) })
@@ -178,6 +184,18 @@ test("an unverified immutable blot leaves the prior publication head untouched",
   await assert.rejects(p.step(), /injected immutable blot failure/)
   assert.equal(p.status().head, null)
   assert.equal(p.status().job.blot_offset || 0, 0)
+})
+
+test("a catalog manifest waits for public CDN readability before replacing the head", async () => {
+  const f = fixture(1)
+  const p = f.create()
+  f.fail("manifest_cdn")
+  await p.bootstrap()
+  await assert.rejects(drain(p), /manifest.*reader-resolvable/i)
+  assert.equal(p.status().head, null)
+  f.fail(null)
+  await drain(p)
+  assert.ok(p.status().head?.current?.version)
 })
 
 async function drain(publisher) {
