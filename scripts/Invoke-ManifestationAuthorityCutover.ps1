@@ -360,9 +360,9 @@ function Invoke-ProgressLoop {
     $stalled = 0
     $previous = $null
     $iteration = 0
+    $status = Get-CutoverStatus
     while ($true) {
         Assert-BeforeDeadline
-        $status = Get-CutoverStatus
         if (& $IsComplete $status) {
             Write-OperatorState -Path $resolvedStatePath -State $state -Status $status
             Write-BoundedProgress -Status $status
@@ -434,9 +434,9 @@ try {
     }
     if ($status.backup.status -eq 'building') {
         $status = Invoke-ProgressLoop -Action 'backup' `
-            -AdditionalBody @{ limit = 5 } `
+            -AdditionalBody @{ limit = 10 } `
             -IsComplete { param($value) $value.backup.status -eq 'verified' } `
-            -Fingerprint { param($value) "$($value.backup.status)|$($value.backup.verified_entries)|$($value.backup.part_count)" }
+            -Fingerprint { param($value) "$($value.backup.status)|$($value.backup.scan_after_symbol)|$($value.backup.verified_entries)|$($value.backup.part_count)" }
     }
     $verifiedBackupStates = @(
         'verified', 'retention_pending', 'held', 'deleting', 'delete_failed', 'deleted'
