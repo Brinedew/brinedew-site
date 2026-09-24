@@ -53,7 +53,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 Caretaker autosave creates the caretaker's own version; new image requests use the selected canonical version. The caretaker editor now shows when those differ and offers the existing canonical-selection action. Do not assume “Saved” means the next image uses that edit, or add a second generation-source path.
 
-Cutover backup has one operator: `scripts/Invoke-ManifestationAuthorityCutover.ps1` advances the indexed, resumable backup cursor. `scripts/Invoke-ManifestationAuthorityCutoverShards.ps1` only materializes the cutover; it cannot back up packages.
+The caretaker authority cutover is finished. Its per-package backup was abandoned at 23,894/38,300 on 24 Sep 2026 and its operator scripts were deleted (B-800): do not resume it because a stored status still says `building`. Off-Cloudflare recovery for every D1 database is the nightly dump from `scripts/backup-d1-rotation.mjs` (B-830).
 
 **ARCHITECTURE FENCE [IPD-006]** — One completed workstation publication yields one bounded receipt per recipient and gene; never infer groups. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md`.
 
