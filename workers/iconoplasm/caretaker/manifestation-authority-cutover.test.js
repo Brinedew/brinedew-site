@@ -1203,3 +1203,86 @@ test("bounded operator resumes through encrypted materialization, shadow project
     0,
   )
 })
+
+test("a previously assigned 250-entry backup part fits the private object limit", async (t) => {
+  const authority = new TestD1(
+    `${AUTHORING_BASE}\n${AUTHORING_BOUNDARY}\n${AUTHORING_CUTOVER}\n${AUTHORING_RESUMABLE_UPLOADS}\n${AUTHORING_BACKUP_BOUNDS}`,
+  )
+  t.after(() => authority.close())
+  const objects = installCutoverStorage(t)
+  const now = "2026-09-24T06:30:00.000Z"
+  const runId = "cutover_run_full_part"
+  const artifactId = "backup_artifact_full_part"
+  const partKey = "private/manifestations/v1/ff/pending_full_part_00000000000000000001.bin"
+  authority.raw
+    .prepare(
+      `INSERT INTO icono_manifestation_cutover_runs (
+         cutover_run_id, source_snapshot_id, source_snapshot_sha256,
+         target_authority_epoch, plan_chain_sha256, status, created_by_actor_kind
+       ) VALUES (?, 'source_full_part', ?, 2, ?, 'authoritative', 'migration')`,
+    )
+    .run(runId, sha("1"), sha("2"))
+  authority.raw
+    .prepare(
+      `INSERT INTO icono_manifestation_cutover_backup_artifacts (
+         backup_artifact_id, cutover_run_id, source_snapshot_sha256,
+         expected_entries, verified_entries, scan_after_symbol, created_at, updated_at
+       ) VALUES (?, ?, ?, 250, 250, 'ZZZZ', ?, ?)`,
+    )
+    .run(artifactId, runId, sha("1"), now, now)
+  authority.raw
+    .prepare(
+      `INSERT INTO icono_manifestation_cutover_backup_parts (
+         backup_artifact_id, part_number, entry_count, part_object_key, created_at
+       ) VALUES (?, 1, 250, ?, ?)`,
+    )
+    .run(artifactId, partKey, now)
+  const insertEntry = authority.raw.prepare(
+    `INSERT INTO icono_manifestation_cutover_backup_entries (
+       backup_artifact_id, entity_kind, entity_id, status, package_object_key,
+       package_sha256, package_bytes, body_sha256, body_bytes,
+       ciphertext_sha256, ciphertext_bytes, part_number, created_at, verified_at
+     ) VALUES (?, 'derivative', ?, 'verified', ?, ?, 1024, ?, 512, ?, 768, 1, ?, ?)`,
+  )
+  for (let index = 0; index < 250; index += 1) {
+    const suffix = String(index).padStart(50, "0")
+    insertEntry.run(
+      artifactId,
+      `derivative_${suffix}`,
+      `private/manifestations/v1/ff/package_${suffix}.bin`,
+      sha("3"),
+      sha("4"),
+      sha("5"),
+      now,
+      now,
+    )
+  }
+
+  const artifact = await advanceManifestationCutoverBackupArtifact(authority, cutoverEnv(), {
+    cutoverRunId: runId,
+    limit: 1,
+    now,
+  })
+  const part = authority.raw
+    .prepare(
+      `SELECT status, part_bytes FROM icono_manifestation_cutover_backup_parts
+       WHERE backup_artifact_id = ? AND part_number = 1`,
+    )
+    .get(artifactId)
+  assert.equal(artifact.status, "verified")
+  assert.equal(part.status, "verified")
+  assert.ok(part.part_bytes <= 64 * 1024)
+  const stored = [...objects.entries()].find(([url]) => url.endsWith(partKey))?.[1]
+  assert.ok(stored)
+  const inventory = JSON.parse(new TextDecoder().decode(stored))
+  assert.equal(inventory.schema_version, 2)
+  assert.deepEqual(inventory.entry_fields, [
+    "entity_kind",
+    "entity_id",
+    "package_object_key",
+    "package_sha256",
+    "package_bytes",
+  ])
+  assert.equal(inventory.entries.length, 250)
+  assert.equal(inventory.entries[0].length, 5)
+})
