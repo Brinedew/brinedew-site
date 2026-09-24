@@ -82,3 +82,7 @@ workers/DISCORD_SETUP.md
 
 # Claude Code session state. Not project source.
 .claude/settings.local.json
+
+# Playwright MCP loads this file as a function expression; Prettier prepends
+# a semicolon that the MCP snippet parser rejects.
+scripts/the-only-iconoplasm-live-journey-do-not-duplicate.js
