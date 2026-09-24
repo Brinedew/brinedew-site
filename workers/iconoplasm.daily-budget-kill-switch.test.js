@@ -536,7 +536,9 @@ test("admin cost snapshot serves the baked observability payload without touchin
   assert.equal(payload?.ok, true)
   assert.equal(payload?.snapshot?.source?.mode, "out_of_band_snapshot")
   assert.equal(payload?.snapshot?.source?.analyticsTruth, "Cloudflare GraphQL analytics")
-  assert.ok(["fresh", "stale", "unavailable"].includes(payload?.snapshot?.freshness?.state))
+  assert.ok(
+    ["fresh", "stale", "overdue", "unavailable"].includes(payload?.snapshot?.freshness?.state),
+  )
   assert.equal(payload?.snapshot?.publication?.state, "deploy_fallback")
   assert.equal(payload?.snapshot?.retiredMetrics?.[0]?.state, "retired")
   assert.deepEqual(
@@ -645,7 +647,7 @@ test("signed-in admin sees current account meters beside an old baked snapshot",
       )
     const payload = await response.json()
     assert.equal(response.status, 200)
-    assert.equal(payload.snapshot.freshness.state, "unavailable")
+    assert.equal(payload.snapshot.freshness.state, "overdue")
     assert.equal(payload.snapshot.liveProvider.state, "queried")
     assert.equal(payload.snapshot.liveProvider.day, day)
     assert.equal(payload.snapshot.liveProvider.usage.rows_read, 273944)
@@ -683,7 +685,7 @@ test("admin capacity shows provider failure instead of treating baked counts as 
       )
     const payload = await response.json()
     assert.equal(response.status, 200)
-    assert.equal(payload.snapshot.freshness.state, "unavailable")
+    assert.equal(payload.snapshot.freshness.state, "overdue")
     assert.equal(payload.snapshot.liveProvider.state, "unavailable")
     assert.equal(payload.snapshot.liveProvider.usage, null)
   } finally {
