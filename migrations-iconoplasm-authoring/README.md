@@ -31,4 +31,8 @@ files are already journaled; it does not apply schema changes.
 an assignment. The lookup still returns the latest withdrawn caretaker or fork
 manifestation; most system-seeded manifestations never enter the index.
 
+`0019_bounded_cutover_backup.sql` backfills the existing backup's progress
+once, then lets the owning artifact maintain its counts and indexed resume
+cursor. The canonical backup operator is `scripts/Invoke-ManifestationAuthorityCutover.ps1`.
+
 <!-- ARCHITECTURE FENCE [IPD-012] -->
