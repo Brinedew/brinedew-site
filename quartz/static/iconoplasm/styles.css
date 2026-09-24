@@ -18,9 +18,8 @@
   font-family: "Special Elite", Georgia, serif;
 }
 
-#iconoplasm-root,
-.icono-request-dialog,
-.icono-image-edit-dialog {
+/* On :root, not #iconoplasm-root: dialogs appended to <body> need them too. */
+:root {
   --icono-image-tile-width: 384px;
   --icono-image-tile-gutter: 16px;
   --icono-reject: oklch(56% 0.16 28);
@@ -45,12 +44,118 @@
   --icono-action-padding: 0.56rem 0.92rem;
   --icono-action-font-size: 0.82rem;
   --icono-action-border: color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
-  --icono-action-border-hover: color-mix(in srgb, var(--accent) 36%, var(--ui-border) 64%);
+  --icono-action-border-hover: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
   --icono-action-secondary-bg: color-mix(in srgb, var(--ui-bg) 82%, var(--light) 18%);
   --icono-action-secondary-bg-hover: color-mix(in srgb, var(--ui-bg) 70%, var(--light) 30%);
-  --icono-action-primary-bg: color-mix(in srgb, oklch(24% 0.035 50) 88%, var(--accent) 12%);
-  --icono-action-primary-bg-hover: color-mix(in srgb, oklch(31% 0.04 50) 84%, var(--accent) 16%);
-  --icono-action-primary-text: oklch(96% 0.015 75);
+  --icono-action-primary-bg: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
+  --icono-action-primary-bg-hover: color-mix(in srgb, var(--dark) 76%, var(--accent) 24%);
+  --icono-action-primary-text: var(--light);
+}
+
+/* ───────── Buttons: the only definition ─────────
+   B-835. Every Iconoplasm button is `.icono-button` plus at most one variant:
+     .icono-button             secondary: an outline on whatever surface it sits on
+     .icono-button--primary    the one main action: dark ink, the Join Discord look
+     .icono-button--danger     destructive: red outline that fills on hover
+     .icono-button--small      the same button for dense rows (version history)
+   Dialogs, toolbars and cards position buttons; they never restyle them. Colors
+   read the theme variables directly, so a surface that re-themes itself (the
+   always-light vote dialog) gets matching buttons for free. */
+.icono-button {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: var(--icono-action-height);
+  max-width: 100%;
+  margin: 0;
+  justify-self: start;
+  padding: var(--icono-action-padding);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 70%, var(--dark) 30%);
+  border-radius: var(--icono-radius-pill);
+  background: transparent;
+  color: var(--dark);
+  font: 600 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.16s var(--icono-ease-out),
+    border-color 0.16s var(--icono-ease-out),
+    color 0.16s var(--icono-ease-out);
+}
+
+.icono-button[hidden] {
+  display: none;
+}
+
+.icono-button svg {
+  flex: none;
+  width: 1.02rem;
+  height: 1.02rem;
+}
+
+.icono-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+  color: var(--dark);
+  text-decoration: none;
+}
+
+.icono-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-button--primary {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
+  color: var(--light);
+}
+
+.icono-button--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--dark) 76%, var(--accent) 24%);
+  color: var(--light);
+}
+
+.icono-button--danger {
+  border-color: color-mix(in srgb, var(--icono-reject) 60%, var(--ui-border) 40%);
+  color: var(--icono-reject);
+}
+
+.icono-button--danger:hover:not(:disabled) {
+  border-color: var(--icono-reject);
+  background: var(--icono-reject);
+  color: oklch(98% 0.01 75);
+}
+
+.icono-button--small {
+  min-height: 2rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.76rem;
+}
+
+/* Disabled buttons of every variant turn into a neutral outline, never a faded pill. */
+.icono-button:disabled {
+  border-color: color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+/* A row of buttons at the end of a dialog, form or card. */
+.icono-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
 #iconoplasm-root :where(a[href], button, input, select, [tabindex]):focus-visible {
@@ -216,24 +321,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-wrap: pretty;
 }
 
-.icono-home-auth-link {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.7rem;
-  padding: 0.55rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
-  background: color-mix(in srgb, var(--light) 80%, white 20%);
-  color: var(--dark);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.icono-home-auth-link:hover {
-  background: color-mix(in srgb, var(--light) 68%, white 32%);
-}
-
 .icono-card.icono-guest-login-card {
   display: grid;
   align-content: start;
@@ -293,22 +380,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-shadow: none;
 }
 
-.icono-guest-login-card-button {
-  box-sizing: border-box;
-  width: fit-content;
-  min-width: 10.9rem;
-  border-radius: var(--icono-radius-pill);
-  min-height: 2.15rem;
-  padding: 0.32rem 0.9rem;
-  border-color: color-mix(in srgb, var(--dark) 72%, var(--accent) 28%);
-  background: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
-  color: var(--light);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.88rem;
-  font-weight: 600;
-  line-height: 1.05;
-}
-
 .icono-guest-login-card-title {
   max-width: 24ch;
   font-family: "IBM Plex Mono", monospace;
@@ -316,11 +387,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-weight: 600;
   line-height: 1.22;
   letter-spacing: 0;
-}
-
-.icono-guest-login-card-button:hover {
-  background: color-mix(in srgb, var(--dark) 78%, var(--accent) 22%);
-  color: var(--light);
 }
 
 .icono-vote-login-dialog {
@@ -367,8 +433,7 @@ body:has(.icono-vote-login-dialog[open]) {
   min-width: 0;
 }
 
-.icono-vote-login-title,
-.icono-vote-login-link {
+.icono-vote-login-title {
   font-family: "IBM Plex Mono", monospace;
 }
 
@@ -377,30 +442,6 @@ body:has(.icono-vote-login-dialog[open]) {
   font-size: 1.1rem;
   font-weight: 650;
   line-height: 1.2;
-}
-
-.icono-vote-login-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: start;
-  max-width: 100%;
-  min-height: 2.4rem;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--dark) 20%, var(--ui-border) 80%);
-  border-radius: var(--icono-radius-pill);
-  background: var(--dark);
-  color: var(--light);
-  font-size: 0.86rem;
-  font-weight: 650;
-  line-height: 1;
-  text-decoration: none;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
-.icono-vote-login-link:hover {
-  background: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
 }
 
 .icono-vote-login-close {
@@ -661,49 +702,6 @@ body:has(.icono-vote-login-dialog[open]) {
   white-space: nowrap;
 }
 
-.icono-canonical-new-candidate-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.42rem;
-  min-height: var(--icono-action-height);
-  padding: var(--icono-action-padding);
-  border: 1px solid var(--icono-action-border);
-  border-radius: var(--icono-radius-pill);
-  background: var(--icono-action-primary-bg);
-  color: var(--icono-action-primary-text);
-  cursor: pointer;
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    transform 0.16s var(--icono-ease-out),
-    border-color 0.16s var(--icono-ease-out),
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out);
-}
-
-.icono-canonical-new-candidate-btn svg {
-  width: 1.02rem;
-  height: 1.02rem;
-  display: block;
-}
-
-.icono-canonical-new-candidate-btn:hover,
-.icono-canonical-new-candidate-btn:focus-visible {
-  border-color: var(--icono-action-border-hover);
-  background: var(--icono-action-primary-bg-hover);
-  transform: translateY(-1px);
-}
-
-.icono-caretaker-claim-btn {
-  background: color-mix(in srgb, var(--secondary) 12%, var(--light) 88%);
-  color: var(--dark);
-}
-
 .icono-caretaker-claim-dialog {
   --width: min(34rem, calc(100vw - 2rem));
   --sl-font-sans: "IBM Plex Mono", monospace;
@@ -829,49 +827,28 @@ body:has(.icono-vote-login-dialog[open]) {
   padding: 1rem 1.2rem 1.2rem;
 }
 
+/* Until Shoelace defines <sl-dialog>, the browser renders its children inline:
+   the whole New candidate form flashed under the gene card for 2-8 frames on
+   every gene page load (B-836, measured in Playwright). */
+sl-dialog:not(:defined) {
+  display: none;
+}
+
+/* No visible actions, no footer bar (the signed-out request dialog). */
+.icono-standard-dialog:not(:has([slot="footer"] > :not([hidden])))::part(footer) {
+  display: none;
+}
+
 .icono-standard-dialog::part(footer) {
   padding: 0.8rem 1.1rem 1rem;
   border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
   background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
 }
 
-.icono-standard-dialog .icono-button {
-  min-height: var(--icono-action-height);
-  padding: var(--icono-action-padding);
-  border: 1px solid var(--accent);
-  border-radius: var(--icono-radius-sm);
-  background: var(--accent);
-  color: var(--light);
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.icono-standard-dialog .icono-button:hover {
-  background: color-mix(in srgb, var(--accent) 86%, var(--dark) 14%);
-}
-
-.icono-standard-dialog .icono-button--quiet {
-  border-color: var(--icono-action-border);
-  background: transparent;
-  color: var(--dark);
-}
-
-.icono-standard-dialog .icono-button--quiet:hover {
-  background: color-mix(in srgb, var(--dark) 7%, transparent);
-}
-
-.icono-standard-dialog a {
+.icono-standard-dialog a:not(.icono-button) {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 0.15em;
-}
-
-.icono-standard-dialog .icono-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
 }
 
 .icono-caretaker-claim-actions {
@@ -902,81 +879,6 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-request-free-actions[hidden],
 .icono-request-direct-actions[hidden] {
-  display: none;
-}
-
-.icono-request-free-submit,
-.icono-request-select-all-favorites,
-.icono-request-direct-generate,
-.icono-request-direct-publish {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: max-content;
-  max-width: 100%;
-  min-width: 11rem;
-  min-height: var(--icono-action-height);
-  padding: var(--icono-action-padding);
-  white-space: nowrap;
-  border: 1px solid var(--icono-action-border);
-  border-radius: var(--icono-radius-pill);
-  background: var(--icono-action-secondary-bg);
-  color: var(--dark);
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 600;
-  line-height: 1;
-  transition:
-    transform 0.16s var(--icono-ease-out),
-    border-color 0.16s var(--icono-ease-out),
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out),
-    opacity 0.16s var(--icono-ease-out);
-}
-
-.icono-request-direct-publish {
-  background: var(--icono-action-primary-bg);
-  color: var(--icono-action-primary-text);
-}
-
-.icono-request-free-submit:not(:disabled):hover,
-.icono-request-free-submit:not(:disabled):focus-visible,
-.icono-request-select-all-favorites:not(:disabled):hover,
-.icono-request-select-all-favorites:not(:disabled):focus-visible,
-.icono-request-direct-generate:not(:disabled):hover,
-.icono-request-direct-generate:not(:disabled):focus-visible,
-.icono-request-direct-publish:not(:disabled):hover,
-.icono-request-direct-publish:not(:disabled):focus-visible {
-  border-color: var(--icono-action-border-hover);
-  transform: translateY(-1px);
-}
-
-.icono-request-free-submit:not(:disabled):hover,
-.icono-request-free-submit:not(:disabled):focus-visible,
-.icono-request-select-all-favorites:not(:disabled):hover,
-.icono-request-select-all-favorites:not(:disabled):focus-visible,
-.icono-request-direct-generate:not(:disabled):hover,
-.icono-request-direct-generate:not(:disabled):focus-visible {
-  background: var(--icono-action-secondary-bg-hover);
-}
-
-.icono-request-direct-publish:not(:disabled):hover,
-.icono-request-direct-publish:not(:disabled):focus-visible {
-  background: var(--icono-action-primary-bg-hover);
-}
-
-.icono-request-free-submit:disabled,
-.icono-request-direct-generate:disabled,
-.icono-request-direct-publish:disabled {
-  border-color: var(--icono-action-border);
-  background: color-mix(in srgb, var(--ui-bg) 88%, var(--light) 12%);
-  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
-  cursor: not-allowed;
-  opacity: 1;
-}
-
-.icono-request-direct-publish[hidden] {
   display: none;
 }
 
@@ -1207,13 +1109,13 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-image-edit-dialog sl-select,
 .icono-image-edit-dialog sl-button,
 .icono-image-edit-dialog sl-checkbox {
-  font-family: var(--icono-action-font) !important;
+  font-family: var(--icono-action-font);
 }
 
 .icono-image-edit-dialog sl-select::part(form-control-label),
 .icono-image-edit-dialog sl-button::part(base),
 .icono-image-edit-dialog sl-checkbox::part(label) {
-  font-family: var(--icono-action-font) !important;
+  font-family: var(--icono-action-font);
 }
 
 .icono-image-edit-dialog sl-select::part(combobox),
@@ -1313,59 +1215,6 @@ img-comparison-slider.rendered [slot="second"] {
   width: 100%;
 }
 
-.icono-image-edit-action-button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: min(11rem, 100%);
-  min-height: var(--icono-action-height);
-  padding: var(--icono-action-padding);
-  border: 1px solid var(--icono-action-border);
-  border-radius: var(--icono-radius-pill);
-  background: var(--icono-action-secondary-bg);
-  color: var(--dark);
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 600;
-  line-height: 1;
-  transition:
-    transform 0.16s var(--icono-ease-out),
-    border-color 0.16s var(--icono-ease-out),
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out),
-    opacity 0.16s var(--icono-ease-out);
-}
-
-.icono-image-edit-action-button--primary {
-  background: var(--icono-action-primary-bg);
-  color: var(--icono-action-primary-text);
-}
-
-.icono-image-edit-action-button:not(:disabled):hover,
-.icono-image-edit-action-button:not(:disabled):focus-visible {
-  border-color: var(--icono-action-border-hover);
-  background: var(--icono-action-secondary-bg-hover);
-  transform: translateY(-1px);
-}
-
-.icono-image-edit-action-button--primary:not(:disabled):hover,
-.icono-image-edit-action-button--primary:not(:disabled):focus-visible {
-  background: var(--icono-action-primary-bg-hover);
-}
-
-.icono-image-edit-action-button:disabled {
-  border-color: var(--icono-action-border);
-  background: color-mix(in srgb, var(--ui-bg) 88%, var(--light) 12%);
-  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
-  cursor: not-allowed;
-  opacity: 1;
-}
-
-.icono-image-edit-action-button[hidden] {
-  display: none;
-}
-
 @media (max-width: 760px) {
   .icono-image-edit-dialog {
     width: calc(100vw - 1rem);
@@ -1410,7 +1259,7 @@ img-comparison-slider.rendered [slot="second"] {
   border-radius: calc(var(--icono-radius-lg) - 3px);
   background: transparent;
   color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
-  font-family: var(--icono-action-font) !important;
+  font-family: var(--icono-action-font);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -1497,10 +1346,6 @@ img-comparison-slider.rendered [slot="second"] {
 
 .icono-request-direct-emulsion-picker {
   width: 100%;
-}
-
-.icono-request-direct-publish[hidden] {
-  display: none;
 }
 
 .icono-request-direct-preview {
@@ -1615,61 +1460,6 @@ img-comparison-slider.rendered [slot="second"] {
 [data-icono-request-note] {
   line-height: 1.4;
   white-space: pre-line;
-}
-
-.icono-request-direct-generate,
-.icono-request-direct-publish {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--icono-action-height);
-  padding: var(--icono-action-padding);
-  border: 1px solid var(--icono-action-border);
-  border-radius: var(--icono-radius-pill);
-  background: var(--icono-action-secondary-bg);
-  color: var(--dark);
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    transform 0.16s var(--icono-ease-out),
-    border-color 0.16s var(--icono-ease-out),
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out),
-    opacity 0.16s var(--icono-ease-out);
-}
-
-.icono-request-direct-generate {
-  background: var(--icono-action-primary-bg);
-  color: var(--icono-action-primary-text);
-}
-
-.icono-request-direct-publish:hover,
-.icono-request-direct-publish:focus-visible {
-  border-color: var(--icono-action-border-hover);
-  background: var(--icono-action-secondary-bg-hover);
-  transform: translateY(-1px);
-}
-
-.icono-request-direct-generate:hover,
-.icono-request-direct-generate:focus-visible {
-  border-color: var(--icono-action-border-hover);
-  background: var(--icono-action-primary-bg-hover);
-  transform: translateY(-1px);
-}
-
-.icono-request-direct-generate:disabled,
-.icono-request-direct-publish:disabled {
-  border-color: var(--icono-action-border);
-  background: transparent;
-  color: color-mix(in srgb, var(--dark) 42%, var(--light) 58%);
-  cursor: default;
-  opacity: 1;
-  transform: none;
 }
 
 .icono-request-direct-result {
@@ -2100,7 +1890,7 @@ img-comparison-slider.rendered [slot="second"] {
   border-radius: var(--icono-radius-pill);
   background: var(--icono-action-secondary-bg);
   color: var(--dark);
-  font-family: var(--icono-action-font) !important;
+  font-family: var(--icono-action-font);
   font-size: var(--icono-action-font-size);
   font-weight: 600;
   line-height: 1;
@@ -3700,16 +3490,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   margin-top: 0.2rem;
 }
 
-.icono-empty-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.6rem;
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--icono-radius-pill);
-  text-decoration: none;
-}
-
 .icono-empty-link--subtle {
   padding-left: 0;
   padding-right: 0;
@@ -3722,7 +3502,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-decoration: underline;
 }
 
-.icono-empty a {
+.icono-empty a:not(.icono-button) {
   color: var(--accent);
 }
 
@@ -4292,7 +4072,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   background: color-mix(in srgb, var(--light) 86%, white 14%);
   color: color-mix(in srgb, var(--dark) 70%, var(--secondary) 30%);
   cursor: pointer;
-  font-family: var(--icono-action-font) !important;
+  font-family: var(--icono-action-font);
   font-size: var(--icono-action-font-size);
   list-style: none;
   transition:
@@ -4445,52 +4225,6 @@ body:has(.icono-candidate-delete-dialog[open]) {
   justify-content: flex-end;
   gap: 0.65rem;
   margin-top: 0.35rem;
-}
-
-.icono-candidate-delete-cancel,
-.icono-candidate-delete-confirm {
-  min-height: 2.75rem;
-  padding: 0.65rem 0.95rem;
-  border-radius: 999px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.82rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.icono-candidate-delete-cancel {
-  border: 1px solid var(--ui-border);
-  background: var(--light);
-  color: var(--dark);
-}
-
-.icono-candidate-delete-confirm {
-  border: 1px solid #7c221d;
-  background: #8f2b24;
-  color: white;
-}
-
-.icono-candidate-delete-cancel:hover:not(:disabled),
-.icono-candidate-delete-cancel:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--ui-border) 55%);
-  background: white;
-}
-
-.icono-candidate-delete-confirm:hover:not(:disabled),
-.icono-candidate-delete-confirm:focus-visible {
-  background: #74221c;
-}
-
-.icono-candidate-delete-cancel:focus-visible,
-.icono-candidate-delete-confirm:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 62%, white 38%);
-  outline-offset: 2px;
-}
-
-.icono-candidate-delete-cancel:disabled,
-.icono-candidate-delete-confirm:disabled {
-  cursor: wait;
-  opacity: 0.58;
 }
 
 .icono-candidate-delete-notice {
@@ -4987,10 +4721,6 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-request-diagnostics-grid {
     grid-template-columns: 1fr;
-  }
-
-  .icono-home-auth-link {
-    width: 100%;
   }
 
   .icono-gallery-actions {

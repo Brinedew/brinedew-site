@@ -4,7 +4,7 @@ const VOTE_LOGIN_DIALOG_CONTENT = `
   <div class="icono-vote-login-copy">
     <h2 class="icono-vote-login-title" id="icono-vote-login-title">Log in with Discord to vote</h2>
   </div>
-  <a class="icono-vote-login-link" data-icono-vote-login-link autofocus>
+  <a class="icono-button icono-button--primary icono-vote-login-link" data-icono-vote-login-link autofocus>
     Log in with Discord
   </a>
 `

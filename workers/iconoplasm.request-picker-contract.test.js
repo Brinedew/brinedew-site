@@ -211,7 +211,7 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     css,
-    /\.icono-request-free-submit,[\s\S]*width:\s*max-content;[\s\S]*white-space:\s*nowrap;/,
+    /\n\.icono-button\s*\{[^}]*white-space:\s*nowrap;/,
     "the counted batch action must stay on one line at mobile width",
   )
   assert.doesNotMatch(
@@ -611,10 +611,12 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
     /\.icono-request-direct-side/,
     "direct generation should not keep the old pseudo-side column",
   )
+  // B-835 (owner, 2026-09-25): primary buttons are dark ink like Join Discord,
+  // which inverts with the theme; the accent teal is too loud for buttons.
   assert.match(
     css,
-    /--icono-action-primary-bg:\s*color-mix\(in srgb,\s*oklch\(24% 0\.035 50\) 88%,\s*var\(--accent\) 12%\)/,
-    "primary action color should live in a shared Iconoplasm action token that does not invert in dark mode",
+    /\.icono-button--primary\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--dark\) 88%,\s*var\(--accent\) 12%\)[^}]*color:\s*var\(--light\)/,
+    "the primary button is dark ink with a hint of accent, like the Join Discord button",
   )
   assert.match(
     css,
@@ -622,14 +624,39 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
     "modal and toolbar action buttons should not inherit the page's display fonts",
   )
   assert.match(
-    css,
-    /\.icono-request-direct-publish\s*\{[^}]*background:\s*var\(--icono-action-primary-bg\)/,
-    "publish candidate should be the primary action token; generate is the secondary token when no image is ready",
+    app,
+    /directGenerateButton\.classList\.toggle\("icono-button--primary", !canPublish\)[\s\S]*directPublishButton\.classList\.toggle\("icono-button--primary", canPublish\)/,
+    "the next step wears the primary style: generate until an image exists, then publish",
   )
   assert.match(
+    app,
+    /class="icono-button icono-button--primary icono-canonical-new-candidate-btn"/,
+    "the toolbar's New candidate action is the shared primary button",
+  )
+  // B-835: one button definition. Surfaces position buttons and never restyle
+  // them, so no other rule may give a button class its own background or font.
+  const buttonRules = css.match(/\n\.icono-button\s*\{/g) || []
+  assert.equal(buttonRules.length, 1, "styles.css defines .icono-button exactly once")
+  for (const legacy of [
+    "icono-canonical-new-candidate-btn",
+    "icono-request-free-submit",
+    "icono-request-direct-generate",
+    "icono-request-direct-publish",
+    "icono-image-edit-action-button",
+    "icono-candidate-delete-confirm",
+    "icono-vote-login-link",
+  ]) {
+    assert.doesNotMatch(
+      css,
+      new RegExp("\\." + legacy + "[^{,]*\\{[^}]*(background|font-family)"),
+      legacy + " must not restyle the shared button",
+    )
+  }
+  assert.doesNotMatch(css, /font-family:\s*var\(--icono-action-font\)\s*!important/)
+  assert.match(
     css,
-    /\.icono-canonical-new-candidate-btn\s*\{[^}]*background:\s*var\(--icono-action-primary-bg\)[^}]*font-family:\s*var\(--icono-action-font\)\s*!important/,
-    "canonical toolbar action should use the same font and primary action token as direct generation and beat global button typography",
+    /sl-dialog:not\(:defined\)\s*\{\s*display:\s*none/,
+    "an undefined sl-dialog must not render its form inline (B-836)",
   )
   assert.match(
     css,
@@ -653,7 +680,7 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   )
   assert.match(
     css,
-    /\.icono-request-direct-generate:disabled,\s*\.icono-request-direct-publish:disabled\s*\{[^}]*background:\s*transparent[^}]*opacity:\s*1/,
+    /\n\.icono-button:disabled\s*\{[^}]*background:\s*transparent[^}]*opacity:\s*1/,
     "disabled direct actions should become neutral outline controls instead of translucent green pills",
   )
   assert.match(

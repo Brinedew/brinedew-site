@@ -32,13 +32,13 @@ import {
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
 import "./vendor/img-comparison-slider.js?v=6e01335000bbafdd"
-import { openVoteLoginDialog } from "./vote-login-dialog.js?v=8968093b0fed6583"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=0155acc7b23ca528"
 import { installIconoplasmLightbox } from "./lightbox.js?v=c176444f4b2570e4"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=52d295f4abbe2e34"
+} from "./candidate-delete-dialog.js?v=9ba98a9e51b6ae85"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
@@ -274,7 +274,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=7802ee9fdc6312d7", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=6af04643162747d9", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -290,7 +290,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=1e72995877397301"),
+      import("./caretaker-manifestations.js?v=ab341b214b00e0af"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -431,7 +431,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var actionLabel = switchFrom ? "Switch to " + symbol : "Become a " + symbol + " caretaker"
         var dialogId = "icono-caretaker-claim-dialog-" + symbol
         target.innerHTML =
-          '<button type="button" class="icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
+          '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
           esc(dialogId) +
           '"><span>' +
           esc(actionLabel) +
@@ -456,7 +456,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(terms.display_label || "caretaker terms") +
           (switchFrom ? "</a>.</p>" : "</a>.</sl-checkbox>") +
           '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
-          '</form><div class="icono-caretaker-claim-actions" slot="footer"><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button" data-icono-caretaker-claim-submit' +
+          '</form><div class="icono-caretaker-claim-actions icono-actions" slot="footer"><button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit' +
           (switchFrom ? "" : " disabled") +
           ">" +
           esc(actionLabel) +
@@ -2499,10 +2499,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var actions =
       '<div class="icono-empty-actions">' +
       (isAuthenticated
-        ? '<a class="icono-home-auth-link icono-empty-link" href="' +
+        ? '<a class="icono-button icono-button--primary icono-empty-link" href="' +
           esc(COMMUNITY_URL) +
           '" target="_blank" rel="noopener noreferrer">Join Discord</a>'
-        : '<a class="icono-home-auth-link icono-empty-link" href="' +
+        : '<a class="icono-button icono-button--primary icono-empty-link" href="' +
           esc(voteLoginUrl()) +
           '">Log in with Discord</a>') +
       '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/wiki/iconoplasm-faq">Read FAQ</a>' +
@@ -3465,7 +3465,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<a class="' +
         (action.subtle
           ? "icono-toolbar-link icono-install-link icono-install-link--subtle"
-          : "icono-home-auth-link icono-guest-login-card-button icono-install-link") +
+          : "icono-button icono-button--primary icono-install-link") +
         '" href="' +
         esc(action.href) +
         '" target="_blank" rel="noopener noreferrer">' +
@@ -3639,7 +3639,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-home-auth-copy">' +
       '<div class="icono-home-auth-title icono-guest-login-card-title">Join the Discord server</div>' +
       "</div>" +
-      '<a class="icono-home-auth-link icono-guest-login-card-button" href="' +
+      '<a class="icono-button icono-button--primary icono-guest-login-card-button" href="' +
       esc(COMMUNITY_URL) +
       '" target="_blank" rel="noopener noreferrer">Join Discord</a>' +
       "</article>"
@@ -5602,7 +5602,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var safeSymbol = normalizedSymbol(symbol)
     var dialogId = "icono-request-dialog-" + safeSymbol
     return (
-      '<button type="button" class="icono-canonical-new-candidate-btn" data-icono-request-dialog-open aria-haspopup="dialog" aria-controls="' +
+      '<button type="button" class="icono-button icono-button--primary icono-canonical-new-candidate-btn" data-icono-request-dialog-open aria-haspopup="dialog" aria-controls="' +
       esc(dialogId) +
       '">' +
       ICONO_PLUS_ICON +
@@ -5625,14 +5625,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-footer" slot="footer">' +
       '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-      '<button type="button" class="icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
+      '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
       '<button type="submit" form="icono-request-form-' +
       esc(safeSymbol) +
-      '" class="icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
+      '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
       "</div>" +
       '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
-      '<button type="button" class="icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
-      '<button type="button" class="icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
+      '<button type="button" class="icono-button icono-button--primary icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
+      '<button type="button" class="icono-button icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
       "</div>" +
       "</div>" +
       "</sl-dialog>"
@@ -5898,8 +5898,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       "</div>" +
       '<div slot="footer" class="icono-image-edit-actions">' +
-      '<button type="button" class="icono-image-edit-action-button icono-image-edit-action-button--primary" data-icono-image-edit-submit disabled>Edit</button>' +
-      '<button type="button" class="icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish</button>' +
+      '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
+      '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish</button>' +
       "</div>" +
       "</sl-dialog>"
     )
@@ -5961,6 +5961,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         imageEditDialogState.job.status === "succeeded" &&
         !imageEditDialogState.job.published
       publishButton.hidden = !shouldShowPublish
+      // The next step wears the primary style: Edit until a result exists, then Publish.
+      publishButton.classList.toggle("icono-button--primary", !!shouldShowPublish)
+      if (editButton) editButton.classList.toggle("icono-button--primary", !shouldShowPublish)
       publishButton.disabled =
         imageEditDialogState.loading ||
         !imageEditDialogState.job ||
@@ -6826,21 +6829,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         } else {
           setDirectStatus("", "")
         }
+        var canPublish = Boolean(
+          !requestDirectState.loading &&
+          requestDirectState.job &&
+          hasDirectGeneratedImage() &&
+          !requestDirectState.job.published,
+        )
+        // The next step wears the primary style: Generate until an image exists, then Publish.
         if (directGenerateButton) {
           directGenerateButton.disabled = Boolean(requestDirectState.loading || !hasProvider)
           directGenerateButton.textContent = requestDirectState.loading
             ? "Generating..."
             : "Generate candidate"
+          directGenerateButton.classList.toggle("icono-button--primary", !canPublish)
         }
         if (directPublishButton) {
-          var canPublish = Boolean(
-            !requestDirectState.loading &&
-            requestDirectState.job &&
-            hasDirectGeneratedImage() &&
-            !requestDirectState.job.published,
-          )
           directPublishButton.hidden = !canPublish
           directPublishButton.disabled = !canPublish
+          directPublishButton.classList.toggle("icono-button--primary", canPublish)
         }
         updateDirectGenerationPreview()
       }
@@ -7865,7 +7871,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             '<div class="icono-home-auth-note">Requests feed the free generation queue. You can choose a specific emulsion ID after login.</div>' +
             "</div>" +
             '<div style="display:grid;gap:12px;">' +
-            '<a class="icono-home-auth-link" href="' +
+            '<a class="icono-button icono-button--primary" href="' +
             esc(currentUser ? COMMUNITY_URL : voteLoginUrl()) +
             '"' +
             (currentUser ? ' target="_blank" rel="noopener noreferrer"' : "") +
