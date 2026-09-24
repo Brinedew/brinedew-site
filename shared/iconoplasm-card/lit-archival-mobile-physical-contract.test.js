@@ -173,7 +173,10 @@ test("first-paint fonts are embedded and revealed as one bounded transaction", a
   const head = await sourceText(headPath)
   const contract = JSON.parse(await sourceText(fontContractPath))
 
-  assert.equal(contract.websiteDelivery.strategy, "embedded-fontface-api")
+  // B-836: the reveal contract (hidden until the faces load, capped below one
+  // second) stays; the bytes move from ~300 KB of per-page base64 to cacheable
+  // preloaded files that every Iconoplasm page and the gene boot share.
+  assert.equal(contract.websiteDelivery.strategy, "preloaded-fontface-api")
   assert.ok(contract.websiteDelivery.revealTimeoutMs > 0)
   assert.ok(contract.websiteDelivery.revealTimeoutMs < 1000)
   assert.equal(
@@ -182,27 +185,19 @@ test("first-paint fonts are embedded and revealed as one bounded transaction", a
     "extension cards must paint fallback text immediately instead of hiding copy during font load",
   )
   assert.doesNotMatch(css, /(?:^|\n)@font-face\s*\{/)
-  assert.doesNotMatch(head, /\/static\/iconoplasm\/fonts\//)
-  assert.match(head, /readFileSync\([\s\S]*\.toString\("base64"\)/)
-  assert.match(head, /html\.icono-fonts-loading body \{ visibility: hidden !important; \}/)
+  assert.doesNotMatch(head, /toString\("base64"\)/)
+  assert.match(head, /html\.icono-fonts-loading body, html\.icono-route-pending body \{ visibility: hidden !important; \}/)
   assert.match(head, /new FontFace\(/)
   assert.match(head, /Promise\.all\(faces\.map/)
   assert.match(head, /loadedFaces\.forEach\(function \(face\) \{ document\.fonts\.add\(face\) \}\)/)
-  assert.match(head, /root\.setAttribute\("data-icono-fonts", state\)/)
-  assert.match(head, /root\.setAttribute\("data-icono-fonts-duration-ms"/)
   assert.match(head, /reveal\("ready"\)/)
   assert.match(head, /reveal\("fallback"\)/)
-  assert.match(head, /if \(settled\) return/)
-
-  let embeddedBytes = 0
   for (const font of [...contract.shellFonts, ...contract.fonts]) {
-    const embeddedFont = await readFile(
-      path.join(repoRoot, "shared", "iconoplasm-card", "fonts", font.embeddedFile),
-    )
-    assert.ok(embeddedFont.byteLength > 0, `${font.embeddedFile} must contain font data`)
-    embeddedBytes += embeddedFont.byteLength
+    assert.match(font.url, /^\/static\/(?:iconoplasm\/)?fonts\/[A-Za-z0-9-]+(?:_wght)?\.woff2$/)
+    const served = path.join(repoRoot, "quartz", font.url)
+    const bytes = await readFile(served)
+    assert.ok(bytes.byteLength > 0, `${font.url} must be a shipped font file`)
   }
-  assert.ok(embeddedBytes < 240_000, `embedded font payload grew to ${embeddedBytes} bytes`)
 })
 
 test("mobile voting copy uses a Firefox-safe flex row with a non-shrinking arrow", async () => {
