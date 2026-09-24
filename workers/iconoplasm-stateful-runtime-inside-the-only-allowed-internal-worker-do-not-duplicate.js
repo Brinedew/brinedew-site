@@ -35843,29 +35843,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
       json(result, 202, { "Cache-Control": "no-store" }),
     )
   },
-  "admin_gallery.backfill_blot_aliases": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done("admin_gallery_blot_alias_backfill_403", json({ error: "Unauthorized" }, 403))
-    const result = await callCardPublication(env, "/backfill-blot-aliases", { method: "POST" })
-    return done(
-      "admin_gallery_blot_alias_backfill",
-      json(result, 202, { "Cache-Control": "no-store" }),
-    )
-  },
-  "admin_gallery.cancel_blot_alias_backfill": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done(
-        "admin_gallery_blot_alias_backfill_cancel_403",
-        json({ error: "Unauthorized" }, 403),
-      )
-    const result = await callCardPublication(env, "/cancel-blot-alias-backfill", {
-      method: "POST",
-    })
-    return done(
-      "admin_gallery_blot_alias_backfill_cancel",
-      json(result, 200, { "Cache-Control": "no-store" }),
-    )
-  },
   "admin_gallery.cancel_card_rematerialization": async ({ request, env, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done(
