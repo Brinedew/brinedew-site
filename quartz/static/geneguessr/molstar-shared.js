@@ -10,17 +10,22 @@
   // Note: `pdbe-molstar` versions are NOT the same as upstream `molstar` versions.
   const MOLSTAR_VERSION = "3.8.0"
   const MOLSTAR_FALLBACK_VERSION = "3.7.1"
-  // Encoded, versioned paths avoid browser-cached redirects and HTML from older asset routing.
+  // Pinned Mol* builds are vendored into the static site at build time
+  // (scripts/write-pages-edge-files.mjs, SHA-256 verified), so the viewer is
+  // same-origin and costs no Worker request.
   const proxiedMolstarAsset = (version, file) =>
-    `/static/vendor/pdbe-molstar%40${version}/build/${file}?route=2`
+    `/static/vendor/pdbe-molstar-${version}/build/${file}`
 
-  // In worker-served contexts (geneguessr subdomain + workers.dev), proxy Mol* assets through the
-  // Worker so the page does not depend on the client being able to reach jsDelivr directly.
-  // In site-served contexts (brinedew.bio), load directly from jsDelivr.
+  // Brinedew-hosted pages use the vendored copy; anything else uses jsDelivr.
   const SHOULD_PROXY_MOLSTAR_ASSETS = (() => {
     try {
       const host = String(globalThis.location?.hostname || "").toLowerCase()
-      return host === "geneguessr.brinedew.bio" || host.endsWith(".workers.dev")
+      return (
+        host === "geneguessr.brinedew.bio" ||
+        host === "brinedew.bio" ||
+        host.endsWith(".brinedew-bio.pages.dev") ||
+        host === "brinedew-bio.pages.dev"
+      )
     } catch {
       return false
     }

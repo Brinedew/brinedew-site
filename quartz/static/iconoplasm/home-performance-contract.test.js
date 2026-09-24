@@ -173,12 +173,20 @@ test("public gallery default order is newly discovered genes first", async () =>
   )
 })
 
-test("Cloudflare Web Analytics automatic injection is consent-gated by worker HTML handling", async () => {
+test("Cloudflare Web Analytics is consent-gated in the page and by the Iconoplasm worker", async () => {
   const head = await readFile(headPath, "utf8")
   const internalWorker = await readFile(internalWorkerPath, "utf8")
 
+  // B-834: brinedew.bio and GeneGuessr pages are static, so the page itself
+  // decides: a stored choice wins, a worker-injected flag still forces the
+  // prompt, otherwise the free /cdn-cgi/trace country decides. The beacon is
+  // loaded only after consent or outside the consent countries.
   assert.match(head, /brinedew_analytics_consent/)
-  assert.match(head, /__brinedewAnalyticsConsentRequired !== true/)
+  assert.match(head, /__brinedewAnalyticsConsentRequired === true\) return decide\(true\)/)
+  assert.match(head, /fetch\("\/cdn-cgi\/trace"/)
+  assert.match(head, /CONSENT_COUNTRIES = new Set\(\[[^\]]*"DE"[^\]]*"GB"/)
+  assert.match(head, /if \(decision === "declined"\) return/)
+  assert.match(head, /const loadBeacon = \(\) =>/)
   assert.match(head, /Allow cookieless Cloudflare Web Analytics/)
   assert.match(
     internalWorker,

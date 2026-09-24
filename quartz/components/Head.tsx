@@ -747,20 +747,35 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
+  // B-834: pages are static (no Worker per request), so the consent decision
+  // is made here. Cloudflare's free /cdn-cgi/trace names the visitor country;
+  // EU/EEA/UK visitors see the prompt, everyone else gets the cookieless beacon.
   const COOKIE = "brinedew_analytics_consent"
+  const BEACON_TOKEN = "381c356e1ba64a2bbd4924e73d532992"
+  const CONSENT_COUNTRIES = new Set(["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MT","NL","NO","PL","PT","RO","SE","SI","SK"])
   const hosts = new Set(["brinedew.bio", "www.brinedew.bio", "iconoplasm.brinedew.bio", "geneguessr.brinedew.bio"])
   const host = String(location.hostname || "").toLowerCase()
   if (!hosts.has(host)) return
-  if (window.__brinedewAnalyticsConsentRequired !== true) return
   const readCookie = (name) => {
-    const parts = (document.cookie || "").split(/;\\s*/)
-    for (const part of parts) {
+    const parts = (document.cookie || "").split(";")
+    for (const rawPart of parts) {
+      const part = rawPart.trim()
       const eq = part.indexOf("=")
       if (eq > -1 && part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1))
     }
     return ""
   }
-  if (readCookie(COOKIE)) return
+  const loadBeacon = () => {
+    if (document.querySelector("script[data-cf-beacon]")) return
+    const script = document.createElement("script")
+    script.defer = true
+    script.src = "https://static.cloudflareinsights.com/beacon.min.js"
+    script.setAttribute("data-cf-beacon", JSON.stringify({ token: BEACON_TOKEN, spa: true }))
+    document.head.appendChild(script)
+  }
+  const decision = readCookie(COOKIE)
+  if (decision === "accepted") return loadBeacon()
+  if (decision === "declined") return
   const writeCookie = (value) => {
     const attrs = ["Path=/", "Max-Age=31536000", "SameSite=Lax"]
     if (location.protocol === "https:") attrs.push("Secure")
@@ -769,7 +784,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   }
   const show = () => {
     if (document.querySelector(".brinedew-analytics-consent")) return
-    const privacyHref = host === "iconoplasm.brinedew.bio" ? "/privacy" : host === "geneguessr.brinedew.bio" ? "/privacy" : "/apps/iconoplasm/privacy"
+    const privacyHref = host === "iconoplasm.brinedew.bio" ? "/privacy" : host === "geneguessr.brinedew.bio" ? "/privacy" : "https://iconoplasm.brinedew.bio/privacy"
     const box = document.createElement("aside")
     box.className = "brinedew-analytics-consent"
     box.setAttribute("role", "dialog")
@@ -777,7 +792,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
     box.innerHTML = '<p>Allow cookieless Cloudflare Web Analytics so we can count visits from your region? It is aggregate traffic data only.</p><div class="brinedew-analytics-consent__actions"><a href="' + privacyHref + '">Privacy</a><button type="button" data-analytics-consent-decline>No thanks</button><button type="button" data-analytics-consent-accept>Allow analytics</button></div>'
     box.querySelector("[data-analytics-consent-accept]").addEventListener("click", () => {
       writeCookie("accepted")
-      location.reload()
+      box.remove()
+      loadBeacon()
     })
     box.querySelector("[data-analytics-consent-decline]").addEventListener("click", () => {
       writeCookie("declined")
@@ -785,8 +801,19 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
     })
     document.body.appendChild(box)
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show, { once: true })
-  else show()
+  const decide = (needsConsent) => {
+    if (!needsConsent) return loadBeacon()
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show, { once: true })
+    else show()
+  }
+  if (window.__brinedewAnalyticsConsentRequired === true) return decide(true)
+  fetch("/cdn-cgi/trace", { cache: "no-store", credentials: "omit" })
+    .then((response) => response.text())
+    .then((text) => {
+      const match = /^loc=([A-Z]{2})$/m.exec(text)
+      decide(match ? CONSENT_COUNTRIES.has(match[1]) : true)
+    })
+    .catch(() => decide(true))
 })()`,
           }}
         />
