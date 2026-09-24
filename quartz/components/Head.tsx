@@ -757,8 +757,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   const host = String(location.hostname || "").toLowerCase()
   if (!hosts.has(host)) return
   const readCookie = (name) => {
-    const parts = (document.cookie || "").split(/;\s*/)
-    for (const part of parts) {
+    const parts = (document.cookie || "").split(";")
+    for (const rawPart of parts) {
+      const part = rawPart.trim()
       const eq = part.indexOf("=")
       if (eq > -1 && part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1))
     }
