@@ -2,7 +2,7 @@
 // browser_run_code_unsafe({ filename: "Website/scripts/the-only-iconoplasm-live-journey-do-not-duplicate.js" })
 // This is a visitor check. It never votes, queues generation, or changes a caretaker role.
 // The installed extension may merge discoveries into the signed-in account as a real visitor does.
-async (page) => {
+;async (page) => {
   const runId = new Date().toISOString().replace(/[:.]/g, "-")
   const artifacts = "D:/Coding/Website/artifacts/B-801"
   const checks = []
@@ -67,9 +67,12 @@ async (page) => {
     )
     const bytes = await response.body()
     const mime = response.headers()["content-type"] || ""
-    const webp = bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP"
+    const webp =
+      bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP"
     if (response.status() !== 200 || !mime.startsWith("image/webp") || !webp || bytes.length < 1024)
-      throw new Error(`${symbol} blot: HTTP ${response.status()}, ${mime}, ${bytes.length} bytes, webp=${webp}`)
+      throw new Error(
+        `${symbol} blot: HTTP ${response.status()}, ${mime}, ${bytes.length} bytes, webp=${webp}`,
+      )
     return { status: response.status(), mime, bytes: bytes.length }
   }
 
@@ -82,16 +85,19 @@ async (page) => {
     try {
       await page.locator(".iconoplasm-tooltip").waitFor({ state: "attached", timeout: 8000 })
       await page.waitForFunction(
-        () => [...(CSS.highlights.get("iconoplasm-gene-ranges") || [])].some(
-          (range) => range.toString() === "SOX11" &&
-            range.startContainer.parentElement?.matches(".decorated-list-item__content strong"),
-        ),
+        () =>
+          [...(CSS.highlights.get("iconoplasm-gene-ranges") || [])].some(
+            (range) =>
+              range.toString() === "SOX11" &&
+              range.startContainer.parentElement?.matches(".decorated-list-item__content strong"),
+          ),
         null,
         { timeout: 15000 },
       )
       const highlight = await page.evaluate(() => {
         const range = [...CSS.highlights.get("iconoplasm-gene-ranges")].find(
-          (entry) => entry.toString() === "SOX11" &&
+          (entry) =>
+            entry.toString() === "SOX11" &&
             entry.startContainer.parentElement?.matches(".decorated-list-item__content strong"),
         )
         const rect = range.getBoundingClientRect()
@@ -114,10 +120,18 @@ async (page) => {
       const popup = await popupPromise
       await popup.waitForURL(/iconoplasm\.brinedew\.bio\/gene\/SOX11/, { timeout: 10000 })
       await popup.close()
-      record("installed extension hover and real click", "passed", "SOX11 portrait loaded and click opened the SOX11 gene page")
+      record(
+        "installed extension hover and real click",
+        "passed",
+        "SOX11 portrait loaded and click opened the SOX11 gene page",
+      )
     } catch (error) {
       const mounted = await page.locator(".iconoplasm-tooltip").count()
-      record("installed extension hover and real click", mounted ? "failed" : "unverified", String(error.message || error))
+      record(
+        "installed extension hover and real click",
+        mounted ? "failed" : "unverified",
+        String(error.message || error),
+      )
     }
   } catch (error) {
     record("UniProt host page", "failed", String(error.message || error))
@@ -144,7 +158,8 @@ async (page) => {
   }
   page.context().off("request", trackRequest)
   const unexpectedWrites = mutationRequests.filter(
-    (request) => request.method !== "POST" ||
+    (request) =>
+      request.method !== "POST" ||
       ![
         "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/batch",
         "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/merge",
