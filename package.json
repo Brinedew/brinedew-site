@@ -39,7 +39,7 @@
     "test": "node scripts/run-tests.mjs && pnpm --filter @brinedew/obsidian-prose-checker test",
     "test:architecture-fences": "node ./scripts/run-tests.mjs ./scripts/architecture-fences.test.js",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
-    "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --from-config"
+    "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --enabled-only"
   },
   "engines": {
     "npm": ">=10.9.2",
