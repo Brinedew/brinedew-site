@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=015c0a99a23f04e1"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=d5620ca1c6b3b8cf"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=ee465f30cb36ac97"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=89d1925ec8d8c01e"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=a6a0780af83a6666"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -193,7 +193,7 @@ export function createCaretakerManifestationPanel({
     section.appendChild(textarea)
     const remove = document.createElement("button")
     remove.type = "button"
-    remove.className = "icono-button icono-button--danger-quiet"
+    remove.className = "icono-button icono-button--danger"
     remove.setAttribute("data-icono-caretaker-remove-draft", "")
     remove.textContent = "Remove draft from this device"
     section.appendChild(remove)

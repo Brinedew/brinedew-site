@@ -72,6 +72,7 @@
 }
 
 .icono-caretaker-panel__footer {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -86,11 +87,8 @@
   font-size: 0.78rem;
 }
 
-.icono-caretaker-footer__actions,
 .icono-caretaker-footer__source {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
+  display: contents;
 }
 
 .icono-caretaker-footnote {
@@ -438,7 +436,7 @@
 .icono-caretaker-editor__meta,
 .icono-caretaker-editor__actions,
 .icono-caretaker-version header,
-.icono-caretaker-version footer {
+.icono-caretaker-version__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -479,42 +477,7 @@
   justify-content: flex-start;
 }
 
-.icono-caretaker-panel .icono-button {
-  min-height: 2.3rem;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--icono-radius-sm);
-  background: var(--accent);
-  color: var(--light);
-  font-family: var(--icono-action-font) !important;
-  font-size: var(--icono-action-font-size);
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.icono-caretaker-panel .icono-button:hover {
-  background: color-mix(in srgb, var(--accent) 86%, var(--dark) 14%);
-}
-
-.icono-caretaker-panel .icono-button--quiet,
-.icono-caretaker-panel .icono-button--danger-quiet {
-  border-color: var(--icono-action-border);
-  background: transparent;
-  color: var(--dark);
-}
-
-.icono-caretaker-panel .icono-button--quiet:hover,
-.icono-caretaker-panel .icono-button--danger-quiet:hover {
-  background: color-mix(in srgb, var(--dark) 7%, transparent);
-}
-
-.icono-caretaker-panel .icono-button--danger-quiet {
-  border-color: color-mix(in srgb, var(--icono-reject) 55%, var(--ui-border) 45%);
-  color: var(--icono-reject);
-}
-
-.icono-caretaker-panel :is(button, textarea, input):disabled {
+.icono-caretaker-panel :is(textarea, input):disabled {
   cursor: not-allowed;
   opacity: 0.62;
 }
@@ -610,7 +573,7 @@
   line-height: 1.55;
 }
 
-.icono-caretaker-version footer {
+.icono-caretaker-version__foot {
   color: var(--darkgray);
   font-family: var(--icono-action-font);
   font-size: 0.72rem;

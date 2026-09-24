@@ -61,11 +61,11 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   assert.doesNotMatch(dialogMarkup, /api key/i)
   assert.match(
     dialogMarkup,
-    /<button type="button" class="icono-image-edit-action-button icono-image-edit-action-button--primary" data-icono-image-edit-submit disabled>Edit<\/button>/,
+    /<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit<\/button>/,
   )
   assert.match(
     dialogMarkup,
-    /<button type="button" class="icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish<\/button>/,
+    /<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish<\/button>/,
   )
   assert.ok(
     dialogMarkup.indexOf("data-icono-image-edit-submit") <
@@ -116,13 +116,12 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   assert.match(css, /\.icono-image-edit-dialog::part\(overlay\)/)
   assert.match(css, /--sl-font-sans:\s*"IBM Plex Mono", monospace/)
   assert.match(css, /--icono-action-font:\s*"IBM Plex Mono", monospace/)
-  assert.match(modalControlCss, /font-family:\s*var\(--icono-action-font\)\s*!important/)
-  assert.match(modalLabelPartCss, /font-family:\s*var\(--icono-action-font\)\s*!important/)
+  assert.match(modalControlCss, /font-family:\s*var\(--icono-action-font\)/)
+  assert.match(modalLabelPartCss, /font-family:\s*var\(--icono-action-font\)/)
   assert.doesNotMatch(modalLabelPartCss, /Special Elite/)
-  assert.match(css, /\.icono-image-edit-action-button\s*\{/)
-  assert.match(css, /\.icono-image-edit-action-button--primary\s*\{/)
-  assert.match(css, /\.icono-image-edit-action-button\[hidden\]\s*\{/)
-  assert.match(css, /font-family:\s*var\(--icono-action-font\)\s*!important/)
+  // B-835: the dialog positions its buttons; `.icono-button` styles them.
+  assert.doesNotMatch(css, /\.icono-image-edit-action-button[^{]*\{[^}]*background/)
+  assert.match(css, /\.icono-button\[hidden\]\s*\{/)
   assert.doesNotMatch(dialogMarkup, /icono-image-edit-action-step-number/)
   assert.match(modalVariablePartCss, /font-family:\s*"Special Elite", Georgia, serif/)
   assert.doesNotMatch(modalVariablePartCss, /IBM Plex Mono/)

@@ -123,18 +123,18 @@ export function openCandidateDeleteDialog(options = {}) {
   status.hidden = true
 
   const actions = ownerDocument.createElement("div")
-  actions.className = "icono-candidate-delete-actions"
+  actions.className = "icono-candidate-delete-actions icono-actions"
 
   const cancelButton = ownerDocument.createElement("button")
   cancelButton.type = "button"
-  cancelButton.className = "icono-candidate-delete-cancel"
+  cancelButton.className = "icono-button icono-candidate-delete-cancel"
   cancelButton.setAttribute("data-icono-candidate-delete-cancel", "")
   cancelButton.setAttribute("autofocus", "")
   cancelButton.textContent = "Keep candidate"
 
   const confirmButton = ownerDocument.createElement("button")
   confirmButton.type = "button"
-  confirmButton.className = "icono-candidate-delete-confirm"
+  confirmButton.className = "icono-button icono-button--danger icono-candidate-delete-confirm"
   confirmButton.setAttribute("data-icono-candidate-delete-confirm", "")
   confirmButton.textContent = "Delete candidate"
 
