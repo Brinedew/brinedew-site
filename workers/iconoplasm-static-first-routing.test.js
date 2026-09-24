@@ -195,6 +195,10 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
     path.join(source, "apps", "iconoplasm", "caretaker-terms.html"),
     "<main>Caretaker Terms</main>",
   )
+  await writeFile(
+    path.join(source, "apps", "iconoplasm", "developers.html"),
+    "<main>For developers</main>",
+  )
   await writeFile(path.join(source, "static", "iconoplasm", "styles.css"), "body{}")
   await writeFile(path.join(source, "runtime.js"), "export {}")
   await writeFile(path.join(source, "component.css"), "body{}")

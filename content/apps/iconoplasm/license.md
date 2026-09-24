@@ -27,7 +27,7 @@ This CC0 dedication applies **only** to the two published image classes above. I
 
 ## Machine-readable permission
 
-Gene pages, the public image resolver, and image HTTP responses identify the applicable CC0 license. The public resolver also states the operational permissions directly so software does not need to infer them from copyright doctrine.
+Gene pages, the public image resolver, and image HTTP responses identify the applicable CC0 license. See [For developers](/developers) for the image URLs and the resolver.
 
 Canonical license URL: `https://creativecommons.org/publicdomain/zero/1.0/`
 

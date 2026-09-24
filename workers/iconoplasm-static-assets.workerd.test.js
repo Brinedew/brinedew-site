@@ -26,7 +26,7 @@ async function makeAssetFixture() {
     { recursive: true },
   )
   const shell = `<!doctype html><script type="module" src="/static/iconoplasm/app.js"></script>`
-  for (const page of ["index", "privacy", "license", "caretaker-terms"])
+  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
     await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
   await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
   const summary = await prepareIconoplasmEdgeAssets({

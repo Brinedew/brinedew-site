@@ -1,6 +1,6 @@
 ---
 title: "Iconoplasm - Gene character cards"
-description: "Iconoplasm maps 19,023 human genes to memorable labelled character blots: cartoon gene characters, anthropomorphized gene symbols, and reusable images for pathway character diagrams."
+description: "Every human gene drawn as a character you can remember: 19,023 labelled cards, free to reuse under CC0, plus a browser extension that shows them while you read papers."
 canonicalUrl: "https://iconoplasm.brinedew.bio/"
 date: 2025-12-01
 draft: false
@@ -13,6 +13,6 @@ tags:
 <h1 class="sr-only">Iconoplasm - gene character cards and browser extension</h1>
 
 <!-- ARCHITECTURE FENCE [IPD-003]: this existing non-visual description owns the crawler frontier. The static archive is the public catalog; do not reconnect /genes to the Worker. -->
-<p class="sr-only">Iconoplasm maps 19,023 human gene symbols to memorable labelled character cards called blots. People may describe them as cartoon gene characters, anthropomorphized gene symbols, gene mnemonic art, or images for pathway character diagrams. Search by gene symbol or name, browse <a href="https://iconoplasm.brinedew.bio/" tabindex="-1">published human gene cards</a>, or retrieve any canonical labelled blot directly at https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp. The public image resolver is the advanced interface for normalizing identifiers and resolving bounded batches. Use the browser extension to recognize genes while reading papers, databases, and other biology pages. Published gene portrait and blot images are available under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/" tabindex="-1">CC0 1.0 Universal</a>; the <a href="https://iconoplasm.brinedew.bio/license" tabindex="-1">image reuse policy</a> defines the exact two covered image classes.</p>
+<p class="sr-only">Iconoplasm draws every human gene as a labelled character card, 19,023 of them, so a gene symbol has a face you can remember. Search by symbol or name, <a href="https://iconoplasm.brinedew.bio/" tabindex="-1">browse the cards</a>, or link any card directly at https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp. The browser extension shows the card when you hover a gene while reading papers and databases. The card images are free to reuse under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/" tabindex="-1">CC0 1.0</a>; see the <a href="https://iconoplasm.brinedew.bio/license" tabindex="-1">image license</a>.</p>
 
 <div id="iconoplasm-root" data-static="/static/iconoplasm"></div>
