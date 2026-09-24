@@ -84,7 +84,6 @@ test(
         "/sitemap.xml",
         "/robots.txt",
         "/llms.txt",
-        "/published-cards/v2/immutable/genes/example.json",
       ]) {
         const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)
         assert.notEqual(response.status, 599, `${pathname} invoked the stateful Worker`)
@@ -105,6 +104,18 @@ test(
           portraitResponse.status,
           599,
           "the first-party portrait route owns the fallback",
+        )
+        // B-807: the extension's origin hedge for immutable publication objects.
+        const objectResponse = await runtime.dispatchFetch(
+          "https://iconoplasm.test/published-cards/v2/immutable/manifests/" +
+            "c".repeat(64) +
+            ".json",
+          { method, redirect: "manual" },
+        )
+        assert.equal(
+          objectResponse.status,
+          599,
+          "immutable publication objects never fall through to the HTML shell",
         )
       }
     } finally {
@@ -192,7 +203,7 @@ test(
     assert.ok(proof.physicalDispatches > 0)
     assert.equal(proof.logicalDispatches, undefined)
     assert.ok(proof.routeClasses.some((route) => route.startsWith("/portraits/v1/")))
-    assert.equal(proof.statefulWorkerRouteEvents, 2)
+    assert.equal(proof.statefulWorkerRouteEvents, 3)
     assert.equal(proof.unexpectedStatefulWorkerRouteEvents, 0)
     assert.equal(proof.verified, true)
   },
