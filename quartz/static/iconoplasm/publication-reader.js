@@ -5,7 +5,9 @@ const HASH = /^[a-f0-9]{64}$/
 const BASE_VERSION = /^ccv2-([a-f0-9]{64})$/
 const VIEW_VERSION = /^(ccv2-[a-f0-9]{64})\.c([a-f0-9]{64})$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
-const MAX_CATALOG_INDEXES = 32
+// The 19,023-card live publication had 67 compact indexes on 2026-09-24.
+// Keep a finite browser fanout ceiling with room for ordinary shard splits.
+const MAX_CATALOG_INDEXES = 96
 const MAX_SEARCH_RESULTS = 12
 const MAX_GALLERY_PAGE_SIZE = 24
 const MAX_CANDIDATE_GALLERY_PAGES = 64
