@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -136,6 +137,150 @@ const redirectsFile = `/genes / 301
 /genes/* / 301
 `
 
+// B-809: one small static document per published gene, so search engines,
+// link unfurlers and scripts see that gene's own title, description,
+// canonical URL, share image and licence without executing JavaScript. The
+// page then boots the one shared SPA shell in place (same URL), so readers get
+// the normal app and no Worker request is spent. The shell itself is ~340 KB
+// (inline font bootstrap), so copying it per gene would be ~6.5 GB.
+const ICONOPLASM_ORIGIN = "https://iconoplasm.brinedew.bio"
+const PUBLICATION_CDN = "https://iconoplasmportraits.b-cdn.net"
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+}
+
+export function iconoplasmGenePageHtml({ symbol, fullName }) {
+  const name = String(fullName || "").trim()
+  const title = name
+    ? `${symbol} — ${name} | Iconoplasm character profile`
+    : `${symbol} | Iconoplasm character profile`
+  const description = `${symbol}${name ? ` (${name})` : ""} drawn as an Iconoplasm gene character card: a memorable labelled portrait for the human gene, free to reuse under CC0.`
+  const url = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(symbol)}`
+  const image = `${ICONOPLASM_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`
+  const jsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "CreativeWork",
+    name: title,
+    url,
+    image,
+    about: { "@type": "Gene", name: symbol, alternateName: name || undefined },
+    license: "https://creativecommons.org/publicdomain/zero/1.0/",
+    isPartOf: { "@type": "WebSite", name: "Iconoplasm", url: `${ICONOPLASM_ORIGIN}/` },
+  }).replaceAll("<", "\\u003c")
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<link rel="canonical" href="${escapeHtml(url)}">
+<link rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Iconoplasm">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:url" content="${escapeHtml(url)}">
+<meta property="og:image" content="${escapeHtml(image)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:domain" content="iconoplasm.brinedew.bio">
+<script type="application/ld+json">${jsonLd}</script>
+</head>
+<body>
+<main>
+<h1>${escapeHtml(symbol)}</h1>
+<p>${escapeHtml(name || symbol)}</p>
+<p><a href="/">Iconoplasm gene character cards</a></p>
+</main>
+<script>fetch("/", { credentials: "same-origin" }).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text() }).then(function (html) { document.open(); document.write(html); document.close() }).catch(function () {})</script>
+</body>
+</html>
+`
+}
+
+export function publishedGeneEntries(publicationIndexes = []) {
+  const entries = new Map()
+  for (const index of publicationIndexes) {
+    if (index?.schema_version !== 2 || !Array.isArray(index.search_entries)) {
+      throw new Error("Invalid immutable compact catalog index")
+    }
+    for (const entry of index.search_entries) {
+      const symbol = String(entry?.[0] || "")
+        .trim()
+        .toUpperCase()
+      if (!SYMBOL.test(symbol)) throw new Error("Invalid published gene symbol")
+      if (!entries.has(symbol)) entries.set(symbol, String(entry?.[1] || "").trim())
+    }
+  }
+  return [...entries].sort(([left], [right]) => left.localeCompare(right))
+}
+
+export async function writeIconoplasmGenePages({ outputRoot, publicationIndexes = [] }) {
+  const genes = publishedGeneEntries(publicationIndexes)
+  if (!genes.length) return { genePages: 0 }
+  const directory = path.join(outputRoot, "gene")
+  await mkdir(directory, { recursive: true })
+  for (const [symbol, fullName] of genes) {
+    await writeFile(
+      path.join(directory, `${symbol}.html`),
+      iconoplasmGenePageHtml({ symbol, fullName }),
+      "utf8",
+    )
+  }
+  return { genePages: genes.length }
+}
+
+async function fetchVerifiedJson(url, expectedSha256 = "") {
+  let lastError = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`)
+      const text = await response.text()
+      if (expectedSha256) {
+        const digest = createHash("sha256").update(text).digest("hex")
+        if (digest !== expectedSha256) throw new Error(`Hash mismatch for ${url}`)
+      }
+      return JSON.parse(text)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
+// Reads the current immutable publication from Bunny (the one publisher's
+// output; no Worker, no D1). Returns [] when the CDN is unreachable so a CDN
+// hiccup cannot block an unrelated deploy; the build log says so.
+export async function loadPublishedCatalogIndexes({ cdn = PUBLICATION_CDN, log = console } = {}) {
+  try {
+    const head = await fetchVerifiedJson(`${cdn}/api/public/v1/card-current`)
+    const base = String(head?.current || "")
+    const manifestHash = /^ccv2-([a-f0-9]{64})$/.exec(base)?.[1]
+    if (!manifestHash) throw new Error("Publication head has no current manifest")
+    const manifest = await fetchVerifiedJson(
+      `${cdn}/published-cards/v2/immutable/manifests/${manifestHash}.json`,
+      manifestHash,
+    )
+    const indexes = []
+    for (const shard of manifest?.shards || []) {
+      const key = String(shard?.catalog_index?.key || "")
+      const hash = /\/([a-f0-9]{64})\.json$/.exec(key)?.[1]
+      if (!hash) throw new Error("Manifest shard has no catalog index")
+      indexes.push(await fetchVerifiedJson(`${cdn}/${key}`, hash))
+    }
+    return indexes
+  } catch (error) {
+    log.warn(`Iconoplasm gene pages skipped: published catalog unavailable (${error.message})`)
+    return []
+  }
+}
+
 export async function writeIconoplasmCompatibilityArtifacts({
   outputRoot = targetRoot,
   publicationIndexes = null,
@@ -259,6 +404,7 @@ export async function prepareIconoplasmEdgeAssets({
     outputRoot: resolvedOutput,
     publicationIndexes,
   })
+  await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publicationIndexes })
   const sourceSha = String(
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
   ).trim()
@@ -284,7 +430,9 @@ export async function prepareIconoplasmEdgeAssets({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const report = await prepareIconoplasmEdgeAssets()
+  const report = await prepareIconoplasmEdgeAssets({
+    publicationIndexes: await loadPublishedCatalogIndexes(),
+  })
   console.log(
     JSON.stringify({
       output: path.relative(repoRoot, targetRoot).replaceAll(path.sep, "/"),
