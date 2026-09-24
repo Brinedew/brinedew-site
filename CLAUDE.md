@@ -14,7 +14,7 @@ _For Claude Code and anyone else working on this site_
 
 Personal longevity research blog built with Quartz 4. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
 
-The basic flow: write markdown in `content/`, push to GitHub, the canonical production deploy path (`scripts/deploy-cloudflare-prod.ps1` -> `.github/workflows/deploy-quartz.yml`) builds the site with Quartz and ships it to Cloudflare Pages at `brinedew.bio`, with a public-edge Cloudflare Worker in front. Takes about 2-3 minutes from dispatch to live. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
+The basic flow: write markdown in `content/`, push to GitHub, the canonical production deploy path (`scripts/deploy-cloudflare-prod.ps1` -> `.github/workflows/deploy-quartz.yml`) builds the site with Quartz and ships it to Cloudflare Pages, which serves `brinedew.bio` and `geneguessr.brinedew.bio` directly as free static requests. Only `/api/*` and GeneGuessr `/admin*` run the public-edge Worker (B-834; the zone rules live in `cloudflare/the-only-brinedew-static-edge-policy.json`, reconciled by `scripts/reconcile-brinedew-static-edge-policy.mjs`). Never put a Worker route back on `brinedew.bio/*` or `geneguessr.brinedew.bio/*`: Workers run before the cache, so every file would become a metered request. Takes about 2-3 minutes from dispatch to live. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
 
 ## Design Context
 

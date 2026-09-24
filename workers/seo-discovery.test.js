@@ -368,14 +368,24 @@ test("apex robots source stays standards-only", async () => {
   assert.doesNotMatch(text, /\bCrawl-delay\b/i)
 })
 
-test("www host is routed and permanently canonicalized to the apex host", async () => {
-  const [workflow, wrangler] = await Promise.all([
+test("www host is permanently canonicalized to the apex host", async () => {
+  const [workflow, wrangler, policy] = await Promise.all([
     readFile(deployWorkflowSource, "utf8"),
     readFile(publicWorkerWranglerSource, "utf8"),
+    readFile(
+      new URL("../cloudflare/the-only-brinedew-static-edge-policy.json", import.meta.url),
+      "utf8",
+    ),
   ])
 
-  assert.match(workflow, /"www\.brinedew\.bio\/\*"/)
-  assert.match(wrangler, /pattern = "www\.brinedew\.bio\/\*"/)
+  // B-834: www -> apex is a zone redirect rule, so no Worker runs for it.
+  const www = JSON.parse(policy).redirectRules.find((rule) => rule.ref === "brinedew_www_to_apex")
+  assert.equal(www.expression, '(http.host eq "www.brinedew.bio")')
+  assert.equal(www.statusCode, 301)
+  assert.doesNotMatch(workflow, /"www\.brinedew\.bio\/\*"/)
+  assert.doesNotMatch(wrangler, /pattern = "www\.brinedew\.bio\/\*"/)
+
+  // The Worker keeps the same behaviour if a www request ever reaches it.
 
   globalThis.fetch = async () => {
     throw new Error("www canonical redirect must not proxy duplicate static HTML")
