@@ -77,6 +77,7 @@ import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-g
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
+import { mergePublishedGeneOverlay } from "../quartz/static/iconoplasm/publication-reader.js"
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
@@ -34305,6 +34306,16 @@ async function readPublishedGeneCardPortraitProjection(env, symbol) {
   const version = String(versionInfo?.current || "").trim()
   if (!version || version === "0") return { kind: "unavailable", version, payload: null }
   const advertised = await readAdvertisedDeltaCardProjection(env, version, symbol)
+  if (advertised?.kind === "available") {
+    const base = await readPublishedCardCatalogArtifact(env, version, [symbol], {
+      allowWholeArtifact: false,
+    })
+    const basePayload = base?.bySymbol.get(symbol)?.payload || null
+    return {
+      ...advertised,
+      payload: mergePublishedGeneOverlay(basePayload, advertised.payload),
+    }
+  }
   if (advertised) return advertised
   const artifact = await readPublishedCardCatalogArtifact(env, version, [symbol], {
     allowWholeArtifact: false,
