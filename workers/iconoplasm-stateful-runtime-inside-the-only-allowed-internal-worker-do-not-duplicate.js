@@ -10943,7 +10943,7 @@ function annotateFavoriteGenerationRequestOptions(options, favoriteEmulsionIds) 
   }))
 }
 
-async function listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds) {
+export async function listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds) {
   if (!env.ICONOPLASM_DB) return []
   const favoriteIds = Array.from(
     new Set(
