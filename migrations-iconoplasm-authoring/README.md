@@ -33,6 +33,7 @@ manifestation; most system-seeded manifestations never enter the index.
 
 `0019_bounded_cutover_backup.sql` backfills the existing backup's progress
 once, then lets the owning artifact maintain its counts and indexed resume
-cursor. The canonical backup operator is `scripts/Invoke-ManifestationAuthorityCutover.ps1`.
+cursor. That backup was abandoned unfinished (B-800) and its operator deleted;
+off-platform recovery is the nightly `scripts/backup-d1-rotation.mjs` dump (B-830).
 
 <!-- ARCHITECTURE FENCE [IPD-012] -->
