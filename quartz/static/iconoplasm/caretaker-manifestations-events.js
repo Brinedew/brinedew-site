@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { diffMarkup } from "./caretaker-manifestations-view.js?v=871a83e88c3825d0"
+import { diffMarkup } from "./caretaker-manifestations-view.js?v=89d1925ec8d8c01e"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
