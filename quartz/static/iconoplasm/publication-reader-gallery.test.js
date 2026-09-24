@@ -20,7 +20,7 @@ function candidate(id, filler = "") {
   }
 }
 
-function fixture({ candidates = [], embedded = false } = {}) {
+function fixture({ candidates = [], embedded = false, staleOverlay = false } = {}) {
   const objects = new Map()
   const requests = []
   const store = (kind, value) => {
@@ -73,6 +73,38 @@ function fixture({ candidates = [], embedded = false } = {}) {
       ],
     })
     const head = { schema_version: 2, current: `ccv2-${manifest.hash}` }
+    if (staleOverlay) {
+      const olderCandidates = candidates.slice(0, -1)
+      const olderGallery = await writeCandidateGallery(SYMBOL, olderCandidates, writePage)
+      const overlayGene = store("genes", {
+        symbol: SYMBOL,
+        full_name: "tumor protein p53",
+        portrait: { status: "published", asset_sha256: olderCandidates[0].asset_sha256 },
+        candidate_count: olderGallery.candidate_count,
+        candidate_gallery: olderGallery.candidate_gallery,
+      })
+      const segment = store("indexes", {
+        schema_version: 1,
+        seq: 1,
+        entries: {
+          [SYMBOL]: {
+            symbol: SYMBOL,
+            version: 3,
+            selection_key: "a".repeat(64),
+            seq: 1,
+            status: "committed",
+            gene: overlayGene,
+          },
+        },
+      })
+      const chain = store("indexes", {
+        schema_version: 1,
+        kind: "gene_delta_chain",
+        base: head.current,
+        segments: [{ seq: 1, ...segment, count: 1 }],
+      })
+      head.reader_view = `${head.current}.c${chain.hash}`
+    }
 
     const fetchImpl = async (url) => {
       const pathname = new URL(url).pathname
@@ -151,5 +183,22 @@ test("records published before the split still resolve their embedded pool", asy
     requests.filter((path) => path.includes("/galleries/")).length,
     0,
     "the embedded pool never touches gallery objects",
+  )
+})
+
+test("a newer base gallery supplies newly generated candidates while the vote overlay keeps its canonical portrait", async () => {
+  const pool = [candidate(1), candidate(2), candidate(3)]
+  const { reader } = await fixture({ candidates: pool, staleOverlay: true })
+  const record = await reader.gene(SYMBOL)
+  assert.equal(record.portrait.asset_sha256, pool[0].asset_sha256)
+  assert.equal(record.candidate_count, 3)
+  const gallery = await reader.candidateGallery(record)
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.candidate_image_id),
+    [1, 2, 3],
+  )
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.is_current),
+    [true, false, false],
   )
 })
