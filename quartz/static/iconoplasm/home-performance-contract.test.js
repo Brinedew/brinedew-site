@@ -93,7 +93,7 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
   assert.doesNotMatch(app, /Leaving options stay in caretaker settings until you need them\./)
   assert.match(app, /<sl-checkbox class="icono-caretaker-claim-terms"/)
   assert.doesNotMatch(app, /<input type="checkbox" data-icono-caretaker-claim-terms>/)
-  assert.match(app, /class="icono-button icono-button--quiet" data-icono-caretaker-claim-cancel/)
+  assert.match(app, /class="icono-button" data-icono-caretaker-claim-cancel/)
   assert.match(app, /switchFrom \? "" : " disabled"/)
   assert.match(app, /previous_assignment_id: switchFrom\.caretaker_assignment_id/)
   assert.doesNotMatch(app, /name="leave_policy"/)
@@ -115,11 +115,8 @@ test("gene caretaking is a toolbar claim and a dedicated sidebar panel, never an
     /\.icono-standard-dialog\s*\{[^}]*--sl-panel-background-color:\s*var\(--light\)/s,
   )
   assert.match(styles, /\.icono-standard-dialog::part\(panel\)\s*\{[^}]*background:/s)
-  assert.match(
-    styles,
-    /\.icono-standard-dialog \.icono-button\s*\{[^}]*font-family:\s*var\(--icono-action-font\) !important/s,
-  )
-  assert.match(styles, /\.icono-standard-dialog \.icono-button--quiet\s*\{/)
+  // B-835: dialogs no longer restyle buttons; the one definition lives in styles.css.
+  assert.doesNotMatch(styles, /\.icono-standard-dialog \.icono-button/)
   assert.match(styles, /\.icono-caretaker-claim-actions\s*\{[^}]*justify-content:\s*flex-end/s)
   assert.doesNotMatch(caretakerStyles, /icono-caretaker-claim-dialog/)
 })
@@ -2105,7 +2102,7 @@ test("direct candidate image API panel stays compact and hides transport details
   assert.match(styles, /\.icono-request-direct-preview\s*\{/)
   assert.match(styles, /\.icono-request-segmented\s*\{/)
   assert.doesNotMatch(styles, /\.icono-request-direct-details pre\s*\{/)
-  assert.match(styles, /\.icono-request-direct-publish\[hidden\]\s*\{/)
+  assert.match(styles, /\.icono-button\[hidden\]\s*\{\s*display:\s*none/)
 })
 
 test("gene votes hydrate only after explicit intent and give responsive copies one controller", async () => {

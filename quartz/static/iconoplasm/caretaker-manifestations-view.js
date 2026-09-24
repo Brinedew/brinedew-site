@@ -106,11 +106,11 @@ function ownLineageManagementMarkup(dossier, escapeHtml) {
           escapeHtml(String(manifestation.status || "active").replaceAll("_", " ")) +
           "</span></div>" +
           (manifestation.can_restore
-            ? '<button type="button" class="icono-button" data-icono-caretaker-restore="' +
+            ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-restore="' +
               escapeHtml(String(manifestation.manifestation_id || "")) +
               '">Restore this manifestation</button>'
             : manifestation.can_withdraw
-              ? '<button type="button" class="icono-button icono-button--danger-quiet" data-icono-caretaker-withdraw="' +
+              ? '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
                 escapeHtml(String(manifestation.manifestation_id || "")) +
                 '">Delete this manifestation</button>'
               : "") +
@@ -163,29 +163,29 @@ function versionMarkup(item, dossier, escapeHtml) {
     '<div class="icono-caretaker-diff" data-icono-caretaker-diff-for="' +
     escapeHtml(revisionId) +
     '" hidden></div>' +
-    "<footer><span>" +
+    '<div class="icono-caretaker-version__foot"><span>' +
     escapeHtml(String(revision.created_at_label || revision.created_at || "")) +
     "</span>" +
     '<span class="icono-caretaker-version__actions">' +
     (!canonical
-      ? '<button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-compare="' +
+      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-compare="' +
         escapeHtml(revisionId) +
         '">Compare with canonical</button>'
       : "") +
     (canFork
-      ? '<button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-fork="' +
+      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-fork="' +
         escapeHtml(revisionId) +
         '">Start from this version</button>'
       : "") +
     (canSelect
-      ? '<button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-select="' +
+      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-select="' +
         escapeHtml(revisionId) +
         '" data-manifestation-id="' +
         escapeHtml(String(manifestation.manifestation_id || "")) +
         '">Use this version</button>'
       : "") +
     "</span>" +
-    "</footer></article>"
+    "</div></article>"
   )
 }
 
@@ -269,16 +269,16 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
         '<label><input type="radio" name="caretaker-invitation-policy" value="retain"> Keep my manifestation in the gene history</label>' +
         '<label><input type="radio" name="caretaker-invitation-policy" value="withdraw"> Withdraw it, fall back to another eligible version, and make it eligible for hard purge after 30 days unless legally held</label>' +
         "</fieldset>" +
-        '<div class="icono-caretaker-invitation__actions"><button type="button" class="icono-button" data-icono-caretaker-accept disabled>Accept caretaker role</button>' +
+        '<div class="icono-caretaker-invitation__actions"><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-accept disabled>Accept caretaker role</button>' +
         (dossier.viewer.can_decline
-          ? '<button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-decline>Decline invitation</button>'
+          ? '<button type="button" class="icono-button" data-icono-caretaker-decline>Decline invitation</button>'
           : "") +
         "</div>"
     } else {
       body +=
         '<p class="icono-caretaker-callout" data-tone="warn">The versioned caretaker terms are temporarily unavailable. This invitation remains open, but it cannot be accepted until the exact document is restored.</p>' +
         (dossier.viewer.can_decline
-          ? '<div class="icono-caretaker-invitation__actions"><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-decline>Decline invitation</button></div>'
+          ? '<div class="icono-caretaker-invitation__actions"><button type="button" class="icono-button" data-icono-caretaker-decline>Decline invitation</button></div>'
           : "")
     }
     body += "</div>"
@@ -314,7 +314,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     footerSource =
       '<div class="icono-caretaker-footer__source" data-icono-caretaker-generation-source>' +
       (savedSourceReady && !ownSourceIsCanonical && !tagsUnavailable
-        ? '<button type="button" class="icono-button" data-icono-caretaker-select="' +
+        ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
           esc(own.manifestation_head_revision_id) +
           '" data-manifestation-id="' +
           esc(own.manifestation_id) +
@@ -325,7 +325,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       "</div>"
     body +=
       (tagsUnavailable
-        ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
+        ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
         : "") +
       '<form class="icono-caretaker-editor" data-icono-caretaker-editor>' +
       '<section class="icono-caretaker-pane icono-caretaker-pane--prose">' +
@@ -379,7 +379,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
 
   if (dossier.history?.next_cursor) {
     body +=
-      '<button type="button" class="icono-button icono-button--quiet icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
+      '<button type="button" class="icono-button icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
   }
   body += "</div>"
 
@@ -411,20 +411,20 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
       '<label><input type="radio" name="caretaker-end-policy" value="withdraw"' +
       (leavePolicy === "withdraw" ? " checked" : "") +
       "> Withdraw it, fall back, and make it eligible for hard purge after 30 days unless legally held</label>" +
-      '<button type="button" class="icono-button icono-button--danger-quiet" data-icono-caretaker-end>Confirm and stop</button></details>'
+      '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-end>Confirm and stop</button></details>'
   }
   body += "</div>"
   body += "</div>"
   body +=
-    '<footer class="icono-caretaker-panel__footer">' +
+    '<div class="icono-caretaker-panel__footer">' +
     '<div class="icono-caretaker-footer__status">' +
     (canWrite
       ? '<span data-icono-caretaker-autosave-state role="status">Saved</span><button type="button" class="icono-caretaker-link-button" data-icono-caretaker-retry-save hidden>Retry</button>'
       : "") +
     "</div>" +
-    '<div class="icono-caretaker-footer__actions">' +
+    '<div class="icono-caretaker-footer__actions icono-actions">' +
     footerSource +
-    '<button type="button" class="icono-button icono-button--quiet" data-icono-caretaker-close>Close</button>' +
+    '<button type="button" class="icono-button" data-icono-caretaker-close>Close</button>' +
     "</div>" +
     "</footer>"
   return body + "</section></dialog>"
