@@ -1,3 +1,4 @@
+import { withErrorReporting } from "./lib/the-only-error-reporter.js"
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 import {
   iconoplasmPublishedPortraitUrl,
@@ -3233,17 +3234,20 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
 export default {
   async fetch(request, env, ctx) {
-    // Rate limiting belongs at the one runtime that actually owns these
-    // routes. Enforcing here applies exactly once to direct custom-domain and
-    // service-binding traffic and cannot be bypassed by changing entry hosts.
-    const rateLimit = await enforceIconoplasmRateLimit(request, env)
-    if (rateLimit.response) return rateLimit.response
-    const response = await handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      request,
-      env,
-      ctx,
-    )
-    return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
+    // B-832: thrown errors and 5xx responses go to Sentry after the response.
+    return withErrorReporting(env, ctx, request, "internal", async () => {
+      // Rate limiting belongs at the one runtime that actually owns these
+      // routes. Enforcing here applies exactly once to direct custom-domain and
+      // service-binding traffic and cannot be bypassed by changing entry hosts.
+      const rateLimit = await enforceIconoplasmRateLimit(request, env)
+      if (rateLimit.response) return rateLimit.response
+      const response = await handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        request,
+        env,
+        ctx,
+      )
+      return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
+    })
   },
 
   async queue(batch, env, ctx) {

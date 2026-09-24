@@ -96,3 +96,7 @@ routes = [{ pattern = "staging.brinedew.bio/*", zone_name = "brinedew.bio" }]
 [[env.staging.services]]
 binding = "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
 service = "geneguessr-api-staging"
+
+[vars]
+# B-832: error reporting (public ingest key; rate-limited to 300 events/hour in Sentry).
+SENTRY_DSN = "https://44c29985415416cc070584965dcd686c@o4512140355239936.ingest.us.sentry.io/4512142881259520"
