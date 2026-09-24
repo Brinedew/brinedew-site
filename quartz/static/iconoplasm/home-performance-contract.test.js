@@ -140,7 +140,7 @@ test("Iconoplasm font paint is in-memory, bounded, and independent of preload ti
   assert.match(head, /iconoplasmFontBootstrap/)
   // B-836: fonts are cacheable files, never base64 inside every HTML response.
   assert.doesNotMatch(head, /toString\("base64"\)/)
-  assert.match(head, /rel="preload" as="font" type="font\/woff2"/)
+  assert.match(head, /rel="preload"\s+as="font"\s+type="font\/woff2"/)
   assert.match(head, /new FontFace\(/)
   assert.match(head, /document\.fonts\.add\(face\)/)
   assert.match(head, /websiteDelivery\.revealTimeoutMs/)
