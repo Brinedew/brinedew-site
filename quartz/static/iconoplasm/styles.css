@@ -4839,7 +4839,11 @@ html[data-theme="dark"] .icono-card--brick {
   box-sizing: border-box;
   border: 1px solid var(--ui-border);
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 31%, transparent 31%),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 31%,
+      transparent 31%
+    ),
     color-mix(in srgb, var(--ui-bg) 55%, var(--light));
 }
 
@@ -4854,7 +4858,11 @@ html[data-theme="dark"] .icono-card--brick {
   .icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
     aspect-ratio: 390 / 644;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 79%, transparent 79%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 79%,
+        transparent 79%
+      ),
       color-mix(in srgb, var(--ui-bg) 55%, var(--light));
   }
 }

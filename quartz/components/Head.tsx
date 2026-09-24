@@ -421,7 +421,13 @@ export default (() => {
         {usesIconoplasmLabelFonts ? (
           <>
             {iconoplasmFontFaces.map((font) => (
-              <link rel="preload" as="font" type="font/woff2" crossOrigin="anonymous" href={font.url} />
+              <link
+                rel="preload"
+                as="font"
+                type="font/woff2"
+                crossOrigin="anonymous"
+                href={font.url}
+              />
             ))}
             <style>{`html.icono-fonts-loading body, html.icono-route-pending body { visibility: hidden !important; }`}</style>
             <script dangerouslySetInnerHTML={{ __html: iconoplasmFontBootstrap }} />
