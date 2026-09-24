@@ -466,7 +466,7 @@ jobs:
 
       - name: Upload public edge worker script with routes (production)
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
-        run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
+        run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --var "SENTRY_RELEASE:$GITHUB_SHA"
 
       - name: Reassign production routes to the public edge worker
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
@@ -514,7 +514,7 @@ jobs:
         # explicit --triggers list here previously carried the three-cron
         # reader-recovery containment into normal operation and silently
         # disabled every Iconoplasm background owner after each deployment.
-        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST"
+        run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --var "SENTRY_RELEASE:$GITHUB_SHA"
 
       - name: Verify Iconoplasm publication aliases (production)
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
