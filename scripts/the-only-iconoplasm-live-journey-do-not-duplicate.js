@@ -2,7 +2,7 @@
 // browser_run_code_unsafe({ filename: "Website/scripts/the-only-iconoplasm-live-journey-do-not-duplicate.js" })
 // This is a visitor check. It never votes, queues generation, or changes a caretaker role.
 // The installed extension may merge discoveries into the signed-in account as a real visitor does.
-;async (page) => {
+async (page) => {
   const runId = new Date().toISOString().replace(/[:.]/g, "-")
   const artifacts = "D:/Coding/Website/artifacts/B-801"
   const checks = []

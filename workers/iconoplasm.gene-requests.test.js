@@ -267,14 +267,14 @@ class FakeRequestStatement {
       const slot = Number(this.args[0] || 0)
       return { results: rows.filter((row) => Number(row.emulsion_slot || 0) === slot) }
     }
-    if (this.sql.includes("FROM icono_generation_request_vision_option_rollup")) {
+    if (this.sql.includes("icono_generation_request_vision_option_rollup")) {
       this.db.optionRollupReads += 1
       this.db.lastOptionRollupSql = this.sql
       this.db.lastOptionRollupArgs = this.args
       if (this.db.failOptionRollupRead) {
         throw new Error("D1_ERROR: request picker rollup missing or unreadable")
       }
-      if (this.sql.includes("JOIN json_each(?) favorite")) {
+      if (this.sql.includes("json_each(?) favorite")) {
         return { results: this.db.favoriteVisionRows }
       }
       if (this.db.queryVisionOptions && this.sql.includes("emulsion_id >= ?")) {
