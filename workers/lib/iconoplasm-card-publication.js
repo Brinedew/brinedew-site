@@ -743,9 +743,11 @@ export function createCardPublication({
       shard_count: refs.length,
       shards: refs,
     }
-    const object = await objects.write("manifests", manifest, {
-      reuseExisting: job.rematerialize === true,
-    })
+    const object = await objects.write("manifests", manifest, { reuseExisting: true })
+    // An origin read can beat Bunny CDN replication. Keep the old public head
+    // until readers can fetch this exact manifest; a vote otherwise causes 503s.
+    const readable = await objects.verifyReaderResolvable(object.key)
+    if (!readable.ready) throw new Error("Published catalog manifest is not reader-resolvable")
     const version = `ccv2-${object.hash}`
     const current = { version, key: object.key, manifest, published_at: now() }
     // All bytes were verified before this single transaction. Neither the
