@@ -10969,10 +10969,10 @@ async function listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds)
        rollup.score,
        rollup.vote_h_index,
        rollup.preview_assets_json
-     FROM icono_generation_request_vision_option_rollup rollup
-     JOIN json_each(?) favorite
-       ON favorite.value = rollup.emulsion_family_id
+     FROM json_each(?) favorite
+     CROSS JOIN icono_generation_request_vision_option_rollup rollup
      WHERE rollup.builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+       AND rollup.emulsion_family_id = favorite.value
      ORDER BY
        favorite.key ASC,
        rollup.vote_h_index DESC,

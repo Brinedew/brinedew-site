@@ -1,11 +1,9 @@
 // Per-statement D1 burn watch.
 //
-// The black-swan sensor: instead of enumerating "bad SQL shapes", this reads
-// Cloudflare's per-statement analytics for one UTC day and fails when any
-// single statement's accumulated rows_read crosses an absolute cap. Any shape
-// that burns the budget is caught by measurement, including statements nobody
-// predicted. It complements the account-level budget watch and never runs
-// inside the Worker request path.
+// After-the-fact signal, not a budget guarantee: Cloudflare's per-statement
+// analytics shows which SQL already spent a large share of the daily allowance.
+// Prevent the first burn by keeping user-triggered reads indexed and bounded;
+// this monitor can only point to a missed query after it has run.
 import { pathToFileURL } from "node:url"
 
 export const STATEMENT_BURN_QUERY = `query StatementBurns($accountTag:String!,$day:Date) {
