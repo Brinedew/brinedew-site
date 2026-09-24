@@ -4822,6 +4822,51 @@ html[data-theme="dark"] .icono-card--brick {
   border-radius: 4px;
 }
 
+/* B-836: the gene-page skeleton occupies exactly the box the real lead will
+   (card + gap + published bar, measured 25 Sep 2026: 800x416 + 15 + 74 at
+   desktop; 390x644 + 15 + 74 on a 390px phone), so the swap to content moves
+   nothing. The card keeps the lab-label aspect ratio on wide screens and the
+   measured phone proportion below the shared 720px mobile breakpoint. */
+/* Keep the footer below the fold while loading, so the gallery arriving
+   under the card pushes nothing the reader can see. */
+.icono-gene-skeleton {
+  min-block-size: 100dvh;
+}
+
+.icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
+  inline-size: 100%;
+  aspect-ratio: 1220 / 634;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 31%,
+      transparent 31%
+    ),
+    color-mix(in srgb, var(--ui-bg) 55%, var(--light));
+}
+
+.icono-gene-lead--skeleton .icono-gene-lead-skeleton-bar {
+  block-size: 74px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-bg) 40%, var(--light));
+}
+
+@media (max-width: 720px) {
+  .icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
+    aspect-ratio: 390 / 644;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 79%,
+        transparent 79%
+      ),
+      color-mix(in srgb, var(--ui-bg) 55%, var(--light));
+  }
+}
+
 /* ───────── Responsive ───────── */
 @media (max-width: 1180px) {
   .icono-gallery-toolbar {

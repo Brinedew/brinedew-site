@@ -154,6 +154,14 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
 }
 
+// B-836: the per-gene document exists for crawlers and link unfurlers. A reader
+// must never see its plain text: paint the site background at once (same theme
+// rule as the shell: saved choice, else light on this host), keep the body
+// hidden, and start the shell request from <head>. The crawler copy is shown
+// only if the shell cannot be fetched.
+const GENE_PAGE_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-theme="dark"]{background:oklch(16% 0.01 45)}body{visibility:hidden}html.icono-stub-failed body{visibility:visible}</style>
+<script>(function(){try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){document.open();document.write(html);document.close()}).catch(function(){document.documentElement.classList.add("icono-stub-failed")})})()</script>`
+
 export function iconoplasmGenePageHtml({ symbol, fullName }) {
   const name = String(fullName || "").trim()
   const title = name
@@ -190,6 +198,7 @@ export function iconoplasmGenePageHtml({ symbol, fullName }) {
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:domain" content="iconoplasm.brinedew.bio">
 <script type="application/ld+json">${jsonLd}</script>
+${GENE_PAGE_BOOT}
 </head>
 <body>
 <main>
@@ -197,7 +206,6 @@ export function iconoplasmGenePageHtml({ symbol, fullName }) {
 <p>${escapeHtml(name || symbol)}</p>
 <p><a href="/">Iconoplasm gene character cards</a></p>
 </main>
-<script>fetch("/", { credentials: "same-origin" }).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text() }).then(function (html) { document.open(); document.write(html); document.close() }).catch(function () {})</script>
 </body>
 </html>
 `
