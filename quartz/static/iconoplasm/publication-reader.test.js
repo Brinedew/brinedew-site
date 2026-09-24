@@ -346,6 +346,62 @@ test("the browser resolves gene, search, and gallery from one immutable publicat
   )
 })
 
+test("the archive reads a 67-shard publication without entering the stateful origin", async () => {
+  const objects = new Map()
+  const shards = []
+  for (let index = 0; index < 67; index += 1) {
+    const symbol = `GENE${String(index).padStart(3, "0")}`
+    const page = await immutableFixtureObject("catalogs", {
+      schema_version: 1,
+      entries: [{ symbol, full_name: symbol, image_score: index + 1 }],
+    })
+    const catalogIndex = await immutableFixtureObject("catalogindexes", {
+      schema_version: 2,
+      pages: [{ first_symbol: symbol, last_symbol: symbol, key: page.path.slice(1) }],
+      search_entries: [[symbol, symbol, 0, 0]],
+      gallery_entries: [[symbol, 0, 0, index + 1, index + 1]],
+    })
+    objects.set(page.path, page.body)
+    objects.set(catalogIndex.path, catalogIndex.body)
+    shards.push({
+      first_symbol: symbol,
+      last_symbol: symbol,
+      catalog_index: { key: catalogIndex.path.slice(1), page_count: 1 },
+    })
+  }
+  const manifest = await immutableFixtureObject("manifests", {
+    storage: "bunny_card_catalog_v2",
+    card_count: 67,
+    shards,
+  })
+  objects.set(manifest.path, manifest.body)
+  const requested = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requested.push(parsed)
+      assert.equal(parsed.origin, "https://iconoplasmportraits.b-cdn.net")
+      if (parsed.pathname === "/api/public/v1/card-current") {
+        return new Response(JSON.stringify({ schema_version: 2, current: `ccv2-${manifest.hash}` }))
+      }
+      const body = objects.get(parsed.pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  const gallery = await reader.gallery({ order: "votes", limit: 4 })
+  assert.equal(gallery.total, 67)
+  assert.deepEqual(
+    gallery.items.map((item) => item.symbol),
+    ["GENE066", "GENE065", "GENE064", "GENE063"],
+  )
+  assert.deepEqual(
+    (await reader.search("GENE066")).genes.map((item) => item.symbol),
+    ["GENE066"],
+  )
+  assert.equal(requested.filter((url) => url.pathname.includes("/catalogindexes/")).length, 67)
+})
+
 test("a legacy immutable gene without candidates remains a complete static dossier", async () => {
   const fixture = await immutableFixture()
   const legacyGene = { ...fixture.gene }
@@ -615,13 +671,13 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
   const catalogReads = requested.filter((pathname) => pathname.includes("/catalog"))
   assert.equal(catalogReads.length, 2, "one compact index plus one selected rich page")
   assert.deepEqual(PUBLIC_READ_REQUEST_BOUNDS, {
-    catalogIndexes: 32,
+    catalogIndexes: 96,
     compactIndexBytes: 131072,
     resultPageBytes: 524288,
-    searchRequests: 46,
-    searchBytes: 10_553_344,
-    galleryRequests: 58,
-    galleryBytes: 16_844_800,
+    searchRequests: 110,
+    searchBytes: 18_941_952,
+    galleryRequests: 122,
+    galleryBytes: 25_233_408,
   })
 })
 
