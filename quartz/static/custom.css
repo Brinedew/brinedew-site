@@ -38,7 +38,10 @@ body,
 article {
   font-family: "Crimson Pro", serif;
 }
-/* Ensure all headings use Crimson Pro regardless of theme defaults */
+/* Headings, nav and buttons default to Crimson Pro. No !important: element
+   selectors lose to any class, so an app (Iconoplasm) styles its own controls
+   without fighting this rule. Measured before removing it: 0 of 77 headings,
+   nav and buttons on brinedew.bio and GeneGuessr changed font (B-835). */
 h1,
 h2,
 h3,
@@ -49,7 +52,7 @@ h2.page-title,
 .breadcrumbs,
 nav,
 button {
-  font-family: "Crimson Pro", serif !important;
+  font-family: "Crimson Pro", serif;
 }
 
 /* Logo: mask using page-title link, not page-title wrapper (v5 wraps in h2) */
