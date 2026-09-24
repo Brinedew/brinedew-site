@@ -312,7 +312,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     const tagsUnavailable =
       own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
     footerSource =
-      "<div class=\"icono-caretaker-footer__source\" data-icono-caretaker-generation-source>" +
+      '<div class="icono-caretaker-footer__source" data-icono-caretaker-generation-source>' +
       (savedSourceReady && !ownSourceIsCanonical && !tagsUnavailable
         ? '<button type="button" class="icono-button" data-icono-caretaker-select="' +
           esc(own.manifestation_head_revision_id) +
