@@ -474,10 +474,9 @@ jobs:
           node scripts/reassign-cloudflare-worker-routes.mjs \
             brinedew.bio \
             the-only-allowed-public-edge-worker-that-must-not-touch-state \
-            "brinedew.bio/*" \
             "brinedew.bio/api/*" \
-            "www.brinedew.bio/*" \
-            "geneguessr.brinedew.bio/*"
+            "geneguessr.brinedew.bio/api/*" \
+            "geneguessr.brinedew.bio/admin*"
 
       # ARCHITECTURE FENCE [IPD-007]: Iconoplasm's matching static assets bypass Worker execution.
       # The mutable /blot/* alias and other dynamic routes go directly to the one

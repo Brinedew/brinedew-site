@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "purpose": "B-834: serve brinedew.bio and geneguessr.brinedew.bio documents and assets straight from Cloudflare Pages (free, unlimited static requests). Only API and admin paths run a Worker. Reconciled by scripts/reconcile-brinedew-static-edge-policy.mjs.",
+  "zoneName": "brinedew.bio",
+  "pagesProject": "brinedew-bio",
+  "pagesTarget": "brinedew-bio.pages.dev",
+  "pagesCustomDomains": ["brinedew.bio", "geneguessr.brinedew.bio"],
+  "dnsCnames": [
+    { "name": "brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true },
+    { "name": "geneguessr.brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true }
+  ],
+  "publicEdgeWorker": "the-only-allowed-public-edge-worker-that-must-not-touch-state",
+  "publicEdgeRoutes": [
+    "brinedew.bio/api/*",
+    "geneguessr.brinedew.bio/api/*",
+    "geneguessr.brinedew.bio/admin*"
+  ],
+  "retiredPublicEdgeRoutes": ["brinedew.bio/*", "www.brinedew.bio/*", "geneguessr.brinedew.bio/*"],
+  "redirectRulesetName": "Brinedew static edge redirects",
+  "redirectRules": [
+    {
+      "ref": "brinedew_www_to_apex",
+      "description": "www.brinedew.bio -> brinedew.bio",
+      "expression": "(http.host eq \"www.brinedew.bio\")",
+      "targetExpression": "concat(\"https://brinedew.bio\", http.request.uri.path)",
+      "statusCode": 301
+    },
+    {
+      "ref": "brinedew_apex_geneguessr_privacy",
+      "description": "Apex GeneGuessr privacy document -> its own host",
+      "expression": "(http.host in {\"brinedew.bio\" \"geneguessr.brinedew.bio\"} and http.request.uri.path in {\"/apps/geneguessr/privacy\" \"/apps/geneguessr/privacy/\" \"/apps/geneguessr/privacy.html\"})",
+      "targetUrl": "https://geneguessr.brinedew.bio/privacy",
+      "statusCode": 301
+    },
+    {
+      "ref": "brinedew_apex_geneguessr_document",
+      "description": "Legacy GeneGuessr document paths -> geneguessr.brinedew.bio/",
+      "expression": "(http.host in {\"brinedew.bio\" \"geneguessr.brinedew.bio\"} and http.request.uri.path in {\"/apps/geneguessr\" \"/apps/geneguessr/\" \"/apps/geneguessr/index\" \"/apps/geneguessr/index/\" \"/apps/geneguessr/index.html\"})",
+      "targetUrl": "https://geneguessr.brinedew.bio/",
+      "statusCode": 301
+    }
+  ],
+  "rewriteRulesetName": "Brinedew static edge rewrites",
+  "rewriteRules": [
+    {
+      "ref": "geneguessr_document_rewrite",
+      "description": "geneguessr.brinedew.bio/ serves the GeneGuessr Pages document",
+      "expression": "(http.host eq \"geneguessr.brinedew.bio\" and http.request.uri.path in {\"/\" \"/index\" \"/index.html\"})",
+      "path": "/apps/geneguessr/"
+    },
+    {
+      "ref": "geneguessr_privacy_rewrite",
+      "description": "geneguessr.brinedew.bio/privacy serves the GeneGuessr privacy Pages document",
+      "expression": "(http.host eq \"geneguessr.brinedew.bio\" and http.request.uri.path in {\"/privacy\" \"/privacy/\" \"/privacy.html\"})",
+      "path": "/apps/geneguessr/privacy"
+    }
+  ],
+  "webAnalyticsSiteHost": "brinedew.bio",
+  "webAnalyticsAutoInstall": false
+}
