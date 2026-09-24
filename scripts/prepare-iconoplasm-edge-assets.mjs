@@ -72,7 +72,11 @@ ${serviceDiscoveryHeaders}
   Cache-Control: public, max-age=31536000, immutable
 `
 
-const iconoplasmRobots = `User-agent: GPTBot
+const iconoplasmRobots = `# Model-training crawlers are blocked (also at the edge, see
+# cloudflare/iconoplasm-crawler-policy.json). AI search crawlers and fetches
+# made on a user's behalf (OAI-SearchBot, Claude-SearchBot, PerplexityBot,
+# ChatGPT-User, Claude-User) are welcome. Card images are CC0; see /license.
+User-agent: GPTBot
 Disallow: /
 
 User-agent: ClaudeBot
