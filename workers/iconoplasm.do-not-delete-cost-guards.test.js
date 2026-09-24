@@ -275,10 +275,34 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "single-page-application"[\s\S]*run_worker_first = \[[\s\S]*"\/api\/\*"[\s\S]*\]/,
     "matching Iconoplasm files must bypass Worker execution through the asset-first binding",
   )
+  const workerFirstBlock =
+    internalWrangler.match(/\[assets\][\s\S]*?(?=\n\[observability\])/u)?.[0] || ""
   assert.doesNotMatch(
-    internalWrangler.match(/\[assets\][\s\S]*?(?=\n\[observability\])/u)?.[0] || "",
-    /"\/(?:gene|genes|published-cards|sitemap|robots\.txt|llms\.txt)/,
+    workerFirstBlock,
+    /"\/(?:gene|genes|sitemap|robots\.txt|llms\.txt)/,
     "static reader routes must never re-enter the Worker-first list",
+  )
+  // B-807: the one exception is the released extension's origin fallback for
+  // immutable, content-addressed publication objects (hedged after 350 ms, or
+  // origin-only on tabs where Bunny failed). Measured 4 requests/24 h on
+  // 24 Sep 2026. Only the exact immutable prefix may enter, and its handler
+  // must stay a pure Bunny read with no D1 access.
+  const publishedCardPatterns = [...workerFirstBlock.matchAll(/"(\/published-cards[^"]*)"/gu)].map(
+    (match) => match[1],
+  )
+  assert.deepEqual(
+    publishedCardPatterns,
+    ["/published-cards/v2/immutable/*"],
+    "only the immutable publication-object prefix may reach the Worker",
+  )
+  const cardDeliverySource = readFileSync(
+    new URL("./lib/iconoplasm-card-delivery.js", import.meta.url),
+    "utf8",
+  )
+  assert.doesNotMatch(
+    cardDeliverySource,
+    /ICONOPLASM_DB|ICONOPLASM_AUTHORING_DB|\.prepare\(|\.batch\(/u,
+    "the publication-object fallback handler must never touch D1",
   )
   assert.match(
     internalWrangler,

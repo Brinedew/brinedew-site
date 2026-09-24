@@ -39,6 +39,10 @@ run_worker_first = [
   "/api/*",
   "/blot/*",
   "/portraits/*",
+  # B-807: the released extension hedges immutable publication objects to this
+  # first-party path when Bunny is slow or unreachable (IPD-001/IPD-008).
+  # The SPA fallback answered those JSON URLs with the HTML shell.
+  "/published-cards/v2/immutable/*",
   "/admin*",
   "/blocklist*",
   "/artist-styles*",
