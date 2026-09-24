@@ -274,7 +274,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=c2a34a3b1d84a192", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=7802ee9fdc6312d7", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -290,7 +290,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=69ab600bf9b2f72e"),
+      import("./caretaker-manifestations.js?v=1e72995877397301"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -443,11 +443,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           '">' +
           '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
           (switchFrom
-            ? "<p>Your " +
+            ? "<p>You will stop caring for " +
               esc(switchFrom.canonical_symbol) +
-              " caretaker role will end. Your writing there stays in the gene history. You will care for " +
+              " and start caring for " +
               esc(symbol) +
-              ' instead.</p><p>By confirming, you accept the <a href="'
+              ". What you wrote for " +
+              esc(switchFrom.canonical_symbol) +
+              ' stays in its history.</p><p>Switching accepts the <a href="'
             : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
           esc(terms.document_url) +
           '" target="_blank" rel="noopener">' +
@@ -9058,8 +9060,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div></header>" +
       '<main class="icono-gene-page-main" id="icono-main">' +
       (includeSkeleton
-        ? '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
-          buildBrickSkeletonCardMarkup() +
+        ? '<div class="icono-gene-skeleton" id="icono-gene-loading" aria-hidden="true">' +
+          '<div class="icono-gene-lead icono-gene-lead--skeleton">' +
+          '<div class="icono-gene-lead-skeleton-card"></div>' +
+          '<div class="icono-gene-lead-skeleton-bar"></div>' +
+          "</div>" +
           "</div>"
         : "") +
       '<div id="icono-gene-content"></div>' +
@@ -9167,10 +9172,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     iconoSidebarState.caretaker = null
     renderIconoplasmSidebar()
-    if (!hasHeadStartedGene) {
+    // Static gene documents carry no pre-rendered card, so a head-started fetch
+    // still needs the skeleton; only keep markup that already holds the gene.
+    if (!hasHeadStartedGene || !root.querySelector(".icono-gene-lead, #icono-gene-content")) {
       root.innerHTML = genePageShellMarkup(true)
     }
     ensureGenePageLandmarks(root)
+    // The final-geometry skeleton is in place: the head bootstrap may show the page.
+    document.documentElement.classList.remove("icono-route-pending")
 
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")

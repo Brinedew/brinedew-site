@@ -37,7 +37,14 @@ test("gene documents carry their own title, canonical, description, image and li
   assert.match(html, /creativecommons\.org\/publicdomain\/zero\/1\.0/)
   // Readers get the one SPA shell in place; the body never loads the blot
   // itself, so a human view spends no Worker request.
-  assert.match(html, /fetch\("\/", \{ credentials: "same-origin" \}\)/)
+  assert.match(html, /fetch\("\/",\{credentials:"same-origin"\}\)/)
+  // B-836: a reader never sees the crawler copy; it paints the site background,
+  // stays hidden, and shows the copy only if the shell fetch fails.
+  assert.match(html, /body\{visibility:hidden\}/)
+  assert.match(html, /icono-stub-failed/)
+  const boot = html.match(/<script>\(function\(\)[\s\S]*?<\/script>/)?.[0] || ""
+  assert.ok(html.indexOf(boot) < html.indexOf("</head>"), "the shell request starts from <head>")
+  new Function(boot.replace(/<\/?script>/g, ""))
   assert.doesNotMatch(html, /<img /)
 })
 

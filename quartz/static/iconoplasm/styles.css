@@ -770,6 +770,9 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-standard-dialog {
   --sl-font-sans: "IBM Plex Mono", monospace;
+  font-family: var(--icono-action-font);
+  font-size: 0.88rem;
+  line-height: 1.5;
   --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
   --sl-input-height-small: 2.5rem;
   --sl-input-border-radius-small: var(--icono-radius-sm);
@@ -817,8 +820,7 @@ body:has(.icono-vote-login-dialog[open]) {
 }
 
 .icono-standard-dialog::part(title) {
-  font-family: "Special Elite", Georgia, serif;
-  font-size: 1.15rem;
+  font: 600 1.05rem/1.3 var(--icono-action-font);
   color: var(--dark);
 }
 
@@ -836,10 +838,10 @@ body:has(.icono-vote-login-dialog[open]) {
 .icono-standard-dialog .icono-button {
   min-height: var(--icono-action-height);
   padding: var(--icono-action-padding);
-  border: 1px solid var(--icono-action-border);
+  border: 1px solid var(--accent);
   border-radius: var(--icono-radius-sm);
-  background: var(--icono-action-primary-bg);
-  color: var(--icono-action-primary-text);
+  background: var(--accent);
+  color: var(--light);
   font-family: var(--icono-action-font) !important;
   font-size: var(--icono-action-font-size);
   font-weight: 700;
@@ -848,12 +850,23 @@ body:has(.icono-vote-login-dialog[open]) {
 }
 
 .icono-standard-dialog .icono-button:hover {
-  background: var(--icono-action-primary-bg-hover);
+  background: color-mix(in srgb, var(--accent) 86%, var(--dark) 14%);
 }
 
 .icono-standard-dialog .icono-button--quiet {
-  background: var(--icono-action-secondary-bg);
+  border-color: var(--icono-action-border);
+  background: transparent;
   color: var(--dark);
+}
+
+.icono-standard-dialog .icono-button--quiet:hover {
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+}
+
+.icono-standard-dialog a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .icono-standard-dialog .icono-button:disabled {
@@ -4820,6 +4833,51 @@ html[data-theme="dark"] .icono-card--brick {
 .icono-gene-skeleton .icono-skel-line {
   background: var(--ui-bg);
   border-radius: 4px;
+}
+
+/* B-836: the gene-page skeleton occupies exactly the box the real lead will
+   (card + gap + published bar, measured 25 Sep 2026: 800x416 + 15 + 74 at
+   desktop; 390x644 + 15 + 74 on a 390px phone), so the swap to content moves
+   nothing. The card keeps the lab-label aspect ratio on wide screens and the
+   measured phone proportion below the shared 720px mobile breakpoint. */
+/* Keep the footer below the fold while loading, so the gallery arriving
+   under the card pushes nothing the reader can see. */
+.icono-gene-skeleton {
+  min-block-size: 100dvh;
+}
+
+.icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
+  inline-size: 100%;
+  aspect-ratio: 1220 / 634;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 31%,
+      transparent 31%
+    ),
+    color-mix(in srgb, var(--ui-bg) 55%, var(--light));
+}
+
+.icono-gene-lead--skeleton .icono-gene-lead-skeleton-bar {
+  block-size: 74px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-bg) 40%, var(--light));
+}
+
+@media (max-width: 720px) {
+  .icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
+    aspect-ratio: 390 / 644;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 79%,
+        transparent 79%
+      ),
+      color-mix(in srgb, var(--ui-bg) 55%, var(--light));
+  }
 }
 
 /* ───────── Responsive ───────── */
