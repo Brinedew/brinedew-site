@@ -546,10 +546,7 @@ export async function handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllo
       )
     ) {
       const declaredRoute = matchIconoplasmRouteContract(path, request.method)
-      if (
-        declaredRoute?.route?.auth === "trusted-client" &&
-        !canAccessRichBatchRoute(request)
-      ) {
+      if (declaredRoute?.route?.auth === "trusted-client" && !canAccessRichBatchRoute(request)) {
         return done(
           request,
           json(

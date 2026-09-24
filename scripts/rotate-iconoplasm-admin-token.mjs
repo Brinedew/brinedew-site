@@ -46,13 +46,11 @@ const targets = [
 ]
 
 if (includeStaging) {
-  targets.push(
-    {
-      label: "stateful staging",
-      config: "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-      env: "staging",
-    },
-  )
+  targets.push({
+    label: "stateful staging",
+    config: "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    env: "staging",
+  })
 }
 
 function run(command, commandArgs, { input = "", timeoutMs = 120_000 } = {}) {
@@ -162,7 +160,6 @@ async function verifyToken() {
       ).slice(0, 500)}`,
     )
   }
-
 
   console.log(
     JSON.stringify(

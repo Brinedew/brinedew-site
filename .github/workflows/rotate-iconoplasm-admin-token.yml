@@ -66,4 +66,3 @@ jobs:
           printf '%s' "${ICONOPLASM_ADMIN_TOKEN}" \
             | pnpm exec wrangler secret put ICONOPLASM_ADMIN_TOKEN \
                 --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
-
