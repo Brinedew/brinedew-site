@@ -38,6 +38,9 @@ export function iconoplasmObservabilitySnapshotForAdmin(snapshot, nowMs = Date.n
       state = "stale"
       level = "warning"
       headline = "Snapshot stale"
+    } else {
+      state = "overdue"
+      headline = "Historical snapshot overdue"
     }
   }
 
@@ -45,10 +48,10 @@ export function iconoplasmObservabilitySnapshotForAdmin(snapshot, nowMs = Date.n
     state === "fresh"
       ? `Baked ${ageMinutes} minute(s) ago; expected hourly.`
       : state === "stale"
-        ? `Baked ${ageMinutes} minute(s) ago; older than the ${policy.staleAfterMinutes}-minute freshness SLA.`
+        ? `Baked ${ageMinutes} minute(s) ago; historical charts are behind. Live account meters are queried separately.`
         : generatedAtMs === null
           ? "The published snapshot has no valid generated-at timestamp."
-          : `Baked ${ageMinutes} minute(s) ago; the scheduled publication path is not healthy.`
+          : `Baked ${ageMinutes} minute(s) ago; no newer historical snapshot is published. Live account meters are queried separately.`
 
   return {
     ...source,
