@@ -31,12 +31,9 @@ but stale repository secret must fail before that pause. When synchronizing this
 secret, pass the locally verified value through standard input without printing
 it or putting it on the command line.
 
-The app admin token does not expire by itself. When it appears to "expire", the usual cause is secret drift. Production has two Worker secret copies that must match:
+The app admin token does not expire by itself. When it appears to "expire", the usual cause is secret drift between its two copies: the GitHub secret and the internal stateful Worker `geneguessr-api`. The public edge Worker holds no admin credential (B-819); operators and the workstation call admin routes on `iconoplasm.brinedew.bio`, which the internal Worker serves.
 
-- public edge worker: `the-only-allowed-public-edge-worker-that-must-not-touch-state`
-- internal stateful worker: `geneguessr-api`
-
-Rotate both copies together from the local operational token and verify both gates:
+Rotate the Worker copy from the local operational token and verify the admin gate:
 
 ```powershell
 pnpm exec node scripts/rotate-iconoplasm-admin-token.mjs
@@ -45,9 +42,8 @@ pnpm exec node scripts/rotate-iconoplasm-admin-token.mjs
 Use `--include-staging` only when intentionally aligning staging as well. The script reads `ICONOPLASM_ADMIN_TOKEN` from the environment, writes it to the relevant Worker secrets through Wrangler, and then verifies:
 
 - stateful admin authorization with `/api/iconoplasm/admin/mutation-limiter/policy`
-- public edge token acceptance with `/api/iconoplasm/site/genes/GLYAT`
 
-Never set only one of the two production Worker secrets. Never diagnose this as a user/session problem until the script has verified both gates.
+Never diagnose this as a user/session problem until the script has verified the gate.
 
 ## Iconoplasm Image Edit Key Storage
 
