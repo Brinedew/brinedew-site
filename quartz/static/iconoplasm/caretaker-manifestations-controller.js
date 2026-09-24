@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=015c0a99a23f04e1"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=bba150d128ebb6c7"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=eda1d1ce9747b9d3"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=688399fff7b9bee8"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=f44430495dde1b33"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -119,6 +119,9 @@ export function createCaretakerManifestationPanel({
           const replacement = next.querySelector(selector)
           if (replacement) state.host.querySelector(selector)?.replaceWith(replacement)
         }
+        const sourceSelector = "[data-icono-caretaker-generation-source]"
+        const source = next.querySelector(sourceSelector)
+        if (source) state.host.querySelector(sourceSelector)?.replaceWith(source)
         updateCount(existingForm.querySelector("[data-icono-caretaker-prose]"))
         if (state.basedOnRevisionId) showBasis(state)
         activateTab(state, state.activeTab || "manifestation")
