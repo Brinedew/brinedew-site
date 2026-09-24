@@ -302,7 +302,20 @@ export function createRequestInbox({
     }, 60000)
   }
 
+  // B-834: returning to a tab fires both `focus` and `visibilitychange`, and
+  // each used to refetch notifications and caretaker state (4 Worker requests
+  // per tab switch). Coalesce lifecycle refreshes to one per 30 s; explicit
+  // refreshes (after reads, requests, claims) still run immediately.
+  var LIFECYCLE_REFRESH_MIN_INTERVAL_MS = 30000
+  var lastLifecycleRefreshAt = 0
+
   function refreshForLifecycle(options) {
+    var now = Date.now()
+    if (now - lastLifecycleRefreshAt < LIFECYCLE_REFRESH_MIN_INTERVAL_MS) {
+      scheduleOpenRequestRefresh()
+      return Promise.resolve(null)
+    }
+    lastLifecycleRefreshAt = now
     stop()
     return refresh(options).finally(scheduleOpenRequestRefresh)
   }
@@ -310,6 +323,7 @@ export function createRequestInbox({
   function start() {
     stop()
     if (!ensureAccountContext()) return
+    lastLifecycleRefreshAt = 0
     void refreshForLifecycle()
     if (lifecycleWired) return
     lifecycleWired = true
