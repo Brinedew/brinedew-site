@@ -12,7 +12,7 @@ test("deployed cost identities match the enforcement code and migration set", ()
   assert.doesNotThrow(assertOperationCostMigrationsCurrent)
 })
 
-test("runtime identities ignore local caches but include new domain helpers and locked dependencies", (t) => {
+test("cost identities follow the cost authority imports, not unrelated Worker copy", (t) => {
   const sourceRoot = mkdtempSync(path.join(tmpdir(), "iconoplasm-cost-identity-"))
   t.after(() => rmSync(sourceRoot, { recursive: true, force: true }))
   const write = (name, text) => {
@@ -27,8 +27,17 @@ test("runtime identities ignore local caches but include new domain helpers and 
     "migrations-iconoplasm-authoring",
   ])
     write(`${directory}/0001.sql`, "SELECT 1;\n")
+  write(
+    "workers/iconoplasm/operation-cost-http.js",
+    "import { query } from './domain/query.js'; export const cost = query;\n",
+  )
+  write(
+    "workers/iconoplasm/domain/query.js",
+    "import { value } from '../../../shared/domain.js'; export const query = value;\n",
+  )
+  write("shared/domain.js", "export const value = 1;\n")
   write("workers/runtime.js", "export const runtime = 1;\n")
-  write("shared/domain.js", "export const domain = 1;\n")
+  write("workers/iconoplasm-observability-freshness.js", "export const headline = 'old';\n")
   write("pnpm-lock.yaml", "lockfileVersion: 9\n")
   write(
     "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
@@ -46,7 +55,11 @@ test("runtime identities ignore local caches but include new domain helpers and 
   assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
   write("workers/runtime.js", "export const runtime = 1;\r\n")
   assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
-  write("workers/domain/another-helper.js", "export const helper = 1;\n")
+  write("workers/iconoplasm-observability-freshness.js", "export const headline = 'new';\n")
+  assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
+  write("shared/domain.js", "export const value = 1;\r\n")
+  assert.deepEqual(operationCostIdentities({ sourceRoot }), initial)
+  write("shared/domain.js", "export const value = 2;\n")
   const withHelper = operationCostIdentities({ sourceRoot })
   assert.notEqual(withHelper.executable_sha256, initial.executable_sha256)
   write("pnpm-lock.yaml", "lockfileVersion: 10\n")

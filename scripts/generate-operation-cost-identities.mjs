@@ -2,32 +2,30 @@ import { createHash } from "node:crypto"
 import { readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
+import { buildSync } from "esbuild"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
-function runtimeSources(sourceRoot, directory) {
-  return readdirSync(path.join(sourceRoot, directory), { withFileTypes: true }).flatMap((entry) => {
-    const name = `${directory}/${entry.name}`
-    // Dependency and provider caches are machine-local state, never Worker
-    // source. Dependencies are pinned by the lockfile below. Walking these
-    // directories made a checkout with Wrangler caches disagree with CI.
-    if (entry.isDirectory())
-      return ["node_modules", ".wrangler", ".git"].includes(entry.name)
-        ? []
-        : runtimeSources(sourceRoot, name)
-    return /\.(?:[cm]?js|json)$/.test(name) &&
-      !/\.(?:test|spec)\.[cm]?js$/.test(name) &&
-      name !== "workers/generated/operation-cost-identities.js" &&
-      // This Worker has no state binding. Its redirects cannot change the
-      // per-operation D1 plans guarded by this identity.
-      name !== "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js" &&
-      !name.startsWith("workers/generated/iconoplasm-observability-snapshot.")
-      ? [name]
-      : []
+function costAuthoritySources(sourceRoot) {
+  // esbuild already resolves the actual imported source graph. Cost receipts
+  // should change when an adapter or its helper changes, not when unrelated
+  // website copy changes in another Worker module.
+  const result = buildSync({
+    absWorkingDir: sourceRoot,
+    entryPoints: ["workers/iconoplasm/operation-cost-http.js"],
+    bundle: true,
+    packages: "external",
+    platform: "neutral",
+    format: "esm",
+    write: false,
+    metafile: true,
+    logLevel: "silent",
   })
+  return Object.keys(result.metafile.inputs).filter(
+    (name) => name !== "workers/generated/operation-cost-identities.js",
+  )
 }
 
-// Cover imported domain handlers as well as the gate itself. A hand-maintained
-// short list allowed a changed transitive SQL helper to keep old plans valid.
+// The migration schema remains an independent identity.
 const schemaDirectories = [
   "migrations",
   "workers/benchmark/migrations",
@@ -47,8 +45,7 @@ function digest(sourceRoot, files) {
 
 export function operationCostIdentities({ sourceRoot = root } = {}) {
   const sourceFiles = [
-    ...runtimeSources(sourceRoot, "workers"),
-    ...runtimeSources(sourceRoot, "shared"),
+    ...costAuthoritySources(sourceRoot),
     "pnpm-lock.yaml",
     "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
     "scripts/generate-operation-cost-migrations.mjs",
