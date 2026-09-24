@@ -166,6 +166,9 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.ok(statefulConfig.assets.run_worker_first.includes("/blot/*"))
   assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)
   assert.ok(statefulConfig.assets.run_worker_first.includes("/portraits/*"))
+  // B-807: extension origin fallback for immutable publication objects must reach
+  // the Worker; the SPA fallback would answer these JSON URLs with the HTML shell.
+  assert.ok(statefulConfig.assets.run_worker_first.includes("/published-cards/v2/immutable/*"))
 })
 
 test("the deterministic asset bundle is complete, secure, and within Free-plan limits", async (t) => {
