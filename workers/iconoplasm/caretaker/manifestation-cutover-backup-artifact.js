@@ -493,8 +493,7 @@ async function writePendingPart(db, backupEnv, artifact, now, allowPartial) {
   }
   const entries = await all(
     db,
-    `SELECT entity_kind, entity_id, package_object_key, package_sha256, package_bytes,
-            body_sha256, body_bytes, ciphertext_sha256, ciphertext_bytes
+    `SELECT entity_kind, entity_id, package_object_key, package_sha256, package_bytes
        FROM icono_manifestation_cutover_backup_entries
       WHERE backup_artifact_id = ? AND part_number = ? ORDER BY entity_kind, entity_id`,
     artifact.backup_artifact_id,
@@ -519,13 +518,28 @@ async function writePendingPart(db, backupEnv, artifact, now, allowPartial) {
     throw error("CUTOVER_BACKUP_PART_ORDER_INVALID", "Previous backup part is not verified", 500)
   const bytes = boundedBytes(
     {
-      schema_version: 1,
+      schema_version: 2,
       artifact_kind: "manifestation_cutover_backup_part",
       backup_artifact_id: artifact.backup_artifact_id,
       cutover_run_id: artifact.cutover_run_id,
       source_snapshot_sha256: artifact.source_snapshot_sha256,
       part_number: Number(part.part_number),
-      entries,
+      // Keep the already-assigned 250-entry parts. Each verified package owns
+      // its body and ciphertext hashes; repeating them here exceeded 64 KiB.
+      entry_fields: [
+        "entity_kind",
+        "entity_id",
+        "package_object_key",
+        "package_sha256",
+        "package_bytes",
+      ],
+      entries: entries.map((entry) => [
+        entry.entity_kind,
+        entry.entity_id,
+        entry.package_object_key,
+        entry.package_sha256,
+        entry.package_bytes,
+      ]),
     },
     "backup part",
   )
