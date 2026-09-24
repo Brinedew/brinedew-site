@@ -1,4 +1,8 @@
 import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
+import {
+  PUBLIC_SECURITY_HEADERS,
+  publicContentSecurityPolicy as policyContentSecurityPolicy,
+} from "./lib/the-only-public-document-policy-do-not-duplicate.js"
 
 const THE_ONLY_ALLOWED_STATEFUL_WORKER_BINDING_DO_NOT_DUPLICATE =
   "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE"
@@ -52,16 +56,6 @@ const ANALYTICS_CONSENT_COUNTRIES = new Set([
   "SK",
 ])
 
-const SECURITY_HEADERS = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy":
-    "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-site",
-}
-
 function parseCookies(cookieHeader) {
   const cookies = {}
   for (const segment of String(cookieHeader || "").split(";")) {
@@ -98,30 +92,17 @@ function injectAnalyticsConsentBootstrap(html, request) {
 
 function publicContentSecurityPolicy(request) {
   const url = new URL(request.url)
-  const allowUnsafeEval = url.hostname === GENEGUESSR_HOST && ROOT_DOCUMENT_PATHS.has(url.pathname)
-  const scriptSrc = [
-    "script-src",
-    "'self'",
-    "'unsafe-inline'",
-    ...(allowUnsafeEval ? ["'unsafe-eval'"] : []),
-    "https://cdn.jsdelivr.net",
-    "https://cdnjs.cloudflare.com",
-    "https://challenges.cloudflare.com",
-    "https://static.cloudflareinsights.com",
-  ].join(" ")
-  const connectSrc = allowUnsafeEval
-    ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com"
-    : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com"
-  return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; style-src 'self' 'unsafe-inline'; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
+  return policyContentSecurityPolicy({
+    geneguessrGame: url.hostname === GENEGUESSR_HOST && ROOT_DOCUMENT_PATHS.has(url.pathname),
+  })
 }
 
 function applyPublicDocumentHeaders(response, request) {
   const headers = new Headers(response.headers)
-  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+  for (const [name, value] of Object.entries(PUBLIC_SECURITY_HEADERS)) {
     headers.set(name, value)
   }
   headers.set("Content-Security-Policy", publicContentSecurityPolicy(request))
-  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
   headers.set("X-Brinedew-Static-Route", "public-edge")
   const contentType = String(headers.get("Content-Type") || "").toLowerCase()
   if (
@@ -227,6 +208,8 @@ function publicStaticDocumentPath(url) {
     if (ROOT_DOCUMENT_PATHS.has(url.pathname)) return "/apps/geneguessr/index.html"
     if (PRIVACY_DOCUMENT_PATHS.has(url.pathname)) return "/apps/geneguessr/privacy.html"
     if (url.pathname === "/static/geneguessr/molstar-shared.js") return url.pathname
+    // B-834 rollout: vendored Mol* builds are static files on Pages.
+    if (url.pathname.startsWith("/static/vendor/pdbe-molstar-")) return url.pathname
     return ""
   }
   if (!MAIN_SITE_HOSTS.has(url.hostname)) return ""

@@ -24,7 +24,7 @@
     "package:iconoplasm-firefox-source": "node ./scripts/package-iconoplasm-firefox-source.mjs",
     "verify:iconoplasm-publisher-authority": "node ./scripts/verify-iconoplasm-publisher-authority.mjs",
     "dev": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve -d content -o public-preview",
-    "build": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build -d content && pnpm run prepare:iconoplasm-edge-assets",
+    "build": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build -d content && pnpm run prepare:iconoplasm-edge-assets && node ./scripts/write-pages-edge-files.mjs",
     "prepare:iconoplasm-edge-assets": "node ./scripts/prepare-iconoplasm-edge-assets.mjs",
     "docs": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs build --serve -d docs -o public-docs-preview",
     "watch": "pnpm run sync:iconoplasm-shared && node ./quartz/bootstrap-cli.mjs watch -d content",
