@@ -230,6 +230,8 @@ destination_address = "brinedew@proton.me"
 allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [vars]
+# B-832: error reporting (public ingest key; rate-limited to 300 events/hour in Sentry).
+SENTRY_DSN = "https://44c29985415416cc070584965dcd686c@o4512140355239936.ingest.us.sentry.io/4512142881259520"
 ICONOPLASM_SCHEMA_TRANSITION = "0"
 ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
 ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
