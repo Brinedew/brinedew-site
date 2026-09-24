@@ -20,20 +20,31 @@ test("operator refuses absent or malformed predictions before credential and net
       [{ prediction: { rows_read: 1, rows_written: 0, requests: 1 } }, "COST_PLAN_INVALID"],
     ]) {
       writeFileSync(planPath, JSON.stringify(plan))
+      // A child that dies without an exit code (status null: killed or crashed
+      // during PowerShell startup on a loaded CI runner) says nothing about the
+      // preflight refusal under test, so retry it once instead of failing.
+      const run = () =>
+        execFileSync(
+          shell,
+          ["-NoProfile", "-File", script, "-Action", "Register", "-PlanPath", planPath],
+          {
+            // This tests preflight refusal, not PowerShell startup latency.
+            // Concurrent workerd fixtures can delay Windows child startup.
+            timeout: 30000,
+            windowsHide: true,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        )
       assert.throws(
-        () =>
-          execFileSync(
-            shell,
-            ["-NoProfile", "-File", script, "-Action", "Register", "-PlanPath", planPath],
-            {
-              // This tests preflight refusal, not PowerShell startup latency.
-              // Concurrent workerd fixtures can delay Windows child startup.
-              timeout: 30000,
-              windowsHide: true,
-              encoding: "utf8",
-              stdio: ["ignore", "pipe", "pipe"],
-            },
-          ),
+        () => {
+          try {
+            run()
+          } catch (error) {
+            if (error.status === null) run()
+            throw error
+          }
+        },
         (error) => {
           assert.equal(error.status, 1, error.code || error.message)
           assert.match(error.stderr, new RegExp(code))
