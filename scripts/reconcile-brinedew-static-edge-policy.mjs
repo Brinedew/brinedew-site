@@ -236,15 +236,6 @@ export async function reconcileStaticEdgePolicy({
     if (apply && inactive.length) {
       throw new Error(`Refusing cutover: Pages domains not active yet: ${inactive.join(", ")}`)
     }
-    drift += await reconcilePhase(
-      call,
-      zoneId,
-      "http_request_transform",
-      policy.rewriteRulesetName,
-      policy.rewriteRules.map(desiredRewriteRule),
-      { apply, log },
-    )
-
     const routes = await call(`/zones/${zoneId}/workers/routes`)
     for (const route of routes || []) {
       if (!policy.retiredPublicEdgeRoutes.includes(route.pattern)) continue
@@ -274,6 +265,17 @@ export async function reconcileStaticEdgePolicy({
       }
       log(`route ${pattern}: written`)
     }
+
+    // Only after the old catch-all routes are gone: the retired Worker would
+    // otherwise redirect the rewritten GeneGuessr path back to "/".
+    drift += await reconcilePhase(
+      call,
+      zoneId,
+      "http_request_transform",
+      policy.rewriteRulesetName,
+      policy.rewriteRules.map(desiredRewriteRule),
+      { apply, log },
+    )
 
     const sites = await call(`/accounts/${accountId}/rum/site_info/list`)
     const site = (sites || []).find(
