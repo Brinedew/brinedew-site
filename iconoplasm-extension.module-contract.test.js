@@ -1851,10 +1851,17 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
     /\.icono-guest-login-card-title[\s\S]*font-family: "IBM Plex Mono"/,
     "guest login headline should use the same IBM Plex face as the card UI",
   )
+  // B-835: the Join Discord button IS the shared primary button now; its dark-ink
+  // look moved into .icono-button--primary so every surface gets it.
+  assert.match(
+    appSource,
+    /class="icono-button icono-button--primary icono-guest-login-card-button"[\s\S]*>Join Discord<\/a>/,
+    "the Discord invite uses the shared primary button",
+  )
   assert.match(
     stylesSource,
-    /\.icono-guest-login-card-button[\s\S]*box-sizing: border-box[\s\S]*min-height: 2\.15rem[\s\S]*background: color-mix\(in srgb, var\(--dark\) 88%, var\(--accent\) 12%\)[\s\S]*font-family: "IBM Plex Mono"/,
-    "guest login button should reuse the auth link style with compact, deliberate IBM Plex text",
+    /\.icono-button--primary\s*\{[^}]*background: color-mix\(in srgb, var\(--dark\) 88%, var\(--accent\) 12%\)/,
+    "the shared primary keeps the Join Discord ink",
   )
   assert.match(
     appSource,
@@ -1863,8 +1870,8 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
   )
   assert.match(
     appSource,
-    /icono-home-auth-link icono-guest-login-card-button icono-install-link/,
-    "extension install primary actions should reuse the working guest-login button template",
+    /icono-button icono-button--primary icono-install-link/,
+    "extension install primary actions use the shared primary button",
   )
 })
 
