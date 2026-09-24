@@ -186,6 +186,7 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
     writeFile(path.join(sourceRoot, "apps", "iconoplasm", "privacy.html"), "privacy"),
     writeFile(path.join(sourceRoot, "apps", "iconoplasm", "license.html"), "license"),
     writeFile(path.join(sourceRoot, "apps", "iconoplasm", "caretaker-terms.html"), "terms"),
+    writeFile(path.join(sourceRoot, "apps", "iconoplasm", "developers.html"), "developers"),
     writeFile(path.join(sourceRoot, "favicon.ico"), "icon"),
   ])
 
