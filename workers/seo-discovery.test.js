@@ -1244,17 +1244,12 @@ test("homepage discovery links the raw archive without adding immersive navigati
   assert.doesNotMatch(html, />Gene index<\/a>/)
   assert.match(
     contentSource,
-    /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/" tabindex="-1">published human gene cards<\/a>/,
+    /class="sr-only"[\s\S]*href="https:\/\/iconoplasm\.brinedew\.bio\/" tabindex="-1">browse the cards<\/a>/,
   )
-  const directBlotIndex = contentSource.indexOf(
-    "https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp",
-  )
-  const resolverIndex = contentSource.indexOf("The public image resolver is the advanced interface")
-  assert.notEqual(directBlotIndex, -1)
-  assert.ok(
-    resolverIndex > directBlotIndex,
-    "homepage must teach the direct blot URL before the resolver",
-  )
+  // B-817: the crawler paragraph teaches the direct blot URL in plain words; the
+  // keyword list and the resolver jargon are gone.
+  assert.ok(contentSource.includes("https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp"))
+  assert.doesNotMatch(contentSource, /anthropomorphized gene symbols/)
 })
 
 test("gene hydration preserves and refreshes the canonical profile title", async () => {
