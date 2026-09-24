@@ -31,6 +31,10 @@ current `main` under an already approved version. Preserve the human GUI gate.
 
 This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Website\`. Root `D:\Coding\AGENTS.md` rules still apply — these are project-specific additions.
 
+## Pull requests from feature worktrees
+
+From a feature worktree, merge with `gh pr merge <number> --squash` and clean up the local worktree separately. GitHub CLI's `--delete-branch` can complete the remote merge and then exit with a local checkout error because `main` is in the primary worktree. After any uncertain merge result, read `gh pr view <number> --json state,mergeCommit` before retrying or reporting failure; `MERGED` and the merge commit are the source of truth.
+
 ## Architecture fence registry
 
 The executable registry is `architecture-fences.json`: every entry carries its full decision, reason, change control, linked runbook and required markers, and `scripts/architecture-fences.test.js` enforces those markers across instructions, runbooks, source, tests and deploy. Read the registry entry and the runbook it names before changing a fence's domain; replace a fence only by an explicit migration that updates every enforcement point together.
