@@ -21,6 +21,12 @@ visitor target or a release requirement.
 
 ## Local verification
 
+In a fresh checkout, run `pnpm install --frozen-lockfile`, then
+`pnpm run install-plugins`, then `pnpm run check`. The plugin command installs
+only enabled plugins at checked-in lockfile commits, like production CI.
+Use the explicit Quartz `plugin install --from-config` command only when
+deliberately changing the plugin set and reviewing the lockfile diff.
+
 `pnpm run dev` serves content from `public-preview`; `pnpm run docs` uses
 `public-docs-preview`. Production builds own `public` and `public-iconoplasm-edge`,
 so a preview rebuild cannot delete the deployment output. For direct Quartz CLI
