@@ -15,7 +15,7 @@ function snapshotMinutesOld(minutes) {
   }
 }
 
-test("observability freshness distinguishes fresh, stale, and unavailable snapshots", () => {
+test("observability freshness distinguishes old history from missing history", () => {
   assert.equal(
     iconoplasmObservabilitySnapshotForAdmin(snapshotMinutesOld(60), NOW).freshness.state,
     "fresh",
@@ -24,14 +24,14 @@ test("observability freshness distinguishes fresh, stale, and unavailable snapsh
     iconoplasmObservabilitySnapshotForAdmin(snapshotMinutesOld(91), NOW).freshness.state,
     "stale",
   )
-  assert.equal(
-    iconoplasmObservabilitySnapshotForAdmin(snapshotMinutesOld(241), NOW).freshness.state,
-    "unavailable",
-  )
+  const overdue = iconoplasmObservabilitySnapshotForAdmin(snapshotMinutesOld(241), NOW)
+  assert.equal(overdue.freshness.state, "overdue")
+  assert.equal(overdue.freshness.headline, "Historical snapshot overdue")
+  assert.match(overdue.freshness.detail, /Live account meters are queried separately/)
   assert.equal(iconoplasmObservabilitySnapshotForAdmin({}, NOW).freshness.state, "unavailable")
 })
 
-test("observability freshness exposes the hourly SLA and intentional retirement", () => {
+test("observability freshness exposes intended cadence and intentional retirement", () => {
   const report = iconoplasmObservabilitySnapshotForAdmin(snapshotMinutesOld(10), NOW)
   assert.deepEqual(report.freshness.policy, ICONOPLASM_OBSERVABILITY_FRESHNESS_POLICY)
   assert.equal(report.retiredMetrics[0].state, "retired")
