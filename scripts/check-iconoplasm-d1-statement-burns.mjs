@@ -4,16 +4,34 @@
 // analytics shows which SQL already spent a large share of the daily allowance.
 // Prevent the first burn by keeping user-triggered reads indexed and bounded;
 // this monitor can only point to a missed query after it has run.
+//
+// It reads a trailing window, not the UTC day. A day-sum stayed red for 18
+// hours after the 2026-09-24 picker fix (#264) and would have hidden any new
+// burn behind the old one. The window cap is the daily cap pro-rated, so a
+// steady leak at the old 500k/day alert rate still trips it.
 import { pathToFileURL } from "node:url"
 
-export const STATEMENT_BURN_QUERY = `query StatementBurns($accountTag:String!,$day:Date) {
+export const STATEMENT_BURN_QUERY = `query StatementBurns($accountTag:String!,$since:Time!,$until:Time!) {
   viewer { accounts(filter:{accountTag:$accountTag}) {
-    d1QueriesAdaptiveGroups(limit:200,filter:{date_geq:$day,date_leq:$day},orderBy:[sum_rowsRead_DESC]) {
+    d1QueriesAdaptiveGroups(limit:200,filter:{datetime_geq:$since,datetime_leq:$until},orderBy:[sum_rowsRead_DESC]) {
       dimensions { databaseId query }
       sum { rowsRead rowsReturned }
     }
   } }
 }`
+
+export function statementBurnWindow({ now = Date.now(), hours = 6, dailyCap = 500000 } = {}) {
+  const span = Number(hours)
+  if (!Number.isFinite(now) || !Number.isFinite(span) || span <= 0 || span > 24)
+    throw new Error("D1_STATEMENT_BURN_WINDOW_INVALID")
+  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z")
+  return {
+    since: iso(now - span * 3600000),
+    until: iso(now),
+    hours: span,
+    cap: Math.floor((Number(dailyCap) * span) / 24),
+  }
+}
 
 export function statementBurnViolations(rows, { cap } = {}) {
   const threshold = Number(cap)
@@ -35,15 +53,15 @@ export function statementBurnViolations(rows, { cap } = {}) {
   return violations
 }
 
-export async function readStatementBurns({ accountId, token, day, fetcher = fetch } = {}) {
-  if (!/^[a-f0-9]{32}$/.test(accountId || "") || !token || !/^\d{4}-\d{2}-\d{2}$/.test(day || ""))
+export async function readStatementBurns({ accountId, token, since, until, fetcher = fetch } = {}) {
+  if (!/^[a-f0-9]{32}$/.test(accountId || "") || !token || !since || !until)
     throw new Error("D1_STATEMENT_WATCH_UNAVAILABLE")
   const response = await fetcher("https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       query: STATEMENT_BURN_QUERY,
-      variables: { accountTag: accountId, day },
+      variables: { accountTag: accountId, since, until },
     }),
     signal: AbortSignal.timeout(20000),
   })
@@ -57,15 +75,18 @@ export async function readStatementBurns({ accountId, token, day, fetcher = fetc
 }
 
 export async function checkStatementBurns() {
-  const day = process.env.ICONOPLASM_BUDGET_WATCH_DAY || new Date().toISOString().slice(0, 10)
-  const cap = Number(process.env.ICONOPLASM_STATEMENT_READ_ALERT || 500000)
+  const window = statementBurnWindow({
+    hours: Number(process.env.ICONOPLASM_STATEMENT_WINDOW_HOURS || 6),
+    dailyCap: Number(process.env.ICONOPLASM_STATEMENT_READ_ALERT || 500000),
+  })
   const rows = await readStatementBurns({
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     token: process.env.CLOUDFLARE_API_TOKEN,
-    day,
+    since: window.since,
+    until: window.until,
   })
-  const violations = statementBurnViolations(rows, { cap })
-  const result = { day, cap, statements: rows.length, violations, ok: violations.length === 0 }
+  const violations = statementBurnViolations(rows, window)
+  const result = { ...window, statements: rows.length, violations, ok: violations.length === 0 }
   console.log(JSON.stringify(result, null, 2))
   if (violations.length)
     console.error(
