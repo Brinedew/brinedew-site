@@ -26,7 +26,9 @@ for (const failedCommand of ["Set-Content", "Move-Item"]) {
     try {
       const result = spawnSync(executable, ["-NoProfile", "-NonInteractive", "-Command", command], {
         encoding: "utf8",
-        timeout: 15_000,
+        // PowerShell cold starts compete with the full CI test suite; keep a
+        // deadline without mistaking scheduler contention for a failed guard.
+        timeout: 30_000,
       })
       assert.equal(result.status, 0, result.stderr)
       assert.deepEqual(JSON.parse(result.stdout), { failed: true, acknowledged: false })
