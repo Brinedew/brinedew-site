@@ -29,7 +29,7 @@ retention design.
 <!-- ARCHITECTURE FENCE [IPD-007] -->
 
 Anonymous reading is static/CDN-first. Workers Cache is not a quota workaround.
-The stable `/blot/{symbol}.webp` alias uses the existing Worker to resolve the
+The stable `/blot/{symbol}.webp` route uses the existing Worker to resolve the
 exact published card after a vote changes the winner. Healthy portrait images
 load directly from Bunny; their canonical first-party `/portraits/*` URLs use
 the existing Worker only for a real byte fallback. The site shell and crawler

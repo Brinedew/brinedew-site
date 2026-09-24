@@ -14,7 +14,6 @@ export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
 // Four ordinary cards fit one phase. Larger galleries consume more than one
 // object per card, so prepare() sizes its actual prefix before any upload.
 export const CARD_PUBLICATION_BATCH = 4
-export const CARD_BLOT_ALIAS_BACKFILL_BATCH = 12
 const CARD_PUBLICATION_CONCURRENCY = 2
 // Cloudflare Free allows 50 external subrequests per invocation. Each immutable
 // object costs a PUT and verified GET; leave 18 for old-shard reads, redirects
@@ -384,8 +383,7 @@ export function createCardPublication({
    * both shapes. Use dirty publication for actual changes. This walk is justified
    * only by a specific reader defect that needs every source card rebuilt.
    * The previous head stays readable until the new one is fully verified, and
-   * cancelRematerialization stops an unnecessary in-flight pass. Blot aliases
-   * have their own owner; do not couple them to this catalog walk.
+   * cancelRematerialization stops an unnecessary in-flight pass.
    */
   async function rematerialize() {
     const head = repo.get("head")
@@ -416,39 +414,6 @@ export function createCardPublication({
       repo.put("requested", true)
     })
     return status()
-  }
-  async function backfillBlotAliases() {
-    const head = repo.get("head")
-    if (!head) throw new Error("Card publication storage migration has not been initialized")
-    if (repo.get("job")) return status()
-    repo.reserveWrites?.(3)
-    repo.transaction(() => {
-      repo.put("job", {
-        bootstrap: false,
-        alias_backfill: true,
-        baseline: head.current.manifest,
-        baseline_version: head.current.version,
-        watermark: head.watermark,
-        groups: head.current.manifest.shards.map((_, index) => ({ index, symbols: null })),
-        group: 0,
-        offset: 0,
-        alias_offset: 0,
-        started_at: now(),
-      })
-    })
-    return status()
-  }
-  function cancelBlotAliasBackfill() {
-    const job = repo.get("job")
-    if (job?.alias_backfill !== true) return { accepted: false }
-    const preparedRows = repo.prepared().length
-    repo.reserveWrites?.(preparedRows + 3, { control: true })
-    repo.transaction(() => {
-      repo.remove("job")
-      repo.remove("failure")
-      repo.clearPrepared()
-    })
-    return { accepted: true, cleared_prepared_rows: preparedRows }
   }
   /**
    * B-795: an operator stop control for a running catalog rematerialization. A
@@ -740,56 +705,26 @@ export function createCardPublication({
         refs,
         group: job.group + 1,
         offset: 0,
-        alias_offset: 0,
+        blot_offset: 0,
         sealed_refs: [],
         seal_offset: 0,
       })
       repo.clearPrepared()
     })
   }
-  async function publishBlotAliases(job) {
+  async function verifyBlots(job) {
     const prepared = repo.prepared()
-    const offset = job.alias_offset || 0
-    const batchSize = job.alias_backfill ? CARD_BLOT_ALIAS_BACKFILL_BATCH : CARD_PUBLICATION_BATCH
-    const slice = prepared.slice(offset, offset + batchSize)
+    const offset = job.blot_offset || 0
+    const slice = prepared.slice(offset, offset + CARD_PUBLICATION_BATCH)
     repo.reserveWrites?.(2)
     for (let index = 0; index < slice.length; index += CARD_PUBLICATION_CONCURRENCY) {
       await settlePublicationWrites(
-        slice.slice(index, index + CARD_PUBLICATION_CONCURRENCY).map((item) =>
-          objects.publishBlotAlias(item.symbol, item.card?.payload?.blot || null, {
-            // Backfill is a compatibility projection over an already committed
-            // immutable head. A historical 404 gets the static placeholder;
-            // ordinary publication remains strict and cannot commit a missing
-            // immutable source. A full rematerialization walks every published
-            // page, so one historical missing blot must not stall the catalog
-            // refresh; it gets the same placeholder instead (#190, B-790).
-            allowMissingImmutablePlaceholder:
-              job.alias_backfill === true || job.rematerialize === true,
-          }),
-        ),
+        slice
+          .slice(index, index + CARD_PUBLICATION_CONCURRENCY)
+          .map((item) => objects.verifyBlot(item.symbol, item.card?.payload?.blot || null)),
       )
     }
-    repo.put("job", { ...job, alias_offset: offset + slice.length })
-  }
-  function prepareAliasBackfill(job, oldCards) {
-    const slice = oldCards.slice(job.offset, job.offset + CARD_BLOT_ALIAS_BACKFILL_BATCH)
-    repo.reserveWrites?.(slice.length + 1)
-    repo.transaction(() => {
-      for (const card of slice) repo.prepare(card.symbol, { symbol: card.symbol, card })
-      repo.put("job", { ...job, offset: job.offset + slice.length })
-    })
-  }
-  function advanceAliasBackfillGroup(job) {
-    repo.reserveWrites?.(2)
-    repo.transaction(() => {
-      repo.put("job", {
-        ...job,
-        group: job.group + 1,
-        offset: 0,
-        alias_offset: 0,
-      })
-      repo.clearPrepared()
-    })
+    repo.put("job", { ...job, blot_offset: offset + slice.length })
   }
   async function commit(job) {
     repo.reserveWrites?.(6)
@@ -882,8 +817,6 @@ export function createCardPublication({
     bootstrap,
     migrate,
     rematerialize,
-    backfillBlotAliases,
-    cancelBlotAliasBackfill,
     cancelRematerialization,
     materializeSymbol,
     async step() {
@@ -901,31 +834,17 @@ export function createCardPublication({
       }
       const job = repo.get("job") || (repo.get("requested") ? await start() : null)
       if (!job) return { more: false }
-      if (job.alias_backfill && job.group >= job.groups.length) {
-        repo.reserveWrites?.(2)
-        repo.transaction(() => {
-          repo.remove("job")
-          repo.clearPrepared()
-        })
-        return { more: false, alias_backfill_completed: true }
-      }
       if (job.group >= job.groups.length) return { more: true, committed: await commit(job) }
       const group = job.groups[job.group]
       const oldCards = await cardsFor(job, job.baseline.shards[group.index])
-      if (job.alias_backfill) {
-        if (job.offset < oldCards.length) prepareAliasBackfill(job, oldCards)
-        else if ((job.alias_offset || 0) < repo.prepared().length) await publishBlotAliases(job)
-        else advanceAliasBackfillGroup(job)
-        return { more: true }
-      }
       if (job.migration && source.reuseExistingCardObjectsForMigration) {
         await finishGroup(job, group, oldCards)
         return { more: true }
       }
       const count = group.symbols?.length ?? oldCards.length
       if (job.offset < count) await prepare(job, group, oldCards)
-      else if (!job.rematerialize && (job.alias_offset || 0) < repo.prepared().length)
-        await publishBlotAliases(job)
+      else if (!job.rematerialize && (job.blot_offset || 0) < repo.prepared().length)
+        await verifyBlots(job)
       else await finishGroup(job, group, oldCards)
       return { more: true }
     },
