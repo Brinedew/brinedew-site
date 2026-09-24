@@ -312,3 +312,22 @@ test("catalog state rejects HEAD because state comparison requires an explicit P
 
   assert.equal(response.status, 404)
 })
+
+// B-831 / IPD-012: the encrypted authoring authority owns manifestation prose and
+// Tags. The workstation's old plaintext upsert and hash-verification routes
+// were a second writer into primary D1 and must not return.
+test("no route writes or verifies legacy manifestation plaintext", () => {
+  for (const method of ["GET", "POST", "PUT", "PATCH"]) {
+    assert.equal(
+      matchIconoplasmRouteContract("/api/iconoplasm/admin/manifestation/upsert", method),
+      null,
+    )
+    assert.equal(
+      matchIconoplasmRouteContract("/api/iconoplasm/admin/manifestation/state", method),
+      null,
+    )
+  }
+  const ids = ICONOPLASM_ROUTE_CONTRACTS.map((entry) => String(entry.id || ""))
+  assert.equal(ids.includes("admin_manifestation_upsert"), false)
+  assert.equal(ids.includes("admin_manifestation_state"), false)
+})
