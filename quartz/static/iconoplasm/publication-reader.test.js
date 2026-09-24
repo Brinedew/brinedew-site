@@ -160,11 +160,12 @@ test("gene documents are one static SPA shell and never enter Worker execution",
   )
   assert.equal(config.assets.run_worker_first.includes("/robots.txt"), false)
   assert.equal(config.assets.run_worker_first.includes("/portraits/*"), true)
-  assert.equal(
-    config.assets.run_worker_first.some((pattern) =>
-      pattern.startsWith("/published-cards/v2/immutable"),
-    ),
-    false,
+  // B-807: the website reader reads publication objects from Bunny only; the
+  // exact immutable prefix reaches the Worker solely as the released
+  // extension's origin fallback.
+  assert.deepEqual(
+    config.assets.run_worker_first.filter((pattern) => pattern.startsWith("/published-cards")),
+    ["/published-cards/v2/immutable/*"],
   )
   assert.equal(config.assets.run_worker_first.includes("/api/*"), true)
   assert.equal(

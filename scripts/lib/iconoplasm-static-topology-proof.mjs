@@ -14,7 +14,12 @@ const ASSET_ROOT = "public-iconoplasm-edge"
 const WRANGLER_CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
 const EXACT_CARD_BLOT_ROUTE = "/blot/TP53.webp"
 const CANONICAL_PORTRAIT_FALLBACK_ROUTE = `/portraits/v1/aa/${"a".repeat(64)}/full.webp`
-const WORKER_OWNED_ROUTES = new Set([EXACT_CARD_BLOT_ROUTE, CANONICAL_PORTRAIT_FALLBACK_ROUTE])
+const PUBLISHED_OBJECT_FALLBACK_ROUTE = `/published-cards/v2/immutable/genes/${"b".repeat(64)}.json`
+const WORKER_OWNED_ROUTES = new Set([
+  EXACT_CARD_BLOT_ROUTE,
+  CANONICAL_PORTRAIT_FALLBACK_ROUTE,
+  PUBLISHED_OBJECT_FALLBACK_ROUTE,
+])
 const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/",
   "/search?q=TP53",
@@ -26,7 +31,7 @@ const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/sitemap.xml",
   "/robots.txt",
   "/llms.txt",
-  "/published-cards/v2/immutable/genes/example.json",
+  PUBLISHED_OBJECT_FALLBACK_ROUTE,
 ])
 
 async function digestTree(root) {
