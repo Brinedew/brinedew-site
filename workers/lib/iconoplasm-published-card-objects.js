@@ -44,9 +44,6 @@ const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
 const BLOT_FINGERPRINT = /^[a-f0-9]{32,64}$/
 const encoder = new TextEncoder()
-const BLOT_PLACEHOLDER_BYTES = encoder.encode(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 4"><rect width="3" height="4" fill="#171714"/><path d="M.5 2h2" stroke="#d8d0bd" stroke-width=".08" opacity=".55"/></svg>',
-)
 const BLOT_BYTE_LIMIT = 5 * 1024 * 1024
 
 export function canonicalPublishedJson(value) {
@@ -68,14 +65,6 @@ export function publishedCardObjectKey(kind, hash) {
     throw new Error("Invalid published card object identity")
   }
   return `${PUBLISHED_CARD_OBJECT_PREFIX}/${kind}/${hash}.json`
-}
-
-export function publishedGeneBlotAliasKey(symbol) {
-  const normalized = String(symbol || "")
-    .trim()
-    .toUpperCase()
-  if (!SYMBOL.test(normalized)) throw new Error("Invalid published blot alias symbol")
-  return `blot/${normalized}.webp`
 }
 
 function immutableBlotIdentity(symbol, blot) {
@@ -312,107 +301,29 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
    * write (both directions observed live), so requiring one named source
    * couples a catalog-wide pass to whichever cache happens to be behind.
    */
-  async function firstMatchingCandidate(key, expectedHash) {
-    const candidates = externalPortraitReadCandidates(env, key, { accept: "image/*" })
-    for (const candidate of candidates) {
-      try {
-        const response = await send(
-          candidate.url,
-          { method: "GET", headers: candidate.headers },
-          key,
-        )
-        if (!response.ok) {
-          await response.body?.cancel().catch(() => {})
-          continue
-        }
-        const bytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
-        if ((await publishedObjectHash(bytes)) === expectedHash) {
-          return { bytes, source: candidate.source }
-        }
-      } catch {
-        // Try the next configured source.
-      }
-    }
-    return null
-  }
-
-  async function publishBlotAlias(symbol, blot, { allowMissingImmutablePlaceholder = false } = {}) {
+  async function verifyBlot(symbol, blot) {
     const normalized = String(symbol || "")
       .trim()
       .toUpperCase()
-    const key = publishedGeneBlotAliasKey(normalized)
+    if (!SYMBOL.test(normalized)) throw new Error("Invalid published blot symbol")
     const immutable = immutableBlotIdentity(normalized, blot)
-    let bytes = BLOT_PLACEHOLDER_BYTES
-    let contentType = "image/svg+xml"
-    if (immutable) {
-      // A catalog-wide rematerialization republishes the alias for every
-      // published card. When any configured source already serves the exact
-      // immutable bytes under the alias key, that read IS the verification;
-      // skipping the idempotent PUT cuts a full pass from three round trips
-      // per card to one. Missing, mismatched or unreadable bytes fall through
-      // to the authoritative publish path below.
-      const existing = await firstMatchingCandidate(key, immutable.hash)
-      if (existing?.bytes) {
-        return {
-          key,
-          hash: immutable.hash,
-          size: existing.bytes.byteLength,
-          contentType: "image/webp",
-          sources: { [existing.source]: true },
-          skipped: true,
-        }
-      }
-      try {
-        bytes = (
-          await readImageBytes(immutable.key, immutable.hash, { repairStorageFromCdn: true })
-        ).bytes
-        contentType = "image/webp"
-      } catch (error) {
-        if (!(allowMissingImmutablePlaceholder && error?.code === "PUBLISHED_BLOT_NOT_FOUND"))
-          throw error
-      }
+    if (!immutable) return { skipped: true }
+    // The first-party /blot/{symbol}.webp reader resolves this exact key from
+    // the committed card. Verify those bytes before advancing the head.
+    const { bytes, verifiedSources } = await readImageBytes(immutable.key, immutable.hash, {
+      repairStorageFromCdn: true,
+    })
+    return {
+      key: immutable.key,
+      hash: immutable.hash,
+      size: bytes.byteLength,
+      sources: verifiedSources,
     }
-    const hash = await publishedObjectHash(bytes)
-    const url = externalPortraitStorageUrl(env, key)
-    const password = externalPortraitStoragePassword(env)
-    if (!url || !password) throw new Error("Bunny published blot writes are not configured")
-    // The stable /blot/{symbol}.webp object is a compatibility projection, not
-    // publication authority, and each read source can lag a write
-    // independently: requiring one named source once stalled a catalog-wide
-    // pass for tens of minutes on a key whose public bytes were already
-    // correct (CLNK, 2026-09-21). Repeat the identical PUT a bounded number of
-    // times and accept the first source that serves the exact expected bytes;
-    // an unverifiable alias still fails closed.
-    let verified = null
-    for (let attempt = 1; attempt <= 3 && !verified; attempt += 1) {
-      const response = await send(
-        url,
-        {
-          method: "PUT",
-          headers: {
-            AccessKey: password,
-            "Content-Type": contentType,
-            "Cache-Control": "public, max-age=30, must-revalidate",
-          },
-          body: bytes,
-        },
-        key,
-      )
-      await response.body?.cancel().catch(() => {})
-      if (!response.ok) throw new Error(`Published blot alias PUT failed (${response.status})`)
-      verified = await firstMatchingCandidate(key, hash)
-      if (!verified && attempt < 3)
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
-    }
-    if (!verified)
-      throw new Error(`Published blot alias PUT is not readable as ${hash.slice(0, 12)}`)
-    return { key, hash, size: bytes.byteLength, contentType, sources: { [verified.source]: true } }
   }
-
   return {
     read,
     verifyReaderResolvable,
-    publishBlotAlias,
+    verifyBlot,
     async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
