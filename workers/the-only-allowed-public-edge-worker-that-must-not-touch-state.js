@@ -1,3 +1,4 @@
+import { withErrorReporting } from "./lib/the-only-error-reporter.js"
 import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
 import {
   PUBLIC_SECURITY_HEADERS,
@@ -390,6 +391,8 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
 
 export default {
   async fetch(request, env, ctx) {
-    return handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env, ctx)
+    return withErrorReporting(env, ctx, request, "edge", () =>
+      handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env, ctx),
+    )
   },
 }
