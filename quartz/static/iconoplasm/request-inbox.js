@@ -307,18 +307,36 @@ export function createRequestInbox({
     return refresh(options).finally(scheduleOpenRequestRefresh)
   }
 
+  // B-834: returning to a tab fires both `focus` and `visibilitychange`, and
+  // each used to refetch notifications and caretaker state (4 Worker requests
+  // per tab switch). Coalesce those passive refreshes to one per 30 s.
+  // Explicit refreshes (mount, account switch, after reads/claims) always run.
+  var PASSIVE_REFRESH_MIN_INTERVAL_MS = 30000
+  var lastPassiveRefreshAt = 0
+
+  function refreshForPassiveLifecycle(options) {
+    var now = Date.now()
+    if (now - lastPassiveRefreshAt < PASSIVE_REFRESH_MIN_INTERVAL_MS) {
+      scheduleOpenRequestRefresh()
+      return Promise.resolve(null)
+    }
+    lastPassiveRefreshAt = now
+    return refreshForLifecycle(options)
+  }
+
   function start() {
     stop()
     if (!ensureAccountContext()) return
+    lastPassiveRefreshAt = Date.now()
     void refreshForLifecycle()
     if (lifecycleWired) return
     lifecycleWired = true
     window.addEventListener("focus", function () {
-      if (getCurrentUser()) void refreshForLifecycle({ announce: true })
+      if (getCurrentUser()) void refreshForPassiveLifecycle({ announce: true })
     })
     document.addEventListener("visibilitychange", function () {
       if (getCurrentUser() && document.visibilityState === "visible") {
-        void refreshForLifecycle({ announce: true })
+        void refreshForPassiveLifecycle({ announce: true })
       } else {
         stop()
       }
