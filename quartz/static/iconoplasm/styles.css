@@ -827,6 +827,13 @@ body:has(.icono-vote-login-dialog[open]) {
   padding: 1rem 1.2rem 1.2rem;
 }
 
+/* Until Shoelace defines <sl-dialog>, the browser renders its children inline:
+   the whole New candidate form flashed under the gene card for 2-8 frames on
+   every gene page load (B-836, measured in Playwright). */
+sl-dialog:not(:defined) {
+  display: none;
+}
+
 /* No visible actions, no footer bar (the signed-out request dialog). */
 .icono-standard-dialog:not(:has([slot="footer"] > :not([hidden])))::part(footer) {
   display: none;

@@ -655,6 +655,11 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
   assert.doesNotMatch(css, /font-family:\s*var\(--icono-action-font\)\s*!important/)
   assert.match(
     css,
+    /sl-dialog:not\(:defined\)\s*\{\s*display:\s*none/,
+    "an undefined sl-dialog must not render its form inline (B-836)",
+  )
+  assert.match(
+    css,
     /\.icono-request-provider-select\s*\{[^}]*background-color:\s*color-mix\(in srgb,\s*var\(--light\) 94%,\s*var\(--dark\) 6%\)/,
     "request modal provider select should use Iconoplasm theme tokens instead of default white controls",
   )
