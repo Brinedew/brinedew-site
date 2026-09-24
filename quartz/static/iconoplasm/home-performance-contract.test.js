@@ -131,17 +131,19 @@ test("Iconoplasm font paint is in-memory, bounded, and independent of preload ti
   const fontContract = JSON.parse(await readFile(fontContractPath, "utf8"))
   const internalWorker = await readFile(internalWorkerPath, "utf8")
 
-  assert.equal(fontContract.websiteDelivery.strategy, "embedded-fontface-api")
+  assert.equal(fontContract.websiteDelivery.strategy, "preloaded-fontface-api")
   assert.ok(fontContract.websiteDelivery.revealTimeoutMs < 1000)
   assert.doesNotMatch(sharedCardCss, /(?:^|\n)@font-face\s*\{/)
   assert.doesNotMatch(customCss, /font-family:\s*"Crimson Pro";[\s\S]{0,240}font-display:/)
   assert.match(head, /const siteNetworkFontFaces =/)
   assert.match(head, /usesIconoplasmLabelFonts \? \(/)
-  assert.match(head, /iconoplasmEmbeddedFontBootstrap/)
+  assert.match(head, /iconoplasmFontBootstrap/)
+  // B-836: fonts are cacheable files, never base64 inside every HTML response.
+  assert.doesNotMatch(head, /toString\("base64"\)/)
+  assert.match(head, /rel="preload" as="font" type="font\/woff2"/)
   assert.match(head, /new FontFace\(/)
   assert.match(head, /document\.fonts\.add\(face\)/)
   assert.match(head, /websiteDelivery\.revealTimeoutMs/)
-  assert.doesNotMatch(head, /href=\{`\/static\/iconoplasm\/fonts/)
   assert.match(
     internalWorker,
     /url\.searchParams\.has\("v"\)[\s\S]{0,120}woff2\?\|ttf\|otf\|eot/,
@@ -1805,7 +1807,9 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.match(block, /hasHeadStartedGene/)
   assert.match(
     block,
-    /\(bootstrap\.geneDetailPromise \|\| bootstrap\.geneCardData \|\| bootstrap\.geneCardPromise\)[\s\S]*if \(!hasHeadStartedGene\) \{\s*root\.innerHTML = genePageShellMarkup\(true\)/,
+    // B-836: static gene documents carry no pre-rendered card, so the skeleton is
+    // only skipped when the root already holds gene markup it must not wipe.
+    /\(bootstrap\.geneDetailPromise \|\| bootstrap\.geneCardData \|\| bootstrap\.geneCardPromise\)[\s\S]*if \(!hasHeadStartedGene \|\| !root\.querySelector\("\.icono-gene-lead, #icono-gene-content"\)\) \{\s*root\.innerHTML = genePageShellMarkup\(true\)/,
     "direct gene loads with head-started detail/card data must not wipe to a fake card or skeleton before real-card hydration",
   )
   assert.match(app, /function reconcilePublicManifestationSection\(container, g\)/)
@@ -1820,8 +1824,8 @@ test("gene route uses the shared detail cache instead of issuing raw duplicate f
   assert.notEqual(shellEnd, -1, "missing semantic gene-page shell boundary")
   assert.match(
     app.slice(shellStart, shellEnd),
-    /includeSkeleton[\s\S]*buildBrickSkeletonCardMarkup\(\)/,
-    "the semantic shell must still render the real-card skeleton for non-head-started gene loads",
+    /includeSkeleton[\s\S]*icono-gene-lead icono-gene-lead--skeleton[\s\S]*icono-gene-lead-skeleton-card[\s\S]*icono-gene-lead-skeleton-bar/,
+    "the gene shell must render a skeleton with the real lead's box (card + published bar) so the swap to content moves nothing (B-836)",
   )
 })
 

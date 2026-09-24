@@ -12,8 +12,6 @@ import { unescapeHTML } from "../util/escape"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
-import { readFileSync } from "node:fs"
-import path from "node:path"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -39,21 +37,34 @@ const siteNetworkFontFaces = `
   font-display: swap;
 }`
 
-function renderIconoplasmEmbeddedFontBootstrap(): string {
-  const fontDirectory = path.resolve(process.cwd(), "shared", "iconoplasm-card", "fonts")
-  const embeddedFonts = [
-    ...iconoplasmFontContract.shellFonts,
-    ...iconoplasmFontContract.fonts.map((font) => ({ ...font, style: "normal" })),
-  ].map((font) => ({
-    family: font.family,
-    weight: String(font.weight),
-    style: font.style,
-    data: readFileSync(path.join(fontDirectory, font.embeddedFile)).toString("base64"),
-  }))
+// B-836: the label fonts used to ship as ~300 KB of base64 inside every
+// Iconoplasm HTML response, so no page view could reuse them from cache and the
+// gene-page boot fetched them twice. They are now ordinary cacheable files,
+// preloaded from <head>; the reveal contract (body hidden until the faces are
+// ready, capped at revealTimeoutMs) is unchanged, so first paint still never
+// swaps fonts under the reader.
+const iconoplasmFontFaces = [
+  ...iconoplasmFontContract.shellFonts,
+  ...iconoplasmFontContract.fonts.map((font) => ({ ...font, style: "normal" })),
+].map((font) => ({
+  family: font.family,
+  weight: String(font.weight),
+  style: font.style,
+  url: font.url,
+}))
 
+function renderIconoplasmFontBootstrap(): string {
   return `(() => {
   var root = document.documentElement
   root.classList.add("icono-fonts-loading")
+  // A gene route stays hidden until the app has placed its final-geometry
+  // skeleton, so the reader never sees the empty shell in between (B-836).
+  if (location.pathname.indexOf("/gene/") === 0) {
+    root.classList.add("icono-route-pending")
+    // Safety cap only for an app that never boots; a slow network should still
+    // go straight from blank to the final-geometry skeleton.
+    window.setTimeout(function () { root.classList.remove("icono-route-pending") }, 6000)
+  }
   var startedAt = window.performance && typeof window.performance.now === "function"
     ? window.performance.now()
     : Date.now()
@@ -75,14 +86,9 @@ function renderIconoplasmEmbeddedFontBootstrap(): string {
     if (!("FontFace" in window) || !document.fonts || typeof document.fonts.add !== "function") {
       throw new Error("CSS Font Loading API unavailable")
     }
-    var definitions = ${JSON.stringify(embeddedFonts)}
+    var definitions = ${JSON.stringify(iconoplasmFontFaces)}
     var faces = definitions.map(function (definition) {
-      var binary = window.atob(definition.data)
-      var bytes = new Uint8Array(binary.length)
-      for (var index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index)
-      }
-      return new FontFace(definition.family, bytes.buffer, {
+      return new FontFace(definition.family, 'url("' + definition.url + '") format("woff2")', {
         weight: definition.weight,
         style: definition.style,
       })
@@ -109,7 +115,7 @@ function renderIconoplasmEmbeddedFontBootstrap(): string {
 })()`
 }
 
-const iconoplasmEmbeddedFontBootstrap = renderIconoplasmEmbeddedFontBootstrap()
+const iconoplasmFontBootstrap = renderIconoplasmFontBootstrap()
 
 export default (() => {
   const Head: QuartzComponent = ({
@@ -343,6 +349,10 @@ export default (() => {
       <head>
         <title>{title}</title>
         <meta charSet="utf-8" />
+        {/* B-836: paint the theme background before any stylesheet arrives, so a
+            document rewritten by the gene-page boot (or a slow CSS load) never
+            flashes white. The theme attribute is set by the inline theme script. */}
+        <style>{`html{background:${cfg.theme.colors.lightMode.light}}html[saved-theme=dark]{background:${cfg.theme.colors.darkMode.light}}`}</style>
         {cfg.theme.cdnCaching && cfg.theme.fontOrigin === "googleFonts" && (
           <>
             <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -410,8 +420,11 @@ export default (() => {
         <meta name="robots" content={robotsDirective} />
         {usesIconoplasmLabelFonts ? (
           <>
-            <style>{`html.icono-fonts-loading body { visibility: hidden !important; }`}</style>
-            <script dangerouslySetInnerHTML={{ __html: iconoplasmEmbeddedFontBootstrap }} />
+            {iconoplasmFontFaces.map((font) => (
+              <link rel="preload" as="font" type="font/woff2" crossOrigin="anonymous" href={font.url} />
+            ))}
+            <style>{`html.icono-fonts-loading body, html.icono-route-pending body { visibility: hidden !important; }`}</style>
+            <script dangerouslySetInnerHTML={{ __html: iconoplasmFontBootstrap }} />
           </>
         ) : (
           <style>{siteNetworkFontFaces}</style>

@@ -9058,8 +9058,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div></header>" +
       '<main class="icono-gene-page-main" id="icono-main">' +
       (includeSkeleton
-        ? '<div class="icono-gene-skeleton" id="icono-gene-loading">' +
-          buildBrickSkeletonCardMarkup() +
+        ? '<div class="icono-gene-skeleton" id="icono-gene-loading" aria-hidden="true">' +
+          '<div class="icono-gene-lead icono-gene-lead--skeleton">' +
+          '<div class="icono-gene-lead-skeleton-card"></div>' +
+          '<div class="icono-gene-lead-skeleton-bar"></div>' +
+          "</div>" +
           "</div>"
         : "") +
       '<div id="icono-gene-content"></div>' +
@@ -9167,10 +9170,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     iconoSidebarState.caretaker = null
     renderIconoplasmSidebar()
-    if (!hasHeadStartedGene) {
+    // Static gene documents carry no pre-rendered card, so a head-started fetch
+    // still needs the skeleton; only keep markup that already holds the gene.
+    if (!hasHeadStartedGene || !root.querySelector(".icono-gene-lead, #icono-gene-content")) {
       root.innerHTML = genePageShellMarkup(true)
     }
     ensureGenePageLandmarks(root)
+    // The final-geometry skeleton is in place: the head bootstrap may show the page.
+    document.documentElement.classList.remove("icono-route-pending")
 
     var contentEl = document.getElementById("icono-gene-content")
     var loadingEl = document.getElementById("icono-gene-loading")
