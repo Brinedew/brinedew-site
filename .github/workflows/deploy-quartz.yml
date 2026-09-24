@@ -558,8 +558,15 @@ jobs:
           grep -Fq 'data-slug="apps/geneguessr/index"' "$smoke_dir/geneguessr.html"
           grep -Fq 'data-slug="apps/iconoplasm/index"' "$smoke_dir/iconoplasm.html"
           grep -Fq 'data-slug="settings/index"' "$smoke_dir/settings.html"
-          grep -Fiq 'X-Brinedew-Static-Route: public-edge' "$smoke_dir/brinedew.headers"
-          grep -Fiq 'X-Brinedew-Static-Route: public-edge' "$smoke_dir/geneguessr.headers"
+          # B-834: these documents are served by Pages directly (free static
+          # requests). A Worker in front would add its marker header back.
+          if grep -Fiq 'X-Brinedew-Static-Route' "$smoke_dir/brinedew.headers" ||
+             grep -Fiq 'X-Brinedew-Static-Route' "$smoke_dir/geneguessr.headers"; then
+            echo "A Worker is fronting brinedew.bio or GeneGuessr documents again." >&2
+            exit 1
+          fi
+          grep -Fiq 'Content-Security-Policy:' "$smoke_dir/brinedew.headers"
+          grep -Fiq "'unsafe-eval'" "$smoke_dir/geneguessr.headers"
 
           for html in "$smoke_dir"/*.html; do
             if grep -Fq 'cdn.jsdelivr.net/npm/katex' "$html"; then
