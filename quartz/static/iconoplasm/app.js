@@ -92,23 +92,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var GUEST_STARTER_GENES = [
     {
       gene_symbol: "INS",
-      first_discovered_at: "2026-01-03T00:00:00.000Z",
-      last_encountered_at: "2026-01-03T00:00:00.000Z",
     },
     {
       gene_symbol: "RHO",
-      first_discovered_at: "2026-01-02T00:00:00.000Z",
-      last_encountered_at: "2026-01-02T00:00:00.000Z",
     },
     {
       gene_symbol: "PRL",
-      first_discovered_at: "2026-01-01T00:00:00.000Z",
-      last_encountered_at: "2026-01-01T00:00:00.000Z",
     },
     {
       gene_symbol: "CD4",
-      first_discovered_at: "2025-12-31T00:00:00.000Z",
-      last_encountered_at: "2025-12-31T00:00:00.000Z",
     },
   ]
   var GUEST_CONTINUATION_CARD_COUNT = 4
@@ -8132,6 +8124,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         galleryState.ready &&
         !galleryState.authenticated &&
         !galleryState.sharedDiscoveries
+      if (!useClassicGallery) {
+        var newestOrderOption = orderEl.querySelector('option[value="newest"]')
+        if (newestOrderOption) {
+          newestOrderOption.textContent = guestPreviewActive ? "Featured" : "Recently discovered"
+        }
+      }
       var postFeedStage = document.getElementById("icono-post-feed-stage")
       var guestContinuation = document.getElementById("icono-guest-continuation")
       if (postFeedStage) {
