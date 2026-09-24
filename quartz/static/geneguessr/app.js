@@ -2,6 +2,7 @@ import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
+  hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
@@ -5431,6 +5432,13 @@ https://geneguessr.brinedew.bio/`
    * Check auth status
    */
   async function checkAuth() {
+    // B-834: a visitor without the shared session hint cookie is anonymous;
+    // skip the /api/auth/me Worker request that used to block every page load.
+    if (!hasSharedSessionPresenceHint()) {
+      currentUser = null
+      sidebarStatsSnapshot = null
+      return false
+    }
     let user
     try {
       user = await fetchAuthenticatedUser({ authBase: API_BASE })
