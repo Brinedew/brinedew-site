@@ -450,11 +450,10 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
                 bootstrap: job.bootstrap,
                 migration: job.migration === true,
                 ...(job.rematerialize === true ? { rematerialize: true } : {}),
-                ...(job.alias_backfill === true ? { alias_backfill: true } : {}),
                 group: job.group,
                 groups: job.groups.length,
                 offset: job.offset,
-                alias_offset: job.alias_offset || 0,
+                blot_offset: job.blot_offset || 0,
                 seal_offset: job.seal_offset || 0,
                 started_at: job.started_at,
               }
@@ -585,15 +584,6 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
               this.repo.reserveWrites(2, { control: true })
               this.repo.remove("failure")
             }
-          } else if (path === "/backfill-blot-aliases") {
-            await this.publisher.backfillBlotAliases()
-          } else if (path === "/cancel-blot-alias-backfill") {
-            const result = this.publisher.cancelBlotAliasBackfill()
-            if (result.accepted) {
-              this.repo.reserveWrites(2, { control: true })
-              await this.state.storage.deleteAlarm()
-            }
-            return reply({ ok: true, ...result }, 200)
           } else if (path === "/cancel-rematerialization") {
             // B-795: a full pass costs a platform day; the operator must be able
             // to stop one. A stopped job must not re-arm from a retained retry.
@@ -611,10 +601,7 @@ export function createCardPublicationCoordinatorClass(sourceForEnv) {
           // Coalesce nearby votes for 10s; one person's vote never synchronously
           // pays to build the public catalog. Target 1-2min, not a strict SLA.
           await this.arm(
-            path === "/bootstrap" ||
-              path === "/migrate" ||
-              path === "/rematerialize" ||
-              path === "/backfill-blot-aliases"
+            path === "/bootstrap" || path === "/migrate" || path === "/rematerialize"
               ? CARD_PUBLICATION_ALARM_CADENCE_MS
               : 10000,
           )

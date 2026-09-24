@@ -26,8 +26,8 @@ export function preparePublicReadCutoverConfig(source) {
   // exact asset bytes already serving production. The explicit legacy routing
   // config is the pre-cutover topology, not a broad `run_worker_first = true`.
   // This keeps the current shell and immutable assets unchanged while the sole
-  // publisher emits and Bunny proves build-revision 3. The mutable blot alias
-  // already belongs to the exact-card Worker handler during preparation.
+  // publisher emits and Bunny proves build-revision 3. The first-party blot
+  // route already belongs to the exact-card Worker handler during preparation.
   // Final activation attaches the newly built SPA assets and route list.
   output = output.replace(
     assets[0],
@@ -131,12 +131,9 @@ export async function waitForPublicReadArtifacts({
 function migrationReceipt(status) {
   const buildRevision = Number(status?.build_revision || 0)
   const job = status?.job
-  // Stable blot aliases and a full content rematerialization are bounded
-  // projections over an already activated immutable catalog. A rematerialization
-  // keeps the previous head readable until one verified commit, so neither may
-  // restart catalog migration nor hold the release in schema-transition mode.
-  if ((job?.alias_backfill === true || job?.rematerialize === true) && buildRevision >= 3)
-    return { complete: true, status }
+  // A full content rematerialization keeps the previous head readable until
+  // one verified commit; it must not restart schema migration.
+  if (job?.rematerialize === true && buildRevision >= 3) return { complete: true, status }
   if (!job && buildRevision >= 3) return { complete: true, status }
   if (!job) {
     return { complete: false, identity: "pending", progress: [0, 0, 0], status }
