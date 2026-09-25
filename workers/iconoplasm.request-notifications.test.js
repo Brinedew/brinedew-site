@@ -2048,10 +2048,7 @@ test("signed-in caretaker sees one active gene and acknowledges its comment aler
   assert.match(markup, /data-icono-caretaker-supervote-alert/)
   assert.doesNotMatch(markup, /must-never-render|discord|provider_subject/i)
   inbox.updateCaretakerSupervote({ active: true, direction: -1, supervote_version: 2 })
-  assert.doesNotMatch(
-    inbox.caretakerPanelMarkup(),
-    /data-icono-caretaker-supervote-alert/,
-  )
+  assert.doesNotMatch(inbox.caretakerPanelMarkup(), /data-icono-caretaker-supervote-alert/)
 
   function fakeInteractive(attributes) {
     return {
