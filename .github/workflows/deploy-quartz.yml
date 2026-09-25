@@ -538,6 +538,15 @@ jobs:
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
         run: pnpm run verify:iconoplasm-publication-aliases
 
+      # B-858: the static edge policy says Cloudflare must not auto-inject its
+      # Web Analytics beacon (that beacon runs before consent and makes our
+      # consent-gated one stand down). Enforce it on every release instead of
+      # trusting a one-off manual run.
+      - name: Enforce the Web Analytics consent setting from the static edge policy
+        if: steps.migrations.outputs.continuation_required != 'true'
+        timeout-minutes: 2
+        run: node scripts/reconcile-brinedew-static-edge-policy.mjs --apply analytics
+
       - name: Smoke test production host ownership and browser bootstraps
         if: steps.migrations.outputs.continuation_required != 'true'
         run: |
