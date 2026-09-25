@@ -7,7 +7,7 @@ draft: false
 
 # Privacy Policy — Iconoplasm
 
-**Last updated:** August 30, 2026
+**Last updated:** September 25, 2026
 
 This policy describes what data Iconoplasm collects and how it's handled.
 
@@ -35,9 +35,9 @@ If you sign in on the Iconoplasm website, we store your Discord user ID, usernam
 
 ### Caretaker manifestations (website only)
 
-If you accept a gene caretaker invitation, we store the assignment, the exact terms version you accepted, your departure-policy choices, manifestation versions you write, canonical-selection history, and the public credit label attached to your authorship. Manifestation and generated Tags bodies are encrypted before they enter private object storage. The authority database stores stable IDs, hashes, byte counts, wrapped encryption keys, lifecycle state, and bounded audit events rather than plaintext bodies.
+If you accept a gene caretaker invitation, we store the assignment, the exact terms version you accepted, manifestation versions you write, and canonical-selection history. Manifestation and generated Tags bodies are encrypted before they enter private object storage. The authority database stores stable IDs, hashes, byte counts, wrapped encryption keys, lifecycle state, and bounded audit events rather than plaintext bodies.
 
-Every save creates an immutable version. Withdrawing a manifestation immediately makes that lineage ineligible for canonical use, but it does not immediately rewrite or erase the private version record. Hard purge becomes eligible 30 days after withdrawal, unless a legal hold requires preservation. It destroys the decryption key before deleting the encrypted object. The one-time encrypted cutover backup contains only original system material, not manifestations users write afterward, and is deleted 30 days after verified retirement of the old plaintext unless a legal hold applies. If your account is erased while history must remain, provider identity is removed and retained authorship uses a stable anonymous label.
+Every save creates an immutable version. Withdrawing a manifestation will remove it from public view on the site, though it will not remove it from backups. If your account is erased while history must remain, provider identity is removed and retained authorship uses a stable anonymous label.
 
 An unsaved caretaker draft is kept in that tab's session storage so a refresh, conflict, or temporary suspension does not destroy your text, while two open tabs cannot erase or overwrite each other's drafts. The draft is not sent to the server until you save it. Saving clears that tab's draft; closing the browser session, using the interface's remove control, or clearing site data also removes it.
 
@@ -95,8 +95,7 @@ The extension's content script runs on all web pages (except `iconoplasm.brinede
 | Signed-in discoveries | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you request deletion |
 | Discord account link | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you request deletion |
 | Caretaker assignment, accepted terms, and bounded authority audit history | Private Cloudflare D1 database | While needed to operate the version record, resolve disputes, or meet legal obligations |
-| Encrypted manifestation and Tags bodies | Dedicated private Bunny Storage zone with no public Pull Zone | While active or retained; withdrawn bodies become hard-purge eligible after 30 days unless a legal hold applies |
-| One-time encrypted cutover recovery artifact | Separate private Bunny Storage zone with no public Pull Zone | 30 days after verified legacy-plaintext retirement; longer only while an active legal hold applies |
+| Encrypted manifestation and Tags bodies | Dedicated private Bunny Storage zone with no public Pull Zone | While needed to operate the version record |
 | User emulsion | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you change it or request deletion |
 | Image provider API keys | Encrypted in Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you remove them or request deletion |
 | Generation and edit jobs | Cloudflare D1 database and image storage | Until removed by site maintenance or deletion request |
@@ -115,7 +114,6 @@ You can:
 
 - **Clear all local data** by removing the extension or clearing its storage in your browser's extension settings.
 - **Remove website settings** such as saved image API keys and your user emulsion in Iconoplasm settings.
-- **Withdraw manifestations you wrote** without changing another caretaker's or the system's records, and choose whether to retain or withdraw your manifestation when ending a caretaker assignment.
 - **Request deletion** of server-side account, discovery, generation, or settings data by emailing **support@brinedew.bio**. We'll respond within 30 days.
 
 ## Children's Privacy

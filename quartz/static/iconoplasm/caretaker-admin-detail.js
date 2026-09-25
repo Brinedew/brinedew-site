@@ -253,7 +253,7 @@
           [
             "retain",
             "Keep them",
-            "They remain eligible for canonical selection and the former caretaker may still withdraw their own lineage.",
+            "They remain eligible for canonical selection, and the gene's next caretaker manages them.",
           ],
           [
             "withdraw",

@@ -1,16 +1,16 @@
 ---
 title: "Caretaker Terms - Iconoplasm"
-description: "The terms for writing, keeping, and removing Iconoplasm gene manifestations"
-date: 2026-09-02
+description: "The terms for writing and editing Iconoplasm gene manifestations"
+date: 2026-09-25
 draft: false
 schemaType: WebPage
 ---
 
 # Caretaker Terms - Iconoplasm
 
-**Version:** `terms_2026_09_02_v3`
+**Version:** `terms_2026_09_25_v4`
 
-**Effective:** September 2, 2026
+**Effective:** September 25, 2026
 
 These terms govern your participation as a caretaker on Iconoplasm.
 
@@ -21,6 +21,10 @@ When you submit a manifestation, you dedicate it to the public domain under [CC0
 No trademark or patent rights held by you are waived, abandoned, surrendered, licensed or otherwise affected by this document. You offer the work as-is and make no representations or warranties of any kind concerning the work.
 
 By submitting your content, you represent and warrant that you have all rights, power, and authority necessary to grant the rights to your content contained within these Terms.
+
+## Editing
+
+No one 'owns' a manifestation. If you create or edit a manifestation, other caretakers can make changes, and you cannot prevent them from doing so. Work submitted to Iconoplasm can be edited, used, and redistributed by anyone.
 
 ## The rules
 
@@ -36,7 +40,7 @@ THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT REPRESENTATIONS, WARR
 
 ## Leaving
 
-You can remove your content and stop using the service at any time. Content already published may continue to be found and displayed by others.
+You can stop using the service at any time. Leaving does not include deleting your contributions.
 
 ## Changes to these terms
 
@@ -46,4 +50,4 @@ We may make changes to these terms from time to time. If we make changes, we wil
 
 Questions, data requests, and takedowns: **support@brinedew.bio**
 
-Canonical plain-text copy: [/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt](/static/iconoplasm/caretaker-terms-2026-09-02-v3.txt)
+Canonical plain-text copy: [/static/iconoplasm/caretaker-terms-2026-09-25-v4.txt](/static/iconoplasm/caretaker-terms-2026-09-25-v4.txt)

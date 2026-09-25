@@ -159,7 +159,7 @@ export function createCaretakerManifestationEventWiring({
           },
           {
             method: "DELETE",
-            success: "Your manifestation was withdrawn.",
+            success: "The manifestation was withdrawn.",
             refreshPublic: true,
           },
         ).catch(function () {})
@@ -213,7 +213,7 @@ export function createCaretakerManifestationEventWiring({
             expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
           },
           {
-            success: "Your manifestation was restored and made canonical.",
+            success: "The manifestation was restored and made canonical.",
             refreshPublic: true,
           },
         ).catch(function () {})
