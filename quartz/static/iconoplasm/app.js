@@ -130,8 +130,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="6" cy="4.75" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.25" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="9" r="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.25v7.5M6 9.25a3 3 0 0 0 3 3h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
   var ICONO_SEND_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  // B-862: sliders, not a pencil. The dialog adjusts an image; a pencil reads as
+  // "edit the text", which caretakers confused with the manifestation editor.
   var ICONO_EDIT_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m4.75 13.85-.6 2.5 2.5-.6 8.45-8.45a1.6 1.6 0 0 0 0-2.26l-.14-.14a1.6 1.6 0 0 0-2.26 0l-7.95 8.95Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><path d="m11.8 5.8 2.4 2.4" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>'
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false" data-icono-icon="sliders"><path d="M3.5 5.5h6M13.5 5.5h3M3.5 10h2M9.5 10h7M3.5 14.5h8M15.5 14.5h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="11.5" cy="5.5" r="1.75" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="10" r="1.75" stroke="currentColor" stroke-width="1.6"/><circle cx="13.5" cy="14.5" r="1.75" stroke="currentColor" stroke-width="1.6"/></svg>'
   var ICONO_MORE_ICON =
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4.5" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="15.5" cy="10" r="1.6" fill="currentColor"/></svg>'
   var ICONO_PLUS_ICON =
