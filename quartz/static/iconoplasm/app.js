@@ -44,7 +44,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=6757b517ce4d3524"
+} from "./diagram-studio.js?v=1cd64be172914b04"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=06d209074b465040"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 

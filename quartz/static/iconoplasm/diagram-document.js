@@ -44,11 +44,13 @@ function cloneAsset(rawAsset, symbol) {
   const asset = rawAsset && typeof rawAsset === "object" ? rawAsset : {}
   const canonicalUrl = String(asset.canonical_url || asset.canonicalUrl || "").trim()
   const immutableUrl = String(asset.immutable_url || asset.immutableUrl || "").trim()
+  const cdnUrl = String(asset.cdn_url || asset.cdnUrl || "").trim()
   return {
     type: "gene_blot",
     symbol,
     canonical_url: canonicalUrl,
     immutable_url: immutableUrl,
+    cdn_url: cdnUrl,
     width: Math.max(1, Math.round(finiteNumber(asset.width, 768))),
     height: Math.max(1, Math.round(finiteNumber(asset.height, 1024))),
     blot_fingerprint: boundedText(asset.blot_fingerprint || asset.fingerprint, 128),
@@ -288,6 +290,7 @@ export function diagramAssetManifest(document) {
       type: node.asset.type,
       canonical_url: node.asset.canonical_url,
       immutable_url: node.asset.immutable_url,
+      cdn_url: node.asset.cdn_url,
       blot_fingerprint: node.asset.blot_fingerprint,
       license_url: node.asset.license_url,
       usage_url: node.asset.usage_url,

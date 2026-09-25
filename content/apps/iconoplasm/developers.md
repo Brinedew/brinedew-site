@@ -41,6 +41,7 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
         "gene_blot": {
           "canonical_url": "https://iconoplasm.brinedew.bio/blot/TP53.webp",
           "immutable_url": "https://iconoplasm.brinedew.bio/blots/v1/T/TP53/19cc3b9c…/TP53-iconoplasm-gene-blot.webp",
+          "cdn_url": "https://iconoplasmportraits.b-cdn.net/blots/v1/T/TP53/19cc3b9c…/TP53-iconoplasm-gene-blot.webp",
           "width": 768,
           "height": 1024,
           "rights": "CC0 1.0 Universal",
@@ -60,6 +61,7 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
 | --- | --- | --- |
 | A few official HGNC symbols (TP53, BRCA1) | Build the image URL directly: `/blot/{SYMBOL}.webp` | Nothing to call |
 | Names from papers or datasets: aliases like p53 or IL-1β, UniProt accessions, odd capitalisation | The resolver, up to 50 identifiers per request | 1 request per 50 names |
+| Cards on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each card | 1 request per 50 cards, then nothing per view |
 | Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of all 19,023 genes | 1 download (19 MB) |
 | A mirror you want to keep current | The bulk file once, then the change feed, polled at most hourly | 1 small request per poll |
 
@@ -75,11 +77,23 @@ Rule of thumb: if you would call the resolver more than about 20 times in a row,
 - `Access-Control-Allow-Origin: *`, so you can draw it into a canvas or fetch it from any web page.
 - An unknown symbol returns `404` with a small JSON body.
 
-Every resolver result also has an `immutable_url`. That URL never changes its bytes, so you can cache it forever. Use it when you store or embed an exact version, for example in a published figure.
+Every resolver result also gives you two addresses for that exact card, which never change their bytes:
+
+- `cdn_url` is the card on our CDN. **Use this one to embed or mirror.** It is cached for 30 days and costs us nothing per view.
+- `immutable_url` is the same file at an address on our own domain, which will keep working if we ever change CDN. Every view of it goes through our server, so use it for links and records, not for images many people will load.
+
+A new card for the same gene gets a new `cdn_url`, so an embedded figure keeps showing the version you picked.
 
 ### Using images at scale
 
-The `/blot/` URL is served by a small program on our side for every request. If a page of yours will show many cards to many readers (a pathway figure on a popular site, say), **download the images once and serve them from your own site or CDN**. CC0 means you may. That is faster for your readers and keeps the service free for everyone.
+The `/blot/` and `immutable_url` addresses are answered by a small program on our side, once per view. The site's free hosting allows about 100,000 of those a day, shared by everyone. A pathway figure of 20 cards on a popular page can use that up in an afternoon.
+
+So for anything many people will see:
+
+1. Resolve your genes once (50 per request) and use each card's `cdn_url`. Views then cost nothing.
+2. Or download the images once and serve them from your own site. CC0 means you may.
+
+Please don't point a popular page at `/blot/{SYMBOL}.webp`. It is for trying things out and for small, private use.
 
 ## Resolver
 
@@ -129,19 +143,19 @@ The full schema is in the [OpenAPI document](https://iconoplasm.brinedew.bio/api
 The whole catalogue is one JSONL file, one gene per line, about 19 MB. Its URL changes with every release, so read it from the metadata first:
 
 ```bash
-curl -s https://iconoplasm.brinedew.bio/api/public/v1/metadata | jq -r '.urls.catalog_jsonl'
-curl -sO "$(curl -s https://iconoplasm.brinedew.bio/api/public/v1/metadata | jq -r '.urls.catalog_jsonl')"
+curl -s https://iconoplasm.brinedew.bio/api/public/v1/metadata | jq -r '.urls.catalog_jsonl_cdn'
+curl -sO "$(curl -s https://iconoplasm.brinedew.bio/api/public/v1/metadata | jq -r '.urls.catalog_jsonl_cdn')"
 ```
 
 Each line:
 
 | Key | Meaning |
 | --- | --- |
-| `s` | HGNC symbol. Build the card URL as `https://iconoplasm.brinedew.bio/blot/{s}.webp`. |
+| `s` | HGNC symbol. For the labelled card, resolve symbols in batches of 50 and use each `cdn_url` (about 380 requests for the whole catalogue). |
 | `n` | Full gene name. |
 | `u` | UniProt accession, when there is one. |
 | `c` | The character's signature colour (hex). |
-| `p` | The unlabelled portrait: `renditions.full`, `.medium`, `.thumb`, each with a `canonical_url`. |
+| `p` | The unlabelled portrait: `renditions.full`, `.medium`, `.thumb`. Each has a `cdn_url` (download from here) and a `canonical_url` on our domain. |
 
 The file is immutable: a given URL never changes, and a new release gets a new URL. Metadata also tells you `gene_count`, `released_at` and the release hash, so you can tell whether you already have the latest.
 

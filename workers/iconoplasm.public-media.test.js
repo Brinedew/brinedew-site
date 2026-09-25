@@ -1135,6 +1135,12 @@ test("public image resolver exposes labelled gene blots without source portraits
     payload.results[0]?.images?.gene_blot?.canonical_url,
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
+  // B-846: embedders get the immutable card straight from the CDN, so a viral
+  // hotlink costs no Worker request. It is the same object as immutable_url.
+  const blot = payload.results[0]?.images?.gene_blot
+  const objectKey = new URL(blot.immutable_url).pathname
+  assert.equal(blot.cdn_url, `https://iconoplasmportraits.b-cdn.net${objectKey}`)
+  assert.match(objectKey, /^\/blots\/v1\/A\/A1BG\/[a-f0-9]{32}\/A1BG-iconoplasm-gene-blot\.webp$/)
   assert.equal("portrait" in payload.results[0].images, false)
   assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
   assert.equal(payload.results[1]?.matched_by, "alias")
