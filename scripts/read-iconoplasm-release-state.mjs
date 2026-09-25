@@ -92,8 +92,6 @@ export function requireReaderRecoveryCompatibleState(state) {
 
 async function main() {
   const state = await readIconoplasmReleaseState()
-  const readerRecoveryOnly = process.env.ICONOPLASM_READER_RECOVERY_ONLY === "1"
-  if (readerRecoveryOnly) requireReaderRecoveryCompatibleState(state)
   const originRunId = selectReleaseOriginRunId(
     state,
     process.env.GITHUB_RUN_ID,
@@ -103,15 +101,11 @@ async function main() {
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
     resumeRunId: originRunId,
-    // The installed reader-recovery setting is the only authority that can
-    // admit a previously successful D1-free containment run. The origin still
-    // has to prove its exact deploy and verification job steps in GitHub.
-    allowReaderRecoveryOrigin: state.schema_transition && state.reader_recovery,
     allowMigrationCheckpointOrigin: state.schema_transition,
     token: process.env.GITHUB_TOKEN,
   })
   let maximum
-  if (state.schema_transition || readerRecoveryOnly) {
+  if (state.schema_transition) {
     const reader = createOperationCostAccountUsageReader({
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       token: process.env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
@@ -126,7 +120,6 @@ async function main() {
     JSON.stringify({
       ...state,
       origin_run_id: originRunId,
-      reader_recovery_only: readerRecoveryOnly,
       maximum,
     }),
   )
