@@ -644,5 +644,4 @@ export function moderateManifestation(db, input = {}) {
   return setManifestationAdministrativeStatus(db, { ...input, status: "moderated" })
 }
 
-
 // ARCHITECTURE FENCE [IPD-012]
