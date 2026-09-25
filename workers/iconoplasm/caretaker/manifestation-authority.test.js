@@ -924,7 +924,7 @@ test("gene merge preserves source history read-only and never cross-wires target
       now: NOW,
       ...command("command_merge_target_withdraw_refused", "b", USER, "account"),
     }),
-    { code: "MANIFESTATION_NOT_OWNED", status: 404 },
+    { code: "ACTIVE_ASSIGNMENT_REQUIRED", status: 403 },
   )
   const mergeEvent = JSON.parse(
     row(
@@ -944,7 +944,7 @@ test("gene merge preserves source history read-only and never cross-wires target
   ])
 })
 
-test("only the author can withdraw a lineage; fallback and restoration are deterministic and events contain no prose or storage secrets", async (t) => {
+test("only the gene's caretaker can withdraw a lineage; fallback and restoration are deterministic and events contain no prose or storage secrets", async (t) => {
   const context = await bootstrap(t, "4001")
   const first = await saveFirst(context.db, context, "4001")
   const selectedFirst = await selectSavedRevision(context.db, {
@@ -968,7 +968,7 @@ test("only the author can withdraw a lineage; fallback and restoration are deter
       now: NOW,
       ...command("command_bad_withdraw_4001", "5", OTHER),
     }),
-    { code: "MANIFESTATION_NOT_OWNED", status: 404 },
+    { code: "ACTIVE_ASSIGNMENT_REQUIRED", status: 403 },
   )
   await assert.rejects(
     withdrawOwnManifestation(context.db, {
@@ -980,7 +980,7 @@ test("only the author can withdraw a lineage; fallback and restoration are deter
       now: NOW,
       ...command("command_bad_seed_4001", "6"),
     }),
-    { code: "MANIFESTATION_NOT_OWNED", status: 404 },
+    { code: "MANIFESTATION_NON_WITHDRAWABLE", status: 409 },
   )
 
   const withdrawn = await withdrawOwnManifestation(context.db, {
@@ -1083,6 +1083,129 @@ test("only the author can withdraw a lineage; fallback and restoration are deter
     ).map((item) => item.status),
     ["active"],
   )
+})
+
+// B-860 stewardship. Ways this could fail, written before the change:
+// 1. a former author, no longer caretaker, pulls their text off the gene;
+// 2. the gene's new caretaker cannot withdraw a predecessor's lineage;
+// 3. a caretaker of another gene withdraws here;
+// 4. the system seed becomes withdrawable (covered above);
+// 5. the new caretaker cannot restore a predecessor's withdrawn lineage.
+test("the gene's current caretaker manages every lineage; a former author has no veto (B-860)", async (t) => {
+  const context = await bootstrap(t, "4101")
+  const first = await saveFirst(context.db, context, "4101")
+  const selected = await selectSavedRevision(context.db, {
+    assignmentId: context.assignmentId,
+    geneId: context.geneId,
+    revisionId: first.manifestation_revision_id,
+    selectionId: "selection_user_4101_01",
+    eventUuid: "event_select_4101_01",
+    commandId: "command_select_4101_01",
+    hashCharacter: "4",
+  })
+  await endCaretakerAssignment(context.db, {
+    assignmentId: context.assignmentId,
+    expectedAssignmentVersion: 2,
+    expectedHeadVersion: selected.head_version,
+    expectedCanonicalRevisionId: first.manifestation_revision_id,
+    relinquishPolicy: "retain",
+    eventUuid: "event_end_4101",
+    now: NOW,
+    ...command("command_end_4101", "5"),
+  })
+  const head = () =>
+    row(
+      context.db,
+      "SELECT head_version, gene_revision, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
+      context.geneId,
+    )
+  const lineageVersion = () =>
+    row(
+      context.db,
+      "SELECT row_version FROM icono_manifestations WHERE manifestation_id = ?",
+      first.manifestation_id,
+    ).row_version
+
+  // 1. The former author cannot pull the text off the gene.
+  await assert.rejects(
+    withdrawOwnManifestation(context.db, {
+      manifestationId: first.manifestation_id,
+      expectedManifestationVersion: lineageVersion(),
+      expectedHeadVersion: head().head_version,
+      expectedCanonicalRevisionId: head().canonical_revision_id,
+      eventUuid: "event_former_author_withdraw_4101",
+      now: NOW,
+      ...command("command_former_author_withdraw_4101", "6"),
+    }),
+    { code: "ACTIVE_ASSIGNMENT_REQUIRED", status: 403 },
+  )
+
+  // 3. Nobody else holds this gene yet, so OTHER is refused too.
+  await assert.rejects(
+    withdrawOwnManifestation(context.db, {
+      manifestationId: first.manifestation_id,
+      expectedManifestationVersion: lineageVersion(),
+      expectedHeadVersion: head().head_version,
+      expectedCanonicalRevisionId: head().canonical_revision_id,
+      eventUuid: "event_stranger_withdraw_4101",
+      now: NOW,
+      ...command("command_stranger_withdraw_4101", "7", OTHER),
+    }),
+    { code: "ACTIVE_ASSIGNMENT_REQUIRED", status: 403 },
+  )
+
+  // OTHER becomes the gene's caretaker.
+  const otherAssignmentId = "assignment_4101_other"
+  await offerCaretakerAssignment(context.db, {
+    geneId: context.geneId,
+    accountId: OTHER,
+    invitedByAccountId: ADMIN,
+    entitlementPolicyVersion: "entitlement-v1",
+    expectedGeneRevision: head().gene_revision,
+    assignmentId: otherAssignmentId,
+    eventUuid: "event_offer_4101_other",
+    now: NOW,
+    ...command("command_offer_4101_other", "8", ADMIN, "administrator"),
+  })
+  await transitionCaretakerAssignment(context.db, {
+    assignmentId: otherAssignmentId,
+    action: "accept",
+    expectedAssignmentVersion: 1,
+    termsVersionId: TERMS,
+    relinquishPolicy: "retain",
+    eventUuid: "event_accept_4101_other",
+    now: NOW,
+    ...command("command_accept_4101_other", "9", OTHER),
+  })
+
+  // 2. The new caretaker withdraws the predecessor's canonical lineage.
+  const withdrawn = await withdrawOwnManifestation(context.db, {
+    manifestationId: first.manifestation_id,
+    expectedManifestationVersion: lineageVersion(),
+    expectedHeadVersion: head().head_version,
+    expectedCanonicalRevisionId: head().canonical_revision_id,
+    selectionId: "selection_fallback_4101",
+    eventUuid: "event_steward_withdraw_4101",
+    now: NOW,
+    ...command("command_steward_withdraw_4101", "a", OTHER),
+  })
+  assert.equal(withdrawn.fallback_revision_id, context.seedRevisionId)
+
+  // 5. ...and can bring it back.
+  const restored = await restoreOwnManifestation(context.db, {
+    manifestationId: first.manifestation_id,
+    revisionId: first.manifestation_revision_id,
+    assignmentId: otherAssignmentId,
+    expectedManifestationVersion: withdrawn.manifestation_row_version,
+    expectedAssignmentVersion: 2,
+    expectedHeadVersion: withdrawn.head_version,
+    expectedCanonicalRevisionId: context.seedRevisionId,
+    selectionId: "selection_restore_4101",
+    eventUuid: "event_steward_restore_4101",
+    now: NOW,
+    ...command("command_steward_restore_4101", "b", OTHER),
+  })
+  assert.equal(restored.status, "active")
 })
 
 test("assignment end atomically freezes the final retain or withdraw policy", async (t) => {
