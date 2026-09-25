@@ -79,6 +79,20 @@ export function desiredRewriteRule(rule) {
   }
 }
 
+// B-858: a configuration rule turns Cloudflare's own Web Analytics injection
+// off for every matching request, whatever the Web Analytics site settings say
+// ("Configuration rules have precedence over any Web Analytics rules").
+export function desiredConfigRule(rule) {
+  return {
+    ref: rule.ref,
+    description: rule.description,
+    expression: rule.expression,
+    action: "set_config",
+    action_parameters: { disable_rum: rule.disableRum === true },
+    enabled: true,
+  }
+}
+
 // Cloudflare returns rule parameters with its own key order.
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical)
@@ -285,7 +299,20 @@ export async function reconcileStaticEdgePolicy({
     // HTML page before any consent check, and our consent-gated snippet then
     // sees an existing beacon and stands down. A site we cannot find is drift,
     // never a silent pass.
+    drift += await reconcilePhase(
+      call,
+      zoneId,
+      "http_config_settings",
+      policy.configRulesetName,
+      (policy.configRules || []).map(desiredConfigRule),
+      { apply, log },
+    )
     const sites = await call(`/accounts/${accountId}/rum/site_info/list`)
+    for (const entry of sites || []) {
+      log(
+        `web analytics site ${entry?.host || entry?.ruleset?.zone_name || "?"}: auto_install ${entry?.auto_install}, ruleset ${entry?.ruleset?.enabled ?? "none"}`,
+      )
+    }
     const site = (sites || []).find(
       (entry) =>
         (policy.webAnalyticsSiteToken && entry?.site_token === policy.webAnalyticsSiteToken) ||
