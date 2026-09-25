@@ -599,10 +599,21 @@ jobs:
         run: |
           set -euo pipefail
           headers_file="$(mktemp)"
-          curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
-
-          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
-          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+          # The public edge Worker was deployed seconds ago. Give a new
+          # version up to ~30 s to reach every edge before judging it, and
+          # never let a missing header kill the step before it says what it
+          # saw: on 25 Sep a transient non-302 had no Location header, grep
+          # exited 1 under pipefail, and the run went red with no output.
+          status=""
+          location=""
+          for attempt in 1 2 3 4 5 6; do
+            curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0" || true
+            status="$(awk 'NR==1 { print $2 }' "$headers_file")"
+            location="$( (grep -i '^Location:' "$headers_file" || true) | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+            [ "$status" = "302" ] && break
+            echo "OAuth login attempt $attempt: status ${status:-none}; retrying in 5 s"
+            sleep 5
+          done
 
           echo "OAuth login status: $status"
           echo "OAuth redirect location: $location"
