@@ -413,3 +413,24 @@ test("DO NOT DELETE: image edit routes stay authenticated, point-keyed, and off 
   assert.match(imageEditRoutes, /reference_assets_json:\s*"\[\]"/)
   assert.doesNotMatch(imageEditRoutes, /createGenerationRequest\(|listOpenGenerationRequests\(/)
 })
+
+test("DO NOT DELETE: public change feed reads O(page), never whole tables", () => {
+  // 2026-09-25: /api/public/v1/changes read all ~19k icono_publish_state rows per
+  // call and defeated the updated_at indexes with COALESCE: ~40-77k D1 rows per
+  // public request, so ~65-125 calls could exhaust the free plan's 5M daily reads.
+  const handler = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function handlePublicChanges(request, env) {",
+    "\n}\n",
+  )
+  assert.doesNotMatch(handler, /COALESCE\(\s*updated_at/, "wrapping updated_at defeats its index")
+  const selects = handler.match(/SELECT[\s\S]*?`/g) || []
+  assert.ok(selects.length >= 4, "expected the three source queries and the page lookup")
+  for (const sql of selects) {
+    assert.match(sql, /\bWHERE\b/, `unbounded public read: ${sql.slice(0, 80)}`)
+    assert.ok(
+      /\bLIMIT\b/.test(sql) || /json_each/.test(sql),
+      `page-unbounded read: ${sql.slice(0, 80)}`,
+    )
+  }
+  assert.doesNotMatch(handler, /Math\.max\(limit \* 5/, "per-source reads stay near the page size")
+})
