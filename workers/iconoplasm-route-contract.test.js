@@ -71,8 +71,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   authority_tags_derivative_select:
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivative-head",
   authority_backups: "/api/iconoplasm/authority/backups/capabilities",
-  authority_maintenance_retention:
-    "/api/iconoplasm/authority/maintenance/withdrawal-retention/sweep",
   authority_maintenance_commands: "/api/iconoplasm/authority/maintenance/command-receipts/compact",
   authority_event_compaction_status:
     "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001",
@@ -184,7 +182,6 @@ test("authority routes declare one least-privilege bearer audience", () => {
     "authority-backup-bearer": ["authority_backups"],
     "authority-cutover-bearer": ["authority_discovery_candidates", "authority_discovery_activate"],
     "authority-maintenance-bearer": [
-      "authority_maintenance_retention",
       "authority_maintenance_commands",
       "authority_event_compaction_start",
       "authority_event_compaction_sweep",
