@@ -9,6 +9,7 @@ import test from "node:test"
 import toml from "toml"
 
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
+import { CURRENT_CARETAKER_TERMS } from "./iconoplasm/caretaker/caretaker-terms-registry.js"
 
 const publicConfig = toml.parse(readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8"))
 const statefulConfig = toml.parse(
@@ -21,10 +22,11 @@ const statefulConfig = toml.parse(
   ),
 )
 
-// Every terms version a migration seeds must have a served plain-text copy
-// whose SHA-256 matches, and the public page must show the newest one. One
+// Every terms version a migration seeded, plus the current one in the
+// checked-in registry (B-864), must have a served plain-text copy whose
+// SHA-256 matches, and the public page must show the registry's version. One
 // generic check instead of one hand-written test per version (B-860).
-test("every seeded caretaker terms version has a hash-matching public copy", () => {
+test("every caretaker terms version has a hash-matching public copy", () => {
   const migrationsDir = new URL("../migrations-iconoplasm-authoring/", import.meta.url)
   const staticDir = new URL("../quartz/static/iconoplasm/", import.meta.url)
   const copies = new Map(
@@ -44,11 +46,14 @@ test("every seeded caretaker terms version has a hash-matching public copy", () 
       const row = /VALUES \(\s*'(terms_[^']+)',\s*'([0-9a-f]{64})'/.exec(sql)
       return row ? [{ version: row[1], sha: row[2] }] : []
     })
-  assert.ok(seeded.length >= 6)
-  for (const { version, sha } of seeded) {
+  assert.ok(seeded.length >= 5)
+  const newest = {
+    version: CURRENT_CARETAKER_TERMS.terms_version_id,
+    sha: CURRENT_CARETAKER_TERMS.terms_sha256,
+  }
+  for (const { version, sha } of [...seeded, newest]) {
     assert.equal(copies.get(version)?.sha, sha, `${version} plain-text copy hash`)
   }
-  const newest = seeded.at(-1)
   const page = readFileSync(
     new URL("../content/apps/iconoplasm/caretaker-terms.md", import.meta.url),
     "utf8",

@@ -1,6 +1,7 @@
 import { decryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import { decryptManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import { readEncryptedManifestationBody } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { readActiveCaretakerTerms } from "./caretaker-terms-registry.js"
 import { authorityError, normalizeId } from "./manifestation-authority-contract.js"
 import {
   all,
@@ -340,12 +341,8 @@ export async function readCaretakerGeneDossier(db, input = {}) {
   if (browser) {
     const activeTerms =
       authority.assignment?.status === "pending_acceptance"
-        ? await first(
+        ? await readActiveCaretakerTerms(
             db,
-            `SELECT terms_version_id, terms_sha256, document_url, display_label, effective_at
-             FROM icono_caretaker_terms_versions
-            WHERE retired_at IS NULL AND effective_at <= ?
-            ORDER BY effective_at DESC, terms_version_id DESC LIMIT 1`,
             input.now ? new Date(input.now).toISOString() : new Date().toISOString(),
           )
         : null
