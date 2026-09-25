@@ -24,6 +24,13 @@ const reusableImageFields = {
     type: { type: "string", enum: ["gene_blot", "portrait"] },
     canonical_url: { type: "string", format: "uri" },
     semantic_url: { type: "string", format: "uri" },
+    immutable_url: { type: "string", format: "uri" },
+    cdn_url: {
+      type: "string",
+      format: "uri",
+      description:
+        "The immutable image straight from the CDN. Use this to embed or mirror: it costs Iconoplasm nothing per view.",
+    },
     info_url: { type: "string", format: "uri" },
     width: { type: ["integer", "null"] },
     height: { type: ["integer", "null"] },
