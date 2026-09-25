@@ -69,6 +69,9 @@ function segment(raw) {
   }
 }
 
+// B-860: a caretaker's text stays with the gene when they leave. Authors get no
+// withdraw-on-leave veto; only the admin route can still choose "withdraw".
+const CARETAKER_LEAVE_POLICY = "retain"
 async function requireRouteAssignment(db, geneLocator, assignmentId, accountId) {
   const gene = await resolveGene(db, geneLocator)
   const assignment = await first(
@@ -101,7 +104,7 @@ async function requireRouteCurrentAssignment(db, geneLocator, accountId) {
   return { assignment, gene }
 }
 
-async function requireRouteEntity(db, geneLocator, table, idColumn, entityId, accountId) {
+async function requireRouteEntity(db, geneLocator, table, idColumn, entityId) {
   const gene = await resolveGene(db, geneLocator)
   const row = await first(
     db,
@@ -110,7 +113,8 @@ async function requireRouteEntity(db, geneLocator, table, idColumn, entityId, ac
        FROM ${table} entity WHERE entity.${idColumn} = ?`,
     entityId,
   )
-  if (!row || row.gene_id !== gene.gene_id || row.author_account_id !== accountId) {
+  // B-860: any lineage on the gene; the command layer checks the caretaker role.
+  if (!row || row.gene_id !== gene.gene_id) {
     throw authorityError("MANIFESTATION_NOT_FOUND", "Manifestation was not found", 404)
   }
   return { gene, row }
@@ -391,7 +395,7 @@ function createCaretakerManifestationHttpHandler({
           geneId: availability.gene.gene_id,
           accountId: session.accountId,
           termsVersionId: body.terms_version_id,
-          relinquishPolicy: body.default_leave_policy,
+          relinquishPolicy: CARETAKER_LEAVE_POLICY,
           entitlementPolicyVersion: body.entitlement_policy_version,
           expectedGeneRevision: body.expected_gene_revision,
           previousAssignmentId: body.previous_assignment_id,
@@ -428,7 +432,7 @@ function createCaretakerManifestationHttpHandler({
                 expectedAssignmentVersion: body.expected_assignment_version,
                 expectedHeadVersion: body.expected_head_version,
                 expectedCanonicalRevisionId: body.expected_canonical_revision_id,
-                relinquishPolicy: body.leave_policy,
+                relinquishPolicy: CARETAKER_LEAVE_POLICY,
                 reason: "caretaker_resigned",
                 ...auditIds(body),
                 idFactory,
@@ -439,7 +443,7 @@ function createCaretakerManifestationHttpHandler({
                 action,
                 expectedAssignmentVersion: body.expected_assignment_version,
                 termsVersionId: body.terms_version_id,
-                relinquishPolicy: body.default_leave_policy,
+                relinquishPolicy: CARETAKER_LEAVE_POLICY,
                 ...auditIds(body),
                 idFactory,
                 ...command,
@@ -544,12 +548,7 @@ function createCaretakerManifestationHttpHandler({
             WHERE revision.manifestation_revision_id = ?`,
           revisionId,
         )
-        if (
-          !revision ||
-          revision.gene_id !== gene.gene_id ||
-          revision.author_account_id !== session.accountId ||
-          revision.caretaker_assignment_id !== assignment.caretaker_assignment_id
-        ) {
+        if (!revision || revision.gene_id !== gene.gene_id) {
           throw authorityError("REVISION_NOT_FOUND", "Manifestation revision was not found", 404)
         }
         if (selectTags) {
@@ -707,7 +706,6 @@ function createCaretakerManifestationHttpHandler({
         "icono_manifestations",
         "manifestation_id",
         manifestationId,
-        session.accountId,
       )
       const lifecycleInput = {
         manifestationId,
