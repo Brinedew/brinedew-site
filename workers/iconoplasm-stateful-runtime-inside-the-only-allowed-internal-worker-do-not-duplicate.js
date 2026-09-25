@@ -31779,21 +31779,16 @@ function scorePublicGeneSearchValue(queryUpper, queryLower, rawValue, category) 
   if (!value) return null
   const valueUpper = value.toUpperCase()
   const valueLower = value.toLowerCase()
-  let baseRank = 100
-  if (category === "symbol") baseRank = 0
-  else if (category === "full_name") baseRank = 10
-  else if (category === "alias") baseRank = 20
-
-  if (valueUpper === queryUpper) {
-    return { rank: baseRank, matched_by: category, matched_value: value }
-  }
-  if (valueUpper.startsWith(queryUpper)) {
-    return { rank: baseRank + 1, matched_by: category, matched_value: value }
-  }
-  if (valueLower.includes(queryLower)) {
-    return { rank: baseRank + 2, matched_by: category, matched_value: value }
-  }
-  return null
+  // Strength first (exact 0, prefix 10, substring 20), field second (symbol,
+  // alias, full name). Ranking by field first let any partial symbol hit beat
+  // an exact alias, so "p53" listed CFAP53 and NOP53 above TP53.
+  const field = category === "symbol" ? 0 : category === "alias" ? 1 : 2
+  let strength = null
+  if (valueUpper === queryUpper) strength = 0
+  else if (valueUpper.startsWith(queryUpper)) strength = 10
+  else if (valueLower.includes(queryLower)) strength = 20
+  if (strength === null) return null
+  return { rank: strength + field, matched_by: category, matched_value: value }
 }
 
 function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
