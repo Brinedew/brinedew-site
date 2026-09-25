@@ -46,6 +46,33 @@ function runPnpm(args, cwd, timeout = 180_000) {
   return result
 }
 
+// B-856: `pnpm run` verifies dependencies before running, and from a worktree
+// whose node_modules is a junction to the main checkout it "recreated" main's
+// node_modules in place, silently re-pointing every package link (24 and 25
+// Sep). The repository scripts this test needs are plain `node` commands, so
+// run the exact package.json command line with node and never start a
+// package manager against the repository. Installs happen only inside the
+// extracted reviewer archive, a temporary directory this test owns.
+const repositoryScripts = JSON.parse(readFileSync("package.json", "utf8")).scripts
+function runRepositoryScript(name, extraArgs, cwd) {
+  const commandLine = repositoryScripts[name]
+  assert.match(
+    commandLine || "",
+    /^node [^\s"'&|;]+( [^\s"'&|;]+)*$/,
+    `package.json script ${name} must stay a plain node command for this test`,
+  )
+  const [, script, ...args] = commandLine.split(" ")
+  const result = spawnSync(process.execPath, [script, ...args, ...extraArgs], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, CI: "1" },
+    timeout: 180_000,
+  })
+  const output = `${result.stdout || ""}\n${result.stderr || ""}`.slice(-8_000)
+  assert.equal(result.status, 0, `${name} failed:\n${output}`)
+  return result
+}
+
 async function extractZip(zipPath, destination) {
   const zip = await JSZip.loadAsync(await readFile(zipPath))
   for (const entry of Object.values(zip.files)) {
@@ -157,8 +184,15 @@ test("store publish packaging goes through WXT browser targets", () => {
   )
   assert.match(
     packageScriptText,
-    /const wxtArgs = \["exec", "wxt", "zip"/,
+    /\[wxtCli, "zip", "--browser"/,
     "the Iconoplasm package script should delegate browser-specific ZIP creation to WXT",
+  )
+  // B-856: `pnpm exec` re-verifies dependencies and rewrote the main
+  // checkout's node_modules through a worktree junction.
+  assert.doesNotMatch(
+    packageScriptText,
+    /\bpnpm\b[^\n]*\bexec\b|"exec", "wxt"/,
+    "packaging must run WXT with node, never through a package manager",
   )
   assert.equal(
     packageJson.scripts?.["package:iconoplasm-safari"],
@@ -362,14 +396,14 @@ test(
     await writeFile(releaseZip, releaseSentinel)
     await writeFile(releaseSourceZip, releaseSentinel)
 
-    runPnpm(["run", "sync:iconoplasm-extension"], repoRoot)
-    runPnpm(["run", "package:iconoplasm-firefox", `--out-dir=${buildRoot}`], repoRoot)
-    runPnpm(["run", "package:iconoplasm-firefox-source", `--out-dir=${buildRoot}`], repoRoot)
+    runRepositoryScript("sync:iconoplasm-extension", [], repoRoot)
+    runRepositoryScript("package:iconoplasm-firefox", [`--out-dir=${buildRoot}`], repoRoot)
+    runRepositoryScript("package:iconoplasm-firefox-source", [`--out-dir=${buildRoot}`], repoRoot)
     assert.deepEqual(await readFile(releaseZip), releaseSentinel)
     assert.deepEqual(await readFile(releaseSourceZip), releaseSentinel)
     await extractZip(sourceZip, extractedRoot)
 
-    const storeDir = runPnpm(["store", "path", "--silent"], repoRoot).stdout.trim()
+    const storeDir = runPnpm(["store", "path", "--silent"], buildRoot).stdout.trim()
     // The reviewer archive owns its frozen lock graph. Warm that exact graph
     // before proving the install/build can run offline; do not assume every
     // reviewer-only transitive tarball is also present in the repository graph.

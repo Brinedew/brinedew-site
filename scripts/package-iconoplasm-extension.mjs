@@ -337,10 +337,14 @@ function runWxtZip() {
   }
   if (!buildPurpose.release) rmSync(zipPath, { force: true })
 
-  const wxtArgs = ["exec", "wxt", "zip", "--browser", targetConfig.browser, "--mv3"]
-  const command = process.platform === "win32" ? "cmd.exe" : "pnpm"
-  const args =
-    process.platform === "win32" ? ["/d", "/s", "/c", ["pnpm", ...wxtArgs].join(" ")] : wxtArgs
+  // B-856: run WXT's own CLI with node, not through the package manager. Its
+  // exec command re-verifies dependencies first and, from a worktree whose
+  // node_modules is a junction to the main checkout, "recreated" main's
+  // node_modules in place. Packaging needs installed dependencies, not pnpm.
+  const wxtCli = join(repoRoot, "node_modules", "wxt", "bin", "wxt.mjs")
+  if (!existsSync(wxtCli)) fail(`WXT is not installed (${relative(repoRoot, wxtCli)})`)
+  const command = process.execPath
+  const args = [wxtCli, "zip", "--browser", targetConfig.browser, "--mv3"]
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: "utf8",
