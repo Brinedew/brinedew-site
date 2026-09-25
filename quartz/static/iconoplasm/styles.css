@@ -134,6 +134,11 @@
   color: oklch(98% 0.01 75);
 }
 
+.icono-button--icon {
+  width: var(--icono-action-height);
+  padding: 0;
+}
+
 .icono-button--small {
   min-height: 2rem;
   padding: 0.3rem 0.75rem;
@@ -597,53 +602,38 @@ body:has(.icono-vote-login-dialog[open]) {
   box-shadow: none;
 }
 
+/* B-838: the toolbar under the gene card is ONE row at every width. Pattern from
+   Apple HIG and Material 3 toolbar guidance and the Unsplash / Civitai image pages
+   (checked 2026-09-25): one labelled primary on the trailing edge (New candidate),
+   icon-only secondaries, rarely used actions (Edit blot, caretaker claim/switch)
+   collapse into a More menu when the bar is narrow, and the metadata truncates
+   instead of pushing anything around. Nothing wraps, nothing scrolls sideways. */
+/* Breakpoints below query .icono-gene-lead, the existing inline-size container
+   whose width is the toolbar's width. (Making the toolbar shell its own container
+   collapsed it to 0 px: it is a content-sized flex item.) */
+[data-icono-canonical-toolbar-island],
 .icono-canonical-toolbar-shell {
   display: block;
+  width: 100%;
 }
 
-/* Canonical is the candidate toolbar's expanded sibling: same compact action
-   grammar, with the larger request picker moved into a dialog behind New candidate. */
 .icono-gene-toolbar-rail {
-  display: grid;
-  grid-template-columns: max-content minmax(11rem, 1fr);
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.52rem 0.62rem;
+  gap: 0.5rem;
+  min-height: 3.6rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.75rem;
   margin-top: 0.75rem;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: none;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 96%, white 4%);
   box-shadow: 0 6px 18px rgba(27, 18, 11, 0.04);
 }
 
-.icono-gene-toolbar-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.icono-gene-toolbar-rail > .icono-gene-request-surface {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.icono-gene-toolbar-rail > .icono-gene-edit-panel {
-  width: max-content;
-}
-
+/* The panel is only a grouping in markup; its meta and actions are row items. */
 .icono-gene-toolbar-rail > .icono-gene-request-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 0.55rem;
-  width: 100%;
-  min-width: 11rem;
-  justify-self: stretch;
+  display: contents;
 }
 
 .icono-canonical-edit-btn {
@@ -655,8 +645,8 @@ body:has(.icono-vote-login-dialog[open]) {
 }
 
 .icono-canonical-toolbar-meta {
-  justify-self: start;
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .icono-canonical-toolbar-pair {
@@ -665,9 +655,112 @@ body:has(.icono-vote-login-dialog[open]) {
 
 .icono-canonical-toolbar-actions {
   display: flex;
+  flex: none;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.45rem;
+  margin-inline-start: auto;
+}
+
+/* Wide bar: the More menu's items sit inline and the ... button is not needed. */
+.icono-toolbar-more {
+  display: none;
+  anchor-name: --icono-toolbar-more;
+}
+
+.icono-toolbar-menu:not(:popover-open) {
+  display: contents;
+}
+
+.icono-toolbar-menu > .icono-gene-edit-panel {
+  width: auto;
+}
+
+.icono-toolbar-menu > [data-icono-caretaker-claim-action]:empty {
+  display: none;
+}
+
+@container (max-width: 34rem) {
+  .icono-toolbar-more {
+    display: inline-flex;
+  }
+
+  .icono-canonical-toolbar-actions:not(:has(.icono-toolbar-menu button)) .icono-toolbar-more {
+    display: none;
+  }
+
+  .icono-toolbar-menu:not(:popover-open) {
+    display: none;
+  }
+
+  .icono-caretaker-identity--toolbar .icono-caretaker-identity__name {
+    display: none;
+  }
+}
+
+/* Very narrow: the published id is already printed on the card above. */
+@container (max-width: 22rem) {
+  .icono-canonical-toolbar-meta .icono-canonical-toolbar-pair {
+    display: none;
+  }
+}
+
+/* Open menu: a small list of labelled rows under the ... button. Without anchor
+   positioning support it falls back to the browser's centred popover. */
+.icono-toolbar-menu:popover-open {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 13rem;
+  padding: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
+  border-radius: var(--icono-radius-lg);
+  background: var(--light);
+  color: var(--dark);
+  box-shadow: 0 12px 32px rgba(15, 10, 6, 0.22);
+}
+
+@supports (anchor-name: --a) {
+  .icono-toolbar-menu:popover-open {
+    position-anchor: --icono-toolbar-more;
+    inset: auto;
+    /* Below the ... button, growing leftwards from its right edge. */
+    position-area: block-end span-inline-start;
+    margin: 0.35rem 0 0;
+    position-try-fallbacks: flip-block;
+  }
+}
+
+.icono-toolbar-menu:popover-open :is(.icono-canonical-edit-btn, .icono-button) {
+  justify-content: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: var(--icono-radius-md);
+  background: transparent;
+  color: var(--dark);
+  font: 500 0.82rem / 1.2 var(--icono-action-font);
+  text-align: start;
+}
+
+.icono-toolbar-menu:popover-open :is(.icono-canonical-edit-btn, .icono-button):hover {
+  background: color-mix(in srgb, var(--dark) 8%, transparent);
+}
+
+/* Menu rows are text-only, like the platform menus they imitate. */
+.icono-toolbar-menu:popover-open svg {
+  display: none;
+}
+
+/* The edit button's accessible label doubles as its visible menu label. */
+.icono-toolbar-menu:popover-open .icono-canonical-edit-btn .icono-visually-hidden {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
 }
 
 .icono-canonical-toolbar-actions > span:empty {
@@ -3961,6 +4054,20 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   box-shadow: inset 0 0 0 1px var(--icono-ring-image);
 }
 
+/* B-838: a tile's footer is one row: votes, the Sample/Emulsion ids, star and
+   actions. Image grids (Unsplash, Civitai) keep tiles to icons; ids are shown only
+   when the tile is wide enough to hold them. They used to shrink to 0 px and print
+   "SAMPLE" over "EMULSION" on two-column tablets. */
+.icono-candidate-card {
+  container: candidate-tile / inline-size;
+}
+
+@container candidate-tile (max-width: 22rem) {
+  .icono-candidate-footer .icono-candidate-toolbar-pair {
+    display: none;
+  }
+}
+
 .icono-candidate-footer {
   display: flex;
   align-items: center;
@@ -4004,6 +4111,9 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-candidate-toolbar-pair span {
   grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.56rem;
   line-height: 1;
@@ -4035,6 +4145,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   flex-wrap: nowrap;
   gap: 0.4rem;
   min-width: 0;
+  margin-inline-start: auto;
   /* Reserve the two public controls before client hydration without permanently
      charging every footer for the admin-only remove control. The admin rail
      still grows to its natural three-control width when that control exists. */
@@ -4686,19 +4797,6 @@ html[data-theme="dark"] .icono-card--brick {
 
   .icono-gene-request-surface {
     padding: 0;
-  }
-
-  .icono-gene-toolbar-rail {
-    grid-template-columns: max-content minmax(11rem, 1fr);
-  }
-
-  .icono-gene-toolbar-rail > .icono-gene-request-panel {
-    grid-column: auto;
-    justify-self: stretch;
-  }
-
-  .icono-canonical-new-candidate-btn {
-    width: auto;
   }
 
   .icono-request-option {

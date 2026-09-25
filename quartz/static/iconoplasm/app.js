@@ -132,6 +132,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var ICONO_EDIT_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m4.75 13.85-.6 2.5 2.5-.6 8.45-8.45a1.6 1.6 0 0 0 0-2.26l-.14-.14a1.6 1.6 0 0 0-2.26 0l-7.95 8.95Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><path d="m11.8 5.8 2.4 2.4" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>'
+  var ICONO_MORE_ICON =
+    '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4.5" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="15.5" cy="10" r="1.6" fill="currentColor"/></svg>'
   var ICONO_PLUS_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
   var ICONO_STAR_ICON =
@@ -461,18 +463,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           ">" +
           esc(actionLabel) +
           "</button></div></sl-dialog>"
+        // B-838: the claim button may sit in the toolbar's More menu; the dialog moves
+        // next to the toolbar so closing the menu never hides it.
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
-        var termsCheckbox = target.querySelector("[data-icono-caretaker-claim-terms]")
-        var submit = target.querySelector("[data-icono-caretaker-claim-submit]")
-        var status = target.querySelector("[data-icono-caretaker-claim-status]")
+        var dialogHost = container.querySelector("[data-icono-caretaker-claim-dialog-host]")
+        if (dialog && dialogHost) dialogHost.replaceChildren(dialog)
+        var scope = dialogHost && dialog && dialog.parentNode === dialogHost ? dialogHost : target
+        var termsCheckbox = scope.querySelector("[data-icono-caretaker-claim-terms]")
+        var submit = scope.querySelector("[data-icono-caretaker-claim-submit]")
+        var status = scope.querySelector("[data-icono-caretaker-claim-status]")
         var pendingCommandId = null
         target
           .querySelector("[data-icono-caretaker-claim-open]")
           ?.addEventListener("click", function () {
+            var menu = target.closest("[popover]")
+            if (menu && menu.matches(":popover-open")) menu.hidePopover()
             if (!dialog.open) dialog.show()
             if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
           })
-        target
+        scope
           .querySelector("[data-icono-caretaker-claim-cancel]")
           ?.addEventListener("click", function () {
             dialog.hide()
@@ -517,6 +526,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             .then(function () {
               dialog.hide()
               target.replaceChildren()
+              if (scope !== target) scope.replaceChildren()
               var host = container.querySelector("[data-icono-caretaker-island]")
               if (host) host.removeAttribute("data-icono-caretaker-signature")
               hydrateCaretakerManifestationIsland(container, genePayload)
@@ -1094,9 +1104,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "icono-caretaker-identity--toolbar",
     )
     if (!markup) return
-    var claimHost = actions.querySelector("[data-icono-caretaker-claim-action]")
-    if (!claimHost) return
-    claimHost.insertAdjacentHTML("beforebegin", markup)
+    var anchor =
+      actions.querySelector(".icono-toolbar-more") ||
+      actions.querySelector("[data-icono-caretaker-claim-action]")
+    if (!anchor) return
+    anchor.insertAdjacentHTML("beforebegin", markup)
     actions
       .querySelector(".icono-caretaker-identity--toolbar")
       ?.setAttribute("data-icono-viewer-caretaker", "true")
@@ -5639,6 +5651,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  document.addEventListener("click", function (event) {
+    var item =
+      event.target && event.target.closest && event.target.closest(".icono-toolbar-menu button")
+    var menu = item && item.closest(".icono-toolbar-menu")
+    if (menu && menu.matches(":popover-open")) menu.hidePopover()
+  })
+
   function renderCanonicalToolbarMarkup(genePayload) {
     var g = genePayload || {}
     return (
@@ -5646,16 +5665,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(g.symbol) +
       '">' +
       '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>' +
-      renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {}) +
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
       renderCanonicalToolbarMetaMarkup(g) +
       '<div class="icono-canonical-toolbar-actions">' +
       renderCaretakerIdentityMarkup(g.caretaker, "icono-caretaker-identity--toolbar") +
+      // B-838: More menu. Wide bars show its items inline; narrow bars collapse them
+      // behind the ... button (native popover, no JS toggling).
+      '<button type="button" class="icono-button icono-button--icon icono-toolbar-more" popovertarget="icono-toolbar-menu-' +
+      esc(normalizedSymbol(g.symbol)) +
+      '" aria-label="More actions" title="More actions">' +
+      ICONO_MORE_ICON +
+      "</button>" +
+      '<div class="icono-toolbar-menu" id="icono-toolbar-menu-' +
+      esc(normalizedSymbol(g.symbol)) +
+      '" popover>' +
+      renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {}) +
       "<span data-icono-caretaker-claim-action></span>" +
+      "</div>" +
       renderRequestDialogTriggerMarkup(g.symbol) +
       "</div>" +
       "</section>" +
       "</div>" +
+      "<div data-icono-caretaker-claim-dialog-host></div>" +
       renderRequestDialogMarkup(g.symbol) +
       "</section>"
     )
