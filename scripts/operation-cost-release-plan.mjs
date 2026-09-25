@@ -28,13 +28,12 @@ function isMigrationCheckpoint(run, jobs) {
   )
 }
 
-// Verified reader containment and deliberately staged migration checkpoints
-// can carry a retained migration lineage into canonical release work. Neither
-// is application activation. Callers have already selected installed state.
+// A deliberately staged migration checkpoint can carry a retained migration
+// lineage into canonical release work. It is not application activation.
+// Callers have already selected installed state.
 export function readCanonicalReleaseOrigin(options) {
   return readReleaseOrigin({
     ...options,
-    allowReaderRecoveryOrigin: true,
     allowMigrationCheckpointOrigin: true,
   })
 }
@@ -44,7 +43,6 @@ export async function readReleaseOrigin({
   runId,
   token,
   resumeRunId = process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
-  allowReaderRecoveryOrigin = false,
   allowMigrationCheckpointOrigin = false,
   fetcher = fetch,
   now = Date.now(),
@@ -77,15 +75,12 @@ export async function readReleaseOrigin({
     // A code correction may continue the same migration, but a different
     // repository, workflow, branch or divergent checkout may not inherit it.
     const isFailedCanonicalOrigin = run.status === "completed" && run.conclusion === "failure"
-    // A reader-only containment deployment can establish a transition before
-    // any migration plan exists. It is therefore the one successful origin a
-    // later canonical release may inherit. Inspect its recorded job steps,
-    // rather than trusting a successful workflow conclusion or a caller flag.
-    let isVerifiedReaderRecoveryOrigin = false
+    // Inspect a successful origin's recorded job steps rather than trusting a
+    // workflow conclusion or a caller flag.
     let isVerifiedMigrationCheckpoint = false
     if (
       !isFailedCanonicalOrigin &&
-      (allowReaderRecoveryOrigin || allowMigrationCheckpointOrigin) &&
+      allowMigrationCheckpointOrigin &&
       run.status === "completed" &&
       run.conclusion === "success"
     ) {
@@ -96,19 +91,6 @@ export async function readReleaseOrigin({
         throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")
       isVerifiedMigrationCheckpoint =
         allowMigrationCheckpointOrigin && isMigrationCheckpoint(run, jobs.jobs)
-      const readerJobs = Array.isArray(jobs?.jobs)
-        ? jobs.jobs.filter((job) => job.name === "reader-recovery-only")
-        : []
-      const reader = readerJobs[0]
-      const completedStep = (name) =>
-        reader?.steps?.some((step) => step.name === name && step.conclusion === "success")
-      isVerifiedReaderRecoveryOrigin =
-        allowReaderRecoveryOrigin &&
-        readerJobs.length === 1 &&
-        reader?.conclusion === "success" &&
-        completedStep("Deploy the D1-free reader containment artifact") &&
-        completedStep("Verify published readers and retained application protection") &&
-        !jobs.jobs.some((job) => job.name === "deploy-production" && job.conclusion !== "skipped")
     }
     if (
       [run, current].some(
@@ -119,11 +101,7 @@ export async function readReleaseOrigin({
           !/^[a-f0-9]{40}$/.test(item.head_sha || ""),
       ) ||
       run.workflow_id !== current.workflow_id ||
-      !(
-        isFailedCanonicalOrigin ||
-        isVerifiedReaderRecoveryOrigin ||
-        isVerifiedMigrationCheckpoint
-      ) ||
+      !(isFailedCanonicalOrigin || isVerifiedMigrationCheckpoint) ||
       started > Date.parse(current.created_at)
     )
       throw new Error("COST_RELEASE_CONTINUATION_ORIGIN_INVALID")

@@ -71,9 +71,10 @@ For a reviewed data or topology change, dispatch that same workflow with
 `data_maintenance=true`. This is the only path that runs provider capacity
 admission, schema migration, catalog publication, and topology reconciliation.
 It is intentionally explicit because those operations consume the shared
-account allowance and can pause application work. The separate
-`reader_recovery_only=true` dispatch remains a D1-free containment action for
-an active incident. Neither dispatch is a routine code-release fallback.
+account allowance and can pause application work. It is not a routine
+code-release fallback. (The separate `reader_recovery_only` dispatch was deleted
+on 2026-09-25, B-820: anonymous pages are static since B-834/B-809, so there is
+nothing left for it to protect.)
 
 Record source revision, exact CI result, provider deployment, activated
 revision, and a fresh user-visible operation separately. If a push refuses,

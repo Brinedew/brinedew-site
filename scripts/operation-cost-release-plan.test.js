@@ -278,7 +278,7 @@ test("a corrected canonical commit resumes the old migration identity with fresh
   )
 })
 
-test("a verified D1-free reader containment run may establish a later migration origin", async () => {
+test("a successful reader-recovery-only run no longer establishes a migration origin (B-820)", async () => {
   const now = Date.parse("2026-09-09T10:00:00Z")
   const common = {
     path: ".github/workflows/deploy-quartz.yml",
@@ -333,26 +333,8 @@ test("a verified D1-free reader containment run may establish a later migration 
     fetcher,
   }
   await assert.rejects(readReleaseOrigin(options), /CONTINUATION_ORIGIN_INVALID/)
-  assert.deepEqual(await readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true }), {
-    releaseId: "deploy-123",
-    inspectionId: "inspect-456-1",
-    started: now - 10_000,
-  })
-  for (const jobs of [
-    { jobs: [] },
-    { jobs: [{ ...readerJobs.jobs[0], conclusion: "failure" }] },
-    { jobs: [{ ...readerJobs.jobs[0], steps: [] }] },
-    { jobs: [readerJobs.jobs[0], { name: "deploy-production", conclusion: "success" }] },
-  ]) {
-    const invalidFetcher = async (url) => {
-      if (url.endsWith("/runs/456")) return Response.json(current)
-      if (url.endsWith("/runs/123")) return Response.json(origin)
-      if (url.endsWith("/runs/123/attempts/1/jobs?per_page=100")) return Response.json(jobs)
-      return Response.json({ status: "ahead" })
-    }
-    await assert.rejects(
-      readReleaseOrigin({ ...options, allowReaderRecoveryOrigin: true, fetcher: invalidFetcher }),
-      /CONTINUATION_ORIGIN_INVALID/,
-    )
-  }
+  await assert.rejects(
+    readReleaseOrigin({ ...options, allowMigrationCheckpointOrigin: true }),
+    /COST_RELEASE_CONTINUATION_ORIGIN_INVALID/,
+  )
 })

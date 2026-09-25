@@ -56,7 +56,7 @@ test("migration staging preserves the fallback and all release gates", () => {
   assert.match(workflow, /node scripts\/prepare-iconoplasm-schema-transition-config\.mjs/)
   assert.equal(
     (workflow.match(/node scripts\/deploy-iconoplasm-reader-recovery\.mjs/g) || []).length,
-    3,
+    2,
   )
   assert.match(workflow, /--config wrangler\.iconoplasm-schema-transition\.generated\.toml/)
   assert.match(workflow, /--var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery"/)
@@ -98,42 +98,12 @@ test("migration staging preserves the fallback and all release gates", () => {
   )
 })
 
-test("manual reader recovery is exact-CI gated and never enters the D1 release path", () => {
+test("the manual reader-recovery job is gone (B-820)", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
     "utf8",
   )
-  const start = workflow.indexOf("  reader-recovery-only:")
-  const end = workflow.indexOf("  deploy-production:", start)
-  assert.ok(start >= 0 && end > start)
-  const recovery = workflow.slice(start, end)
-  assert.match(recovery, /inputs\.reader_recovery_only == true/)
-  assert.match(recovery, /Require successful tests for the exact deployed commit/)
-  assert.match(recovery, /id: exact-ci/)
-  assert.match(recovery, /Restore immutable static assets from the exact tested CI run/)
-  assert.match(recovery, /run-id: \$\{\{ steps\.exact-ci\.outputs\.ci_run_id \}\}/)
-  assert.match(recovery, /Verify restored immutable static asset bundle/)
-  assert.match(recovery, /ICONOPLASM_READER_RECOVERY_ONLY: "1"/)
-  assert.match(recovery, /Read compatible installed state and non-D1 reader headroom/)
-  assert.match(recovery, /Deploy the D1-free reader containment artifact/)
-  assert.match(recovery, /ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery/)
-  assert.match(recovery, /Verify published readers and retained application protection/)
-  for (const forbidden of [
-    "Sync shared Iconoplasm assets before release guards",
-    "Apply reviewed D1 migrations through prediction admission",
-    "Prepare the published catalog through shared KV admission",
-    "Ensure requested gene-card Queues exist",
-  ])
-    assert.equal(recovery.includes(forbidden), false, forbidden)
-})
-
-test("exact push CI archives the static bundle needed by D1-free recovery", () => {
-  const ci = readFileSync(new URL("../.github/workflows/ci.yaml", import.meta.url), "utf8")
-  assert.match(ci, /Build exact HEAD before topology tests/)
-  assert.match(ci, /Archive exact tested Iconoplasm static assets for recovery/)
-  assert.match(ci, /name: iconoplasm-edge-assets-\$\{\{ github\.sha \}\}/)
-  assert.match(ci, /path: public-iconoplasm-edge/)
-  assert.match(ci, /retention-days: 1/)
+  assert.doesNotMatch(workflow, /reader-recovery-only:|reader_recovery_only|READER_RECOVERY_ONLY/)
 })
 
 test("failure classification never returns private provider prose", () => {
