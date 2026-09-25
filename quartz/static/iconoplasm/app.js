@@ -1099,10 +1099,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       return
     }
-    if (existing) {
-      existing.setAttribute("data-icono-viewer-caretaker", "true")
-      return
-    }
+    if (existing && existing.hasAttribute("data-icono-caretaker-open")) return
+    // B-862: your own caretaker chip is the door to your tools, like Reddit's
+    // Mod Mode toggle or YouTube's "Customize channel": a badge you click, not a
+    // sentence telling you where to go.
     var markup = renderCaretakerIdentityMarkup(
       {
         username: currentUser.username,
@@ -1111,14 +1111,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "icono-caretaker-identity--toolbar",
     )
     if (!markup) return
-    var anchor =
-      actions.querySelector(".icono-toolbar-more") ||
-      actions.querySelector("[data-icono-caretaker-claim-action]")
-    if (!anchor) return
-    anchor.insertAdjacentHTML("beforebegin", markup)
-    actions
-      .querySelector(".icono-caretaker-identity--toolbar")
-      ?.setAttribute("data-icono-viewer-caretaker", "true")
+    markup = markup
+      .replace(
+        '<div class="icono-caretaker-identity ',
+        '<button type="button" data-icono-caretaker-open data-icono-viewer-caretaker="true" title="Open caretaker tools" class="icono-caretaker-identity icono-caretaker-identity--button ',
+      )
+      .replace(
+        /<\/span><\/div>$/,
+        '</span><span class="icono-caretaker-identity__badge">Caretaker</span></button>',
+      )
+    if (existing) {
+      existing.insertAdjacentHTML("beforebegin", markup)
+      existing.remove()
+    } else {
+      var anchor =
+        actions.querySelector(".icono-toolbar-more") ||
+        actions.querySelector("[data-icono-caretaker-claim-action]")
+      if (!anchor) return
+      anchor.insertAdjacentHTML("beforebegin", markup)
+    }
+    actions.querySelector("[data-icono-caretaker-open]")?.addEventListener("click", function () {
+      var host = container.querySelector("[data-icono-caretaker-island]")
+      if (!host) return
+      void loadCaretakerPanel().then(function (panel) {
+        panel.open(host)
+      })
+    })
   }
 
   function portraitDimensions(genePayload) {

@@ -112,6 +112,57 @@ function measure() {
   }
 }
 
+// B-862: a caretaker reaches their tools by clicking their own badge in the gene
+// toolbar, not by reading a sentence that says where to go. Fails if the chip is
+// not a button, lacks the Caretaker badge, or clicking it does not open the panel.
+test("the caretaker's own toolbar badge opens the caretaker panel", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  mkdirSync(OUT, { recursive: true })
+  try {
+    for (const [width, height, name] of VIEWPORTS) {
+      const context = await browser.newContext({ viewport: { width, height } })
+      await routeProduction(context, origin, (pathname, request) => {
+        if (pathname === "/api/auth/me") {
+          return {
+            authenticated: true,
+            user: {
+              id: "u1",
+              user_id: "u1",
+              account_id: "u1",
+              username: "e2e",
+              avatar_url: "/api/avatar?src=e2e",
+            },
+          }
+        }
+        if (pathname.startsWith("/api/iconoplasm/caretaker/")) {
+          return request.method() === "GET" ? DOSSIER : { ok: true }
+        }
+        return undefined
+      })
+      const page = await context.newPage()
+      await page.goto(`${HOST}/gene/TP53`)
+      const badge = await page.waitForSelector("button[data-icono-caretaker-open]", {
+        timeout: 30_000,
+      })
+      assert.match(await badge.textContent(), /Caretaker/, `${name}: badge text`)
+      assert.equal(
+        await page.$(".icono-caretaker-dialog[open]"),
+        null,
+        `${name}: panel opened by itself`,
+      )
+      await badge.click()
+      await page.waitForSelector(".icono-caretaker-dialog[open]", { timeout: 10_000 })
+      await page.screenshot({ path: path.join(OUT, `caretaker-badge-${name}.png`) })
+      await context.close()
+    }
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
+
 test("the caretaker dialog fits, uses the UI fonts and never clips its buttons", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
