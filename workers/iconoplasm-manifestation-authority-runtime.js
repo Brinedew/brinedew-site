@@ -1,11 +1,9 @@
 import {
   authorizeIconoplasmAuthorityBackupBearer,
-  authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityMaintenanceBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
 import { createManifestationAuthorityRouteHandler } from "./iconoplasm/caretaker/manifestation-authority.js"
-import { projectCanonicalManifestationCutoverEvent } from "./lib/iconoplasm-manifestation-authority-projection.js"
 
 export function createIconoplasmManifestationAuthorityRuntimeHandler({
   env,
@@ -29,8 +27,6 @@ export function createIconoplasmManifestationAuthorityRuntimeHandler({
     authorizeReplicaBearer: authorizeIconoplasmAuthorityReplicaBearer,
     authorizeMaintenanceBearer: authorizeIconoplasmAuthorityMaintenanceBearer,
     authorizeBackupBearer: authorizeIconoplasmAuthorityBackupBearer,
-    authorizeCutoverBearer: authorizeIconoplasmAuthorityCutoverBearer,
-    projectManifestationCutoverEvent: projectCanonicalManifestationCutoverEvent,
     resolveSession,
     onAuthorityEvent,
     onIntegrityFailure,
