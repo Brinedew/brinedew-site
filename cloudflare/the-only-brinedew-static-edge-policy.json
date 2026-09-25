@@ -57,5 +57,14 @@
   ],
   "webAnalyticsSiteHost": "brinedew.bio",
   "webAnalyticsSiteToken": "381c356e1ba64a2bbd4924e73d532992",
-  "webAnalyticsAutoInstall": false
+  "webAnalyticsAutoInstall": false,
+  "configRulesetName": "Brinedew static edge configuration",
+  "configRules": [
+    {
+      "ref": "brinedew_no_injected_web_analytics",
+      "description": "B-858: Cloudflare must not inject its Web Analytics beacon; pages load the consent-gated one themselves",
+      "expression": "true",
+      "disableRum": true
+    }
+  ]
 }
