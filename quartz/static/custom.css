@@ -978,18 +978,14 @@ article p {
   padding-right: 4.5rem;
 }
 
-.icono-request-inbox__caretaker-mark {
-  display: grid;
-  width: 26px;
-  height: 30px;
-  place-items: center;
-  color: var(--light);
-  background: var(--dark);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.66rem;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%);
+.icono-request-inbox__caretaker-portrait {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: var(--lightgray);
+  object-fit: cover;
 }
 
 .icono-request-inbox__caretaker-read {
@@ -1040,13 +1036,15 @@ article p {
 }
 
 .icono-request-inbox__caretaker-supervote-alert {
-  display: block;
-  margin: -0.15rem 0 0.75rem 2.75rem;
-  padding-left: 0.65rem;
-  border-left: 2px solid var(--accent);
-  color: var(--darkgray);
+  display: inline-block;
+  margin: -0.15rem 0 0.75rem 3.25rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
   font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
   font-size: 0.68rem;
+  font-weight: 600;
   line-height: 1.45;
   text-decoration: none;
 }
