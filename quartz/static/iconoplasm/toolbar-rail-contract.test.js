@@ -22,25 +22,31 @@ function cssBlockFor(css, selector) {
   return css.slice(open + 1, close)
 }
 
-test("Iconoplasm toolbar rails are real one-row rails, not wrapped action stacks", async () => {
+// B-838 (2026-09-25): the gene toolbar follows the platform toolbar pattern (Apple
+// HIG, Material 3, Unsplash, Civitai): one row, one labelled primary on the trailing
+// edge, rarely used actions in a native-popover More menu on narrow bars. The
+// geometry itself is checked in a real browser (artifacts/b-838-toolbar/capture-v2.js:
+// 12 width x auth combinations, 0 overlaps, 0 overflow, menu on screen).
+test("gene toolbar is one row with a More menu instead of wrapping or scrolling", async () => {
   const app = await sourceText(appPath)
   const css = await sourceText(cssPath)
 
   assert.match(app, /<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>/)
-  const railBlock = cssBlockFor(css, ".icono-gene-toolbar-rail")
-  assert.match(railBlock, /display:\s*grid;/)
-  assert.match(railBlock, /grid-template-columns:\s*max-content minmax\(11rem, 1fr\);/)
-  assert.doesNotMatch(railBlock, /flex-wrap:\s*wrap/)
-  assert.match(railBlock, /overflow-x:\s*auto;/)
+  const railBlock = cssBlockFor(css, ".icono-gene-toolbar-rail {")
+  assert.match(railBlock, /display:\s*flex;/)
+  assert.match(railBlock, /flex-wrap:\s*nowrap;/)
+  assert.doesNotMatch(railBlock, /overflow-x:\s*auto/, "no hidden sideways scrolling")
 
-  const requestPanelBlock = cssBlockFor(css, ".icono-gene-toolbar-rail > .icono-gene-request-panel")
-  assert.match(requestPanelBlock, /min-width:\s*11rem;/)
-
-  const editPanelBlock = cssBlockFor(css, ".icono-gene-toolbar-rail > .icono-gene-edit-panel")
-  assert.match(editPanelBlock, /width:\s*max-content;/)
+  assert.match(app, /class="icono-button icono-button--icon icono-toolbar-more" popovertarget=/)
+  assert.match(app, /<div class="icono-toolbar-menu" id="icono-toolbar-menu-' \+/)
+  assert.match(css, /\.icono-toolbar-menu:not\(:popover-open\)\s*\{\s*display:\s*contents;/)
+  assert.match(
+    app,
+    /data-icono-caretaker-claim-dialog-host/,
+    "the claim dialog lives outside the menu so a closed menu cannot hide it",
+  )
   assert.match(app, /data-icono-edit-source=/)
   assert.match(app, /<sl-dialog/)
-  assert.match(app, /\.show\(/)
   assert.doesNotMatch(app, /data-icono-edit-image-form/)
 })
 
