@@ -13952,6 +13952,11 @@ async function publicMetadataObj(url, env) {
       catalog_artifact: buildHash ? `${url.origin}${publicCatalogArtifactPath(buildHash)}` : null,
       catalog_scanner: manifest.scanner_artifact?.artifact_url || null,
       catalog_jsonl: catalogHash ? `${url.origin}${publicCatalogJsonlDumpPath(catalogHash)}` : null,
+      // B-846: the same immutable file straight from the CDN. Downloading it
+      // from there costs no Worker request.
+      catalog_jsonl_cdn: catalogHash
+        ? iconoplasmGeneCardCdnUrl(env, publicCatalogJsonlDumpKey(catalogHash))
+        : null,
       changes: publicUrl(url, "/changes"),
       batch: publicUrl(url, "/genes/batch"),
       resolve: publicUrl(url, "/resolve"),
@@ -14079,7 +14084,7 @@ function publicMediaEnvelope(url, symbol, portrait) {
   }
 }
 
-function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
+function publicGeneBlotMediaEnvelope(url, symbol, cardPayload, env) {
   const blot = cardPayload?.blot
   const portrait =
     cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : null
@@ -14100,6 +14105,11 @@ function publicGeneBlotMediaEnvelope(url, symbol, cardPayload) {
     blot_fingerprint: expectedFingerprint,
     canonical_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
     immutable_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${expectedObjectKey}`,
+    // B-846: canonical_url and immutable_url are on our domain, so every view of
+    // them runs this Worker (Free plan: 100k requests/day shared with sign-in and
+    // the API). cdn_url is the same immutable bytes served straight from Bunny's
+    // CDN: zero Worker requests, max-age 30 days. Hand it to anyone who embeds.
+    cdn_url: iconoplasmGeneBlotCdnUrl(env, expectedObjectKey),
     ...(recordedReady && blot.image_url ? { accelerator_url: String(blot.image_url) } : {}),
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
     width: ICONOPLASM_GENE_BLOT_WIDTH,
@@ -32037,7 +32047,9 @@ async function handlePublicCatalogJsonlDump(env, path) {
   return new Response(object.body, {
     headers: {
       ...corsHeaders(),
-      "Content-Type": object.contentType || "application/x-ndjson; charset=utf-8",
+      // The storage layer reports application/octet-stream for this object, so
+      // browsers downloaded it as a binary blob. It is always NDJSON.
+      "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "public, max-age=31536000, immutable",
       ETag: `"${hash}"`,
     },
@@ -33997,10 +34009,15 @@ async function handlePublicImageResolve(request, env) {
         images: null,
       }
     }
-    const geneBlot = publicGeneBlotMediaEnvelope(url, identity.canonical_symbol, {
-      ...payload,
-      portrait: portraitStateFromPublishedCardPayload(payload, portraitBase(url, env)),
-    })
+    const geneBlot = publicGeneBlotMediaEnvelope(
+      url,
+      identity.canonical_symbol,
+      {
+        ...payload,
+        portrait: portraitStateFromPublishedCardPayload(payload, portraitBase(url, env)),
+      },
+      env,
+    )
     return {
       ...identity,
       page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
@@ -34189,10 +34206,15 @@ async function handlePublicMedia(request, env, symbol) {
     publishedCard.payload,
     portraitBase(url, env),
   )
-  const media = publicGeneBlotMediaEnvelope(url, resolvedSymbol, {
-    ...publishedCard.payload,
-    portrait,
-  })
+  const media = publicGeneBlotMediaEnvelope(
+    url,
+    resolvedSymbol,
+    {
+      ...publishedCard.payload,
+      portrait,
+    },
+    env,
+  )
   if (!media) {
     return json({ error: "Published media not found" }, 404, {
       "Cache-Control": "no-store",
@@ -35492,6 +35514,24 @@ export function buildPublishedScannerArtifact(artifact) {
   return { scanner, byteSize }
 }
 
+// B-846: the public dump is what mirrors, figure pipelines and ML datasets
+// read. Its portrait canonical_url is on our domain, so fetching every portrait
+// would spend ~19k Worker requests (a fifth of the Free daily budget) per
+// mirror. Each rendition therefore also carries cdn_url: the same immutable
+// object straight from Bunny. Only the dump gets this; the hover artifact
+// keeps its size budget.
+function withPortraitCdnUrls(env, gene) {
+  const renditions = gene?.p?.renditions
+  if (!renditions || typeof renditions !== "object") return gene
+  const withCdn = {}
+  for (const [size, rendition] of Object.entries(renditions)) {
+    const path = String(rendition?.path || "")
+    withCdn[size] =
+      rendition && path ? { ...rendition, cdn_url: iconoplasmGeneCardCdnUrl(env, path) } : rendition
+  }
+  return { ...gene, p: { ...gene.p, renditions: withCdn } }
+}
+
 async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
@@ -35540,7 +35580,9 @@ async function publishCatalogArtifact(env) {
       },
     },
   )
-  const catalogJsonl = `${hydrated.genes.map((gene) => JSON.stringify(gene)).join("\n")}\n`
+  const catalogJsonl = `${hydrated.genes
+    .map((gene) => JSON.stringify(withPortraitCdnUrls(env, gene)))
+    .join("\n")}\n`
   if (env.ICONOPLASM_PORTRAITS || canWriteExternalPortraitStorage(env)) {
     // Keep dumps alongside portraits under a separate prefix so public sync clients
     // get a stable immutable snapshot without us needing a brand new bucket.

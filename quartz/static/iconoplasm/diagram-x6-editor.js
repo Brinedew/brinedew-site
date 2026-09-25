@@ -170,7 +170,9 @@ function graphNodes(document) {
         data: { ...node, itemType: "text" },
       }
     }
-    const imageUrl = node.asset.immutable_url || node.asset.canonical_url
+    // B-846: cdn_url serves the same immutable bytes without a Worker request,
+    // so a shared or embedded diagram costs Iconoplasm nothing per view.
+    const imageUrl = node.asset.cdn_url || node.asset.immutable_url || node.asset.canonical_url
     return {
       id: node.id,
       shape: GENE_SHAPE,

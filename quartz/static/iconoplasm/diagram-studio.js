@@ -9,8 +9,8 @@ import {
   normalizeGeneSymbol,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=20385023f660f19c"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=994290448fb10093"
+} from "./diagram-document.js?v=15ba819c5d4b4ad1"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=16af02f0a0f9b9a0"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=06d209074b465040"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -253,7 +253,7 @@ function castListMarkup() {
   return cast
     .map(
       (node) =>
-        `<button type="button" class="icono-studio-cast-item${selectedId === node.id ? " is-selected" : ""}" data-studio-select="${escapeHtml(node.id)}" aria-label="Select ${escapeHtml(node.symbol)}" title="${escapeHtml(node.symbol)}"><img src="${escapeHtml(node.asset.canonical_url || node.asset.immutable_url)}" alt="" loading="lazy"/></button>`,
+        `<button type="button" class="icono-studio-cast-item${selectedId === node.id ? " is-selected" : ""}" data-studio-select="${escapeHtml(node.id)}" aria-label="Select ${escapeHtml(node.symbol)}" title="${escapeHtml(node.symbol)}"><img src="${escapeHtml(node.asset.cdn_url || node.asset.canonical_url || node.asset.immutable_url)}" alt="" loading="lazy"/></button>`,
     )
     .join("")
 }
