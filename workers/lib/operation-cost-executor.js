@@ -50,7 +50,17 @@ export class OperationCostExecutor {
     // no automatic retry. Replaying this step cannot execute the operation twice.
     const receipt = await adapter.dispatch(prepared)
     const result = this.ledger.settle({ ...permit, actual: receipt.actual })
-    if (result.status !== "active") throw new OperationCostError("COST_VERIFIED_BOUND_EXCEEDED")
-    return { result: receipt.result, usage: result.used, ceiling: result.ceiling }
+    // B-847: an overrun is discovered only after the provider has committed and
+    // billed the work. Settle has already charged it in full, tripped the plan
+    // and invalidated this adapter, so nothing further can spend under it.
+    // Throwing here would claim the work did not happen; callers stopped on
+    // that lie and left production paused. Report it with the result instead.
+    const exceeded = result.status !== "active"
+    return {
+      result: receipt.result,
+      usage: result.used,
+      ceiling: result.ceiling,
+      ...(exceeded ? { bound_exceeded: true, code: "COST_VERIFIED_BOUND_EXCEEDED" } : {}),
+    }
   }
 }
