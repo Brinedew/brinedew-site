@@ -604,8 +604,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         {/* Load Quartz CSS first */}
         {pageCss.map((resource) => CSSResourceToStyleElement(resource, true))}
 
-        {/* Preload critical assets to reduce flash (fonts, logo mask) */}
-        {!isIconoplasm && (
+        {/* Preload critical assets to reduce flash (fonts, logo mask). GeneGuessr
+            renders neither Crimson Pro nor the logo mask at load (B-858). */}
+        {!isIconoplasm && !isGeneguessr && (
           <link
             rel="preload"
             as="font"
@@ -623,8 +624,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
             crossOrigin="anonymous"
           />
         )}
-        {!isIconoplasm && (
-          <link rel="preload" as="image" href="/static/logo-mask.png" fetchpriority="high" />
+        {!isIconoplasm && !isGeneguessr && (
+          <link
+            rel="preload"
+            as="image"
+            href="/static/logo-mask.png"
+            fetchpriority="high"
+            crossOrigin="anonymous"
+          />
         )}
 
         {/* Custom CSS last. Use the build cache key; a hand-bumped version left

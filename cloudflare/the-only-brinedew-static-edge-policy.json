@@ -56,5 +56,6 @@
     }
   ],
   "webAnalyticsSiteHost": "brinedew.bio",
+  "webAnalyticsSiteToken": "381c356e1ba64a2bbd4924e73d532992",
   "webAnalyticsAutoInstall": false
 }
