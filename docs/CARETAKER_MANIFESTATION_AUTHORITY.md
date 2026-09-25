@@ -31,8 +31,9 @@ secrets enforce least privilege, and a token is valid only for its named routes:
   purge, receipt, tombstone, and event-compaction maintenance;
 - `ICONOPLASM_AUTHORITY_BACKUP_TOKEN`: backup capability, export, restore, and
   verification;
-- `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the one-time cutover plan, freeze,
-  materialize, verify, activate, backup-for-cutover, and plaintext retirement.
+- `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
+  handover only. (The one-time manifestation cutover it was named for finished
+  on 2026-08-31 and its code was deleted on 2026-09-25.)
 
 Scheduled maintenance calls domain functions internally instead of sending a
 bearer request back through the public route. Secrets must contain different
@@ -114,32 +115,17 @@ active legal hold applies. The purge transaction queues the opaque ciphertext
 locator and erases the wrapped data key before the separately retryable object
 DELETE. Retained lineages have no withdrawal deadline and are never swept.
 
-Legacy plaintext retirement is gated by one real multipart artifact per cutover
-run in the distinct private `iconoplasm-authoring-backup` Bunny Storage zone,
-also with no Pull Zone. Each bounded package contains ciphertext plus the
-minimum immutable metadata and envelope needed for recovery. Manifests of at
-most 250 packages form an actual-LF SHA-256 chain; a verified root object binds
-the run, source snapshot, entry count, private part locators, and chain root.
-Retirement accepts only the opaque artifact ID and independently re-reads,
-hashes, and parses that root. A caller-supplied digest cannot unlock deletion.
+The one-time legacy cutover finished on 2026-08-31 (one run, mode
+`authoritative`). Its code — the cutover processor, materializer, Durable Object
+coordinator, backup-artifact writer, 30-day backup retention sweeper, plaintext
+retirement and the never-called key-rotation job — was deleted on 2026-09-25.
+The cutover's backup artifact stays untouched in the private
+`iconoplasm-authoring-backup` Bunny zone as a cold archive; nothing reads or
+sweeps it any more.
 
-That artifact contains only the original system revisions and Tags moved by
-the cutover plan; it never admits a post-cutover caretaker revision. Verified
-legacy plaintext retirement starts an exact 30-day retention clock. A bounded
-service sweep then inventories every package, manifest part, and root object,
-rechecks legal holds immediately before each authenticated DELETE+GET proof,
-and records a locator-free deletion receipt before removing the inventory
-locators from D1. An active legal hold pauses the deadline; the sweep resumes
-after the final hold is released. Deleted-object audit rows are removed after a
-seven-day audit window, while the artifact ID, root digest, count, deletion
-receipt digest, and deletion timestamp remain as bounded proof.
-
-Production uses `iconoplasm-authoring` and
-`iconoplasm-authoring-backup`; staging uses the credential-isolated
-`iconoplasm-authoring-staging` and
-`iconoplasm-authoring-backup-staging`. All four are private Storage zones with
-no Pull Zone. A Worker fails closed when the body and backup zone names match;
-staging never receives either production zone password.
+Production uses `iconoplasm-authoring`; staging uses the credential-isolated
+`iconoplasm-authoring-staging`. Both are private Storage zones with
+no Pull Zone. Staging never receives the production zone password.
 
 ## Exact generation contract
 
@@ -262,11 +248,8 @@ case where it crosses Website/workstation boundaries.
 | D1 fails after object upload                         | No revision commits; orphan is recoverable and later deleted                              |
 | Object delete fails after key erasure                | Plaintext stays unrecoverable; purge retry remains durable                                |
 | Legal hold plus purge                                | Purge is refused before key erasure                                                       |
-| Key rotation races a read or backup                  | Versioned wrapped key decrypts exactly; body and AAD hashes still verify                  |
 | Backup restore targets merged/retired history        | Exact immutable ID/hash returns at a fresh locator without changing canon                 |
 | Backup capability is replayed or expires             | One-shot token is unusable; storage credentials/object locators stay secret               |
-| Cutover backup reaches 30 days without legal hold    | Bounded retry deletes and GET-verifies every package, part, and root object               |
-| Cutover backup reaches 30 days under legal hold      | No object is deleted; release resumes the same verified deletion inventory                |
 | Event delivered twice/out of order                   | Replica converges once without rewinding a gene                                           |
 | Cursor expired or event gap                          | Replica replaces state from a validated watermarked snapshot                              |
 | Malformed/foreign snapshot or cursor                 | Replica rejects it and preserves its last verified local state                            |
@@ -288,16 +271,9 @@ case where it crosses Website/workstation boundaries.
 | Caretaker moves +10 to -10 or another candidate      | One CAS head transfers atomically; no ordinary FIT/MISFIT row is rewritten                |
 | Preferred +10 candidate loses canon                  | One transition-keyed Discord DM is queued; stale preference or ended tenure suppresses it |
 
-## Release gate
+## Release gate (historical)
 
-Cutover is allowed only after existing Website manifestations are seeded with
-verified bodies and canonical selections, the public projection matches every
-seed hash, the workstation completes a full snapshot plus incremental replay, and
-shadow comparison reports no unexplained difference. Deployment is not proof:
+The cutover release gate was met on 2026-08-31. Deployment is still not proof:
 fresh logged-in browser tests must cover edit, version rollback, own-only deletion,
 both leave policies, exact generation, and one conflict/retry path on two gene
-pages. The signed 10x authority also requires short-click isolation, pointer and
-keyboard long-press assignment, positive/negative ranking, transfer/recall,
-sidebar unspent guidance, tenure cleanup, and deduplicated Discord delivery. The
-old mutable publication and destructive schema-rebuild paths are then
-deleted, not retained as fallback behavior.
+pages.
