@@ -100,7 +100,12 @@ export async function runAdmittedMigrations({
       adapter_id: adapterId,
       arguments: args,
     })
-    evidence.push({ plan, usage: receipt.usage, ceiling: receipt.ceiling })
+    evidence.push({
+      plan,
+      usage: receipt.usage,
+      ceiling: receipt.ceiling,
+      ...(receipt.bound_exceeded === true ? { bound_exceeded: true } : {}),
+    })
     acquired.set(adapterId, { plan, stepId: `execute-${Number(stepId.slice(8)) + 1}` })
     return receipt.result
   }
@@ -259,10 +264,30 @@ export function createReleaseSender(
       phase: response.ok ? "complete" : "refused",
       status: response.status,
       ...(!response.ok ? { code } : {}),
+      ...(response.ok && value.bound_exceeded === true ? { bound_exceeded: true } : {}),
     })
     if (!response.ok) throw new Error(code)
+    if (value.bound_exceeded === true) recordCostOverrun({ ...step, usage: value.usage })
     return value
   }
+}
+
+// B-847: the work behind an overrun has already committed, so the release
+// carries on and brings production back instead of stopping paused. The
+// authority has charged it in full and refuses that adapter until its bound
+// is fixed. This makes it loud: a GitHub error annotation now, and a record
+// that the workflow's last step turns into a red run once production is safe.
+export function recordCostOverrun(entry, env = process.env, write = appendFileSync) {
+  const line = JSON.stringify({
+    adapter_id: entry.adapter_id,
+    operation_id: entry.operation_id,
+    step_id: entry.step_id,
+    usage: entry.usage ?? null,
+  })
+  console.log(
+    `::error title=Operation cost bound exceeded::${entry.adapter_id} spent more than its verified bound. The work applied and was charged; fix the adapter's bound before it can run again. ${line}`,
+  )
+  if (env.ICONOPLASM_COST_OVERRUN_LOG) write(env.ICONOPLASM_COST_OVERRUN_LOG, line + "\n", "utf8")
 }
 
 async function main() {

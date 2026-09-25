@@ -111,6 +111,15 @@ export class OperationCostLedger {
       executable_sha256 TEXT NOT NULL, schema_sha256 TEXT NOT NULL, resource TEXT NOT NULL,
       operation_id TEXT NOT NULL, step_id TEXT NOT NULL,
       PRIMARY KEY(executable_sha256, schema_sha256, resource))`)
+    // B-847: an overrun invalidates only the adapter that overran. The table
+    // above invalidated every adapter of the Worker build for that resource,
+    // including the migration inventory a release starts with, which kept the
+    // app paused until new code shipped. Rows already in it are still honoured;
+    // new invalidations are written only here.
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_invalid_adapter_bounds (
+      executable_sha256 TEXT NOT NULL, schema_sha256 TEXT NOT NULL, resource TEXT NOT NULL,
+      adapter_id TEXT NOT NULL, operation_id TEXT NOT NULL, step_id TEXT NOT NULL,
+      PRIMARY KEY(executable_sha256, schema_sha256, resource, adapter_id))`)
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_account_usage (
       day TEXT PRIMARY KEY, measured_at INTEGER NOT NULL, rows_read INTEGER NOT NULL,
       rows_written INTEGER NOT NULL, requests INTEGER NOT NULL)`)
@@ -479,7 +488,15 @@ export class OperationCostLedger {
           plan.immutable.executable_sha256,
           plan.immutable.schema_sha256,
           plan.immutable.resource,
-        ),
+        ) &&
+          !this.row(
+            `SELECT 1 AS invalid FROM operation_cost_invalid_adapter_bounds
+        WHERE executable_sha256 = ? AND schema_sha256 = ? AND resource = ? AND adapter_id = ?`,
+            plan.immutable.executable_sha256,
+            plan.immutable.schema_sha256,
+            plan.immutable.resource,
+            plan.immutable.adapter_id,
+          ),
         "COST_VERIFIED_BOUND_INVALIDATED",
       )
       const account = this.readAccountUsage()
@@ -628,11 +645,12 @@ export class OperationCostLedger {
         // A corrected executable/schema identity can proceed through normal
         // admission immediately, without waiting for a reset or human unlock.
         this.storage.sql.exec(
-          `INSERT INTO operation_cost_invalid_bounds VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(executable_sha256, schema_sha256, resource) DO NOTHING`,
+          `INSERT INTO operation_cost_invalid_adapter_bounds VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(executable_sha256, schema_sha256, resource, adapter_id) DO NOTHING`,
           plan.immutable.executable_sha256,
           plan.immutable.schema_sha256,
           plan.immutable.resource,
+          plan.immutable.adapter_id,
           plan.id,
           input.step_id,
         )
