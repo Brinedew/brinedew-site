@@ -95,15 +95,29 @@ function withImmutableMedia(record) {
   }
 }
 
-// The vote view owns the selected portrait; the newer catalog owns the complete
-// candidate pool. A vote overlay can outlive a catalog publish, so copying its
-// old gallery would make a fulfilled generation invisible to every reader.
+// The vote view owns the selected portrait. The candidate pool belongs to
+// whichever side is newer, and that can be either: delta segments are carried
+// across catalog rebuilds, so a vote overlay can outlive a catalog publish
+// (#257: its old gallery would hide a fulfilled generation), and a delta
+// committed after the catalog carries uploads the catalog has never seen
+// (B-865: ARCN1 showed 1 of 8 candidates for over an hour). The catalog pool
+// stays primary; the overlay's pool rides along and candidateGallery() picks
+// the one holding the newest candidate.
 export function mergePublishedGeneOverlay(base, overlay) {
   if (!base || !overlay) return overlay
   const merged = { ...overlay }
   delete merged.candidate_count
   delete merged.candidate_gallery
   delete merged.portrait_candidates
+  if (overlay.candidate_gallery || Array.isArray(overlay.portrait_candidates)) {
+    merged.overlay_candidate_pool = {
+      candidate_count: overlay.candidate_count,
+      candidate_gallery: overlay.candidate_gallery || null,
+      ...(Array.isArray(overlay.portrait_candidates)
+        ? { portrait_candidates: overlay.portrait_candidates }
+        : {}),
+    }
+  }
   if ("candidate_count" in base) merged.candidate_count = base.candidate_count
   if ("candidate_gallery" in base) merged.candidate_gallery = base.candidate_gallery
   if (Array.isArray(base.portrait_candidates)) {
@@ -290,6 +304,22 @@ export function createIconoplasmPublicationReader(options = {}) {
   // object cache makes a repeat call free. A failed or malformed page throws:
   // callers show an unavailable/error state, never "no candidates".
   async function candidateGallery(record) {
+    const primary = await candidatePool(record)
+    const alternate = record?.overlay_candidate_pool
+    if (!alternate) return primary
+    const overlay = await candidatePool({
+      symbol: record.symbol,
+      portrait: record.portrait,
+      ...alternate,
+    })
+    // B-865: candidate ids only grow, so the pool holding the higher id is the
+    // later snapshot. A tie is no evidence the overlay is newer: keep the catalog.
+    const newest = (pool) =>
+      pool.candidates.reduce((max, item) => Math.max(max, Number(item?.candidate_image_id) || 0), 0)
+    return newest(overlay) > newest(primary) ? overlay : primary
+  }
+
+  async function candidatePool(record) {
     const symbol = normalizedSymbol(record?.symbol)
     if (!symbol) throw new Error("Invalid candidate gallery symbol")
     let reference = record?.candidate_gallery || null
