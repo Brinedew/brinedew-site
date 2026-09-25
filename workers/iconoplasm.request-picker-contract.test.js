@@ -363,9 +363,9 @@ test("canonical blot toolbar keeps picker behind a modal trigger", () => {
   )
   assert.match(css, /\.icono-request-dialog\b/, "request dialog should have dedicated styling")
   assert.match(
-    css,
-    /\.icono-canonical-new-candidate-btn\b/,
-    "New candidate should be styled as the expanded canonical toolbar action",
+    app,
+    /class="icono-button icono-button--primary icono-canonical-new-candidate-btn"/,
+    "New candidate is the toolbar's one labelled primary action",
   )
 })
 
