@@ -1854,6 +1854,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_local_removals_pending" ||
     family === "admin_local_removals_ack" ||
     family === "admin_artist_styles_remove" ||
+    family === "admin_blot_aliases_refresh" ||
     family === "admin_artist_blacklist_pending" ||
     family === "admin_artist_blacklist_ack"
   ) {
