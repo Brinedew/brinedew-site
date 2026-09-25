@@ -29,8 +29,6 @@ import {
   selectTagsDerivativeHead,
   submitTagsDerivative,
 } from "./manifestation-derivative-commands.js"
-import { sweepManifestationPurgeQueue } from "./manifestation-authority-purge.js"
-import { sweepWithdrawnManifestationRetention } from "./manifestation-withdrawal-retention.js"
 import {
   matchManifestationEventCompactionRoute,
   runManifestationEventCompactionRoute,
@@ -324,7 +322,7 @@ export function createManifestationAuthorityServiceHandler({
         /^\/api\/iconoplasm\/authority\/backups\/(capabilities|export|restores|verifications)$/,
       )
       const maintenance = url.pathname.match(
-        /^\/api\/iconoplasm\/authority\/maintenance\/(withdrawal-retention|purge-queue|command-receipts|command-tombstones)\/(sweep|compact)$/,
+        /^\/api\/iconoplasm\/authority\/maintenance\/(command-receipts|command-tombstones)\/(sweep|compact)$/,
       )
       const compaction = matchManifestationEventCompactionRoute(url.pathname)
       const matched =
@@ -390,12 +388,6 @@ export function createManifestationAuthorityServiceHandler({
 
       if (maintenance) {
         const options = { limit: body.limit, now: body.now }
-        if (maintenance[1] === "withdrawal-retention" && maintenance[2] === "sweep") {
-          return jsonResponse(await sweepWithdrawnManifestationRetention(db, options))
-        }
-        if (maintenance[1] === "purge-queue" && maintenance[2] === "sweep") {
-          return jsonResponse(await sweepManifestationPurgeQueue(db, env, options))
-        }
         if (maintenance[1] === "command-receipts" && maintenance[2] === "compact") {
           return jsonResponse(await compactManifestationCommandReceipts(db, options))
         }

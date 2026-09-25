@@ -436,11 +436,7 @@ export async function readCaretakerGeneDossier(db, input = {}) {
       return {
         ...manifestation,
         author_label:
-          row.author_account_id === authority.actor.account_id
-            ? "Your manifestation"
-            : row.origin === "system_seed"
-              ? "Original manifestation"
-              : manifestation.author_label,
+          row.origin === "system_seed" ? "Original manifestation" : manifestation.author_label,
         head_body: headRevision?.body || "",
         withdrawal_preview: withdrawalPreviews.get(row.manifestation_id) || null,
         revisions: manifestationRevisions,

@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=015c0a99a23f04e1"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=c373da21c6c72600"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=f9fd8aef7b96c702"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -208,7 +208,7 @@ export function createCaretakerManifestationPanel({
     const item = revisionById(state.dossier, state.basedOnRevisionId)
     target.hidden = !item
     target.textContent = item
-      ? `Starting from version ${item.revision.revision_number || ""}. Saving creates a new version in your manifestation history.`
+      ? `Starting from version ${item.revision.revision_number || ""}. Saving creates a new version in this manifestation's history.`
       : ""
   }
 

@@ -964,17 +964,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "manifestation_authority_service",
-    id: "authority_maintenance_retention",
-    match: pattern(
-      /^\/api\/iconoplasm\/authority\/maintenance\/(withdrawal-retention|purge-queue)\/sweep$/,
-      ["maintenance_operation"],
-    ),
-    methods: POST,
-    auth: "authority-maintenance-bearer",
-    budgetFamily: "authority_maintenance",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "manifestation_authority_service",
     id: "authority_maintenance_commands",
     match: pattern(
       /^\/api\/iconoplasm\/authority\/maintenance\/(command-receipts\/compact|command-tombstones\/sweep)$/,
