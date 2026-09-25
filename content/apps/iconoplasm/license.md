@@ -1,6 +1,6 @@
 ---
 title: "License — Iconoplasm"
-description: "CC0 reuse terms for Iconoplasm gene portraits, gene blots and the factual catalogue data behind them"
+description: "Iconoplasm releases its published images, catalogue data and manifestations under the Creative Commons Public Domain (CC0) License"
 date: 2026-09-25
 draft: false
 schemaType: WebPage
@@ -10,53 +10,30 @@ schemaType: WebPage
 
 **Last updated:** September 25, 2026
 
-Short version: the pictures and the facts about them are free to use for anything, with no need to ask or credit us. The software, the written prose and the running service are not part of that.
+Iconoplasm wants to ensure that its information is accessible to the public and free to use. For this reason, all published gene portraits, gene blots, catalogue data and manifestations are released under the <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">Creative Commons Public Domain (CC0) License</a>. This means that any form of reuse of the content is permitted.
 
-## Images: CC0
+You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
 
-Two kinds of published Iconoplasm images are dedicated to the public domain under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0 Universal</a>:
+## Attribution
 
-1. **Gene portraits**: the unlabelled character image chosen for a gene.
-2. **Gene blots**: the labelled card that puts the gene's full name and symbol over its portrait.
+Iconoplasm recommends attribution (e.g. in publications, services or products), as it helps us understand how Iconoplasm is used.
 
-You may copy, display, embed, hotlink, redistribute, modify and sell them, including in pathway diagrams, teaching materials and AI-generated documents, without asking permission or giving credit.
+## Other material
 
-## Catalogue data: CC0
+Iconoplasm's source code and the text of this website are copyrighted and are not released under CC0.
 
-The factual data that the public API and the bulk download give about each gene is dedicated to the public domain under the same <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0 Universal</a>. That means:
+## Third-party data
 
-- the gene symbol and full name;
-- aliases, including the curated literature aliases such as p53 and E-cadherin;
-- the UniProt accession;
-- the character's signature colour;
-- whether a gene has a published card, and the image addresses for it;
-- clan membership;
-- release and change-feed information: dates, counts and hashes.
+Gene symbols, names and aliases come from the [HGNC](https://www.genenames.org/about/license/), which releases all data under the Creative Commons Public Domain (CC0) License.
 
-Where these come from other sources, their terms still apply to their own data, and both are generous:
+UniProt accessions come from [UniProt](https://www.uniprot.org/help/license), which applies the Creative Commons Attribution 4.0 International (CC BY 4.0) License to all copyrightable parts of its databases.
 
-- Gene symbols, names and aliases come from the [HGNC](https://www.genenames.org/about/license/), which releases its data under CC0.
-- UniProt accessions come from [UniProt](https://www.uniprot.org/help/license), which licenses the copyrightable parts of its databases under CC BY 4.0. An accession number is an identifier. If you reuse UniProt's own content alongside it, credit UniProt.
+## Other information
 
-Credit ("Images and data: Iconoplasm") is appreciated, never required.
+In no way are the patent or trademark rights of any person affected by CC0, nor are the rights that other persons may have in the work or in how the work is used, such as publicity or privacy rights.
 
-## What is not covered
+Unless expressly stated otherwise, Iconoplasm makes no warranties about the work, and disclaims liability for all uses of the work, to the fullest extent permitted by applicable law.
 
-These are **not** dedicated to the public domain:
-
-- Iconoplasm's software and source code;
-- written prose, such as character descriptions, manifestations and site text;
-- generation prompts;
-- private or unpublished images;
-- the Iconoplasm and Brinedew names and logos;
-- the running API as a service. You may use its answers freely under the terms above, but access is subject to the rate limits on the [developers page](/developers), and we may block clients that harm the service for everyone else.
-
-Please don't suggest that Iconoplasm endorses your product.
-
-## Machine-readable permission
-
-Gene pages, the public image resolver and image HTTP responses identify the CC0 licence. See [For developers](/developers) for the image addresses, the resolver and the bulk download.
+When using or citing the work, you should not imply endorsement by Iconoplasm.
 
 Canonical licence URL: `https://creativecommons.org/publicdomain/zero/1.0/`
-
-Iconoplasm usage information: `https://iconoplasm.brinedew.bio/license`
