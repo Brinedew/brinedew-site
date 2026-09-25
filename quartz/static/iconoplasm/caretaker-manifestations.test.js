@@ -165,6 +165,12 @@ function dossier() {
   }
 }
 
+function allRevisionIds(value) {
+  return value.manifestations.flatMap((item) =>
+    (item.revisions || []).map((revision) => revision.manifestation_revision_id),
+  )
+}
+
 test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.match(html, /Manifestation</)
@@ -173,16 +179,22 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
   assert.match(html, /data-icono-caretaker-tag-categories/)
-  assert.match(html, /Tags are never shown/)
-  assert.match(html, /Use this version/)
-  assert.match(html, /Compare with canonical/)
-  assert.match(html, /Start from this version/)
-  assert.match(html, /Delete this manifestation/)
+  // B-835: History is a timeline + preview; Settings holds the danger zone.
+  assert.match(html, /Tags always stay private/)
+  assert.match(html, /data-icono-caretaker-version="/, "versions are a selectable timeline")
+  assert.match(html, /data-icono-caretaker-preview/, "the selected version is previewed")
+  assert.match(html, /Edit from here/)
+  assert.match(html, /Danger zone/)
+  assert.match(html, /Delete your manifestation/)
   assert.match(html, /Stop being caretaker/)
-  assert.match(
-    html,
-    /eligible for hard purge after 30 days unless (?:a legal hold applies|legally held)/,
-  )
+  assert.match(html, /Purged after 30 days unless legally held/)
+  // Make public is offered for a non-public version once it is selected.
+  const other = dossier()
+  const nonPublic = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
+  const selected = renderCaretakerManifestationPanel(other, escapeHtml, {
+    selectedRevisionId: nonPublic,
+  })
+  assert.match(selected, new RegExp(`data-icono-caretaker-select="${nonPublic}"[^>]*>Make public`))
   assert.doesNotMatch(html, /curator/i)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
@@ -234,7 +246,8 @@ test("a withdrawn own lineage is restored explicitly before another save", () =>
   withdrawn.manifestations[0].can_withdraw = false
   withdrawn.manifestations[0].can_restore = true
   const html = renderCaretakerManifestationPanel(withdrawn, escapeHtml)
-  assert.match(html, /Restore this manifestation/)
+  assert.match(html, /data-icono-caretaker-restore="/)
+  assert.match(html, /Restore your manifestation/)
   assert.match(html, /Restore it before writing another version/)
   assert.doesNotMatch(html, /Save new version/)
 })
@@ -256,8 +269,8 @@ test("a new tenure never edits an older retained lineage but may still withdraw 
   })
   const html = renderCaretakerManifestationPanel(multiple, escapeHtml)
   assert.doesNotMatch(html, /data-icono-caretaker-editor/)
-  assert.match(html, /Restore this manifestation/)
-  assert.match(html, /Record from a previous tenure/)
+  assert.match(html, /Restore your manifestation/)
+  assert.match(html, /Delete an earlier manifestation/)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
 
@@ -274,9 +287,11 @@ test("purged history remains attributable but cannot be selected, forked, or ren
       body: "must not render",
     },
   ]
-  const html = renderCaretakerManifestationPanel(purged, escapeHtml)
+  const html = renderCaretakerManifestationPanel(purged, escapeHtml, {
+    selectedRevisionId: "revision_purged",
+  })
   assert.match(html, /Former caretaker 7H2Q/)
-  assert.match(html, /no longer available under its retention policy/)
+  assert.match(html, /removed under the retention policy/)
   assert.doesNotMatch(html, /must not render/)
   assert.doesNotMatch(html, /data-icono-caretaker-fork="revision_purged"/)
   assert.doesNotMatch(html, /data-icono-caretaker-select="revision_purged"/)
@@ -301,9 +316,12 @@ test("canonical and current heads remain usable when history pagination moves th
   const own = normalized.manifestations[0]
   assert.equal(own.head_body, "First body")
   assert.equal(own.revisions.length, 2)
-  const html = renderCaretakerManifestationPanel(normalized, escapeHtml)
+  const html = renderCaretakerManifestationPanel(normalized, escapeHtml, {
+    selectedRevisionId: "revision_1",
+  })
+  assert.match(html, /data-icono-caretaker-version="revision_1"/)
   assert.match(html, /First body/)
-  assert.match(html, /Canonical/)
+  assert.match(html, /Public/)
 })
 
 test("the readable diff keeps unchanged context and marks both sides", () => {
