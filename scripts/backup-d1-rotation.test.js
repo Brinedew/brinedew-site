@@ -99,12 +99,19 @@ test("1,2,6: the budget gate fails closed and a finished day is not exported twi
   seed(remote)
   const base = {
     root: dir,
-    now: Date.parse("2026-09-25T01:00:00Z"),
+    now: Date.parse("2026-09-25T13:00:00Z"),
     queryFor: () => remote.query,
     pageSize: 50,
   }
-  const busy = await runRotation({ ...base, readUsage: async () => ({ rows_read: 1600000 }) })
+  const busy = await runRotation({ ...base, readUsage: async () => ({ rows_read: 2600000 }) })
   assert.equal(busy.status, "skipped_budget")
+  // A normal evening (1.6M reads, 32%) no longer blocks the backup.
+  const normal = await runRotation({
+    ...base,
+    now: Date.parse("2026-09-26T13:00:00Z"),
+    readUsage: async () => ({ rows_read: 1600000 }),
+  })
+  assert.equal(normal.status, "exported")
   const broken = await runRotation({
     ...base,
     readUsage: async () => {
@@ -119,6 +126,30 @@ test("1,2,6: the budget gate fails closed and a finished day is not exported twi
   assert.equal(again.status, "already_done")
   const files = readdirSync(path.dirname(done.file))
   assert.ok(files.every((f) => !f.includes(".partial")))
+})
+
+// Owner, 2026-09-25: a backup right after the 00:00 UTC reset makes the whole
+// day run on what is left. It must spend the tail of the budget day instead,
+// including when a laptop wakes after midnight and the task catches up.
+test("10: the backup never runs in the first half of a UTC budget day", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "d1bk-"))
+  let budgetReads = 0
+  for (const at of ["2026-09-25T00:30:00Z", "2026-09-25T06:00:00Z", "2026-09-25T11:59:00Z"]) {
+    const early = await runRotation({
+      root: dir,
+      now: Date.parse(at),
+      queryFor: () => {
+        throw new Error("must not query D1")
+      },
+      readUsage: async () => {
+        budgetReads++
+        return { rows_read: 0 }
+      },
+    })
+    assert.equal(early.status, "too_early_in_budget_day", at)
+  }
+  assert.equal(budgetReads, 0)
+  assert.deepEqual(readdirSync(dir), [])
 })
 
 test("rotation visits every database once per cycle", () => {
