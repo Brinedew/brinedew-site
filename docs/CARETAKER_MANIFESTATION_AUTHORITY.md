@@ -27,8 +27,8 @@ secrets enforce least privilege, and a token is valid only for its named routes:
   and Tags enrichment submission/selection;
 - `ICONOPLASM_AUTHORITY_GENERATION_TOKEN`: generation lease claim, renew, fail,
   and complete;
-- `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN`: explicitly exposed bounded retention,
-  purge, receipt, tombstone, and event-compaction maintenance;
+- `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN`: explicitly exposed bounded receipt,
+  tombstone, and event-compaction maintenance;
 - `ICONOPLASM_AUTHORITY_BACKUP_TOKEN`: backup capability, export, restore, and
   verification;
 - `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
@@ -100,20 +100,19 @@ hash, and byte length. The encrypted object is read back, hash checked, and
 decrypted before its metadata becomes authoritative.
 
 Object locators are independent random secrets and never appear in browser or
-replica payloads. Upload-before-commit orphans are recorded/reconciled. A normal
-withdrawal preserves revision history and ciphertext. A hard purge first removes
-the wrapped key (cryptographic erasure), then deletes and verifies the object;
-legal hold blocks purge. Every admitted byte is counted against a bounded quota.
+replica payloads. Upload-before-commit orphans are recorded/reconciled. Withdrawal
+preserves revision history and ciphertext. Every admitted byte is counted against a bounded quota.
 Bodies live only in the dedicated private `iconoplasm-authoring` Bunny Storage
 zone. It has no connected Pull Zone, and the code must fail closed when its
 authoring-specific zone or credential is missing; portrait storage is never a
 fallback.
 
-Withdrawal immediately removes the lineage from canonical eligibility. Its
-encrypted body becomes hard-purge eligible exactly 30 days later unless an
-active legal hold applies. The purge transaction queues the opaque ciphertext
-locator and erases the wrapped data key before the separately retryable object
-DELETE. Retained lineages have no withdrawal deadline and are never swept.
+Withdrawal immediately removes the lineage from public view and canonical
+eligibility; it is never purged. There is no hard purge, retention sweep or
+legal hold (deleted 2026-09-25, B-859): no comparable open-contribution site
+promises more than "remove it from public view on the site, though it will not
+remove it from backups" (iNaturalist). An erasure request arrives by email and
+is handled by hand.
 
 The one-time legacy cutover finished on 2026-08-31 (one run, mode
 `authoritative`). Its code — the cutover processor, materializer, Durable Object
@@ -224,14 +223,12 @@ case where it crosses Website/workstation boundaries.
 | Caretaker comments on their own gene                 | Comment persists and appears unread nowhere; no self-DM is queued                         |
 | Discord is unavailable after a comment               | Comment succeeds; durable outbox retries without duplicate ambiguous POSTs                |
 | Canonical changes after generation enqueue           | Job uses the captured revision and hashes                                                 |
-| Queued source is withdrawn or purged                 | Fulfilment fails closed; cache/current-canon text is never substituted                    |
-| Author withdraws the canonical lineage               | Atomic withdrawal plus deterministic fallback                                             |
-| Author attempts to withdraw another user's lineage   | `403`; no state, event, or object change                                                  |
-| Author attempts to withdraw the system seed          | Refused; seed stays eligible                                                              |
-| Author restores an own withdrawn lineage             | New lifecycle and selection events restore it without rewriting history                   |
-| Retention expires after withdrawal                   | Legal-hold-aware purge destroys keys/bodies but keeps bounded tombstones                  |
+| Queued source is withdrawn                           | Fulfilment fails closed; cache/current-canon text is never substituted                    |
+| Caretaker withdraws the canonical lineage            | Atomic withdrawal plus deterministic fallback                                             |
+| Former caretaker or stranger attempts a withdraw     | `403 ACTIVE_ASSIGNMENT_REQUIRED`; no state, event, or object change                       |
+| Caretaker attempts to withdraw the system seed       | Refused; seed stays eligible                                                              |
+| Caretaker restores any withdrawn lineage on the gene | New lifecycle and selection events restore it without rewriting history                   |
 | Leave with `retain`                                  | Tenure ends; lineage remains eligible and readable                                        |
-| Leave with `withdraw`                                | Tenure and lineage change atomically; fallback is recorded                                |
 | Repeated leave request with a different policy       | Original receipt wins; policy cannot flip                                                 |
 | Command receipt source event is checkpointed/pruned  | Hash tombstone keeps replay fail-closed; leave/delete policy cannot reinterpret           |
 | Suspension during an open editor                     | New save is refused; local draft survives                                                 |
@@ -246,8 +243,6 @@ case where it crosses Website/workstation boundaries.
 | Erased former author is displayed                    | Stable anonymous attribution appears; provider subject never leaks                        |
 | Missing/corrupt encrypted object                     | Revision is ineligible and an integrity alert is emitted                                  |
 | D1 fails after object upload                         | No revision commits; orphan is recoverable and later deleted                              |
-| Object delete fails after key erasure                | Plaintext stays unrecoverable; purge retry remains durable                                |
-| Legal hold plus purge                                | Purge is refused before key erasure                                                       |
 | Backup restore targets merged/retired history        | Exact immutable ID/hash returns at a fresh locator without changing canon                 |
 | Backup capability is replayed or expires             | One-shot token is unusable; storage credentials/object locators stay secret               |
 | Event delivered twice/out of order                   | Replica converges once without rewinding a gene                                           |
