@@ -49,22 +49,21 @@ async function requireGeneDossierAuthority(db, { geneId, actorAccountId, adminis
   return { actor, assignment, gene }
 }
 
-function authorCredit(row, viewerAccountId) {
+// B-860: versions carry no author names. Pride belongs to the caretaker role,
+// not to a text, so nobody sees a version as "theirs" to defend.
+function authorCredit(row) {
   if (row.origin === "system_seed" || !row.author_account_id) return "Original manifestation"
-  if (row.author_account_id === viewerAccountId) return "Your manifestation"
-  const label = String(row.author_public_credit_label || "Anonymous caretaker")
-  return row.author_account_status === "tombstoned"
-    ? `${label} (account removed)`
-    : `${label} (former caretaker)`
+  return "Caretaker manifestation"
 }
 
 function browserManifestation(row, authority) {
   const own = row.author_account_id === authority.actor.account_id
-  const currentAssignment =
+  const steward =
     authority.gene.status === "active" &&
     authority.assignment?.status === "active" &&
-    authority.assignment?.gene_id === authority.gene.gene_id &&
-    row.caretaker_assignment_id === authority.assignment?.caretaker_assignment_id
+    authority.assignment?.gene_id === authority.gene.gene_id
+  const currentAssignment =
+    steward && row.caretaker_assignment_id === authority.assignment?.caretaker_assignment_id
   return {
     manifestation_id: row.manifestation_id,
     origin: row.origin,
@@ -76,16 +75,10 @@ function browserManifestation(row, authority) {
     public_page_visible: Boolean(row.public_page_visible),
     author_is_viewer: own,
     belongs_to_current_assignment: Boolean(currentAssignment),
-    author_label: authorCredit(row, authority.actor.account_id),
-    can_withdraw: Boolean(
-      authority.gene.status === "active" && own && row.status === "active" && !row.non_withdrawable,
-    ),
+    author_label: authorCredit(row),
+    can_withdraw: Boolean(steward && row.status === "active" && !row.non_withdrawable),
     can_restore: Boolean(
-      currentAssignment &&
-      own &&
-      row.status === "withdrawn" &&
-      !row.non_withdrawable &&
-      row.restore_body_available,
+      steward && row.status === "withdrawn" && !row.non_withdrawable && row.restore_body_available,
     ),
     created_at: row.created_at,
   }
@@ -160,9 +153,7 @@ async function readWithdrawalFallbackPreview(db, geneId, excludedManifestationId
     fallback_label:
       fallback.origin === "system_seed"
         ? "Original manifestation"
-        : String(
-            fallback.author_public_credit_label || "a retained former caretaker manifestation",
-          ),
+        : "an earlier caretaker manifestation",
   }
 }
 

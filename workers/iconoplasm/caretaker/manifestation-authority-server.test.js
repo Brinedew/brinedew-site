@@ -701,20 +701,23 @@ test("browser claim route exposes exact terms and atomically activates an availa
       terms_version_id: availability.claim.terms.terms_version_id,
       terms_accepted: true,
       entitlement_policy_version: availability.claim.entitlement_policy_version,
-      default_leave_policy: "retain",
+      // B-860: a browser cannot choose to take its text away on leaving.
+      default_leave_policy: "withdraw",
     }),
   )
   assert.ok(new Set([200, 202]).has(claimedResponse.status))
   const claimed = await claimedResponse.json()
   assert.equal(claimed.status, "active")
-  assert.equal(
-    row(
-      context.db,
-      "SELECT status FROM icono_caretaker_assignments WHERE gene_id = ? AND account_id = ?",
-      geneId,
-      OTHER,
-    ).status,
-    "active",
+  assert.deepEqual(
+    {
+      ...row(
+        context.db,
+        "SELECT status, relinquish_policy FROM icono_caretaker_assignments WHERE gene_id = ? AND account_id = ?",
+        geneId,
+        OTHER,
+      ),
+    },
+    { status: "active", relinquish_policy: "retain" },
   )
   const noLongerAvailable = await handler(new Request(`https://iconoplasm.test${path}`))
   assert.equal((await noLongerAvailable.json()).claim.reason, "already_caretaking")

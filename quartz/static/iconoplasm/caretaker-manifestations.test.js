@@ -185,7 +185,7 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /data-icono-caretaker-preview/, "the selected version is previewed")
   assert.match(html, /Edit from here/)
   assert.match(html, /Danger zone/)
-  assert.match(html, /Delete your manifestation/)
+  assert.match(html, /Delete the current manifestation/)
   assert.match(html, /Stop being caretaker/)
   assert.match(html, /Purged after 30 days unless legally held/)
   // Make public is offered for a non-public version once it is selected.
@@ -199,7 +199,7 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
 
-test("pending invitations pin visible terms and require an explicit departure default", () => {
+test("pending invitations pin visible terms and ask no departure question (B-860)", () => {
   const pending = dossier()
   pending.assignment.status = "pending_acceptance"
   pending.assignment.terms = {
@@ -220,8 +220,7 @@ test("pending invitations pin visible terms and require an explicit departure de
   assert.match(html, /Decline invitation/)
   assert.match(html, /Caretaker terms - 30 August 2026/)
   assert.match(html, /data-icono-caretaker-terms-accepted/)
-  assert.match(html, /name="caretaker-invitation-policy"/)
-  assert.doesNotMatch(html, /name="caretaker-invitation-policy" value="retain" checked/)
+  assert.doesNotMatch(html, /caretaker-invitation-policy/, "text always stays with the gene")
   assert.match(html, /data-icono-caretaker-accept disabled/)
 })
 
@@ -247,12 +246,12 @@ test("a withdrawn own lineage is restored explicitly before another save", () =>
   withdrawn.manifestations[0].can_restore = true
   const html = renderCaretakerManifestationPanel(withdrawn, escapeHtml)
   assert.match(html, /data-icono-caretaker-restore="/)
-  assert.match(html, /Restore your manifestation/)
+  assert.match(html, /Restore the current manifestation/)
   assert.match(html, /Restore it before writing another version/)
   assert.doesNotMatch(html, /Save new version/)
 })
 
-test("a new tenure never edits an older retained lineage but may still withdraw it", () => {
+test("a new tenure forks an older lineage and may withdraw it like any steward (B-860)", () => {
   const multiple = dossier()
   multiple.manifestations[0].belongs_to_current_assignment = false
   multiple.manifestations[0].created_at = "2025-01-01T00:00:00.000Z"
@@ -269,7 +268,7 @@ test("a new tenure never edits an older retained lineage but may still withdraw 
   })
   const html = renderCaretakerManifestationPanel(multiple, escapeHtml)
   assert.doesNotMatch(html, /data-icono-caretaker-editor/)
-  assert.match(html, /Restore your manifestation/)
+  assert.match(html, /Restore the current manifestation/)
   assert.match(html, /Delete an earlier manifestation/)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
@@ -803,7 +802,7 @@ test("remounting for another signed-in account does not duplicate or retain stal
   )
 })
 
-test("accepting sends the exact displayed terms and chosen departure default", async () => {
+test("accepting sends the exact displayed terms and no departure choice (B-860)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const pending = dossier()
@@ -846,14 +845,7 @@ test("accepting sends the exact displayed terms and chosen departure default", a
   accepted.checked = true
   accepted.dispatchEvent(new Event("input", { bubbles: true }))
   const acceptButton = host.querySelector("[data-icono-caretaker-accept]")
-  assert.equal(acceptButton.disabled, true, "terms consent alone is not a departure choice")
-  const withdraw = host.querySelector('input[name="caretaker-invitation-policy"][value="withdraw"]')
-  host
-    .querySelector('input[name="caretaker-invitation-policy"][value="retain"]')
-    .removeAttribute("checked")
-  withdraw.setAttribute("checked", "")
-  withdraw.dispatchEvent(new Event("input", { bubbles: true }))
-  assert.equal(acceptButton.disabled, false)
+  assert.equal(acceptButton.disabled, false, "terms consent is the only choice")
   acceptButton.dispatchEvent(new Event("click", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 0))
   await new Promise((resolve) => setTimeout(resolve, 0))
@@ -864,7 +856,7 @@ test("accepting sends the exact displayed terms and chosen departure default", a
   const body = JSON.parse(mutation.init.body)
   assert.equal(body.terms_version_id, "terms_2026_08_30")
   assert.equal(body.terms_accepted, true)
-  assert.equal(body.default_leave_policy, "withdraw")
+  assert.equal(body.default_leave_policy, undefined)
   assert.equal(body.expected_assignment_version, 3)
 })
 
