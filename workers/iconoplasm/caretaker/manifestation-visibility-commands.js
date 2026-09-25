@@ -66,13 +66,11 @@ export async function setManifestationPageVisibility(
   if (
     !manifestation ||
     manifestation.gene_id !== gene.gene_id ||
-    manifestation.author_account_id !== actor.account_id ||
-    manifestation.caretaker_assignment_id !== assignment.caretaker_assignment_id ||
     manifestation.status !== "active"
   ) {
     throw authorityError(
       "MANIFESTATION_NOT_EDITABLE",
-      "Only the active manifestation from this caretaker tenure can be made visible",
+      "Only an active manifestation on this gene can be shown or hidden",
       403,
     )
   }
@@ -112,12 +110,11 @@ export async function setManifestationPageVisibility(
     guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
       SELECT ?, CASE WHEN EXISTS (
         SELECT 1 FROM icono_caretaker_assignments assignment
-        JOIN icono_manifestations manifestation
-          ON manifestation.caretaker_assignment_id = assignment.caretaker_assignment_id
+        JOIN icono_manifestations manifestation ON manifestation.gene_id = assignment.gene_id
         JOIN icono_manifestation_heads head ON head.gene_id = assignment.gene_id
         WHERE assignment.caretaker_assignment_id = ? AND assignment.account_id = ?
           AND assignment.status = 'active' AND assignment.assignment_version = ?
-          AND manifestation.manifestation_id = ? AND manifestation.author_account_id = ?
+          AND manifestation.manifestation_id = ?
           AND manifestation.status = 'active' AND manifestation.row_version = ?
           AND head.gene_revision = ?
       ) THEN 1 ELSE 0 END`,
@@ -127,7 +124,6 @@ export async function setManifestationPageVisibility(
       actor.account_id,
       assignmentVersion,
       manifestation.manifestation_id,
-      actor.account_id,
       manifestationVersion,
       geneRevision,
     ],

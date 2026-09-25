@@ -24,6 +24,7 @@ import {
   requireActiveGene,
   requireAssignment,
   requireDatabase,
+  requireGeneSteward,
   resolveCommandReplay,
   runCommand,
 } from "./manifestation-authority-repository.js"
@@ -57,12 +58,8 @@ export async function restoreOwnManifestation(
     db,
     normalizeId(manifestationId, "manifestation_id"),
   )
-  if (!manifestation || manifestation.author_account_id !== actor.account_id) {
-    throw authorityError(
-      "MANIFESTATION_NOT_OWNED",
-      "Manifestation was not found for this account",
-      404,
-    )
+  if (!manifestation) {
+    throw authorityError("MANIFESTATION_NOT_FOUND", "Manifestation was not found", 404)
   }
   if (manifestation.status !== "withdrawn") {
     throw authorityError("MANIFESTATION_NOT_WITHDRAWN", "Manifestation is not withdrawn", 409)
@@ -157,7 +154,6 @@ export async function restoreOwnManifestation(
           JOIN icono_caretaker_assignments a ON a.caretaker_assignment_id = ?
           JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id
          WHERE m.manifestation_id = ?
-           AND m.author_account_id = ?
            AND m.status = 'withdrawn'
            AND m.row_version = ?
            AND a.account_id = ? AND a.gene_id = m.gene_id
@@ -168,7 +164,6 @@ export async function restoreOwnManifestation(
       cmd.commandId,
       assignment.caretaker_assignment_id,
       manifestation.manifestation_id,
-      actor.account_id,
       manifestationVersion,
       actor.account_id,
       assignmentVersion,
@@ -268,13 +263,10 @@ export async function withdrawOwnManifestation(
     db,
     normalizeId(manifestationId, "manifestation_id"),
   )
-  if (!manifestation || manifestation.author_account_id !== actor.account_id) {
-    throw authorityError(
-      "MANIFESTATION_NOT_OWNED",
-      "Manifestation was not found for this account",
-      404,
-    )
+  if (!manifestation) {
+    throw authorityError("MANIFESTATION_NOT_FOUND", "Manifestation was not found", 404)
   }
+  await requireGeneSteward(db, actor.account_id, manifestation.gene_id)
   if (manifestation.non_withdrawable) {
     throw authorityError("MANIFESTATION_NON_WITHDRAWABLE", "System seed cannot be withdrawn", 409)
   }
@@ -449,7 +441,10 @@ export async function withdrawOwnManifestation(
           FROM icono_manifestations m
           JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id
          WHERE m.manifestation_id = ?
-           AND m.author_account_id = ?
+           AND EXISTS (
+             SELECT 1 FROM icono_caretaker_assignments a
+              WHERE a.account_id = ? AND a.gene_id = m.gene_id AND a.status = 'active'
+           )
            AND m.status = 'active'
            AND m.non_withdrawable = 0
            AND m.row_version = ?

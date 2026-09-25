@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=797fb14e97daaee1"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=1b817a9931002d63"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -27,16 +27,10 @@ export function createCaretakerManifestationEventWiring({
       const state = mounted.get(host)
       if (!state) return
       const termsAcceptance = state.host.querySelector("[data-icono-caretaker-terms-accepted]")
-      const invitationPolicy = state.host.querySelector(
-        'input[name="caretaker-invitation-policy"]:checked',
-      )
-      if (
-        event.target.closest?.("[data-icono-caretaker-terms-accepted]") ||
-        event.target.name === "caretaker-invitation-policy"
-      ) {
+      if (event.target.closest?.("[data-icono-caretaker-terms-accepted]")) {
         const accept = state.host.querySelector("[data-icono-caretaker-accept]")
         if (accept) {
-          accept.disabled = termsAcceptance?.checked !== true || !invitationPolicy || state.busy
+          accept.disabled = termsAcceptance?.checked !== true || state.busy
         }
         return
       }
@@ -150,7 +144,7 @@ export function createCaretakerManifestationEventWiring({
         )
         if (
           !confirmAction(
-            `Delete your manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, ${fallback} will become canonical, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
+            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, ${fallback} will become canonical, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
           )
         )
           return
@@ -180,13 +174,6 @@ export function createCaretakerManifestationEventWiring({
           setStatus(state, "Read and accept the displayed caretaker terms first.", "error")
           return
         }
-        const defaultLeavePolicy = state.host.querySelector(
-          'input[name="caretaker-invitation-policy"]:checked',
-        )?.value
-        if (defaultLeavePolicy !== "retain" && defaultLeavePolicy !== "withdraw") {
-          setStatus(state, "Choose what happens to your manifestation when the role ends.", "error")
-          return
-        }
         void mutate(
           state,
           `/assignments/${encodeURIComponent(state.dossier.assignment.caretaker_assignment_id)}/accept`,
@@ -194,7 +181,6 @@ export function createCaretakerManifestationEventWiring({
             expected_assignment_version: Number(state.dossier.assignment.assignment_version || 0),
             terms_version_id: terms.terms_version_id,
             terms_accepted: true,
-            default_leave_policy: defaultLeavePolicy,
           },
           { success: `You are now the caretaker of ${state.symbol}.` },
         ).catch(function () {})
@@ -234,31 +220,17 @@ export function createCaretakerManifestationEventWiring({
         return
       }
       if (target.hasAttribute("data-icono-caretaker-end")) {
-        const policy = state.host.querySelector('input[name="caretaker-end-policy"]:checked')?.value
-        if (policy !== "retain" && policy !== "withdraw") {
-          setStatus(
-            state,
-            "Choose what happens to your manifestation before ending the role.",
-            "error",
-          )
-          return
-        }
-        const consequence =
-          policy === "withdraw"
-            ? `withdraw your manifestation, make ${state.dossier.assignment?.withdrawal_preview?.fallback_label || "the next eligible version"} canonical, and make the encrypted body eligible for hard purge after 30 days unless legally held`
-            : "keep your manifestation in the gene history"
-        if (!confirmAction(`Stop being caretaker and ${consequence}?`)) return
+        if (!confirmAction(`Stop being caretaker of ${state.symbol}?`)) return
         void mutate(
           state,
           `/assignments/${encodeURIComponent(state.dossier.assignment.caretaker_assignment_id)}/end`,
           {
-            leave_policy: policy,
             expected_assignment_version: Number(state.dossier.assignment.assignment_version || 0),
             expected_head_version: state.dossier.head.head_version,
             expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
           },
           {
-            success: "Caretaker role ended with your selected manifestation policy.",
+            success: "Caretaker role ended.",
             refreshPublic: true,
           },
         ).catch(function () {})

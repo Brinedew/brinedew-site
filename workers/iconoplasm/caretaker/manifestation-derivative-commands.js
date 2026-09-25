@@ -21,6 +21,7 @@ import {
   requireActiveAccount,
   requireActiveGene,
   requireDatabase,
+  requireGeneSteward,
   resolveCommandReplay,
   runCommand,
 } from "./manifestation-authority-repository.js"
@@ -166,21 +167,8 @@ export async function submitTagsDerivative(
   const head = await readHead(db, gene.gene_id)
   const manifestation = await readManifestation(db, revision.manifestation_id)
   if (actor.actorKind === "account") {
-    const assignment = await first(
-      db,
-      `SELECT caretaker_assignment_id FROM icono_caretaker_assignments
-        WHERE caretaker_assignment_id = ? AND account_id = ? AND gene_id = ? AND status = 'active'`,
-      revision.caretaker_assignment_id,
-      actor.actorAccountId,
-      gene.gene_id,
-    )
-    if (!assignment || manifestation.author_account_id !== actor.actorAccountId) {
-      throw authorityError(
-        "DERIVATIVE_MANIFESTATION_NOT_OWNED",
-        "Caretakers may edit Tags only for their current manifestation",
-        403,
-      )
-    }
+    // B-860: the gene's active caretaker manages Tags on any lineage of that gene.
+    await requireGeneSteward(db, actor.actorAccountId, gene.gene_id)
   }
   const sourceHash = normalizeSha256(sourceBodySha256, "source_body_sha256")
   if (sourceHash !== revision.body_sha256) {
@@ -445,21 +433,8 @@ export async function selectTagsDerivativeHead(
   const head = await readHead(db, gene.gene_id)
   const manifestation = await readManifestation(db, derivative.manifestation_id)
   if (actor.actorKind === "account") {
-    const assignment = await first(
-      db,
-      `SELECT caretaker_assignment_id FROM icono_caretaker_assignments
-        WHERE caretaker_assignment_id = ? AND account_id = ? AND gene_id = ? AND status = 'active'`,
-      derivative.caretaker_assignment_id,
-      actor.actorAccountId,
-      gene.gene_id,
-    )
-    if (!assignment || manifestation.author_account_id !== actor.actorAccountId) {
-      throw authorityError(
-        "DERIVATIVE_MANIFESTATION_NOT_OWNED",
-        "Caretakers may select Tags only for their current manifestation",
-        403,
-      )
-    }
+    // B-860: the gene's active caretaker manages Tags on any lineage of that gene.
+    await requireGeneSteward(db, actor.actorAccountId, gene.gene_id)
   }
   const revision = await readRevision(db, derivative.manifestation_revision_id)
   const derivativeHead = await first(
