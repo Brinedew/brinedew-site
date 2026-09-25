@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=015c0a99a23f04e1"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=200ee5fe015bead6"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=31d64e30c09d61f1"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=141937b730ed2df1"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=797fb14e97daaee1"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
