@@ -12,13 +12,9 @@ Iconoplasm draws every human protein-coding gene as a character: 19,023 labelled
 
 ## Quickstart
 
-Show a gene card in a page, a notebook or a slide:
+Two steps: look your genes up once, then embed the `cdn_url` you get back.
 
-```html
-<img src="https://iconoplasm.brinedew.bio/blot/TP53.webp" alt="TP53 as an Iconoplasm character" width="384" height="512">
-```
-
-Turn names from your data (aliases, mixed case, UniProt accessions) into card URLs:
+**1. Look up.** Send up to 50 names at a time. Official symbols, common aliases, any capitalisation and UniProt accessions all work:
 
 ```bash
 curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
@@ -55,11 +51,21 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
 
 (Trimmed. Results come back in the order you sent them, one per identifier.)
 
+**2. Embed** the `cdn_url` in a page, a wiki or a figure:
+
+```html
+<img src="https://iconoplasmportraits.b-cdn.net/blots/v1/T/TP53/19cc3b9c3e65e87f012b2364b0c406a8/TP53-iconoplasm-gene-blot.webp" alt="TP53 as an Iconoplasm character" width="384" height="512">
+```
+
+That address comes straight from our CDN and never changes, so the page keeps showing the card you picked, however many people read it.
+
+Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/blot/TP53.webp` works without a lookup and always shows the current card. Every view of it runs on our server, though, so please don't put it on a page many people will see (see [Using images at scale](#using-images-at-scale)).
+
 ## Which approach to use
 
 | You have | Use | Cost to you |
 | --- | --- | --- |
-| A few official HGNC symbols (TP53, BRCA1) | Build the image URL directly: `/blot/{SYMBOL}.webp` | Nothing to call |
+| A quick try in a notebook, a slide or a private page | Build the image URL directly: `/blot/{SYMBOL}.webp` (official HGNC symbols only) | Nothing to call, but every view runs on our server |
 | Names from papers or datasets: aliases like p53 or IL-1β, UniProt accessions, odd capitalisation | The resolver, up to 50 identifiers per request | 1 request per 50 names |
 | Cards on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each card | 1 request per 50 cards, then nothing per view |
 | Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of all 19,023 genes | 1 download (19 MB) |
