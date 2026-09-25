@@ -8,9 +8,12 @@ import {
 // 0109 adds idx_icono_publish_state_updated so the public change feed pages
 // icono_publish_state by index instead of scanning ~19k rows per request.
 // icono_publish_state has one row per published gene (19,160 on 2026-09-25);
-// 20,000 is the admission ceiling, not an estimate. Building the index reads
-// the table once for the guard and once for the DDL and writes one index entry
-// per row.
+// The admission ceiling (max_rows) is not an estimate.
+// MEASURED on production 2026-09-25 (wrangler d1 insights): the CREATE INDEX
+// alone read 38,573 rows and wrote 19,161 for 19,160 rows, i.e. D1 bills the
+// index build as TWO table passes plus one index entry per row. With the row
+// guard that is three passes. The first release used two and was refused with
+// COST_VERIFIED_BOUND_EXCEEDED after the index had already applied.
 export function createPublishStateIndexMigrationCostAdapter({
   db,
   executable_sha256,
@@ -49,7 +52,7 @@ export function createPublishStateIndexMigrationCostAdapter({
         },
       ]
       const bound = {
-        rows_read: 2 * (args.max_rows + 1) + 16 * args.max_schema_rows + 256,
+        rows_read: 3 * (args.max_rows + 1) + 16 * args.max_schema_rows + 256,
         rows_written: args.max_rows + 32,
         requests: 1,
       }
