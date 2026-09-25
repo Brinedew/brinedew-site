@@ -154,6 +154,17 @@ test("buttons keep one face, one line and the ink primary on every modal surface
           const fonts = surface.root === EDIT ? await page.evaluate(editFonts) : null
           report.push({ where, ...m, fonts })
 
+          // A value escaped for text but not for attributes splits into junk
+          // attribute names (seen live: `sex":"female"` on the Edit blot button).
+          const badAttributes = await page.evaluate(() =>
+            [...document.querySelectorAll("*")].flatMap((el) =>
+              [...el.attributes]
+                .filter((a) => !/^[a-z_:][a-z0-9_.:-]*$/i.test(a.name))
+                .map((a) => `${el.tagName.toLowerCase()} ${a.name}`),
+            ),
+          )
+          assert.deepEqual(badAttributes.slice(0, 5), [], `${where}: malformed attributes`)
+
           const actions = m.buttons.filter((b) => /\bicono-button\b/.test(b.className))
           assert.ok(actions.length > 0, `${where}: no shared buttons found`)
           for (const b of actions) {
