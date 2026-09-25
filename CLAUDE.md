@@ -211,6 +211,7 @@ Production is **Cloudflare Pages + Cloudflare Workers**. There is no GitHub Page
 - **Durable Object class changes** (create, delete or rename) are applied by `wrangler deploy` automatically when the config's migration tag is ahead of the deployed one (`scripts/stateful-worker-do-migration.mjs`).
 - **Cloudflare zone settings** (Pages domains, redirect rules, Web Analytics injection) are owned by `cloudflare/the-only-brinedew-static-edge-policy.json` and its reconciler. Never change them in the dashboard.
 - Never run `wrangler deploy` or `wrangler pages deploy` for production by hand.
+- `workers/generated/operation-cost-identities.js` is generated, not committed (B-863). `pnpm test`, CI and the deploy regenerate it. Before a bare `node --test`, run `node scripts/generate-operation-cost-identities.mjs` once.
 
 Deeper mechanics and recovery live in `docs/ICONOPLASM_OPERATIONS.md` and `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`. Read them rather than trusting a summary here.
 
