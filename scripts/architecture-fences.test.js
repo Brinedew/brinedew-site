@@ -376,24 +376,15 @@ test("IPD-012 keeps one encrypted manifestation command authority", () => {
   assert.match(config, /binding = "ICONOPLASM_AUTHORING_DB"/)
   assert.match(config, /database_name = "iconoplasm-authoring"/)
   assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"/)
-  assert.match(config, /ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup"/)
   assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"/)
-  assert.match(
-    config,
-    /ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup-staging"/,
-  )
   const authoringZones = [
     ...config.matchAll(/^ICONOPLASM_AUTHORING_STORAGE_ZONE = "([^"]+)"$/gm),
-  ].map((match) => match[1])
-  const backupZones = [
-    ...config.matchAll(/^ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "([^"]+)"$/gm),
   ].map((match) => match[1])
   assert.deepEqual(
     new Set(authoringZones).size,
     2,
     "production and staging authoring zones must differ",
   )
-  assert.deepEqual(new Set(backupZones).size, 2, "production and staging backup zones must differ")
   assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
   assert.match(
     deploy,

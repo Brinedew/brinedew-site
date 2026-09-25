@@ -1325,7 +1325,6 @@ import {
   handleIconoplasmReaderRecoverySiteGeneDetail,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
-  IconoplasmManifestationCutoverCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   drainIconoplasmAuthorityAccountProjection,
@@ -1354,7 +1353,6 @@ import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate }
 
 export { IconoplasmVoteCoordinator }
 export { IconoplasmCardPublicationCoordinator }
-export { IconoplasmManifestationCutoverCoordinator }
 export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
 export { IconoplasmSyncGovernor }
 // Import Discord bot handlers
