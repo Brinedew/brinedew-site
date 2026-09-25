@@ -1,4 +1,3 @@
-import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 export const RELEASE_REQUEST_LIMIT = 40
 // Resumable migrations have at most 100 admitted steps plus per-step capacity
 // reads and inventory/registration overhead. The shared daily ceiling remains.
@@ -129,8 +128,12 @@ export async function acquireReleasePlan({
   send,
   features,
   now,
-  identities = OPERATION_COST_IDENTITIES,
+  identities,
 }) {
+  // Lazy (B-863): the identity file is generated after `pnpm install`, but
+  // verify-code-release imports this module before install to read the origin.
+  identities ??= (await import("../workers/generated/operation-cost-identities.js"))
+    .OPERATION_COST_IDENTITIES
   let id = `${releaseId}-${adapter.id}`
   let predecessor
   for (let depth = 0; depth < 8; depth++) {

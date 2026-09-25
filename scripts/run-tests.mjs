@@ -5,6 +5,11 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { availableParallelism } from "node:os"
 
+import { writeOperationCostIdentities } from "./generate-operation-cost-identities.mjs"
+
+// B-863: the cost identity file is generated, not committed. Tests import it.
+writeOperationCostIdentities()
+
 const explicitTestArgs = process.argv.slice(2)
 
 // tsx can silently omit a nonexistent explicit path while running other files.
