@@ -900,10 +900,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   /* ─── Utility ─── */
 
+  // Escapes for text AND attribute values: the old textContent/innerHTML trick
+  // left quotes raw, so JSON in a data-* attribute split into junk attributes.
   function esc(s) {
-    var d = document.createElement("div")
-    d.textContent = s
-    return d.innerHTML
+    return String(s == null ? "" : s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;")
   }
 
   var requestInbox = createRequestInbox({
