@@ -76,6 +76,16 @@ function analyticsCloudflare(sites) {
     if (path.startsWith("/zones?name="))
       return Response.json({ success: true, result: [{ id: "z", name: "brinedew.bio" }] })
     if (path.endsWith("/rum/site_info/list")) return Response.json({ success: true, result: sites })
+    if (
+      path.endsWith("/rulesets/phases/http_config_settings/entrypoint") &&
+      (init.method || "GET") === "GET"
+    ) {
+      return new Response(JSON.stringify({ success: false }), { status: 404 })
+    }
+    if (path.endsWith("/rulesets") && init.method === "POST") {
+      writes.push({ path, body: JSON.parse(init.body) })
+      return Response.json({ success: true, result: {} })
+    }
     if (init.method === "PUT") {
       writes.push({ path, body: JSON.parse(init.body) })
       return Response.json({ success: true, result: {} })
@@ -90,11 +100,12 @@ test("an unmatched Web Analytics site is drift, and apply refuses", async () => 
     { site_tag: "t", host: "elsewhere.example", site_token: "x" },
   ])
   const options = { apiToken: "t", accountId: "a", stage: "analytics", fetchImpl, log: () => {} }
-  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 1 })
+  // Two drifts: the missing configuration rule and the unmatched site.
+  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 2 })
   await assert.rejects(reconcileStaticEdgePolicy({ ...options, mode: "apply" }), /not found/)
 })
 
-test("the analytics stage turns Cloudflare's beacon auto-injection off", async () => {
+test("the analytics stage turns Cloudflare's beacon injection off by configuration rule and site setting", async () => {
   const policy = await loadStaticEdgePolicy()
   assert.equal(policy.webAnalyticsAutoInstall, false)
   const { fetchImpl, writes } = analyticsCloudflare([
@@ -114,6 +125,24 @@ test("the analytics stage turns Cloudflare's beacon auto-injection off", async (
     log: () => {},
   })
   assert.deepEqual(writes, [
+    {
+      path: "/zones/z/rulesets",
+      body: {
+        name: policy.configRulesetName,
+        kind: "zone",
+        phase: "http_config_settings",
+        rules: [
+          {
+            ref: "brinedew_no_injected_web_analytics",
+            description: policy.configRules[0].description,
+            expression: "true",
+            action: "set_config",
+            action_parameters: { disable_rum: true },
+            enabled: true,
+          },
+        ],
+      },
+    },
     {
       path: "/accounts/a/rum/site_info/tag1",
       body: { auto_install: false, host: "brinedew.bio", zone_tag: "z" },
