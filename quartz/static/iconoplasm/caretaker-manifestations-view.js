@@ -134,9 +134,16 @@ function absoluteDate(revision) {
   )
 }
 
-function versionTitle(item) {
+// One global timeline, numbered oldest = 1 (like Google Docs), not each
+// record's own revision_number: caretakers with several records across tenures
+// otherwise saw "Version 1, Version 1, Version 2, Version 1".
+function versionTitle(item, revisions) {
   if (item.manifestation?.origin === "system_seed") return "Original"
-  return "Version " + String(item.revision?.revision_number || "")
+  const numbered = revisions.filter((entry) => entry.manifestation?.origin !== "system_seed")
+  const index = numbered.indexOf(item)
+  return (
+    "Version " + String(index < 0 ? item.revision?.revision_number || "" : numbered.length - index)
+  )
 }
 
 function versionBodyAvailable(revision) {
@@ -150,7 +157,7 @@ function defaultSelectedRevisionId(dossier, revisions) {
   return String(revisions[0]?.revision?.manifestation_revision_id || "")
 }
 
-function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml) {
+function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, revisions) {
   const revision = item.revision || {}
   const revisionId = String(revision.manifestation_revision_id || "")
   const canonical = revisionId && revisionId === dossier.head.canonical_revision_id
@@ -177,7 +184,7 @@ function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml) {
     (revisionId === selectedId ? ' aria-current="true"' : "") +
     ">" +
     '<span class="icono-caretaker-timeline__title">' +
-    escapeHtml(versionTitle(item)) +
+    escapeHtml(versionTitle(item, revisions)) +
     (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
     "</span>" +
     '<span class="icono-caretaker-timeline__meta">' +
@@ -245,14 +252,14 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
   return (
     '<section class="icono-caretaker-preview" data-icono-caretaker-preview aria-live="polite">' +
     '<header class="icono-caretaker-preview__header"><h3>' +
-    escapeHtml(versionTitle(item)) +
+    escapeHtml(versionTitle(item, revisions)) +
     (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
     "</h3><p>" +
     escapeHtml(
       [
         versionAuthor(manifestation),
         absoluteDate(revision),
-        previous ? "changes since " + versionTitle(previous).toLowerCase() : "",
+        previous ? "changes since " + versionTitle(previous, revisions).toLowerCase() : "",
       ]
         .filter(Boolean)
         .join(" · "),
@@ -287,6 +294,7 @@ function historyMarkup(dossier, revisions, selectedId, escapeHtml) {
           dossier,
           selectedId,
           escapeHtml,
+          revisions,
         )
       })
       .join("") +
