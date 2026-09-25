@@ -6,6 +6,7 @@ import {
   desiredRedirectRule,
   desiredRewriteRule,
   loadStaticEdgePolicy,
+  reconcileStaticEdgePolicy,
 } from "./reconcile-brinedew-static-edge-policy.mjs"
 
 // B-834: one policy owns the Cloudflare settings that keep brinedew.bio and
@@ -62,4 +63,91 @@ test("rules serialize to the Cloudflare ruleset shape", async () => {
   assert.equal(www.action_parameters.from_value.preserve_query_string, true)
   const rewrite = desiredRewriteRule(policy.rewriteRules[0])
   assert.deepEqual(rewrite.action_parameters, { uri: { path: { value: "/apps/geneguessr/" } } })
+})
+
+// B-858. Ways the consent setting could silently fail, written first:
+// 1. the Web Analytics site is not matched, and the reconciler reports "fine";
+// 2. auto_install stays on after an apply;
+// 3. the release never runs the analytics stage at all.
+function analyticsCloudflare(sites) {
+  const writes = []
+  const fetchImpl = async (url, init = {}) => {
+    const path = String(url).replace("https://api.cloudflare.com/client/v4", "")
+    if (path.startsWith("/zones?name="))
+      return Response.json({ success: true, result: [{ id: "z", name: "brinedew.bio" }] })
+    if (path.endsWith("/rum/site_info/list")) return Response.json({ success: true, result: sites })
+    if (
+      path.endsWith("/rulesets/phases/http_config_settings/entrypoint") &&
+      (init.method || "GET") === "GET"
+    ) {
+      return new Response(JSON.stringify({ success: false }), { status: 404 })
+    }
+    if (path.endsWith("/rulesets") && init.method === "POST") {
+      writes.push({ path, body: JSON.parse(init.body) })
+      return Response.json({ success: true, result: {} })
+    }
+    if (init.method === "PUT") {
+      writes.push({ path, body: JSON.parse(init.body) })
+      return Response.json({ success: true, result: {} })
+    }
+    throw new Error(`unexpected ${init.method || "GET"} ${path}`)
+  }
+  return { fetchImpl, writes }
+}
+
+test("an unmatched Web Analytics site is drift, and apply refuses", async () => {
+  const { fetchImpl } = analyticsCloudflare([
+    { site_tag: "t", host: "elsewhere.example", site_token: "x" },
+  ])
+  const options = { apiToken: "t", accountId: "a", stage: "analytics", fetchImpl, log: () => {} }
+  // Two drifts: the missing configuration rule and the unmatched site.
+  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 2 })
+  await assert.rejects(reconcileStaticEdgePolicy({ ...options, mode: "apply" }), /not found/)
+})
+
+test("the analytics stage turns Cloudflare's beacon injection off by configuration rule and site setting", async () => {
+  const policy = await loadStaticEdgePolicy()
+  assert.equal(policy.webAnalyticsAutoInstall, false)
+  const { fetchImpl, writes } = analyticsCloudflare([
+    {
+      site_tag: "tag1",
+      host: "brinedew.bio",
+      site_token: policy.webAnalyticsSiteToken,
+      auto_install: true,
+    },
+  ])
+  await reconcileStaticEdgePolicy({
+    apiToken: "t",
+    accountId: "a",
+    mode: "apply",
+    stage: "analytics",
+    fetchImpl,
+    log: () => {},
+  })
+  assert.deepEqual(writes, [
+    {
+      path: "/zones/z/rulesets",
+      body: {
+        name: policy.configRulesetName,
+        kind: "zone",
+        phase: "http_config_settings",
+        rules: [
+          {
+            ref: "brinedew_no_injected_web_analytics",
+            description: policy.configRules[0].description,
+            expression: "true",
+            action: "set_config",
+            action_parameters: { disable_rum: true },
+            enabled: true,
+          },
+        ],
+      },
+    },
+    {
+      path: "/accounts/a/rum/site_info/tag1",
+      body: { auto_install: false, host: "brinedew.bio", zone_tag: "z" },
+    },
+  ])
+  const workflow = await read("../.github/workflows/deploy-quartz.yml")
+  assert.match(workflow, /reconcile-brinedew-static-edge-policy\.mjs --apply analytics/)
 })

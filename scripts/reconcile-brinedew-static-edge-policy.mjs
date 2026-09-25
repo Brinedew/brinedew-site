@@ -7,6 +7,7 @@
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --check
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply prepare
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply cutover
+//   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply analytics
 //
 // `prepare` is safe while the broad Worker routes still exist (Pages domains,
 // DNS targets, redirect rules). `cutover` must run right after the deploy that
@@ -74,6 +75,20 @@ export function desiredRewriteRule(rule) {
     expression: rule.expression,
     action: "rewrite",
     action_parameters: { uri: { path: { value: rule.path } } },
+    enabled: true,
+  }
+}
+
+// B-858: a configuration rule turns Cloudflare's own Web Analytics injection
+// off for every matching request, whatever the Web Analytics site settings say
+// ("Configuration rules have precedence over any Web Analytics rules").
+export function desiredConfigRule(rule) {
+  return {
+    ref: rule.ref,
+    description: rule.description,
+    expression: rule.expression,
+    action: "set_config",
+    action_parameters: { disable_rum: rule.disableRum === true },
     enabled: true,
   }
 }
@@ -150,6 +165,7 @@ export async function reconcileStaticEdgePolicy({
   const apply = mode === "apply"
   const doPrepare = stage === "prepare" || stage === "all"
   const doCutover = stage === "cutover" || stage === "all"
+  const doAnalytics = doCutover || stage === "analytics"
   const policy = await loadStaticEdgePolicy()
   const call = client({ apiToken, fetchImpl })
   const zones = await call(`/zones?name=${encodeURIComponent(policy.zoneName)}`)
@@ -276,13 +292,38 @@ export async function reconcileStaticEdgePolicy({
       policy.rewriteRules.map(desiredRewriteRule),
       { apply, log },
     )
+  }
 
+  if (doAnalytics) {
+    // B-858: with auto_install on, Cloudflare injects its own beacon into every
+    // HTML page before any consent check, and our consent-gated snippet then
+    // sees an existing beacon and stands down. A site we cannot find is drift,
+    // never a silent pass.
+    drift += await reconcilePhase(
+      call,
+      zoneId,
+      "http_config_settings",
+      policy.configRulesetName,
+      (policy.configRules || []).map(desiredConfigRule),
+      { apply, log },
+    )
     const sites = await call(`/accounts/${accountId}/rum/site_info/list`)
+    for (const entry of sites || []) {
+      log(
+        `web analytics site ${entry?.host || entry?.ruleset?.zone_name || "?"}: auto_install ${entry?.auto_install}, ruleset ${entry?.ruleset?.enabled ?? "none"}`,
+      )
+    }
     const site = (sites || []).find(
       (entry) =>
+        (policy.webAnalyticsSiteToken && entry?.site_token === policy.webAnalyticsSiteToken) ||
         entry?.ruleset?.zone_name === policy.webAnalyticsSiteHost ||
         entry?.host === policy.webAnalyticsSiteHost,
     )
+    if (!site) {
+      drift += 1
+      log(`web analytics site ${policy.webAnalyticsSiteHost}: not found`)
+      if (apply) throw new Error("Web Analytics site from the policy was not found")
+    }
     if (site && site.auto_install !== policy.webAnalyticsAutoInstall) {
       drift += 1
       log(`web analytics auto_install ${site.auto_install} -> ${policy.webAnalyticsAutoInstall}`)
@@ -297,8 +338,8 @@ export async function reconcileStaticEdgePolicy({
         })
         log("web analytics auto_install: written")
       }
-    } else {
-      log(`web analytics auto_install: ${site ? site.auto_install : "site not found"}`)
+    } else if (site) {
+      log(`web analytics auto_install: ${site.auto_install}`)
     }
   }
 
@@ -308,7 +349,8 @@ export async function reconcileStaticEdgePolicy({
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2)
   const mode = args.includes("--apply") ? "apply" : "check"
-  const stage = args.find((arg) => ["prepare", "cutover", "all"].includes(arg)) || "all"
+  const stage =
+    args.find((arg) => ["prepare", "cutover", "analytics", "all"].includes(arg)) || "all"
   const { drift } = await reconcileStaticEdgePolicy({
     apiToken: process.env.CLOUDFLARE_API_TOKEN,
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,

@@ -71,8 +71,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   authority_tags_derivative_select:
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivative-head",
   authority_backups: "/api/iconoplasm/authority/backups/capabilities",
-  authority_cutover_status: "/api/iconoplasm/authority/cutover/runs/cutover_0001",
-  authority_cutover_actions: "/api/iconoplasm/authority/cutover/runs/cutover_0001/actions",
   authority_maintenance_retention:
     "/api/iconoplasm/authority/maintenance/withdrawal-retention/sweep",
   authority_maintenance_commands: "/api/iconoplasm/authority/maintenance/command-receipts/compact",
@@ -184,12 +182,7 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_tags_derivative_select",
     ],
     "authority-backup-bearer": ["authority_backups"],
-    "authority-cutover-bearer": [
-      "authority_cutover_status",
-      "authority_cutover_actions",
-      "authority_discovery_candidates",
-      "authority_discovery_activate",
-    ],
+    "authority-cutover-bearer": ["authority_discovery_candidates", "authority_discovery_activate"],
     "authority-maintenance-bearer": [
       "authority_maintenance_retention",
       "authority_maintenance_commands",

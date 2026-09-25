@@ -322,6 +322,27 @@ async function requireAssignment(db, rawAssignmentId) {
   return row
 }
 
+// B-860: the gene's active caretaker manages every lineage on that gene,
+// whoever wrote it. Authorship grants no extra rights.
+async function requireGeneSteward(db, accountId, geneId) {
+  const row = await first(
+    db,
+    `SELECT caretaker_assignment_id, account_id, gene_id, status, assignment_version
+       FROM icono_caretaker_assignments
+      WHERE account_id = ? AND gene_id = ? AND status = 'active'`,
+    accountId,
+    geneId,
+  )
+  if (!row) {
+    throw authorityError(
+      "ACTIVE_ASSIGNMENT_REQUIRED",
+      "Only this gene's active caretaker can manage its manifestations",
+      403,
+    )
+  }
+  return row
+}
+
 async function readManifestation(db, manifestationId) {
   return first(
     db,
@@ -683,6 +704,7 @@ export {
   requireActiveGene,
   requireAssignment,
   requireDatabase,
+  requireGeneSteward,
   resolveCommandReplay,
   revisionSnapshot,
   selectionSnapshot,
