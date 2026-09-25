@@ -104,6 +104,20 @@ jobs:
           PYTHON
           exit "$test_status"
 
+      # B-839: the caretaker dialog is checked in a real browser (the runner's
+      # installed Chrome) by geometry and computed fonts, not CSS regexes.
+      - name: Caretaker dialog geometry (browser E2E)
+        run: node --test e2e/*.e2e.mjs
+
+      - name: Upload E2E screenshots and measurements
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-${{ github.sha }}
+          path: artifacts/e2e
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Preserve complete test output
         if: ${{ always() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
         uses: actions/upload-artifact@v7
