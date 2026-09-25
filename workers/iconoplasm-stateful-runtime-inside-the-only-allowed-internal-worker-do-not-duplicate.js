@@ -178,11 +178,6 @@ import {
   resolveCaretakerCommentRecipient,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
-import {
-  forwardManifestationCutoverActionToCoordinator,
-  IconoplasmManifestationCutoverCoordinator,
-} from "./iconoplasm/caretaker/manifestation-cutover-durable-coordinator.js"
-export { IconoplasmManifestationCutoverCoordinator }
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { readBrinedewAccount } from "./lib/brinedew-account-identity.js"
 import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
@@ -35745,8 +35740,6 @@ const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecut
 })
 
 async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
-  const coordinated = await forwardManifestationCutoverActionToCoordinator(request, env)
-  if (coordinated) return done("manifestation_authority_cutover_coordinator", coordinated)
   // Accepted writes wake their exact event below; the scheduled outbox retry
   // preserves recovery after failure. Reads and unauthenticated requests must
   // not start an unrelated database repair pass outside their admission.
