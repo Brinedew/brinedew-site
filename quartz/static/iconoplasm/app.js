@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=21fe258d32cf905c"
+import { createRequestInbox } from "./request-inbox.js?v=7e9a6d5198260d81"
 import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 import {
   createEmulsionFavoriteStore,
@@ -130,8 +130,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="6" cy="4.75" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.25" r="1.5" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="9" r="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.25v7.5M6 9.25a3 3 0 0 0 3 3h3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
   var ICONO_SEND_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  // B-862: sliders, not a pencil. The dialog adjusts an image; a pencil reads as
+  // "edit the text", which caretakers confused with the manifestation editor.
   var ICONO_EDIT_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m4.75 13.85-.6 2.5 2.5-.6 8.45-8.45a1.6 1.6 0 0 0 0-2.26l-.14-.14a1.6 1.6 0 0 0-2.26 0l-7.95 8.95Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><path d="m11.8 5.8 2.4 2.4" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>'
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false" data-icono-icon="sliders"><path d="M3.5 5.5h6M13.5 5.5h3M3.5 10h2M9.5 10h7M3.5 14.5h8M15.5 14.5h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="11.5" cy="5.5" r="1.75" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="10" r="1.75" stroke="currentColor" stroke-width="1.6"/><circle cx="13.5" cy="14.5" r="1.75" stroke="currentColor" stroke-width="1.6"/></svg>'
   var ICONO_MORE_ICON =
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="4.5" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="15.5" cy="10" r="1.6" fill="currentColor"/></svg>'
   var ICONO_PLUS_ICON =
@@ -925,6 +927,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     navigate: function (href, link) {
       navigateTo(href, link)
     },
+    // B-862: the caretaker card shows its gene's portrait. Signed-in caretakers
+    // only, once per symbol, through the same static gene detail the page reads.
+    loadGenePortrait: function (symbol) {
+      return fetchGeneDetail(symbol).then(function (detail) {
+        return detail ? publishedPortraitUrl(detail, "thumb") : ""
+      })
+    },
   })
 
   function normalizedSymbol(symbol) {
@@ -1097,10 +1106,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       return
     }
-    if (existing) {
-      existing.setAttribute("data-icono-viewer-caretaker", "true")
-      return
-    }
+    if (existing && existing.hasAttribute("data-icono-caretaker-open")) return
+    // B-862: your own caretaker chip is the door to your tools, like Reddit's
+    // Mod Mode toggle or YouTube's "Customize channel": a badge you click, not a
+    // sentence telling you where to go.
     var markup = renderCaretakerIdentityMarkup(
       {
         username: currentUser.username,
@@ -1109,14 +1118,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "icono-caretaker-identity--toolbar",
     )
     if (!markup) return
-    var anchor =
-      actions.querySelector(".icono-toolbar-more") ||
-      actions.querySelector("[data-icono-caretaker-claim-action]")
-    if (!anchor) return
-    anchor.insertAdjacentHTML("beforebegin", markup)
-    actions
-      .querySelector(".icono-caretaker-identity--toolbar")
-      ?.setAttribute("data-icono-viewer-caretaker", "true")
+    markup = markup
+      .replace(
+        '<div class="icono-caretaker-identity ',
+        '<button type="button" data-icono-caretaker-open data-icono-viewer-caretaker="true" title="Open caretaker tools" class="icono-caretaker-identity icono-caretaker-identity--button ',
+      )
+      .replace(
+        /<\/span><\/div>$/,
+        '</span><span class="icono-caretaker-identity__badge">Caretaker</span></button>',
+      )
+    if (existing) {
+      existing.insertAdjacentHTML("beforebegin", markup)
+      existing.remove()
+    } else {
+      var anchor =
+        actions.querySelector(".icono-toolbar-more") ||
+        actions.querySelector("[data-icono-caretaker-claim-action]")
+      if (!anchor) return
+      anchor.insertAdjacentHTML("beforebegin", markup)
+    }
+    actions.querySelector("[data-icono-caretaker-open]")?.addEventListener("click", function () {
+      var host = container.querySelector("[data-icono-caretaker-island]")
+      if (!host) return
+      void loadCaretakerPanel().then(function (panel) {
+        panel.open(host)
+      })
+    })
   }
 
   function portraitDimensions(genePayload) {
