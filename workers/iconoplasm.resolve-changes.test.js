@@ -345,6 +345,43 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
   )
 })
 
+// Live on 25 Sep, POST /resolve with {"symbols": ["p53", "TP53"]} answered
+// 200 with an empty results list: the key /images/resolve accepts was silently
+// ignored here. A client could not tell "no such gene" from "wrong request".
+test("legacy resolve accepts the same keys as the image resolver and refuses unusable requests", async () => {
+  const post = async (body) => {
+    const response =
+      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: typeof body === "string" ? body : JSON.stringify(body),
+        }),
+        buildEnv(),
+        {},
+      )
+    return { status: response.status, payload: await response.json() }
+  }
+
+  const bySymbols = await post({ symbols: ["P53", "INS"] })
+  assert.equal(bySymbols.status, 200)
+  assert.deepEqual(
+    bySymbols.payload.results.map((item) => item.canonical_symbol),
+    ["TP53", "INS"],
+  )
+
+  for (const unusable of [{}, { symbols: [] }, { identifiers: "TP53" }, "not json"]) {
+    const refused = await post(unusable)
+    assert.equal(refused.status, 400, JSON.stringify(unusable))
+    assert.equal(refused.payload.max_identifiers, 250)
+  }
+
+  // More than the limit is refused, not silently truncated to the first 250.
+  const tooMany = await post({ identifiers: Array.from({ length: 251 }, () => "INS") })
+  assert.equal(tooMany.status, 400)
+  assert.equal(tooMany.payload.max_identifiers, 250)
+})
+
 test("public changes route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
