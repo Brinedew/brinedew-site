@@ -44,8 +44,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=bbc8d8099c6b8d5f"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=06d209074b465040"
+} from "./diagram-studio.js?v=3577888b9e60893b"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=688f9a6233bd9ce5"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -1580,7 +1580,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (
       !payload ||
       typeof payload !== "object" ||
-      !payload.candidate_gallery ||
+      // B-865: a pre-split catalog record has no gallery reference, but a newer
+      // delta riding on it may still hold the real pool.
+      (!payload.candidate_gallery && !payload.overlay_candidate_pool) ||
       !publicationReader ||
       typeof publicationReader.candidateGallery !== "function"
     ) {

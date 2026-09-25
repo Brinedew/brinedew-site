@@ -20,7 +20,12 @@ function candidate(id, filler = "") {
   }
 }
 
-function fixture({ candidates = [], embedded = false, staleOverlay = false } = {}) {
+function fixture({
+  candidates = [],
+  embedded = false,
+  staleOverlay = false,
+  overlayCandidates = null,
+} = {}) {
   const objects = new Map()
   const requests = []
   const store = (kind, value) => {
@@ -73,15 +78,15 @@ function fixture({ candidates = [], embedded = false, staleOverlay = false } = {
       ],
     })
     const head = { schema_version: 2, current: `ccv2-${manifest.hash}` }
-    if (staleOverlay) {
-      const olderCandidates = candidates.slice(0, -1)
-      const olderGallery = await writeCandidateGallery(SYMBOL, olderCandidates, writePage)
+    if (staleOverlay || overlayCandidates) {
+      const overlayPool = overlayCandidates || candidates.slice(0, -1)
+      const overlayGallery = await writeCandidateGallery(SYMBOL, overlayPool, writePage)
       const overlayGene = store("genes", {
         symbol: SYMBOL,
         full_name: "tumor protein p53",
-        portrait: { status: "published", asset_sha256: olderCandidates[0].asset_sha256 },
-        candidate_count: olderGallery.candidate_count,
-        candidate_gallery: olderGallery.candidate_gallery,
+        portrait: { status: "published", asset_sha256: overlayPool[0].asset_sha256 },
+        candidate_count: overlayGallery.candidate_count,
+        candidate_gallery: overlayGallery.candidate_gallery,
       })
       const segment = store("indexes", {
         schema_version: 1,
@@ -200,5 +205,58 @@ test("a newer base gallery supplies newly generated candidates while the vote ov
   assert.deepEqual(
     gallery.candidates.map((item) => item.is_current),
     [true, false, false],
+  )
+})
+
+// B-865: delta segments are carried across catalog rebuilds, so a delta can be
+// older than the catalog (the case above, #257) or newer (ARCN1, 2026-09-25:
+// six uploads sat in the delta's gallery for over an hour while the page showed
+// the catalog's older pool). Ways the reader can get this wrong:
+// 1. a newer delta pool is hidden behind the catalog's older one;
+// 2. same, when the catalog record is pre-split and embeds its pool inline
+//    (ARCN1's exact shape), so no gallery reference exists on the merged record;
+// 3. an older delta pool hides the catalog's newer generation (#257);
+// 4. equal newest candidates pick the delta (a tie is no evidence it is newer);
+// 5. the shown count disagrees with the pool actually shown;
+// 6. the delta's selected portrait stops being marked current.
+test("a delta holding the newest upload shows its pool over an older catalog gallery", async () => {
+  const pool = [candidate(1), candidate(2)]
+  const newer = [candidate(1), candidate(2), candidate(63140), candidate(63145)]
+  const { reader } = await fixture({ candidates: pool, overlayCandidates: newer })
+  const record = await reader.gene(SYMBOL)
+  const gallery = await reader.candidateGallery(record)
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.candidate_image_id),
+    [1, 2, 63140, 63145],
+  )
+  assert.equal(gallery.count, 4)
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.is_current),
+    [true, false, false, false],
+  )
+})
+
+test("a delta holding the newest upload wins over a pre-split catalog that embeds its pool", async () => {
+  const pool = [candidate(8185), candidate(35127)]
+  const newer = [candidate(8185), candidate(35127), candidate(63140), candidate(63145)]
+  const { reader } = await fixture({ candidates: pool, embedded: true, overlayCandidates: newer })
+  const record = await reader.gene(SYMBOL)
+  const gallery = await reader.candidateGallery(record)
+  assert.equal(gallery.count, 4)
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.candidate_image_id),
+    [8185, 35127, 63140, 63145],
+  )
+})
+
+test("an equally new delta pool leaves the catalog pool in charge", async () => {
+  const pool = [candidate(1), candidate(2), candidate(3)]
+  const same = [candidate(1), candidate(3)]
+  const { reader } = await fixture({ candidates: pool, overlayCandidates: same })
+  const record = await reader.gene(SYMBOL)
+  const gallery = await reader.candidateGallery(record)
+  assert.deepEqual(
+    gallery.candidates.map((item) => item.candidate_image_id),
+    [1, 2, 3],
   )
 })
