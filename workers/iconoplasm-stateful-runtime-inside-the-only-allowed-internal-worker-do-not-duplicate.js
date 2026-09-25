@@ -34036,12 +34036,20 @@ async function handlePublicChanges(request, env) {
     1,
     Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)),
   )
-  const perSourceLimit = Math.max(limit * 5, 250)
-  const [catalogRows, essenceRows, portraitRows, publishStateRows] = await Promise.all([
+  // COST: this is a public, uncached route. Every query below must be an index
+  // SEARCH bounded by the page size. The previous version wrapped updated_at in
+  // COALESCE (defeating the index) and read all ~19k icono_publish_state rows on
+  // every call: ~40-77k D1 rows per request, so ~65-125 calls could exhaust the
+  // free plan's 5M daily reads for the whole site. Now: <= 3 * perSourceLimit +
+  // limit rows (~875 at the default page size).
+  // NULL updated_at never matched before either: COALESCE(NULL, '') > since is
+  // false for any non-empty since, exactly like NULL > since.
+  const perSourceLimit = limit + 25
+  const [catalogRows, essenceRows, portraitRows] = await Promise.all([
     env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol AS symbol, updated_at
          FROM icono_gene_catalog
-        WHERE COALESCE(updated_at, '') > ?
+        WHERE updated_at > ?
         ORDER BY updated_at ASC, gene_symbol ASC
         LIMIT ?`,
     )
@@ -34050,7 +34058,7 @@ async function handlePublicChanges(request, env) {
     env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol AS symbol, updated_at
          FROM icono_gene_essence
-        WHERE COALESCE(updated_at, '') > ?
+        WHERE updated_at > ?
         ORDER BY updated_at ASC, gene_symbol ASC
         LIMIT ?`,
     )
@@ -34059,16 +34067,12 @@ async function handlePublicChanges(request, env) {
     env.ICONOPLASM_DB.prepare(
       `SELECT gene_symbol AS symbol, updated_at
          FROM icono_publish_state
-        WHERE COALESCE(updated_at, '') > ?
+        WHERE updated_at > ?
         ORDER BY updated_at ASC, gene_symbol ASC
         LIMIT ?`,
     )
       .bind(since, perSourceLimit)
       .all(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol AS symbol, current_asset_sha256
-         FROM icono_publish_state`,
-    ).all(),
   ])
 
   const merged = []
@@ -34102,6 +34106,25 @@ async function handlePublicChanges(request, env) {
     )
   })
 
+  // Asset hashes only for the symbols that can appear on this page (primary-key
+  // lookups), never the whole table.
+  const pageSymbols = []
+  const seenSymbols = new Set()
+  for (const row of merged) {
+    if (!row.symbol || !row.changed_at || seenSymbols.has(row.symbol)) continue
+    if (pageSymbols.length >= limit) break
+    seenSymbols.add(row.symbol)
+    pageSymbols.push(row.symbol)
+  }
+  const publishStateRows = pageSymbols.length
+    ? await env.ICONOPLASM_DB.prepare(
+        `SELECT gene_symbol AS symbol, current_asset_sha256
+           FROM icono_publish_state
+          WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+      )
+        .bind(JSON.stringify(pageSymbols))
+        .all()
+    : { results: [] }
   const publishStateBySymbol = new Map(
     (Array.isArray(publishStateRows?.results) ? publishStateRows.results : [])
       .map((row) => [
