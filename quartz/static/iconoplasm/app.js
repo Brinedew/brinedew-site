@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=21fe258d32cf905c"
+import { createRequestInbox } from "./request-inbox.js?v=7e9a6d5198260d81"
 import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 import {
   createEmulsionFavoriteStore,
@@ -926,6 +926,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     resolvePortraitUrl: portraitDelivery.resolve,
     navigate: function (href, link) {
       navigateTo(href, link)
+    },
+    // B-862: the caretaker card shows its gene's portrait. Signed-in caretakers
+    // only, once per symbol, through the same static gene detail the page reads.
+    loadGenePortrait: function (symbol) {
+      return fetchGeneDetail(symbol).then(function (detail) {
+        return detail ? publishedPortraitUrl(detail, "thumb") : ""
+      })
     },
   })
 
