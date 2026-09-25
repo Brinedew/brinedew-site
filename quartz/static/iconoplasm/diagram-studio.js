@@ -52,9 +52,76 @@ function publicApiOrigin() {
     : "https://iconoplasm.brinedew.bio"
 }
 
-export function searchPublishedGenes(query, { limit = 8 } = {}) {
+// B-855: people type the name they know ("p53", "E-cadherin"). The static
+// index has symbols and names only, so the curated literature aliases come from
+// the public metadata: one small, browser-cached request per studio session,
+// never one per keystroke. Ranking matches the server search: match strength
+// (exact, prefix, substring) first, then symbol before alias before name.
+const READER_RANK_SCORE = { 1: 0, 2: 10, 3: 12, 4: 20, 5: 22 }
+let publicationAliasesPromise = null
+
+function publicationAliases() {
+  publicationAliasesPromise ||= fetch(`${publicApiOrigin()}/api/public/v1/metadata`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((metadata) => metadata?.publication_aliases?.by_symbol || {})
+    .catch(() => {
+      publicationAliasesPromise = null
+      return {}
+    })
+  return publicationAliasesPromise
+}
+
+function aliasScore(aliases, needle) {
+  let best = null
+  for (const alias of Array.isArray(aliases) ? aliases : []) {
+    const value = String(alias || "").toLowerCase()
+    const score =
+      value === needle ? 1 : value.startsWith(needle) ? 11 : value.includes(needle) ? 21 : null
+    if (score !== null && (best === null || score < best)) best = score
+  }
+  return best
+}
+
+function readerScore(gene, needle) {
+  const symbol = String(gene?.symbol || "").toLowerCase()
+  const name = String(gene?.full_name || gene?.name || "").toLowerCase()
+  if (symbol === needle) return READER_RANK_SCORE[1]
+  if (symbol.startsWith(needle)) return READER_RANK_SCORE[2]
+  if (name.startsWith(needle)) return READER_RANK_SCORE[3]
+  if (symbol.includes(needle)) return READER_RANK_SCORE[4]
+  return READER_RANK_SCORE[5]
+}
+
+export async function searchPublishedGenes(query, { limit = 8 } = {}) {
   const reader = globalThis.IconoplasmPublicationReader || iconoplasmPublicationReader
-  return reader.search(String(query || ""), { limit })
+  const text = String(query || "")
+  const needle = text.trim().toLowerCase()
+  const [direct, aliases] = await Promise.all([
+    reader.search(text, { limit }),
+    needle.length >= 2 ? publicationAliases() : {},
+  ])
+  const scored = new Map()
+  for (const gene of direct?.genes || []) {
+    scored.set(gene.symbol, { gene, score: readerScore(gene, needle) })
+  }
+  const aliasHits = Object.entries(aliases)
+    .map(([symbol, list]) => [symbol, aliasScore(list, needle)])
+    .filter(([symbol, score]) => score !== null && !(scored.get(symbol)?.score < score))
+    .sort((left, right) => left[1] - right[1])
+    .slice(0, limit)
+  for (const [symbol, score] of aliasHits) {
+    const exact = await reader.search(symbol, { limit: 1, symbols: [symbol] })
+    const gene = exact?.genes?.find((item) => item.symbol === symbol)
+    if (gene) scored.set(symbol, { gene, score })
+  }
+  const genes = [...scored.values()]
+    .sort(
+      (left, right) =>
+        left.score - right.score || left.gene.symbol.localeCompare(right.gene.symbol),
+    )
+    .slice(0, limit)
+    .map((item) => item.gene)
+  return { ...direct, genes }
 }
 
 function readStoredDocument() {
