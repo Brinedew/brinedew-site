@@ -14,6 +14,8 @@ function costAuthoritySources(sourceRoot) {
     entryPoints: ["workers/iconoplasm/operation-cost-http.js"],
     bundle: true,
     packages: "external",
+    // The cost code imports this generated file; it may not exist yet.
+    external: ["*/operation-cost-identities.js"],
     platform: "neutral",
     format: "esm",
     write: false,
@@ -28,7 +30,9 @@ function costAuthoritySources(sourceRoot) {
     packages: [
       ...new Set(
         inputs.flatMap((input) =>
-          input.imports.filter((entry) => entry.external).map((entry) => entry.path),
+          input.imports
+            .filter((entry) => entry.external && !/^[./]/.test(entry.path))
+            .map((entry) => entry.path),
         ),
       ),
     ],
