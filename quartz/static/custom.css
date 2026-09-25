@@ -1829,3 +1829,11 @@ body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after 
   --secondary: oklch(40% 0.04 55);
   --tertiary: var(--accent);
 }
+
+/* Code blocks scroll inside the column. A blog rule makes their <figure> a flex
+   container, and a flex item's default min-width:auto let the <pre> grow to its
+   longest line: /developers scrolled the whole page 332 px sideways on phones. */
+figure[data-rehype-pretty-code-figure] > pre {
+  min-width: 0;
+  max-width: 100%;
+}
