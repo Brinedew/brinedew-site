@@ -12,8 +12,17 @@ test("maintenance containment uploads retain cron work and activation restores t
     new URL("./prepare-iconoplasm-public-read-cutover.mjs", import.meta.url),
     "utf8",
   )
+  // A normal release applies a pending Durable Object migration with
+  // `wrangler deploy` and the config's own triggers; it is not containment.
+  const migrationDeploy = workflow.jobs["deploy-production"].steps.find(
+    (step) => step.name === "Deploy the compatible stateful Worker",
+  )
+  assert.equal(migrationDeploy.if, "inputs.data_maintenance != true")
+  assert.match(migrationDeploy.run, /steps\.do_migration\.outputs\.pending/)
+  assert.doesNotMatch(migrationDeploy.run, /--triggers/)
   const uploads = workflow.jobs["deploy-production"].steps.filter(
     (step) =>
+      step !== migrationDeploy &&
       (step.run?.includes("pnpm exec wrangler deploy") ||
         step.run?.includes("node scripts/deploy-iconoplasm-reader-recovery.mjs")) &&
       (step.run.includes("--config wrangler.the-only-allowed-internal-stateful-worker") ||
