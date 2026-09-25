@@ -145,6 +145,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CACHE_BUST: ${{ github.sha }}
       ICONOPLASM_RELEASE_ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
+      ICONOPLASM_COST_OVERRUN_LOG: ${{ github.workspace }}/../iconoplasm-cost-overruns.jsonl
     steps:
       # Bump actions/checkout @v6 -> @v7 and actions/upload-artifact @v6 -> @v7
       # (2026 current majors). This workflow is the canonical production
@@ -629,6 +630,19 @@ jobs:
           fi
           grep -Eq '"authenticated"[[:space:]]*:[[:space:]]*false' "$me_body"
           grep -Fiq 'Cache-Control: no-store' "$me_headers"
+
+      # B-847: an admitted operation that overran its verified bound has
+      # already applied and been charged, so the release above carried on and
+      # brought production back. The run still goes red here, after production
+      # is safe, because that adapter stays refused until its bound is fixed.
+      - name: Fail the run if any admitted operation overran its bound
+        if: always()
+        run: |
+          if [ -s "$ICONOPLASM_COST_OVERRUN_LOG" ]; then
+            echo "Admitted operations that overran their verified bound (applied and charged):" >&2
+            cat "$ICONOPLASM_COST_OVERRUN_LOG" >&2
+            exit 1
+          fi
 
   post-deploy-production-acceptance:
     needs: deploy-production
