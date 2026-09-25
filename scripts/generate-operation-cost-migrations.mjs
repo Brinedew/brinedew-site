@@ -154,6 +154,16 @@ function output() {
   }
   const migrations = [
     [
+      "PUBLISH_STATE_UPDATED_INDEX",
+      "0109_publish_state_updated_index.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0109_publish_state_updated_index.sql",
+        0,
+        1,
+      ),
+    ],
+    [
       "COMPACT_DISCOVERY_ACTIVATION",
       "0108_compact_discovery_activation_v2.sql",
       compactDiscoveryActivationMigrationStatements(),

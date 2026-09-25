@@ -11,6 +11,12 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0109_publish_state_updated_index.sql": {
+      "adapter_id": "iconoplasm-migration-0109",
+      "arguments": { "max_rows": 20000, "max_schema_rows": 512 },
+      "migration_protocol": "one-migration-per-release-v1",
+      "prediction": { "rows_read": 45000, "rows_written": 19500, "requests": 1 }
+    },
     "iconoplasm/0108_compact_discovery_activation_v2.sql": {
       "adapter_id": "iconoplasm-migration-0108",
       "arguments": {},
