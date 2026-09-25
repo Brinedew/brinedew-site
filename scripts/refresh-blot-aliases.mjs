@@ -109,6 +109,7 @@ for (let index = start; index < symbols.length; index += BATCH) {
     result.ok ? (ok += 1) : (failed += 1)
     appendFileSync(log, `${JSON.stringify({ index, symbol, ...result })}\n`)
   }
-  if ((index / BATCH) % 20 === 0) console.log(`at ${index}/${symbols.length}: ok ${ok}, failed ${failed}`)
+  if ((index / BATCH) % 20 === 0)
+    console.log(`at ${index}/${symbols.length}: ok ${ok}, failed ${failed}`)
 }
 console.log(`done: ok ${ok}, failed ${failed}`)
