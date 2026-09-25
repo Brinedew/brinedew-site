@@ -9,7 +9,13 @@ import {
 import { createOperationCostAuthority, OPERATION_COST_ROUTE_PREFIX } from "./operation-cost-http.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
-function fixture({ migrated = true, kv, initializeCatalog, kvUsage = {} } = {}) {
+function fixture({
+  migrated = true,
+  kv,
+  initializeCatalog,
+  kvUsage = {},
+  meta = () => ({ rows_read: 2, rows_written: 0 }),
+} = {}) {
   const clock = Date.parse("2026-09-06T12:00:00Z")
   const local = new DatabaseSync(":memory:")
   const provider = new DatabaseSync(":memory:")
@@ -61,7 +67,7 @@ function fixture({ migrated = true, kv, initializeCatalog, kvUsage = {} } = {}) 
           return {
             success: true,
             results: statement.columns().length ? statement.all(...args) : statement.run(...args),
-            meta: { rows_read: 2, rows_written: 0 },
+            meta: meta(sql),
           }
         })
         provider.exec("COMMIT")
@@ -425,6 +431,101 @@ test("migration uses the same HTTP prediction gate and a query plan cannot be re
     assert.equal((await result.json()).result.applied, true)
     assert.equal(f.calls.length, 1)
     assert.equal(f.provider.prepare("SELECT COUNT(*) AS n FROM d1_migrations").get().n, 1)
+  } finally {
+    f.close()
+  }
+})
+
+// Replay of the 25 Sep 2026 incident (B-847). D1 billed the 0109 CREATE INDEX
+// as two table passes, more than its bound. The executor threw after the
+// index had applied, and the overrun invalidated every adapter in the Worker
+// build, including the migration inventory each release starts with, so the
+// app stayed in schema transition for 43 minutes until new code shipped.
+test("a migration that overruns its bound after applying still reports success and leaves the release able to continue", async () => {
+  const f = fixture({
+    meta: (sql) =>
+      /^CREATE INDEX/i.test(sql)
+        ? { rows_read: 38_573, rows_written: 19_161 }
+        : { rows_read: 2, rows_written: 0 },
+  })
+  try {
+    f.provider.exec(
+      "CREATE TABLE icono_publish_state (gene_symbol TEXT PRIMARY KEY, updated_at TEXT); INSERT INTO icono_publish_state VALUES ('TP53', '2026-09-25'), ('BRCA1', '2026-09-25')",
+    )
+    const capabilities = await (await f.authority.fetch(f.request(""))).json()
+    const find = (id) => capabilities.adapters.find((adapter) => adapter.id === id)
+    const register = async (adapter, id, prediction) => {
+      const response = await f.authority.fetch(
+        f.request("/register", {
+          ...adapter,
+          id,
+          adapter_id: adapter.id,
+          prediction,
+          expires_at: f.clock + 60_000,
+        }),
+      )
+      assert.equal(response.status, 201)
+    }
+    const migration = find("iconoplasm-migration-0109")
+    await register(migration, "release-0109", {
+      rows_read: 40_000,
+      rows_written: 20_000,
+      requests: 1,
+    })
+    const applied = await f.authority.fetch(
+      f.request("/execute", {
+        operation_id: "release-0109",
+        adapter_id: migration.id,
+        step_id: "execute-0",
+        arguments: { max_rows: 2, max_schema_rows: 64 },
+      }),
+    )
+    assert.equal(applied.status, 200)
+    const receipt = await applied.json()
+    assert.equal(receipt.result.applied, true)
+    assert.equal(receipt.bound_exceeded, true)
+    assert.equal(receipt.usage.rows_read, 38_573 + 3 * 2)
+    assert.ok(
+      f.provider
+        .prepare("SELECT 1 FROM sqlite_schema WHERE name = 'idx_icono_publish_state_updated'")
+        .get(),
+    )
+
+    // The next release's first step: a different adapter, same Worker build.
+    const inventory = find("iconoplasm-migration-inventory")
+    await register(inventory, "next-release-inventory", {
+      rows_read: 1000,
+      rows_written: 0,
+      requests: 1,
+    })
+    const listed = await f.authority.fetch(
+      f.request("/execute", {
+        operation_id: "next-release-inventory",
+        adapter_id: inventory.id,
+        step_id: "execute-0",
+        arguments: { statements: [{ query_id: "applied-migrations", arguments: {} }] },
+      }),
+    )
+    assert.equal(listed.status, 200)
+    const names = (await listed.json()).result[0].results.map((row) => row.name)
+    assert.ok(names.includes("0109_publish_state_updated_index.sql"))
+
+    // The adapter whose bound proved wrong stays refused until its code changes.
+    await register(migration, "release-0109-again", {
+      rows_read: 40_000,
+      rows_written: 20_000,
+      requests: 1,
+    })
+    const again = await f.authority.fetch(
+      f.request("/execute", {
+        operation_id: "release-0109-again",
+        adapter_id: migration.id,
+        step_id: "execute-0",
+        arguments: { max_rows: 2, max_schema_rows: 64 },
+      }),
+    )
+    assert.equal(again.status, 429)
+    assert.equal((await again.json()).code, "COST_VERIFIED_BOUND_INVALIDATED")
   } finally {
     f.close()
   }

@@ -553,6 +553,47 @@ test("a defective bound is charged in full, trips the plan and blocks further di
   f.db.close()
 })
 
+// B-847: on 25 Sep one migration's CREATE INDEX overran its bound. The ledger
+// then refused every adapter sharing the Worker's executable identity,
+// including the read-only migration inventory the next release starts with, so
+// production stayed in schema transition until new code shipped. A proven
+// defect belongs to the adapter that overran, not to its neighbours.
+test("an overrun invalidates only the adapter that overran, not its neighbours", () => {
+  const f = fixture()
+  f.ledger.register(f.input)
+  const permit = f.ledger.reserve(f.step())
+  f.ledger.settle({ ...permit, actual: { rows_read: 30, rows_written: 0, requests: 1 } })
+  // The defective adapter stays refused under the same code identity.
+  f.ledger.register({ ...f.input, id: "same-adapter-again" })
+  assert.throws(
+    () => f.ledger.reserve(f.step({ id: "same-adapter-again" })),
+    /COST_VERIFIED_BOUND_INVALIDATED/,
+  )
+  // A different adapter in the same Worker build and resource keeps working.
+  f.ledger.register({ ...f.input, id: "inventory", adapter_id: "iconoplasm-migration-inventory" })
+  f.ledger.reserve(f.step({ id: "inventory", adapter_id: "iconoplasm-migration-inventory" }))
+  // A second overrun by another adapter is recorded too, not swallowed by the first.
+  f.ledger.register({ ...f.input, id: "other", adapter_id: "other-migration" })
+  const other = f.ledger.reserve(f.step({ id: "other", adapter_id: "other-migration" }))
+  f.ledger.settle({ ...other, actual: { rows_read: 30, rows_written: 0, requests: 1 } })
+  f.ledger.register({ ...f.input, id: "other-again", adapter_id: "other-migration" })
+  assert.throws(
+    () => f.ledger.reserve(f.step({ id: "other-again", adapter_id: "other-migration" })),
+    /COST_VERIFIED_BOUND_INVALIDATED/,
+  )
+  f.db.close()
+})
+
+test("resource-wide invalidations recorded before B-847 still refuse that code identity", () => {
+  const f = fixture()
+  f.db
+    .prepare("INSERT INTO operation_cost_invalid_bounds VALUES (?, ?, ?, ?, ?)")
+    .run("a".repeat(64), "b".repeat(64), "iconoplasm", "legacy-plan", "legacy-step")
+  f.ledger.register(f.input)
+  assert.throws(() => f.ledger.reserve(f.step()), /COST_VERIFIED_BOUND_INVALIDATED/)
+  f.db.close()
+})
+
 test("absent, stale, future or exhausted account telemetry causes zero reservations", () => {
   const f = fixture()
   f.ledger.register(f.input)
@@ -702,6 +743,30 @@ test("executor reserves all concurrent work before sending and reports actual co
   complete.forEach((finish) => finish())
   await Promise.all([first, second])
   assert.equal(f.ledger.readPlan(f.input.id).used.rows_read, 6)
+  f.db.close()
+})
+
+// B-847: throwing after a successful dispatch told the caller "nothing
+// happened" when the work had committed and been billed. The release then
+// stopped with the app paused. An overrun is reported alongside the result:
+// the spend is charged, the plan trips, and the adapter is invalidated.
+test("an overrun after a successful dispatch returns the result and flags it instead of throwing", async () => {
+  const f = fixture()
+  f.ledger.register({ ...f.input, prediction: { rows_read: 40, rows_written: 2, requests: 2 } })
+  let calls = 0
+  const executor = executorFixture(f, async () => {
+    calls++
+    return { result: { applied: true }, actual: { rows_read: 25, rows_written: 0, requests: 1 } }
+  })
+  const input = { operation_id: f.input.id, adapter_id: "verified-read" }
+  const receipt = await executor.execute({ ...input, step_id: "one" })
+  assert.deepEqual(receipt.result, { applied: true })
+  assert.equal(receipt.bound_exceeded, true)
+  assert.equal(receipt.usage.rows_read, 25)
+  assert.equal(f.ledger.readPlan(f.input.id).status, "tripped")
+  assert.equal(f.db.prepare("SELECT rows_read FROM operation_cost_days").get().rows_read, 25)
+  await assert.rejects(executor.execute({ ...input, step_id: "two" }), /COST_PLAN_TRIPPED/)
+  assert.equal(calls, 1)
   f.db.close()
 })
 
