@@ -34,7 +34,6 @@ export * from "./manifestation-admin-commands.js"
 export * from "./manifestation-legal-hold-commands.js"
 export * from "./manifestation-moderation-commands.js"
 export * from "./manifestation-integrity-commands.js"
-export * from "./manifestation-key-rotation.js"
 export * from "./manifestation-authority-backup.js"
 export * from "./manifestation-authority-purge.js"
 export * from "./manifestation-withdrawal-retention.js"
@@ -46,12 +45,6 @@ export * from "./manifestation-upload-intents.js"
 export { projectAuthorityAccountStatus } from "./authority-account-projection.js"
 export { sweepManifestationAuthorityOutbox } from "./manifestation-authority-outbox.js"
 export { createManifestationAuthorityServiceHandler } from "./manifestation-authority-service-handlers.js"
-export { createManifestationCutoverServiceHandler } from "./manifestation-cutover-service-handler.js"
-export * from "./manifestation-cutover-backup-retention.js"
-export {
-  advanceManifestationAuthorityCutover,
-  readManifestationCutoverStatus,
-} from "./manifestation-cutover-processor.js"
 export { createManifestationAuthoritySyncHandler } from "./manifestation-authority-sync-handlers.js"
 export { createManifestationAuthorityRouteHandler } from "./manifestation-authority-routes.js"
 
