@@ -118,7 +118,6 @@ function relativeTime(iso) {
 }
 
 function versionAuthor(manifestation) {
-  if (manifestation?.author_is_viewer) return "You"
   return String(
     manifestation?.author_label ||
       (manifestation?.origin === "system_seed" ? "Original" : "Previous caretaker"),
@@ -312,7 +311,7 @@ function historyMarkup(dossier, revisions, selectedId, escapeHtml) {
 // row, delete belongs to the danger zone.
 function lineageRows(dossier, escapeHtml) {
   const lineages = dossier.manifestations.filter(function (item) {
-    return item?.author_is_viewer === true && (item.can_withdraw || item.can_restore)
+    return item?.can_withdraw || item?.can_restore
   })
   const restore = []
   const danger = []
@@ -321,7 +320,7 @@ function lineageRows(dossier, escapeHtml) {
     const current = manifestation.belongs_to_current_assignment === true
     const date = String(manifestation.created_at_label || manifestation.created_at || "")
     const which = current
-      ? "your manifestation"
+      ? "the current manifestation"
       : "an earlier manifestation" + (date ? " (" + date + ")" : "")
     if (manifestation.can_restore) {
       restore.push(
@@ -422,10 +421,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
           : "") +
         "</p>" +
         '<label class="icono-caretaker-invitation__confirmation"><input type="checkbox" data-icono-caretaker-terms-accepted> I have read and accept these caretaker terms.</label>' +
-        '<fieldset class="icono-caretaker-invitation__policy"><legend>If I later stop being caretaker, default to:</legend>' +
-        '<label><input type="radio" name="caretaker-invitation-policy" value="retain"> Keep my manifestation in the gene history</label>' +
-        '<label><input type="radio" name="caretaker-invitation-policy" value="withdraw"> Withdraw it, fall back to another eligible version, and make it eligible for hard purge after 30 days unless legally held</label>' +
-        "</fieldset>" +
         '<div class="icono-caretaker-invitation__actions"><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-accept disabled>Accept caretaker role</button>' +
         (dossier.viewer.can_decline
           ? '<button type="button" class="icono-button" data-icono-caretaker-decline>Decline invitation</button>'
@@ -559,13 +554,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
         esc(dossier.gene.symbol) +
         ".</p></span>" +
         '<span class="icono-button icono-button--danger" aria-hidden="true">Stop…</span></summary>' +
-        '<fieldset class="icono-caretaker-leave__choices"><legend>What happens to what you wrote</legend>' +
-        '<label><input type="radio" name="caretaker-end-policy" value="retain"' +
-        (assignment.leave_policy === "retain" ? " checked" : "") +
-        "> Keep it in the gene’s history</label>" +
-        '<label><input type="radio" name="caretaker-end-policy" value="withdraw"' +
-        (assignment.leave_policy === "withdraw" ? " checked" : "") +
-        "> Delete it (purged after 30 days unless legally held)</label></fieldset>" +
         '<div class="icono-actions"><button type="button" class="icono-button icono-button--danger" data-icono-caretaker-end>Stop being caretaker</button></div></details>'
       : ""
   if (rows.danger || leave) {
