@@ -81,112 +81,261 @@ function statusMarkup(message, tone, escapeHtml) {
   )
 }
 
-function ownLineageManagementMarkup(dossier, escapeHtml) {
-  const lineages = dossier.manifestations.filter(function (item) {
-    return item?.author_is_viewer === true && (item.can_withdraw || item.can_restore)
-  })
-  if (!lineages.length) return ""
+// B-835 (owner, 2026-09-25): History and Settings follow the version-history and
+// settings patterns of Google Docs, Notion and GitHub. History is a compact
+// timeline (when, who, what changed) beside a preview that shows the selected
+// version as a diff against the one before it; the full text of every version is
+// never dumped in a column. Destructive actions live in Settings > Danger zone.
+
+function wordDelta(before, after) {
+  let added = 0
+  let removed = 0
+  for (const part of manifestationWordDiff(before, after)) {
+    const words = String(part.text).trim().split(/\s+/).filter(Boolean).length
+    if (part.kind === "added") added += words
+    else if (part.kind === "removed") removed += words
+  }
+  return { added, removed }
+}
+
+function relativeTime(iso) {
+  const time = Date.parse(iso || "")
+  if (!Number.isFinite(time)) return ""
+  const seconds = (time - Date.now()) / 1000
+  const units = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ]
+  const format = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit)
+  }
+  return "just now"
+}
+
+function versionAuthor(manifestation) {
+  if (manifestation?.author_is_viewer) return "You"
+  return String(
+    manifestation?.author_label ||
+      (manifestation?.origin === "system_seed" ? "Original" : "Previous caretaker"),
+  )
+}
+
+function absoluteDate(revision) {
+  if (revision?.created_at_label) return String(revision.created_at_label)
+  const time = Date.parse(revision?.created_at || "")
+  if (!Number.isFinite(time)) return ""
+  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(
+    time,
+  )
+}
+
+function versionTitle(item) {
+  if (item.manifestation?.origin === "system_seed") return "Original"
+  return "Version " + String(item.revision?.revision_number || "")
+}
+
+function versionBodyAvailable(revision) {
+  return revision?.body_available !== false && revision?.lifecycle !== "purged"
+}
+
+function defaultSelectedRevisionId(dossier, revisions) {
+  const canonical = String(dossier?.head?.canonical_revision_id || "")
+  if (canonical && revisions.some((item) => item.revision?.manifestation_revision_id === canonical))
+    return canonical
+  return String(revisions[0]?.revision?.manifestation_revision_id || "")
+}
+
+function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml) {
+  const revision = item.revision || {}
+  const revisionId = String(revision.manifestation_revision_id || "")
+  const canonical = revisionId && revisionId === dossier.head.canonical_revision_id
+  const when = relativeTime(revision.created_at)
+  const absolute = absoluteDate(revision)
+  let delta = '<span class="icono-caretaker-timeline__delta">First version</span>'
+  if (!versionBodyAvailable(revision)) {
+    delta = '<span class="icono-caretaker-timeline__delta">Text removed</span>'
+  } else if (previous && versionBodyAvailable(previous.revision)) {
+    const { added, removed } = wordDelta(previous.revision.body, revision.body)
+    delta =
+      '<span class="icono-caretaker-timeline__delta" aria-label="' +
+      escapeHtml(`${added} words added, ${removed} removed`) +
+      '"><span class="icono-caretaker-delta-add">+' +
+      added +
+      '</span> <span class="icono-caretaker-delta-remove">−' +
+      removed +
+      "</span></span>"
+  }
   return (
-    '<section class="icono-caretaker-lineages" aria-labelledby="icono-caretaker-lineages-title">' +
-    '<h3 id="icono-caretaker-lineages-title">Your manifestation records</h3>' +
-    "<p>Deleted records are purged after 30 days unless legally held.</p>" +
-    lineages
-      .map(function (manifestation) {
-        const current = manifestation.belongs_to_current_assignment === true
-        const title = current ? "Current caretaker record" : "Record from a previous tenure"
-        const date = String(manifestation.created_at_label || manifestation.created_at || "")
-        return (
-          '<article class="icono-caretaker-lineage" data-manifestation-id="' +
-          escapeHtml(String(manifestation.manifestation_id || "")) +
-          '"><div><strong>' +
-          escapeHtml(title) +
-          "</strong>" +
-          (date ? "<span>Started " + escapeHtml(date) + "</span>" : "") +
-          '<span class="icono-caretaker-lineage__state">' +
-          escapeHtml(String(manifestation.status || "active").replaceAll("_", " ")) +
-          "</span></div>" +
-          (manifestation.can_restore
-            ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-restore="' +
-              escapeHtml(String(manifestation.manifestation_id || "")) +
-              '">Restore this manifestation</button>'
-            : manifestation.can_withdraw
-              ? '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
-                escapeHtml(String(manifestation.manifestation_id || "")) +
-                '">Delete this manifestation</button>'
-              : "") +
-          "</article>"
-        )
-      })
-      .join("") +
+    '<div role="listitem"><button type="button" class="icono-caretaker-timeline__item" data-icono-caretaker-version="' +
+    escapeHtml(revisionId) +
+    '"' +
+    (revisionId === selectedId ? ' aria-current="true"' : "") +
+    ">" +
+    '<span class="icono-caretaker-timeline__title">' +
+    escapeHtml(versionTitle(item)) +
+    (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
+    "</span>" +
+    '<span class="icono-caretaker-timeline__meta">' +
+    (when
+      ? '<time datetime="' +
+        escapeHtml(String(revision.created_at || "")) +
+        '" title="' +
+        escapeHtml(absolute) +
+        '">' +
+        escapeHtml(when) +
+        "</time> · "
+      : "") +
+    escapeHtml(versionAuthor(item.manifestation)) +
+    "</span>" +
+    delta +
+    "</button></div>"
+  )
+}
+
+export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
+  const revisions = allRevisions(dossier)
+  const index = revisions.findIndex(function (item) {
+    return item.revision?.manifestation_revision_id === selectedId
+  })
+  if (index < 0) {
+    return '<section class="icono-caretaker-preview" data-icono-caretaker-preview></section>'
+  }
+  const item = revisions[index]
+  const previous = revisions[index + 1] || null
+  const revision = item.revision || {}
+  const manifestation = item.manifestation || {}
+  const canonical = selectedId === dossier.head.canonical_revision_id
+  const available = versionBodyAvailable(revision)
+  const canSelect =
+    dossier.viewer.can_edit && revision.lifecycle === "active" && available && !canonical
+  const canFork = dossier.viewer.can_edit && revision.lifecycle === "active" && available
+  let body
+  if (!available) {
+    body =
+      '<p class="icono-caretaker-preview__empty">This version’s text was removed under the retention policy.</p>'
+  } else if (previous && versionBodyAvailable(previous.revision)) {
+    const same = String(previous.revision.body || "") === String(revision.body || "")
+    body = same
+      ? '<p class="icono-caretaker-preview__empty">Same text as the version before; only tags or settings changed.</p>'
+      : '<p class="icono-caretaker-preview__text">' +
+        diffMarkup(previous.revision.body, revision.body, escapeHtml) +
+        "</p>"
+  } else {
+    body =
+      '<p class="icono-caretaker-preview__text">' + escapeHtml(String(revision.body || "")) + "</p>"
+  }
+  const actions =
+    (canFork
+      ? '<button type="button" class="icono-button" data-icono-caretaker-fork="' +
+        escapeHtml(selectedId) +
+        '">Edit from here</button>'
+      : "") +
+    (canSelect
+      ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
+        escapeHtml(selectedId) +
+        '" data-manifestation-id="' +
+        escapeHtml(String(manifestation.manifestation_id || "")) +
+        '" title="The gene page and new candidate images will use this version">Make public</button>'
+      : "")
+  return (
+    '<section class="icono-caretaker-preview" data-icono-caretaker-preview aria-live="polite">' +
+    '<header class="icono-caretaker-preview__header"><h3>' +
+    escapeHtml(versionTitle(item)) +
+    (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
+    "</h3><p>" +
+    escapeHtml(
+      [
+        versionAuthor(manifestation),
+        absoluteDate(revision),
+        previous ? "changes since " + versionTitle(previous).toLowerCase() : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ) +
+    "</p></header>" +
+    '<div class="icono-caretaker-preview__body">' +
+    body +
+    derivativeMarkup(revision, escapeHtml) +
+    provenanceMarkup(revision, escapeHtml) +
+    "</div>" +
+    (actions
+      ? '<div class="icono-caretaker-preview__actions icono-actions">' + actions + "</div>"
+      : "") +
     "</section>"
   )
 }
 
-function versionMarkup(item, dossier, escapeHtml) {
-  const revision = item.revision || {}
-  const manifestation = item.manifestation || {}
-  const revisionId = String(revision.manifestation_revision_id || "")
-  const canonical = revisionId && revisionId === dossier.head.canonical_revision_id
-  const bodyAvailable = revision.body_available !== false && revision.lifecycle !== "purged"
-  const canSelect =
-    dossier.viewer.can_edit && revision.lifecycle === "active" && bodyAvailable && !canonical
-  const canFork = dossier.viewer.can_edit && revision.lifecycle === "active" && bodyAvailable
-  const authorLabel = String(
-    manifestation.author_label ||
-      (manifestation.author_is_viewer
-        ? "Your manifestation"
-        : manifestation.origin === "system_seed"
-          ? "Original manifestation"
-          : "Previous caretaker"),
-  )
+function historyMarkup(dossier, revisions, selectedId, escapeHtml) {
+  if (!revisions.length) {
+    return '<p class="icono-caretaker-empty">No versions yet. Your first save becomes version 1.</p>'
+  }
   return (
-    '<article class="icono-caretaker-version' +
-    (canonical ? " is-canonical" : "") +
-    '" data-manifestation-revision-id="' +
-    escapeHtml(revisionId) +
-    '">' +
-    '<header><div><span class="icono-caretaker-version__number">Version ' +
-    escapeHtml(String(revision.revision_number || "")) +
-    "</span>" +
-    '<span class="icono-caretaker-version__author">' +
-    escapeHtml(authorLabel) +
-    "</span></div>" +
-    (canonical ? '<strong class="icono-caretaker-version__canonical">Canonical</strong>' : "") +
-    "</header>" +
-    '<p class="icono-caretaker-version__body">' +
-    (bodyAvailable
-      ? escapeHtml(String(revision.body || ""))
-      : "<em>This version’s body is no longer available under its retention policy.</em>") +
-    "</p>" +
-    derivativeMarkup(revision, escapeHtml) +
-    provenanceMarkup(revision, escapeHtml) +
-    '<div class="icono-caretaker-diff" data-icono-caretaker-diff-for="' +
-    escapeHtml(revisionId) +
-    '" hidden></div>' +
-    '<div class="icono-caretaker-version__foot"><span>' +
-    escapeHtml(String(revision.created_at_label || revision.created_at || "")) +
-    "</span>" +
-    '<span class="icono-caretaker-version__actions">' +
-    (!canonical
-      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-compare="' +
-        escapeHtml(revisionId) +
-        '">Compare with canonical</button>'
+    '<div class="icono-caretaker-history">' +
+    // role=list divs, not <ol>: the blog's .markdown-preview-view :is(ul, ol) rule
+    // outranks app classes and re-adds numbering (see Linear pet-peeves doc, #2).
+    '<nav class="icono-caretaker-timeline-pane" aria-label="Versions"><div class="icono-caretaker-timeline" role="list">' +
+    revisions
+      .map(function (item, index) {
+        return timelineItemMarkup(
+          item,
+          revisions[index + 1] || null,
+          dossier,
+          selectedId,
+          escapeHtml,
+        )
+      })
+      .join("") +
+    "</div>" +
+    (dossier.history?.next_cursor
+      ? '<button type="button" class="icono-button icono-button--small icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
       : "") +
-    (canFork
-      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-fork="' +
-        escapeHtml(revisionId) +
-        '">Start from this version</button>'
-      : "") +
-    (canSelect
-      ? '<button type="button" class="icono-button icono-button--small" data-icono-caretaker-select="' +
-        escapeHtml(revisionId) +
-        '" data-manifestation-id="' +
-        escapeHtml(String(manifestation.manifestation_id || "")) +
-        '">Use this version</button>'
-      : "") +
-    "</span>" +
-    "</div></article>"
+    "</nav>" +
+    historyPreviewMarkup(dossier, selectedId, escapeHtml) +
+    "</div>"
   )
+}
+
+// Settings rows for the viewer's own manifestation records: restore is a normal
+// row, delete belongs to the danger zone.
+function lineageRows(dossier, escapeHtml) {
+  const lineages = dossier.manifestations.filter(function (item) {
+    return item?.author_is_viewer === true && (item.can_withdraw || item.can_restore)
+  })
+  const restore = []
+  const danger = []
+  for (const manifestation of lineages) {
+    const id = escapeHtml(String(manifestation.manifestation_id || ""))
+    const current = manifestation.belongs_to_current_assignment === true
+    const date = String(manifestation.created_at_label || manifestation.created_at || "")
+    const which = current
+      ? "your manifestation"
+      : "an earlier manifestation" + (date ? " (" + date + ")" : "")
+    if (manifestation.can_restore) {
+      restore.push(
+        '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Restore ' +
+          escapeHtml(which) +
+          "</h4><p>It was deleted. Restoring brings it back and makes it public.</p></div>" +
+          '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-restore="' +
+          id +
+          '">Restore</button></div>',
+      )
+    } else if (manifestation.can_withdraw) {
+      danger.push(
+        '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Delete ' +
+          escapeHtml(which) +
+          "</h4><p>Hidden at once; the next eligible version becomes public. Purged after 30 days unless legally held.</p></div>" +
+          '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
+          id +
+          '">Delete…</button></div>',
+      )
+    }
+  }
+  return { restore: restore.join(""), danger: danger.join("") }
 }
 
 function canonicalRevisionBody(dossier) {
@@ -198,7 +347,7 @@ function canonicalRevisionBody(dossier) {
   return String(found?.revision?.body || "")
 }
 
-export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
+export function renderCaretakerManifestationPanel(dossier, escapeHtml, options = {}) {
   const esc = escapeHtml
   const assignment = dossier.assignment
   const own = ownManifestation(dossier)
@@ -366,53 +515,60 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
   body += "</div>"
   body +=
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-history" aria-labelledby="icono-caretaker-tab-button-history" data-icono-caretaker-tabpanel="history" hidden>'
-  body += ownLineageManagementMarkup(dossier, esc)
-  body += '<div class="icono-caretaker-versions" aria-label="Manifestation version history">'
-  body += revisions.length
-    ? revisions
-        .map(function (item) {
-          return versionMarkup(item, dossier, esc)
-        })
-        .join("")
-    : '<p class="icono-caretaker-empty">No manifestation versions have been recorded yet.</p>'
-  body += "</div>"
-
-  if (dossier.history?.next_cursor) {
-    body +=
-      '<button type="button" class="icono-button icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
-  }
+  body += historyMarkup(
+    dossier,
+    revisions,
+    String(options.selectedRevisionId || "") || defaultSelectedRevisionId(dossier, revisions),
+    esc,
+  )
   body += "</div>"
 
   body +=
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-settings" aria-labelledby="icono-caretaker-tab-button-settings" data-icono-caretaker-tabpanel="settings" hidden>'
 
+  const rows = lineageRows(dossier, esc)
+  body += '<div class="icono-caretaker-settings">'
   if (editable) {
     const visible = own?.public_page_visible === true
     body +=
-      '<section class="icono-caretaker-visibility" aria-labelledby="icono-caretaker-visibility-title">' +
-      '<div><h3 id="icono-caretaker-visibility-title">Gene-page manifestation</h3>' +
-      "<p>Show the prose on the public gene page. Tags are never shown.</p></div>" +
-      '<label class="icono-caretaker-switch"><input type="checkbox" data-icono-caretaker-visibility' +
+      '<section class="icono-settings-group" aria-label="Gene page">' +
+      '<div class="icono-setting-row"><div class="icono-setting-row__text">' +
+      '<h4 id="icono-caretaker-visibility-title">Show on the gene page</h4>' +
+      "<p>Readers see your prose under the card. Tags always stay private.</p></div>" +
+      '<label class="icono-caretaker-switch"><input type="checkbox" role="switch" aria-labelledby="icono-caretaker-visibility-title" data-icono-caretaker-visibility' +
       (visible ? " checked" : "") +
       (own ? "" : " disabled") +
-      '><span aria-hidden="true"></span><strong>' +
-      (visible ? "Visible" : "Hidden") +
-      "</strong></label></section>"
+      '><span aria-hidden="true"></span></label></div>' +
+      rows.restore +
+      "</section>"
+  } else if (rows.restore) {
+    body += '<section class="icono-settings-group">' + rows.restore + "</section>"
   }
-
-  if (editable && assignment) {
-    const leavePolicy = assignment.leave_policy
+  const leave =
+    editable && assignment
+      ? '<details class="icono-setting-row icono-caretaker-leave"><summary><span class="icono-setting-row__text"><h4>Stop being caretaker</h4>' +
+        "<p>Someone else can then care for " +
+        esc(dossier.gene.symbol) +
+        ".</p></span>" +
+        '<span class="icono-button icono-button--danger" aria-hidden="true">Stop…</span></summary>' +
+        '<fieldset class="icono-caretaker-leave__choices"><legend>What happens to what you wrote</legend>' +
+        '<label><input type="radio" name="caretaker-end-policy" value="retain"' +
+        (assignment.leave_policy === "retain" ? " checked" : "") +
+        "> Keep it in the gene’s history</label>" +
+        '<label><input type="radio" name="caretaker-end-policy" value="withdraw"' +
+        (assignment.leave_policy === "withdraw" ? " checked" : "") +
+        "> Delete it (purged after 30 days unless legally held)</label></fieldset>" +
+        '<div class="icono-actions"><button type="button" class="icono-button icono-button--danger" data-icono-caretaker-end>Stop being caretaker</button></div></details>'
+      : ""
+  if (rows.danger || leave) {
     body +=
-      '<details class="icono-caretaker-leave"><summary>Stop being caretaker</summary>' +
-      "<p>What should happen to what you wrote?</p>" +
-      '<label><input type="radio" name="caretaker-end-policy" value="retain"' +
-      (leavePolicy === "retain" ? " checked" : "") +
-      "> Keep it in the gene history</label>" +
-      '<label><input type="radio" name="caretaker-end-policy" value="withdraw"' +
-      (leavePolicy === "withdraw" ? " checked" : "") +
-      "> Withdraw it, fall back, and make it eligible for hard purge after 30 days unless legally held</label>" +
-      '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-end>Confirm and stop</button></details>'
+      '<section class="icono-danger-zone" aria-labelledby="icono-caretaker-danger-title">' +
+      '<h3 id="icono-caretaker-danger-title">Danger zone</h3>' +
+      rows.danger +
+      leave +
+      "</section>"
   }
+  body += "</div>"
   body += "</div>"
   body += "</div>"
   body +=
@@ -426,6 +582,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml) {
     footerSource +
     '<button type="button" class="icono-button" data-icono-caretaker-close>Close</button>' +
     "</div>" +
-    "</footer>"
+    "</div>"
   return body + "</section></dialog>"
 }
