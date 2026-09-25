@@ -740,7 +740,11 @@ test("catalog search changes portraits only after the publisher replaces its sna
   assert.match(secondPayload?.genes?.[0]?.ph || "", /b{64}\/full\.webp$/)
 })
 
-test("catalog search ranks symbol matches before full names before aliases", async () => {
+// Match strength comes first (exact, then prefix, then substring), and the
+// field only breaks ties within a strength (symbol, then alias, then full
+// name). The old rule ranked by field first, so any partial symbol hit beat
+// an exact alias: on 25 Sep "p53" listed CFAP53 and NOP53 above TP53.
+test("catalog search ranks exact matches before prefixes before substrings, then by field", async () => {
   const env = buildEnv()
   const response =
     await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
@@ -753,13 +757,42 @@ test("catalog search ranks symbol matches before full names before aliases", asy
   assert.equal(response.status, 200)
   assert.equal(payload?.scope_applied, "catalog")
   assert.deepEqual(
-    payload?.genes?.slice(0, 3).map((gene) => gene.symbol),
-    ["GUARDIAN1", "BAX", "MDM2"],
+    payload?.genes?.slice(0, 3).map((gene) => [gene.symbol, gene.matched_by]),
+    [
+      ["MDM2", "alias"], // alias GUARDIAN is exact
+      ["GUARDIAN1", "symbol"], // symbol prefix
+      ["BAX", "full_name"], // full-name prefix
+    ],
   )
+})
+
+test("an exact literature alias outranks symbols that merely contain the query", async () => {
+  const artifact = buildCatalogArtifact()
+  artifact.genes.push(
+    { s: "CFAP53", n: "Cilia and flagella associated protein 53", c: "#777777", a: [] },
+    { s: "NOP53", n: "NOP53 ribosome biogenesis factor", c: "#777777", a: [] },
+    { s: "TP53BP1", n: "Tumor protein p53 binding protein 1", c: "#777777", a: ["53BP1"] },
+  )
+  artifact.gene_count = artifact.genes.length
+  const env = buildEnv({ artifact })
+  const response =
+    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+      buildRequest("/api/public/v1/genes/search?q=p53&scope=catalog&limit=10"),
+      env,
+      {},
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
   assert.deepEqual(
-    payload?.genes?.slice(0, 3).map((gene) => gene.matched_by),
-    ["symbol", "full_name", "alias"],
+    payload?.genes?.slice(0, 2).map((gene) => [gene.symbol, gene.matched_by]),
+    [
+      ["TP53", "alias"],
+      ["CFAP53", "symbol"],
+    ],
   )
+  // TP53 appears once, at its best match, not again for its symbol substring.
+  assert.equal(payload.genes.filter((gene) => gene.symbol === "TP53").length, 1)
 })
 
 test("catalog search resolves bootstrap publication aliases", async () => {

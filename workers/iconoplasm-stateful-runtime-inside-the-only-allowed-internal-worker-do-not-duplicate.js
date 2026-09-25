@@ -31779,21 +31779,16 @@ function scorePublicGeneSearchValue(queryUpper, queryLower, rawValue, category) 
   if (!value) return null
   const valueUpper = value.toUpperCase()
   const valueLower = value.toLowerCase()
-  let baseRank = 100
-  if (category === "symbol") baseRank = 0
-  else if (category === "full_name") baseRank = 10
-  else if (category === "alias") baseRank = 20
-
-  if (valueUpper === queryUpper) {
-    return { rank: baseRank, matched_by: category, matched_value: value }
-  }
-  if (valueUpper.startsWith(queryUpper)) {
-    return { rank: baseRank + 1, matched_by: category, matched_value: value }
-  }
-  if (valueLower.includes(queryLower)) {
-    return { rank: baseRank + 2, matched_by: category, matched_value: value }
-  }
-  return null
+  // Strength first (exact 0, prefix 10, substring 20), field second (symbol,
+  // alias, full name). Ranking by field first let any partial symbol hit beat
+  // an exact alias, so "p53" listed CFAP53 and NOP53 above TP53.
+  const field = category === "symbol" ? 0 : category === "alias" ? 1 : 2
+  let strength = null
+  if (valueUpper === queryUpper) strength = 0
+  else if (valueUpper.startsWith(queryUpper)) strength = 10
+  else if (valueLower.includes(queryLower)) strength = 20
+  if (strength === null) return null
+  return { rank: strength + field, matched_by: category, matched_value: value }
 }
 
 function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
@@ -33935,14 +33930,19 @@ async function handleIconoplasmPrintCopyPng(request, env, ctx, symbolFromPath) {
 
 async function handlePublicResolve(request, env) {
   const body = await parseJsonBody(request)
-  const identifiers = Array.isArray(body.identifiers)
-    ? body.identifiers
-    : Array.isArray(body.ids)
-      ? body.ids
-      : []
-  const limited = identifiers.slice(0, PUBLIC_MAX_RESOLVE_BATCH_LIMIT)
+  // Accept every key /images/resolve does. An ignored key used to answer 200
+  // with no results, and a long list was cut to 250 without saying so, so a
+  // client couldn't tell "no such gene" from "wrong request".
+  const identifiers = [body.identifiers, body.symbols, body.ids].find(Array.isArray) || []
+  const refuse = (error) =>
+    json({ error, max_identifiers: PUBLIC_MAX_RESOLVE_BATCH_LIMIT }, 400, {
+      "Cache-Control": "no-store",
+    })
+  if (!identifiers.length) return refuse("identifiers must be a non-empty array")
+  if (identifiers.length > PUBLIC_MAX_RESOLVE_BATCH_LIMIT)
+    return refuse(`Too many identifiers (max ${PUBLIC_MAX_RESOLVE_BATCH_LIMIT})`)
   const results = []
-  for (const identifier of limited) {
+  for (const identifier of identifiers) {
     results.push(await resolvePublicIdentifier(env, identifier))
   }
   return json({

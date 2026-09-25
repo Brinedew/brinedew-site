@@ -140,11 +140,17 @@ jobs:
   deploy-production:
     if: github.event_name != 'workflow_dispatch' || inputs.reader_recovery_only != true
     runs-on: ubuntu-latest
+    # B-857: actions: write lets a superseded push cancel its own run (grey)
+    # instead of failing red at the head check. Nothing else here uses it.
+    permissions:
+      contents: read
+      actions: write
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CACHE_BUST: ${{ github.sha }}
       ICONOPLASM_RELEASE_ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
+      ICONOPLASM_COST_OVERRUN_LOG: ${{ github.workspace }}/../iconoplasm-cost-overruns.jsonl
     steps:
       # Bump actions/checkout @v6 -> @v7 and actions/upload-artifact @v6 -> @v7
       # (2026 current majors). This workflow is the canonical production
@@ -593,10 +599,21 @@ jobs:
         run: |
           set -euo pipefail
           headers_file="$(mktemp)"
-          curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0"
-
-          status="$(awk 'NR==1 { print $2 }' "$headers_file")"
-          location="$(grep -i '^Location:' "$headers_file" | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+          # The public edge Worker was deployed seconds ago. Give a new
+          # version up to ~30 s to reach every edge before judging it, and
+          # never let a missing header kill the step before it says what it
+          # saw: on 25 Sep a transient non-302 had no Location header, grep
+          # exited 1 under pipefail, and the run went red with no output.
+          status=""
+          location=""
+          for attempt in 1 2 3 4 5 6; do
+            curl -sS -D "$headers_file" -o /dev/null "https://brinedew.bio/api/auth/login?leaderboard_opt_in=0" || true
+            status="$(awk 'NR==1 { print $2 }' "$headers_file")"
+            location="$( (grep -i '^Location:' "$headers_file" || true) | head -n1 | sed -E 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+            [ "$status" = "302" ] && break
+            echo "OAuth login attempt $attempt: status ${status:-none}; retrying in 5 s"
+            sleep 5
+          done
 
           echo "OAuth login status: $status"
           echo "OAuth redirect location: $location"
@@ -629,6 +646,19 @@ jobs:
           fi
           grep -Eq '"authenticated"[[:space:]]*:[[:space:]]*false' "$me_body"
           grep -Fiq 'Cache-Control: no-store' "$me_headers"
+
+      # B-847: an admitted operation that overran its verified bound has
+      # already applied and been charged, so the release above carried on and
+      # brought production back. The run still goes red here, after production
+      # is safe, because that adapter stays refused until its bound is fixed.
+      - name: Fail the run if any admitted operation overran its bound
+        if: always()
+        run: |
+          if [ -s "$ICONOPLASM_COST_OVERRUN_LOG" ]; then
+            echo "Admitted operations that overran their verified bound (applied and charged):" >&2
+            cat "$ICONOPLASM_COST_OVERRUN_LOG" >&2
+            exit 1
+          fi
 
   post-deploy-production-acceptance:
     needs: deploy-production
