@@ -60,6 +60,11 @@ export async function forwardReplicaCostRequest(request, env, authority) {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "private, no-store",
       "X-Iconoplasm-Operation-Usage": JSON.stringify(receipt.usage),
+      // B-847: the write applied and was charged, but the adapter's bound
+      // proved wrong and is now refused until fixed. Tell the replica.
+      ...(receipt.bound_exceeded === true
+        ? { "X-Iconoplasm-Operation-Bound-Exceeded": "COST_VERIFIED_BOUND_EXCEEDED" }
+        : {}),
     },
   })
 }

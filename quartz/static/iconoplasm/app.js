@@ -1603,6 +1603,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .gene(key, options || {})
       .then(hydratePublishedCandidateGallery)
       .then(function (data) {
+        // The reader answers null only after reading the index and finding no
+        // entry; load failures throw. Report it as a miss, not an outage: this
+        // used to tell readers of /gene/p53 to "try again shortly".
+        if (data === null) {
+          var missing = new Error("Gene is not in the published catalog: " + key)
+          missing.status = 404
+          throw missing
+        }
         if (!isCompleteGeneDetailPayload(data, key)) {
           throw new Error("Incomplete gene detail response for " + key)
         }
@@ -9150,6 +9158,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         head.appendChild(link)
       }
       link.setAttribute("href", ICONOPLASM_CANONICAL_ORIGIN + pathname)
+      // Undo markDocumentNotFound after in-app navigation to a real page.
+      var robots = head.querySelector('meta[name="robots"]')
+      if (robots && robots.getAttribute("content") === "noindex")
+        robots.setAttribute("content", "index,follow")
       if (description) {
         var meta = head.querySelector('meta[name="description"]')
         if (!meta) {
@@ -9315,9 +9327,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       recordGenePageVisitDiscovery(g && g.symbol ? g.symbol : symbol)
     }
-    firstGenePromise.then(renderGeneResult).catch(function (err) {
+    var renderGeneFailure = function (err) {
       if (renderId !== activeGeneRenderId) return
       if (loadingEl) loadingEl.style.display = "none"
+      if (err && err.status === 404) markDocumentNotFound("Gene not found | Iconoplasm")
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(symbol),
         error: true,
@@ -9342,7 +9355,64 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             '">Try again</a></p>') +
         "</div>"
       console.error("[Iconoplasm] gene load error:", err)
+    }
+    firstGenePromise.then(renderGeneResult).catch(function (err) {
+      if (renderId !== activeGeneRenderId) return
+      if (!(err && err.status === 404)) return renderGeneFailure(err)
+      // People type the name they know: /gene/p53, /gene/E-cadherin. Ask the
+      // resolver once before calling it missing. Only a miss pays this Worker
+      // request; a published gene never makes it.
+      resolveGeneAliasPath(symbol).then(function (path) {
+        if (renderId !== activeGeneRenderId) return
+        if (!path) return renderGeneFailure(err)
+        window.history.replaceState(buildNavigationState(path), "", path)
+        render()
+      })
     })
+  }
+
+  function resolveGeneAliasPath(symbol) {
+    var requested = String(symbol || "").trim()
+    if (!requested) return Promise.resolve("")
+    return fetch("/api/public/v1/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers: [requested] }),
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null
+      })
+      .then(function (payload) {
+        var hit = payload && Array.isArray(payload.results) ? payload.results[0] : null
+        var canonical = hit && hit.found ? normalizedSymbol(hit.canonical_symbol) : ""
+        return canonical && canonical !== normalizedSymbol(requested)
+          ? "/gene/" + encodeURIComponent(canonical)
+          : ""
+      })
+      .catch(function () {
+        return ""
+      })
+  }
+
+  // A missing page must not look indexable. The single-page fallback answers
+  // every unknown path with 200, and the shell had set "SYMBOL | Iconoplasm
+  // character profile", a canonical /gene/SYMBOL and index,follow for any
+  // mistyped gene.
+  function markDocumentNotFound(title) {
+    try {
+      document.title = title
+      var head = document.head
+      if (!head) return
+      var canonical = head.querySelector('link[rel="canonical"]')
+      if (canonical) canonical.remove()
+      var robots = head.querySelector('meta[name="robots"]')
+      if (!robots) {
+        robots = document.createElement("meta")
+        robots.setAttribute("name", "robots")
+        head.appendChild(robots)
+      }
+      robots.setAttribute("content", "noindex")
+    } catch (_notFoundHeadError) {}
   }
 
   function hydrateServerCandidateActionIslands(container, genePayload) {
@@ -10568,7 +10638,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.title = "Diagram Studio - Iconoplasm"
       syncDocumentCanonical("/studio")
     } else {
-      document.title = "Not found - Iconoplasm"
+      markDocumentNotFound("Not found - Iconoplasm")
     }
     // Render the appropriate page
     if (route.page === "home") {
