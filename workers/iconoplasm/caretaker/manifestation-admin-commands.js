@@ -24,7 +24,6 @@ import {
   runCommand,
 } from "./manifestation-authority-repository.js"
 import { administratorContext } from "./manifestation-admin-context.js"
-import { manifestationPurgeStorageStatements } from "./manifestation-purge-transition.js"
 
 function nextGeneHead(head) {
   return { ...head, gene_revision: Number(head.gene_revision) + 1 }
@@ -431,7 +430,6 @@ async function setManifestationAdministrativeStatus(
     expectedHeadVersion,
     expectedCanonicalRevisionId,
     reasonCode,
-    urgentPurge = false,
     selectionId,
     eventUuid,
     idFactory = defaultIdFactory,
@@ -452,30 +450,12 @@ async function setManifestationAdministrativeStatus(
     throw authorityError("MANIFESTATION_NON_WITHDRAWABLE", "System seed cannot be changed", 409)
   }
   const timestamp = normalizeTimestamp(now)
-  const purgeStatuses = new Set(["active", "withdrawn", "moderated"])
-  if (
-    status === "purged"
-      ? !purgeStatuses.has(manifestation.status)
-      : manifestation.status !== "active"
-  ) {
+  if (manifestation.status !== "active") {
     throw authorityError(
       "MANIFESTATION_NOT_ELIGIBLE",
       "Manifestation is not eligible for this transition",
       409,
     )
-  }
-  if (status === "purged") {
-    const deadlineElapsed =
-      manifestation.status === "withdrawn" &&
-      manifestation.purge_eligible_at &&
-      manifestation.purge_eligible_at <= timestamp
-    if (!deadlineElapsed && urgentPurge !== true) {
-      throw authorityError(
-        "MANIFESTATION_PURGE_RETENTION_ACTIVE",
-        "Manifestation retention has not elapsed; urgent purge requires explicit authorization",
-        409,
-      )
-    }
   }
   const gene = await readGene(db, manifestation.gene_id)
   if (!gene) throw authorityError("GENE_NOT_FOUND", "Gene identity was not found", 404)
@@ -516,7 +496,7 @@ async function setManifestationAdministrativeStatus(
         gene_revision: Number(head.gene_revision) + 1,
       }
     : nextGeneHead(head)
-  const selectionReason = status === "purged" ? "purge_fallback" : "moderation_fallback"
+  const selectionReason = "moderation_fallback"
   const changedSelection = isCanonical
     ? canonicalSelectionRecord({
         selectionId: selectionIdNorm,
@@ -597,16 +577,6 @@ async function setManifestationAdministrativeStatus(
       manifestation.manifestation_id,
     ),
   )
-  if (status === "purged") {
-    statements.push(
-      ...manifestationPurgeStorageStatements(db, {
-        manifestationId: manifestation.manifestation_id,
-        actorKind: admin.actorKind,
-        actorAccountId: admin.actor.account_id,
-        timestamp,
-      }),
-    )
-  }
   statements.push(
     eventStatement(db, {
       eventUuid: createId(eventUuid, "event_uuid", "event", idFactory),
@@ -674,8 +644,5 @@ export function moderateManifestation(db, input = {}) {
   return setManifestationAdministrativeStatus(db, { ...input, status: "moderated" })
 }
 
-export function purgeManifestation(db, input = {}) {
-  return setManifestationAdministrativeStatus(db, { ...input, status: "purged" })
-}
 
 // ARCHITECTURE FENCE [IPD-012]
