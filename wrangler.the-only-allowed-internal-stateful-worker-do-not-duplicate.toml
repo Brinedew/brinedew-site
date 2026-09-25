@@ -149,10 +149,6 @@ class_name = "IconoplasmSyncGovernor"
 name = "ICONOPLASM_CARD_PUBLICATION"
 class_name = "IconoplasmCardPublicationCoordinator"
 
-[[durable_objects.bindings]]
-name = "ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS"
-class_name = "IconoplasmManifestationCutoverCoordinator"
-
 [[queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization"
@@ -222,6 +218,10 @@ new_sqlite_classes = ["IconoplasmCardPublicationCoordinator"]
 tag = "v6"
 new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 
+[[migrations]]
+tag = "v7"
+deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
+
 # Cloudflare Email Service send binding.
 # Used by the site-wide /api/contact endpoint to deliver contact-form submissions
 # from no-reply@brinedew.bio -> contact@brinedew.bio (which Email Routing forwards
@@ -270,11 +270,7 @@ ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
 #   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
 #   ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN  externally invoked bounded maintenance
 #   ICONOPLASM_AUTHORITY_BACKUP_TOKEN       backup capability/export/restore/verify
-#   ICONOPLASM_AUTHORITY_CUTOVER_TOKEN      one-time cutover lifecycle only
-# Separate private, no-Pull-Zone cutover recovery storage. Its password is the
-# ICONOPLASM_AUTHORING_BACKUP_STORAGE_PASSWORD Worker secret; never fall back.
-ICONOPLASM_AUTHORING_BACKUP_STORAGE_HOST = "storage.bunnycdn.com"
-ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup"
+#   ICONOPLASM_AUTHORITY_CUTOVER_TOKEN      discovery candidate/activate handover
 ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
@@ -388,10 +384,6 @@ class_name = "IconoplasmSyncGovernor"
 name = "ICONOPLASM_CARD_PUBLICATION"
 class_name = "IconoplasmCardPublicationCoordinator"
 
-[[env.staging.durable_objects.bindings]]
-name = "ICONOPLASM_MANIFESTATION_CUTOVER_COORDINATORS"
-class_name = "IconoplasmManifestationCutoverCoordinator"
-
 [[env.staging.queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization-staging"
@@ -455,6 +447,10 @@ new_sqlite_classes = ["IconoplasmCardPublicationCoordinator"]
 tag = "v6"
 new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 
+[[env.staging.migrations]]
+tag = "v7"
+deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
+
 # Same email sending binding on staging so the form works end-to-end on
 # staging.brinedew.bio before any production deploy.
 [[env.staging.send_email]]
@@ -483,8 +479,6 @@ ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"
-ICONOPLASM_AUTHORING_BACKUP_STORAGE_HOST = "storage.bunnycdn.com"
-ICONOPLASM_AUTHORING_BACKUP_STORAGE_ZONE = "iconoplasm-authoring-backup-staging"
 ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 # Staging has no recap cron and must never post into the production feed.
 DISCORD_FEED_CHANNEL_ID = ""

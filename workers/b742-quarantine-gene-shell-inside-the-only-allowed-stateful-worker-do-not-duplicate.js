@@ -2,7 +2,6 @@ import baseRuntime, {
   GameSession,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
-  IconoplasmManifestationCutoverCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   serveIconoplasmReaderRecoveryGenePage,
@@ -21,7 +20,6 @@ export {
   GameSession,
   IconoplasmVoteCoordinator,
   IconoplasmCardPublicationCoordinator,
-  IconoplasmManifestationCutoverCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
 }
