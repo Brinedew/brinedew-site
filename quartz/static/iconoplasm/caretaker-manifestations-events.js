@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { diffMarkup } from "./caretaker-manifestations-view.js?v=a6a0780af83a6666"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=141937b730ed2df1"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -83,25 +83,16 @@ export function createCaretakerManifestationEventWiring({
         })
         return
       }
-      const compareRevisionId = target.getAttribute("data-icono-caretaker-compare")
-      if (compareRevisionId) {
-        const comparison = Array.from(
-          state.host.querySelectorAll("[data-icono-caretaker-diff-for]"),
-        ).find(function (candidate) {
-          return candidate.getAttribute("data-icono-caretaker-diff-for") === compareRevisionId
+      const versionId = target.getAttribute("data-icono-caretaker-version")
+      if (versionId) {
+        state.selectedRevisionId = versionId
+        state.host.querySelectorAll("[data-icono-caretaker-version]").forEach(function (item) {
+          if (item.getAttribute("data-icono-caretaker-version") === versionId) {
+            item.setAttribute("aria-current", "true")
+          } else item.removeAttribute("aria-current")
         })
-        const selected = revisionById(state.dossier, compareRevisionId)
-        const canonical = revisionById(state.dossier, state.dossier.head.canonical_revision_id)
-        if (!comparison || !selected || !canonical) return
-        const opening = comparison.hidden
-        comparison.hidden = !opening
-        target.textContent = opening ? "Hide comparison" : "Compare with canonical"
-        if (opening) {
-          comparison.innerHTML =
-            '<h3>Changes from canonical</h3><p class="icono-caretaker-diff__body">' +
-            diffMarkup(canonical.revision.body, selected.revision.body, escapeHtml) +
-            "</p>"
-        }
+        const preview = state.host.querySelector("[data-icono-caretaker-preview]")
+        if (preview) preview.outerHTML = historyPreviewMarkup(state.dossier, versionId, escapeHtml)
         return
       }
       const forkRevisionId = target.getAttribute("data-icono-caretaker-fork")
@@ -110,6 +101,7 @@ export function createCaretakerManifestationEventWiring({
         const textarea = state.host.querySelector("[data-icono-caretaker-prose]")
         if (!selected || !textarea) return
         state.basedOnRevisionId = forkRevisionId
+        state.host.querySelector('[data-icono-caretaker-tab="manifestation"]')?.click()
         textarea.value = String(selected.revision.body || "")
         saveDraft(state, {
           prose: textarea.value,
