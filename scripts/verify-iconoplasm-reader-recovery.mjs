@@ -17,21 +17,31 @@ export async function verifyIconoplasmReaderRecovery({
     evidence.push({ path, method, status: response.status })
     return response
   }
+  // Since B-809 every /gene/{SYMBOL} is a static per-gene document served by
+  // Workers static assets before the Worker runs, so in production the page never
+  // carries the Worker's recovery header; the card is drawn in the browser from
+  // /api/iconoplasm/site/genes (checked strictly below). Accept either the
+  // Worker-rendered recovery page or the static document for that exact symbol.
+  // (2026-09-25: the header-only check blocked every maintenance release while
+  // the public API sat in schema transition.)
+  const canonicalLink = (symbol) =>
+    `<link rel="canonical" href="https://iconoplasm.brinedew.bio/gene/${symbol}">`
   for (const symbol of ["TP53", "BRCA1"]) {
     const page = await probe(`/gene/${symbol}`)
     const html = await page.text()
-    if (
-      page.status !== 200 ||
-      page.headers.get("X-Iconoplasm-Reader-Recovery") !== "published-card-only" ||
-      !html.includes(`data-icono-gene-symbol="${symbol}"`) ||
-      !html.includes('class="icono-card-semantic-profile"') ||
-      !html.includes('id="iconoplasm-card-bootstrap"')
-    )
+    const workerRendered =
+      page.headers.get("X-Iconoplasm-Reader-Recovery") === "published-card-only" &&
+      html.includes(`data-icono-gene-symbol="${symbol}"`) &&
+      html.includes('class="icono-card-semantic-profile"') &&
+      html.includes('id="iconoplasm-card-bootstrap"')
+    const staticDocument = html.includes(canonicalLink(symbol))
+    if (page.status !== 200 || (!workerRendered && !staticDocument))
       throw new Error(`COST_READER_RECOVERY_PAGE_INVALID: ${symbol}`)
     const api = await probe(`/api/iconoplasm/site/genes/${symbol}`)
     const card = await api.json()
     if (
       api.status !== 200 ||
+      api.headers.get("X-Iconoplasm-Reader-Recovery") !== "published-card-only" ||
       card.symbol !== symbol ||
       card.detail_availability?.source !== "published_card_catalog" ||
       !Array.isArray(card.portrait_candidates) ||
@@ -52,12 +62,18 @@ export async function verifyIconoplasmReaderRecovery({
     )
       throw new Error(`COST_READER_RECOVERY_PORTRAIT_UNAVAILABLE: ${symbol}`)
   }
-  for (const path of [
-    "/gene/NOT_A_REAL_GENE_B742",
-    "/api/iconoplasm/site/genes/NOT_A_REAL_GENE_B742",
-  ]) {
-    if ((await probe(path)).status !== 404) throw new Error("COST_READER_RECOVERY_UNKNOWN_INVALID")
-  }
+  // The unknown gene's API must 404. Its page may be a 404 or the static app
+  // shell (the SPA fallback answers unknown paths), but never a per-gene
+  // document claiming that symbol.
+  const unknownPage = await probe("/gene/NOT_A_REAL_GENE_B742")
+  const unknownHtml = await unknownPage.text()
+  if (
+    (unknownPage.status !== 404 && unknownPage.status !== 200) ||
+    unknownHtml.includes(canonicalLink("NOT_A_REAL_GENE_B742"))
+  )
+    throw new Error("COST_READER_RECOVERY_UNKNOWN_INVALID")
+  if ((await probe("/api/iconoplasm/site/genes/NOT_A_REAL_GENE_B742")).status !== 404)
+    throw new Error("COST_READER_RECOVERY_UNKNOWN_INVALID")
   const protectedResponse = await probe("/api/iconoplasm/authority/events")
   if (
     protectedResponse.status !== 503 ||
