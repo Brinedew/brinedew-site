@@ -209,11 +209,6 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     /\.icono-request-option\.is-selected\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 1px/,
     "selected emulsions need a persistent visual state distinct from hover",
   )
-  assert.match(
-    css,
-    /\n\.icono-button\s*\{[^}]*white-space:\s*nowrap;/,
-    "the counted batch action must stay on one line at mobile width",
-  )
   assert.doesNotMatch(
     css,
     /\.icono-emulsion-favorite-button\.is-favorite\s*\{[^}]*background:/,
@@ -611,18 +606,8 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
     /\.icono-request-direct-side/,
     "direct generation should not keep the old pseudo-side column",
   )
-  // B-835 (owner, 2026-09-25): primary buttons are dark ink like Join Discord,
-  // which inverts with the theme; the accent teal is too loud for buttons.
-  assert.match(
-    css,
-    /\.icono-button--primary\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--dark\) 88%,\s*var\(--accent\) 12%\)[^}]*color:\s*var\(--light\)/,
-    "the primary button is dark ink with a hint of accent, like the Join Discord button",
-  )
-  assert.match(
-    css,
-    /--icono-action-font:\s*"IBM Plex Mono", monospace/,
-    "modal and toolbar action buttons should not inherit the page's display fonts",
-  )
+  // B-835: the primary ink, one-line labels, button fonts and the disabled
+  // outline are measured by computed style in e2e/button-system.e2e.mjs.
   assert.match(
     app,
     /directGenerateButton\.classList\.toggle\("icono-button--primary", !canPublish\)[\s\S]*directPublishButton\.classList\.toggle\("icono-button--primary", canPublish\)/,
@@ -677,11 +662,6 @@ test("direct generation result uses edit-modal geometry instead of a handmade si
     app,
     /if \(\s*selectedValue\s*&&\s*!options\.some\(function \(opt\) \{\s*return opt\.value === selectedValue\s*\}\)\s*\) \{\s*selectedValue = options\.length \? options\[0\]\.value : ""/,
     "a removed last-used provider should fall back to the first currently available compound option",
-  )
-  assert.match(
-    css,
-    /\n\.icono-button:disabled\s*\{[^}]*background:\s*transparent[^}]*opacity:\s*1/,
-    "disabled direct actions should become neutral outline controls instead of translucent green pills",
   )
   assert.match(
     app,

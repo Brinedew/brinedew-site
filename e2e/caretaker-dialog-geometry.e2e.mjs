@@ -15,30 +15,11 @@
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measured geometry land in artifacts/e2e/.
 import assert from "node:assert/strict"
-import { createServer } from "node:http"
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
-import { fileURLToPath } from "node:url"
-import { chromium } from "playwright-core"
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url))
-const SITE = path.join(ROOT, "public-iconoplasm-edge")
-const OUT = path.join(ROOT, "artifacts", "e2e")
-const HOST = "https://iconoplasm.brinedew.bio"
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css",
-  ".js": "text/javascript",
-  ".mjs": "text/javascript",
-  ".json": "application/json",
-  ".woff2": "font/woff2",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".txt": "text/plain",
-}
+import { HOST, OUT, VIEWPORTS, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 const DOSSIER = {
   gene: { gene_id: "gene_tp53", symbol: "TP53" },
@@ -90,69 +71,6 @@ const DOSSIER = {
   ],
 }
 
-function siteFile(pathname) {
-  const clean = decodeURIComponent(pathname).replace(/^\/+/, "")
-  for (const candidate of [clean, `${clean}.html`, path.posix.join(clean, "index.html")]) {
-    const file = path.join(SITE, candidate)
-    if (!file.startsWith(SITE)) continue
-    try {
-      if (statSync(file).isFile()) return file
-    } catch {}
-  }
-  // Single-page application fallback, like the production static assets.
-  return path.join(SITE, "index.html")
-}
-
-async function startSite() {
-  const server = createServer((request, response) => {
-    const file = siteFile(new URL(request.url, "http://local").pathname)
-    response.writeHead(200, {
-      "content-type": TYPES[path.extname(file)] || "application/octet-stream",
-    })
-    response.end(readFileSync(file))
-  })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  return { server, origin: `http://127.0.0.1:${server.address().port}` }
-}
-
-async function routeProduction(context, localOrigin) {
-  await context.addCookies([
-    {
-      name: "brinedew_session_present",
-      value: "1",
-      domain: "iconoplasm.brinedew.bio",
-      path: "/",
-      secure: true,
-      sameSite: "Lax",
-    },
-  ])
-  await context.route(`${HOST}/**`, async (route) => {
-    const url = new URL(route.request().url())
-    if (url.pathname.startsWith("/api/")) {
-      const json = (body) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) })
-      if (url.pathname === "/api/auth/me") {
-        return json({
-          authenticated: true,
-          user: { id: "u1", user_id: "u1", account_id: "u1", username: "e2e", display_name: "E2E" },
-        })
-      }
-      if (url.pathname.startsWith("/api/iconoplasm/caretaker/")) {
-        return json(route.request().method() === "GET" ? DOSSIER : { ok: true })
-      }
-      // Public reads stay real: the gene page must render as readers see it.
-      if (url.pathname.startsWith("/api/public/")) return route.continue()
-      return json({})
-    }
-    const local = await fetch(`${localOrigin}${url.pathname}`)
-    return route.fulfill({
-      status: local.status,
-      contentType: local.headers.get("content-type") || undefined,
-      body: Buffer.from(await local.arrayBuffer()),
-    })
-  })
-}
-
 function measure() {
   const rect = (el) => el && el.getBoundingClientRect()
   const dialog = document.querySelector(".icono-caretaker-dialog[open]")
@@ -195,26 +113,23 @@ function measure() {
 }
 
 test("the caretaker dialog fits, uses the UI fonts and never clips its buttons", async (t) => {
-  let browser
-  try {
-    browser = await chromium.launch({ channel: "chrome" })
-  } catch (error) {
-    // Locally without Chrome this is a skip; CI always has it.
-    if (!process.env.CI) return t.skip(`Chrome is not available: ${error.message}`)
-    throw error
-  }
+  const browser = await launchChrome(t)
+  if (!browser) return
   const { server, origin } = await startSite()
   mkdirSync(OUT, { recursive: true })
   const report = []
   try {
-    for (const [width, height, name] of [
-      [1280, 860, "desktop"],
-      [400, 820, "phone"],
-    ]) {
+    for (const [width, height, name] of VIEWPORTS) {
       for (const theme of ["light", "dark"]) {
         const context = await browser.newContext({ viewport: { width, height } })
         await context.addInitScript((value) => localStorage.setItem("theme", value), theme)
-        await routeProduction(context, origin)
+        await routeProduction(context, origin, (pathname, request) =>
+          pathname.startsWith("/api/iconoplasm/caretaker/")
+            ? request.method() === "GET"
+              ? DOSSIER
+              : { ok: true }
+            : undefined,
+        )
         const page = await context.newPage()
         await page.goto(`${HOST}/gene/TP53?caretaker=open`)
         await page.waitForSelector(".icono-caretaker-dialog[open]", { timeout: 30_000 })

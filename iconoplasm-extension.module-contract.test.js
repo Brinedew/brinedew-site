@@ -1859,11 +1859,6 @@ test("Iconoplasm home keeps Discord actions in the starter-card flow", () => {
     "the Discord invite uses the shared primary button",
   )
   assert.match(
-    stylesSource,
-    /\.icono-button--primary\s*\{[^}]*background: color-mix\(in srgb, var\(--dark\) 88%, var\(--accent\) 12%\)/,
-    "the shared primary keeps the Join Discord ink",
-  )
-  assert.match(
     appSource,
     /icono-card icono-guest-login-card icono-install-panel/,
     "extension install instructions should reuse the working guest-login card visual template",
