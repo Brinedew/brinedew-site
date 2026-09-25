@@ -31812,7 +31812,6 @@ function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
 }
 
 function publicGeneSearchEntry(url, env, symbol, gene, match) {
-  const base = portraitBase(url, env)
   const entry = {
     symbol,
     color: gene?.c || "#888",
@@ -31822,10 +31821,21 @@ function publicGeneSearchEntry(url, env, symbol, gene, match) {
     match_rank: Number(match?.rank ?? 999),
   }
   if (gene?.p) {
-    entry.pt = portraitAssetUrl(gene.p, "medium")
-    entry.ph = portraitAssetUrl(gene.p, "full")
+    // B-855/B-846: thumbnails come straight from Bunny. Our own /portraits/*
+    // host costs one Worker request per image, so a search results list of 8
+    // would cost 9 requests instead of 1.
+    entry.pt = portraitCdnUrl(env, gene.p, "medium")
+    entry.ph = portraitCdnUrl(env, gene.p, "full")
   }
   return entry
+}
+
+function portraitCdnUrl(env, asset, preferred) {
+  const renditions = asset?.renditions || {}
+  const path = [preferred, "medium", "full", "thumb"]
+    .map((size) => renditions?.[size]?.path)
+    .find(Boolean)
+  return path ? iconoplasmGeneCardCdnUrl(env, path) : portraitAssetUrl(asset, preferred)
 }
 
 async function parseJsonBody(request) {
