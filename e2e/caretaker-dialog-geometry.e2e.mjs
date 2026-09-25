@@ -112,6 +112,83 @@ function measure() {
   }
 }
 
+// B-862: a caretaker reaches their tools by clicking their own badge in the gene
+// toolbar, not by reading a sentence that says where to go. Fails if the chip is
+// not a button, lacks the Caretaker badge, or clicking it does not open the panel.
+test("the caretaker's own toolbar badge opens the caretaker panel", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  mkdirSync(OUT, { recursive: true })
+  try {
+    for (const [width, height, name] of VIEWPORTS) {
+      const context = await browser.newContext({ viewport: { width, height } })
+      await routeProduction(context, origin, (pathname, request) => {
+        if (pathname === "/api/auth/me") {
+          return {
+            authenticated: true,
+            user: {
+              id: "u1",
+              user_id: "u1",
+              account_id: "u1",
+              username: "e2e",
+              avatar_url: "/api/avatar?src=e2e",
+            },
+          }
+        }
+        if (pathname === "/api/iconoplasm/caretaker/me") {
+          return {
+            ok: true,
+            caretaker: {
+              caretaker_assignment_id: "assignment_tp53",
+              canonical_symbol: "TP53",
+              assignment_status: "active",
+              href: "/gene/TP53",
+              unread_comment_count: 2,
+              supervote_active: false,
+            },
+          }
+        }
+        if (pathname.startsWith("/api/iconoplasm/caretaker/")) {
+          return request.method() === "GET" ? DOSSIER : { ok: true }
+        }
+        return undefined
+      })
+      const page = await context.newPage()
+      await page.goto(`${HOST}/gene/TP53`)
+      if (name === "desktop") {
+        // The sidebar card shows the gene's portrait and badges, not a letter
+        // mark and an instruction sentence.
+        await page.waitForSelector(
+          "[data-icono-caretaker-assignment] img.icono-request-inbox__caretaker-portrait",
+          { timeout: 30_000 },
+        )
+        const card = await page.textContent(".icono-request-inbox__caretaker-item")
+        assert.match(card, /Caretaker/, "sidebar: Caretaker badge")
+        assert.match(card, /10×/, "sidebar: supervote chip")
+        assert.doesNotMatch(card, /long-press|Your gene/i, "sidebar: instruction sentence")
+      }
+      const badge = await page.waitForSelector("button[data-icono-caretaker-open]", {
+        timeout: 30_000,
+      })
+      assert.match(await badge.textContent(), /Caretaker/, `${name}: badge text`)
+      assert.equal(
+        await page.$(".icono-caretaker-dialog[open]"),
+        null,
+        `${name}: panel opened by itself`,
+      )
+      await page.screenshot({ path: path.join(OUT, `caretaker-entry-${name}.png`) })
+      await badge.click()
+      await page.waitForSelector(".icono-caretaker-dialog[open]", { timeout: 10_000 })
+      await page.screenshot({ path: path.join(OUT, `caretaker-badge-${name}.png`) })
+      await context.close()
+    }
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
+
 test("the caretaker dialog fits, uses the UI fonts and never clips its buttons", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return

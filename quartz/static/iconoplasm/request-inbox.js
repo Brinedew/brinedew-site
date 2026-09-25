@@ -12,8 +12,10 @@ export function createRequestInbox({
   ensurePortraitSource,
   resolvePortraitUrl,
   navigate,
+  loadGenePortrait,
 }) {
   var state = {
+    caretaker_portraits: Object.create(null),
     loaded: false,
     loading: false,
     request_error: false,
@@ -508,18 +510,40 @@ export function createRequestInbox({
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
     var supervoteUnspent = item.supervote_active !== true
+    // B-862: show the gene, not a letter. The portrait loads once per symbol and
+    // re-renders the sidebar; until then a blank tile holds the space.
+    var portraitUrl = state.caretaker_portraits[symbol]
+    if (portraitUrl === undefined && typeof loadGenePortrait === "function") {
+      state.caretaker_portraits[symbol] = ""
+      void Promise.resolve(loadGenePortrait(symbol))
+        .catch(function () {
+          return ""
+        })
+        .then(function (url) {
+          if (!url) return
+          state.caretaker_portraits[symbol] = String(url)
+          renderSidebar()
+        })
+    }
     return (
       '<div class="icono-request-inbox__caretaker-item">' +
       '<a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
       escapeHtml(href) +
       '" data-icono-caretaker-assignment data-icono-caretaker-gene="' +
       escapeHtml(symbol) +
-      '"><span class="icono-request-inbox__caretaker-mark" aria-hidden="true">C</span>' +
+      '">' +
+      (portraitUrl
+        ? '<img class="icono-request-inbox__caretaker-portrait" src="' +
+          escapeHtml(portraitUrl) +
+          '" alt="" loading="lazy" decoding="async" width="40" height="40">'
+        : '<span class="icono-request-inbox__caretaker-portrait" aria-hidden="true"></span>') +
       '<span class="icono-request-inbox__copy"><strong>' +
       escapeHtml(symbol) +
-      "</strong><small>" +
-      escapeHtml(item.assignment_status === "suspended" ? "Caretaking suspended" : "Your gene") +
-      "</small></span></a>" +
+      "</strong>" +
+      (item.assignment_status === "suspended"
+        ? "<small>Caretaking suspended</small>"
+        : '<span class="icono-caretaker-identity__badge">Caretaker</span>') +
+      "</span></a>" +
       (unread
         ? '<a class="icono-request-inbox__caretaker-comments" href="' +
           escapeHtml(
@@ -536,7 +560,7 @@ export function createRequestInbox({
       (supervoteUnspent && item.assignment_status === "active"
         ? '<a class="icono-request-inbox__caretaker-supervote-alert" href="' +
           escapeHtml("/gene/" + encodeURIComponent(symbol)) +
-          '" data-icono-caretaker-supervote-alert>long-press any vote button to assign your 10x supervote</a>'
+          '" data-icono-caretaker-supervote-alert title="Unspent: long-press any vote button to cast your 10× supervote" aria-label="10× supervote unspent. Long-press any vote button to cast it.">10×</a>'
         : "") +
       "</div>"
     )

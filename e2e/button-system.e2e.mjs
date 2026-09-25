@@ -165,6 +165,14 @@ test("buttons keep one face, one line and the ink primary on every modal surface
           )
           assert.deepEqual(badAttributes.slice(0, 5), [], `${where}: malformed attributes`)
 
+          if (surface.root === EDIT) {
+            // B-862: the blot edit control adjusts an image, so it shows sliders, not a pencil.
+            const icon = await page.$eval("[data-icono-edit-source] svg", (svg) =>
+              svg.getAttribute("data-icono-icon"),
+            )
+            assert.equal(icon, "sliders", `${where}: blot edit icon`)
+          }
+
           const actions = m.buttons.filter((b) => /\bicono-button\b/.test(b.className))
           assert.ok(actions.length > 0, `${where}: no shared buttons found`)
           for (const b of actions) {
