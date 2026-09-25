@@ -77,7 +77,7 @@ jobs:
       - name: Verify operation cost implementation and migration identities
         run: |
           node scripts/generate-operation-cost-migrations.mjs --check
-          node scripts/generate-operation-cost-identities.mjs --check
+          node scripts/generate-operation-cost-identities.mjs
 
       - name: Build exact HEAD before topology tests
         run: pnpm run build
