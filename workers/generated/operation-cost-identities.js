@@ -2,5 +2,5 @@
 // Plans bind to the deployed query implementation and complete migration set.
 export const OPERATION_COST_IDENTITIES = Object.freeze({
   "executable_sha256": "b925af3f2be638290a5f2dfb23eaabe0d018e6f65415144a1469bfde145e261e",
-  "schema_sha256": "d7ccaaabba48b46c7ebbe57bd1f7ca5f218a72ec5272de97bec5c85035962f7d"
+  "schema_sha256": "94a5e972ae0338df41099cd0eb1b4e56d938eacd818a5dc2a1722047cb3dc247"
 })
