@@ -14,7 +14,7 @@ _For Claude Code and anyone else working on this site_
 
 Personal longevity research blog built with Quartz 4. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
 
-The basic flow: write markdown in `content/`, push to GitHub, the canonical production deploy path (`scripts/deploy-cloudflare-prod.ps1` -> `.github/workflows/deploy-quartz.yml`) builds the site with Quartz and ships it to Cloudflare Pages, which serves `brinedew.bio` and `geneguessr.brinedew.bio` directly as free static requests. Only `/api/*` and GeneGuessr `/admin*` run the public-edge Worker (B-834; the zone rules live in `cloudflare/the-only-brinedew-static-edge-policy.json`, reconciled by `scripts/reconcile-brinedew-static-edge-policy.mjs`). Never put a Worker route back on `brinedew.bio/*` or `geneguessr.brinedew.bio/*`: Workers run before the cache, so every file would become a metered request. Takes about 2-3 minutes from dispatch to live. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
+The basic flow: write markdown in `content/`, push to `main`, and `.github/workflows/deploy-quartz.yml` builds the site with Quartz and ships it to Cloudflare Pages, which serves `brinedew.bio` and `geneguessr.brinedew.bio` directly as free static requests. Only `/api/*` and GeneGuessr `/admin*` run the public-edge Worker (B-834; the zone rules live in `cloudflare/the-only-brinedew-static-edge-policy.json`, reconciled by `scripts/reconcile-brinedew-static-edge-policy.mjs`). Never put a Worker route back on `brinedew.bio/*` or `geneguessr.brinedew.bio/*`: Workers run before the cache, so every file would become a metered request. A deploy takes about 7-9 minutes. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
 
 ## Design Context
 
@@ -64,8 +64,8 @@ npx quartz build    # builds static site to public/
 1. Write markdown in Obsidian on any device (phone, tablet, PC)
 2. Syncthing syncs content automatically across all devices
 3. When ready to publish: Git commit and push from PC
-4. From the PC, dispatch production: `powershell -File scripts/deploy-cloudflare-prod.ps1`. The script refuses to dispatch unless HEAD == origin/main and the working tree is clean, so this is safe to run by hand.
-5. Wait for the dispatched `Deploy Production (Cloudflare Pages + Worker)` workflow to finish (~2-3 min), check `https://brinedew.bio/`
+4. A push to `main` deploys by itself: the `Deploy Production (Cloudflare Pages + Worker)` workflow runs on every push (except `docs/**` and `plans/**` changes).
+5. Wait for that run to finish (about 7-9 minutes, measured September 2026), then check `https://brinedew.bio/`
 
 **Device setup:**
 
@@ -138,28 +138,15 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 
 - **Default text**: `color: var(--darkgray)`
 - **Headings**: `color: var(--dark)`
-- **Links**: `color: var(--secondary)` with `hover: var(--accent)` (BROKEN - accent undefined)
-- **Interactive elements (buttons)**: `color: var(--darkgray)` with `hover: var(--accent)` (BROKEN)
+- **Links**: `color: var(--secondary)` with `hover: var(--accent)`
+- **Interactive elements (buttons)**: `color: var(--darkgray)` with `hover: var(--accent)` (`--accent` is defined in `quartz/static/custom.css`)
 - **Borders**: Use `var(--gray)`
 - **Backgrounds**: `var(--light)` for cards/surfaces, `var(--lightgray)` for input fields
-
-**What needs fixing:**
-
-1. Define `--accent` variable in theme.ts and quartz.config.ts with teal values
-2. Update `--secondary` from blue to match brand teal for link color
-3. Update all hover states to use properly-defined `--accent`
-
-**Common mistakes to avoid:**
-
-- ❌ Using `var(--accent)` → Currently undefined, will be black
-- ❌ `color: var(--secondary)` for buttons → Should be `var(--darkgray)`
-- ❌ Hardcoding hex values → Always use variables
-- ❌ Azure/blue colors → Brand uses teal per style guide
 
 **Where colors are defined:**
 
 - Values: `quartz.config.ts` lines 36-57 (lightMode and darkMode objects) - NEEDS UPDATE
-- Variables: `quartz/util/theme.ts` lines 147-176 - MISSING --accent definition
+- Variables: `quartz/util/theme.ts`; `--accent` (teal) is set in `quartz/static/custom.css`
 - Style guide: `BrinedewStyle/Visual/BrinedewVisualStyleGuide.md` - authoritative source
 
 **Testing color changes:**
@@ -173,9 +160,10 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 
 **Site not updating?** First check the GitHub Actions tab on this repo for the `Deploy Production (Cloudflare Pages + Worker)` workflow run. Then check `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md` and `docs/ICONOPLASM_OPERATIONS.md` (and the "Site is broken" runbook in `AGENTS.md`) before doing anything else.
 
-- Green checkmark = dispatch + Pages + Worker deploy succeeded, changes should be live on `brinedew.bio` in ~2-3 min total
+- Green checkmark = Pages + Worker deploy succeeded; changes are live on `brinedew.bio`
+- Grey (cancelled) = a newer push superseded this run; not a failure
 - Red X = build failed or one of the deploy steps failed; check the failing step's log
-- Yellow circle = dispatch in progress or in the `production-deploy` concurrency queue
+- Yellow circle = in progress or waiting in the `production-deploy` concurrency queue
 
 **Build failing?** Check that:
 
@@ -215,36 +203,16 @@ git reset --hard origin/main
 
 ## the deployment pipeline
 
-Production deploy is **Cloudflare Pages + Cloudflare Worker**, not GitHub Pages. The canonical entry point is `scripts/deploy-cloudflare-prod.ps1`, which dispatches `.github/workflows/deploy-quartz.yml` against the exact `origin/main` SHA. Do not run `wrangler pages deploy` or `wrangler deploy` by hand for production — local machine auth, local config drift, and partial deploys are exactly what the dispatch path is designed to prevent.
+Production is **Cloudflare Pages + Cloudflare Workers**. There is no GitHub Pages and no `brinedew.com`.
 
-The flow on a production push:
+- **A push to `main` deploys.** `.github/workflows/deploy-quartz.yml` runs on every push (`paths-ignore: docs/**, plans/**`). It builds Quartz, deploys the stateful Worker, the public edge Worker and Pages, then runs post-deploy acceptance. It takes about 7-9 minutes.
+- **Back-to-back merges are safe.** Runs share the `production-deploy` concurrency group (`cancel-in-progress: false`). A run whose commit is no longer `main`'s head cancels itself and ends grey. Grey is not a failure (B-857).
+- **D1 migrations do not apply on a normal push.** A push that adds an unapplied migration fails with `CODE_RELEASE_REQUIRES_MAINTENANCE`. Migrations run only in a `workflow_dispatch` with `data_maintenance=true`, which currently pauses the app (B-847).
+- **Durable Object class changes** (create, delete or rename) are applied by `wrangler deploy` automatically when the config's migration tag is ahead of the deployed one (`scripts/stateful-worker-do-migration.mjs`).
+- **Cloudflare zone settings** (Pages domains, redirect rules, Web Analytics injection) are owned by `cloudflare/the-only-brinedew-static-edge-policy.json` and its reconciler. Never change them in the dashboard.
+- Never run `wrangler deploy` or `wrangler pages deploy` for production by hand.
 
-1. Push your commit to `main` (via Obsidian Git Sync or the PC).
-2. From the PC, dispatch: `powershell -File scripts/deploy-cloudflare-prod.ps1`. The script refuses unless HEAD == origin/main and the working tree is clean.
-3. The dispatched `Deploy Production (Cloudflare Pages + Worker)` workflow (`concurrency: production-deploy, cancel-in-progress: true`) runs on `ubuntu-latest` and, in order:
-   1. Checks out at full depth.
-   2. Sets up Node 22 + pnpm 11 via corepack, with `minimumReleaseAge: 1440`.
-   3. Runs `scripts/enrich-proteins.py` (Python 3.12, pandas/pyyaml/python-frontmatter/requests).
-   4. Installs dependencies and the Quartz plugin set.
-   5. Runs the Iconoplasm worker-budget guard tests + `scripts/assert-iconoplasm-worker-budget-guards.mjs`. **If any of these fail, the deploy is blocked.** This is the canonical cost-barrier gate; see `docs/ICONOPLASM_OPERATIONS.md`.
-   6. Runs `pnpm run build` (Quartz + Iconoplasm shared-asset sync + plugin install + content rendering into `public/`).
-   7. Writes `public/CNAME` from `content/CNAME` (fallback `brinedew.bio`, never `brinedew.com`).
-   8. Deploys the static site to Cloudflare Pages via an isolated Pages-only `wrangler.pages.toml` config.
-   9. Applies D1 migrations to `geneguessr` and `iconoplasm`.
-   10. Deploys the internal stateful Worker.
-   11. Re-binds the Iconoplasm finalization queue consumer.
-   12. Deploys the public edge Worker with routes from `wrangler.toml`.
-   13. Reassigns production routes (idempotent safety net).
-   14. Smoke-tests `https://brinedew.bio/api/auth/login` for a 302 to `https://discord.com/oauth2/authorize` with a non-empty `client_id`.
-
-Total wall time on a clean cache is 2-3 minutes.
-
-What it does **not** do (and the previous "GitHub Pages + brinedew.com" mental model implied):
-
-- It does not publish to GitHub Pages. There is no `gh-pages` branch, no `actions/deploy-pages` step, and no Pages artifact in this repo.
-- It does not serve `brinedew.com`. The canonical domain is `brinedew.bio` (see `quartz.config.yaml:79` and `:220`); the old `brinedew.com` fallback CNAME in the deploy workflow was a 2026-06-29 cleanup target.
-
-For preview deploys on a PR, `build-preview.yaml` builds the same site and `deploy-preview.yaml` uploads it to a Cloudflare Pages branch preview (only if `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN` secrets are set).
+Deeper mechanics and recovery live in `docs/ICONOPLASM_OPERATIONS.md` and `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`. Read them rather than trusting a summary here.
 
 ## quartz features we're using
 
@@ -295,7 +263,6 @@ This survives Quartz's dynamic navigation and won't get nuked by migration scrip
 
 ## things to not touch
 
-- `.github/workflows/deploy-quartz.yml` permissions (required for Pages)
 - `quartz.config.ts` core configuration (themes, plugins)
 - Don't append CSS to .scss files (breaks Sass compilation)
 
