@@ -62,10 +62,18 @@ test("cost identities follow the cost authority imports, not unrelated Worker co
   write("shared/domain.js", "export const value = 2;\n")
   const withHelper = operationCostIdentities({ sourceRoot })
   assert.notEqual(withHelper.executable_sha256, initial.executable_sha256)
+  // B-863: a lockfile change alone (a dev-only tool) must not move the
+  // identity; a version bump of a package the cost code imports must.
   write("pnpm-lock.yaml", "lockfileVersion: 10\n")
+  assert.deepEqual(operationCostIdentities({ sourceRoot }), withHelper)
+  write("node_modules/cost-helper/package.json", '{"name":"cost-helper","version":"1.0.0"}')
+  write("node_modules/cost-helper/index.js", "export const helper = 1;\n")
+  write("shared/domain.js", "import { helper } from 'cost-helper'; export const value = helper;\n")
+  const withPackage = operationCostIdentities({ sourceRoot })
+  write("node_modules/cost-helper/package.json", '{"name":"cost-helper","version":"1.0.1"}')
   assert.notEqual(
     operationCostIdentities({ sourceRoot }).executable_sha256,
-    withHelper.executable_sha256,
+    withPackage.executable_sha256,
   )
   const beforeBenchmark = operationCostIdentities({ sourceRoot })
   write(

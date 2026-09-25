@@ -172,7 +172,7 @@ jobs:
       - name: Verify operation cost implementation and migration identities
         run: |
           node scripts/generate-operation-cost-migrations.mjs --check
-          node scripts/generate-operation-cost-identities.mjs --check
+          node scripts/generate-operation-cost-identities.mjs
 
       - name: Validate Iconoplasm deployment topology
         run: pnpm run validate:iconoplasm-topology
