@@ -49,7 +49,7 @@ export const ICONOPLASM_PUBLIC_OPENAPI = Object.freeze({
     title: "Iconoplasm public image resolver",
     version: "1.0.0",
     description:
-      "Resolve human gene symbols, aliases, HGNC identifiers, and UniProt accessions to canonical Iconoplasm gene blots. A gene blot is the machine-downloadable card image with the gene name and symbol over the canonical character portrait.",
+      "Resolve HGNC gene symbols (any case), curated literature aliases, and UniProt accessions to canonical Iconoplasm gene blots. HGNC IDs, Ensembl and NCBI Gene IDs are not resolved (found: false). A gene blot is the machine-downloadable card image with the gene name and symbol over the canonical character portrait.",
   },
   servers: [{ url: "https://iconoplasm.brinedew.bio" }],
   paths: {
