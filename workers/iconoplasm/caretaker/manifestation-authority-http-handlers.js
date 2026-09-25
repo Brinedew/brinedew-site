@@ -16,6 +16,7 @@ import {
   claimCaretakerAssignment,
   transitionCaretakerAssignment,
 } from "./caretaker-assignment-commands.js"
+import { readActiveCaretakerTerms } from "./caretaker-terms-registry.js"
 import { authorityError, defaultIdFactory } from "./manifestation-authority-contract.js"
 import {
   authorityMode,
@@ -191,15 +192,7 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
           gene_revision: Number(accountAssignment.gene_revision),
         }
       : null
-  const terms = await first(
-    db,
-    `SELECT terms_version_id, terms_sha256, document_url, display_label, effective_at
-       FROM icono_caretaker_terms_versions
-      WHERE retired_at IS NULL AND effective_at <= ?
-      ORDER BY effective_at DESC, terms_version_id DESC
-      LIMIT 1`,
-    currentTimestamp,
-  )
+  const terms = await readActiveCaretakerTerms(db, currentTimestamp)
   let reason = null
   if (!head.canonical_manifestation_id || !head.canonical_revision_id) {
     reason = "gene_not_ready"
