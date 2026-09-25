@@ -2045,12 +2045,12 @@ test("signed-in caretaker sees one active gene and acknowledges its comment aler
   assert.match(markup, /data-icono-caretaker-assignment-id="assignment_ui_0001"/)
   assert.match(markup, /2<\/strong> new comments/)
   assert.match(markup, /href="\/gene\/TP53#gene-comments"/)
-  assert.match(markup, /long-press any vote button to assign your 10x supervote/)
+  assert.match(markup, /data-icono-caretaker-supervote-alert/)
   assert.doesNotMatch(markup, /must-never-render|discord|provider_subject/i)
   inbox.updateCaretakerSupervote({ active: true, direction: -1, supervote_version: 2 })
   assert.doesNotMatch(
     inbox.caretakerPanelMarkup(),
-    /long-press any vote button to assign your 10x supervote/,
+    /data-icono-caretaker-supervote-alert/,
   )
 
   function fakeInteractive(attributes) {
