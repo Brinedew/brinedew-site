@@ -23,11 +23,10 @@ import {
   ICONOPLASM_EXTENSION_BLOCKLIST_MAX_PROJECTION_BYTES,
   ICONOPLASM_EXTENSION_BLOCKLIST_MAX_REQUEST_BYTES,
   iconoplasmExtensionBlocklistKvKey,
+  readAuthoritativePublishedIconoplasmExtensionBlocklist,
   reconcileIconoplasmExtensionBlocklistPolicy,
-  resetIconoplasmExtensionBlocklistPublicCacheForTests,
   publishIconoplasmExtensionBlocklistPolicy,
   readIconoplasmExtensionBlocklistPolicy,
-  readPublishedIconoplasmExtensionBlocklist,
   saveIconoplasmExtensionBlocklistPolicy,
   validateIconoplasmExtensionBlocklistAgainstPublishedScanner,
 } from "./iconoplasm-extension-blocklist-policy.js"
@@ -572,7 +571,6 @@ test("save uses expected_revision CAS, records actor audit, and retains only the
 })
 
 test("KV failure preserves the newer desired policy and old public projection, then idempotent publication repairs it", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const oldVersion = AMID_VERSION
   const db = new FakeDb(policyRow({ version: oldVersion }))
   const kv = new FakeKv({
@@ -656,7 +654,6 @@ test("foreground fresh blocklist publication and retry never list histories or r
 })
 
 test("immutable projection publication refuses a valid revision ahead of D1 and a same-revision content collision", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const db = new FakeDb(
     policyRow({
       revision: 2,
@@ -682,9 +679,8 @@ test("immutable projection publication refuses a valid revision ahead of D1 and 
   assert.equal(kv.entries.has(iconoplasmExtensionBlocklistKvKey(2)), false)
   assert.equal(db.row.published_revision, 1)
   assert.equal(db.row.projection_lease_token, null)
-  assert.equal((await readPublishedIconoplasmExtensionBlocklist(kv, { fresh: true })).revision, 3)
+  assert.equal((await readAuthoritativePublishedIconoplasmExtensionBlocklist(kv)).revision, 3)
 
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const collisionDb = new FakeDb(
     policyRow({
       revision: 2,
@@ -714,7 +710,6 @@ test("immutable projection publication refuses a valid revision ahead of D1 and 
 })
 
 test("an expired stale lease holder cannot hide a newer immutable projection", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const version1 = AMID_VERSION
   const db = new FakeDb(
     policyRow({
@@ -763,11 +758,10 @@ test("an expired stale lease holder cannot hide a newer immutable projection", a
   assert.equal(db.row.published_revision, 3)
   assert.equal(db.row.projection_lease_token, null)
   assert.equal(kv.entries.has(iconoplasmExtensionBlocklistKvKey(2)), true)
-  assert.equal((await readPublishedIconoplasmExtensionBlocklist(kv, { fresh: true })).revision, 3)
+  assert.equal((await readAuthoritativePublishedIconoplasmExtensionBlocklist(kv)).revision, 3)
 })
 
 test("projection lease holder loops to the newest revision when a save races its KV write", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const db = new FakeDb(
     policyRow({
       publishedRevision: null,
@@ -799,7 +793,6 @@ test("projection lease holder loops to the newest revision when a save races its
 })
 
 test("scheduled reconciliation repairs stale projection and clears an expired in-sync lease", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const oldVersion = AMID_VERSION
   const newVersion = ARCH_VERSION
   const db = new FakeDb(
@@ -860,7 +853,6 @@ test("scheduled reconciliation repairs stale projection and clears an expired in
 })
 
 test("scheduled reconciliation bounds immutable KV history while retaining the current revision", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const revision = ICONOPLASM_EXTENSION_BLOCKLIST_KV_RETENTION + 5
   const version = AMID_VERSION
   const entries = {}
@@ -888,7 +880,6 @@ test("scheduled reconciliation bounds immutable KV history while retaining the c
 })
 
 test("admin route enforces auth, body bound, CAS, scanner validation, and identical-policy republish", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
@@ -972,7 +963,6 @@ test("admin route enforces auth, body bound, CAS, scanner validation, and identi
   assert.equal(stalePayload.code, "extension_blocklist_revision_conflict")
   assert.equal(Object.hasOwn(stalePayload, "projection_lease_token"), false)
 
-  await readPublishedIconoplasmExtensionBlocklist(kv)
   kv.entries.delete(iconoplasmExtensionBlocklistKvKey(1))
   const missingProjectionStatus = await callHandler(
     handlers(),
@@ -982,7 +972,6 @@ test("admin route enforces auth, body bound, CAS, scanner validation, and identi
   const missingProjectionPayload = await missingProjectionStatus.json()
   assert.equal(missingProjectionStatus.status, 200)
   assert.equal(missingProjectionPayload.publication.in_sync, false)
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const republished = await callHandler(
     handlers(),
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/extension-blocklist", {
@@ -1000,7 +989,6 @@ test("admin route enforces auth, body bound, CAS, scanner validation, and identi
 })
 
 test("a blocklist save bootstraps the missing alias projection and publishes one coherent pair", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const db = new FakeDb(policyRow({ version: AMID_VERSION }))
   const kv = new FakeKv({
     ...scannerEntries(),
@@ -1032,7 +1020,6 @@ test("a blocklist save bootstraps the missing alias projection and publishes one
 })
 
 test("blocklist admin returns saved policy state when the new pair key is listed before its value", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const db = new FakeDb(policyRow({ version: AMID_VERSION }))
   const kv = new FakeKv({
@@ -1065,7 +1052,6 @@ test("blocklist admin returns saved policy state when the new pair key is listed
 })
 
 test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const terms = Array.from(
     { length: 500 },
     (_, index) => `${"界".repeat(31)}-${String(index).padStart(3, "0")}`,
@@ -1126,7 +1112,6 @@ test("admin rejects an exact 500-term projection over 48 KiB before the D1 CAS",
 })
 
 test("admin distinguishes pre-save scanner failure from post-save publication busy", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const version = AMID_VERSION
   const unavailableDb = new FakeDb(policyRow({ version }))
   const unavailableKv = new FakeKv({
@@ -1260,7 +1245,6 @@ test("admin mutation admission blocks CSRF before D1 or KV and allows trusted br
     assert.equal(authChecks, 0)
   }
 
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({
@@ -1329,7 +1313,6 @@ test("blocklist admin route rejects unsupported methods before auth or bindings"
 })
 
 test("admin route returns the newer saved policy when KV projection fails", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   const version = AMID_VERSION
   const db = new FakeDb(policyRow({ version }))
   const kv = new FakeKv({

@@ -1303,13 +1303,6 @@ async function cleanupOldProjectionKeysBestEffort(kv, protectedRevision = null) 
   }
 }
 
-export function cleanupIconoplasmPublicationAliasProjectionHistory(
-  kv,
-  { protectedRevision = null } = {},
-) {
-  return cleanupOldProjectionKeysBestEffort(kv, protectedRevision)
-}
-
 function leaseToken() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID()
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
