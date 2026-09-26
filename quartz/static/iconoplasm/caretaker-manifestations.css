@@ -449,12 +449,61 @@
   font: 0.76rem/1.45 var(--icono-action-font);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="pending"] {
+/* B-874: the save state is a cloud glyph (Google Docs convention), never a word.
+   Hollow = unsaved, arrow = saving, check = saved, slash = failed. */
+[data-icono-caretaker-autosave-state] {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  color: var(--darkgray);
+}
+
+.icono-caretaker-cloud {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icono-caretaker-cloud__mark {
+  display: none;
+}
+
+[data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"],
+[data-icono-caretaker-autosave-state][data-state="saved"] [data-mark="saved"],
+[data-icono-caretaker-autosave-state][data-state="failed"] [data-mark="failed"] {
+  display: inline;
+}
+
+[data-icono-caretaker-autosave-state][data-state="unsaved"],
+[data-icono-caretaker-autosave-state][data-state="saving"] {
   color: var(--secondary);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="error"] {
+[data-icono-caretaker-autosave-state][data-state="unsaved"] .icono-caretaker-cloud__shape {
+  stroke-dasharray: 2.4 2.2;
+}
+
+[data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"] {
+    animation: icono-caretaker-cloud-lift 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes icono-caretaker-cloud-lift {
+  from {
+    transform: translateY(1px);
+  }
+  to {
+    transform: translateY(-1.5px);
+  }
 }
 
 .icono-caretaker-editor__actions {

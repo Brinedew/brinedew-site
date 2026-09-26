@@ -174,7 +174,10 @@ function allRevisionIds(value) {
 test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.match(html, /Manifestation</)
-  assert.match(html, /data-icono-caretaker-autosave-state role="status">Saved/)
+  assert.match(
+    html,
+    /data-icono-caretaker-autosave-state data-state="saved" role="status" title="Saved"><svg class="icono-caretaker-cloud"[^]*?data-icono-caretaker-autosave-label>Saved</,
+  )
   assert.match(html, /data-icono-caretaker-tab="manifestation"/)
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
@@ -666,6 +669,41 @@ test("an autosave in flight never greys out Close, the × or the tabs (B-874)", 
     assert.equal(control.disabled, false, control.getAttribute("aria-label") || control.textContent)
   }
   release()
+})
+
+test("the autosave indicator is a glyph whose state reads without words (B-874)", async () => {
+  let release
+  let attempts = 0
+  const { host } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    if (++attempts === 1) {
+      await new Promise((resolve) => (release = resolve))
+      return { manifestation_revision_id: "revision_3" }
+    }
+    throw Object.assign(new Error("Assignment is not active"), { status: 403 })
+  })
+  const indicator = () => host.querySelector("[data-icono-caretaker-autosave-state]")
+  const glyph = () => indicator().querySelector("svg")
+  assert.equal(indicator().dataset.state, "unsaved")
+  assert.equal(
+    glyph()?.getAttribute("aria-hidden"),
+    "true",
+    "the glyph is decoration for sighted users",
+  )
+  assert.equal(indicator().title, "Unsaved changes")
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(indicator().dataset.state, "saving")
+  assert.equal(indicator().textContent, "Saving…", "screen readers still hear the word")
+  release()
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(indicator().dataset.state, "saved")
+  assert.equal(glyph() !== null, true, "updating the state keeps the glyph")
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Fourth body"
+  prose.dispatchEvent(new globalThis.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(indicator().dataset.state, "failed")
+  assert.equal(indicator().title, "Not saved")
 })
 
 test("an uncertain autosave failure retries by itself when the browser reconnects (B-874)", async () => {

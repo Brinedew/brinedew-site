@@ -203,6 +203,31 @@ function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, rev
   )
 }
 
+// B-874: the save state is a cloud glyph, the convention Google Docs taught
+// everyone: hollow = unsaved, arrow = saving, check = saved, slash = failed.
+// CSS shows one mark per data-state; the word stays for screen readers.
+const AUTOSAVE_GLYPH =
+  '<svg class="icono-caretaker-cloud" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+  '<path class="icono-caretaker-cloud__shape" d="M7 18.5h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.3 9.3 4.6 4.6 0 0 0 7 18.5z"/>' +
+  '<path class="icono-caretaker-cloud__mark" data-mark="saving" d="M12 16.2v-5.4m-2.3 2.3 2.3-2.3 2.3 2.3"/>' +
+  '<path class="icono-caretaker-cloud__mark" data-mark="saved" d="m9.3 13.6 1.9 1.9 3.6-3.8"/>' +
+  '<path class="icono-caretaker-cloud__mark" data-mark="failed" d="M4.5 4.5l15 15"/>' +
+  "</svg>"
+
+// Titles are fixed strings, never user text. setBusy re-enables every control
+// that lacks data-icono-caretaker-disabled, so a grey button must carry it.
+function greyButton(title, label, state = "") {
+  return (
+    '<button type="button" class="icono-button" disabled data-icono-caretaker-disabled' +
+    (state ? ' data-state="' + state + '"' : "") +
+    ' title="' +
+    title +
+    '">' +
+    label +
+    "</button>"
+  )
+}
+
 export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
   const revisions = allRevisions(dossier)
   const index = revisions.findIndex(function (item) {
@@ -571,7 +596,10 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     '<div class="icono-caretaker-panel__footer">' +
     '<div class="icono-caretaker-footer__status">' +
     (canWrite
-      ? '<span data-icono-caretaker-autosave-state role="status">Saved</span><button type="button" class="icono-caretaker-link-button" data-icono-caretaker-retry-save hidden>Retry</button>'
+      ? '<span data-icono-caretaker-autosave-state data-state="saved" role="status" title="Saved">' +
+        AUTOSAVE_GLYPH +
+        '<span class="icono-visually-hidden" data-icono-caretaker-autosave-label>Saved</span></span>' +
+        '<button type="button" class="icono-caretaker-link-button" data-icono-caretaker-retry-save hidden>Retry</button>'
       : "") +
     "</div>" +
     '<div class="icono-caretaker-footer__actions icono-actions">' +

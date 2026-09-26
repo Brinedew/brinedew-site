@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=31b58b97edce1d60"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=a1525bea5f5cee5f"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=c70e63428d413fc4"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=1b817a9931002d63"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=c86caf733068dcbb"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -483,13 +483,25 @@ export function createCaretakerManifestationPanel({
     }
   }
 
-  function autosaveIndicator(state, message, tone = "") {
+  // B-874: the glyph carries the state; the word stays for screen readers and the tooltip.
+  const AUTOSAVE_LABELS = Object.freeze({
+    unsaved: "Unsaved changes",
+    saving: "Saving…",
+    saved: "Saved",
+    failed: "Not saved",
+  })
+
+  function autosaveIndicator(state, kind) {
     const target = state.host.querySelector("[data-icono-caretaker-autosave-state]")
     if (!target) return
-    target.textContent = message
-    target.dataset.tone = tone
+    const label = AUTOSAVE_LABELS[kind]
+    target.dataset.state = kind
+    target.title = label
+    const text = target.querySelector("[data-icono-caretaker-autosave-label]")
+    if (text) text.textContent = label
+    else target.textContent = label
     const retry = state.host.querySelector("[data-icono-caretaker-retry-save]")
-    if (retry) retry.hidden = tone !== "error"
+    if (retry) retry.hidden = kind !== "failed"
   }
 
   // B-874: a save whose outcome is uncertain (network drop, 5xx) retries by itself
@@ -521,8 +533,8 @@ export function createCaretakerManifestationPanel({
 
   function scheduleAutosave(state) {
     globalThis.clearTimeout(state.autosaveTimer)
-    if (state.autosaveFailed) return autosaveIndicator(state, "Not saved", "error")
-    autosaveIndicator(state, "Unsaved changes", "pending")
+    if (state.autosaveFailed) return autosaveIndicator(state, "failed")
+    autosaveIndicator(state, "unsaved")
     state.autosaveTimer = globalThis.setTimeout(function () {
       void autosave(state)
     }, 1100)
@@ -545,21 +557,21 @@ export function createCaretakerManifestationPanel({
     }
     const validation = proseValidationError(snapshot.prose)
     if (validation) {
-      autosaveIndicator(state, "Not saved", "error")
+      autosaveIndicator(state, "failed")
       return setStatus(state, validation, "error")
     }
     if (
       new TextEncoder().encode(snapshot.tags + JSON.stringify(snapshot.fieldsJson)).byteLength >
       32 * 1024 - 1
     ) {
-      autosaveIndicator(state, "Not saved", "error")
+      autosaveIndicator(state, "failed")
       return setStatus(state, "Keep Tags below 32 KiB.", "error")
     }
     if (
       !snapshot.tags.trim() &&
       JSON.stringify(snapshot.fieldsJson) !== tagsControl.dataset.initialFieldsJson
     ) {
-      autosaveIndicator(state, "Not saved", "error")
+      autosaveIndicator(state, "failed")
       return setStatus(
         state,
         "At least one generation tag is required to save tag changes.",
@@ -568,10 +580,10 @@ export function createCaretakerManifestationPanel({
     }
     const fingerprint = JSON.stringify([snapshot.prose, snapshot.tags, snapshot.fieldsJson])
     if (fingerprint === state.lastSavedFingerprint) {
-      autosaveIndicator(state, "Saved", "success")
+      autosaveIndicator(state, "saved")
       return
     }
-    autosaveIndicator(state, "Saving…", "pending")
+    autosaveIndicator(state, "saving")
     setStatus(state, "")
     state.autosaving = true
     const job = (state.autosaveJob ||= { snapshot })
@@ -625,13 +637,13 @@ export function createCaretakerManifestationPanel({
       }
       if (JSON.stringify([current.prose, current.tags, current.fieldsJson]) === fingerprint) {
         clearDraft(state)
-        autosaveIndicator(state, "Saved", "success")
+        autosaveIndicator(state, "saved")
       } else scheduleAutosave(state)
     } catch (error) {
       globalThis.clearTimeout(state.autosaveTimer)
       state.autosaveFailed = true
       if (Number(error?.status) >= 400 && Number(error?.status) < 500) state.autosaveJob = null
-      autosaveIndicator(state, "Not saved", "error")
+      autosaveIndicator(state, "failed")
       state.autosaveRetryable = uncertainFailure(error)
       if (state.autosaveRetryable) scheduleAutosaveRetry(state)
     } finally {
