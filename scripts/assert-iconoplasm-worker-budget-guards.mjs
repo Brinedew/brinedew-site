@@ -134,8 +134,8 @@ includesOrFail(
 )
 includesOrFail(
   worker,
-  "CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES",
-  "Worker must reserve the bounded dirty-shard publication step ceiling.",
+  "nextGroup + CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP",
+  "Worker must publish dirty card-catalog shards in bounded steps, never a whole-catalog rewrite.",
 )
 doesNotMatchOrFail(
   worker,

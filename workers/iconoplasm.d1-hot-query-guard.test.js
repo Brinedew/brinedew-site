@@ -245,7 +245,7 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
 test("DO NOT DELETE: canon auto-promotion must not select stale portrait assets", () => {
   const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function autoPromoteTopVotedPortrait",
-    "async function getArtistStyleBlacklistRow",
+    "async function iconoExistingAssetsBatch",
   )
 
   assert.match(
@@ -258,7 +258,7 @@ test("DO NOT DELETE: canon auto-promotion must not select stale portrait assets"
 test("DO NOT DELETE: automatic canon tie-break ranks newer assets before current-asset inertia", () => {
   const compareFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "function compareAdminLeaderRows",
-    "async function listAdminReadModelSymbols",
+    "async function listAdminReadModelSymbolsAfter",
   )
   DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(
     compareFn,
@@ -269,7 +269,7 @@ test("DO NOT DELETE: automatic canon tie-break ranks newer assets before current
 
   const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function autoPromoteTopVotedPortrait",
-    "async function getArtistStyleBlacklistRow",
+    "async function iconoExistingAssetsBatch",
   )
   const autoPromoteOrderBy = autoPromoteFn.slice(autoPromoteFn.indexOf("ORDER BY"))
   DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(
