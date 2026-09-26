@@ -5,7 +5,6 @@ import {
   decryptManifestationProse,
   encryptManifestationProse,
   normalizeManifestationProse,
-  rewrapManifestationDek,
 } from "./lib/iconoplasm-manifestation-body-crypto.js"
 import {
   decryptManifestationTags,
@@ -67,31 +66,6 @@ test("ciphertext cannot be moved to another gene or revision", async () => {
       keyVersion: encrypted.key_version,
     }),
   )
-})
-
-test("DEKs can be rewrapped without rewriting ciphertext", async () => {
-  const encrypted = await encryptManifestationProse(env, { ...identity, prose: "Rotate me" })
-  const rewrapped = await rewrapManifestationDek(env, {
-    ...identity,
-    wrappedDekBase64: encrypted.wrapped_dek_base64,
-    wrapIvBase64: encrypted.wrap_iv_base64,
-    fromKeyVersion: 1,
-    toKeyVersion: 2,
-  })
-  const prose = await decryptManifestationProse(
-    { ...env, ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "2" },
-    {
-      ...identity,
-      ciphertext: encrypted.ciphertext,
-      bodySha256: encrypted.body_sha256,
-      bodyBytes: encrypted.body_bytes,
-      bodyIvBase64: encrypted.body_iv_base64,
-      wrappedDekBase64: rewrapped.wrapped_dek_base64,
-      wrapIvBase64: rewrapped.wrap_iv_base64,
-      keyVersion: rewrapped.key_version,
-    },
-  )
-  assert.equal(prose, "Rotate me")
 })
 
 test("prose validation rejects empty, control, and character overflow", () => {

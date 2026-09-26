@@ -1,9 +1,4 @@
-import {
-  decryptEnvelope,
-  encryptEnvelope,
-  rewrapEnvelope,
-  sha256Hex,
-} from "./iconoplasm-envelope-crypto.js"
+import { decryptEnvelope, encryptEnvelope, sha256Hex } from "./iconoplasm-envelope-crypto.js"
 
 const ENCODER = new TextEncoder()
 const DECODER = new TextDecoder("utf-8", { fatal: true })
@@ -115,16 +110,4 @@ export async function decryptManifestationTags(env, input = {}) {
       tagsWrapAad(ids.derivativeId, ids.revisionId, ids.sourceBodySha256, version),
   })
   return DECODER.decode(bytes)
-}
-
-export async function rewrapManifestationTagsDek(env, input = {}) {
-  const ids = identity(input)
-  return rewrapEnvelope(env, {
-    wrappedDekBase64: input.wrappedDekBase64,
-    wrapIvBase64: input.wrapIvBase64,
-    fromKeyVersion: input.fromKeyVersion,
-    toKeyVersion: input.toKeyVersion,
-    wrapAadForKeyVersion: (version) =>
-      tagsWrapAad(ids.derivativeId, ids.revisionId, ids.sourceBodySha256, version),
-  })
 }

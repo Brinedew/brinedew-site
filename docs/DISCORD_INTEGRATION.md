@@ -62,8 +62,8 @@ Current design (2026-08-03):
 - The recap image now uses the **same Bunny CDN object storage the Iconoplasm
   portrait pipeline already uses** — no R2 required. Shared helpers live in
   [`workers/lib/discord-recap-images.js`](../workers/lib/discord-recap-images.js):
-  `putDiscordRecapImage` / `loadDiscordRecapImageBytes` / `headDiscordRecapImage`
-  / `deleteDiscordRecapImage`. They prefer `STRUCTURES_BUCKET` automatically if
+  `putDiscordRecapImage` / `loadDiscordRecapImageBytes` / `headDiscordRecapImage`.
+  They prefer `STRUCTURES_BUCKET` automatically if
   R2 is ever rebound, otherwise read/write Bunny.
 - Uploading images: the `/admin` panel ("Upload Selected Day Image" /
   "Upload Next 365 Days") posts to `POST /api/admin/discord-recap-image`, which

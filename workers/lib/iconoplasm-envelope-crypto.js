@@ -197,47 +197,4 @@ async function decryptEnvelope(
   }
 }
 
-async function rewrapEnvelope(
-  env,
-  { wrappedDekBase64, wrapIvBase64, fromKeyVersion, toKeyVersion, wrapAadForKeyVersion },
-) {
-  if (Number(fromKeyVersion) === Number(toKeyVersion)) {
-    throw new TypeError("Key versions must differ for rewrap")
-  }
-  const oldKek = await importKek(env, Number(fromKeyVersion))
-  const newKek = await importKek(env, Number(toKeyVersion))
-  const dekBytes = new Uint8Array(
-    await requireCrypto().subtle.decrypt(
-      {
-        name: "AES-GCM",
-        iv: base64ToBytes(wrapIvBase64, "wrap_iv_base64"),
-        additionalData: encodeAad(wrapAadForKeyVersion(Number(fromKeyVersion))),
-      },
-      oldKek,
-      base64ToBytes(wrappedDekBase64, "wrapped_dek_base64"),
-    ),
-  )
-  try {
-    const nextIv = randomBytes(12)
-    const wrappedDek = new Uint8Array(
-      await requireCrypto().subtle.encrypt(
-        {
-          name: "AES-GCM",
-          iv: nextIv,
-          additionalData: encodeAad(wrapAadForKeyVersion(Number(toKeyVersion))),
-        },
-        newKek,
-        dekBytes,
-      ),
-    )
-    return Object.freeze({
-      wrapped_dek_base64: bytesToBase64Url(wrappedDek),
-      wrap_iv_base64: bytesToBase64Url(nextIv),
-      key_version: Number(toKeyVersion),
-    })
-  } finally {
-    dekBytes.fill(0)
-  }
-}
-
-export { decryptEnvelope, encryptEnvelope, rewrapEnvelope, sha256Hex }
+export { decryptEnvelope, encryptEnvelope, sha256Hex }
