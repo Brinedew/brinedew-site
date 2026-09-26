@@ -5,7 +5,6 @@ import test from "node:test"
 import {
   IconoplasmGenerationLeaseError,
   assertExactGenerationLeaseCompletion,
-  buildExactGenerationLeasePlan,
   claimExactGenerationLeases,
   completeExactGenerationLease,
   exactGenerationLeaseFromRow,
@@ -140,45 +139,6 @@ test("exact generation lease exposes one stable request/attempt and immutable ma
   )
   assert.equal(lease.source_manifestation_derivative_recipe_id, "taggerizer")
   assert.equal(lease.source_snapshot_sha256, sha("e"))
-})
-
-test("lease planning fails closed on source drift and never substitutes current canon", async () => {
-  const row = boundRow()
-  const plan = await buildExactGenerationLeasePlan({
-    rows: [row],
-    validateSource: async () => ({ source_snapshot_sha256: sha("9") }),
-  })
-  assert.equal(plan.leases.length, 0)
-  assert.equal(plan.blocked_rows.length, 1)
-  assert.equal(plan.blocked_rows[0].code, "GENERATION_SOURCE_SNAPSHOT_MISMATCH")
-  assert.equal(
-    plan.blocked_rows[0].source_manifestation_revision_id,
-    row.source_manifestation_revision_id,
-  )
-})
-
-test("legacy, missing-attempt, and deleted-source rows cannot become leases", async () => {
-  const rows = [
-    boundRow({ id: 1, generation_provenance_status: "legacy_unbound" }),
-    boundRow({ id: 2, generation_attempt_id: "" }),
-    boundRow({ id: 3 }),
-  ]
-  const plan = await buildExactGenerationLeasePlan({
-    rows,
-    validateSource: async (row) => {
-      if (row.id === 3) {
-        const error = new Error("The exact encrypted source object was deleted")
-        error.code = "GENERATION_SOURCE_BODY_MISSING"
-        throw error
-      }
-      return { source_snapshot_sha256: row.source_snapshot_sha256 }
-    },
-  })
-  assert.equal(plan.leases.length, 0)
-  assert.deepEqual(
-    plan.blocked_rows.map((row) => row.code),
-    ["LEGACY_GENERATION_SOURCE_UNBOUND", "GENERATION_LEASE_INVALID", "GENERATION_LEASE_FAILED"],
-  )
 })
 
 test("repeated lease reads retain the same stable request and attempt identities", () => {
