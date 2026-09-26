@@ -341,20 +341,36 @@ async function claimExpiredIntent(db, row, now, leaseToken) {
 export async function sweepExpiredManifestationUploadIntents(
   db,
   env,
-  { limit = 10, now, idFactory = defaultIdFactory } = {},
+  { limit = 10, now, idFactory = defaultIdFactory, assignmentId = null } = {},
 ) {
   requireDatabase(db)
   const timestamp = normalizeTimestamp(now)
   const boundedLimit = Math.max(1, Math.min(20, Math.trunc(Number(limit)) || 10))
-  const due = await all(
-    db,
-    `SELECT upload_intent_id, object_key
-       FROM icono_manifestation_upload_intents
-      WHERE status IN ('uploading', 'deleting') AND lease_expires_at <= ?
-      ORDER BY lease_expires_at, upload_intent_id LIMIT ?`,
-    timestamp,
-    boundedLimit,
-  )
+  const scopedAssignmentId = normalizeOptionalId(assignmentId, "caretaker_assignment_id")
+  // B-875: scoped to one caretaker, the read uses the partial quota index, which
+  // holds only that caretaker's live intents (usually 0 to 2 rows).
+  const due = scopedAssignmentId
+    ? await all(
+        db,
+        `SELECT upload_intent_id, object_key
+           FROM icono_manifestation_upload_intents
+           INDEXED BY idx_icono_upload_intents_caretaker_quota
+          WHERE caretaker_assignment_id = ? AND status IN ('uploading', 'deleting')
+            AND lease_expires_at <= ?
+          ORDER BY lease_expires_at, upload_intent_id LIMIT ?`,
+        scopedAssignmentId,
+        timestamp,
+        boundedLimit,
+      )
+    : await all(
+        db,
+        `SELECT upload_intent_id, object_key
+           FROM icono_manifestation_upload_intents
+          WHERE status IN ('uploading', 'deleting') AND lease_expires_at <= ?
+          ORDER BY lease_expires_at, upload_intent_id LIMIT ?`,
+        timestamp,
+        boundedLimit,
+      )
   const results = []
   for (const row of due) {
     const leaseToken = createId(null, "lease_token", "upload_sweep", idFactory)
@@ -386,4 +402,32 @@ export async function sweepExpiredManifestationUploadIntents(
     }
   }
   return Object.freeze({ processed: results.length, results })
+}
+
+// B-875: upload admission counts every intent still 'uploading' or 'deleting',
+// expired or not, against the global reserve and the caretaker's lineage caps
+// (256 revisions, 512 derivatives, 2 MiB). An abandoned upload (a phone losing
+// signal mid-autosave) used to hold its share forever. Before reserving, release
+// up to three of this caretaker's own expired strays. The cost falls only on
+// uploads, and it heals exactly the caretaker who would otherwise be blocked. A
+// storage failure here never blocks the upload: the stray is retried next time.
+const ADMISSION_SWEEP_LIMIT = 3
+
+export async function admitManifestationUploadIntent(db, env, input = {}) {
+  if (input.assignmentId) {
+    try {
+      await sweepExpiredManifestationUploadIntents(db, env, {
+        assignmentId: input.assignmentId,
+        limit: ADMISSION_SWEEP_LIMIT,
+        now: input.now,
+        idFactory: input.idFactory,
+      })
+    } catch (error) {
+      console.warn("[manifestation-upload] stray release deferred", {
+        code: String(error?.code || error?.name || "sweep_failed").slice(0, 80),
+        message: String(error?.message || "").slice(0, 160),
+      })
+    }
+  }
+  return createManifestationUploadIntent(db, input)
 }

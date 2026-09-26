@@ -23,7 +23,7 @@ import {
   submitTagsDerivative,
 } from "./manifestation-derivative-commands.js"
 import {
-  createManifestationUploadIntent,
+  admitManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
 import {
@@ -375,7 +375,7 @@ export function createManifestationAuthorityServiceHandler({
           )
         }
         const objectKey = await createManifestationBodyObjectKey()
-        await createManifestationUploadIntent(db, {
+        await admitManifestationUploadIntent(db, env, {
           entityKind: "derivative",
           entityId: derivativeId,
           assignmentId: revision.caretaker_assignment_id || null,
