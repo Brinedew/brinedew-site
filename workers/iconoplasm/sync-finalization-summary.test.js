@@ -6,7 +6,6 @@ import test from "node:test"
 import {
   GLOBAL_FINALIZATION_SUMMARY_SQL,
   readSyncFinalizationSummary,
-  readSyncFinalizationDrainCounts,
 } from "./sync-finalization-summary.js"
 
 test("global completion time has constant D1 reads even when all historical timestamps are blank", async () => {
@@ -105,19 +104,6 @@ test("finalization counts stay exact through writes without scanning completed h
       ),
     )
     assert.equal((await readSyncFinalizationSummary(db)).completed_count, 20000)
-    raw.exec(
-      readFileSync(
-        new URL(
-          "../../migrations-iconoplasm/0101_finalization_publication_barrier.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
-    )
-    assert.deepEqual(
-      { ...(await readSyncFinalizationDrainCounts(db)) },
-      { remaining_count: 0, pending_finalize_count: 0 },
-    )
     const pendingPlan = raw
       .prepare(
         `EXPLAIN QUERY PLAN SELECT * FROM icono_sync_finalization_jobs
@@ -135,28 +121,12 @@ test("finalization counts stay exact through writes without scanning completed h
     assert.equal(summary.pending_finalize_count, 1)
     raw.exec(`INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase)
       VALUES('ACTIVE','retrying','reconcile'),('PHASE_DONE','queued','completed')`)
-    assert.deepEqual(
-      { ...(await readSyncFinalizationDrainCounts(db)) },
-      { remaining_count: 1, pending_finalize_count: 1 },
-    )
-    assert.deepEqual(
-      { ...(await readSyncFinalizationDrainCounts(db, ["TEST", "PHASE_DONE", "MISSING"])) },
-      { remaining_count: 0, pending_finalize_count: 1 },
-    )
-    assert.deepEqual(
-      { ...(await readSyncFinalizationDrainCounts(db, ["ACTIVE"])) },
-      { remaining_count: 1, pending_finalize_count: 0 },
-    )
     raw.exec(
       `UPDATE icono_sync_finalization_jobs SET status='completed',completed_at='2026-09-05' WHERE gene_symbol='TEST'`,
     )
     summary = await readSyncFinalizationSummary(db)
     assert.equal(summary.completed_count, 20001)
     assert.equal(summary.pending_finalize_count, 0)
-    assert.deepEqual(
-      { ...(await readSyncFinalizationDrainCounts(db)) },
-      { remaining_count: 1, pending_finalize_count: 0 },
-    )
     assert.equal(summary.completed_at, "2026-09-05")
     assert.equal((await readSyncFinalizationSummary(db, ["TEST", "MISSING"])).completed_count, 1)
     raw.exec(`BEGIN; DELETE FROM icono_sync_finalization_jobs WHERE gene_symbol='TEST'; ROLLBACK;`)

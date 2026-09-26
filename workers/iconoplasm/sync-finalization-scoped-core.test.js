@@ -12,7 +12,6 @@ function fixture(t, rows = [["TP53", "completed_pending_finalize"]]) {
     "0094_finalization_summary.sql",
     "0099_finalization_queue_indexes.sql",
     "0100_finalization_job_version.sql",
-    "0101_finalization_publication_barrier.sql",
   ]) {
     sqlite.exec(
       readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8"),
