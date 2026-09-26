@@ -4,7 +4,6 @@ import test from "node:test"
 import {
   activateManifestationEventCheckpoint,
   buildManifestationEventCheckpointPage,
-  compactManifestationCommandReceipts,
   completeManifestationSnapshot,
   createManifestationSnapshot,
   endCaretakerAssignment,
@@ -18,7 +17,6 @@ import {
   saveManifestationRevision,
   seedSystemManifestation,
   startManifestationEventCheckpoint,
-  sweepManifestationCommandTombstones,
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
 import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
@@ -348,170 +346,5 @@ test("a newer open snapshot and a concurrent snapshot both fence checkpoint acti
       "SELECT status FROM icono_manifestation_event_checkpoints WHERE checkpoint_id='checkpoint_stream_race'",
     ).status,
     "verified",
-  )
-})
-
-test("receipt compaction preserves replay fences after the source event is pruned", async (t) => {
-  const db = await bootstrap(t)
-  const saved = await saveManifestationRevision(db, {
-    assignmentId: ASSIGNMENT,
-    expectedAssignmentVersion: 2,
-    expectedManifestationVersion: 0,
-    expectedHeadVersion: 1,
-    expectedCanonicalRevisionId: "revision_compaction_seed",
-    storage: storage(300),
-    manifestationId: "manifestation_compaction_retained",
-    revisionId: "revision_compaction_retained",
-    selectionId: "selection_compaction_retained",
-    eventUuid: "event_compaction_retained",
-    now: "2026-01-01T00:00:00.000Z",
-    ...command("command_compaction_retained", "8", USER, "account"),
-  })
-  const endInput = {
-    assignmentId: ASSIGNMENT,
-    expectedAssignmentVersion: 2,
-    expectedHeadVersion: saved.head_version,
-    expectedCanonicalRevisionId: "revision_compaction_seed",
-    relinquishPolicy: "retain",
-    eventUuid: "event_compaction_end_retain",
-    now: "2026-01-01T00:01:00.000Z",
-    ...command("command_compaction_end_retain", "9", USER, "account"),
-  }
-  await endCaretakerAssignment(db, endInput)
-  db.raw.prepare("UPDATE icono_manifestation_events SET projection_status = 'not_required'").run()
-  db.raw
-    .prepare("UPDATE icono_authoring_command_receipts SET created_at = '2026-01-01T00:00:00.000Z'")
-    .run()
-  const watermark = row(
-    db,
-    "SELECT max(event_sequence) AS value FROM icono_manifestation_events",
-  ).value
-  let checkpoint = await startManifestationEventCheckpoint(db, {
-    checkpointId: "checkpoint_command_receipts",
-    watermarkSequence: watermark,
-    auditRetentionSeconds: 3_600,
-    now: "2026-09-30T00:00:00.000Z",
-  })
-  for (let page = 0; page < 100 && checkpoint.status === "building"; page += 1) {
-    checkpoint = await buildManifestationEventCheckpointPage(db, {
-      checkpointId: checkpoint.checkpoint_id,
-      limit: 10,
-      now: "2026-09-30T00:01:00.000Z",
-    })
-  }
-  await activateManifestationEventCheckpoint(db, {
-    checkpointId: checkpoint.checkpoint_id,
-    totalEntities: checkpoint.total_entities,
-    manifestSha256: checkpoint.manifest_sha256,
-    now: "2026-09-30T00:02:00.000Z",
-  })
-
-  assert.equal(
-    (
-      await compactManifestationCommandReceipts(db, {
-        now: "2026-09-30T00:03:00.000Z",
-        retentionDays: 90,
-        limit: 50,
-      })
-    ).compacted,
-    0,
-  )
-  while (
-    (
-      await pruneManifestationEventPage(db, {
-        checkpointId: checkpoint.checkpoint_id,
-        limit: 10,
-        now: "2026-09-30T00:04:00.000Z",
-      })
-    ).complete === false
-  ) {}
-
-  const compacted = await compactManifestationCommandReceipts(db, {
-    now: "2026-09-30T00:05:00.000Z",
-    retentionDays: 90,
-    limit: 50,
-  })
-  assert.equal(compacted.compacted > 0, true)
-  const commandTombstone = row(
-    db,
-    `SELECT request_sha256, response_sha256, accepted_event_uuid,
-              accepted_event_sequence, accepted_gene_revision
-         FROM icono_authoring_command_tombstones WHERE command_id = ?`,
-    endInput.commandId,
-  )
-  assert.deepEqual(
-    { ...commandTombstone },
-    {
-      request_sha256: endInput.requestSha256,
-      response_sha256: commandTombstone.response_sha256,
-      accepted_event_uuid: endInput.eventUuid,
-      accepted_event_sequence: watermark,
-      accepted_gene_revision: row(
-        db,
-        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
-        GENE,
-      ).gene_revision,
-    },
-  )
-  assert.match(commandTombstone.response_sha256, /^[a-f0-9]{64}$/)
-  await assert.rejects(endCaretakerAssignment(db, endInput), {
-    code: "IDEMPOTENCY_RECEIPT_EXPIRED",
-  })
-  await assert.rejects(
-    endCaretakerAssignment(db, {
-      ...endInput,
-      relinquishPolicy: "withdraw",
-      requestSha256: sha("a"),
-    }),
-    { code: "IDEMPOTENCY_KEY_REUSED" },
-  )
-  assert.equal(
-    row(
-      db,
-      "SELECT relinquish_policy FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-      ASSIGNMENT,
-    ).relinquish_policy,
-    "retain",
-  )
-
-  assert.equal(
-    (
-      await sweepManifestationCommandTombstones(db, {
-        now: "2026-10-01T00:00:00.000Z",
-        retentionDays: 365,
-        limit: 50,
-      })
-    ).purged,
-    0,
-  )
-  db.raw
-    .prepare(
-      "UPDATE icono_authoring_command_tombstones SET compacted_at = '2025-01-01T00:00:00.000Z'",
-    )
-    .run()
-  assert.equal(
-    (
-      await sweepManifestationCommandTombstones(db, {
-        now: "2026-10-01T00:00:00.000Z",
-        retentionDays: 365,
-        limit: 50,
-      })
-    ).purged > 0,
-    true,
-  )
-  await assert.rejects(
-    endCaretakerAssignment(db, {
-      ...endInput,
-      relinquishPolicy: "withdraw",
-    }),
-    { code: "ASSIGNMENT_ALREADY_ENDED" },
-  )
-  assert.equal(
-    row(
-      db,
-      "SELECT relinquish_policy FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-      ASSIGNMENT,
-    ).relinquish_policy,
-    "retain",
   )
 })

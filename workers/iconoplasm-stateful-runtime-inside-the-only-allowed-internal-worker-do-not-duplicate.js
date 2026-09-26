@@ -1786,8 +1786,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (
     family === "authority_workstation_write" ||
     family === "authority_generation_executor" ||
-    family === "authority_cutover" ||
-    family === "authority_maintenance"
+    family === "authority_cutover"
   )
     return "workstation_sync_write"
   if (family.startsWith("votes_"))
@@ -1879,8 +1878,7 @@ function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   if (
     routeFamily.startsWith("authority_workstation_") ||
     routeFamily === "authority_generation_executor" ||
-    routeFamily === "authority_cutover" ||
-    routeFamily === "authority_maintenance"
+    routeFamily === "authority_cutover"
   )
     return "workstation_sync"
   if (path.startsWith("/api/iconoplasm/admin/")) {

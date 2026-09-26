@@ -23,14 +23,6 @@ import {
   submitTagsDerivative,
 } from "./manifestation-derivative-commands.js"
 import {
-  matchManifestationEventCompactionRoute,
-  runManifestationEventCompactionRoute,
-} from "./manifestation-authority-compaction-handler.js"
-import {
-  compactManifestationCommandReceipts,
-  sweepManifestationCommandTombstones,
-} from "./manifestation-command-retention.js"
-import {
   createManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
@@ -262,7 +254,6 @@ export function createManifestationAuthorityServiceHandler({
   db,
   env,
   authorizeReplicaBearer,
-  authorizeMaintenanceBearer,
   onAuthorityEvent,
   onIntegrityFailure,
   idFactory = defaultIdFactory,
@@ -283,16 +274,9 @@ export function createManifestationAuthorityServiceHandler({
       const select = url.pathname.match(
         /^\/api\/iconoplasm\/authority\/revisions\/([^/]+)\/tags-derivative-head$/,
       )
-      const maintenance = url.pathname.match(
-        /^\/api\/iconoplasm\/authority\/maintenance\/(command-receipts|command-tombstones)\/(sweep|compact)$/,
-      )
-      const compaction = matchManifestationEventCompactionRoute(url.pathname)
-      const matched =
-        revisionBody || derivativeBody || submit || select || maintenance || compaction
+      const matched = revisionBody || derivativeBody || submit || select
       if (!matched) return null
-      const authorizeBearer =
-        maintenance || compaction ? authorizeMaintenanceBearer : authorizeReplicaBearer
-      const actor = await requireAuthorityBearer(request, env, authorizeBearer)
+      const actor = await requireAuthorityBearer(request, env, authorizeReplicaBearer)
       if (request.method === "GET" && revisionBody) {
         const row = await exactRevision(db, routeId(revisionBody[1]))
         if (!row) throw authorityError("REVISION_NOT_FOUND", "Revision was not found", 404)
@@ -323,29 +307,10 @@ export function createManifestationAuthorityServiceHandler({
           fields_sha256: material.fields_sha256,
         })
       }
-      if (request.method === "GET" && compaction?.action === "status") {
-        return jsonResponse(await runManifestationEventCompactionRoute(db, compaction))
-      }
       if (request.method !== "POST") return null
       requireJson(request)
       const parsed = await readBoundedJson(request, 48 * 1024)
       const body = parsed.value
-
-      if (compaction) {
-        if (compaction.action === "status") return null
-        return jsonResponse(await runManifestationEventCompactionRoute(db, compaction, body))
-      }
-
-      if (maintenance) {
-        const options = { limit: body.limit, now: body.now }
-        if (maintenance[1] === "command-receipts" && maintenance[2] === "compact") {
-          return jsonResponse(await compactManifestationCommandReceipts(db, options))
-        }
-        if (maintenance[1] === "command-tombstones" && maintenance[2] === "sweep") {
-          return jsonResponse(await sweepManifestationCommandTombstones(db, options))
-        }
-        throw authorityError("INVALID_MAINTENANCE_ACTION", "Maintenance action is invalid", 404)
-      }
 
       const revisionId = routeId((submit || select)[1])
       const revision = await exactRevision(db, revisionId)

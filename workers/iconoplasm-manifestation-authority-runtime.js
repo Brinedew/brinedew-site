@@ -1,7 +1,4 @@
-import {
-  authorizeIconoplasmAuthorityMaintenanceBearer,
-  authorizeIconoplasmAuthorityReplicaBearer,
-} from "./iconoplasm-authority-service-auth.js"
+import { authorizeIconoplasmAuthorityReplicaBearer } from "./iconoplasm-authority-service-auth.js"
 import { createManifestationAuthorityRouteHandler } from "./iconoplasm/caretaker/manifestation-authority.js"
 
 export function createIconoplasmManifestationAuthorityRuntimeHandler({
@@ -24,7 +21,6 @@ export function createIconoplasmManifestationAuthorityRuntimeHandler({
     primaryDb: env.ICONOPLASM_DB,
     env,
     authorizeReplicaBearer: authorizeIconoplasmAuthorityReplicaBearer,
-    authorizeMaintenanceBearer: authorizeIconoplasmAuthorityMaintenanceBearer,
     resolveSession,
     onAuthorityEvent,
     onIntegrityFailure,

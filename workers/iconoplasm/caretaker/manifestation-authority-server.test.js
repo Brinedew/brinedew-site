@@ -1335,38 +1335,26 @@ test("structured Tags submission rejects hash mismatch and numeric fields before
   )
 })
 
-test("service-authenticated maintenance exposes bounded command replay retention", async (t) => {
+test("retired maintenance and event-compaction routes are not served (B-859)", async (t) => {
+  // No schedule, workflow or workstation ever held the maintenance token, and
+  // 0 checkpoints / 0 tombstones were ever written. The routes must not return.
   const context = await bootstrap(t, "7007")
   let authorizations = 0
-  let wrongAudienceAuthorizations = 0
   const handler = createManifestationAuthorityServiceHandler({
     db: context.db,
     env: serviceEnvironment(),
-    authorizeMaintenanceBearer: async () => {
+    authorizeReplicaBearer: async () => {
       authorizations += 1
       return { authorized: true, actor_kind: "service" }
     },
-    authorizeReplicaBearer: async () => {
-      wrongAudienceAuthorizations += 1
-      return { authorized: true, actor_kind: "service" }
-    },
   })
-  const compact = await handler(
-    serviceRequest("/api/iconoplasm/authority/maintenance/command-receipts/compact", {
-      limit: 7,
-      now: "2026-09-30T00:00:00.000Z",
-    }),
-  )
-  assert.equal(compact.status, 200)
-  assert.deepEqual(await compact.json(), { schema_version: 1, compacted: 0 })
-  const sweep = await handler(
-    serviceRequest("/api/iconoplasm/authority/maintenance/command-tombstones/sweep", {
-      limit: 7,
-      now: "2026-09-30T00:00:00.000Z",
-    }),
-  )
-  assert.equal(sweep.status, 200)
-  assert.deepEqual(await sweep.json(), { schema_version: 1, purged: 0 })
-  assert.equal(authorizations, 2)
-  assert.equal(wrongAudienceAuthorizations, 0)
+  for (const path of [
+    "/api/iconoplasm/authority/maintenance/command-receipts/compact",
+    "/api/iconoplasm/authority/maintenance/command-tombstones/sweep",
+    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints",
+    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001/build",
+  ]) {
+    assert.equal(await handler(serviceRequest(path, { limit: 7 })), null, path)
+  }
+  assert.equal(authorizations, 0)
 })
