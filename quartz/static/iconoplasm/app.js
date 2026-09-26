@@ -294,7 +294,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=a88a8e2ca364bfc9"),
+      import("./caretaker-manifestations.js?v=c29a75437d048b3f"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({

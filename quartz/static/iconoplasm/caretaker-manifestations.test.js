@@ -190,7 +190,10 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /Danger zone/)
   assert.match(html, /Delete the current manifestation/)
   assert.match(html, /Stop being caretaker/)
-  assert.match(html, /Purged after 30 days unless legally held/)
+  // B-859: the UI says what the published privacy page says (#320): removed from
+  // public view, not from backups. Nothing purges and no legal hold can be placed.
+  assert.match(html, /removed from public view on the site, though not from backups/)
+  assert.doesNotMatch(html, /purge|legal(ly)? hold/i)
   // B-874: there is no second save step and no second meaning of "public".
   const other = dossier()
   const nonCanonical = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
@@ -904,8 +907,9 @@ test("withdraw and restore send the lineage row version instead of accepting sta
   assert.match(confirmations[0], /withdrawn immediately/)
   assert.match(
     confirmations[0],
-    /eligible for hard purge after 30 days unless a legal hold applies/,
+    /removed from public view on the site, though it will not be removed from backups/,
   )
+  assert.doesNotMatch(confirmations[0], /purge|legal hold/i)
 
   current.manifestations[0].status = "withdrawn"
   current.manifestations[0].can_withdraw = false
