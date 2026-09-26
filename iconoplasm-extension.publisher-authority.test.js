@@ -125,3 +125,26 @@ test("exact-head CI validates the catalog before and after shared-asset sync", (
     "production must require exact-head CI before it syncs release assets",
   )
 })
+
+// B-869: the one-release compatibility window (API_COMPAT.md) keeps installed
+// users working during store review. There is no second, per-version catalog
+// artifact: the Worker serves exactly one catalog contract. An older supported
+// release is therefore only served correctly if it reads that same contract.
+// If this fails, a release changed the catalog contract while an older package
+// is still supported: keep the change readable by the old package (additive),
+// or wait for store rollout before advancing the contract.
+test("every supported older release reads the one catalog contract the Worker serves", () => {
+  const authority = readJson("iconoplasm-extension/publisher-release.json")
+  const candidate = readJson("iconoplasm-extension/candidate-contract.json")
+  const served = {
+    schema_version: Number(candidate.catalog_schema_version),
+    revision: Number(candidate.catalog_contract_revision),
+  }
+  for (const [version, contract] of Object.entries(authority.compatibility_contracts || {})) {
+    assert.deepEqual(
+      { schema_version: Number(contract.schema_version), revision: Number(contract.revision) },
+      served,
+      `supported release ${version} expects catalog ${JSON.stringify(contract)}, but the Worker serves only ${JSON.stringify(served)}`,
+    )
+  }
+})
