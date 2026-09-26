@@ -12341,20 +12341,26 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
   )
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  let recorded = null
   if (requestedSymbols.length) {
     const lookup = await readDiscoveryDictionaryForSymbols(env, requestedSymbols)
     const state = await readCompactUserStateForRequest(env, {
       userId: userIdNorm,
     })
     const membership = String(state?.membership_b64 || "")
+    // The dictionary is lazy: most catalog genes acquire an ordinal only when
+    // someone first discovers them (3,678 of ~19k on 2026-09-26). A symbol
+    // without one is therefore fresh, not unknown; the recorder assigns it or
+    // reports it dropped if it is not a catalog gene. Filtering on "has an
+    // ordinal" silently lost every never-seen gene a guest merged (B-869).
     const fresh = requestedSymbols.filter((symbol) => {
       const ordinal = lookup.byName.get(symbol)
-      return ordinal != null && !hasDiscoveryOrdinal(membership, ordinal)
+      return ordinal == null || !hasDiscoveryOrdinal(membership, ordinal)
     })
     if (fresh.length) {
       const at = Math.floor(Date.now() / 1000)
       const digest = await sha256Hex(`guest-merge:${userIdNorm}:${requestedSymbols.join(",")}`)
-      await recordCompactDiscoveryEncounters(env, {
+      recorded = await recordCompactDiscoveryEncounters(env, {
         userId: userIdNorm,
         isAdmin,
         batchId: `guest.merge.${digest.slice(0, 48)}`,
@@ -12372,6 +12378,7 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     ok: true,
     merged_count: requestedSymbols.length,
     merged_symbols: requestedSymbols,
+    dropped_symbols: recorded?.dropped || [],
   }
 }
 
@@ -35878,6 +35885,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             merged_symbols: result.merged_symbols,
             checked_symbols: result.merged_symbols,
             discovered_symbols: result.merged_symbols,
+            dropped_symbols: result.dropped_symbols,
           },
           200,
           { "Cache-Control": "no-store" },
