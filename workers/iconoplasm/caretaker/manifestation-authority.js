@@ -3,7 +3,6 @@ export {
   ManifestationAuthorityError,
 } from "./manifestation-authority-contract.js"
 export { readManifestationAuthorityGeneState } from "./manifestation-authority-repository.js"
-export { seedGeneWithoutManifestation } from "./gene-authority-seed-command.js"
 export {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
   claimCaretakerAssignment,
@@ -30,15 +29,11 @@ export {
 } from "./manifestation-authority-read-model.js"
 export { createCaretakerManifestationHttpHandler } from "./manifestation-authority-http-handlers.js"
 export { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
-export * from "./manifestation-admin-commands.js"
-export * from "./manifestation-moderation-commands.js"
-export * from "./manifestation-integrity-commands.js"
 export * from "./manifestation-authority-sync.js"
 export * from "./manifestation-authority-checkpoints.js"
 export * from "./manifestation-derivative-commands.js"
 export * from "./manifestation-upload-intents.js"
 export { projectAuthorityAccountStatus } from "./authority-account-projection.js"
-export { sweepManifestationAuthorityOutbox } from "./manifestation-authority-outbox.js"
 export { createManifestationAuthorityServiceHandler } from "./manifestation-authority-service-handlers.js"
 export { createManifestationAuthoritySyncHandler } from "./manifestation-authority-sync-handlers.js"
 export { createManifestationAuthorityRouteHandler } from "./manifestation-authority-routes.js"
