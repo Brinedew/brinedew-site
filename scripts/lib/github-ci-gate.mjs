@@ -26,18 +26,46 @@ export async function waitForSuccessfulPushCi({
   endpoint.searchParams.set("event", "push")
   endpoint.searchParams.set("per_page", "20")
 
+  // One network blip, 5xx or 429 among ~180 polls must not kill a release (the
+  // #359 deploy died on a single `fetch failed`, 26 Sep 2026). A refusal such as
+  // 401/403/404 still fails at once, and a lasting outage fails after a few tries.
+  const maxConsecutiveTransient = 5
+  let consecutiveTransient = 0
   while (Date.now() < deadline) {
-    const response = await fetchImpl(endpoint, {
-      signal: AbortSignal.timeout(Math.min(30_000, Math.max(1, deadline - Date.now()))),
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${cleanToken}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    })
+    let response
+    try {
+      response = await fetchImpl(endpoint, {
+        signal: AbortSignal.timeout(Math.min(30_000, Math.max(1, deadline - Date.now()))),
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${cleanToken}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      })
+    } catch (error) {
+      response = null
+      if (++consecutiveTransient >= maxConsecutiveTransient) {
+        throw new Error(
+          `Could not verify Build and Test: GitHub API unreachable after ${consecutiveTransient} tries (${error?.message || error})`,
+        )
+      }
+    }
+    if (response && (response.status >= 500 || response.status === 429)) {
+      if (++consecutiveTransient >= maxConsecutiveTransient) {
+        throw new Error(
+          `Could not verify Build and Test: GitHub API unreachable after ${consecutiveTransient} tries (HTTP ${response.status})`,
+        )
+      }
+      response = null
+    }
+    if (!response) {
+      await sleep(Math.max(250, Number(pollMs) || 0))
+      continue
+    }
     if (!response.ok) {
       throw new Error(`Could not verify Build and Test: GitHub API returned ${response.status}`)
     }
+    consecutiveTransient = 0
     const payload = await response.json()
     const run = (Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : []).find(
       (candidate) => candidate?.head_sha === cleanHeadSha && candidate?.event === "push",
