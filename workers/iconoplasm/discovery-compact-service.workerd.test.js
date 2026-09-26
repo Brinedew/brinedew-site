@@ -120,8 +120,12 @@ test(
       const attempts = results.map((result) => result.attempts)
       const maxAttempts = Math.max(...attempts)
       const totalAttempts = attempts.reduce((sum, value) => sum + value, 0)
+      // A compare-and-swap round always lets one writer win, so no writer can
+      // need more attempts than there are writers. Whether any collision happens
+      // at all depends on scheduling, so it is reported in the receipt below
+      // rather than asserted (an assert.ok here failed CI once on 26 Sep 2026
+      // and passed on re-run, PR #330).
       assert.ok(maxAttempts <= users)
-      assert.ok(totalAttempts > users)
       const compact = await readCompactDiscoveryState(db, "atomic-user-0")
       assert.deepEqual(readSharedDiscoveryOrdinal(compact.shared, 0), {
         discoverer_count: users,
