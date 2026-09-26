@@ -25,12 +25,10 @@ import {
   ICONOPLASM_PUBLICATION_ALIAS_KV_RETENTION,
   ICONOPLASM_PUBLICATION_ALIAS_MAX_PROJECTION_BYTES,
   iconoplasmPublicationAliasKvKey,
-  iconoplasmPublicationAliasVersionKvKey,
   loadIconoplasmPublishedScannerRecognitionContext,
   publishIconoplasmPublicationAliasPolicy,
   readAuthoritativePublishedIconoplasmPublicationAliases,
   readPublishedIconoplasmPublicationAliases,
-  readPublishedIconoplasmPublicationAliasesByVersionToken,
   resetIconoplasmPublicationAliasPublicCacheForTests,
   saveIconoplasmPublicationAliasPolicy,
   validateIconoplasmPublicationAliasesAgainstPublishedScanner,
@@ -825,35 +823,6 @@ test("anonymous reads retain last-known-good aliases through KV failure while au
   resetIconoplasmPublicationAliasPublicCacheForTests()
   const bootstrap = await readPublishedIconoplasmPublicationAliases(new FakeKv())
   assert.equal(bootstrap.version, SEED_ALIAS_VERSION)
-})
-
-test("historical alias version lookup is one direct GET and keeps bootstrap independent of KV history", async () => {
-  const candidate = await iconoplasmPublicationAliasManifestFromPolicy(candidateWithIl8())
-  const entries = Object.fromEntries(
-    Array.from({ length: ICONOPLASM_PUBLICATION_ALIAS_KV_RETENTION }, (_, index) => [
-      iconoplasmPublicationAliasKvKey(index + 1),
-      aliasProjection(),
-    ]),
-  )
-  entries[iconoplasmPublicationAliasVersionKvKey(candidate.version.replace(/-/g, ""))] =
-    JSON.stringify(candidate)
-  const kv = new FakeKv(entries)
-
-  const bootstrap = await readPublishedIconoplasmPublicationAliasesByVersionToken(
-    kv,
-    SEED_ALIAS_VERSION.replace(/-/g, ""),
-  )
-  assert.equal(bootstrap.overlay.version, SEED_ALIAS_VERSION)
-  assert.equal(kv.gets.length, 0)
-  assert.equal(kv.lists.length, 0)
-
-  const historical = await readPublishedIconoplasmPublicationAliasesByVersionToken(
-    kv,
-    candidate.version.replace(/-/g, ""),
-  )
-  assert.equal(historical.overlay.version, candidate.version)
-  assert.equal(kv.gets.length, 1)
-  assert.equal(kv.lists.length, 0)
 })
 
 test("coherent public reader is O(1) at max history and never mixes or mutates pair state", async () => {
