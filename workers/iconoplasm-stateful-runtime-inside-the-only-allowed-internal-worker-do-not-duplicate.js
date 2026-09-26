@@ -32,7 +32,6 @@ import {
   compactSharedRowsFromSummaries,
   compactSharedSummaries,
   compactShelfRowsFromChronology,
-  sortCompactShelfRows,
 } from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
@@ -253,12 +252,8 @@ import {
   iconoplasmGeneBlotWebpDimensions,
   registerIconoplasmGeneBlot,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import { applyIconoplasmPublicationAliasPolicyToGene } from "./iconoplasm-publication-aliases.js"
 import {
-  applyIconoplasmPublicationAliasPolicyToGene,
-  ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
-} from "./iconoplasm-publication-aliases.js"
-import {
-  readPublishedIconoplasmPublicationAliasesByVersionToken,
   readIconoplasmPublicationAliasPolicy,
   resetIconoplasmPublicationAliasPublicCacheForTests,
   validateIconoplasmPublicationAliasesAgainstPublishedScanner,
@@ -1138,12 +1133,6 @@ const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
 // every dirty shard is ready for one atomic version flip. This is a cost and CPU
 // boundary, not a trigger for a broader fallback.
 const CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP = 6
-// One step can write two replacement shard blobs per dirty baseline shard (a
-// local split), plus the manifest, publication cursor cleanup, watermark, and
-// gallery-version barrier. Budget admission is derived from that bounded path;
-// it must never reserve for a hypothetical complete-catalog rewrite.
-const CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES =
-  CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP * 2 + 4
 // The gene universe is fixed and currently below 20k. Querying one extra symbol
 // lets publication fail explicitly if that invariant changes; it must never turn
 // a large delta into a surprise full-catalog rebuild.
@@ -3855,10 +3844,6 @@ function mapUserEmulsionVersionRow(row, sessionUser = null) {
   )
 }
 
-function publicUserEmulsionIdForRow(row) {
-  return mapUserEmulsionRow(row).id
-}
-
 async function getUserEmulsionForSession(env, sessionUser) {
   const userId = normalizeUserId(sessionUser?.user_id || "")
   if (!userId || !env.DB) return mapUserEmulsionRow(null, sessionUser)
@@ -3905,35 +3890,6 @@ function parseUserEmulsionPublicId(raw) {
     ownerSlug: match[1],
     revision: Number.parseInt(match[2], 10),
   }
-}
-
-async function getUserEmulsionByPublicId(env, publicId) {
-  const parsed = parseUserEmulsionPublicId(publicId)
-  if (!parsed || !env.DB) return null
-  const versionRow = await env.DB.prepare(
-    `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text,
-            COALESCE(s.slot, 0) AS public_slot
-       FROM iconoplasm_user_emulsion_versions v
-       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
-      WHERE v.public_id = ?
-        AND COALESCE(emulsion_text, '') <> ''
-      LIMIT 1`,
-  )
-    .bind(parsed.publicId)
-    .first()
-  const versionMapped = versionRow ? mapUserEmulsionVersionRow(versionRow) : null
-  if (versionMapped?.text && versionMapped.id === parsed.publicId) return versionMapped
-  const row = await env.DB.prepare(
-    `SELECT discord_id, username, iconoplasm_emulsion_text, iconoplasm_emulsion_revision, iconoplasm_emulsion_public_id
-       FROM users
-      WHERE iconoplasm_emulsion_public_id = ?
-        AND COALESCE(iconoplasm_emulsion_text, '') <> ''
-      LIMIT 1`,
-  )
-    .bind(parsed.publicId)
-    .first()
-  const mapped = row ? mapUserEmulsionRow(row) : null
-  return mapped?.text && mapped.id === parsed.publicId ? mapped : null
 }
 
 async function getUserEmulsionByPublicIdForSession(env, sessionUser, publicId) {
@@ -15194,10 +15150,6 @@ async function inspectAdminAssetStorageRows(
   return out
 }
 
-async function writeStorageAuditQueueInspectionResult(env, result) {
-  return (await writeStorageAuditQueueInspectionResults(env, [result])) > 0
-}
-
 async function writeStorageAuditQueueInspectionResults(env, rows) {
   if (!env.ICONOPLASM_DB) return 0
   const successRows = []
@@ -21053,25 +21005,6 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   }
 }
 
-async function getArtistStyleBlacklistRow(env, artistTag) {
-  if (!env.ICONOPLASM_DB) return null
-  const artistTagNorm = normalizeArtistTag(artistTag)
-  if (!artistTagNorm) return null
-  try {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
-       FROM icono_artist_style_blacklist
-       WHERE lower(artist_tag) = ?
-       LIMIT 1`,
-    )
-      .bind(artistTagNorm)
-      .first()
-    return row || null
-  } catch {
-    return null
-  }
-}
-
 async function iconoExistingAssetsBatch(env, rawItems) {
   const out = new Map()
   if (!env.ICONOPLASM_DB || !Array.isArray(rawItems) || rawItems.length <= 0) return out
@@ -21129,69 +21062,6 @@ async function iconoExistingAssetsBatch(env, rawItems) {
       const assetSha = normalizeSha256(row?.asset_sha256 || "")
       if (!symbol || !assetSha) continue
       out.set(`${symbol}|${assetSha}`, row)
-    }
-  } catch {}
-  return out
-}
-
-async function iconoPublishStateBatch(env, rawSymbols) {
-  const out = new Map()
-  if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return out
-  const symbols = Array.from(
-    new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
-  )
-  if (symbols.length <= 0) return out
-  try {
-    const { results } = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT upper(value) AS symbol
-         FROM json_each(?)
-       )
-       SELECT
-         ps.gene_symbol AS symbol,
-         COALESCE(ps.current_asset_sha256, '') AS current_asset_sha256,
-         COALESCE(ps.admin_override, 0) AS admin_override
-       FROM icono_publish_state ps
-       JOIN incoming i
-         ON ps.gene_symbol = i.symbol`,
-    )
-      .bind(JSON.stringify(symbols))
-      .all()
-    for (const row of results || []) {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      if (!symbol) continue
-      out.set(symbol, {
-        current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
-        admin_override: Number(row?.admin_override || 0) > 0,
-      })
-    }
-  } catch {}
-  return out
-}
-
-async function iconoBlacklistRowsBatch(env, rawArtistTags) {
-  const out = new Map()
-  if (!env.ICONOPLASM_DB || !Array.isArray(rawArtistTags) || rawArtistTags.length <= 0) return out
-  const artistTags = Array.from(
-    new Set(rawArtistTags.map((value) => normalizeArtistTag(value)).filter(Boolean)),
-  )
-  if (artistTags.length <= 0) return out
-  try {
-    const { results } = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT lower(value) AS artist_tag
-         FROM json_each(?)
-       )
-       SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
-       FROM icono_artist_style_blacklist
-       WHERE lower(artist_tag) IN (SELECT artist_tag FROM incoming)`,
-    )
-      .bind(JSON.stringify(artistTags))
-      .all()
-    for (const row of results || []) {
-      const artistTag = normalizeArtistTag(row?.artist_tag || "")
-      if (!artistTag) continue
-      out.set(artistTag, row)
     }
   } catch {}
   return out
@@ -21299,24 +21169,6 @@ function compareAdminLeaderRows(left, right, currentAssetSha = null) {
       ) ||
     compareNullableTextAsc(left?.asset_sha256 || "", right?.asset_sha256 || "")
   return compareCaretakerWeightedCandidates(left, right, existingTieBreak)
-}
-
-async function listAdminReadModelSymbols(env) {
-  if (!env.ICONOPLASM_DB) return []
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol FROM icono_gene_catalog
-     UNION
-     SELECT gene_symbol FROM icono_portrait_assets
-     UNION
-     SELECT gene_symbol FROM icono_publish_state`,
-  ).all()
-  return Array.from(
-    new Set(
-      (Array.isArray(resp?.results) ? resp.results : [])
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter(Boolean),
-    ),
-  )
 }
 
 async function listAdminReadModelSymbolsAfter(env, rawAfterSymbol = "", limit = 0) {
