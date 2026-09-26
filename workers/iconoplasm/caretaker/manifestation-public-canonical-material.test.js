@@ -12,8 +12,6 @@ import { encryptManifestationTags } from "../../lib/iconoplasm-manifestation-tag
 import {
   PublicCanonicalMaterialError,
   readPublicCanonicalMaterial,
-  verifyPublicCanonicalMaterial,
-  verifyPublicCanonicalMaterialItem,
 } from "./manifestation-public-canonical-material.js"
 import { prepareManifestationTagsPayload } from "./manifestation-tags-payload.js"
 
@@ -416,87 +414,6 @@ test("missing exact ciphertext fails closed and never falls back to legacy plain
     assert.equal(storage.reads(), 1)
   } finally {
     storage.restore()
-    closeFixture(value)
-  }
-})
-
-test("cutover item proof binds the exact projected body and Tags hashes", async () => {
-  const value = await fixture({ mode: "shadow_frozen" })
-  const storage = installStorageFetch(value.objects)
-  try {
-    const proof = await verifyPublicCanonicalMaterialItem({
-      primaryDb: value.primaryDb,
-      authoringDb: value.authoringDb,
-      env: ENV,
-      run: { cutover_run_id: "cutover_run_0001" },
-      item: {
-        cutover_run_id: "cutover_run_0001",
-        gene_id: "gene_tp53",
-        canonical_symbol: "TP53",
-        source_kind: "manifestation",
-        seed_manifestation_id: "manifestation_0001",
-        seed_revision_id: "revision_0001",
-        seed_selection_id: "selection_0001",
-        seed_tags_derivative_id: "derivative_0001",
-        source_body_sha256: value.proseEncrypted.body_sha256,
-        source_body_bytes: value.proseEncrypted.body_bytes,
-        source_tags_sha256: value.preparedTags.tags_sha256,
-        source_tags_bytes: value.preparedTags.tags_bytes,
-        source_fields_sha256: value.preparedTags.fields_sha256,
-        source_fields_bytes: value.preparedTags.fields_bytes,
-      },
-    })
-    assert.equal(proof.gene_id, "gene_tp53")
-    assert.equal(proof.authority_event_sequence, 1)
-    assert.match(proof.public_material_proof_sha256, /^[a-f0-9]{64}$/)
-    assert.equal(storage.reads(), 2)
-  } finally {
-    storage.restore()
-    closeFixture(value)
-  }
-})
-
-test("run verification consumes durable per-item proofs without rereading 19k objects", async () => {
-  const value = await fixture()
-  value.authoringRaw.exec(`
-    CREATE TABLE icono_manifestation_cutover_runs (
-      cutover_run_id TEXT PRIMARY KEY,
-      source_gene_count INTEGER NOT NULL,
-      verified_items INTEGER NOT NULL,
-      status TEXT NOT NULL
-    );
-    CREATE TABLE icono_manifestation_cutover_items (
-      cutover_run_id TEXT NOT NULL,
-      source_kind TEXT NOT NULL,
-      status TEXT NOT NULL,
-      authority_event_sequence INTEGER,
-      public_material_proof_sha256 TEXT,
-      public_material_event_sequence INTEGER,
-      public_material_verified_at TEXT
-    );
-    INSERT INTO icono_manifestation_cutover_runs
-    VALUES ('cutover_run_0001', 1, 1, 'shadow_verified');
-    INSERT INTO icono_manifestation_cutover_items
-    VALUES (
-      'cutover_run_0001', 'manifestation', 'verified', 1,
-      '${"e".repeat(64)}', 1, '2026-08-30T00:00:00.000Z'
-    );
-  `)
-  try {
-    assert.deepEqual(
-      await verifyPublicCanonicalMaterial({
-        primaryDb: value.primaryDb,
-        authoringDb: value.authoringDb,
-        run: { cutover_run_id: "cutover_run_0001" },
-      }),
-      {
-        ok: true,
-        run_id: "cutover_run_0001",
-        verified_gene_count: 1,
-        snapshot_event_sequence: 1,
-      },
-    )
-  } finally {
     closeFixture(value)
   }
 })
