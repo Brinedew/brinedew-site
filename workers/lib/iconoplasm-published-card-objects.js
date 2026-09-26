@@ -4,9 +4,6 @@ import {
   externalPortraitStorageUrl,
   fetchPortraitStorage,
 } from "./iconoplasm-portrait-storage.js"
-// The mutable /blot/{symbol}.webp alias is not a published-card object; its one
-// writer is iconoplasm-blot-alias.js (B-846), called from verifyBlot below.
-import { writeBlotAlias } from "./iconoplasm-blot-alias.js"
 
 // THE ONLY published-card object writer: add reuse and verification here, not
 // in a second upload path. This is immutable storage, not canon selection.
@@ -316,16 +313,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     const { bytes, verifiedSources } = await readImageBytes(immutable.key, immutable.hash, {
       repairStorageFromCdn: true,
     })
-    // B-846: refresh the Bunny /blot/{symbol}.webp alias from the same verified
-    // bytes. A projection only: writeBlotAlias never throws, and a failed alias
-    // must not block the head (the 24 Sep SOX11 lesson, #259).
-    const alias = await writeBlotAlias(env, normalized, bytes)
     return {
       key: immutable.key,
       hash: immutable.hash,
       size: bytes.byteLength,
       sources: verifiedSources,
-      alias,
     }
   }
   return {
