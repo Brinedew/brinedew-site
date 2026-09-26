@@ -4,13 +4,13 @@ import test from "node:test"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmGatewayRequest,
   resetIconoplasmRuntimeCachesForTest,
   publishPortraitReferenceSnapshot,
   buildPortraitAwareManifestHash,
   mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 
 const amidBlocklistVersion = `ebl1-${createHash("sha256")
   .update(JSON.stringify(["AMID"]))
@@ -372,7 +372,7 @@ test("DO NOT DELETE: catalog manifest never rebuilds publisher-owned fingerprint
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmGatewayRequest(
+  const first = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -383,7 +383,7 @@ test("DO NOT DELETE: catalog manifest never rebuilds publisher-owned fingerprint
   assert.match(firstPayload.artifact_url, /catalog\.costbarrier01-a5c1-v3-2-/)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmGatewayRequest(
+  const second = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -402,7 +402,7 @@ test("DO NOT DELETE: missing publication metadata is retryable without a D1 repa
   kv.store.delete(key)
   resetIconoplasmRuntimeCachesForTest()
 
-  const missing = await handleIconoplasmGatewayRequest(
+  const missing = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -411,7 +411,7 @@ test("DO NOT DELETE: missing publication metadata is retryable without a D1 repa
   assert.equal(db.fingerprintReads, 0)
 
   kv.store.set(key, published)
-  const repaired = await handleIconoplasmGatewayRequest(
+  const repaired = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -442,7 +442,7 @@ test("portrait publication preserves the old version on payload, pointer or sour
     }
     const env = buildEnv(kv, db)
     const readManifest = () =>
-      handleIconoplasmGatewayRequest(
+      viaStatefulWorker(
         new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
         env,
         { waitUntil() {} },
@@ -521,7 +521,7 @@ test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolat
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmGatewayRequest(
+  const first = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -530,7 +530,7 @@ test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolat
   assert.equal(db.portraitRefReads, 0)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmGatewayRequest(
+  const second = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -546,7 +546,7 @@ test("cold catalog readers perform no D1 work or KV writes, including missing an
   const manifestUrl = "https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"
   resetIconoplasmRuntimeCachesForTest()
   const manifest = await (
-    await handleIconoplasmGatewayRequest(new Request(manifestUrl), env, { waitUntil() {} })
+    await viaStatefulWorker(new Request(manifestUrl), env, { waitUntil() {} })
   ).json()
   const artifactUrl = `https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.${manifest.build_version}.json`
   const artifactKey = `iconoplasm:hydrated-catalog-artifact:a5c1:${manifest.build_version}`
@@ -556,7 +556,7 @@ test("cold catalog readers perform no D1 work or KV writes, including missing an
   kv.put = async () => {
     throw new Error("reader attempted a KV write")
   }
-  const read = (url) => handleIconoplasmGatewayRequest(new Request(url), env, { waitUntil() {} })
+  const read = (url) => viaStatefulWorker(new Request(url), env, { waitUntil() {} })
   for (let isolate = 0; isolate < 5; isolate++) {
     resetIconoplasmRuntimeCachesForTest()
     const response = await read(artifactUrl)
@@ -613,7 +613,7 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmGatewayRequest(
+  const first = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -627,7 +627,7 @@ test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot a
   assert.equal(db.galleryPublishedReads, 1)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmGatewayRequest(
+  const second = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -654,7 +654,7 @@ test("DO NOT DELETE: corrupt portrait publication fails retryably instead of rep
     }),
   )
   resetIconoplasmRuntimeCachesForTest()
-  const manifestResponse = await handleIconoplasmGatewayRequest(
+  const manifestResponse = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -677,7 +677,7 @@ test("DO NOT DELETE: corrupt portrait publication fails retryably instead of rep
   )
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmGatewayRequest(
+  const first = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.costbarrier01.json"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -692,7 +692,7 @@ test("DO NOT DELETE: corrupt portrait publication fails retryably instead of rep
   assert.equal(JSON.parse(kv.store.get(incompletePortraitRefCacheKey)).length, 0)
 
   resetIconoplasmRuntimeCachesForTest()
-  const second = await handleIconoplasmGatewayRequest(
+  const second = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/catalog.costbarrier01.json"),
     buildEnv(kv, db),
     { waitUntil() {} },
@@ -714,13 +714,13 @@ test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version 
   }
 
   resetIconoplasmRuntimeCachesForTest()
-  const first = await handleIconoplasmGatewayRequest(
+  const first = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", requestInit),
     env,
     { waitUntil() {} },
   )
   assert.equal(first.status, 200)
-  const second = await handleIconoplasmGatewayRequest(
+  const second = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", requestInit),
     env,
     { waitUntil() {} },
@@ -735,7 +735,7 @@ test("DO NOT DELETE: symbol-scoped card manifest reads only exact indexed shards
   const db = new FakeCostBarrierDb()
 
   resetIconoplasmRuntimeCachesForTest()
-  const response = await handleIconoplasmGatewayRequest(
+  const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
