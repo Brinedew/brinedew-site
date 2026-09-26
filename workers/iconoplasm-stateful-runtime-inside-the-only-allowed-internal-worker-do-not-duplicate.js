@@ -1897,7 +1897,6 @@ function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   }
   if (hasExtensionClientHeader(request)) return "extension"
   if (hasTrustedIconoplasmBrowserOrigin(request)) return "first_party_site"
-  if (isInternalRequestForTheOnlyAllowedStatefulWorker(request)) return "public_edge_proxy"
   return "public_api"
 }
 
@@ -13500,12 +13499,6 @@ function publicRichRouteDeniedPayload(url, routeKey) {
   }
 }
 
-function canAccessRichBatchRoute(request, env) {
-  if (hasAdminToken(request, env)) return true
-  if (hasExtensionClientHeader(request)) return true
-  return hasTrustedIconoplasmBrowserOrigin(request)
-}
-
 function normalizeArtistBlacklistSubmissionInput(raw) {
   return sanitizeText(raw, 255).replace(/\s+/g, " ").trim()
 }
@@ -13689,8 +13682,6 @@ function publicUrl(url, suffix = "") {
   return `${url.origin}${publicApiPath(suffix)}`
 }
 
-const ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE =
-  "x-iconoplasm-only-allowed-stateful-worker-internal"
 const ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/repair-canon-invariants"
 const ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
@@ -13699,15 +13690,6 @@ const ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WOR
   "/__internal/iconoplasm/process-sync-finalization"
 const ICONOPLASM_PUBLISH_GALLERY_DIRTY_SHARDS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/publish-gallery-dirty-shards"
-
-function isInternalRequestForTheOnlyAllowedStatefulWorker(request) {
-  return (
-    String(
-      request?.headers?.get(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE) ||
-        "",
-    ) === "1"
-  )
-}
 
 function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
   return (
@@ -13761,93 +13743,6 @@ function isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, method 
   const declaredRoute = matchIconoplasmRouteContract(path, requestMethod)
   if (declaredRoute) return declaredRoute.methodAllowed
   return false
-}
-
-function missingTheOnlyAllowedStatefulWorkerResponse() {
-  return json(
-    {
-      error:
-        "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for a fail-closed public route",
-      code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED",
-    },
-    503,
-    { "Cache-Control": "no-store" },
-  )
-}
-
-async function proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env) {
-  // BILLING / CAPABILITY BARRIER: these Iconoplasm routes must go
-  // through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE. If you are tempted to point these
-  // paths back at raw ICONOPLASM_DB.prepare(...), stop and read the
-  // cost-barrier tests first.
-  const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
-  const url = new URL(request.url)
-  if (!isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(url.pathname, request.method))
-    return null
-  if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
-    return missingTheOnlyAllowedStatefulWorkerResponse()
-  }
-  const upstreamRequest = new Request(
-    `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${url.pathname}${url.search}`,
-    {
-      method: request.method,
-      headers: request.headers,
-      body:
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : await request.clone().text(),
-    },
-  )
-  try {
-    return await theOnlyAllowedStatefulWorker.fetch(upstreamRequest)
-  } catch {
-    return json(
-      {
-        error: "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE request failed",
-        code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_UNAVAILABLE",
-      },
-      503,
-      { "Cache-Control": "no-store" },
-    )
-  }
-}
-
-export async function handleIconoplasmGatewayRequest(request, env) {
-  return proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(request, env)
-}
-
-export async function runIconoplasmCanonMaintenanceThroughTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-  env,
-  { limit = 250, actorId = "system", reason = "" } = {},
-) {
-  const theOnlyAllowedStatefulWorker = env?.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE
-  if (!theOnlyAllowedStatefulWorker || typeof theOnlyAllowedStatefulWorker.fetch !== "function") {
-    throw new Error(
-      "THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE binding missing for canon maintenance",
-    )
-  }
-  const response = await theOnlyAllowedStatefulWorker.fetch(
-    new Request(
-      `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ limit, actorId, reason }),
-      },
-    ),
-  )
-  if (!response.ok) {
-    let detail = ""
-    try {
-      detail = await response.text()
-    } catch {}
-    throw new Error(
-      `THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE canon maintenance failed (${response.status})${detail ? `: ${detail}` : ""}`,
-    )
-  }
-  return response.json()
 }
 
 function publicCatalogArtifactFilename(hash) {
@@ -25357,7 +25252,6 @@ async function callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDu
       headers: {
         Authorization: `Bearer ${adminToken}`,
         "Content-Type": "application/json",
-        [ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE]: "1",
       },
       body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(payload || {}),
     },
@@ -35259,13 +35153,10 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
 
     if (path.startsWith("/api/iconoplasm/")) {
-      const headers = new Headers(request.headers)
-      headers.set(ICONOPLASM_INTERNAL_STATEFUL_WORKER_REQUEST_HEADER_DO_NOT_DUPLICATE, "1")
-      const internalRequest = new Request(request, { headers })
       routeLoggedByNestedHandler = true
       const response =
         await handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-          internalRequest,
+          request,
           meteredEnv,
           ctx,
         )
@@ -36005,7 +35896,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
   const started = Date.now()
   const url = new URL(request.url)
   const path = url.pathname
-  const internalGatewayRequest = isInternalRequestForTheOnlyAllowedStatefulWorker(request)
   const done = async (route, res, schema = null) => {
     const out = asHead(request, res)
     await logReq(
@@ -36032,21 +35922,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       return done(
         "health",
         json({ status: "ok", service: "iconoplasm" }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (
-      path.startsWith("/api/iconoplasm/") &&
-      !internalGatewayRequest &&
-      isIconoplasmPathHandledInsideTheOnlyAllowedStatefulWorker(path, request.method)
-    ) {
-      const response = await proxyIconoplasmRequestToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-      )
-      return done(
-        "iconoplasm_api_only_allowed_stateful_worker",
-        new Response(response.body, { status: response.status, headers: response.headers }),
       )
     }
 
