@@ -20,7 +20,8 @@ const args = process.argv.slice(2)
 const check = args.includes("--check")
 const dirArg = args.find((arg) => !arg.startsWith("--"))
 const dir = path.resolve(dirArg || "quartz/static/iconoplasm")
-const STAMP = /(["'(])(\.\/[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
+// Imports of ./generated/ files are stamped too; they used to be stamped by hand.
+const STAMP = /(["'(])(\.\/(?:generated\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
 
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 16)
 const files = readdirSync(dir).filter(
