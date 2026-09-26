@@ -99,6 +99,25 @@ test("large bootstrap streams immutable bounded pages with zero copied rows and 
   assert.deepEqual(await completeManifestationSnapshot(db, completion), receipt)
 })
 
+// Event checkpoints were the only way to back a raised retention floor, and
+// they were retired (B-869). A raised floor must refuse, not stream a history
+// whose prefix is gone.
+test("a raised retention floor refuses a snapshot instead of streaming partial history", async (t) => {
+  const db = new TestD1()
+  t.after(() => db.close())
+  await registerGeneIdentity(db, { geneId: "gene_floor_one", canonicalSymbol: "FLOOR" })
+  db.raw.exec("UPDATE icono_authority_state SET event_retention_floor = 1 WHERE singleton = 1")
+  await assert.rejects(
+    createManifestationSnapshot(db, { consumerId: "floor_reader", cursorSecret, now }),
+    { code: "SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE" },
+  )
+  assert.equal(
+    db.raw.prepare("SELECT COUNT(*) AS n FROM icono_manifestation_snapshot_leases").get().n,
+    0,
+    "a refused snapshot leaves no lease behind",
+  )
+})
+
 test("foreign, expired and changed-epoch streams fail closed", async (t) => {
   const db = new TestD1()
   t.after(() => db.close())

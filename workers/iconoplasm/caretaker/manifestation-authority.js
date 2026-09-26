@@ -30,7 +30,6 @@ export {
 export { createCaretakerManifestationHttpHandler } from "./manifestation-authority-http-handlers.js"
 export { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
 export * from "./manifestation-authority-sync.js"
-export * from "./manifestation-authority-checkpoints.js"
 export * from "./manifestation-derivative-commands.js"
 export * from "./manifestation-upload-intents.js"
 export { projectAuthorityAccountStatus } from "./authority-account-projection.js"
