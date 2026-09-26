@@ -8,8 +8,6 @@ import {
 import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
 import { all, first, prepared, requireDatabase } from "./manifestation-authority-repository.js"
 import { decodeCursor, encodeCursor } from "./manifestation-sync-cursor.js"
-import { checkpointEntityPart } from "./manifestation-checkpoint-entities.js"
-import { readActiveManifestationEventCheckpoint } from "./manifestation-authority-checkpoints.js"
 import { advanceManifestationSnapshotChain } from "./manifestation-snapshot-hash.js"
 import { bytesToBase64Url, utf8Bytes } from "./manifestation-sync-encoding.js"
 
@@ -249,13 +247,10 @@ export async function createManifestationSnapshot(db, input = {}) {
   )
   await eventArchiveBoundary(state, input.archiveDb)
   const floor = Number(state?.event_retention_floor || 0)
-  const checkpoint = floor > 0 ? await readActiveManifestationEventCheckpoint(db) : null
-  if (
-    floor > 0 &&
-    (!checkpoint ||
-      Number(checkpoint.authority_epoch) !== Number(state.authority_epoch) ||
-      Number(checkpoint.target_watermark_event_sequence) !== floor)
-  ) {
+  // Nothing raises the retention floor since event checkpoints were retired
+  // (B-869): cold history lives in the event archive. A raised floor means the
+  // prefix is gone with no base to rebuild from, so refuse the snapshot.
+  if (floor > 0) {
     throw authorityError(
       "SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE",
       "The compacted event prefix has no verified checkpoint base",
@@ -283,9 +278,9 @@ export async function createManifestationSnapshot(db, input = {}) {
       consumerId,
       Number(state.authority_epoch),
       Number(state?.watermark || 0),
-      checkpoint?.checkpoint_id || null,
+      null,
       floor,
-      checkpoint ? "checkpoint_entities" : "baselines",
+      "baselines",
       Number(state.baseline_rowid),
       expiresAt,
       timestamp,
@@ -365,22 +360,6 @@ async function sourcePage(db, archiveDb, archiveThrough, lease, phase, after, li
       Number(lease.source_baseline_rowid),
       limit,
     )
-  if (phase === "checkpoint_entities")
-    return all(
-      db,
-      `SELECT entity.entity_ordinal AS source_ordinal, entity.entity_kind, entity.entity_key,
-            entity.gene_id, entity.source_event_sequence, entity.entity_json, entity.payload_sha256,
-            checkpoint.checkpoint_id, checkpoint.authority_epoch,
-            checkpoint.target_watermark_event_sequence, checkpoint.manifest_sha256
-       FROM icono_manifestation_event_checkpoint_entities entity
-       INDEXED BY sqlite_autoindex_icono_manifestation_event_checkpoint_entities_2
-       JOIN icono_manifestation_event_checkpoints checkpoint ON checkpoint.checkpoint_id=entity.checkpoint_id
-      WHERE entity.checkpoint_id=? AND checkpoint.status='active' AND entity.entity_ordinal>?
-      ORDER BY entity.entity_ordinal LIMIT ?`,
-      lease.source_checkpoint_id,
-      Number(after),
-      limit,
-    )
   const rows = await readEventRows(
     db,
     archiveDb,
@@ -396,21 +375,6 @@ export async function readManifestationSnapshotPage(db, input = {}) {
   requireDatabase(db)
   const lease = await readSnapshotLease(db, normalizeId(input.snapshotId, "snapshot_id"))
   requireStreamingLease(lease, normalizeTimestamp(input.now))
-  if (lease.source_checkpoint_id) {
-    const checkpoint = await readActiveManifestationEventCheckpoint(db)
-    if (
-      checkpoint?.checkpoint_id !== lease.source_checkpoint_id ||
-      Number(checkpoint.authority_epoch) !== Number(lease.authority_epoch) ||
-      Number(checkpoint.target_watermark_event_sequence) !==
-        Number(lease.source_checkpoint_watermark_sequence)
-    ) {
-      throw authorityError(
-        "SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE",
-        "Pinned checkpoint is no longer available",
-        410,
-      )
-    }
-  }
   const cursor = await decodeCursor(input.cursorSecret, input.cursor, "snapshot_stream")
   requireSnapshotCursor(cursor, lease)
   const archiveState = await first(
@@ -420,7 +384,7 @@ export async function readManifestationSnapshotPage(db, input = {}) {
   )
   const archiveThrough = await eventArchiveBoundary(archiveState, input.archiveDb)
   const limit = Math.max(1, Math.min(250, Math.trunc(Number(input.limit)) || 100))
-  let phase = cursor?.phase || (lease.source_checkpoint_id ? "checkpoint_entities" : "baselines")
+  let phase = cursor?.phase || "baselines"
   let after = Number(cursor?.after_key || 0)
   let ordinal = Number(cursor?.after_ordinal || 0)
   let chain = cursor?.chain_sha256 || "0".repeat(64)
@@ -438,12 +402,7 @@ export async function readManifestationSnapshotPage(db, input = {}) {
     )
     const selected = rows.slice(0, limit - parts.length)
     for (const row of selected) {
-      const payload =
-        phase === "baselines"
-          ? baselinePart(row)
-          : phase === "checkpoint_entities"
-            ? checkpointEntityPart(row, row)
-            : eventPart(row)
+      const payload = phase === "baselines" ? baselinePart(row) : eventPart(row)
       const bytes = utf8Bytes(JSON.stringify(payload))
       const digest = await sha256Hex(bytes)
       ordinal += 1
@@ -451,12 +410,7 @@ export async function readManifestationSnapshotPage(db, input = {}) {
       parts.push({
         ordinal,
         part_kind: payload.part_kind,
-        source_key:
-          phase === "baselines"
-            ? row.gene_id
-            : phase === "checkpoint_entities"
-              ? `${row.entity_kind}:${row.entity_key}`
-              : String(row.event_sequence),
+        source_key: phase === "baselines" ? row.gene_id : String(row.event_sequence),
         gene_id: row.gene_id,
         payload_sha256: digest,
         payload_base64url: bytesToBase64Url(bytes),
