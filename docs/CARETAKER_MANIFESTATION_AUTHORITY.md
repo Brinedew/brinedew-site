@@ -20,28 +20,25 @@ the job happens to run.
 
 ### Service bearer audiences
 
-No general manifestation-authority service bearer exists. Five independent Worker
+No general manifestation-authority service bearer exists. Three independent Worker
 secrets enforce least privilege, and a token is valid only for its named routes:
 
 - `ICONOPLASM_AUTHORITY_REPLICA_TOKEN`: events, snapshots, exact material reads,
   and Tags enrichment submission/selection;
 - `ICONOPLASM_AUTHORITY_GENERATION_TOKEN`: generation lease claim, renew, fail,
   and complete;
-- `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN`: explicitly exposed bounded receipt,
-  tombstone, and event-compaction maintenance;
 - `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
   handover only. (The one-time manifestation cutover it was named for finished
   on 2026-08-31 and its code was deleted on 2026-09-25.)
 
-Nothing calls the maintenance routes today: no schedule, workflow or
-workstation job holds the maintenance token. Command receipts were never
-compacted (58,116 rows on 2026-09-26), and B-859 replaces that path with a flat
-receipt TTL.
-
-There is no separate backup protocol. It was deleted on 2026-09-26 after
-issuing 0 capabilities in its lifetime. Recovery is D1 Time Travel (30 days)
+There are no maintenance routes and no separate backup protocol. Both were
+deleted on 2026-09-26 because nothing had ever called them: no schedule,
+workflow or workstation job held either token, and 0 checkpoints, 0 tombstones
+and 0 backup capabilities were ever written. Command receipts are not
+compacted; almost all 58,116 are the one-time 2026-08-31 cutover, and real use
+adds about three a day (B-859 has the 100x sizing). Recovery is D1 Time Travel (30 days)
 for `iconoplasm-authoring`, plus the immutable body objects in Bunny Storage.
-The `ICONOPLASM_AUTHORITY_BACKUP_TOKEN` Worker secret is unused. Secrets must contain different
+The `ICONOPLASM_AUTHORITY_BACKUP_TOKEN` and `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN` Worker secrets are unused. Secrets must contain different
 values; admin credentials and the retired generic service token are never
 fallbacks.
 

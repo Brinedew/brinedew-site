@@ -70,11 +70,6 @@ const PATTERN_EXAMPLES = Object.freeze({
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivatives",
   authority_tags_derivative_select:
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivative-head",
-  authority_maintenance_commands: "/api/iconoplasm/authority/maintenance/command-receipts/compact",
-  authority_event_compaction_status:
-    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001",
-  authority_event_compaction_action:
-    "/api/iconoplasm/authority/maintenance/event-compaction/checkpoints/checkpoint_0001/build",
   authority_generation_lease_material:
     "/api/iconoplasm/authority/generation-leases/generation_lease_0001/material",
   authority_generation_lease_renew:
@@ -179,13 +174,6 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_tags_derivative_select",
     ],
     "authority-cutover-bearer": ["authority_discovery_candidates", "authority_discovery_activate"],
-    "authority-maintenance-bearer": [
-      "authority_maintenance_commands",
-      "authority_event_compaction_start",
-      "authority_event_compaction_sweep",
-      "authority_event_compaction_status",
-      "authority_event_compaction_action",
-    ],
   }
   const authorityRoutes = ICONOPLASM_ROUTE_CONTRACTS.filter((route) =>
     route.id.startsWith("authority_"),

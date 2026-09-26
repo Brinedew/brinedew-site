@@ -268,7 +268,6 @@ ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
 # generic service token:
 #   ICONOPLASM_AUTHORITY_REPLICA_TOKEN      events, snapshots, exact material, Tags
 #   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
-#   ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN  externally invoked bounded maintenance
 #   ICONOPLASM_AUTHORITY_CUTOVER_TOKEN      discovery candidate/activate handover
 ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
