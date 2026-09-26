@@ -936,17 +936,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "authority_workstation_write",
   }),
   iconoplasmApiContract({
-    apiHandler: "manifestation_authority_service",
-    id: "authority_backups",
-    match: pattern(
-      /^\/api\/iconoplasm\/authority\/backups\/(capabilities|export|restores|verifications)$/,
-      ["operation"],
-    ),
-    methods: POST,
-    auth: "authority-backup-bearer",
-    budgetFamily: "authority_workstation_write",
-  }),
-  iconoplasmApiContract({
     apiHandler: "discovery_authority_cutover",
     id: "authority_discovery_candidates",
     match: exact("/api/iconoplasm/authority/discovery/candidates"),

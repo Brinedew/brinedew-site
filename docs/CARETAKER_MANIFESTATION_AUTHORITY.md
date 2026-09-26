@@ -29,14 +29,19 @@ secrets enforce least privilege, and a token is valid only for its named routes:
   and complete;
 - `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN`: explicitly exposed bounded receipt,
   tombstone, and event-compaction maintenance;
-- `ICONOPLASM_AUTHORITY_BACKUP_TOKEN`: backup capability, export, restore, and
-  verification;
 - `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
   handover only. (The one-time manifestation cutover it was named for finished
   on 2026-08-31 and its code was deleted on 2026-09-25.)
 
-Scheduled maintenance calls domain functions internally instead of sending a
-bearer request back through the public route. Secrets must contain different
+Nothing calls the maintenance routes today: no schedule, workflow or
+workstation job holds the maintenance token. Command receipts were never
+compacted (58,116 rows on 2026-09-26), and B-859 replaces that path with a flat
+receipt TTL.
+
+There is no separate backup protocol. It was deleted on 2026-09-26 after
+issuing 0 capabilities in its lifetime. Recovery is D1 Time Travel (30 days)
+for `iconoplasm-authoring`, plus the immutable body objects in Bunny Storage.
+The `ICONOPLASM_AUTHORITY_BACKUP_TOKEN` Worker secret is unused. Secrets must contain different
 values; admin credentials and the retired generic service token are never
 fallbacks.
 
@@ -243,8 +248,6 @@ case where it crosses Website/workstation boundaries.
 | Erased former author is displayed                    | Stable anonymous attribution appears; provider subject never leaks                        |
 | Missing/corrupt encrypted object                     | Revision is ineligible and an integrity alert is emitted                                  |
 | D1 fails after object upload                         | No revision commits; orphan is recoverable and later deleted                              |
-| Backup restore targets merged/retired history        | Exact immutable ID/hash returns at a fresh locator without changing canon                 |
-| Backup capability is replayed or expires             | One-shot token is unusable; storage credentials/object locators stay secret               |
 | Event delivered twice/out of order                   | Replica converges once without rewinding a gene                                           |
 | Cursor expired or event gap                          | Replica replaces state from a validated watermarked snapshot                              |
 | Malformed/foreign snapshot or cursor                 | Replica rejects it and preserves its last verified local state                            |
