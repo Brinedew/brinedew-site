@@ -14,6 +14,34 @@ export const TAG_CATEGORIES = [
   "composition",
 ]
 
+// B-879: retired category names, folded into their successor on read. 98% of
+// saved records predate the current tree. Stored tags are immutable versions, so
+// they are upcast here instead of rewritten; a caretaker's next save stores the
+// new name. "colors" has no one-to-one successor and stays a saved extra row.
+// Mirror of CATEGORY_ALIASES in Iconoplasm src/manifestation.py.
+export const TAG_CATEGORY_ALIASES = Object.freeze({ pose_mood: "pose" })
+
+function asTagArray(value) {
+  return Array.isArray(value) ? value : typeof value === "string" && value ? [value] : []
+}
+
+function upcastTagFields(saved) {
+  const fields = Object.assign(Object.create(null), saved)
+  for (const [retired, successor] of Object.entries(TAG_CATEGORY_ALIASES)) {
+    if (!Object.hasOwn(fields, retired)) continue
+    const value = fields[retired]
+    if (!Array.isArray(value) && typeof value !== "string") continue
+    fields[successor] = [...new Set([...asTagArray(fields[successor]), ...asTagArray(value)])]
+    delete fields[retired]
+  }
+  // Tree order first, then saved extras in their saved order.
+  const ordered = Object.create(null)
+  for (const key of TAG_CATEGORIES) ordered[key] = Object.hasOwn(fields, key) ? fields[key] : []
+  for (const key of Object.keys(fields))
+    if (!Object.hasOwn(ordered, key)) ordered[key] = fields[key]
+  return ordered
+}
+
 export function readTagFields(source) {
   return JSON.parse(source?.dataset.fieldsJson || "{}")
 }
@@ -30,7 +58,7 @@ export function mountCaretakerTagEditor(form) {
   const host = form?.querySelector("[data-icono-caretaker-tag-categories]")
   if (!source || !host) return
   const doc = host.ownerDocument
-  const fields = Object.assign(Object.create(null), readTagFields(source))
+  const fields = upcastTagFields(readTagFields(source))
   const known = new Set(
     Object.values(fields)
       .flat()
@@ -44,7 +72,6 @@ export function mountCaretakerTagEditor(form) {
       ...ungrouped,
     ]
   }
-  for (const key of TAG_CATEGORIES) if (!Object.hasOwn(fields, key)) fields[key] = []
   source.dataset.fieldsJson = JSON.stringify(fields)
 
   function button(text, label, action) {
