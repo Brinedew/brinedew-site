@@ -27403,7 +27403,6 @@ async function fetchAdminGallery(
        SELECT
           pa.gene_symbol AS gene_symbol,
           gr.full_name,
-          ge.manifestation,
          pa.asset_sha256 AS asset_sha256,
          COALESCE(pa.status, 'draft') AS status,
          COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
@@ -27431,8 +27430,6 @@ async function fetchAdminGallery(
         AND vs.asset_sha256 = pa.asset_sha256
         LEFT JOIN icono_admin_gene_rollup gr
           ON gr.gene_symbol = pa.gene_symbol
-        LEFT JOIN icono_gene_essence ge
-          ON ge.gene_symbol = pa.gene_symbol
        ${whereClause}
        ORDER BY ${orderClause}
        LIMIT ? OFFSET ?`,
@@ -27465,7 +27462,6 @@ async function fetchAdminGallery(
       rows: allRows.map((row) => ({
         gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
         full_name: sanitizeText(row?.full_name || "", 255) || "",
-        manifestation: sanitizeText(row?.manifestation || "", 4000) || "",
         asset_sha256: normalizeSha256(row?.asset_sha256 || "") || null,
         candidate_count: Number(row?.candidate_count || 0),
         approved_count: Number(row?.approved_count || 0),
@@ -27526,7 +27522,6 @@ async function fetchAdminGallery(
      SELECT
         gr.gene_symbol AS gene_symbol,
         gr.full_name,
-        ge.manifestation,
        gr.candidate_count,
        gr.approved_count,
        gr.rejected_count,
@@ -27556,8 +27551,6 @@ async function fetchAdminGallery(
        gr.leader_score,
        gr.current_asset_missing AS has_mismatch
       FROM icono_admin_gene_rollup gr
-      LEFT JOIN icono_gene_essence ge
-        ON ge.gene_symbol = gr.gene_symbol
      ${whereClause}
      ORDER BY ${orderClause}
      LIMIT ? OFFSET ?`,
@@ -27588,7 +27581,6 @@ async function fetchAdminGallery(
     rows: rows.map((row) => ({
       gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
       full_name: sanitizeText(row?.full_name || "", 255) || "",
-      manifestation: sanitizeText(row?.manifestation || "", 4000) || "",
       candidate_count: Number(row?.candidate_count || 0),
       approved_count: Number(row?.approved_count || 0),
       rejected_count: Number(row?.rejected_count || 0),
@@ -27640,13 +27632,10 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
     `SELECT
        gr.gene_symbol,
        gr.full_name,
-       ge.manifestation,
        gr.current_asset_sha256 AS live_sha,
        gr.admin_override,
        gr.updated_at AS live_updated_at
      FROM icono_admin_gene_rollup gr
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = gr.gene_symbol
      WHERE gr.gene_symbol = ?`,
   )
     .bind(symbol)
@@ -27731,7 +27720,6 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
     full_name: sanitizeText(info?.full_name || "", 255) || "",
     live_sha: liveSha,
     admin_override: Number(info?.admin_override || 0) > 0,
-    manifestation: sanitizeText(info?.manifestation || "", 4000) || "",
     updated_at: sanitizeText(info?.live_updated_at || info?.essence_updated_at || "", 64) || "",
     candidates,
     recent_events: (Array.isArray(eventResp?.results) ? eventResp.results : []).map((row) => ({
