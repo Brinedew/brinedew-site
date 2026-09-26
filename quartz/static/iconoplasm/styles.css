@@ -994,6 +994,17 @@ sl-dialog:not(:defined) {
   flex-wrap: wrap;
 }
 
+/* B-867: Generate and Publish are always both present (Publish greys out
+   instead of hiding). Side by side when they fit; stacked full width on a
+   phone, never with a label broken onto two lines. */
+.icono-request-direct-actions {
+  flex-wrap: wrap;
+}
+
+.icono-request-direct-actions > .icono-button {
+  flex: 1 1 12rem;
+}
+
 .icono-request-free-actions[hidden],
 .icono-request-direct-actions[hidden] {
   display: none;
