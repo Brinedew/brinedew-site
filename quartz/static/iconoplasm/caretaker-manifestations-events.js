@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=193139eb6a445721"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=7ad84e9d6d961a55"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -134,7 +134,7 @@ export function createCaretakerManifestationEventWiring({
         )
         if (
           !confirmAction(
-            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, new images will be drawn from ${fallback}, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
+            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately and new images will be drawn from ${fallback}. It will be removed from public view on the site, though it will not be removed from backups.`,
           )
         )
           return

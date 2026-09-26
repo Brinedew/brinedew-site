@@ -366,7 +366,7 @@ function lineageRows(dossier, escapeHtml) {
       danger.push(
         '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Delete ' +
           escapeHtml(which) +
-          "</h4><p>Hidden at once; new images go back to the next available version. Purged after 30 days unless legally held.</p></div>" +
+          "</h4><p>Hidden at once; new images go back to the next available version. It is removed from public view on the site, though not from backups.</p></div>" +
           '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
           id +
           '">Delete…</button></div>',
