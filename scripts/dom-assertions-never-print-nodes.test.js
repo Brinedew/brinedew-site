@@ -55,7 +55,8 @@ test("DOM tests never hand a node to an assertion printer", () => {
   const offenders = []
   for (const file of files) {
     const source = readFileSync(file, "utf8")
-    if (!/from "linkedom"/.test(source)) continue
+    // Written as a character class so this file's own source never matches it.
+    if (!/from ["']linkedom["']/.test(source)) continue
     for (const { line, args } of assertionArguments(source)) {
       if (args.some(printsNode)) offenders.push(`${file}:${line}`)
     }
