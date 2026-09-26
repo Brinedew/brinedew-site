@@ -152,10 +152,10 @@ The old projection flow could mutate `icono_publish_state` before the card-catal
 
 Fix landed in commit `06ff1bbd`:
 
-- `processVoteProjectionRefreshForSymbol(...)` now runs `assertIconoplasmCardCatalogBudgetPreflight(env)` before any auto-promotion mutation.
+- Vote projection does not republish the KV card catalog; a D1 hot-query guard test forbids it. (An earlier note here said it ran a card-catalog budget preflight; that function was never called and was deleted on 2026-09-26, B-869.)
 - If artifact publication fails after a promotion, `rollbackVoteAutoPromoteAfterProjectionFailure(...)` conditionally rolls back `icono_publish_state`.
 - The rollback only applies when the row still points at the asset this projection promoted and `admin_override` is still off, so it will not undo a newer admin action or later successful promotion.
-- Regression tests cover both missing preflight and failed artifact publication.
+- Regression tests cover failed artifact publication.
 
 ## 2026-05-29 KV Write-Cap Failure
 
@@ -255,7 +255,7 @@ Do not repair data while the old code path can recreate the split.
 Required tests before deploy:
 
 ```powershell
-pnpm test workers/iconoplasm.vote-coordinator-routing.test.js workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm.card-catalog-budget-preflight.test.js
+pnpm test workers/iconoplasm.vote-coordinator-routing.test.js workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js
 ```
 
 Use the normal production workflow, not a local one-off Worker upload, unless the documented deploy path is blocked.
