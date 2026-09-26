@@ -118,7 +118,6 @@ import {
   putPortraitStorageObject,
   readPortraitStorageObject,
 } from "./lib/iconoplasm-portrait-storage.js"
-import { writeBlotAlias } from "./lib/iconoplasm-blot-alias.js"
 import {
   IconoplasmGenerationSourceError,
   generationConfigSha256,
@@ -1854,7 +1853,6 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_local_removals_pending" ||
     family === "admin_local_removals_ack" ||
     family === "admin_artist_styles_remove" ||
-    family === "admin_blot_aliases_refresh" ||
     family === "admin_artist_blacklist_pending" ||
     family === "admin_artist_blacklist_ack"
   ) {
@@ -34864,18 +34862,23 @@ export async function handlePublishedImageAssetRoute(
   })
 }
 
-// Resolves the current semantic blot for one symbol: the object bytes plus the
-// fingerprint that names them. Shared by the /blot route and the B-846 Bunny
-// alias refresh, so both always agree on which image "current" means.
-async function resolveSemanticGeneBlot(env, symbol) {
+async function handleSemanticGeneBlot(request, env, symbolValue) {
+  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
+  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
   const published = await readPublishedGeneCardPortraitProjection(env, symbol)
-  if (published.kind === "unavailable") return { status: "unavailable", published }
+  if (published.kind === "unavailable") {
+    return json(cardArtifactUnavailablePayload(published.version), 503, {
+      "Cache-Control": "no-store",
+    })
+  }
   const card = published.kind === "available" ? published.payload : null
   const cardSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
   const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
   if (cardSymbol !== symbol || portrait?.status !== "published" || !portraitAssetSha) {
-    return { status: "not_found" }
+    return json({ error: "Canonical gene blot not found" }, 404, {
+      "Cache-Control": "no-store",
+    })
   }
   // The exact published card is the authority. Its renderer revision, symbol,
   // name, and portrait SHA deterministically identify the immutable Bunny key.
@@ -34912,25 +34915,11 @@ async function resolveSemanticGeneBlot(env, symbol) {
       }
     }
   }
-  if (!object) return { status: "not_found" }
-  return { status: "ok", object, selectedFingerprint, selectedObjectKey, published }
-}
-
-async function handleSemanticGeneBlot(request, env, symbolValue) {
-  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
-  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
-  const resolved = await resolveSemanticGeneBlot(env, symbol)
-  if (resolved.status === "unavailable") {
-    return json(cardArtifactUnavailablePayload(resolved.published.version), 503, {
-      "Cache-Control": "no-store",
-    })
-  }
-  if (resolved.status !== "ok") {
+  if (!object) {
     return json({ error: "Canonical gene blot not found" }, 404, {
       "Cache-Control": "no-store",
     })
   }
-  const { object, selectedFingerprint, selectedObjectKey, published } = resolved
   const etag = `"${selectedFingerprint}"`
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
@@ -40454,44 +40443,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         html(renderIconoplasmAdminHtml(ICONOPLASM_ADMIN_HTML, env), 200, {
           "Cache-Control": "no-store",
         }),
-      )
-    }
-
-    // B-846: copy named immutable blots onto their Bunny /blot aliases and purge
-    // them, for up to ten genes (GET + PUT + purge = 3 subrequests each, under
-    // the Free plan's 50). The caller (scripts/refresh-blot-aliases.mjs) finds
-    // each gene's current blot from the public CDN catalog, so this reads no
-    // KV and no D1. The key must be that gene's own blots/v1 path; the
-    // publisher keeps changed genes fresh on its own.
-    if (path === "/api/iconoplasm/admin/blot-aliases/refresh" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("blot_alias_refresh_403", json({ error: "Unauthorized" }, 403))
-      const body = await request.json().catch(() => ({}))
-      const items = (Array.isArray(body?.aliases) ? body.aliases : []).slice(0, 10)
-      const results = {}
-      for (const item of items) {
-        const symbol = normalizeSymbol(String(item?.symbol || ""))
-        const key = String(item?.blot_key || "")
-        const expected = new RegExp(
-          `^blots/v1/[A-Z0-9]/${symbol.replace(/[.]/g, "\\.")}/[a-f0-9]{32,64}/[A-Za-z0-9._-]+\\.webp$`,
-        )
-        if (!symbol || !expected.test(key)) {
-          results[symbol || "?"] = { ok: false, reason: "invalid_blot_key" }
-          continue
-        }
-        const object = await readPortraitStorageObject(env, key, {
-          fallbackContentType: "image/webp",
-        })
-        if (!object) {
-          results[symbol] = { ok: false, reason: "blot_missing" }
-          continue
-        }
-        const bytes = new Uint8Array(await new Response(object.body).arrayBuffer())
-        results[symbol] = await writeBlotAlias(env, symbol, bytes)
-      }
-      return done(
-        "blot_alias_refresh",
-        json({ ok: true, results }, 200, { "Cache-Control": "no-store" }),
       )
     }
 
