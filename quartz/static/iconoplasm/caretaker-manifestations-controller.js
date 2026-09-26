@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=31b58b97edce1d60"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=c70e63428d413fc4"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=f9366e8614c9baf4"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=c86caf733068dcbb"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=193139eb6a445721"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -127,9 +127,6 @@ export function createCaretakerManifestationPanel({
           const replacement = next.querySelector(selector)
           if (replacement) state.host.querySelector(selector)?.replaceWith(replacement)
         }
-        const sourceSelector = "[data-icono-caretaker-generation-source]"
-        const source = next.querySelector(sourceSelector)
-        if (source) state.host.querySelector(sourceSelector)?.replaceWith(source)
         updateCount(existingForm.querySelector("[data-icono-caretaker-prose]"))
         if (state.basedOnRevisionId) showBasis(state)
         activateTab(state, state.activeTab || "manifestation")
@@ -613,7 +610,7 @@ export function createCaretakerManifestationPanel({
           { preserveDraft: true },
         ))
         if (!submitted) throw new Error("Tags save needs an explicit retry")
-        const selected = await mutate(
+        const selected = (job.tagsSelected ||= await mutate(
           state,
           `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivative-head`,
           {
@@ -622,8 +619,30 @@ export function createCaretakerManifestationPanel({
             expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
           },
           { preserveDraft: true },
-        )
+        ))
         if (!selected) throw new Error("Tags selection needs an explicit retry")
+        // B-874: the saved version is what new images are drawn from. There is no
+        // second "Use my version" step; it read as "save again" right after "Saved",
+        // and a caretaker who closed on "Saved" never reached a single new image.
+        // Only a version with Tags is a complete generation source, so this waits for them.
+        const head = state.dossier.head
+        if (head.canonical_revision_id !== revision.manifestation_revision_id) {
+          const source = (job.source ||= await mutate(
+            state,
+            "/canonical-selections",
+            {
+              manifestation_id: revision.manifestation_id,
+              manifestation_revision_id: revision.manifestation_revision_id,
+              expected_assignment_version: Number(
+                state.dossier.assignment?.assignment_version || 0,
+              ),
+              expected_head_version: head.head_version,
+              expected_canonical_revision_id: head.canonical_revision_id || null,
+            },
+            { preserveDraft: true, refreshPublic: true },
+          ))
+          if (!source) throw new Error("Image source update needs an explicit retry")
+        }
       }
       state.lastSavedFingerprint = fingerprint
       state.autosaveJob = null

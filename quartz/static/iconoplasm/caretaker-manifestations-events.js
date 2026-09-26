@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=c86caf733068dcbb"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=193139eb6a445721"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -124,22 +124,6 @@ export function createCaretakerManifestationEventWiring({
         setStatus(state, "Unsaved draft removed from this device.", "success")
         return
       }
-      const revisionId = target.getAttribute("data-icono-caretaker-select")
-      if (revisionId) {
-        void mutate(
-          state,
-          "/canonical-selections",
-          {
-            manifestation_id: target.getAttribute("data-manifestation-id"),
-            manifestation_revision_id: revisionId,
-            expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-            expected_head_version: state.dossier.head.head_version,
-            expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
-          },
-          { success: "Canonical manifestation changed.", refreshPublic: true },
-        ).catch(function () {})
-        return
-      }
       const manifestationId = target.getAttribute("data-icono-caretaker-withdraw")
       if (manifestationId) {
         const manifestation = state.dossier.manifestations.find(function (item) {
@@ -150,7 +134,7 @@ export function createCaretakerManifestationEventWiring({
         )
         if (
           !confirmAction(
-            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, ${fallback} will become canonical, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
+            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, new images will be drawn from ${fallback}, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
           )
         )
           return

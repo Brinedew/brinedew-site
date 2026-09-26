@@ -191,13 +191,19 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /Delete the current manifestation/)
   assert.match(html, /Stop being caretaker/)
   assert.match(html, /Purged after 30 days unless legally held/)
-  // Make public is offered for a non-public version once it is selected.
+  // B-874: there is no second save step and no second meaning of "public".
   const other = dossier()
-  const nonPublic = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
-  const selected = renderCaretakerManifestationPanel(other, escapeHtml, {
-    selectedRevisionId: nonPublic,
-  })
-  assert.match(selected, new RegExp(`data-icono-caretaker-select="${nonPublic}"[^>]*>Make public`))
+  const nonCanonical = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
+  for (const selectedRevisionId of [nonCanonical, other.head.canonical_revision_id]) {
+    const selected = renderCaretakerManifestationPanel(other, escapeHtml, { selectedRevisionId })
+    assert.doesNotMatch(selected, /Make public|Use my version|New images use your version/)
+    assert.doesNotMatch(selected, /data-icono-caretaker-select/)
+    assert.doesNotMatch(selected, /icono-caretaker-badge">Public/)
+  }
+  // The version new images are drawn from is marked by a glyph, not the word "public".
+  const marks = html.match(/data-icono-caretaker-source-mark[^>]*>/g) || []
+  assert.equal(marks.length, 2, "one mark in the timeline, one in the preview of that version")
+  assert.match(marks[0], /title="New images are drawn from this version"/)
   assert.doesNotMatch(html, /curator/i)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
@@ -297,6 +303,11 @@ test("purged history remains attributable but cannot be selected, forked, or ren
   assert.doesNotMatch(html, /must not render/)
   assert.doesNotMatch(html, /data-icono-caretaker-fork="revision_purged"/)
   assert.doesNotMatch(html, /data-icono-caretaker-select="revision_purged"/)
+  // B-872: Edit from here stays in place, greyed and unwired, instead of vanishing.
+  assert.match(
+    html.match(/<button[^>]*>Edit from here<\/button>/)?.[0] || "",
+    / disabled data-icono-caretaker-disabled/,
+  )
 })
 
 test("canonical and current heads remain usable when history pagination moves them off-page", () => {
@@ -323,7 +334,7 @@ test("canonical and current heads remain usable when history pagination moves th
   })
   assert.match(html, /data-icono-caretaker-version="revision_1"/)
   assert.match(html, /First body/)
-  assert.match(html, /Public/)
+  assert.match(html, /data-icono-caretaker-source-mark/, "the image source stays marked")
 })
 
 test("the readable diff keeps unchanged context and marks both sides", () => {
@@ -497,7 +508,7 @@ test("category rows add, edit and remove tags without flattening their fields", 
   assert.equal(host.querySelector("[data-icono-caretaker-prose]").value, "Second body")
   await new Promise((resolve) => setTimeout(resolve, 1200))
 })
-test("autosaving appends an immutable version without silently changing canonical", async () => {
+test("a text-only save without Tags is not yet a source for new images (B-874)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
@@ -534,20 +545,32 @@ test("autosaving appends an immutable version without silently changing canonica
   assert.equal("expected_head_version" in body, false)
   assert.equal("expected_canonical_revision_id" in body, false)
   assert.match(body.command_id, /^cmd_/)
+  // No Tags means no generation recipe, so new images stay on the last complete version.
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/canonical-selections")),
+    false,
+  )
   assert.deepEqual(publicRefreshes, [])
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
-test("autosave persists Tags against the exact new revision and selects that derivative", async () => {
+test("autosave persists Tags, then makes the new version the one new images use (B-874)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
+  const publicRefreshes = []
   const panel = createCaretakerManifestationPanel({
+    onCanonicalChanged: (symbol) => publicRefreshes.push(symbol),
     fetchJSON: async function (path, init) {
       calls.push({ path, init })
       if ((init?.method || "GET") === "GET") return dossier()
       if (path.endsWith("/revisions")) {
-        return { ok: true, manifestation_revision_id: "revision_3" }
+        // The real save response names both the lineage and the new revision.
+        return {
+          ok: true,
+          manifestation_id: "manifestation_own",
+          manifestation_revision_id: "revision_3",
+        }
       }
       if (path.endsWith("/tags-derivatives")) {
         return {
@@ -590,6 +613,22 @@ test("autosave persists Tags against the exact new revision and selects that der
   })
   assert.ok(tagSelect)
   assert.equal(JSON.parse(tagSelect.init.body).manifestation_derivative_id, "derivative_3")
+
+  // B-874: no second "Use my version" step. Once the version is complete, it is
+  // what new images are drawn from, through the same authority command.
+  const mutations = calls.filter((call) => (call.init?.method || "GET") !== "GET")
+  assert.deepEqual(
+    mutations.map((call) => call.path.split("/").pop()),
+    ["revisions", "tags-derivatives", "tags-derivative-head", "canonical-selections"],
+  )
+  const selection = JSON.parse(mutations[3].init.body)
+  assert.equal(selection.manifestation_revision_id, "revision_3")
+  assert.equal(selection.manifestation_id, "manifestation_own")
+  assert.equal(selection.expected_canonical_revision_id, "revision_1")
+  assert.equal(selection.expected_head_version, 4)
+  assert.equal(selection.expected_assignment_version, 3)
+  assert.deepEqual(publicRefreshes, ["TP53"])
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
 test("Retry resumes a failed Tags upload without creating another revision", async () => {

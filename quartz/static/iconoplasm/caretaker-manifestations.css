@@ -87,15 +87,6 @@
   font-size: 0.78rem;
 }
 
-.icono-caretaker-footer__source {
-  display: contents;
-}
-
-.icono-caretaker-footnote {
-  color: var(--darkgray);
-  font-size: 0.78rem;
-}
-
 .icono-caretaker-link-button {
   margin-left: 0.4rem;
   padding: 0;
@@ -699,23 +690,23 @@
   letter-spacing: 0;
 }
 
-/* "Use my version" is an editor action: only on the Manifestation tab. */
-.icono-caretaker-panel:has([data-icono-caretaker-tabpanel="manifestation"][hidden])
-  .icono-caretaker-footer__source {
-  display: none;
+/* B-874: marks the version new images are drawn from. A picture, not the word
+   "public", which belongs to the gene-page switch alone. */
+.icono-caretaker-source-mark {
+  display: inline-flex;
+  margin-inline-start: 0.45rem;
+  color: var(--accent);
+  vertical-align: -0.2em;
 }
 
-.icono-caretaker-badge {
-  display: inline-block;
-  margin-inline-start: 0.45rem;
-  padding: 0.12rem 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--ui-border));
-  border-radius: var(--icono-radius-pill);
-  color: var(--accent);
-  font: 600 0.62rem / 1.2 var(--icono-action-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  vertical-align: 0.1em;
+.icono-caretaker-source-mark svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .icono-caretaker-history {

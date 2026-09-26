@@ -184,7 +184,7 @@ function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, rev
     ">" +
     '<span class="icono-caretaker-timeline__title">' +
     escapeHtml(versionTitle(item, revisions)) +
-    (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
+    (canonical ? SOURCE_MARK : "") +
     "</span>" +
     '<span class="icono-caretaker-timeline__meta">' +
     (when
@@ -214,12 +214,23 @@ const AUTOSAVE_GLYPH =
   '<path class="icono-caretaker-cloud__mark" data-mark="failed" d="M4.5 4.5l15 15"/>' +
   "</svg>"
 
+// B-874: the version new images are drawn from. It used to be a "Public" badge,
+// which clashed with "Show on the gene page": the word meant two things.
+const SOURCE_MARK_LABEL = "New images are drawn from this version"
+const SOURCE_MARK =
+  '<span class="icono-caretaker-source-mark" data-icono-caretaker-source-mark role="img" aria-label="' +
+  SOURCE_MARK_LABEL +
+  '" title="' +
+  SOURCE_MARK_LABEL +
+  '"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+  '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="m3.5 16 5-5 4 4 3-3 5 5"/>' +
+  '<circle cx="15.5" cy="9.5" r="1.4"/></svg></span>'
+
 // Titles are fixed strings, never user text. setBusy re-enables every control
 // that lacks data-icono-caretaker-disabled, so a grey button must carry it.
-function greyButton(title, label, state = "") {
+function greyButton(title, label) {
   return (
     '<button type="button" class="icono-button" disabled data-icono-caretaker-disabled' +
-    (state ? ' data-state="' + state + '"' : "") +
     ' title="' +
     title +
     '">' +
@@ -242,8 +253,6 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
   const manifestation = item.manifestation || {}
   const canonical = selectedId === dossier.head.canonical_revision_id
   const available = versionBodyAvailable(revision)
-  const canSelect =
-    dossier.viewer.can_edit && revision.lifecycle === "active" && available && !canonical
   const canFork = dossier.viewer.can_edit && revision.lifecycle === "active" && available
   let body
   if (!available) {
@@ -260,24 +269,21 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
     body =
       '<p class="icono-caretaker-preview__text">' + escapeHtml(String(revision.body || "")) + "</p>"
   }
-  const actions =
-    (canFork
+  // B-874: no "Make public". Saving makes a version the image source; going back
+  // to an older one is "Edit from here", which saves it as the newest version.
+  // B-872: when a version can't be edited, the button greys out instead of vanishing.
+  const actions = !dossier.viewer.can_edit
+    ? ""
+    : canFork
       ? '<button type="button" class="icono-button" data-icono-caretaker-fork="' +
         escapeHtml(selectedId) +
         '">Edit from here</button>'
-      : "") +
-    (canSelect
-      ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
-        escapeHtml(selectedId) +
-        '" data-manifestation-id="' +
-        escapeHtml(String(manifestation.manifestation_id || "")) +
-        '" title="The gene page and new candidate images will use this version">Make public</button>'
-      : "")
+      : greyButton("This version's text is no longer available", "Edit from here")
   return (
     '<section class="icono-caretaker-preview" data-icono-caretaker-preview aria-live="polite">' +
     '<header class="icono-caretaker-preview__header"><h3>' +
     escapeHtml(versionTitle(item, revisions)) +
-    (canonical ? '<span class="icono-caretaker-badge">Public</span>' : "") +
+    (canonical ? SOURCE_MARK : "") +
     "</h3><p>" +
     escapeHtml(
       [
@@ -360,7 +366,7 @@ function lineageRows(dossier, escapeHtml) {
       danger.push(
         '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Delete ' +
           escapeHtml(which) +
-          "</h4><p>Hidden at once; the next eligible version becomes public. Purged after 30 days unless legally held.</p></div>" +
+          "</h4><p>Hidden at once; new images go back to the next available version. Purged after 30 days unless legally held.</p></div>" +
           '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
           id +
           '">Delete…</button></div>',
@@ -387,17 +393,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   const assignmentState = String(assignment?.status || "")
   const editable = dossier.viewer.can_edit && assignmentState === "active"
   const canWrite = editable && own?.status !== "withdrawn"
-  const ownHead = revisions.find(function (item) {
-    return item.revision?.manifestation_revision_id === own?.manifestation_head_revision_id
-  })
-  const savedSourceReady =
-    ownHead?.revision?.lifecycle === "active" &&
-    ownHead.revision.body_available !== false &&
-    ownHead.revision.derivative?.status === "accepted" &&
-    ownHead.revision.derivative.body_available !== false
-  const ownSourceIsCanonical =
-    own?.manifestation_head_revision_id === dossier.head?.canonical_revision_id
-  let footerSource = ""
   let body =
     '<dialog class="icono-caretaker-dialog" data-icono-caretaker-dialog aria-labelledby="icono-caretaker-title">' +
     '<section class="icono-caretaker-panel">' +
@@ -488,18 +483,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     const currentTags = String(dossier?.prefill_tags_text ?? own?.head_tags ?? "")
     const tagsUnavailable =
       own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
-    footerSource =
-      '<div class="icono-caretaker-footer__source" data-icono-caretaker-generation-source>' +
-      (savedSourceReady && !ownSourceIsCanonical && !tagsUnavailable
-        ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
-          esc(own.manifestation_head_revision_id) +
-          '" data-manifestation-id="' +
-          esc(own.manifestation_id) +
-          '" title="New candidate images and the gene page will use your latest saved version">Use my version</button>'
-        : savedSourceReady && ownSourceIsCanonical
-          ? '<span class="icono-caretaker-footnote">New images use your version</span>'
-          : "") +
-      "</div>"
     body +=
       (tagsUnavailable
         ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
@@ -603,7 +586,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       : "") +
     "</div>" +
     '<div class="icono-caretaker-footer__actions icono-actions">' +
-    footerSource +
     '<button type="button" class="icono-button" data-icono-caretaker-close>Close</button>' +
     "</div>" +
     "</div>"
