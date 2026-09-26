@@ -11,6 +11,7 @@ import {
   saveManifestationRevision,
   submitTagsDerivative,
   createManifestationUploadIntent,
+  admitManifestationUploadIntent,
 } from "./manifestation-authority.js"
 import { TestD1, command, sha, storage } from "./manifestation-authority-test-support.js"
 import { createLineageAdmissionMigrationCostAdapter } from "../operation-cost-lineage-migration-adapter.js"
@@ -216,4 +217,101 @@ test("failed derivative history counts toward the derivative limit without scann
     })
   f.migrate()
   await assert.rejects(f.reserve("revision"), { code: "LINEAGE_DERIVATIVE_LIMIT_EXCEEDED" })
+})
+
+// B-875: admission counts every live intent, expired or not, against these caps.
+// Nothing released an abandoned upload, so a caretaker on a flaky connection
+// slowly lost lineage slots for good. Admission now first releases up to three of
+// that caretaker's own expired strays, using the quota index 0014 creates.
+const storageEnv = {
+  ICONOPLASM_AUTHORING_STORAGE_ZONE: "quota-test-zone",
+  ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "quota-test-password",
+}
+const PAST = "2026-08-30T00:00:00.000Z"
+const LATER = "2026-08-30T00:05:00.000Z"
+
+function stubStorage(t, handler) {
+  const original = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = original
+  })
+  globalThis.fetch = handler
+}
+
+const deletingStorage = async (_url, init = {}) =>
+  new Response(null, { status: String(init.method).toUpperCase() === "DELETE" ? 200 : 404 })
+
+function statusOf(f, id) {
+  return f.db.raw
+    .prepare("SELECT status FROM icono_manifestation_upload_intents WHERE upload_intent_id = ?")
+    .get(id).status
+}
+
+function admit(f, n) {
+  const envelope = storage(n, 1)
+  return admitManifestationUploadIntent(f.db, storageEnv, {
+    entityKind: "revision",
+    entityId: `revision_admit_${n}`,
+    assignmentId: assignment,
+    objectKey: envelope.object_key,
+    ciphertextSha256: envelope.ciphertext_sha256,
+    bodyBytes: 1,
+    actorKind: "account",
+    actorAccountId: account,
+    uploadIntentId: `intent_admit_${n}`,
+    leaseToken: `lease_admit_${n}`,
+    now: LATER,
+    leaseMs: 600_000,
+  })
+}
+
+test("a caretaker's next upload releases their own expired strays first (B-875)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  stubStorage(t, deletingStorage)
+  const stray = await f.reserve("revision", 1, { now: PAST, leaseMs: 30_000 })
+  const fresh = await admit(f, 20001)
+  assert.equal(fresh.status, "uploading")
+  assert.equal(statusOf(f, stray.upload_intent_id), "deleted")
+})
+
+test("the release is bounded to three strays per upload (B-875)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  stubStorage(t, deletingStorage)
+  const strays = []
+  for (let i = 0; i < 5; i++)
+    strays.push(await f.reserve("revision", 1, { now: PAST, leaseMs: 30_000 }))
+  await admit(f, 20002)
+  const released = strays.filter((s) => statusOf(f, s.upload_intent_id) === "deleted").length
+  assert.equal(released, 3)
+})
+
+test("admission leaves strays still inside their lease and strays it doesn't own (B-875)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  stubStorage(t, deletingStorage)
+  const live = await f.reserve("revision", 1, { now: LATER, leaseMs: 3_600_000 })
+  const unowned = await f.reserve("revision", 1, {
+    now: PAST,
+    leaseMs: 30_000,
+    assignmentId: null,
+    actorKind: "migration",
+    actorAccountId: null,
+  })
+  await admit(f, 20003)
+  assert.equal(statusOf(f, live.upload_intent_id), "uploading", "lease not expired")
+  assert.equal(statusOf(f, unowned.upload_intent_id), "uploading", "not this caretaker's")
+})
+
+test("a storage outage during the release never blocks the new upload (B-875)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  stubStorage(t, async () => {
+    throw new TypeError("fetch failed")
+  })
+  const stray = await f.reserve("revision", 1, { now: PAST, leaseMs: 30_000 })
+  const fresh = await admit(f, 20004)
+  assert.equal(fresh.status, "uploading")
+  assert.equal(statusOf(f, stray.upload_intent_id), "uploading", "released on a later upload")
 })

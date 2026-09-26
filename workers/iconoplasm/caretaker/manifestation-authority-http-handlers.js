@@ -41,7 +41,7 @@ import {
   resolveCommandReplay,
 } from "./manifestation-authority-repository.js"
 import {
-  createManifestationUploadIntent,
+  admitManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
 import { selectManifestationRevision } from "./manifestation-selection-commands.js"
@@ -475,7 +475,7 @@ function createCaretakerManifestationHttpHandler({
           prose: body.prose,
         })
         const objectKey = await createManifestationBodyObjectKey()
-        await createManifestationUploadIntent(db, {
+        await admitManifestationUploadIntent(db, env, {
           entityKind: "revision",
           entityId: revisionId,
           assignmentId,
@@ -578,7 +578,7 @@ function createCaretakerManifestationHttpHandler({
           tags: output.output_plain,
         })
         const objectKey = await createManifestationBodyObjectKey()
-        await createManifestationUploadIntent(db, {
+        await admitManifestationUploadIntent(db, env, {
           entityKind: "derivative",
           entityId: derivativeId,
           assignmentId: assignment.caretaker_assignment_id,
