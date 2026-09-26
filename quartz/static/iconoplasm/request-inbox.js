@@ -38,6 +38,8 @@ export function createRequestInbox({
   }
   var refreshTimer = 0
   var lifecycleWired = false
+  // B-880: the last caretaker status seen per gene in the caretaker panel.
+  var caretakerDossierSignatures = Object.create(null)
   var requestRefreshVersion = 0
   var caretakerRefreshVersion = 0
 
@@ -114,6 +116,7 @@ export function createRequestInbox({
 
   function reset() {
     invalidateInflight()
+    caretakerDossierSignatures = Object.create(null)
     state.loaded = false
     state.loading = false
     state.request_error = false
@@ -247,6 +250,29 @@ export function createRequestInbox({
       renderSidebar()
     }
     return Promise.allSettled([refreshRequests(options, accountKey), refreshCaretaker(accountKey)])
+  }
+
+  // B-880: the caretaker panel reports its dossier on every load and reload, and
+  // an autosave reloads it four times. The inbox only shows this viewer's
+  // caretaker status, so it refetches (notifications + caretaker/me, 2 Worker
+  // requests) only when that status changes: accepted, declined or ended. The
+  // first report of a gene is already covered by the page's own inbox load.
+  function noteCaretakerDossier(detail) {
+    var symbol = String((detail && detail.symbol) || "")
+      .trim()
+      .toUpperCase()
+    if (!symbol) return Promise.resolve(null)
+    var dossier = (detail && detail.dossier) || {}
+    var viewer = dossier.viewer || {}
+    var signature = [
+      viewer.is_caretaker === true,
+      viewer.can_accept === true,
+      String((dossier.assignment && dossier.assignment.status) || ""),
+    ].join("|")
+    var previous = caretakerDossierSignatures[symbol]
+    caretakerDossierSignatures[symbol] = signature
+    if (previous === undefined || previous === signature) return Promise.resolve(null)
+    return refreshForLifecycle()
   }
 
   function markRead(notificationIds, markAll, receipt) {
@@ -770,6 +796,7 @@ export function createRequestInbox({
   return {
     caretakerPanelMarkup,
     panelMarkup,
+    noteCaretakerDossier,
     refresh: refreshForLifecycle,
     reset,
     start,
