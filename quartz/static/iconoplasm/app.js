@@ -8,7 +8,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=7e9a6d5198260d81"
+import { createRequestInbox } from "./request-inbox.js?v=138cab33bb1ae3f4"
 import { portraitDelivery } from "./portrait-delivery.js?v=d9df3d31630e704e"
 import {
   createEmulsionFavoriteStore,
@@ -339,7 +339,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               }
             : null
           renderIconoplasmSidebar()
-          void requestInbox.refresh()
+          // B-880: refetch the inbox only when this viewer's caretaker status changed.
+          void requestInbox.noteCaretakerDossier(detail)
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
