@@ -2,7 +2,7 @@ import {
   ownManifestation,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=1b817a9931002d63"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=193139eb6a445721"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -11,6 +11,7 @@ export function createCaretakerManifestationEventWiring({
   loadOlderHistory,
   mounted,
   mutate,
+  retryAfterReconnect,
   retryTags,
   retrySave,
   scheduleAutosave,
@@ -23,6 +24,11 @@ export function createCaretakerManifestationEventWiring({
   function wire(host) {
     if (wiredHosts.has(host)) return
     wiredHosts.add(host)
+    // B-874: a save that failed because the network dropped resumes on reconnect.
+    host.ownerDocument?.defaultView?.addEventListener?.("online", function () {
+      const state = mounted.get(host)
+      if (state) void retryAfterReconnect(state)
+    })
     host.addEventListener("input", function (event) {
       const state = mounted.get(host)
       if (!state) return
@@ -118,22 +124,6 @@ export function createCaretakerManifestationEventWiring({
         setStatus(state, "Unsaved draft removed from this device.", "success")
         return
       }
-      const revisionId = target.getAttribute("data-icono-caretaker-select")
-      if (revisionId) {
-        void mutate(
-          state,
-          "/canonical-selections",
-          {
-            manifestation_id: target.getAttribute("data-manifestation-id"),
-            manifestation_revision_id: revisionId,
-            expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-            expected_head_version: state.dossier.head.head_version,
-            expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
-          },
-          { success: "Canonical manifestation changed.", refreshPublic: true },
-        ).catch(function () {})
-        return
-      }
       const manifestationId = target.getAttribute("data-icono-caretaker-withdraw")
       if (manifestationId) {
         const manifestation = state.dossier.manifestations.find(function (item) {
@@ -144,7 +134,7 @@ export function createCaretakerManifestationEventWiring({
         )
         if (
           !confirmAction(
-            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, ${fallback} will become canonical, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
+            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately, new images will be drawn from ${fallback}, and its encrypted body will become eligible for hard purge after 30 days unless a legal hold applies.`,
           )
         )
           return

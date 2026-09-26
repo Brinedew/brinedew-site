@@ -174,7 +174,10 @@ function allRevisionIds(value) {
 test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.match(html, /Manifestation</)
-  assert.match(html, /data-icono-caretaker-autosave-state role="status">Saved/)
+  assert.match(
+    html,
+    /data-icono-caretaker-autosave-state data-state="saved" role="status" title="Saved"><svg class="icono-caretaker-cloud"[^]*?data-icono-caretaker-autosave-label>Saved</,
+  )
   assert.match(html, /data-icono-caretaker-tab="manifestation"/)
   assert.match(html, /data-icono-caretaker-tab="history"/)
   assert.match(html, /data-icono-caretaker-tab="settings"/)
@@ -188,13 +191,19 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.match(html, /Delete the current manifestation/)
   assert.match(html, /Stop being caretaker/)
   assert.match(html, /Purged after 30 days unless legally held/)
-  // Make public is offered for a non-public version once it is selected.
+  // B-874: there is no second save step and no second meaning of "public".
   const other = dossier()
-  const nonPublic = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
-  const selected = renderCaretakerManifestationPanel(other, escapeHtml, {
-    selectedRevisionId: nonPublic,
-  })
-  assert.match(selected, new RegExp(`data-icono-caretaker-select="${nonPublic}"[^>]*>Make public`))
+  const nonCanonical = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
+  for (const selectedRevisionId of [nonCanonical, other.head.canonical_revision_id]) {
+    const selected = renderCaretakerManifestationPanel(other, escapeHtml, { selectedRevisionId })
+    assert.doesNotMatch(selected, /Make public|Use my version|New images use your version/)
+    assert.doesNotMatch(selected, /data-icono-caretaker-select/)
+    assert.doesNotMatch(selected, /icono-caretaker-badge">Public/)
+  }
+  // The version new images are drawn from is marked by a glyph, not the word "public".
+  const marks = html.match(/data-icono-caretaker-source-mark[^>]*>/g) || []
+  assert.equal(marks.length, 2, "one mark in the timeline, one in the preview of that version")
+  assert.match(marks[0], /title="New images are drawn from this version"/)
   assert.doesNotMatch(html, /curator/i)
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
@@ -294,6 +303,11 @@ test("purged history remains attributable but cannot be selected, forked, or ren
   assert.doesNotMatch(html, /must not render/)
   assert.doesNotMatch(html, /data-icono-caretaker-fork="revision_purged"/)
   assert.doesNotMatch(html, /data-icono-caretaker-select="revision_purged"/)
+  // B-872: Edit from here stays in place, greyed and unwired, instead of vanishing.
+  assert.match(
+    html.match(/<button[^>]*>Edit from here<\/button>/)?.[0] || "",
+    / disabled data-icono-caretaker-disabled/,
+  )
 })
 
 test("canonical and current heads remain usable when history pagination moves them off-page", () => {
@@ -320,7 +334,7 @@ test("canonical and current heads remain usable when history pagination moves th
   })
   assert.match(html, /data-icono-caretaker-version="revision_1"/)
   assert.match(html, /First body/)
-  assert.match(html, /Public/)
+  assert.match(html, /data-icono-caretaker-source-mark/, "the image source stays marked")
 })
 
 test("the readable diff keeps unchanged context and marks both sides", () => {
@@ -494,7 +508,7 @@ test("category rows add, edit and remove tags without flattening their fields", 
   assert.equal(host.querySelector("[data-icono-caretaker-prose]").value, "Second body")
   await new Promise((resolve) => setTimeout(resolve, 1200))
 })
-test("autosaving appends an immutable version without silently changing canonical", async () => {
+test("a text-only save without Tags is not yet a source for new images (B-874)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
@@ -531,20 +545,32 @@ test("autosaving appends an immutable version without silently changing canonica
   assert.equal("expected_head_version" in body, false)
   assert.equal("expected_canonical_revision_id" in body, false)
   assert.match(body.command_id, /^cmd_/)
+  // No Tags means no generation recipe, so new images stay on the last complete version.
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/canonical-selections")),
+    false,
+  )
   assert.deepEqual(publicRefreshes, [])
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
-test("autosave persists Tags against the exact new revision and selects that derivative", async () => {
+test("autosave persists Tags, then makes the new version the one new images use (B-874)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
+  const publicRefreshes = []
   const panel = createCaretakerManifestationPanel({
+    onCanonicalChanged: (symbol) => publicRefreshes.push(symbol),
     fetchJSON: async function (path, init) {
       calls.push({ path, init })
       if ((init?.method || "GET") === "GET") return dossier()
       if (path.endsWith("/revisions")) {
-        return { ok: true, manifestation_revision_id: "revision_3" }
+        // The real save response names both the lineage and the new revision.
+        return {
+          ok: true,
+          manifestation_id: "manifestation_own",
+          manifestation_revision_id: "revision_3",
+        }
       }
       if (path.endsWith("/tags-derivatives")) {
         return {
@@ -587,6 +613,22 @@ test("autosave persists Tags against the exact new revision and selects that der
   })
   assert.ok(tagSelect)
   assert.equal(JSON.parse(tagSelect.init.body).manifestation_derivative_id, "derivative_3")
+
+  // B-874: no second "Use my version" step. Once the version is complete, it is
+  // what new images are drawn from, through the same authority command.
+  const mutations = calls.filter((call) => (call.init?.method || "GET") !== "GET")
+  assert.deepEqual(
+    mutations.map((call) => call.path.split("/").pop()),
+    ["revisions", "tags-derivatives", "tags-derivative-head", "canonical-selections"],
+  )
+  const selection = JSON.parse(mutations[3].init.body)
+  assert.equal(selection.manifestation_revision_id, "revision_3")
+  assert.equal(selection.manifestation_id, "manifestation_own")
+  assert.equal(selection.expected_canonical_revision_id, "revision_1")
+  assert.equal(selection.expected_head_version, 4)
+  assert.equal(selection.expected_assignment_version, 3)
+  assert.deepEqual(publicRefreshes, ["TP53"])
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
 test("Retry resumes a failed Tags upload without creating another revision", async () => {
@@ -623,7 +665,7 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   assert.equal(host.querySelector("[data-icono-caretaker-editor]") === form, true)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Not saved")
   await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(uploads, 1, "failed saves wait for explicit Retry")
+  assert.equal(uploads, 1, "the first automatic retry waits 2 seconds (B-874)")
   host.querySelector("[data-icono-caretaker-retry-save]").click()
   await new Promise((resolve) => setTimeout(resolve, 25))
   assert.equal(calls.filter((c) => c.path.endsWith("/revisions")).length, 1)
@@ -631,6 +673,121 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   assert.equal(retries.length, 2)
   assert.deepEqual(retries[0].body, retries[1].body)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
+})
+
+async function mountForAutosave(fetchJSON) {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const panel = createCaretakerManifestationPanel({ fetchJSON, escapeHtml, storage: null })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Third body"
+  prose.dispatchEvent(new Event("input", { bubbles: true }))
+  const autosaveState = () =>
+    host.querySelector("[data-icono-caretaker-autosave-state]").textContent
+  return { document, Event, host, autosaveState }
+}
+
+test("an autosave in flight never greys out Close, the × or the tabs (B-874)", async () => {
+  let release
+  const { host } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    await new Promise((resolve) => (release = resolve))
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(typeof release, "function", "the save is in flight")
+  const controls = host.querySelectorAll("[data-icono-caretaker-close], [data-icono-caretaker-tab]")
+  assert.equal(controls.length, 5, "two close controls and three tabs")
+  for (const control of controls) {
+    assert.equal(control.disabled, false, control.getAttribute("aria-label") || control.textContent)
+  }
+  release()
+})
+
+test("the autosave indicator is a glyph whose state reads without words (B-874)", async () => {
+  let release
+  let attempts = 0
+  const { host } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    if (++attempts === 1) {
+      await new Promise((resolve) => (release = resolve))
+      return { manifestation_revision_id: "revision_3" }
+    }
+    throw Object.assign(new Error("Assignment is not active"), { status: 403 })
+  })
+  const indicator = () => host.querySelector("[data-icono-caretaker-autosave-state]")
+  const glyph = () => indicator().querySelector("svg")
+  assert.equal(indicator().dataset.state, "unsaved")
+  assert.equal(
+    glyph()?.getAttribute("aria-hidden"),
+    "true",
+    "the glyph is decoration for sighted users",
+  )
+  assert.equal(indicator().title, "Unsaved changes")
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(indicator().dataset.state, "saving")
+  assert.equal(indicator().textContent, "Saving…", "screen readers still hear the word")
+  release()
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(indicator().dataset.state, "saved")
+  assert.equal(glyph() !== null, true, "updating the state keeps the glyph")
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Fourth body"
+  prose.dispatchEvent(new globalThis.Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(indicator().dataset.state, "failed")
+  assert.equal(indicator().title, "Not saved")
+})
+
+test("an uncertain autosave failure retries by itself when the browser reconnects (B-874)", async () => {
+  const revisions = []
+  const { document, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    revisions.push(JSON.parse(init.body))
+    if (revisions.length === 1) throw new TypeError("Failed to fetch")
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(autosaveState(), "Not saved")
+  document.defaultView.dispatchEvent(new Event("online"))
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(revisions.length, 2)
+  assert.equal(revisions[0].command_id, revisions[1].command_id, "the retry reuses the command")
+  assert.equal(autosaveState(), "Saved")
+})
+
+test("an uncertain autosave failure retries by itself after 2 seconds (B-874)", async () => {
+  let attempts = 0
+  const { autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    if (++attempts === 1) throw Object.assign(new Error("Bad gateway"), { status: 502 })
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(autosaveState(), "Not saved")
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  assert.equal(attempts, 2)
+  assert.equal(autosaveState(), "Saved")
+})
+
+test("a rejected autosave waits for a person, even after reconnecting (B-874)", async () => {
+  let attempts = 0
+  const { document, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    attempts += 1
+    throw Object.assign(new Error("Assignment is not active"), { status: 403 })
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  document.defaultView.dispatchEvent(new Event("online"))
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  assert.equal(attempts, 1)
+  assert.equal(autosaveState(), "Not saved")
 })
 
 test("the Settings visibility switch uses manifestation and gene CAS versions", async () => {
