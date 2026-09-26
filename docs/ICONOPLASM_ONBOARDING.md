@@ -245,22 +245,7 @@ Wrapping both sides in `upper(...)` looks harmless, but it can blow away index u
 
 This is the most important runtime barrier in Iconoplasm, and it is not only a D1 budget. The live admin cost cockpit at `/admin#costs` tracks the free-plan pressure points across D1, Workers, Durable Objects, KV, Queues, R2, Pages Functions, and Workers observability.
 
-The current card-catalog publication preflight checks these failure names:
-
-- `kv_reads`
-- `kv_writes`
-- `kv_lists`
-- `d1_rows_read`
-- `d1_rows_written`
-- `queue_operations`
-- `worker_requests`
-- `worker_cpu_ms`
-- `durable_object_requests`
-- `durable_object_rows_written`
-- `logs_events`
-- `r2_available`
-
-If the admin cockpit or worker code adds another Cloudflare meter, update this note and `workers/iconoplasm.card-catalog-budget-preflight.test.js` in the same change.
+Mutation and publication admission runs through the operation-cost ledger (`workers/iconoplasm/operation-cost-*.js`) and the card-publication coordinator's write reservations. There is no separate card-catalog budget preflight: one was defined but never called, and it was deleted on 2026-09-26 (B-869).
 
 D1 row-read blowups are still the easiest budget wall to hit accidentally.
 
@@ -377,7 +362,7 @@ If you genuinely need to replace one of these guards, the replacement has to lan
 Verified test command:
 
 ```text
-pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm.sync-finalization-queue.test.js workers/iconoplasm.card-catalog-budget-preflight.test.js
+pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm.sync-finalization-queue.test.js
 ```
 
 If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.

@@ -1329,7 +1329,6 @@ test("vote projection rolls back canonical promotion when read-model projection 
     ICONOPLASM_VOTE_PROJECTION_QUEUE: queue,
     GAME_SESSIONS: fakeSessions(),
     KV: fakeKv(),
-    ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
     ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
   }
 
@@ -1508,7 +1507,6 @@ test("vote projection promotes newer asset when score and upvotes tie", async ()
       ICONOPLASM_DB: db,
       ICONOPLASM_VOTE_COORDINATORS: coordinator,
       KV: kv,
-      ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
       ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
     },
   )
@@ -1590,7 +1588,6 @@ test("vote projection preserves explicit admin override when newer tied asset ex
       ICONOPLASM_DB: db,
       ICONOPLASM_VOTE_COORDINATORS: coordinator,
       KV: fakeKv(),
-      ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
       ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
     },
   )
@@ -1751,7 +1748,6 @@ test("vote projection Queue batch does not publish the public card artifact for 
     ICONOPLASM_DB: db,
     ICONOPLASM_VOTE_COORDINATORS: coordinator,
     KV: kv,
-    ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
     ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
   }
   let acked = 0
@@ -1963,7 +1959,6 @@ test("vote projection promotes newer asset when score and upvotes tie", async ()
       ICONOPLASM_DB: db,
       ICONOPLASM_VOTE_COORDINATORS: coordinator,
       KV: fakeKv(),
-      ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
       ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
     },
   )
@@ -2044,7 +2039,6 @@ test("vote projection preserves explicit admin override when newer tied asset ex
       ICONOPLASM_DB: db,
       ICONOPLASM_VOTE_COORDINATORS: coordinator,
       KV: fakeKv(),
-      ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
       ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
     },
   )
@@ -2528,7 +2522,6 @@ test("admin vote projection process endpoint drains due durable jobs", async () 
         ICONOPLASM_ADMIN_TOKEN: "secret",
         KV: fakeKv(),
         GAME_SESSIONS: fakeSessions(),
-        ICONOPLASM_CARD_CATALOG_BUDGET_PREFLIGHT_REQUIRED: "1",
         ICONOPLASM_LIVE_BUDGET_SNAPSHOT_FOR_TEST: healthyBudgetSnapshot(),
       },
       waitUntilRecorder(),
