@@ -87,15 +87,6 @@
   font-size: 0.78rem;
 }
 
-.icono-caretaker-footer__source {
-  display: contents;
-}
-
-.icono-caretaker-footnote {
-  color: var(--darkgray);
-  font-size: 0.78rem;
-}
-
 .icono-caretaker-link-button {
   margin-left: 0.4rem;
   padding: 0;
@@ -449,12 +440,61 @@
   font: 0.76rem/1.45 var(--icono-action-font);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="pending"] {
+/* B-874: the save state is a cloud glyph (Google Docs convention), never a word.
+   Hollow = unsaved, arrow = saving, check = saved, slash = failed. */
+[data-icono-caretaker-autosave-state] {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  color: var(--darkgray);
+}
+
+.icono-caretaker-cloud {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icono-caretaker-cloud__mark {
+  display: none;
+}
+
+[data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"],
+[data-icono-caretaker-autosave-state][data-state="saved"] [data-mark="saved"],
+[data-icono-caretaker-autosave-state][data-state="failed"] [data-mark="failed"] {
+  display: inline;
+}
+
+[data-icono-caretaker-autosave-state][data-state="unsaved"],
+[data-icono-caretaker-autosave-state][data-state="saving"] {
   color: var(--secondary);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="error"] {
+[data-icono-caretaker-autosave-state][data-state="unsaved"] .icono-caretaker-cloud__shape {
+  stroke-dasharray: 2.4 2.2;
+}
+
+[data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"] {
+    animation: icono-caretaker-cloud-lift 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes icono-caretaker-cloud-lift {
+  from {
+    transform: translateY(1px);
+  }
+  to {
+    transform: translateY(-1.5px);
+  }
 }
 
 .icono-caretaker-editor__actions {
@@ -650,23 +690,23 @@
   letter-spacing: 0;
 }
 
-/* "Use my version" is an editor action: only on the Manifestation tab. */
-.icono-caretaker-panel:has([data-icono-caretaker-tabpanel="manifestation"][hidden])
-  .icono-caretaker-footer__source {
-  display: none;
+/* B-874: marks the version new images are drawn from. A picture, not the word
+   "public", which belongs to the gene-page switch alone. */
+.icono-caretaker-source-mark {
+  display: inline-flex;
+  margin-inline-start: 0.45rem;
+  color: var(--accent);
+  vertical-align: -0.2em;
 }
 
-.icono-caretaker-badge {
-  display: inline-block;
-  margin-inline-start: 0.45rem;
-  padding: 0.12rem 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--ui-border));
-  border-radius: var(--icono-radius-pill);
-  color: var(--accent);
-  font: 600 0.62rem / 1.2 var(--icono-action-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  vertical-align: 0.1em;
+.icono-caretaker-source-mark svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .icono-caretaker-history {
