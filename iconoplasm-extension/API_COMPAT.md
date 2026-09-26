@@ -48,6 +48,14 @@ asynchronously without cutting off installed users. The next human release
 replaces that entry with its own predecessor, so retired releases do not remain
 documented or supported indefinitely.
 
+The Worker serves exactly one catalog contract; there is no second, per-version
+catalog artifact. (An earlier design projected one, but nothing in production
+ever published it, so an activated window would have answered 503. It was
+removed on 2026-09-26, B-869.) The window therefore holds only while the older
+release reads the served contract: a catalog change during store review must be
+readable by the previous package. `iconoplasm-extension.publisher-authority.test.js`
+fails CI when a supported older release declares a different catalog contract.
+
 Publication alias dictionary edits are administrator-owned desired state and are
 projected into both contracts through the existing `publication_aliases`
 manifest object. They do not rebuild the catalog/scanner or require a store
