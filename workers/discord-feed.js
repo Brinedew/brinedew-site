@@ -230,19 +230,6 @@ function feedItemId(item) {
   return item.guid || item.link || item.title || ""
 }
 
-function feedItemToOutput(item, sourceName, author) {
-  return {
-    id: feedItemId(item),
-    sourceName,
-    author,
-    title: (item.title || "").trim(),
-    url: stripUtm(item.link || ""),
-    excerpt: item.excerpt || "",
-    publishedAt: item.pubDate || "",
-    text: "",
-  }
-}
-
 /**
  * Factory: an adapter that pulls items from any standard RSS/Atom feed and
  * extracts body text from a chosen source field. This is the single-file
