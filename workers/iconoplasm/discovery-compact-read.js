@@ -116,18 +116,3 @@ export function compactSharedRowsFromSummaries(summaries, symbolByOrdinal) {
   )
   return rows
 }
-
-export function sortCompactShelfRows(rows, order, seed) {
-  const sorted = [...rows]
-  if (order === "symbol") {
-    sorted.sort((left, right) => left.gene_symbol.localeCompare(right.gene_symbol))
-    return sorted
-  }
-  // Newest first: a deterministic symbol tiebreak keeps cursors stable.
-  sorted.sort(
-    (left, right) =>
-      (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "") ||
-      left.gene_symbol.localeCompare(right.gene_symbol),
-  )
-  return sorted
-}
