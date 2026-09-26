@@ -288,25 +288,3 @@ export async function loadDiscordRecapImageBytes(env, identity) {
   if (!imageData || imageData.byteLength <= 0) return null
   return new Uint8Array(imageData)
 }
-
-/**
- * Delete a day's recap PNG. Best-effort; returns true if it acted.
- */
-export async function deleteDiscordRecapImage(env, identity) {
-  const key = buildDiscordRecapImageKey(identity)
-
-  if (env?.STRUCTURES_BUCKET) {
-    await env.STRUCTURES_BUCKET.delete(key)
-    return true
-  }
-
-  const writeUrl = bunnyWriteUrl(env, key)
-  const password = bunnyStoragePassword(env)
-  if (!writeUrl || !password) return false
-  const response = await fetch(writeUrl, { method: "DELETE", headers: { AccessKey: password } })
-  if (response.status === 404) return false
-  if (!response.ok) {
-    throw new Error(`Recap image DELETE failed (${response.status}) for ${key}`)
-  }
-  return true
-}
