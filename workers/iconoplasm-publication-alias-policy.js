@@ -42,7 +42,6 @@ const KV_REVISION_WIDTH = 20
 const KV_LIST_LIMIT = 1_000
 const KV_CLEANUP_BATCH_SIZE = 10
 const VERSION_RE = /^v1-[a-f0-9]{16}$/
-const VERSION_TOKEN_RE = /^v1[a-f0-9]{16}$/
 const PUBLIC_PROJECTION_FIELDS = Object.freeze([
   "alias_count",
   "by_symbol",
@@ -974,11 +973,6 @@ export async function validateIconoplasmPublicationAliasesIncrementallyAgainstPu
 function publicationAliasVersionToken(version) {
   const normalized = String(version || "").trim()
   return VERSION_RE.test(normalized) ? normalized.replace(/-/g, "") : null
-}
-
-function normalizedPublicationAliasVersionToken(rawToken) {
-  const token = String(rawToken || "").trim()
-  return VERSION_TOKEN_RE.test(token) ? token : null
 }
 
 export function iconoplasmPublicationAliasKvKey(revision, version = null) {
