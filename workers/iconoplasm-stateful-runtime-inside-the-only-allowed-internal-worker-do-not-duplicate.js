@@ -22130,91 +22130,6 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   return visionIds.length
 }
 
-async function rebuildVoteAssetSummaryForSymbol(env, rawSymbol) {
-  if (!env.ICONOPLASM_DB) return 0
-  const symbol = normalizeSymbol(rawSymbol)
-  if (!symbol) return 0
-
-  const [assetResp, voteResp] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT asset_sha256, vision_id, candidate_image_id
-       FROM icono_portrait_assets
-       WHERE gene_symbol = ?`,
-    )
-      .bind(symbol)
-      .all(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         asset_sha256,
-         MAX(NULLIF(vision_id, '')) AS vision_id,
-         MAX(candidate_image_id) AS candidate_image_id,
-         SUM(CASE WHEN vote_value = 1 THEN 1 ELSE 0 END) AS upvotes,
-         SUM(CASE WHEN vote_value = -1 THEN 1 ELSE 0 END) AS downvotes,
-         SUM(vote_value) AS score,
-         COUNT(*) AS vote_count
-       FROM icono_image_votes
-       WHERE gene_symbol = ?
-       GROUP BY asset_sha256`,
-    )
-      .bind(symbol)
-      .all(),
-  ])
-
-  const voteByAsset = new Map()
-  for (const row of Array.isArray(voteResp?.results) ? voteResp.results : []) {
-    const assetSha = normalizeSha256(row?.asset_sha256 || "")
-    if (!assetSha) continue
-    voteByAsset.set(assetSha, {
-      vision_id: validAdminRollupVisionId(row?.vision_id || ""),
-      candidate_image_id: optionalInt(row?.candidate_image_id),
-      upvotes: Number(row?.upvotes || 0),
-      downvotes: Number(row?.downvotes || 0),
-      score: Number(row?.score || 0),
-      vote_count: Number(row?.vote_count || 0),
-    })
-  }
-
-  await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?`)
-    .bind(symbol)
-    .run()
-
-  let written = 0
-  for (const row of Array.isArray(assetResp?.results) ? assetResp.results : []) {
-    const assetSha = normalizeSha256(row?.asset_sha256 || "")
-    if (!assetSha) continue
-    const vote = voteByAsset.get(assetSha) || null
-    const candidateRef = normalizeCandidateRef("", symbol, assetSha)
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_vote_asset_summary (
-         gene_symbol,
-         asset_sha256,
-         candidate_ref,
-         vision_id,
-         candidate_image_id,
-         upvotes,
-         downvotes,
-         score,
-         vote_count,
-         updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    )
-      .bind(
-        symbol,
-        assetSha,
-        candidateRef,
-        validAdminRollupVisionId(vote?.vision_id || row?.vision_id || ""),
-        optionalInt(vote?.candidate_image_id ?? row?.candidate_image_id),
-        Number(vote?.upvotes || 0),
-        Number(vote?.downvotes || 0),
-        Number(vote?.score || 0),
-        Number(vote?.vote_count || 0),
-      )
-      .run()
-    written += 1
-  }
-  return written
-}
-
 async function rebuildGeneRollupForSymbol(env, rawSymbol) {
   if (!env.ICONOPLASM_DB) return false
   const symbol = normalizeSymbol(rawSymbol)
@@ -27748,42 +27663,6 @@ async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
   }
 }
 
-async function unpublishCurrentPortrait(env, { symbol, actorId, reason, fromAssetSha256 } = {}) {
-  if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
-  const symbolNorm = normalizeSymbol(symbol)
-  const actorNorm = normalizeUserId(actorId || "artist_style_blacklist")
-  const fromAssetSha = normalizeSha256(fromAssetSha256 || "")
-  if (!symbolNorm || !fromAssetSha) return { ok: false, changed: false, code: "BAD_INPUT" }
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
-     VALUES (?, NULL, ?, CURRENT_TIMESTAMP, 1)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       current_asset_sha256 = NULL,
-       admin_override = 1,
-       updated_by = excluded.updated_by,
-       updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(symbolNorm, actorNorm)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_events (
-       gene_symbol,
-       from_asset_sha256,
-       to_asset_sha256,
-       action,
-       actor,
-       reason,
-       created_at
-     ) VALUES (?, ?, NULL, 'unpublish', ?, ?, CURRENT_TIMESTAMP)`,
-  )
-    .bind(symbolNorm, fromAssetSha, actorNorm, String(reason || "").slice(0, 2000) || null)
-    .run()
-
-  return { ok: true, changed: true, code: "UNPUBLISHED", from_asset_sha256: fromAssetSha }
-}
-
 async function removePortraitAssetAndQueueLocalRemoval(
   env,
   {
@@ -28579,11 +28458,6 @@ async function publishGalleryVersionBarrier(env, barrier) {
   galleryVersionCache.value = barrier
   galleryVersionCache.loadedAt = Date.now()
   return String(barrier?.current || "")
-}
-
-async function bumpGalleryVersion(env) {
-  const barrier = nextGalleryVersionBarrier(await currentGalleryVersionBarrier(env))
-  return publishGalleryVersionBarrier(env, barrier)
 }
 
 function cardCatalogCanonicalActionPlaceholders() {
@@ -35050,39 +34924,6 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
       )
     }
   }
-}
-
-async function handleCatalogManifest(request, env) {
-  if (!env.KV) return json({ error: "KV binding missing" }, 500)
-  const url = new URL(request.url)
-  let manifest
-  try {
-    manifest = await extensionManifestObj(url, env, extVersion(request))
-  } catch (error) {
-    if (error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE") throw error
-    return json({ error: "Published catalog metadata is temporarily unavailable" }, 503, {
-      "Cache-Control": "no-store",
-      "Retry-After": "60",
-    })
-  }
-  if (!manifest)
-    return json({ error: "Catalog manifest not found — run iconoplasm catalog publish" }, 404)
-  const body = JSON.stringify(manifest)
-  const etag = catalogManifestEtag(manifest)
-  if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
-    return new Response(null, {
-      status: 304,
-      headers: { ...corsHeaders(), ETag: etag, "Cache-Control": "public, max-age=300" },
-    })
-  }
-  return new Response(body, {
-    headers: {
-      ...corsHeaders(),
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "public, max-age=300",
-      ...(etag ? { ETag: etag } : {}),
-    },
-  })
 }
 
 async function handleCatalogArtifact(env, path) {
