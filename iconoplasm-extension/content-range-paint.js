@@ -35,6 +35,10 @@
       let selected = parent
       for (let element = parent; element; element = element.parentElement) {
         const style = win.getComputedStyle(element)
+        // B-837: a box split across CSS columns paints its background as one
+        // unbroken strip, so a layer placed in its second column lands off to
+        // the side and the pill vanishes (Wikipedia's multi-column gene lists).
+        if (style.display !== "inline" && element.getClientRects().length > 1) continue
         const box = element.getBoundingClientRect()
         selected = element
         const opaque =
