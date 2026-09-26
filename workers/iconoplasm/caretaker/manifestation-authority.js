@@ -33,7 +33,6 @@ export { readCanonicalProjectionRecord } from "./manifestation-authority-project
 export * from "./manifestation-admin-commands.js"
 export * from "./manifestation-moderation-commands.js"
 export * from "./manifestation-integrity-commands.js"
-export * from "./manifestation-authority-backup.js"
 export * from "./manifestation-authority-sync.js"
 export * from "./manifestation-authority-checkpoints.js"
 export * from "./manifestation-command-retention.js"

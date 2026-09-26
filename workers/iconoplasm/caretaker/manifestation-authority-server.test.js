@@ -1139,16 +1139,11 @@ test("service material routes round-trip exact prose and structured Tags without
 
   const integrityFailures = []
   let replicaAuthorizations = 0
-  let backupAuthorizations = 0
   const handler = createManifestationAuthorityServiceHandler({
     db: context.db,
     env,
     authorizeReplicaBearer: async () => {
       replicaAuthorizations += 1
-      return { authorized: true, actor_kind: "service" }
-    },
-    authorizeBackupBearer: async () => {
-      backupAuthorizations += 1
       return { authorized: true, actor_kind: "service" }
     },
     onIntegrityFailure: async (descriptor) => {
@@ -1272,17 +1267,16 @@ test("service material routes round-trip exact prose and structured Tags without
   assert.equal((await corruptResponse.json()).error.code, "DERIVATIVE_BODY_UNAVAILABLE")
   assert.equal(integrityFailures.at(-1).entity_id, submitted.manifestation_derivative_id)
 
-  const backupCapability = await handler(
+  // B-859: the backup protocol was deleted (0 capabilities ever issued); its
+  // path must not be served again.
+  const retiredBackup = await handler(
     serviceRequest("/api/iconoplasm/authority/backups/capabilities", {
       entity_kind: "revision",
       entity_id: revisionId,
-      ttl_seconds: 120,
     }),
   )
-  assert.equal(backupCapability.status, 200)
-  assert.equal((await backupCapability.json()).entity_id, revisionId)
+  assert.equal(retiredBackup, null)
   assert.equal(replicaAuthorizations > 0, true)
-  assert.equal(backupAuthorizations, 1)
 })
 
 test("structured Tags submission rejects hash mismatch and numeric fields before upload", async (t) => {
@@ -1353,10 +1347,6 @@ test("service-authenticated maintenance exposes bounded command replay retention
       return { authorized: true, actor_kind: "service" }
     },
     authorizeReplicaBearer: async () => {
-      wrongAudienceAuthorizations += 1
-      return { authorized: true, actor_kind: "service" }
-    },
-    authorizeBackupBearer: async () => {
       wrongAudienceAuthorizations += 1
       return { authorized: true, actor_kind: "service" }
     },
