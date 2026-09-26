@@ -11,6 +11,7 @@ export function createCaretakerManifestationEventWiring({
   loadOlderHistory,
   mounted,
   mutate,
+  retryAfterReconnect,
   retryTags,
   retrySave,
   scheduleAutosave,
@@ -23,6 +24,11 @@ export function createCaretakerManifestationEventWiring({
   function wire(host) {
     if (wiredHosts.has(host)) return
     wiredHosts.add(host)
+    // B-874: a save that failed because the network dropped resumes on reconnect.
+    host.ownerDocument?.defaultView?.addEventListener?.("online", function () {
+      const state = mounted.get(host)
+      if (state) void retryAfterReconnect(state)
+    })
     host.addEventListener("input", function (event) {
       const state = mounted.get(host)
       if (!state) return

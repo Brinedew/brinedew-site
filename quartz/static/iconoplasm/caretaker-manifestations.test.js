@@ -623,7 +623,7 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   assert.equal(host.querySelector("[data-icono-caretaker-editor]") === form, true)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Not saved")
   await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(uploads, 1, "failed saves wait for explicit Retry")
+  assert.equal(uploads, 1, "the first automatic retry waits 2 seconds (B-874)")
   host.querySelector("[data-icono-caretaker-retry-save]").click()
   await new Promise((resolve) => setTimeout(resolve, 25))
   assert.equal(calls.filter((c) => c.path.endsWith("/revisions")).length, 1)
@@ -631,6 +631,86 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   assert.equal(retries.length, 2)
   assert.deepEqual(retries[0].body, retries[1].body)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
+})
+
+async function mountForAutosave(fetchJSON) {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const panel = createCaretakerManifestationPanel({ fetchJSON, escapeHtml, storage: null })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Third body"
+  prose.dispatchEvent(new Event("input", { bubbles: true }))
+  const autosaveState = () =>
+    host.querySelector("[data-icono-caretaker-autosave-state]").textContent
+  return { document, Event, host, autosaveState }
+}
+
+test("an autosave in flight never greys out Close, the × or the tabs (B-874)", async () => {
+  let release
+  const { host } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    await new Promise((resolve) => (release = resolve))
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(typeof release, "function", "the save is in flight")
+  const controls = host.querySelectorAll("[data-icono-caretaker-close], [data-icono-caretaker-tab]")
+  assert.equal(controls.length, 5, "two close controls and three tabs")
+  for (const control of controls) {
+    assert.equal(control.disabled, false, control.getAttribute("aria-label") || control.textContent)
+  }
+  release()
+})
+
+test("an uncertain autosave failure retries by itself when the browser reconnects (B-874)", async () => {
+  const revisions = []
+  const { document, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    revisions.push(JSON.parse(init.body))
+    if (revisions.length === 1) throw new TypeError("Failed to fetch")
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(autosaveState(), "Not saved")
+  document.defaultView.dispatchEvent(new Event("online"))
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(revisions.length, 2)
+  assert.equal(revisions[0].command_id, revisions[1].command_id, "the retry reuses the command")
+  assert.equal(autosaveState(), "Saved")
+})
+
+test("an uncertain autosave failure retries by itself after 2 seconds (B-874)", async () => {
+  let attempts = 0
+  const { autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    if (++attempts === 1) throw Object.assign(new Error("Bad gateway"), { status: 502 })
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(autosaveState(), "Not saved")
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  assert.equal(attempts, 2)
+  assert.equal(autosaveState(), "Saved")
+})
+
+test("a rejected autosave waits for a person, even after reconnecting (B-874)", async () => {
+  let attempts = 0
+  const { document, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    attempts += 1
+    throw Object.assign(new Error("Assignment is not active"), { status: 403 })
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  document.defaultView.dispatchEvent(new Event("online"))
+  await new Promise((resolve) => setTimeout(resolve, 2100))
+  assert.equal(attempts, 1)
+  assert.equal(autosaveState(), "Not saved")
 })
 
 test("the Settings visibility switch uses manifestation and gene CAS versions", async () => {

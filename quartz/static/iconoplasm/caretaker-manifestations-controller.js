@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=31b58b97edce1d60"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=f9fd8aef7b96c702"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=a1525bea5f5cee5f"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -97,7 +97,13 @@ export function createCaretakerManifestationPanel({
     state.busy = busy
     state.host.setAttribute("aria-busy", busy ? "true" : "false")
     state.host.querySelectorAll("button, textarea, input").forEach(function (control) {
-      const editing = state.autosaving && control.closest("[data-icono-caretaker-editor]")
+      // B-874: an autosave never greys out the editor, the tabs or Close. Closing
+      // mid-save is safe: the save finishes in the background and the draft is local.
+      const editing =
+        state.autosaving &&
+        control.closest(
+          "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-caretaker-close]",
+        )
       control.disabled = (busy && !editing) || control.hasAttribute("data-icono-caretaker-disabled")
     })
   }
@@ -486,6 +492,33 @@ export function createCaretakerManifestationPanel({
     if (retry) retry.hidden = tone !== "error"
   }
 
+  // B-874: a save whose outcome is uncertain (network drop, 5xx) retries by itself
+  // with the same command ID, which the server deduplicates. A 4xx, a conflict or
+  // a local refusal waits for a person. Four tries at most, then only Retry.
+  const AUTOSAVE_RETRY_DELAYS = [2_000, 5_000, 15_000, 30_000]
+
+  function uncertainFailure(error) {
+    const status = Number(error?.status || 0)
+    return status >= 500 || (!status && error?.name === "TypeError")
+  }
+
+  function retryAutosave(state) {
+    globalThis.clearTimeout(state.autosaveRetryTimer)
+    if (mounted.get(state.host) !== state) return null
+    state.autosaveFailed = false
+    return autosave(state)
+  }
+
+  function scheduleAutosaveRetry(state) {
+    const delay = AUTOSAVE_RETRY_DELAYS[state.autosaveRetries || 0]
+    if (delay == null) return
+    state.autosaveRetries = (state.autosaveRetries || 0) + 1
+    globalThis.clearTimeout(state.autosaveRetryTimer)
+    state.autosaveRetryTimer = globalThis.setTimeout(function () {
+      void retryAutosave(state)
+    }, delay)
+  }
+
   function scheduleAutosave(state) {
     globalThis.clearTimeout(state.autosaveTimer)
     if (state.autosaveFailed) return autosaveIndicator(state, "Not saved", "error")
@@ -582,6 +615,8 @@ export function createCaretakerManifestationPanel({
       }
       state.lastSavedFingerprint = fingerprint
       state.autosaveJob = null
+      state.autosaveRetries = 0
+      state.autosaveRetryable = false
       state.basedOnRevisionId = null
       const current = {
         prose: String(state.host.querySelector("[data-icono-caretaker-prose]")?.value || ""),
@@ -597,6 +632,8 @@ export function createCaretakerManifestationPanel({
       state.autosaveFailed = true
       if (Number(error?.status) >= 400 && Number(error?.status) < 500) state.autosaveJob = null
       autosaveIndicator(state, "Not saved", "error")
+      state.autosaveRetryable = uncertainFailure(error)
+      if (state.autosaveRetryable) scheduleAutosaveRetry(state)
     } finally {
       state.autosaving = false
     }
@@ -610,10 +647,9 @@ export function createCaretakerManifestationPanel({
     mounted,
     mutate,
     retryTags,
-    retrySave: (state) => {
-      state.autosaveFailed = false
-      return autosave(state)
-    },
+    retrySave: retryAutosave,
+    retryAfterReconnect: (state) =>
+      state.autosaveFailed && state.autosaveRetryable ? retryAutosave(state) : null,
     scheduleAutosave,
     saveDraft,
     setStatus,
