@@ -33401,11 +33401,6 @@ async function handlePublicMedia(request, env, symbol) {
 // chain itself is already cached once per isolate by the reader-view module.
 const ADVERTISED_GENE_DELTA_VIEW_TTL_MS = 30000
 const advertisedGeneDeltaViewCache = { value: null, loadedAt: 0, loaded: false }
-function clearAdvertisedGeneDeltaViewCache() {
-  advertisedGeneDeltaViewCache.value = null
-  advertisedGeneDeltaViewCache.loadedAt = 0
-  advertisedGeneDeltaViewCache.loaded = false
-}
 async function advertisedGeneDeltaViewForDetail(env) {
   const now = Date.now()
   if (
