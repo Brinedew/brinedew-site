@@ -9543,7 +9543,12 @@
       '<div class="detail-title">' + esc(detail.gene_symbol || "") + "</div>",
       detail.full_name ? '<div class="small">' + esc(detail.full_name) + "</div>" : "",
       '<div class="badge-row">' + headerBadges.join("") + "</div>",
-      '<div class="detail-copy">' + esc(detail.manifestation || "No sample note yet.") + "</div>",
+      // B-808: the manifestation lives in the caretaker authority and reaches
+      // readers through the published card. Link there instead of showing the
+      // frozen pre-cutover copy that the primary D1 still held.
+      '<div class="small"><a href="https://iconoplasm.brinedew.bio/gene/' +
+        encodeURIComponent(detail.gene_symbol || "") +
+        '" target="_blank" rel="noreferrer">Current manifestation on the gene page</a></div>',
       '<div class="small">' +
         esc(
           detail.admin_override
