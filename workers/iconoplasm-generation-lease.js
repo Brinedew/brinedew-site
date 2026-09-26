@@ -1,5 +1,4 @@
 import {
-  IconoplasmGenerationSourceError,
   readExactGenerationSource,
   requireExactGenerationProvenance,
 } from "./lib/iconoplasm-generation-provenance.js"
@@ -490,50 +489,5 @@ export function exactGenerationLeaseFromRow(row) {
     prompt_body_mode: source.prompt_body_mode,
     source_material: materialPaths(source),
     request,
-  })
-}
-
-export async function buildExactGenerationLeasePlan({ rows = [], validateSource } = {}) {
-  if (typeof validateSource !== "function") {
-    leaseError(
-      "GENERATION_SOURCE_VALIDATOR_REQUIRED",
-      "Exact generation lease creation requires the authoring source validator",
-      500,
-    )
-  }
-  const leases = []
-  const blockedRows = []
-  for (const row of Array.isArray(rows) ? rows : []) {
-    try {
-      const source = await validateSource(row)
-      const lease = exactGenerationLeaseFromRow(row)
-      if (source?.source_snapshot_sha256 !== lease.source_snapshot_sha256) {
-        leaseError(
-          "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
-          "The validated authoring source differs from the stored request snapshot",
-        )
-      }
-      leases.push(lease)
-    } catch (error) {
-      blockedRows.push(
-        Object.freeze({
-          request_id: Math.max(0, Number(row?.id || 0) || 0),
-          generation_request_id: text(row?.generation_request_id),
-          gene_symbol: text(row?.gene_symbol).toUpperCase(),
-          source_manifestation_revision_id: text(row?.source_manifestation_revision_id),
-          source_snapshot_sha256: text(row?.source_snapshot_sha256).toLowerCase(),
-          code:
-            error instanceof IconoplasmGenerationLeaseError ||
-            error instanceof IconoplasmGenerationSourceError
-              ? error.code
-              : "GENERATION_LEASE_FAILED",
-          error: text(error?.message || error || "Generation lease failed").slice(0, 500),
-        }),
-      )
-    }
-  }
-  return Object.freeze({
-    leases: Object.freeze(leases),
-    blocked_rows: Object.freeze(blockedRows),
   })
 }
