@@ -186,7 +186,7 @@ test("successful deletion removes only the matching card and updates page state"
     genePayload.portrait_candidates.map((candidate) => candidate.asset_sha256),
     ["bbb", "current"],
   )
-  assert.equal(document.querySelector("#first"), null)
+  assert.equal(document.querySelector("#first") === null, true)
   assert.equal(document.querySelector(".icono-candidate-grid--single") !== null, true)
   assert.equal(document.querySelector("#second") !== null, true)
 })
@@ -202,7 +202,7 @@ test("success notice is a non-modal live region", async () => {
   assert.equal(notice.getAttribute("role"), "status")
   assert.equal(notice.getAttribute("aria-live"), "polite")
   assert.equal(notice.textContent, "CDK1-1t candidate deleted.")
-  assert.equal(document.querySelector("dialog"), null)
+  assert.equal(document.querySelector("dialog") === null, true)
   await new Promise((resolve) => setTimeout(resolve, 220))
   assert.equal(notice.isConnected, false)
 })

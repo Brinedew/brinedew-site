@@ -91,8 +91,8 @@ test("highlighting preserves a framework's retained Text object through streamin
   const parent = document.querySelector("p")
   const original = parent.firstChild
   scanner.processTextNode(original)
-  assert.equal(parent.firstChild, original)
-  assert.equal(original.parentNode, parent)
+  assert.equal(parent.firstChild === original, true)
+  assert.equal(original.parentNode === parent, true)
   original.data += " BRCA1"
   scanner.processTextNode(original)
   assert.equal(parent.textContent, "TP53 BRCA1")

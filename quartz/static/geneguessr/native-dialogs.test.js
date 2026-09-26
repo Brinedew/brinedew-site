@@ -112,7 +112,7 @@ test("tutorial dialog preserves navigation, completion, and invoker focus", asyn
   assert.match(dialog.querySelector(".pg-tutorial-status").textContent, /Step 1 of 3/)
   assert.equal(dialog.querySelector(".pg-tutorial-back")?.getAttribute("aria-label"), "Back")
   assert.equal(dialog.querySelector(".pg-tutorial-forward")?.getAttribute("aria-label"), "Next")
-  assert.equal(dialog.querySelector("[role='dialog']"), null)
+  assert.equal(dialog.querySelector("[role='dialog']") === null, true)
 
   dialog.querySelector(".pg-tutorial-forward").click()
   await settle()
@@ -126,7 +126,7 @@ test("tutorial dialog preserves navigation, completion, and invoker focus", asyn
   dialog.querySelector(".pg-tutorial-forward").click()
   assert.equal(dialog.open, false)
   assert.equal(localStorage.getItem("gg_tut"), "7")
-  assert.equal(domWindow.document.activeElement, invoker)
+  assert.equal(domWindow.document.activeElement === invoker, true)
 })
 
 test("native tutorial cancellation closes contextual help and records the seen step", async () => {
@@ -143,7 +143,7 @@ test("native tutorial cancellation closes contextual help and records the seen s
   assert.equal(cancelEvent.defaultPrevented, false)
   assert.equal(dialog.open, false)
   assert.equal(localStorage.getItem("gg_tut"), "1")
-  assert.equal(domWindow.document.activeElement, invoker)
+  assert.equal(domWindow.document.activeElement === invoker, true)
 })
 
 test("practice dialog uses the browser modal lifecycle and returns focus", async () => {
@@ -201,7 +201,10 @@ test("practice dialog uses the browser modal lifecycle and returns focus", async
     assert.ok(dialog)
     assert.equal(dialog.open, true)
     assert.equal(dialog.getAttribute("aria-labelledby"), "pg-practice-title")
-    assert.equal(window.document.activeElement, dialog.querySelector(".pg-practice-textarea"))
+    assert.equal(
+      window.document.activeElement === dialog.querySelector(".pg-practice-textarea"),
+      true,
+    )
     assert.equal(
       dialog.querySelector(".pg-practice-label")?.getAttribute("for"),
       "pg-practice-genes",
@@ -209,7 +212,7 @@ test("practice dialog uses the browser modal lifecycle and returns focus", async
     assert.equal(dialog.querySelector(".pg-practice-textarea")?.id, "pg-practice-genes")
     assert.equal(dialog.querySelector(".pg-practice-results")?.getAttribute("role"), "status")
     assert.equal(dialog.querySelector(".pg-practice-results")?.getAttribute("aria-live"), "polite")
-    assert.equal(dialog.querySelector("[role='dialog']"), null)
+    assert.equal(dialog.querySelector("[role='dialog']") === null, true)
 
     dialog
       .querySelector(".pg-practice-card")
@@ -219,12 +222,12 @@ test("practice dialog uses the browser modal lifecycle and returns focus", async
     const cancelEvent = requestNativeCancel(window, dialog)
     assert.equal(cancelEvent.defaultPrevented, false)
     assert.equal(dialog.open, false)
-    assert.equal(window.document.activeElement, invoker)
+    assert.equal(window.document.activeElement === invoker, true)
 
     window.geneguessrOpenPracticeList()
     dialog.dispatchEvent(new window.Event("click", { bubbles: true }))
     assert.equal(dialog.open, false)
-    assert.equal(window.document.activeElement, invoker)
+    assert.equal(window.document.activeElement === invoker, true)
     await settle()
   } finally {
     for (const [name, descriptor] of replacedGlobals) {
