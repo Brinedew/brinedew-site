@@ -399,7 +399,7 @@ test("a failed Tags body read pauses editing until an explicit retry restores th
   assert.equal(host.querySelector("[data-icono-caretaker-prose]").disabled, false)
   assert.equal(host.querySelector("[data-icono-caretaker-tags]").disabled, false)
   assert.equal(host.querySelector("[data-icono-caretaker-tags]").value, "rose seal, archive plate")
-  assert.equal(host.querySelector("[data-icono-caretaker-retry-tags]"), null)
+  assert.equal(host.querySelector("[data-icono-caretaker-retry-tags]") === null, true)
 })
 
 test("a suspension keeps an unsent local draft readable and explicitly removable", async () => {
@@ -443,12 +443,12 @@ test("a suspension keeps an unsent local draft readable and explicitly removable
     recovery.querySelector("textarea").value,
     "Unsent <img src=x onerror=alert(1)> draft",
   )
-  assert.equal(recovery.querySelector("img"), null)
+  assert.equal(recovery.querySelector("img") === null, true)
   recovery
     .querySelector("[data-icono-caretaker-remove-draft]")
     .dispatchEvent(new Event("click", { bubbles: true }))
   assert.equal(values.size, 0)
-  assert.equal(host.querySelector(".icono-caretaker-draft-recovery"), null)
+  assert.equal(host.querySelector(".icono-caretaker-draft-recovery") === null, true)
 })
 
 test("category rows add, edit and remove tags without flattening their fields", async () => {
@@ -487,6 +487,10 @@ test("category rows add, edit and remove tags without flattening their fields", 
   assert.deepEqual(JSON.parse(source.dataset.fieldsJson).outfit, [])
   assert.equal(source.value, "")
   assert.ok(host.querySelector('[data-tag-category="hair"]'))
+  // B-873: caretakers edit tag values; the category skeleton comes from the
+  // generation prompt and is not theirs to extend.
+  assert.equal(host.querySelector('[aria-label="Add category"]') === null, true)
+  assert.equal(host.querySelector(".icono-caretaker-add-category") === null, true)
   assert.equal(host.querySelector("[data-icono-caretaker-prose]").value, "Second body")
   await new Promise((resolve) => setTimeout(resolve, 1200))
 })
@@ -616,7 +620,7 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   tags.dataset.fieldsJson = JSON.stringify({ outfit: ["linen coat"] })
   tags.dispatchEvent(new Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 1250))
-  assert.equal(host.querySelector("[data-icono-caretaker-editor]"), form)
+  assert.equal(host.querySelector("[data-icono-caretaker-editor]") === form, true)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Not saved")
   await new Promise((resolve) => setTimeout(resolve, 1200))
   assert.equal(uploads, 1, "failed saves wait for explicit Retry")
