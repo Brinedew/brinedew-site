@@ -2,7 +2,6 @@ export {
   MANIFESTATION_AUTHORITY_EVENT_TYPE,
   ManifestationAuthorityError,
 } from "./manifestation-authority-contract.js"
-export { readManifestationAuthorityGeneState } from "./manifestation-authority-repository.js"
 export {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
   claimCaretakerAssignment,
