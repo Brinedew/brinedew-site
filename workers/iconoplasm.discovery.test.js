@@ -13,7 +13,6 @@ import {
   claimCompactDiscoveryMigrationLease,
   migrateLegacyDiscoveryPage,
 } from "./iconoplasm/discovery-compact-migrate.js"
-import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
 // the actual handlers with the actual compact SQL, not a SQL-string mock.
@@ -195,7 +194,6 @@ async function buildEnv({
       "INSERT INTO icono_admin_gene_rollup (gene_symbol, live_upvotes, live_score, live_created_at, current_asset_sha256) VALUES (?, ?, ?, ?, ?)",
     )
     .run("TP53", 3, 3, "2025-04-01T00:00:01Z", "a".repeat(64))
-  await evolveAndPersistDiscoveryDictionary(db, { symbols: CATALOG.map(([symbol]) => symbol) })
   const gatewayEnv = {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
@@ -500,6 +498,27 @@ test("guest merge converges into compact membership without double counting", as
     .first()
   assert.equal(Number(after.member_count), 2)
   assert.equal(JSON.parse(after.active_events_json).length, 2)
+})
+
+// Production's dictionary is lazy (3,678 of ~19k genes had ordinals on
+// 2026-09-26). A merged catalog gene nobody has discovered yet must be
+// recorded, and a name outside the catalog must be reported, not stored.
+test("guest merge records never-seen catalog genes and reports non-catalog names", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53", "NOTAGENE"] },
+    }),
+    env,
+  )
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.deepEqual(payload.dropped_symbols, ["NOTAGENE"])
+  const state = await env.gatewayDb
+    .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+    .first()
+  assert.equal(Number(state.member_count), 1)
 })
 
 test("guest merge reports capacity refusal as retryable pending work instead of a crash", async () => {
