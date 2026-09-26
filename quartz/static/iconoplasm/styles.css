@@ -36,6 +36,9 @@
   --icono-radius-md: 4px;
   --icono-radius-sm: 3px;
   --icono-radius-pill: 999px;
+  /* B-867: every control (button, tab, input, select, chip) is square. The
+     brief is an FBC/SCP case file, not a web app: straight edges, no pills. */
+  --icono-control-radius: 0;
   --icono-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --icono-ring-soft: color-mix(in srgb, var(--dark) 10%, transparent);
   --icono-ring-image: color-mix(in srgb, var(--light) 72%, var(--dark) 12%);
@@ -74,7 +77,7 @@
   justify-self: start;
   padding: var(--icono-action-padding);
   border: 1px solid color-mix(in srgb, var(--ui-border) 70%, var(--dark) 30%);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: transparent;
   color: var(--dark);
   font: 600 var(--icono-action-font-size) / 1 var(--icono-action-font);
@@ -483,7 +486,7 @@ body:has(.icono-vote-login-dialog[open]) {
   color: var(--dark);
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-sm);
+  border-radius: var(--icono-control-radius);
   outline: none;
   transition:
     border-color 0.16s var(--icono-ease-out),
@@ -737,7 +740,7 @@ body:has(.icono-vote-login-dialog[open]) {
   min-height: 2.5rem;
   padding: 0.5rem 0.75rem;
   border: 0;
-  border-radius: var(--icono-radius-md);
+  border-radius: var(--icono-control-radius);
   background: transparent;
   color: var(--dark);
   font: 500 0.82rem / 1.2 var(--icono-action-font);
@@ -799,7 +802,7 @@ body:has(.icono-vote-login-dialog[open]) {
 .icono-caretaker-identity--button {
   padding: 0.2rem 0.55rem 0.2rem 0.2rem;
   border: 1px solid var(--gray);
-  border-radius: 999px;
+  border-radius: var(--icono-control-radius);
   background: transparent;
   cursor: pointer;
 }
@@ -994,6 +997,17 @@ sl-dialog:not(:defined) {
   flex-wrap: wrap;
 }
 
+/* B-867: Generate and Publish are always both present (Publish greys out
+   instead of hiding). Side by side when they fit; stacked full width on a
+   phone, never with a label broken onto two lines. */
+.icono-request-direct-actions {
+  flex-wrap: wrap;
+}
+
+.icono-request-direct-actions > .icono-button {
+  flex: 1 1 12rem;
+}
+
 .icono-request-free-actions[hidden],
 .icono-request-direct-actions[hidden] {
   display: none;
@@ -1018,7 +1032,7 @@ sl-dialog:not(:defined) {
   min-width: 0;
   padding: 0 2.2rem 0 0.7rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
-  border-radius: var(--icono-radius-sm);
+  border-radius: var(--icono-control-radius);
   background-color: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
   color: var(--dark);
   font-family: "IBM Plex Mono", monospace;
@@ -1364,7 +1378,7 @@ img-comparison-slider.rendered [slot="second"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.32rem;
   padding: 0.28rem;
-  border-radius: var(--icono-radius-lg);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--ui-border) 34%, var(--light) 66%);
 }
 
@@ -1373,7 +1387,7 @@ img-comparison-slider.rendered [slot="second"] {
   min-height: 2.75rem;
   padding: 0.62rem 0.85rem;
   border: 1px solid transparent;
-  border-radius: calc(var(--icono-radius-lg) - 3px);
+  border-radius: var(--icono-control-radius);
   background: transparent;
   color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
   font-family: var(--icono-action-font);
@@ -2041,7 +2055,7 @@ img-comparison-slider.rendered [slot="second"] {
   padding: 0.85rem 1rem;
   resize: vertical;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  border-radius: var(--icono-radius-lg);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--light) 98%, white 2%);
 }
 
@@ -2099,7 +2113,7 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-candidate-copy-panel .icono-request-picker-input {
   padding: 0.6rem 0.78rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  border-radius: var(--icono-radius-lg);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--light) 98%, white 2%);
 }
 
@@ -2224,7 +2238,7 @@ img-comparison-slider.rendered [slot="second"] {
   flex-wrap: wrap;
   padding: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--dark) 12%, var(--ui-border) 88%);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--light) 92%, white 8%);
 }
 
@@ -2272,7 +2286,7 @@ img-comparison-slider.rendered [slot="second"] {
   min-height: 2.7rem;
   padding: 0.55rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--light) 80%, white 20%);
   color: var(--dark);
   font: inherit;
@@ -2547,7 +2561,7 @@ img-comparison-slider.rendered [slot="second"] {
   color: var(--dark);
   background: var(--light);
   border: 1px solid var(--ui-border);
-  border-radius: 999px;
+  border-radius: var(--icono-control-radius);
   outline: none;
 }
 
@@ -3902,7 +3916,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   align-items: center;
   padding: 0.26rem 0.66rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: rgba(14, 12, 10, 0.58);
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
@@ -4202,7 +4216,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   height: 2.25rem;
   min-height: 2.25rem;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--icono-control-radius);
   border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
   background: color-mix(in srgb, var(--light) 86%, white 14%);
   color: color-mix(in srgb, var(--dark) 70%, var(--secondary) 30%);
@@ -4491,7 +4505,7 @@ body:has(.icono-candidate-delete-dialog[open]) {
   min-height: 44px;
   padding: 0.65rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--light) 82%, white 18%);
   color: var(--dark);
   font:
@@ -4608,7 +4622,7 @@ body:has(.icono-candidate-delete-dialog[open]) {
 }
 
 .pswp__button--close {
-  border-radius: 999px;
+  border-radius: var(--icono-control-radius);
   background: rgba(33, 27, 22, 0.68);
 }
 
@@ -5367,7 +5381,7 @@ a.icono-clan-ae:hover {
   min-height: 2.6rem;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--ui-bg) 70%, var(--light));
   font-family: "Special Elite", Georgia, serif;
   font-size: 14px;
@@ -5380,7 +5394,7 @@ a.icono-clan-ae:hover {
 }
 .icono-suggest-btn {
   padding: 0.5rem 0.86rem;
-  border-radius: 8px;
+  border-radius: var(--icono-control-radius);
   border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--ui-border));
   background: color-mix(in srgb, var(--accent) 12%, var(--light));
   color: color-mix(in srgb, var(--dark) 85%, var(--accent) 15%);
@@ -5576,7 +5590,7 @@ body.icono-studio-route #iconoplasm-root {
 .icono-studio button {
   min-height: 36px;
   border: 1px solid var(--studio-rule);
-  border-radius: 4px;
+  border-radius: var(--icono-control-radius);
   background: #ffffff;
   color: var(--studio-ink);
   cursor: pointer;
@@ -5740,7 +5754,7 @@ body.icono-studio-route #iconoplasm-root {
 .icono-studio-search .icono-search-input {
   min-height: 38px;
   padding: 0.55rem 0.65rem;
-  border-radius: 4px;
+  border-radius: var(--icono-control-radius);
   font-size: 0.75rem;
 }
 
@@ -5922,7 +5936,7 @@ body.icono-studio-route #iconoplasm-root {
   min-height: 36px;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--icono-control-radius);
   background: transparent;
   padding: 0.35rem 0.5rem;
   color: var(--studio-ink);

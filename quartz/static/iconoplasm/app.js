@@ -278,7 +278,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=807a440981407d76", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=d159a16595aee458", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -5686,7 +5686,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
       '<button type="button" class="icono-button icono-button--primary icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
-      '<button type="button" class="icono-button icono-request-direct-publish" data-icono-request-image-publish hidden disabled>Publish candidate</button>' +
+      '<button type="button" class="icono-button icono-request-direct-publish" data-icono-request-image-publish disabled>Publish candidate</button>' +
       "</div>" +
       "</div>" +
       "</sl-dialog>"
@@ -5972,7 +5972,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div slot="footer" class="icono-image-edit-actions">' +
       '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
-      '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish</button>' +
+      '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish</button>' +
       "</div>" +
       "</sl-dialog>"
     )
@@ -6033,7 +6033,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         imageEditDialogState.job &&
         imageEditDialogState.job.status === "succeeded" &&
         !imageEditDialogState.job.published
-      publishButton.hidden = !shouldShowPublish
       // The next step wears the primary style: Edit until a result exists, then Publish.
       publishButton.classList.toggle("icono-button--primary", !!shouldShowPublish)
       if (editButton) editButton.classList.toggle("icono-button--primary", !shouldShowPublish)
@@ -6917,7 +6916,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           directGenerateButton.classList.toggle("icono-button--primary", !canPublish)
         }
         if (directPublishButton) {
-          directPublishButton.hidden = !canPublish
           directPublishButton.disabled = !canPublish
           directPublishButton.classList.toggle("icono-button--primary", canPublish)
         }
