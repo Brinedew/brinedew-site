@@ -199,6 +199,63 @@ test("the dossier renders a tabbed autosave dialog, exact version choices, and o
   assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
 })
 
+function buttonTag(html, label) {
+  return html.match(new RegExp(`<button[^>]*>${label}</button>`))?.[0] || ""
+}
+
+test("caretaker actions grey out instead of popping in and out (B-872)", () => {
+  function withSavedSource({ canonical, accepted = true, tagsUnavailable = false }) {
+    const value = dossier()
+    value.manifestations[0].manifestation_head_revision_id = "revision_2"
+    value.manifestations[0].revisions[0].derivative = accepted ? { status: "accepted" } : null
+    value.head.canonical_revision_id = canonical
+    if (tagsUnavailable) value.tags_body_unavailable = true
+    return value
+  }
+  const states = {
+    notSavedYet: withSavedSource({ canonical: "revision_1", accepted: false }),
+    ready: withSavedSource({ canonical: "revision_1" }),
+    inUse: withSavedSource({ canonical: "revision_2" }),
+    tagsUnavailable: withSavedSource({ canonical: "revision_1", tagsUnavailable: true }),
+  }
+  for (const [name, value] of Object.entries(states)) {
+    const tag = buttonTag(renderCaretakerManifestationPanel(value, escapeHtml), "Use my version")
+    assert.ok(tag, `${name}: the footer always shows Use my version`)
+    if (name === "ready") {
+      assert.match(tag, /data-icono-caretaker-select="revision_2"/)
+      assert.match(tag, /icono-button--primary/)
+      assert.doesNotMatch(tag, /disabled/)
+    } else {
+      // setBusy re-enables every control that lacks data-icono-caretaker-disabled.
+      assert.match(tag, / disabled data-icono-caretaker-disabled/, name)
+      assert.doesNotMatch(
+        tag,
+        /data-icono-caretaker-select=/,
+        `${name}: a grey button does nothing`,
+      )
+      assert.doesNotMatch(tag, /icono-button--primary/, name)
+    }
+  }
+  assert.match(
+    buttonTag(renderCaretakerManifestationPanel(states.inUse, escapeHtml), "Use my version"),
+    /data-state="in-use"/,
+  )
+  assert.doesNotMatch(
+    renderCaretakerManifestationPanel(states.inUse, escapeHtml),
+    /New images use your version/,
+  )
+
+  // History: Make public stays in place, greyed and marked in use, on the public version.
+  const publicPreview = renderCaretakerManifestationPanel(dossier(), escapeHtml, {
+    selectedRevisionId: "revision_1",
+  })
+  const makePublic = buttonTag(publicPreview, "Make public")
+  assert.match(makePublic, / disabled data-icono-caretaker-disabled/)
+  assert.match(makePublic, /data-state="in-use"/)
+  assert.doesNotMatch(makePublic, /data-icono-caretaker-select=/)
+  assert.match(buttonTag(publicPreview, "Edit from here"), /data-icono-caretaker-fork="revision_1"/)
+})
+
 test("pending invitations pin visible terms and ask no departure question (B-860)", () => {
   const pending = dossier()
   pending.assignment.status = "pending_acceptance"
@@ -294,6 +351,9 @@ test("purged history remains attributable but cannot be selected, forked, or ren
   assert.doesNotMatch(html, /must not render/)
   assert.doesNotMatch(html, /data-icono-caretaker-fork="revision_purged"/)
   assert.doesNotMatch(html, /data-icono-caretaker-select="revision_purged"/)
+  // B-872: both actions stay visible, greyed out and unwired.
+  assert.match(buttonTag(html, "Edit from here"), / disabled data-icono-caretaker-disabled/)
+  assert.match(buttonTag(html, "Make public"), / disabled data-icono-caretaker-disabled/)
 })
 
 test("canonical and current heads remain usable when history pagination moves them off-page", () => {

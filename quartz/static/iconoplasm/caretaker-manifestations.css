@@ -91,9 +91,10 @@
   display: contents;
 }
 
-.icono-caretaker-footnote {
-  color: var(--darkgray);
-  font-size: 0.78rem;
+/* B-872: a greyed action that is already in effect shows a check, not a sentence. */
+.icono-caretaker-dialog .icono-button[data-state="in-use"]::before {
+  content: "\2713";
+  margin-inline-end: 0.35em;
 }
 
 .icono-caretaker-link-button {

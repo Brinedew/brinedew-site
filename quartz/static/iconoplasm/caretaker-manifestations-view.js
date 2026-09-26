@@ -203,6 +203,20 @@ function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, rev
   )
 }
 
+// Titles are fixed strings, never user text. setBusy re-enables every control
+// that lacks data-icono-caretaker-disabled, so a grey button must carry it.
+function greyButton(title, label, state = "") {
+  return (
+    '<button type="button" class="icono-button" disabled data-icono-caretaker-disabled' +
+    (state ? ' data-state="' + state + '"' : "") +
+    ' title="' +
+    title +
+    '">' +
+    label +
+    "</button>"
+  )
+}
+
 export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
   const revisions = allRevisions(dossier)
   const index = revisions.findIndex(function (item) {
@@ -235,19 +249,24 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
     body =
       '<p class="icono-caretaker-preview__text">' + escapeHtml(String(revision.body || "")) + "</p>"
   }
-  const actions =
-    (canFork
-      ? '<button type="button" class="icono-button" data-icono-caretaker-fork="' +
-        escapeHtml(selectedId) +
-        '">Edit from here</button>'
-      : "") +
-    (canSelect
-      ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
-        escapeHtml(selectedId) +
-        '" data-manifestation-id="' +
-        escapeHtml(String(manifestation.manifestation_id || "")) +
-        '" title="The gene page and new candidate images will use this version">Make public</button>'
-      : "")
+  // B-872: an editor's actions stay in place and grey out; they never pop in.
+  // A grey button carries no action attribute, so it cannot act on this version.
+  const actions = !dossier.viewer.can_edit
+    ? ""
+    : (canFork
+        ? '<button type="button" class="icono-button" data-icono-caretaker-fork="' +
+          escapeHtml(selectedId) +
+          '">Edit from here</button>'
+        : greyButton("This version's text is no longer available", "Edit from here")) +
+      (canSelect
+        ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
+          escapeHtml(selectedId) +
+          '" data-manifestation-id="' +
+          escapeHtml(String(manifestation.manifestation_id || "")) +
+          '" title="The gene page and new candidate images will use this version">Make public</button>'
+        : canonical
+          ? greyButton("This version is already public", "Make public", "in-use")
+          : greyButton("This version's text is no longer available", "Make public"))
   return (
     '<section class="icono-caretaker-preview" data-icono-caretaker-preview aria-live="polite">' +
     '<header class="icono-caretaker-preview__header"><h3>' +
@@ -465,6 +484,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
     footerSource =
       '<div class="icono-caretaker-footer__source" data-icono-caretaker-generation-source>' +
+      // B-872: always present; primary only when it is the next step.
       (savedSourceReady && !ownSourceIsCanonical && !tagsUnavailable
         ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-select="' +
           esc(own.manifestation_head_revision_id) +
@@ -472,8 +492,14 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
           esc(own.manifestation_id) +
           '" title="New candidate images and the gene page will use your latest saved version">Use my version</button>'
         : savedSourceReady && ownSourceIsCanonical
-          ? '<span class="icono-caretaker-footnote">New images use your version</span>'
-          : "") +
+          ? greyButton(
+              "New candidate images and the gene page already use your latest version",
+              "Use my version",
+              "in-use",
+            )
+          : tagsUnavailable
+            ? greyButton("Saved Tags must load before your version can be used", "Use my version")
+            : greyButton("Available once your version is saved", "Use my version")) +
       "</div>"
     body +=
       (tagsUnavailable
