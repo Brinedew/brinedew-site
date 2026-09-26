@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
@@ -166,12 +166,7 @@ test("admin ingest verify_storage reuploads missing portrait blobs for existing 
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(request, env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -220,12 +215,7 @@ test("admin ingest force_upload overwrites existing portrait blobs without stora
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(request, env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)

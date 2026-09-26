@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
@@ -222,26 +222,25 @@ function buildEnv({ bindGateway = true } = {}) {
 test("admin read-model sync with publish_gallery_dirty_shards still honors skip flags", async () => {
   const env = buildEnv()
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          symbols: ["TP53"],
-          skip_vote_summaries: true,
-          skip_gene_rollups: true,
-          skip_vision_rollups: true,
-          skip_dashboard: true,
-          publish_gallery_dirty_shards: true,
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        symbols: ["TP53"],
+        skip_vote_summaries: true,
+        skip_gene_rollups: true,
+        skip_vision_rollups: true,
+        skip_dashboard: true,
+        publish_gallery_dirty_shards: true,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const payload = await response.json()
 
@@ -267,25 +266,24 @@ test("admin read-model sync with publish_gallery_dirty_shards still honors skip 
 test("batched vision sync atomically refreshes the request-picker projection", async () => {
   const env = buildEnv()
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          vision_ids: ["anima-v1-18"],
-          skip_vote_summaries: true,
-          skip_gene_rollups: true,
-          skip_dashboard: true,
-          publish_gallery_dirty_shards: false,
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vision_ids: ["anima-v1-18"],
+        skip_vote_summaries: true,
+        skip_gene_rollups: true,
+        skip_dashboard: true,
+        publish_gallery_dirty_shards: false,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -330,25 +328,24 @@ test("admin sync reads transactional counts without rebuilding catalogue history
   // canonical public summary. This regression test protects the specific
   // incident where the GUI showed 70 no-live genes even though the canonical
   // catalog had 19,023 live portraits.
-  const syncResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          symbols: ["TP53"],
-          skip_vote_summaries: true,
-          skip_gene_rollups: true,
-          skip_vision_rollups: true,
-          publish_gallery_dirty_shards: false,
-        }),
+  const syncResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/sync", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        symbols: ["TP53"],
+        skip_vote_summaries: true,
+        skip_gene_rollups: true,
+        skip_vision_rollups: true,
+        publish_gallery_dirty_shards: false,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   assert.equal(syncResponse.status, 200)
 
   const dashboardSummarySql = env.gatewayDb.calls.find(
@@ -368,7 +365,7 @@ test("admin sync reads transactional counts without rebuilding catalogue history
     .map((call) => call.sql)
   assert.deepEqual(countCacheSql, [])
 
-  await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+  await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/overview?event_limit=0", {
       headers: {
         Authorization: "Bearer secret-admin-token",

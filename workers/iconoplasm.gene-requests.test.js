@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   iconoplasmAnimaEmulsionSlotFromExactAlias,
@@ -684,15 +684,13 @@ test("admin request history keeps fulfilled rows and attaches their result image
       ],
     },
   })
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/history?limit=500",
-        { headers: { "x-iconoplasm-admin-token": "test-admin-token" } },
-      ),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/history?limit=500", {
+      headers: { "x-iconoplasm-admin-token": "test-admin-token" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
   const fulfilled = payload.rows.find((row) => row.id === 39)
 
@@ -803,12 +801,11 @@ test("generation requests purge unrelated-gene reference snapshots", () => {
 
 test("legacy one-shot gene request route is gone and fails loudly", async () => {
   const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 410)
@@ -822,12 +819,11 @@ test("legacy one-shot gene request route is gone and fails loudly", async () => 
 
 test("anonymous gene request summary stays cheap and skips options rollups", async () => {
   const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG/summary"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/gene/A1BG/summary"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -854,16 +850,15 @@ test("authenticated request options return rich emulsion rows from the dedicated
       )
     },
   }
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -925,14 +920,13 @@ test("request options include a favorite outside the normal ranked window and pl
       )
     },
   }
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
-        headers: { Cookie: "session=abc123" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: { Cookie: "session=abc123" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
   assert.equal(response.status, 200)
   assert.equal(payload.favorite_count, 1)
@@ -984,14 +978,13 @@ test("qualified factory favorites hydrate the neutral family and stay filled in 
   }
   const load = async (query = "") => {
     const suffix = query ? `?query=${encodeURIComponent(query)}` : ""
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options${suffix}`, {
-          headers: { Cookie: "session=abc123" },
-        }),
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options${suffix}`, {
+        headers: { Cookie: "session=abc123" },
+      }),
+      env,
+      {},
+    )
     assert.equal(response.status, 200)
     return response.json()
   }
@@ -1025,7 +1018,7 @@ test("authenticated emulsion favorites are private and idempotent", async () => 
     },
   }
   const request = (path, method = "GET") =>
-    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    viaStatefulWorker(
       new Request(`https://iconoplasm.brinedew.bio${path}`, {
         method,
         headers: { Cookie: "session=abc123" },
@@ -1066,7 +1059,7 @@ test("published emulsion assets remain favoriteable after leaving the request-op
     },
   }
   const request = (path, method = "GET") =>
-    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    viaStatefulWorker(
       new Request(`https://iconoplasm.brinedew.bio${path}`, {
         method,
         headers: { Cookie: "session=abc123" },
@@ -1082,12 +1075,11 @@ test("published emulsion assets remain favoriteable after leaving the request-op
 
 test("emulsion favorites reject anonymous reads and unknown additions", async () => {
   const anonymousEnv = buildEnv()
-  const anonymousResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites"),
-      anonymousEnv,
-      {},
-    )
+  const anonymousResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites"),
+    anonymousEnv,
+    {},
+  )
   assert.equal(anonymousResponse.status, 401)
 
   const env = buildEnv()
@@ -1105,15 +1097,14 @@ test("emulsion favorites reject anonymous reads and unknown additions", async ()
       )
     },
   }
-  const missingResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites/DOES-NOT-EXIST",
-        { method: "PUT", headers: { Cookie: "session=abc123" } },
-      ),
-      env,
-      {},
-    )
+  const missingResponse = await viaStatefulWorker(
+    new Request(
+      "https://iconoplasm.brinedew.bio/api/iconoplasm/emulsion-favorites/DOES-NOT-EXIST",
+      { method: "PUT", headers: { Cookie: "session=abc123" } },
+    ),
+    env,
+    {},
+  )
   assert.equal(missingResponse.status, 404)
 })
 
@@ -1178,16 +1169,15 @@ test("authenticated request options include shared user emulsions with preview t
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=lower", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=lower", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
   const userOption = payload.request_options.find(
     (option) => option.option_type === "user_emulsion",
@@ -1224,16 +1214,15 @@ test("a fully qualified factory code resolves to one pipeline-neutral emulsion",
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-2", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-2", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1264,14 +1253,13 @@ test("a preallocated emulsion search returns one pipeline-neutral first-blot opt
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=50817", {
-        headers: { Cookie: "session=abc123" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=50817", {
+      headers: { Cookie: "session=abc123" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
   const option = payload.request_options[0]
 
@@ -1345,15 +1333,14 @@ test("a slot collapses every factory line into one image-backed emulsion", async
     },
   }
   const load = async (query) => {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(
-          `https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=${encodeURIComponent(query)}`,
-          { headers: { Cookie: "session=abc123" } },
-        ),
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=${encodeURIComponent(query)}`,
+        { headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      {},
+    )
     assert.equal(response.status, 200)
     return response.json()
   }
@@ -1396,16 +1383,15 @@ test("another fully qualified factory code also resolves to one neutral emulsion
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-3", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options?query=A1-3", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1477,16 +1463,15 @@ test("authenticated request options infer emulsion code from vision id when roll
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1540,16 +1525,15 @@ test("authenticated request options stay cheap even on long option lists", async
       )
     },
   }
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1603,16 +1587,15 @@ test("request options load through the dedicated options endpoint only for authe
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
-        headers: {
-          Cookie: "session=abc123",
-        },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests/options", {
+      headers: {
+        Cookie: "session=abc123",
+      },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)

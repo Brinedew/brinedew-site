@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
@@ -125,12 +125,11 @@ function buildSubmissionRequest({ artistTag, ip, admin = false }) {
 }
 
 test("legacy artist-styles route redirects to /blocklist", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/artist-styles?source=faq"),
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/artist-styles?source=faq"),
+    buildEnv(),
+    {},
+  )
 
   assert.equal(response.status, 308)
   assert.equal(
@@ -140,12 +139,11 @@ test("legacy artist-styles route redirects to /blocklist", async () => {
 })
 
 test("blocklist route serves the public blocklist page", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/blocklist"),
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/blocklist"),
+    buildEnv(),
+    {},
+  )
 
   const html = await response.text()
   assert.equal(response.status, 200)
@@ -158,24 +156,22 @@ test("blocklist route serves the public blocklist page", async () => {
 test("guest blacklist submissions stay singular per requester identity", async () => {
   const env = buildEnv()
 
-  const firstResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildSubmissionRequest({ artistTag: "@first_tag", ip: "203.0.113.10" }),
-      env,
-      {},
-    )
+  const firstResponse = await viaStatefulWorker(
+    buildSubmissionRequest({ artistTag: "@first_tag", ip: "203.0.113.10" }),
+    env,
+    {},
+  )
   const firstJson = await firstResponse.json()
   assert.equal(firstResponse.status, 200)
   assert.equal(firstJson.queued, true)
   assert.equal(firstJson.accepted, true)
   assert.equal(firstJson.requesterLocked, false)
 
-  const secondResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildSubmissionRequest({ artistTag: "@second_tag", ip: "203.0.113.10" }),
-      env,
-      {},
-    )
+  const secondResponse = await viaStatefulWorker(
+    buildSubmissionRequest({ artistTag: "@second_tag", ip: "203.0.113.10" }),
+    env,
+    {},
+  )
   const secondJson = await secondResponse.json()
   assert.equal(secondResponse.status, 200)
   assert.equal(secondJson.queued, false)
@@ -187,24 +183,22 @@ test("guest blacklist submissions stay singular per requester identity", async (
 test("admin blacklist submissions can queue multiple tags from the same account", async () => {
   const env = buildEnv()
 
-  const firstResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildSubmissionRequest({ artistTag: "@first_tag", ip: "203.0.113.11", admin: true }),
-      env,
-      {},
-    )
+  const firstResponse = await viaStatefulWorker(
+    buildSubmissionRequest({ artistTag: "@first_tag", ip: "203.0.113.11", admin: true }),
+    env,
+    {},
+  )
   const firstJson = await firstResponse.json()
   assert.equal(firstResponse.status, 200)
   assert.equal(firstJson.queued, true)
   assert.equal(firstJson.accepted, true)
   assert.equal(firstJson.requesterLocked, false)
 
-  const secondResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildSubmissionRequest({ artistTag: "@second_tag", ip: "203.0.113.11", admin: true }),
-      env,
-      {},
-    )
+  const secondResponse = await viaStatefulWorker(
+    buildSubmissionRequest({ artistTag: "@second_tag", ip: "203.0.113.11", admin: true }),
+    env,
+    {},
+  )
   const secondJson = await secondResponse.json()
   assert.equal(secondResponse.status, 200)
   assert.equal(secondJson.queued, true)
@@ -220,23 +214,22 @@ test("admin blacklist submissions can queue multiple tags from the same account"
 test("admin artist-style remove keeps the provided artist name", async () => {
   const env = buildEnv()
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/artist-styles/remove", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer secret-admin-token",
-        },
-        body: JSON.stringify({
-          artist_tag: "@a1bg_artist",
-          artist_name: "A1BG Artist",
-          dry_run: true,
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/artist-styles/remove", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer secret-admin-token",
+      },
+      body: JSON.stringify({
+        artist_tag: "@a1bg_artist",
+        artist_name: "A1BG Artist",
+        dry_run: true,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const json = await response.json()
   assert.equal(response.status, 200)

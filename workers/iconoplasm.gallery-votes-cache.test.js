@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
@@ -216,12 +216,11 @@ function buildEnv({ bindGateway = true } = {}) {
 test("vote-sorted gallery uses the cached snapshot instead of live rollup reads", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
-      env,
-      { waitUntil() {} },
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
+    env,
+    { waitUntil() {} },
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)

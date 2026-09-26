@@ -39,8 +39,10 @@ This repo is the public runtime.
 It owns things like:
 
 - the public Iconoplasm homepage and gene pages
-- the caller-side Cloudflare Worker boundary in `workers/iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js`
-- the only-allowed internal stateful runtime in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
+- the only-allowed internal stateful runtime, which `iconoplasm.brinedew.bio/*`
+  routes to directly (there is no public-edge proxy in front of it; the old
+  proxy module was deleted on 2026-09-26, B-869)
+- the stateful runtime's Iconoplasm handler in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - the production D1 runtime tables
 - the shared settings/auth bridge that connects `brinedew.bio` and `iconoplasm.brinedew.bio`
 - the administrator-owned publication-alias desired policy and its atomic

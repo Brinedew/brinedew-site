@@ -4,7 +4,7 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
@@ -701,12 +701,11 @@ test("catalog search changes portraits only after the publisher replaces its sna
     ],
   })
 
-  const firstResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
-      env,
-      {},
-    )
+  const firstResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
+    env,
+    {},
+  )
   const firstPayload = await firstResponse.json()
 
   assert.equal(firstResponse.status, 200)
@@ -727,12 +726,11 @@ test("catalog search changes portraits only after the publisher replaces its sna
 
   resetIconoplasmRuntimeCachesForTest()
 
-  const secondResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
-      env,
-      {},
-    )
+  const secondResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
+    env,
+    {},
+  )
   const secondPayload = await secondResponse.json()
 
   assert.equal(secondResponse.status, 200)
@@ -746,12 +744,11 @@ test("catalog search changes portraits only after the publisher replaces its sna
 // an exact alias: on 25 Sep "p53" listed CFAP53 and NOP53 above TP53.
 test("catalog search ranks exact matches before prefixes before substrings, then by field", async () => {
   const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=guardian&scope=catalog&limit=10"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=guardian&scope=catalog&limit=10"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -775,12 +772,11 @@ test("an exact literature alias outranks symbols that merely contain the query",
   )
   artifact.gene_count = artifact.genes.length
   const env = buildEnv({ artifact })
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=p53&scope=catalog&limit=10"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=p53&scope=catalog&limit=10"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -820,12 +816,11 @@ test("catalog search resolves bootstrap publication aliases", async () => {
     ["p65", "RELA"],
     ["Cyclin%20H", "CCNH"],
   ]) {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        buildRequest(`/api/public/v1/genes/search?q=${query}&scope=catalog&limit=5`),
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(
+      buildRequest(`/api/public/v1/genes/search?q=${query}&scope=catalog&limit=5`),
+      env,
+      {},
+    )
     const payload = await response.json()
 
     assert.equal(response.status, 200)
@@ -873,12 +868,11 @@ test("catalog search resolves an administrator-published alias KV revision", asy
       }),
     },
   })
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=IL8&scope=catalog&limit=5"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=IL8&scope=catalog&limit=5"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -889,12 +883,11 @@ test("catalog search resolves an administrator-published alias KV revision", asy
 test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {
   const env = buildEnv()
 
-  const starterResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10"),
-      env,
-      {},
-    )
+  const starterResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10"),
+    env,
+    {},
+  )
   const starterPayload = await starterResponse.json()
 
   assert.equal(starterResponse.status, 200)
@@ -905,12 +898,11 @@ test("guest discovery search falls back to the starter trio instead of the full 
   )
   assert.equal(starterResponse.headers.get("Cache-Control"), "no-store")
 
-  const hiddenResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10"),
-      env,
-      {},
-    )
+  const hiddenResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10"),
+    env,
+    {},
+  )
   const hiddenPayload = await hiddenResponse.json()
 
   assert.equal(hiddenResponse.status, 200)
@@ -924,14 +916,13 @@ test("signed-in discovery search uses virtual starters without mutating an empty
     },
   })
 
-  const starterResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
-        cookie: "session=abc",
-      }),
-      env,
-      {},
-    )
+  const starterResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
+      cookie: "session=abc",
+    }),
+    env,
+    {},
+  )
   const starterPayload = await starterResponse.json()
 
   assert.equal(starterResponse.status, 200)
@@ -947,14 +938,13 @@ test("signed-in discovery search uses virtual starters without mutating an empty
 
   env.gatewayDb.seedDiscovery("user-123", "TP53")
 
-  const discoveredResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
-        cookie: "session=abc",
-      }),
-      env,
-      {},
-    )
+  const discoveredResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
+      cookie: "session=abc",
+    }),
+    env,
+    {},
+  )
   const discoveredPayload = await discoveredResponse.json()
 
   assert.equal(discoveredResponse.status, 200)
@@ -963,14 +953,13 @@ test("signed-in discovery search uses virtual starters without mutating an empty
     ["TP53"],
   )
 
-  const hiddenResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
-        cookie: "session=abc",
-      }),
-      env,
-      {},
-    )
+  const hiddenResponse = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
+      cookie: "session=abc",
+    }),
+    env,
+    {},
+  )
   const hiddenPayload = await hiddenResponse.json()
 
   assert.equal(hiddenResponse.status, 200)
@@ -988,12 +977,11 @@ test("shared discovery search is public and reads the shared symbol cache", asyn
     },
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared&limit=10"),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared&limit=10"),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1017,12 +1005,11 @@ test("unavailable shared publications never perform reader-triggered database re
       queries.push(sql)
       return prepare(sql)
     }
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared"),
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(
+      buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared"),
+      env,
+      {},
+    )
     assert.equal(response.status, 503)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
     assert.equal((await response.json()).code, "SHARED_DISCOVERY_PUBLICATION_UNAVAILABLE")
@@ -1032,70 +1019,4 @@ test("unavailable shared publications never perform reader-triggered database re
       false,
     )
   }
-})
-
-test("catalog search uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      genes: [{ symbol: "PRL", matched_by: "symbol" }],
-      query: "PRL",
-      scope_applied: "catalog",
-    }),
-  )
-  const env = buildEnv({
-    overrides: {
-      ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-    },
-  })
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.genes?.[0]?.symbol, "PRL")
-  assert.equal(gateway.calls.length, 1)
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/genes/search?q=prl&scope=catalog&limit=5",
-  )
-  assert.equal(gateway.calls[0]?.method, "GET")
-})
-
-test("catalog artifact uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      schema_version: 4,
-      gene_count: 1,
-      genes: [{ s: "PRL", n: "Gateway Prolactin" }],
-    }),
-  )
-  const env = buildEnv({
-    overrides: {
-      ICONOPLASM_DB: null,
-      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-    },
-  })
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      buildRequest("/api/public/v1/catalog/catalog.searchfixture01.json"),
-      env,
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.gene_count, 1)
-  assert.equal(payload?.genes?.[0]?.n, "Gateway Prolactin")
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/catalog/catalog.searchfixture01.json",
-  )
-  assert.equal(gateway.calls[0]?.method, "GET")
 })
