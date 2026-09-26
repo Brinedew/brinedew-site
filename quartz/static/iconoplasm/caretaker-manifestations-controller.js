@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=8790ff5b931c1181"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=6c4037f0f0264efa"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,7 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=7ad84e9d6d961a55"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=468d7669186aa5f0"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -114,6 +114,7 @@ export function createCaretakerManifestationPanel({
     const wasOpen = existingDialog?.open === true
     const markup = renderCaretakerManifestationPanel(state.dossier, escapeHtml, {
       selectedRevisionId: state.selectedRevisionId,
+      expandedSessions: state.expandedSessions,
     })
     if (existingForm) {
       const next = state.host.ownerDocument.createElement("div")
