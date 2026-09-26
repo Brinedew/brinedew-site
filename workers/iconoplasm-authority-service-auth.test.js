@@ -5,7 +5,6 @@ import {
   AUTHORITY_BEARER_BINDINGS,
   authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityGenerationBearer,
-  authorizeIconoplasmAuthorityMaintenanceBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
 
@@ -13,7 +12,6 @@ const ADMIN_TOKEN = "legacy-admin-token-0000000000000000001"
 const AUDIENCES = Object.freeze({
   replica: authorizeIconoplasmAuthorityReplicaBearer,
   generation: authorizeIconoplasmAuthorityGenerationBearer,
-  maintenance: authorizeIconoplasmAuthorityMaintenanceBearer,
   cutover: authorizeIconoplasmAuthorityCutoverBearer,
 })
 const TOKENS = Object.freeze(
@@ -55,8 +53,9 @@ test("each authority bearer is accepted only by its exact audience", async () =>
   }
 })
 
-test("the retired backup audience is gone (B-859: 0 capabilities ever issued)", () => {
+test("the retired backup and maintenance audiences are gone (B-859: no caller ever)", () => {
   assert.equal(AUTHORITY_BEARER_BINDINGS.backup, undefined)
+  assert.equal(AUTHORITY_BEARER_BINDINGS.maintenance, undefined)
   assert.equal(
     Object.values(AUTHORITY_BEARER_BINDINGS).includes("ICONOPLASM_AUTHORITY_BACKUP_TOKEN"),
     false,
