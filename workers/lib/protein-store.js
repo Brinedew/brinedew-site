@@ -3,9 +3,7 @@
 import { sanitizeProteinSummary } from "./structure-utils.js"
 
 const MAX_CACHE_SIZE = 512
-const MAX_EMBEDDING_CACHE_SIZE = 256
 const proteinCache = new Map()
-const embeddingCache = new Map()
 const DUAL_EMBEDDINGS_TABLE = "protein_embeddings_old"
 const eligibleCache = {
   ids: null,
@@ -74,21 +72,6 @@ function rememberProtein(key, value) {
   if (proteinCache.size > MAX_CACHE_SIZE) {
     const oldestKey = proteinCache.keys().next().value
     proteinCache.delete(oldestKey)
-  }
-}
-
-function rememberEmbedding(key, vector) {
-  if (!key) {
-    return
-  }
-  if (!vector) {
-    embeddingCache.delete(key)
-    return
-  }
-  embeddingCache.set(key, vector)
-  if (embeddingCache.size > MAX_EMBEDDING_CACHE_SIZE) {
-    const oldestKey = embeddingCache.keys().next().value
-    embeddingCache.delete(oldestKey)
   }
 }
 
@@ -352,36 +335,6 @@ export async function fetchProteinByGene(db, gene) {
     rememberProtein(normalizeKey(protein.uniprot), protein)
   }
   return protein || null
-}
-
-export async function fetchProteinSummaries(db, limit = 100) {
-  const { results } = await db
-    .prepare(
-      `SELECT uniprot, gene, full_name, length
-     FROM proteins
-     ORDER BY gene
-     LIMIT ?`,
-    )
-    .bind(limit)
-    .all()
-  return (results || []).map((row) => sanitizeProteinSummary(row))
-}
-
-export async function fetchProteinEmbedding(db, geneSymbol) {
-  if (!geneSymbol) {
-    return null
-  }
-  const key = geneSymbol.toUpperCase()
-  if (embeddingCache.has(key)) {
-    return embeddingCache.get(key)
-  }
-  const row = await db
-    .prepare(`SELECT vector, dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE gene_symbol = ? LIMIT 1`)
-    .bind(key)
-    .first()
-  const vector = toFloat32Vector(row)
-  rememberEmbedding(key, vector)
-  return vector
 }
 
 // Cache for dual embeddings (HiG2Vec + SaProt, with optional legacy ESM2 fallback)
@@ -1025,31 +978,6 @@ function cosineSimilarity(vecA, vecB) {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB))
 }
 
-function normalizeCosine(value) {
-  if (!Number.isFinite(value)) {
-    return null
-  }
-  const normalized = (value + 1) / 2
-  if (normalized <= 0) {
-    return 0
-  }
-  if (normalized >= 1) {
-    return 1
-  }
-  return normalized
-}
-
-// Mode-aligned normalization (from 10k random pair analysis)
-// Linear transform: norm = scale * raw + offset
-// Calibrated so: mode → 0.50, right-tail p99 → 0.90
-// This aligns the peaks and right-side falloff slopes
-const EMBEDDING_STATS = {
-  // ESM2 cosine: mode=0.976, right spread=0.017 → very narrow peak
-  esm2: { scale: 23.0569, offset: -21.9954 },
-  // HiG2Vec cosine: mode=-0.030, right spread=0.975 → wide symmetric
-  hig2vec: { scale: 0.4101, offset: 0.5123 },
-}
-
 // Soft-OR calibration constants (q90, gamma=1.6).
 // Notes:
 // - `hig2vec` is computed on the isotropic HiG2Vec space (mean-center + remove top PCs + L2).
@@ -1062,12 +990,6 @@ const SOFT_OR_CALIBRATION = {
   esm2: { slope: 4.584771332415639, midpoint: 0.12455377192395384 },
 }
 
-// Beta calibration constants (Kull et al. 2017)
-// Fitted offline to satisfy: median÷50%, HBBHBD÷97%, BRCA1 spread maximized
-// Formula: p_cal = å(A*log(s) + B*log(1-s) + C)
-// Note: BRCA1 spread limited by embedding resolution, not transform
-const BETA_CAL = { A: 3.415631, B: -3.36647, C: 0.005369 }
-
 /**
  * Stage 1: Compute metric similarity (internal, preserves discrimination).
  * Uses percentile-aligned linear transform: norm = scale * raw + offset.
@@ -1077,19 +999,6 @@ const BETA_CAL = { A: 3.415631, B: -3.36647, C: 0.005369 }
  * where the ladder boundary sits. No clipping needed - blended metric naturally
  * stays in reasonable bounds (both inputs calibrated to [0, 1] at p0→p100).
  */
-function getMetricSimilarity(cosine, embeddingType) {
-  if (!Number.isFinite(cosine)) {
-    return null
-  }
-  const stats = EMBEDDING_STATS[embeddingType]
-  if (!stats) {
-    // Fallback to simple normalization if unknown type
-    return normalizeCosine(cosine)
-  }
-  // Linear transform: scale * raw + offset
-  return stats.scale * cosine + stats.offset
-}
-
 function sigmoid(value) {
   return 1 / (1 + Math.exp(-value))
 }
@@ -1115,20 +1024,6 @@ function getSoftOrPercent(cosH, cosSeq, seqKey = "saprot") {
  *
  * Formula: p_cal = σ(A*log(s) + B*log(1-s) + C)
  */
-function toDisplayScoreGlobal(pMetric) {
-  if (pMetric === null || !Number.isFinite(pMetric)) {
-    return null
-  }
-  // Clamp to avoid log(0) or log(1)
-  const eps = 1e-9
-  const s = Math.max(eps, Math.min(1 - eps, pMetric))
-  // Beta calibration: logit-like transform with asymmetric coefficients
-  const x = BETA_CAL.A * Math.log(s) + BETA_CAL.B * Math.log(1 - s) + BETA_CAL.C
-  let pCal = 1 / (1 + Math.exp(-x))
-  // Cap at 0.90 - top 10% reserved for ladder neighbors
-  return Math.min(pCal, 0.9)
-}
-
 /**
  * Stage 2B: Rank-based display score for ladder neighbors.
  * If guess is in target's top-K neighbors, use discrete rank mapping:
@@ -1136,19 +1031,10 @@ function toDisplayScoreGlobal(pMetric) {
  *
  * This guarantees distinct integer percentages regardless of metric compression.
  */
-function toDisplayScoreLadder(rank) {
-  // rank 1 → 0.99, rank 2 → 0.98, etc.
-  return (100 - rank) / 100
-}
-
 /**
  * Legacy name - now just returns metric score (no display transform).
  * Display transform happens in getBlendedSimilarity with ladder support.
  */
-function normalizeWithZScore(cosine, embeddingType) {
-  return getMetricSimilarity(cosine, embeddingType)
-}
-
 export async function getHig2vecSimilarity(db, guessId, targetId) {
   const guessKey = normalizeKey(guessId)
   const targetKey = normalizeKey(targetId)

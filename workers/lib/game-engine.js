@@ -1,5 +1,3 @@
-import { resolveStructureRepresentation } from "./structure-utils.js"
-
 const MAX_GUESSES = 10
 const DEFAULT_HINT_COST = 1
 const HINT_REWARD_ON_INCORRECT = 1
@@ -271,11 +269,6 @@ export function extractHintData(sections, hintId) {
   return null
 }
 
-export function extractHintText(sections, hintId) {
-  const data = extractHintData(sections, hintId)
-  return data ? data.text : null
-}
-
 export function scoreGuess(guessProtein, targetProtein, options = {}) {
   if (!guessProtein || !targetProtein) {
     return null
@@ -379,34 +372,6 @@ export function collectMatchedHintTexts(target, guessProtein, score, options = {
   return matches
 }
 
-function normalizeProtein(protein) {
-  const safeArray = (value) => (Array.isArray(value) ? value : [])
-  const normalizeGoTerms = (terms) => {
-    if (!terms || typeof terms !== "object") {
-      return { bp: [], mf: [], cc: [] }
-    }
-    return {
-      bp: safeArray(terms.bp),
-      mf: safeArray(terms.mf),
-      cc: safeArray(terms.cc),
-    }
-  }
-  return {
-    ...protein,
-    domains: safeArray(protein.domains),
-    go_slim: safeArray(protein.go_slim),
-    go_terms: normalizeGoTerms(protein.go_terms),
-    go_terms_named: normalizeGoTerms(protein.go_terms_named),
-    structure: protein?.structure || null,
-    structure_id: protein?.structure_id || null,
-    alphafold_id: protein?.alphafold_id || null,
-    synonyms: safeArray(protein.synonyms),
-    subcell: safeArray(protein.subcell),
-    tissue: protein?.tissue ? protein.tissue : { label: "unknown", score: null },
-    links: protein?.links || {},
-  }
-}
-
 function cloneGoTerms(terms) {
   if (!terms || typeof terms !== "object") {
     return { bp: [], mf: [], cc: [] }
@@ -418,14 +383,6 @@ function cloneGoTerms(terms) {
   }
 }
 
-function determineLengthBin(len) {
-  if (len < 400) return 0
-  if (len < 800) return 1
-  if (len < 1200) return 2
-  if (len < 1600) return 3
-  return 4
-}
-
 function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.01) {
   const target = Number(targetLength)
   const guess = Number(guessLength)
@@ -434,26 +391,6 @@ function isLengthWithinTolerance(targetLength, guessLength, toleranceRatio = 0.0
   }
   const diff = Math.abs(target - guess)
   return diff <= target * toleranceRatio
-}
-
-function formatGoTerms(protein, aspect) {
-  const names = protein?.go_terms_named?.[aspect]
-  if (Array.isArray(names) && names.length) {
-    return names
-  }
-  const raw = protein?.go_terms?.[aspect]
-  return Array.isArray(raw) ? raw : []
-}
-
-function formatReactomeList(protein) {
-  return (protein?.reactome_pathways || [])
-    .map((entry) => {
-      if (!entry) return ""
-      if (typeof entry === "string") return entry
-      const trimmed = entry.name && entry.name.trim()
-      return trimmed || entry.id || ""
-    })
-    .filter(Boolean)
 }
 
 function shouldSuppressDisplayedClan(clan, protein) {
