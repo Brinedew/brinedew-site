@@ -330,7 +330,7 @@
   max-width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--ui-border);
-  border-radius: 3px;
+  border-radius: var(--icono-control-radius);
   background: var(--light);
   color: var(--dark);
   padding: 0.25rem 0.4rem;
@@ -585,7 +585,7 @@
   gap: 0.18rem;
   padding: 0.8rem;
   border: 1px solid color-mix(in srgb, var(--ui-border) 72%, var(--accent) 28%);
-  border-radius: var(--icono-radius-md);
+  border-radius: var(--icono-control-radius);
   background: color-mix(in srgb, var(--ui-bg) 92%, var(--accent) 8%);
   color: var(--dark);
   text-align: start;
