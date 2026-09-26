@@ -364,16 +364,6 @@ const SCANNER_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.scanner_contract_revision,
 )
 const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
-const PUBLISHED_EXTENSION_VERSION = String(ICONOPLASM_PUBLISHER_RELEASE.version)
-const PUBLISHED_CATALOG_SCHEMA_VERSION = Number(
-  ICONOPLASM_PUBLISHER_RELEASE.catalog_contract.schema_version,
-)
-const PUBLISHED_CATALOG_CONTRACT_REVISION = Number(
-  ICONOPLASM_PUBLISHER_RELEASE.catalog_contract.revision,
-)
-const PUBLISHED_COMPATIBILITY_CONTRACTS = Object.freeze(
-  ICONOPLASM_PUBLISHER_RELEASE.compatibility_contracts || {},
-)
 const ICONOPLASM_PRINT_COPY_PNG_PREFIX = "/api/iconoplasm/print-copy"
 const ICONOPLASM_PRINT_COPY_RENDER_PREFIX = "/api/iconoplasm/print-copy-render"
 const ICONOPLASM_PRINT_COPY_RENDER_VERSION = "2026-07-25-font-face-fix"
@@ -401,48 +391,7 @@ function resolveProviderPollConfig(env) {
   return { initialWait, interval, hardTimeout: ICONOPLASM_PROVIDER_POLL_HARD_TIMEOUT_MS }
 }
 const MIN_EXTENSION_VERSION = String(ICONOPLASM_PUBLISHER_RELEASE.minimum_supported_version)
-const PUBLISHED_CATALOG_CONTRACTS_BY_VERSION = Object.freeze({
-  ...PUBLISHED_COMPATIBILITY_CONTRACTS,
-  [PUBLISHED_EXTENSION_VERSION]: Object.freeze({
-    schema_version: PUBLISHED_CATALOG_SCHEMA_VERSION,
-    revision: PUBLISHED_CATALOG_CONTRACT_REVISION,
-  }),
-})
 
-function publishedCatalogContractToken(version, contract) {
-  return `a${Number(contract?.schema_version)}p${String(version).replace(/\D/g, "")}c${Number(contract?.revision)}`
-}
-
-export function publishedCatalogContractForClientVersion(clientVersion) {
-  const version = String(clientVersion || "").trim()
-  const contract = PUBLISHED_CATALOG_CONTRACTS_BY_VERSION[version]
-  if (!contract) return null
-  return {
-    version,
-    schemaVersion: Number(contract.schema_version),
-    revision: Number(contract.revision),
-    token: publishedCatalogContractToken(version, contract),
-  }
-}
-
-function publishedCompatibilityContractForClientVersion(clientVersion) {
-  const contract = publishedCatalogContractForClientVersion(clientVersion)
-  if (!contract) return null
-  return contract.schemaVersion < CATALOG_ARTIFACT_SCHEMA_VERSION ||
-    (contract.schemaVersion === CATALOG_ARTIFACT_SCHEMA_VERSION &&
-      contract.revision < CATALOG_ARTIFACT_CONTRACT_REVISION)
-    ? contract
-    : null
-}
-
-function publishedCompatibilityContractForHash(hash) {
-  const hashTokens = new Set(String(hash || "").split("-"))
-  for (const version of Object.keys(PUBLISHED_CATALOG_CONTRACTS_BY_VERSION)) {
-    const contract = publishedCompatibilityContractForClientVersion(version)
-    if (contract && hashTokens.has(contract.token)) return contract
-  }
-  return null
-}
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
     provider_id: "openai",
@@ -1119,7 +1068,6 @@ const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
-const KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX = "iconoplasm:published-compatibility-artifact:"
 const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
 // Watermark recorded after every successful card-catalog publish: which artifact
 // version is live and the max icono_publish_events position it reflects. The
@@ -1321,10 +1269,6 @@ const galleryUniquenessRowsCache = {
   value: null,
 }
 const hydratedCatalogArtifactCache = {
-  key: null,
-  value: null,
-}
-const publishedCompatibilityArtifactCache = {
   key: null,
   value: null,
 }
@@ -3509,47 +3453,6 @@ export function mergePublishedPortraitRefsIntoArtifact(artifact, publishedPortra
   }
 }
 
-export function projectPublishedCompatibilityArtifact(
-  artifact,
-  targetContract = {
-    schemaVersion: PUBLISHED_CATALOG_SCHEMA_VERSION,
-    revision: PUBLISHED_CATALOG_CONTRACT_REVISION,
-  },
-  publicationAliases = ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
-) {
-  if (!artifact || typeof artifact !== "object" || !Array.isArray(artifact.genes)) return null
-  if (
-    Number(artifact.schema_version || 0) !== CATALOG_ARTIFACT_SCHEMA_VERSION ||
-    Number(artifact.contract_revision || 0) !== CATALOG_ARTIFACT_CONTRACT_REVISION
-  ) {
-    return null
-  }
-  const targetSchemaVersion = Number(targetContract?.schemaVersion)
-  const targetContractRevision = Number(targetContract?.revision)
-  const supportsCurrentContract =
-    targetSchemaVersion === CATALOG_ARTIFACT_SCHEMA_VERSION &&
-    targetContractRevision === CATALOG_ARTIFACT_CONTRACT_REVISION
-  const supportsLegacyPortraitContract = targetSchemaVersion === 4 && targetContractRevision === 1
-  if (!supportsCurrentContract && !supportsLegacyPortraitContract) return null
-  const genes = artifact.genes.map((rawGene) => {
-    if (!rawGene || typeof rawGene !== "object") return rawGene
-    const gene = applyIconoplasmPublicationAliasPolicyToGene(rawGene, rawGene.s, publicationAliases)
-    if (targetSchemaVersion >= 5) return gene
-    const { p: portrait, ...compatible } = gene
-    const mediumPath = String(portrait?.renditions?.medium?.path || "").trim()
-    const fullPath = String(portrait?.renditions?.full?.path || "").trim()
-    if (mediumPath) compatible.pt = mediumPath
-    if (fullPath) compatible.ph = fullPath
-    return compatible
-  })
-  return {
-    ...artifact,
-    schema_version: targetSchemaVersion,
-    contract_revision: targetContractRevision,
-    genes,
-  }
-}
-
 async function queryPublishedPortraitFingerprint(env) {
   if (!env.ICONOPLASM_DB) return null
   try {
@@ -3671,32 +3574,6 @@ function publishedPortraitRefSnapshotMatchesFingerprint(rows, fingerprint) {
   return true
 }
 
-async function publishedPortraitRefs(env) {
-  if (!env?.KV) return []
-  const fingerprint = await sharedPublishedPortraitFingerprint(env)
-  if (!fingerprint) {
-    const error = new Error("Published portrait fingerprint is unavailable")
-    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
-    throw error
-  }
-  const version = portraitSnapshotVersion(fingerprint)
-  if (
-    publishedPortraitRefsCache.key === version &&
-    publishedPortraitRefSnapshotMatchesFingerprint(publishedPortraitRefsCache.value, fingerprint)
-  ) {
-    return publishedPortraitRefsCache.value
-  }
-  const cached = await readVersionedSharedJson(env, KV_PUBLISHED_PORTRAIT_REFS_PREFIX, version)
-  if (publishedPortraitRefSnapshotMatchesFingerprint(cached, fingerprint)) {
-    publishedPortraitRefsCache.key = version
-    publishedPortraitRefsCache.value = cached
-    return cached
-  }
-  const error = new Error("Published portrait reference snapshot is unavailable")
-  error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
-  throw error
-}
-
 async function preparePortraitReferenceSnapshot(env) {
   if (!env?.ICONOPLASM_DB || !env?.KV) throw new Error("Portrait publication bindings missing")
   const fingerprint = await queryPublishedPortraitFingerprint(env)
@@ -3749,10 +3626,6 @@ async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catal
   sharedPublishedPortraitFingerprintCache.loadedAt = now
   sharedPublishedPortraitFingerprintCache.value = fingerprint
   return rows
-}
-
-export async function publishPortraitReferenceSnapshot(env) {
-  return commitPortraitReferenceSnapshot(env, await preparePortraitReferenceSnapshot(env))
 }
 
 // Release initialization consumes retained publication inputs, never live D1.
@@ -13411,7 +13284,6 @@ async function extensionManifestObj(url, env, clientVersion = null) {
   const recognitionPolicies = await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV)
   const publicationAliases = recognitionPolicies.publication_aliases
   const extensionBlocklist = recognitionPolicies.extension_blocklist
-  const compatibilityContract = publishedCompatibilityContractForClientVersion(clientVersion)
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
   if (!portraitFingerprint) {
     const error = new Error("Published portrait fingerprint is unavailable")
@@ -13423,19 +13295,9 @@ async function extensionManifestObj(url, env, clientVersion = null) {
     portraitFingerprint,
   )
   const aliasToken = portraitHashToken(publicationAliases.version) || "aliases"
-  const buildVersion = compatibilityContract
-    ? `${buildContractAwareManifestHash(
-        manifest.current_hash,
-        portraitFingerprint,
-        compatibilityContract.token,
-      )}-${aliasToken}`
-    : candidateBuildVersion
-  const artifactSchemaVersion = compatibilityContract
-    ? compatibilityContract.schemaVersion
-    : CATALOG_ARTIFACT_SCHEMA_VERSION
-  const artifactContractRevision = compatibilityContract
-    ? compatibilityContract.revision
-    : CATALOG_ARTIFACT_CONTRACT_REVISION
+  const buildVersion = candidateBuildVersion
+  const artifactSchemaVersion = CATALOG_ARTIFACT_SCHEMA_VERSION
+  const artifactContractRevision = CATALOG_ARTIFACT_CONTRACT_REVISION
   const scannerArtifact = publicScannerArtifactManifest(url, manifest)
   return {
     ...manifest,
@@ -13446,7 +13308,6 @@ async function extensionManifestObj(url, env, clientVersion = null) {
     artifact_contract_revision: artifactContractRevision,
     schema_version: artifactSchemaVersion,
     min_extension_version: MIN_EXTENSION_VERSION,
-    ...(compatibilityContract ? { portrait_base_url: ICONOPLASM_CANONICAL_ORIGIN } : {}),
     portrait_delivery: portraitDeliveryPolicy(url, env),
     publication_aliases: publicationAliases,
     scanner_artifact: scannerArtifact,
@@ -28162,8 +28023,6 @@ function clearSharedD1CostCaches() {
   galleryUniquenessRowsCache.value = null
   hydratedCatalogArtifactCache.key = null
   hydratedCatalogArtifactCache.value = null
-  publishedCompatibilityArtifactCache.key = null
-  publishedCompatibilityArtifactCache.value = null
 }
 
 // Test-only reset hook. The cost-barrier regression tests use this to simulate a
@@ -28246,152 +28105,6 @@ async function hydratedCatalogArtifact(env, hash) {
     return cached
   }
   const error = new Error("Published hydrated catalog snapshot is unavailable")
-  error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
-  throw error
-}
-
-function isPublishedCompatibilityArtifact(value, contract) {
-  return (
-    value &&
-    typeof value === "object" &&
-    Number(value.schema_version || 0) === contract?.schemaVersion &&
-    Number(value.contract_revision || 0) === contract?.revision &&
-    Array.isArray(value.genes)
-  )
-}
-
-function isPublishedCompatibilityHash(hash) {
-  return Boolean(publishedCompatibilityContractForHash(hash))
-}
-
-function parsedPublishedCompatibilityHash(rawHash, contract) {
-  const hash = String(rawHash || "").trim()
-  const baseHash = catalogBaseHash(hash)
-  if (!baseHash || !contract?.token) return null
-  const prefix = `${baseHash}-${contract.token}-`
-  if (!hash.startsWith(prefix)) return null
-  const tokens = hash.slice(prefix.length).split("-")
-  const aliasToken = tokens.pop() || ""
-  if (!/^v1[a-f0-9]{16}$/.test(aliasToken)) return null
-
-  let portraitFingerprint
-  if (tokens.length === 0) {
-    portraitFingerprint = { published_count: 0, latest: null }
-  } else {
-    if (
-      tokens.length < 2 ||
-      tokens.length > 3 ||
-      tokens[0] !== PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION ||
-      !/^\d+$/.test(tokens[1])
-    ) {
-      return null
-    }
-    const publishedCount = Number(tokens[1])
-    const latest = tokens[2] || null
-    if (
-      !Number.isSafeInteger(publishedCount) ||
-      publishedCount < 0 ||
-      (latest && portraitHashToken(latest) !== latest)
-    ) {
-      return null
-    }
-    portraitFingerprint = { published_count: publishedCount, latest }
-  }
-  const expectedBaseHash = buildContractAwareManifestHash(
-    baseHash,
-    portraitFingerprint,
-    contract.token,
-  )
-  if (hash !== `${expectedBaseHash}-${aliasToken}`) return null
-  return { hash, baseHash, aliasToken, portraitFingerprint }
-}
-
-async function publishedPortraitRefsForFingerprint(env, fingerprint) {
-  const requestedVersion = portraitSnapshotVersion(fingerprint)
-  const currentFingerprint = await sharedPublishedPortraitFingerprint(env)
-  if (portraitSnapshotVersion(currentFingerprint) === requestedVersion) {
-    return publishedPortraitRefs(env)
-  }
-  const retained = await readVersionedSharedJson(
-    env,
-    KV_PUBLISHED_PORTRAIT_REFS_PREFIX,
-    requestedVersion,
-  )
-  if (!publishedPortraitRefSnapshotMatchesFingerprint(retained, fingerprint)) {
-    const error = new Error(
-      `Published portrait reference snapshot ${requestedVersion} is unavailable`,
-    )
-    error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
-    throw error
-  }
-  return retained
-}
-
-export async function materializePublishedCompatibilityArtifact(env, requestedHash, contract) {
-  if (!env?.KV || !requestedHash || !contract) return null
-  const parsedHash = parsedPublishedCompatibilityHash(requestedHash, contract)
-  if (!parsedHash) return null
-  const { hash, baseHash, aliasToken: requestedAliasToken, portraitFingerprint } = parsedHash
-
-  if (
-    publishedCompatibilityArtifactCache.key === hash &&
-    publishedCompatibilityArtifactCache.value
-  ) {
-    return publishedCompatibilityArtifactCache.value
-  }
-  const cached = await readVersionedSharedJson(
-    env,
-    KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX,
-    hash,
-  )
-  if (isPublishedCompatibilityArtifact(cached, contract)) {
-    publishedCompatibilityArtifactCache.key = hash
-    publishedCompatibilityArtifactCache.value = cached
-    return cached
-  }
-
-  const currentPolicies = await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV)
-  const currentAliases = currentPolicies.publication_aliases
-  const aliasRecord =
-    portraitHashToken(currentAliases?.version) === requestedAliasToken
-      ? { overlay: currentAliases }
-      : await readPublishedIconoplasmPublicationAliasesByVersionToken(env.KV, requestedAliasToken)
-  const aliases = aliasRecord?.overlay
-  if (!aliases) {
-    const error = new Error(`Published alias snapshot ${requestedAliasToken} is not yet visible`)
-    error.code = "ICONOPLASM_PUBLISHED_ALIAS_SNAPSHOT_UNAVAILABLE"
-    throw error
-  }
-  const aliasToken = portraitHashToken(aliases.version) || "aliases"
-  if (aliasToken !== requestedAliasToken) return null
-
-  const portraitRows = await publishedPortraitRefsForFingerprint(env, portraitFingerprint)
-  // This explicit materializer is publisher-only. Anonymous readers below only
-  // consume its committed output; they cannot reconstruct missing versions.
-  const raw = await env.KV.get(`${KV_CATALOG_PREFIX}${baseHash}`)
-  if (!raw) return null
-  const candidate = mergePublishedPortraitRefsIntoArtifact(JSON.parse(raw), portraitRows)
-  const compatible = projectPublishedCompatibilityArtifact(candidate, contract, aliases)
-  if (!compatible) return null
-  publishedCompatibilityArtifactCache.key = hash
-  publishedCompatibilityArtifactCache.value = compatible
-  await env.KV.put(
-    `${KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX}${hash}`,
-    JSON.stringify(compatible),
-  )
-  return compatible
-}
-
-async function publishedCompatibilityArtifact(env, requestedHash) {
-  const contract = publishedCompatibilityContractForHash(requestedHash)
-  if (!contract) return null
-  const artifact = await readVersionedSharedJson(
-    env,
-    KV_PUBLISHED_COMPATIBILITY_ARTIFACT_PREFIX,
-    requestedHash,
-  )
-  if (isPublishedCompatibilityArtifact(artifact, contract)) return artifact
-  const error = new Error("Published compatibility catalog snapshot is unavailable")
   error.code = "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE"
   throw error
 }
@@ -35096,9 +34809,7 @@ async function handleCatalogArtifact(env, path) {
   // change whenever the canonical portrait changes.
   let hydrated
   try {
-    hydrated = isPublishedCompatibilityHash(hash)
-      ? await publishedCompatibilityArtifact(env, hash)
-      : await hydratedCatalogArtifact(env, hash)
+    hydrated = await hydratedCatalogArtifact(env, hash)
   } catch (error) {
     if (
       error?.code !== "ICONOPLASM_PUBLISHED_PORTRAIT_SNAPSHOT_UNAVAILABLE" &&
