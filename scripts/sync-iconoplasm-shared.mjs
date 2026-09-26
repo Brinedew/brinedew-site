@@ -40,6 +40,13 @@ const targets = [
     ],
   },
   {
+    // B-879: the one tag-category tree, for the caretaker editor.
+    source: path.join(repoRoot, "shared", "iconoplasm-tag-categories.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "tag-categories.js"),
+    ],
+  },
+  {
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-vote.css"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "shared-card-vote.css"),
