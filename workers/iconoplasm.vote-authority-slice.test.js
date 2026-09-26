@@ -217,25 +217,26 @@ test("v2 commits vote, selection intent and wake atomically; duplicates stay fre
     { asset_sha256: sha("a"), status: "approved", autopick_eligible: 1 },
     { asset_sha256: sha("b"), status: "approved", autopick_eligible: 1 },
   ])
-  // A score tie keeps the currently published asset, so the first B vote is
-  // content-neutral for publication.
+  // A score tie keeps the currently published winner, but importing B changed
+  // the published gallery, so the first commit afterwards publishes (B-876).
   const tied = await coordinator.applyAuthoritativeVoteMutation(
     voteOptions(coordinator, sha("b"), { userId: "user-2", visionId: "anima-v1-8" }),
   )
-  assert.equal(tied.publication.changed, false)
+  assert.equal(tied.publication.changed, true)
+  assert.equal(coordinator.publication.read().desiredVersion, 2)
   const flip = await coordinator.applyAuthoritativeVoteMutation(
     voteOptions(coordinator, sha("b"), { userId: "user-3", visionId: "anima-v1-8" }),
   )
   assert.equal(flip.publication.changed, true)
   const pending = coordinator.publication.read()
   assert.equal(pending.pending, true)
-  assert.equal(pending.desiredVersion, 2)
+  assert.equal(pending.desiredVersion, 3)
 
   const duplicate = await coordinator.applyAuthoritativeVoteMutation(
     voteOptions(coordinator, sha("b"), { userId: "user-3", visionId: "anima-v1-8" }),
   )
   assert.equal(duplicate.publication.changed, false)
-  assert.equal(coordinator.publication.read().desiredVersion, 2)
+  assert.equal(coordinator.publication.read().desiredVersion, 3)
 })
 
 test("an alarm failure rolls back the v2 vote and its selection intent", async (t) => {
