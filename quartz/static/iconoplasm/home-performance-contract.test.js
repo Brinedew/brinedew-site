@@ -623,7 +623,7 @@ test("home shell exposes landmarks, search semantics, and a labelled automatic f
   assert.ok(document.querySelector("#icono-guest-continuation"))
   assert.equal(document.querySelectorAll(".icono-feed-skip").length, 2)
   assert.equal(document.querySelector("#icono-feed-retry")?.hidden, true)
-  assert.equal(document.querySelector("#icono-collection-pager"), null)
+  assert.equal(document.querySelector("#icono-collection-pager") === null, true)
 })
 
 test("feed skip links stay clipped until keyboard focus and then expose a 44px target", async () => {

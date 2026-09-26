@@ -270,7 +270,7 @@ test("registry treats labels as text and renders only state-valid controls", asy
   harness.api.mount()
   await settle(20)
 
-  assert.equal(harness.document.querySelector("[data-caretaker-registry-body] img"), null)
+  assert.equal(harness.document.querySelector("[data-caretaker-registry-body] img") === null, true)
   assert.match(
     harness.document.querySelector("[data-caretaker-registry-body]").textContent,
     /<img src=x onerror=alert\(1\)>/,
@@ -281,7 +281,10 @@ test("registry treats labels as text and renders only state-valid controls", asy
   assert.match(detail.textContent, /End this caretaker tenure/)
   assert.doesNotMatch(detail.textContent, /Resume caretaker access/)
   assert.doesNotMatch(detail.textContent, /Cancel invitation/)
-  assert.equal(detail.querySelector("input[name='caretaker-relinquish-policy']:checked"), null)
+  assert.equal(
+    detail.querySelector("input[name='caretaker-relinquish-policy']:checked") === null,
+    true,
+  )
   harness.api.unmount()
 })
 

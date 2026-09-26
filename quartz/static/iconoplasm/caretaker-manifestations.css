@@ -296,8 +296,7 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--dark) 7%, var(--light));
 }
-.icono-caretaker-tag-values button,
-.icono-caretaker-add-category {
+.icono-caretaker-tag-values button {
   border: 0;
   background: transparent;
   color: var(--dark);
@@ -314,12 +313,10 @@
   flex: none;
   color: var(--darkgray);
 }
-.icono-caretaker-tag-values button:hover,
-.icono-caretaker-add-category:hover {
+.icono-caretaker-tag-values button:hover {
   background: color-mix(in srgb, var(--dark) 9%, transparent);
 }
 .icono-caretaker-tag-values button:focus-visible,
-.icono-caretaker-add-category:focus-visible,
 .icono-caretaker-tag-input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -335,10 +332,6 @@
   color: var(--dark);
   padding: 0.25rem 0.4rem;
   font: 0.8rem/1.4 var(--icono-action-font);
-}
-.icono-caretaker-add-category {
-  margin-top: 0.65rem;
-  color: var(--darkgray);
 }
 @media (max-width: 30rem) {
   .icono-caretaker-tag-row {

@@ -110,5 +110,5 @@ test("authentication failures return the exact vote control that opened the logi
   upButton.click()
   await new Promise((resolve) => setTimeout(resolve, 0))
 
-  assert.equal(authPromptSource, upButton)
+  assert.equal(authPromptSource === upButton, true)
 })

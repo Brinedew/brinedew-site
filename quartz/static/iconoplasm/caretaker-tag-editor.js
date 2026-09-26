@@ -159,34 +159,6 @@ export function mountCaretakerTagEditor(form) {
       row.append(label, values)
       host.append(row)
     }
-    const addCategory = button("+ Category", "Add category", () => {
-      const input = doc.createElement("input")
-      input.className = "icono-caretaker-tag-input"
-      input.placeholder = "Category"
-      input.setAttribute("aria-label", "Category name")
-      addCategory.replaceWith(input)
-      input.addEventListener("keydown", (event) => {
-        if (event.isComposing) return
-        if (event.key === "Escape") {
-          event.preventDefault()
-          render()
-        }
-        if (event.key !== "Enter") return
-        event.preventDefault()
-        const name = input.value.trim()
-        if (!name) return
-        if (!Object.hasOwn(fields, name)) fields[name] = []
-        commit()
-        render()
-        const row = [...host.querySelectorAll("[data-tag-category]")].find(
-          (node) => node.dataset.tagCategory === name,
-        )
-        row?.querySelector("[data-add-tag]")?.click()
-      })
-      input.focus()
-    })
-    addCategory.className = "icono-caretaker-add-category"
-    host.append(addCategory)
   }
   render()
   source.dataset.fieldsJson = JSON.stringify(fields)
