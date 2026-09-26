@@ -13,7 +13,7 @@ import {
 } from "./iconoplasm/sync-finalization-publication.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmSyncFinalizationQueue as handleIconoplasmSyncFinalizationQueueProduction,
@@ -1343,20 +1343,19 @@ test("admin finalization pending exposes queued, retrying, and pending-finalize 
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/pending?limit=10",
-        {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer secret-admin-token",
-          },
+  const response = await viaStatefulWorker(
+    new Request(
+      "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/pending?limit=10",
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
         },
-      ),
-      env,
-      {},
-    )
+      },
+    ),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1409,20 +1408,19 @@ test("admin finalization pending can scope the snapshot to selected symbols", as
   })
 
   const scopedSymbols = encodeURIComponent(JSON.stringify(["EGFR"]))
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/pending?limit=10&symbols=${scopedSymbols}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer secret-admin-token",
-          },
+  const response = await viaStatefulWorker(
+    new Request(
+      `https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/pending?limit=10&symbols=${scopedSymbols}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
         },
-      ),
-      env,
-      {},
-    )
+      },
+    ),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1462,34 +1460,33 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
     },
   }
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          reason: "pytest_sync_finalization",
-          rows: [
-            {
-              symbol: "tp53",
-              phase: "gene_rollups",
-              keep: [{ symbol: "TP53", asset_sha256: "a".repeat(64) }],
-              legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
-              vision_ids: ["anima-v1-1"],
-            },
-            {
-              symbol: "",
-              phase: "reconcile",
-            },
-          ],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reason: "pytest_sync_finalization",
+        rows: [
+          {
+            symbol: "tp53",
+            phase: "gene_rollups",
+            keep: [{ symbol: "TP53", asset_sha256: "a".repeat(64) }],
+            legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
+            vision_ids: ["anima-v1-1"],
+          },
+          {
+            symbol: "",
+            phase: "reconcile",
+          },
+        ],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
   const stored = env.gatewayDb.jobs.get("TP53")
 
@@ -1520,30 +1517,29 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
   stored.phase = "vision_rollups"
   stored.vision_ids_json = "[]"
   const progressedVersion = stored.job_version
-  const retryResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          reason: "pytest_sync_finalization",
-          rows: [
-            {
-              symbol: "TP53",
-              phase: "gene_rollups",
-              keep: [{ symbol: "TP53", asset_sha256: "a".repeat(64) }],
-              legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
-              vision_ids: ["anima-v1-1"],
-            },
-          ],
-        }),
+  const retryResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reason: "pytest_sync_finalization",
+        rows: [
+          {
+            symbol: "TP53",
+            phase: "gene_rollups",
+            keep: [{ symbol: "TP53", asset_sha256: "a".repeat(64) }],
+            legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
+            vision_ids: ["anima-v1-1"],
+          },
+        ],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   const retained = env.gatewayDb.jobs.get("TP53")
 
   assert.equal(retryResponse.status, 200)
@@ -1600,27 +1596,26 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
     gatewayEnv,
   )
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          reason: "pytest_sync_finalization",
-          rows: [
-            {
-              symbol: "TP53",
-              phase: "reconcile",
-            },
-          ],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/enqueue", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reason: "pytest_sync_finalization",
+        rows: [
+          {
+            symbol: "TP53",
+            phase: "reconcile",
+          },
+        ],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1745,22 +1740,21 @@ test("admin finalization process route fails loud because finalization must use 
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          limit: 25,
-          finalize_if_drained: false,
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/process", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        limit: 25,
+        finalize_if_drained: false,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 410)

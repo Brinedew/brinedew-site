@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -240,11 +240,7 @@ function get(path, { cookie = "" } = {}) {
 }
 
 async function invoke(request, env) {
-  return handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-    request,
-    env,
-    {},
-  )
+  return viaStatefulWorker(request, env, {})
 }
 
 function sessionFor(userId) {

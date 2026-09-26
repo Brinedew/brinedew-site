@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 // Shared live gallery version across both tests. currentGalleryVersionBarrier has
@@ -94,15 +94,14 @@ function buildEnv({ changesSummary, kvSeed } = {}) {
 }
 
 async function getStatus(env) {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-status", {
-        method: "GET",
-        headers: { Authorization: "Bearer secret-admin-token" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-status", {
+      method: "GET",
+      headers: { Authorization: "Bearer secret-admin-token" },
+    }),
+    env,
+    {},
+  )
   return { response, payload: await response.json() }
 }
 
