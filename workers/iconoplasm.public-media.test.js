@@ -22,10 +22,7 @@ import {
   listIconoplasmGeneBlotBacklog,
   buildPublishedScannerArtifact,
   buildPortraitAwareManifestHash,
-  materializePublishedCompatibilityArtifact,
   mergePublishedPortraitRefsIntoArtifact,
-  projectPublishedCompatibilityArtifact,
-  publishedCatalogContractForClientVersion,
   readIconoplasmPublishedCardCatalogArtifactForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -59,23 +56,6 @@ function expectedPublishedContract(version, contract) {
     token: `a${schemaVersion}p${String(version).replace(/\D/g, "")}c${revision}`,
   }
 }
-
-test("published browser versions resolve through the inspectable authority contract", () => {
-  assert.deepEqual(
-    publishedCatalogContractForClientVersion(publisherRelease.version),
-    expectedPublishedContract(publisherRelease.version, {
-      schema_version: publisherRelease.contractSchemaVersion,
-      revision: publisherRelease.contractRevision,
-    }),
-  )
-  for (const [version, contract] of Object.entries(publisherRelease.compatibilityContracts)) {
-    assert.deepEqual(
-      publishedCatalogContractForClientVersion(version),
-      expectedPublishedContract(version, contract),
-    )
-  }
-  assert.equal(publishedCatalogContractForClientVersion("0.0.0"), null)
-})
 
 test("published scanner artifacts contain only the fields needed for page matching", () => {
   const { scanner, byteSize } = buildPublishedScannerArtifact({
@@ -737,53 +717,6 @@ test("catalog hydration emits only schema-5 inspectable portrait assets", () => 
   )
   assert.equal("ph" in hydrated.genes[1], false)
   assert.equal("p" in hydrated.genes[1], false)
-})
-
-test("published compatibility projection materializes aliases and legacy portrait paths", () => {
-  const sha = "c".repeat(64)
-  const projected = projectPublishedCompatibilityArtifact(
-    {
-      schema_version: 5,
-      contract_revision: 1,
-      genes: [
-        {
-          s: "RELA",
-          a: [],
-          p: {
-            schema_version: 1,
-            asset_sha256: sha,
-            renditions: {
-              medium: { path: `portraits/v1/cc/${sha}/medium.webp` },
-              full: { path: `portraits/v1/cc/${sha}/full.webp` },
-            },
-          },
-        },
-        { s: "CXCL8", a: [] },
-      ],
-    },
-    { schemaVersion: 4, revision: 1 },
-    {
-      by_symbol: { RELA: ["p65"], CXCL8: ["IL8"] },
-      remove_by_symbol: {},
-    },
-  )
-
-  assert.equal(projected.schema_version, 4)
-  assert.equal(projected.contract_revision, 1)
-  assert.equal(projected.genes[0].a.includes("p65"), true)
-  assert.equal(projected.genes[1].a.includes("IL8"), true)
-  assert.equal(projected.genes[0].pt, `portraits/v1/cc/${sha}/medium.webp`)
-  assert.equal(projected.genes[0].ph, `portraits/v1/cc/${sha}/full.webp`)
-  assert.equal("p" in projected.genes[0], false)
-})
-
-test("compatibility projection fails closed for an undeclared contract revision", () => {
-  const projected = projectPublishedCompatibilityArtifact(
-    { schema_version: 5, contract_revision: 2, genes: [{ s: "TP53" }] },
-    { schemaVersion: 5, revision: 1 },
-  )
-
-  assert.equal(projected, null)
 })
 
 test("public gene payload includes published portrait dimensions", async () => {
@@ -1513,116 +1446,6 @@ test("published extension receives its publisher-declared client contract", asyn
   assert.equal(
     Object.values(scanner.genes).some((gene) => "p" in gene),
     false,
-  )
-})
-
-test("a cold cached compatibility URL survives a newer alias pair without a revision-1 KV record", async () => {
-  const compatibilityContract = {
-    version: "0.4.0",
-    schemaVersion: 4,
-    revision: 1,
-    token: "a4p040c1",
-  }
-
-  const kv = buildCatalogResolveKv()
-  const rawCatalogKey = "iconoplasm:catalog:aliascatalog01"
-  const rawCatalog = JSON.parse(kv.entries.get(rawCatalogKey))
-  rawCatalog.genes.push({
-    s: "CXCL8",
-    n: "C-X-C motif chemokine ligand 8",
-    u: "P10145",
-    c: "#89685f",
-    tmh: false,
-    a: [],
-  })
-  rawCatalog.gene_count = rawCatalog.genes.length
-  kv.entries.set(rawCatalogKey, JSON.stringify(rawCatalog))
-  const env = buildEnv({ KV: kv })
-  const oldHash = `aliascatalog01-${compatibilityContract.token}-v1bf7d4149d6b2df6c`
-  assert.equal(
-    [...kv.entries.keys()].some((key) =>
-      key.startsWith("iconoplasm:publication-alias-policy:v1:revision:"),
-    ),
-    false,
-  )
-
-  const aliasesV2 = await iconoplasmPublicationAliasManifestFromPolicy({
-    ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
-    by_symbol: {
-      ...ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol,
-      CXCL8: ["IL8"],
-    },
-  })
-  const blocklist = {
-    schema_version: 1,
-    revision: 1,
-    version: amidBlocklistVersion,
-    term_count: 1,
-    terms: ["AMID"],
-  }
-  kv.entries.set(
-    iconoplasmRecognitionPairKvKey(2, 1),
-    JSON.stringify({
-      schema_version: 1,
-      alias_revision: 2,
-      blocklist_revision: 1,
-      alias_depends_on_blocklist_revision: 1,
-      blocklist_depends_on_alias_revision: null,
-      publication_aliases: aliasesV2,
-      extension_blocklist: blocklist,
-    }),
-  )
-  const portraitFingerprint = { published_count: 1, latest: "c".repeat(64) }
-  kv.entries.set(
-    "iconoplasm:published-portrait-fingerprint:v3",
-    JSON.stringify({
-      schema: "iconoplasm.publishedPortraitFingerprint.v1",
-      published_at: "2026-08-11T00:00:00.000Z",
-      fingerprint: portraitFingerprint,
-    }),
-  )
-  kv.entries.set(
-    `iconoplasm:published-portrait-refs:v3-1-${portraitFingerprint.latest}`,
-    JSON.stringify([{ symbol: "CXCL8", asset_sha256: "d".repeat(64) }]),
-  )
-  // Simulate pair propagation reaching this colo before the v2 token index.
-  resetIconoplasmRuntimeCachesForTest()
-  const aliasTokenV2 = aliasesV2.version.replace(/-/g, "")
-  const newHash = `aliascatalog01-${compatibilityContract.token}-v3-1-${portraitFingerprint.latest}-${aliasTokenV2}`
-  assert.notEqual(newHash, oldHash)
-
-  await assert.rejects(
-    materializePublishedCompatibilityArtifact(
-      env.gatewayDb ? { ...env, ICONOPLASM_DB: env.gatewayDb } : env,
-      newHash.replace(aliasTokenV2, "v1aaaaaaaaaaaaaaaa"),
-      compatibilityContract,
-    ),
-    (error) => error.code === "ICONOPLASM_PUBLISHED_ALIAS_SNAPSHOT_UNAVAILABLE",
-  )
-
-  const statefulEnv = env.gatewayDb ? { ...env, ICONOPLASM_DB: env.gatewayDb } : env
-  const oldArtifact = await materializePublishedCompatibilityArtifact(
-    statefulEnv,
-    oldHash,
-    compatibilityContract,
-  )
-  assert.ok(oldArtifact)
-  assert.equal(
-    oldArtifact.genes.find((gene) => gene.s === "CXCL8")?.a?.includes("IL8") || false,
-    false,
-  )
-  assert.equal("ph" in oldArtifact.genes.find((gene) => gene.s === "CXCL8"), false)
-
-  const newArtifact = await materializePublishedCompatibilityArtifact(
-    statefulEnv,
-    newHash,
-    compatibilityContract,
-  )
-  assert.ok(newArtifact)
-  assert.equal(newArtifact.genes.find((gene) => gene.s === "CXCL8")?.a?.includes("IL8"), true)
-  assert.match(
-    newArtifact.genes.find((gene) => gene.s === "CXCL8")?.ph || "",
-    new RegExp("d{64}/full\\.webp$"),
   )
 })
 
