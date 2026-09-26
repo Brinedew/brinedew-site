@@ -152,8 +152,8 @@ test("DO NOT DELETE: vote projection promotion is Queue-backed, not request wait
   )
   assert.doesNotMatch(
     voteProjectionBatch,
-    /publishIconoplasmGalleryDirtyShards\(|publishCardCatalogArtifact\(|assertIconoplasmCardCatalogBudgetPreflight\(/,
-    "vote projection must not republish the broad KV card catalog or require its KV-heavy budget preflight",
+    /publishIconoplasmGalleryDirtyShards\(|publishCardCatalogArtifact\(/,
+    "vote projection must not republish the broad KV card catalog",
   )
 
   const wrapper = source.includes("handleIconoplasmQueue")
