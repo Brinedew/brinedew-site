@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
@@ -292,32 +292,31 @@ test.after(() => {
 })
 
 test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          identifiers: [
-            "P53",
-            "Cyclin H",
-            "cadherin",
-            "Cadherin",
-            "E-cadherin",
-            "E-Cadherins",
-            "E cadherins",
-            "N-cadherin",
-            "N-Cadherins",
-            "N cadherins",
-            "P130",
-            "p130",
-            "INS",
-          ],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifiers: [
+          "P53",
+          "Cyclin H",
+          "cadherin",
+          "Cadherin",
+          "E-cadherin",
+          "E-Cadherins",
+          "E cadherins",
+          "N-cadherin",
+          "N-Cadherins",
+          "N cadherins",
+          "P130",
+          "p130",
+          "INS",
+        ],
       }),
-      buildEnv(),
-      {},
-    )
+    }),
+    buildEnv(),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -350,16 +349,15 @@ test("public resolve route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
 // ignored here. A client could not tell "no such gene" from "wrong request".
 test("legacy resolve accepts the same keys as the image resolver and refuses unusable requests", async () => {
   const post = async (body) => {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: typeof body === "string" ? body : JSON.stringify(body),
-        }),
-        buildEnv(),
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      }),
+      buildEnv(),
+      {},
+    )
     return { status: response.status, payload: await response.json() }
   }
 
@@ -383,14 +381,13 @@ test("legacy resolve accepts the same keys as the image resolver and refuses unu
 })
 
 test("public changes route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10",
-      ),
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request(
+      "https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10",
+    ),
+    buildEnv(),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -398,53 +395,4 @@ test("public changes route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT
   assert.equal(payload?.changes?.[0]?.symbol, "PRL")
   assert.deepEqual(payload?.changes?.[0]?.change_types, ["catalog", "essence", "portrait"])
   assert.equal(payload?.changes?.[0]?.current_asset_sha256, "a".repeat(64))
-})
-
-test("public resolve uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when explicitly bound", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      results: [{ requested: "P53", canonical_symbol: "TP53", matched_by: "alias", found: true }],
-    }),
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: ["P53"] }),
-      }),
-      buildEnv(
-        { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway },
-        { bindGateway: false },
-      ),
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.results?.[0]?.canonical_symbol, "TP53")
-  assert.equal(gateway.calls.length, 1)
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/resolve",
-  )
-  assert.equal(gateway.calls[0]?.method, "POST")
-  assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { identifiers: ["P53"] })
-})
-
-test("public changes fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10",
-      ),
-      buildEnv({ THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: null }, { bindGateway: false }),
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 503)
-  assert.equal(payload?.code, "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED")
-  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/i)
 })

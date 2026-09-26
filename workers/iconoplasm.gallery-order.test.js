@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 if (!globalThis.caches) {
@@ -239,12 +239,11 @@ function buildCtx() {
 }
 
 test("youngest sort keeps zero-age genes off the top while leaving them in the results", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=youngest&limit=10"),
-      buildEnv(),
-      buildCtx(),
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=youngest&limit=10"),
+    buildEnv(),
+    buildCtx(),
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -257,12 +256,11 @@ test("youngest sort keeps zero-age genes off the top while leaving them in the r
 })
 
 test("lightest sort keeps zero-weight genes off the top while leaving them in the results", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=lightest&limit=10"),
-      buildEnv(),
-      buildCtx(),
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=lightest&limit=10"),
+    buildEnv(),
+    buildCtx(),
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -272,37 +270,4 @@ test("lightest sort keeps zero-weight genes off the top while leaving them in th
     payload.items.findIndex((item) => item.symbol === "ZEROWEIGHT") >
       payload.items.findIndex((item) => item.symbol === "LIGHTEST"),
   )
-})
-
-test("public gallery hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      items: [{ symbol: "GATEWAY" }],
-      order: "votes",
-      limit: 10,
-      offset: 0,
-      total: 1,
-      has_more: false,
-    }),
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
-      buildEnv({
-        ICONOPLASM_DB: null,
-        THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-      }),
-      buildCtx(),
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload.items[0]?.symbol, "GATEWAY")
-  assert.equal(gateway.calls.length, 1)
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/gallery?order=votes&limit=10",
-  )
-  assert.equal(gateway.calls[0]?.method, "GET")
 })

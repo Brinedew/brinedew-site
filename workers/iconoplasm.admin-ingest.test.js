@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 let lastPortraitAssetInsertBoundValues = []
@@ -140,12 +140,7 @@ test("admin ingest dry-run accepts a normal sync payload without crashing", asyn
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -173,12 +168,7 @@ test("admin assets state exposes sample provenance metadata", async () => {
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -196,12 +186,7 @@ test("admin assets state rejects unscoped full-ledger GET before it can blow Wor
     },
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 400)
@@ -230,12 +215,7 @@ test("admin ingest non-dry-run writes a portrait asset row without SQL column mi
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -292,12 +272,7 @@ test("normal external-storage ingest does not run read-after-write retries per r
   })
 
   try {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(request, env, {})
     const payload = await response.json()
 
     assert.equal(response.status, 200)
@@ -336,12 +311,7 @@ test("admin ingest can explicitly clear sample hash for unknown provenance", asy
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -421,12 +391,7 @@ test("admin ingest success returns current mutation-limiter telemetry for sync f
     }),
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(request, env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -469,12 +434,7 @@ test("admin ingest proxy forwards POST bodies without cloning them into text fir
     },
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      request,
-      buildEnv(),
-      {},
-    )
+  const response = await viaStatefulWorker(request, buildEnv(), {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)

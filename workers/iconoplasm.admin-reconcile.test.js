@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class FakeStatement {
@@ -118,16 +118,15 @@ function buildEnv({ existingAssets } = {}, { bindGateway = true } = {}) {
 
 test("admin reconcile refuses unscoped unpublishing before source reads", async () => {
   const env = buildEnv()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
-        method: "POST",
-        headers: { Authorization: "Bearer secret-admin-token", "Content-Type": "application/json" },
-        body: JSON.stringify({ unpublish_missing: true }),
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+      method: "POST",
+      headers: { Authorization: "Bearer secret-admin-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ unpublish_missing: true }),
+    }),
+    env,
+    {},
+  )
   assert.equal(response.status, 400)
   assert.match((await response.json()).error, /explicit scope_symbols/)
   assert.equal(env.gatewayDb.calls.length, 0)
@@ -146,24 +145,23 @@ test("admin reconcile restores rejected legacy assets instead of leaving them hi
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          defer_read_models: true,
-          scope_symbols: ["TP53"],
-          keep: [],
-          legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        defer_read_models: true,
+        scope_symbols: ["TP53"],
+        keep: [],
+        legacy: [{ symbol: "TP53", asset_sha256: "b".repeat(64) }],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const payload = await response.json()
 
@@ -198,24 +196,23 @@ test("admin reconcile restores rejected keep-assets so sync repairs become publi
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          defer_read_models: true,
-          scope_symbols: ["TP53"],
-          keep: [{ symbol: "TP53", asset_sha256: "c".repeat(64) }],
-          legacy: [],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        defer_read_models: true,
+        scope_symbols: ["TP53"],
+        keep: [{ symbol: "TP53", asset_sha256: "c".repeat(64) }],
+        legacy: [],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const payload = await response.json()
 
@@ -258,24 +255,23 @@ test("admin reconcile NEVER rejects: an asset absent from keep is left untouched
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          defer_read_models: true,
-          scope_symbols: ["TP53"],
-          keep: [],
-          legacy: [],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        defer_read_models: true,
+        scope_symbols: ["TP53"],
+        keep: [],
+        legacy: [],
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const payload = await response.json()
 
@@ -312,26 +308,25 @@ test("admin reconcile has no flag that re-enables destructive keep-set rejection
     ],
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer secret-admin-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          defer_read_models: true,
-          scope_symbols: ["TP53"],
-          keep: [],
-          legacy: [],
-          reject_absent_from_keep: true,
-          confirm_mass_reject: true,
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/reconcile", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer secret-admin-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        defer_read_models: true,
+        scope_symbols: ["TP53"],
+        keep: [],
+        legacy: [],
+        reject_absent_from_keep: true,
+        confirm_mass_reject: true,
       }),
-      env,
-      {},
-    )
+    }),
+    env,
+    {},
+  )
 
   const payload = await response.json()
 

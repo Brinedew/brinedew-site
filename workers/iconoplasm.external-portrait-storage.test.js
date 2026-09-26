@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   putPortraitStorageObject,
@@ -337,12 +337,11 @@ test("public edge serves first-party portrait URLs from authenticated Bunny stor
   }
 
   try {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
-        bindOnlyAllowedGateway(env),
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request(`https://iconoplasm.brinedew.bio/${PORTRAIT_KEY}`),
+      bindOnlyAllowedGateway(env),
+      {},
+    )
 
     assert.equal(response.status, 200)
     assert.equal(await response.text(), "public-edge-storage-image-bytes")
@@ -427,14 +426,13 @@ test("public catalog dump proxies to the stateful worker when portraits live in 
   }
 
   try {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request("https://iconoplasm.brinedew.bio/api/public/v1/dumps/catalog.abc123.jsonl"),
-        bindOnlyAllowedGateway({
-          ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
-        }),
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/dumps/catalog.abc123.jsonl"),
+      bindOnlyAllowedGateway({
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+      }),
+      {},
+    )
 
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("content-type"), "application/x-ndjson; charset=utf-8")

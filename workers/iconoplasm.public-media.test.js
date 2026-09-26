@@ -15,7 +15,7 @@ import {
 } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
-import { handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-public-edge-proxy-to-the-only-allowed-stateful-worker-do-not-duplicate.js"
+import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -787,12 +787,11 @@ test("compatibility projection fails closed for an undeclared contract revision"
 })
 
 test("public gene payload includes published portrait dimensions", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 403)
@@ -805,16 +804,15 @@ test("public gene payload includes published portrait dimensions", async () => {
 })
 
 test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: {
-          Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-        },
-      }),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: {
+        Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+      },
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -851,14 +849,13 @@ test("site gene detail survives a D1 read outage from the exact published card",
       throw new Error("D1 free tier daily row read limit exceeded")
     },
   }
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      buildEnv({ ICONOPLASM_DB: unavailableDb, KV: buildPublishedCardReadKv() }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+    }),
+    buildEnv({ ICONOPLASM_DB: unavailableDb, KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -889,14 +886,13 @@ test("site gene detail exposes an exact ready blot without republishing the card
     gene_blot_height: 1024,
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -924,14 +920,13 @@ test("site gene detail rejects a stale blot row as a public image authority", as
     gene_blot_height: 1024,
   })
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -945,17 +940,16 @@ test("site gene detail is identical for guest, Loweren, and every other account"
   })
   const read = async (cookie = "") => {
     resetIconoplasmRuntimeCachesForTest()
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-          headers: {
-            Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-            ...(cookie ? { Cookie: cookie } : {}),
-          },
-        }),
-        buildEnv({ GAME_SESSIONS: sessions, KV: buildPublishedCardReadKv() }),
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+        headers: {
+          Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+      }),
+      buildEnv({ GAME_SESSIONS: sessions, KV: buildPublishedCardReadKv() }),
+      {},
+    )
     assert.equal(response.status, 200)
     return { payload: await response.json(), cacheControl: response.headers.get("Cache-Control") }
   }
@@ -981,29 +975,27 @@ test("site gene detail is identical for guest, Loweren, and every other account"
 
 test("site gene detail keeps the public cache policy on conditional responses", async () => {
   const env = buildEnv({ KV: buildPublishedCardReadKv() })
-  const first =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      env,
-      {},
-    )
+  const first = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+    }),
+    env,
+    {},
+  )
   const etag = first.headers.get("ETag")
   assert.ok(etag)
 
   resetIconoplasmRuntimeCachesForTest()
-  const conditional =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: {
-          Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-          "If-None-Match": etag,
-        },
-      }),
-      env,
-      {},
-    )
+  const conditional = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: {
+        Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
+        "If-None-Match": etag,
+      },
+    }),
+    env,
+    {},
+  )
 
   assert.equal(conditional.status, 304)
   assert.equal(
@@ -1016,7 +1008,7 @@ test("site gene detail keeps the public cache policy on conditional responses", 
 test("unpublished D1 portrait changes cannot move the published gene portrait", async () => {
   const env = buildEnv({ KV: buildPublishedCardReadKv() })
   const read = async () =>
-    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    viaStatefulWorker(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
         headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
       }),
@@ -1061,16 +1053,15 @@ test("unpublished D1 portrait changes cannot move the published gene portrait", 
 })
 
 test("site gene detail canonicalizes alias requests before rendering the gene payload", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/USAG1", {
-        headers: {
-          Referer: "https://iconoplasm.brinedew.bio/gene/USAG1",
-        },
-      }),
-      buildEnv({ KV: buildCatalogResolveKv() }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/USAG1", {
+      headers: {
+        Referer: "https://iconoplasm.brinedew.bio/gene/USAG1",
+      },
+    }),
+    buildEnv({ KV: buildCatalogResolveKv() }),
+    {},
+  )
 
   assert.equal(response.status, 302)
   assert.equal(
@@ -1080,15 +1071,14 @@ test("site gene detail canonicalizes alias requests before rendering the gene pa
 })
 
 test("public media exposes only the canonical gene blot", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-      buildEnv({
-        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-        KV: buildPublishedCardReadKv(),
-      }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+    buildEnv({
+      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+      KV: buildPublishedCardReadKv(),
+    }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1111,19 +1101,18 @@ test("public media exposes only the canonical gene blot", async () => {
 
 test("public image resolver exposes labelled gene blots without source portraits", async () => {
   resetIconoplasmRuntimeCachesForTest()
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbols: ["A1BG", "USAG1", "NOT_A_GENE"] }),
-      }),
-      buildEnv({
-        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-        KV: buildAgentImageResolverKv(),
-      }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["A1BG", "USAG1", "NOT_A_GENE"] }),
+    }),
+    buildEnv({
+      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+      KV: buildAgentImageResolverKv(),
+    }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1156,16 +1145,15 @@ test("public image resolver derives the stable blot URL before catalog metadata 
   const shard = JSON.parse(await kv.get(shardKey))
   delete shard.cards[0].payload.blot
   await kv.put(shardKey, JSON.stringify(shard))
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: ["A1BG"] }),
-      }),
-      buildEnv({ KV: kv }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers: ["A1BG"] }),
+    }),
+    buildEnv({ KV: kv }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1187,27 +1175,26 @@ test("stable blot route derives the Bunny object from the published card without
   const fingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
   const expectedObjectKey = iconoplasmGeneBlotObjectKey("A1BG", fingerprint)
   const reads = []
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
-      buildEnv({
-        KV: kv,
-        ICONOPLASM_PORTRAITS: {
-          async get(key) {
-            reads.push(key)
-            return key === expectedObjectKey
-              ? {
-                  body: new Uint8Array([82, 73, 70, 70]),
-                  size: 4,
-                  httpEtag: '"derived-blot"',
-                  httpMetadata: { contentType: "image/webp" },
-                }
-              : null
-          },
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
+    buildEnv({
+      KV: kv,
+      ICONOPLASM_PORTRAITS: {
+        async get(key) {
+          reads.push(key)
+          return key === expectedObjectKey
+            ? {
+                body: new Uint8Array([82, 73, 70, 70]),
+                size: 4,
+                httpEtag: '"derived-blot"',
+                httpMetadata: { contentType: "image/webp" },
+              }
+            : null
         },
-      }),
-      {},
-    )
+      },
+    }),
+    {},
+  )
 
   assert.equal(response.status, 200)
   assert.deepEqual(reads, [expectedObjectKey])
@@ -1230,27 +1217,26 @@ test("stable blot route preserves an exact-card legacy blot until its replacemen
   )
   const legacyObjectKey = cardPayload.blot.object_key
   const reads = []
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
-      buildEnv({
-        KV: kv,
-        ICONOPLASM_PORTRAITS: {
-          async get(key) {
-            reads.push(key)
-            return key === legacyObjectKey
-              ? {
-                  body: new Uint8Array([82, 73, 70, 70]),
-                  size: 4,
-                  httpEtag: '"legacy-blot"',
-                  httpMetadata: { contentType: "image/webp" },
-                }
-              : null
-          },
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp"),
+    buildEnv({
+      KV: kv,
+      ICONOPLASM_PORTRAITS: {
+        async get(key) {
+          reads.push(key)
+          return key === legacyObjectKey
+            ? {
+                body: new Uint8Array([82, 73, 70, 70]),
+                size: 4,
+                httpEtag: '"legacy-blot"',
+                httpMetadata: { contentType: "image/webp" },
+              }
+            : null
         },
-      }),
-      {},
-    )
+      },
+    }),
+    {},
+  )
 
   assert.equal(response.status, 200)
   assert.deepEqual(reads, [expectedObjectKey, legacyObjectKey])
@@ -1279,12 +1265,11 @@ test("public media follows the published card barrier instead of D1 portrait cha
     asset_sha256: d1PortraitA,
   })
   const read = async () => {
-    const response =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-        env,
-        {},
-      )
+    const response = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+      env,
+      {},
+    )
     return { response, payload: await response.clone().json() }
   }
 
@@ -1354,48 +1339,47 @@ test("public catalog manifest publishes explicit extension contract fields", asy
     term_count: 1,
     terms: ["AMID"],
   }
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
-      buildEnv({
-        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-        KV: new FakeKV({
-          "iconoplasm:catalog-manifest": JSON.stringify({
-            current_hash: "catalog-2026-04-16",
-            generated_at: "2026-04-16T16:30:00.000Z",
-            gene_count: 19001,
-            scanner_artifact: {
-              schema_version: scannerContract.schemaVersion,
-              contract_revision: scannerContract.revision,
-              build_version: "catalog",
-              filename: "scanner.catalog.json",
-              byte_size: 1_900_000,
-            },
-          }),
-          "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
-            schema: "iconoplasm.publishedPortraitFingerprint.v1",
-            published_at: "2026-04-16T16:30:00.000Z",
-            fingerprint: { published_count: 0, latest: null },
-          }),
-          "iconoplasm:published-portrait-refs:v3-none": "[]",
-          [iconoplasmExtensionBlocklistKvKey(1)]: JSON.stringify({
-            ...publishedBlocklist,
-            depends_on_alias_revision: null,
-          }),
-          [iconoplasmPublicationAliasKvKey(2)]: JSON.stringify(publishedAliases),
-          [iconoplasmRecognitionPairKvKey(2, 1)]: JSON.stringify({
-            schema_version: 1,
-            alias_revision: 2,
-            blocklist_revision: 1,
-            alias_depends_on_blocklist_revision: null,
-            blocklist_depends_on_alias_revision: null,
-            publication_aliases: publishedAliases,
-            extension_blocklist: publishedBlocklist,
-          }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest"),
+    buildEnv({
+      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+      KV: new FakeKV({
+        "iconoplasm:catalog-manifest": JSON.stringify({
+          current_hash: "catalog-2026-04-16",
+          generated_at: "2026-04-16T16:30:00.000Z",
+          gene_count: 19001,
+          scanner_artifact: {
+            schema_version: scannerContract.schemaVersion,
+            contract_revision: scannerContract.revision,
+            build_version: "catalog",
+            filename: "scanner.catalog.json",
+            byte_size: 1_900_000,
+          },
+        }),
+        "iconoplasm:published-portrait-fingerprint:v3": JSON.stringify({
+          schema: "iconoplasm.publishedPortraitFingerprint.v1",
+          published_at: "2026-04-16T16:30:00.000Z",
+          fingerprint: { published_count: 0, latest: null },
+        }),
+        "iconoplasm:published-portrait-refs:v3-none": "[]",
+        [iconoplasmExtensionBlocklistKvKey(1)]: JSON.stringify({
+          ...publishedBlocklist,
+          depends_on_alias_revision: null,
+        }),
+        [iconoplasmPublicationAliasKvKey(2)]: JSON.stringify(publishedAliases),
+        [iconoplasmRecognitionPairKvKey(2, 1)]: JSON.stringify({
+          schema_version: 1,
+          alias_revision: 2,
+          blocklist_revision: 1,
+          alias_depends_on_blocklist_revision: null,
+          blocklist_depends_on_alias_revision: null,
+          publication_aliases: publishedAliases,
+          extension_blocklist: publishedBlocklist,
         }),
       }),
-      {},
-    )
+    }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1475,14 +1459,13 @@ test("published extension receives its publisher-declared client contract", asyn
     : candidateContract.revision
   const kv = buildCatalogResolveKv()
   const env = buildEnv({ KV: kv })
-  const manifestResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest", {
-        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
-      }),
-      env,
-      {},
-    )
+  const manifestResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest", {
+      headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
+    }),
+    env,
+    {},
+  )
   const manifest = await manifestResponse.json()
 
   assert.equal(manifestResponse.status, 200)
@@ -1497,14 +1480,13 @@ test("published extension receives its publisher-declared client contract", asyn
     assert.equal("portrait_base_url" in manifest, false)
   }
 
-  const artifactResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(manifest.artifact_url, {
-        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
-      }),
-      env,
-      {},
-    )
+  const artifactResponse = await viaStatefulWorker(
+    new Request(manifest.artifact_url, {
+      headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
+    }),
+    env,
+    {},
+  )
   const artifact = await artifactResponse.json()
   assert.equal(artifactResponse.status, 200)
   assert.equal(artifact.schema_version, effectiveSchemaVersion)
@@ -1516,14 +1498,13 @@ test("published extension receives its publisher-declared client contract", asyn
     )
   }
 
-  const scannerResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(manifest.scanner_artifact.artifact_url, {
-        headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
-      }),
-      env,
-      {},
-    )
+  const scannerResponse = await viaStatefulWorker(
+    new Request(manifest.scanner_artifact.artifact_url, {
+      headers: { "X-Iconoplasm-Extension-Version": compatibilityVersion },
+    }),
+    env,
+    {},
+  )
   const scanner = await scannerResponse.json()
   assert.equal(scannerResponse.status, 200)
   assert.equal(scanner.schema_version, scannerContract.schemaVersion)
@@ -1645,20 +1626,6 @@ test("a cold cached compatibility URL survives a newer alias pair without a revi
   )
 })
 
-test("public media fails closed when THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE is missing", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-      buildEnv({ THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: null }, { bindGateway: false }),
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 503)
-  assert.equal(payload?.code, "THE_ONLY_ALLOWED_STATEFUL_WORKER_REQUIRED")
-  assert.match(String(payload?.error || ""), /THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE/i)
-})
-
 test("portrait asset requests still reach the only allowed stateful worker when the public edge has no direct bucket binding", async () => {
   const gateway = new FakeOnlyAllowedGateway(
     () =>
@@ -1670,50 +1637,34 @@ test("portrait asset requests still reach the only allowed stateful worker when 
         },
       }),
   )
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
-      ),
-      {
-        THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-      },
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request(
+      "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
+    ),
+    {
+      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
+    },
+    {},
+  )
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("content-type"), "image/webp")
   assert.equal(gateway.calls.length, 1)
 })
 
-test("public gene batch is limited to first-party clients and extension traffic", async () => {
-  const deniedResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbols: ["A1BG"] }),
-      }),
-      buildEnv(),
-      {},
-    )
-  const deniedPayload = await deniedResponse.json()
-  assert.equal(deniedResponse.status, 403)
-  assert.equal(deniedPayload?.code, "FIRST_PARTY_ONLY")
-
-  const extensionResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Iconoplasm-Extension-Version": "0.3.0",
-        },
-        body: JSON.stringify({ symbols: ["A1BG"] }),
-      }),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+test("public gene batch serves the published card catalog", async () => {
+  const extensionResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Iconoplasm-Extension-Version": "0.3.0",
+      },
+      body: JSON.stringify({ symbols: ["A1BG"] }),
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const extensionPayload = await extensionResponse.json()
   assert.equal(extensionResponse.status, 200)
   assert.equal(extensionPayload?.snapshot_version, "test-card-v1")
@@ -1742,7 +1693,7 @@ test("content-addressed hover delivery reuses unchanged shards across publicatio
   }
   const env = buildEnv({ KV: kv, ICONOPLASM_DB: null })
   const read = (path, headers = { "X-Iconoplasm-Extension-Version": "0.5.2" }) =>
-    handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
+    viaStatefulWorker(
       new Request(`https://iconoplasm.brinedew.bio/api/public/v1/${path}`, { headers }),
       env,
       {},
@@ -1758,7 +1709,6 @@ test("content-addressed hover delivery reuses unchanged shards across publicatio
   const detail = JSON.parse(beforeText)
   const portrait = await (await read(`card-content/v1/${hash}/portraits/A1BG`)).json()
   assert.equal(portrait.record.portrait.asset_sha256, detail.record.portrait.asset_sha256)
-  assert.equal((await read(detailPath, {})).status, 403)
   assert.equal((await read(`card-content/v1/${"b".repeat(64)}/genes/A1BG`)).status, 410)
   kv.entries.set(
     "iconoplasm:gallery-version",
@@ -1779,25 +1729,16 @@ test("content-addressed hover delivery reuses unchanged shards across publicatio
   assert.equal(malformed.headers.get("cache-control"), "no-store")
 })
 
-test("versioned public gene detail is immutable, extension-only, and published-artifact backed", async () => {
+test("versioned public gene detail is immutable and published-artifact backed", async () => {
   const requestUrl =
     "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
-  const deniedResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(requestUrl),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
-  assert.equal(deniedResponse.status, 403)
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(requestUrl, {
-        headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
-      }),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request(requestUrl, {
+      headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1812,15 +1753,13 @@ test("versioned public gene detail is immutable, extension-only, and published-a
   assert.equal(response.headers.get("x-iconoplasm-data-source"), "published-card-catalog")
   assert.match(String(response.headers.get("etag") || ""), /card-detail-test-card-v1-A1BG/)
 
-  const retiredResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/genes/A1BG",
-        { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
-      ),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+  const retiredResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/genes/A1BG", {
+      headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   assert.equal(retiredResponse.status, 410)
   assert.equal((await retiredResponse.clone().json()).code, "card_snapshot_retired")
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
@@ -1830,22 +1769,13 @@ test("versioned portrait locator is an immutable projection of the same publishe
   const portraitSha = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212"
   const requestUrl =
     "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/portraits/A1BG"
-  const deniedResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(requestUrl),
-      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
-      {},
-    )
-  assert.equal(deniedResponse.status, 403)
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(requestUrl, {
-        headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
-      }),
-      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request(requestUrl, {
+      headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -1861,15 +1791,14 @@ test("versioned portrait locator is an immutable projection of the same publishe
     /card-portrait-locator-test-card-v1-A1BG/,
   )
 
-  const retiredResponse =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/portraits/A1BG",
-        { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
-      ),
-      buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
-      {},
-    )
+  const retiredResponse = await viaStatefulWorker(
+    new Request(
+      "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/portraits/A1BG",
+      { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
+    ),
+    buildEnv({ KV: buildPublishedCardReadKv({ portraitSha }) }),
+    {},
+  )
   assert.equal(retiredResponse.status, 410)
   assert.equal((await retiredResponse.clone().json()).code, "card_snapshot_retired")
   assert.equal(retiredResponse.headers.get("cache-control"), "no-store")
@@ -1897,24 +1826,9 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
     const url =
       "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
     const headers = { "X-Iconoplasm-Extension-Version": "0.4.15" }
-    const first =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(url, { headers }),
-        env,
-        {},
-      )
-    const second =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(url, { headers }),
-        env,
-        {},
-      )
-    const head =
-      await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-        new Request(url, { method: "HEAD", headers }),
-        env,
-        {},
-      )
+    const first = await viaStatefulWorker(new Request(url, { headers }), env, {})
+    const second = await viaStatefulWorker(new Request(url, { headers }), env, {})
+    const head = await viaStatefulWorker(new Request(url, { method: "HEAD", headers }), env, {})
 
     assert.equal(first.status, 200)
     assert.equal(second.status, 200)
@@ -1940,22 +1854,21 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
 })
 
 test("public gene batch honors lean field projection for extension traffic", async () => {
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Iconoplasm-Extension-Version": "0.3.0",
-        },
-        body: JSON.stringify({
-          symbols: ["A1BG"],
-          fields: ["symbol", "full_name", "color", "essence", "portrait"],
-        }),
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Iconoplasm-Extension-Version": "0.3.0",
+      },
+      body: JSON.stringify({
+        symbols: ["A1BG"],
+        fields: ["symbol", "full_name", "color", "essence", "portrait"],
       }),
-      buildEnv({ KV: buildPublishedCardReadKv() }),
-      {},
-    )
+    }),
+    buildEnv({ KV: buildPublishedCardReadKv() }),
+    {},
+  )
   const payload = await response.json()
   const gene = payload?.genes?.[0] || null
 
@@ -2150,75 +2063,6 @@ test("manifest cache is bounded and cannot cross published artifact versions", a
   assert.equal(kv.parses(manifests[0].manifestKey), 2)
 })
 
-test("public media hot path uses THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE when bound", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      media: {
-        symbol: "A1BG",
-        width: 999,
-        height: 777,
-      },
-    }),
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-      buildEnv({
-        ICONOPLASM_DB: null,
-        THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-      }),
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.media?.width, 999)
-  assert.equal(gateway.calls.length, 1)
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/media/A1BG",
-  )
-  assert.equal(gateway.calls[0]?.method, "GET")
-})
-
-test("public gene batch forwards post bodies through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
-  const gateway = new FakeOnlyAllowedGateway(async () =>
-    Response.json({
-      genes: [{ symbol: "A1BG" }],
-    }),
-  )
-
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Iconoplasm-Extension-Version": "0.3.0",
-        },
-        body: JSON.stringify({ symbols: ["A1BG", "TP53"] }),
-      }),
-      buildEnv({
-        ICONOPLASM_DB: null,
-        THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-      }),
-      {},
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.genes?.[0]?.symbol, "A1BG")
-  assert.equal(gateway.calls.length, 1)
-  assert.equal(
-    gateway.calls[0]?.url,
-    "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/public/v1/genes/batch",
-  )
-  assert.equal(gateway.calls[0]?.method, "POST")
-  assert.deepEqual(JSON.parse(gateway.calls[0]?.body || "null"), { symbols: ["A1BG", "TP53"] })
-  assert.equal(gateway.calls[0]?.headers?.["x-iconoplasm-extension-version"], "0.3.0")
-})
-
 test("site gene detail resolves the advertised v2 delta view for its symbol", async (t) => {
   const objects = new Map()
   const originalFetch = globalThis.fetch
@@ -2305,14 +2149,13 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
   )
   resetIconoplasmRuntimeCachesForTest()
 
-  const response =
-    await handleIconoplasmRequestAtPublicEdgeByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      env,
-      {},
-    )
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
+      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
+    }),
+    env,
+    {},
+  )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
