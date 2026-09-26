@@ -278,7 +278,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=807a440981407d76", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=d159a16595aee458", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
