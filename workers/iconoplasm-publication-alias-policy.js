@@ -9,7 +9,6 @@ import {
   iconoplasmPublicationAliasManifestFromPolicy,
   MAX_PUBLICATION_ALIAS_COUNT,
   MAX_PUBLICATION_ALIAS_LENGTH,
-  normalizePublicationAlias,
   normalizePublicationAliasSymbol,
   PUBLICATION_ALIAS_SCHEMA_VERSION,
   publicationAliasCollisionKey,
@@ -34,8 +33,6 @@ export const ICONOPLASM_PUBLICATION_ALIAS_HISTORY_RETENTION = 100
 export const ICONOPLASM_PUBLICATION_ALIAS_KV_RETENTION = 100
 export const ICONOPLASM_PUBLICATION_ALIAS_KV_PREFIX =
   "iconoplasm:publication-alias-policy:v1:revision:"
-export const ICONOPLASM_PUBLICATION_ALIAS_VERSION_KV_PREFIX =
-  "iconoplasm:publication-alias-policy:v1:version:"
 
 const CATALOG_MANIFEST_KV_KEY = "iconoplasm:catalog-manifest"
 const SCANNER_CATALOG_KV_PREFIX = "iconoplasm:scanner-catalog:"
@@ -984,18 +981,6 @@ function normalizedPublicationAliasVersionToken(rawToken) {
   return VERSION_TOKEN_RE.test(token) ? token : null
 }
 
-export function iconoplasmPublicationAliasVersionKvKey(rawToken) {
-  const token = normalizedPublicationAliasVersionToken(rawToken)
-  if (!token) {
-    throw policyError(
-      "invalid_publication_alias_version_token",
-      "Publication alias version token is invalid",
-      400,
-    )
-  }
-  return `${ICONOPLASM_PUBLICATION_ALIAS_VERSION_KV_PREFIX}${token}`
-}
-
 export function iconoplasmPublicationAliasKvKey(revision, version = null) {
   const normalized = positiveRevision(revision)
   if (!normalized) {
@@ -1115,53 +1100,6 @@ export async function readAuthoritativePublishedIconoplasmPublicationAliases(kv)
   return readHighestValidProjectionFromKv(kv)
 }
 
-export async function readPublishedIconoplasmPublicationAliasesByVersionToken(kv, rawToken) {
-  requireBinding(kv, "KV")
-  const token = normalizedPublicationAliasVersionToken(rawToken)
-  if (!token) return null
-  const bootstrap = await bootstrapProjection()
-  if (publicationAliasVersionToken(bootstrap.overlay.version) === token) return bootstrap
-  const overlay = await normalizedManifest(
-    await readJsonFromKv(kv, iconoplasmPublicationAliasVersionKvKey(token)),
-  )
-  if (!overlay || publicationAliasVersionToken(overlay.version) !== token) return null
-  return Object.freeze({ revision: null, overlay })
-}
-
-async function ensureVersionProjection(kv, projection) {
-  const token = publicationAliasVersionToken(projection?.version)
-  if (!token) {
-    throw policyError(
-      "invalid_publication_alias_version",
-      "Publication alias version is invalid",
-      500,
-    )
-  }
-  const key = iconoplasmPublicationAliasVersionKvKey(token)
-  const existingRaw = await kv.get(key)
-  if (existingRaw != null) {
-    const existing = await normalizedManifest(safeJsonParse(existingRaw))
-    if (!existing || existing.version !== projection.version || !samePolicy(existing, projection)) {
-      throw policyError(
-        "publication_alias_version_projection_collision",
-        `Immutable publication alias version ${projection.version} already has different content`,
-        503,
-      )
-    }
-  } else {
-    await kv.put(key, JSON.stringify(projection))
-  }
-  const visible = await normalizedManifest(await readJsonFromKv(kv, key))
-  if (!visible || visible.version !== projection.version || !samePolicy(visible, projection)) {
-    throw policyError(
-      "publication_alias_projection_not_visible",
-      `Publication alias version ${projection.version} is not yet visible`,
-      503,
-    )
-  }
-  return { key, token, overlay: visible }
-}
-
 async function bootstrapProjection() {
   if (!bootstrapProjectionPromise) {
     bootstrapProjectionPromise = iconoplasmPublicationAliasManifest().then((overlay) =>
@@ -1269,28 +1207,9 @@ async function cleanupOldProjectionKeys(kv, protectedRevision = null) {
   if (doomed.length > 0 && typeof kv?.delete !== "function") {
     throw policyError("kv_delete_unavailable", "KV binding does not support delete()", 500)
   }
-  const doomedKeys = new Set(doomed.map(({ key }) => key))
-  const retainedTokens = new Set(
-    keys
-      .filter(({ key }) => !doomedKeys.has(key))
-      .map(({ versionToken }) => versionToken)
-      .filter(Boolean),
-  )
-  const doomedVersionKeys = [
-    ...new Set(
-      doomed
-        .map(({ versionToken }) => versionToken)
-        .filter((token) => token && !retainedTokens.has(token))
-        .map((token) => iconoplasmPublicationAliasVersionKvKey(token)),
-    ),
-  ]
-  await Promise.all([
-    ...doomed.map(({ key }) => kv.delete(key)),
-    ...doomedVersionKeys.map((key) => kv.delete(key)),
-  ])
+  await Promise.all(doomed.map(({ key }) => kv.delete(key)))
   return {
     deleted: doomed.length,
-    version_keys_deleted: doomedVersionKeys.length,
     pending: Math.max(0, excess - doomed.length),
   }
 }
@@ -1366,7 +1285,6 @@ export async function publishIconoplasmPublicationAliasPolicy(
     : await readHighestValidProjectionFromKv(kv)
   assertProjectionDoesNotConflictWithPolicy(publishedBefore, before)
   if (iconoplasmPublicationAliasPublicationState(before, publishedBefore).in_sync) {
-    await ensureVersionProjection(kv, publishedBefore.overlay)
     return {
       ok: true,
       changed: false,
@@ -1456,10 +1374,6 @@ export async function publishIconoplasmPublicationAliasPolicy(
       } else {
         await kv.put(key, raw)
       }
-      // The revision key carries the version token in its name, so a failed
-      // token-index write remains discoverable and bounded by normal history
-      // cleanup. The atomic recognition pair is not published until both exist.
-      await ensureVersionProjection(kv, projection)
       const publishedAfter = exactDesired
         ? await readPublishedIconoplasmPublicationAliasesForPolicy(kv, policy)
         : await readHighestValidProjectionFromKv(kv)
