@@ -154,7 +154,7 @@ watermarked snapshot; it never edits local rows until the snapshot validates and
 swaps atomically.
 
 Snapshot transport v2 (migration `0012`) streams directly from a pinned authority
-epoch, event watermark, baseline rowid ceiling and checkpoint. GET pages are
+epoch, event watermark and baseline rowid ceiling. GET pages are
 read-only and contain at most 250 parts; no per-consumer D1 payload copy or build
 poller exists. Each signed continuation binds the cumulative part count and SHA-256
 chain. `total_parts` and `manifest_sha256` describe the prefix through that page;
@@ -163,9 +163,6 @@ only a terminal signed `completion_cursor` can complete the lease. The event
 Database triggers forbid baseline updates and deletion. VACUUM and table rebuilds
 are unsupported while any lease is open: maintenance must first expire all leases
 and prevent new leases until it finishes. There is no automatic VACUUM path.
-Database triggers also arbitrate snapshot creation against checkpoint activation;
-every open lease whose source floor precedes a checkpoint blocks activation,
-including a lease with a newer event watermark than the checkpoint.
 
 The workstation durably caches validated metadata pages and revalidates them after
 restart, downloading only the missing suffix. It verifies the completion receipt
@@ -190,23 +187,17 @@ shows the remote head, and requires a human rebase/retry. Local candidates witho
 an exact source binding remain `legacy_unbound`; migration never guesses by gene or
 timestamp.
 
-Event retention advances only through a verified normalized checkpoint at a
-fixed event watermark. The checkpoint keeps every immutable revision, canonical
-selection, Tags derivative, alias/tombstone, and the current mutable heads needed
-for history and rollback. Its bounded builder can resume after interruption; it
-must finish its manifest hash and pass active-consumer, open-snapshot, and pending
-projection guards before becoming the bootstrap baseline. Only then may a bounded
-service page delete the replaced event prefix. An older cursor receives an
-explicit snapshot-required response, and a fresh replica receives the checkpoint
-entities followed only by events strictly after its watermark.
+The Website never prunes events. Cold history moves to the sealed event archive
+(`iconoplasm-event-archive`), which snapshot and event pages read as one ordered
+source; a fresh replica receives the baselines followed by every event after
+them. An earlier design pruned the event prefix behind a verified normalized
+checkpoint and tombstoned command receipts. It was never activated (0 checkpoints,
+retention floor 0, 0 tombstones on 2026-09-26) and was deleted that day (B-869).
+If the retention floor were ever raised, a new snapshot refuses with
+`SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE` instead of streaming an incomplete history.
 
-Full command response receipts remain replayable for at least 90 days. After the
-accepted event is safely checkpointed and physically pruned, maintenance may
-replace a receipt atomically with a request/response hash tombstone that preserves
-the accepted event UUID, sequence, and gene revision. The tombstone makes the same
-command fail closed instead of reapplying with missing response data. It remains
-for a further 365-day tamper-audit window and is deleted only when the monotonic
-authority state proves the original command cannot apply again.
+Full command response receipts are kept and stay replayable; they are not
+compacted (see above).
 
 ## Hostile acceptance matrix
 
@@ -232,7 +223,6 @@ case where it crosses Website/workstation boundaries.
 | Caretaker restores any withdrawn lineage on the gene | New lifecycle and selection events restore it without rewriting history                   |
 | Leave with `retain`                                  | Tenure ends; lineage remains eligible and readable                                        |
 | Repeated leave request with a different policy       | Original receipt wins; policy cannot flip                                                 |
-| Command receipt source event is checkpointed/pruned  | Hash tombstone keeps replay fail-closed; leave/delete policy cannot reinterpret           |
 | Suspension during an open editor                     | New save is refused; local draft survives                                                 |
 | Assignment ends between save and select              | Select is refused without changing the head                                               |
 | Gene symbol renamed                                  | Stable gene ID retains assignment, history, and queued sources                            |
