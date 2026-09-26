@@ -58,10 +58,18 @@ test("an old-tree record shows its pose_mood tags under pose, with no duplicate 
   assert.equal("pose_mood" in JSON.parse(editor.source.dataset.fieldsJson), false)
 })
 
-test("rows follow the category tree, and saved extras such as colors come last (B-879)", () => {
+test("rows follow the category tree, and the retired colors category never shows (B-879)", () => {
+  // A row that shows now and vanishes after the gene is re-tagged is the same
+  // pop-in B-872 removed, and colour tags pull image generation off course.
   const editor = mount(oldTree, oldTreeText)
-  assert.deepEqual(editor.names, [...TAG_CATEGORIES, "colors"])
-  assert.deepEqual(editor.values("colors"), ["nightshade blue"], "colors is real content, kept")
+  assert.deepEqual(editor.names, TAG_CATEGORIES)
+  assert.equal(editor.values("uncategorized").length, 0, "colors tags don't resurface as ungrouped")
+})
+
+test("the retired colors tags leave the flat list too, so the next save drops them (B-879)", () => {
+  const editor = mount(oldTree, oldTreeText)
+  assert.equal(editor.source.value.includes("nightshade blue"), false)
+  assert.equal(editor.source.value.includes("static fist stance"), true)
 })
 
 test("opening an old-tree record does not count as an edit (B-879)", () => {
@@ -71,7 +79,6 @@ test("opening an old-tree record does not count as an edit (B-879)", () => {
     true,
     "the folded shape is the baseline, so autosave has nothing to send",
   )
-  assert.equal(editor.source.value, oldTreeText, "the flat tag list the images use is untouched")
 })
 
 test("a new-tree record gets no colors row (B-879)", () => {

@@ -1,7 +1,7 @@
 import {
   mountCaretakerTagEditor,
   readTagFields,
-} from "./caretaker-tag-editor.js?v=13736cfb9eb08d81"
+} from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
 import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=f9366e8614c9baf4"
 import {
   MAX_PROSE_CODE_POINTS,

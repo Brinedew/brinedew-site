@@ -75,6 +75,7 @@ import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
+import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import { mergePublishedGeneOverlay } from "../quartz/static/iconoplasm/publication-reader.js"
 import {
@@ -8791,7 +8792,7 @@ function candidateGenerationCommunityCommentsSnapshot(comments, { limit = 12 } =
   return sanitizeText(lines.join("\n"), 3000) || ""
 }
 
-function buildCandidateGenerationPrompt({
+export function buildCandidateGenerationPrompt({
   symbol,
   geneContext,
   promptBodyMode = "taggerizer_prompt",
@@ -8801,7 +8802,14 @@ function buildCandidateGenerationPrompt({
   const geneSymbol = normalizeSymbol(symbol || geneContext?.gene_symbol || "") || ""
   const fullName = sanitizeText(geneContext?.full_name || "", 255) || ""
   const manifestation = sanitizeText(geneContext?.manifestation || "", 4000) || ""
-  const tags = normalizeTaggerizerPrompt(geneContext?.manifestation_tags)
+  // B-879: the retired colors tags pull image generation off course; they are
+  // dropped here, using the grouping saved with the flat list.
+  const tags = normalizeTaggerizerPrompt(
+    promptTagsWithoutRetired(
+      geneContext?.manifestation_tags,
+      geneContext?.manifestation_fields_json,
+    ),
+  )
   const bodyMode = normalizeCandidatePromptBodyMode(promptBodyMode)
   const essenceSuffix = candidateGenerationEssenceSuffix(geneContext)
   let promptBody = bodyMode === "taggerizer_prompt" ? tags : manifestation
@@ -37713,6 +37721,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         ...mutableGeneContext,
         manifestation: exactSource.prose,
         manifestation_tags: exactSource.tags,
+        // The grouping of this exact source, not of whatever the gene context held.
+        manifestation_fields_json: exactSource.tags_fields_json,
         sample_label: exactSource.source_sample_label,
         sample_number: exactSource.source_sample_number,
         sample_text_hash: exactSource.source_sample_text_sha256,

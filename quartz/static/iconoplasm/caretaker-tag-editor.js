@@ -1,46 +1,12 @@
-// Starter rows mirror the authoring prompt; saved category names are never a whitelist.
-export const TAG_CATEGORIES = [
-  "archetype",
-  "body",
-  "face",
-  "hair",
-  "outfit",
-  "accessories",
-  "fantastical",
-  "action",
-  "pose",
-  "signature",
-  "background",
-  "composition",
-]
+// B-879: the category tree, the pose_mood rename and the retired colors category
+// live in shared/iconoplasm-tag-categories.js, the one copy on the website.
+import {
+  TAG_CATEGORIES,
+  promptTagsWithoutRetired,
+  upcastTagFields,
+} from "./generated/tag-categories.js?v=34136cdc4f5ec6dd"
 
-// B-879: retired category names, folded into their successor on read. 98% of
-// saved records predate the current tree. Stored tags are immutable versions, so
-// they are upcast here instead of rewritten; a caretaker's next save stores the
-// new name. "colors" has no one-to-one successor and stays a saved extra row.
-// Mirror of CATEGORY_ALIASES in Iconoplasm src/manifestation.py.
-export const TAG_CATEGORY_ALIASES = Object.freeze({ pose_mood: "pose" })
-
-function asTagArray(value) {
-  return Array.isArray(value) ? value : typeof value === "string" && value ? [value] : []
-}
-
-function upcastTagFields(saved) {
-  const fields = Object.assign(Object.create(null), saved)
-  for (const [retired, successor] of Object.entries(TAG_CATEGORY_ALIASES)) {
-    if (!Object.hasOwn(fields, retired)) continue
-    const value = fields[retired]
-    if (!Array.isArray(value) && typeof value !== "string") continue
-    fields[successor] = [...new Set([...asTagArray(fields[successor]), ...asTagArray(value)])]
-    delete fields[retired]
-  }
-  // Tree order first, then saved extras in their saved order.
-  const ordered = Object.create(null)
-  for (const key of TAG_CATEGORIES) ordered[key] = Object.hasOwn(fields, key) ? fields[key] : []
-  for (const key of Object.keys(fields))
-    if (!Object.hasOwn(ordered, key)) ordered[key] = fields[key]
-  return ordered
-}
+export { TAG_CATEGORIES }
 
 export function readTagFields(source) {
   return JSON.parse(source?.dataset.fieldsJson || "{}")
@@ -58,7 +24,11 @@ export function mountCaretakerTagEditor(form) {
   const host = form?.querySelector("[data-icono-caretaker-tag-categories]")
   if (!source || !host) return
   const doc = host.ownerDocument
-  const fields = upcastTagFields(readTagFields(source))
+  const saved = readTagFields(source)
+  // Retired colors tags are parasitic in image prompts: they leave the editor and
+  // the flat list together, so the next save stores neither.
+  source.value = promptTagsWithoutRetired(source.value, saved)
+  const fields = upcastTagFields(saved)
   const known = new Set(
     Object.values(fields)
       .flat()
