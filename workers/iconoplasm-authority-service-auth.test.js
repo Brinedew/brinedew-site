@@ -3,7 +3,6 @@ import test from "node:test"
 
 import {
   AUTHORITY_BEARER_BINDINGS,
-  authorizeIconoplasmAuthorityBackupBearer,
   authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityGenerationBearer,
   authorizeIconoplasmAuthorityMaintenanceBearer,
@@ -15,7 +14,6 @@ const AUDIENCES = Object.freeze({
   replica: authorizeIconoplasmAuthorityReplicaBearer,
   generation: authorizeIconoplasmAuthorityGenerationBearer,
   maintenance: authorizeIconoplasmAuthorityMaintenanceBearer,
-  backup: authorizeIconoplasmAuthorityBackupBearer,
   cutover: authorizeIconoplasmAuthorityCutoverBearer,
 })
 const TOKENS = Object.freeze(
@@ -55,6 +53,14 @@ test("each authority bearer is accepted only by its exact audience", async () =>
     assert.equal((await authorize(request(ADMIN_TOKEN), ENV)).authorized, false)
     assert.equal((await authorize(request(""), ENV)).authorized, false)
   }
+})
+
+test("the retired backup audience is gone (B-859: 0 capabilities ever issued)", () => {
+  assert.equal(AUTHORITY_BEARER_BINDINGS.backup, undefined)
+  assert.equal(
+    Object.values(AUTHORITY_BEARER_BINDINGS).includes("ICONOPLASM_AUTHORITY_BACKUP_TOKEN"),
+    false,
+  )
 })
 
 test("authority bearers have no generic, admin-token, or alternate-header fallback", async () => {

@@ -1,5 +1,4 @@
 import {
-  authorizeIconoplasmAuthorityBackupBearer,
   authorizeIconoplasmAuthorityMaintenanceBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
@@ -26,7 +25,6 @@ export function createIconoplasmManifestationAuthorityRuntimeHandler({
     env,
     authorizeReplicaBearer: authorizeIconoplasmAuthorityReplicaBearer,
     authorizeMaintenanceBearer: authorizeIconoplasmAuthorityMaintenanceBearer,
-    authorizeBackupBearer: authorizeIconoplasmAuthorityBackupBearer,
     resolveSession,
     onAuthorityEvent,
     onIntegrityFailure,

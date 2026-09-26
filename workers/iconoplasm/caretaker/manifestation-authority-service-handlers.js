@@ -16,13 +16,6 @@ import {
   requireAuthorityBearer,
   safeErrorResponse,
 } from "./manifestation-authority-http-security.js"
-import {
-  consumeManifestationBackupCapability,
-  issueManifestationBackupCapability,
-  restoreManifestationDerivativeBackup,
-  restoreManifestationRevisionBackup,
-  verifyManifestationBackupEntity,
-} from "./manifestation-authority-backup.js"
 import { deliverAcceptedAuthorityEvent } from "./manifestation-authority-projection-delivery.js"
 import { first, resolveCommandReplay } from "./manifestation-authority-repository.js"
 import {
@@ -62,12 +55,6 @@ function requireJson(request) {
   if (type !== "application/json") {
     throw authorityError("JSON_CONTENT_TYPE_REQUIRED", "JSON request body required", 415)
   }
-}
-
-function bytesToBase64Url(bytes) {
-  let binary = ""
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
 }
 
 function base64UrlToBytes(raw) {
@@ -271,33 +258,11 @@ async function mutationResponse(db, callback, result) {
   )
 }
 
-function restoreInput(body, actor, command, kind) {
-  const entityId = String(body.entity_id || "")
-  return {
-    ...(kind === "revision" ? { revisionId: entityId } : { derivativeId: entityId }),
-    expectedGeneRevision: body.expected_gene_revision,
-    expectedStorageCiphertextSha256: body.expected_storage_ciphertext_sha256 ?? null,
-    ciphertext: base64UrlToBytes(body.ciphertext_base64url),
-    ciphertextSha256: body.ciphertext_sha256,
-    ciphertextBytes: body.ciphertext_bytes,
-    bodyIvBase64: body.body_iv_base64,
-    wrappedDekBase64: body.wrapped_dek_base64,
-    wrapIvBase64: body.wrap_iv_base64,
-    keyVersion: body.key_version,
-    aadVersion: body.aad_version,
-    eventUuid: body.event_id,
-    actorKind: actor.actorKind,
-    actorAccountId: actor.actorAccountId,
-    ...command,
-  }
-}
-
 export function createManifestationAuthorityServiceHandler({
   db,
   env,
   authorizeReplicaBearer,
   authorizeMaintenanceBearer,
-  authorizeBackupBearer,
   onAuthorityEvent,
   onIntegrityFailure,
   idFactory = defaultIdFactory,
@@ -318,27 +283,15 @@ export function createManifestationAuthorityServiceHandler({
       const select = url.pathname.match(
         /^\/api\/iconoplasm\/authority\/revisions\/([^/]+)\/tags-derivative-head$/,
       )
-      const backupPath = url.pathname.match(
-        /^\/api\/iconoplasm\/authority\/backups\/(capabilities|export|restores|verifications)$/,
-      )
       const maintenance = url.pathname.match(
         /^\/api\/iconoplasm\/authority\/maintenance\/(command-receipts|command-tombstones)\/(sweep|compact)$/,
       )
       const compaction = matchManifestationEventCompactionRoute(url.pathname)
       const matched =
-        revisionBody ||
-        derivativeBody ||
-        submit ||
-        select ||
-        backupPath ||
-        maintenance ||
-        compaction
+        revisionBody || derivativeBody || submit || select || maintenance || compaction
       if (!matched) return null
-      const authorizeBearer = backupPath
-        ? authorizeBackupBearer
-        : maintenance || compaction
-          ? authorizeMaintenanceBearer
-          : authorizeReplicaBearer
+      const authorizeBearer =
+        maintenance || compaction ? authorizeMaintenanceBearer : authorizeReplicaBearer
       const actor = await requireAuthorityBearer(request, env, authorizeBearer)
       if (request.method === "GET" && revisionBody) {
         const row = await exactRevision(db, routeId(revisionBody[1]))
@@ -375,10 +328,7 @@ export function createManifestationAuthorityServiceHandler({
       }
       if (request.method !== "POST") return null
       requireJson(request)
-      const parsed = await readBoundedJson(
-        request,
-        backupPath?.[1] === "restores" ? 128 * 1024 : 48 * 1024,
-      )
+      const parsed = await readBoundedJson(request, 48 * 1024)
       const body = parsed.value
 
       if (compaction) {
@@ -395,69 +345,6 @@ export function createManifestationAuthorityServiceHandler({
           return jsonResponse(await sweepManifestationCommandTombstones(db, options))
         }
         throw authorityError("INVALID_MAINTENANCE_ACTION", "Maintenance action is invalid", 404)
-      }
-
-      if (backupPath) {
-        if (backupPath[1] === "capabilities") {
-          return jsonResponse(
-            await issueManifestationBackupCapability(db, {
-              entityKind: body.entity_kind,
-              entityId: body.entity_id,
-              ttlSeconds: body.ttl_seconds,
-              actorKind: actor.actorKind,
-              actorAccountId: actor.actorAccountId,
-            }),
-          )
-        }
-        if (backupPath[1] === "export") {
-          const value = await consumeManifestationBackupCapability(db, env, {
-            capability: body.capability,
-            actorKind: actor.actorKind,
-            actorAccountId: actor.actorAccountId,
-          })
-          return jsonResponse({
-            schema_version: 1,
-            ...value,
-            ciphertext: undefined,
-            ciphertext_base64url: bytesToBase64Url(value.ciphertext),
-          })
-        }
-        if (backupPath[1] === "verifications") {
-          return jsonResponse(
-            await verifyManifestationBackupEntity(db, env, {
-              entityKind: body.entity_kind,
-              entityId: body.entity_id,
-              actorKind: actor.actorKind,
-              actorAccountId: actor.actorAccountId,
-            }),
-          )
-        }
-        const kind = String(body.entity_kind || "")
-          .trim()
-          .toLowerCase()
-        if (!["revision", "derivative"].includes(kind)) {
-          throw authorityError("INVALID_BACKUP_ENTITY", "Backup entity kind is invalid")
-        }
-        const command = await commandEnvelope(
-          request,
-          parsed.raw,
-          body,
-          actor.actorKind,
-          actor.actorAccountId,
-        )
-        const value =
-          kind === "revision"
-            ? await restoreManifestationRevisionBackup(
-                db,
-                env,
-                restoreInput(body, actor, command, kind),
-              )
-            : await restoreManifestationDerivativeBackup(
-                db,
-                env,
-                restoreInput(body, actor, command, kind),
-              )
-        return mutationResponse(db, onAuthorityEvent, value)
       }
 
       const revisionId = routeId((submit || select)[1])
