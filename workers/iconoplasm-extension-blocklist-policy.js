@@ -29,7 +29,6 @@ export const ICONOPLASM_EXTENSION_BLOCKLIST_KV_RETENTION = 100
 export const ICONOPLASM_EXTENSION_BLOCKLIST_KV_PREFIX =
   "iconoplasm:extension-blocklist-policy:v1:revision:"
 
-const PUBLIC_CACHE_TTL_MS = 5_000
 const PROJECTION_LEASE_MS = 60_000
 const KV_REVISION_WIDTH = 20
 const KV_LIST_LIMIT = 1_000
@@ -44,8 +43,6 @@ if (
 ) {
   throw new TypeError("Unsupported extension blocklist candidate contract")
 }
-
-let publicProjectionCache = new WeakMap()
 
 export function iconoplasmExtensionBlocklistKvKey(revision) {
   const normalized = positiveRevision(revision)
@@ -491,10 +488,6 @@ export async function parseIconoplasmPublishedExtensionBlocklistProjection(raw) 
   return Object.freeze({ ...normalized, terms: Object.freeze([...terms]) })
 }
 
-export function resetIconoplasmExtensionBlocklistPublicCacheForTests() {
-  publicProjectionCache = new WeakMap()
-}
-
 async function listProjectionKeys(kv) {
   if (typeof kv?.list !== "function") {
     throw policyError("kv_list_unavailable", "KV binding does not support list()", 500)
@@ -564,49 +557,6 @@ export async function readRetainedPublishedIconoplasmExtensionBlocklists(kv) {
 export async function readAuthoritativePublishedIconoplasmExtensionBlocklist(kv) {
   requireBinding(kv, "KV")
   return readHighestValidProjectionFromKv(kv)
-}
-
-function monotonicProjection(cached, candidate) {
-  if (!cached) return candidate
-  if (!candidate || candidate.revision < cached.revision) return cached
-  if (
-    candidate.revision === cached.revision &&
-    (candidate.version !== cached.version || !sameTerms(candidate.terms, cached.terms))
-  ) {
-    return cached
-  }
-  return candidate
-}
-
-export async function readPublishedIconoplasmExtensionBlocklist(
-  kv,
-  { fresh = false, nowMs = Date.now() } = {},
-) {
-  if (!kv) return null
-  const cached = publicProjectionCache.get(kv)
-  if (!fresh && cached && cached.expiresAt > nowMs) return cached.value
-  const candidate = await readHighestValidProjectionFromKv(kv)
-  const value = monotonicProjection(cached?.value || null, candidate)
-  publicProjectionCache.set(kv, { value, expiresAt: nowMs + PUBLIC_CACHE_TTL_MS })
-  return value ? publicBlocklistProjection(value) : null
-}
-
-function publicBlocklistProjection(projection) {
-  return Object.freeze({
-    schema_version: projection.schema_version,
-    revision: projection.revision,
-    version: projection.version,
-    term_count: projection.term_count,
-    terms: projection.terms,
-  })
-}
-
-function cachePublishedProjection(kv, candidate) {
-  const cached = publicProjectionCache.get(kv)
-  publicProjectionCache.set(kv, {
-    value: monotonicProjection(cached?.value || null, candidate),
-    expiresAt: Date.now() + PUBLIC_CACHE_TTL_MS,
-  })
 }
 
 function projectionForPolicy(policy) {
@@ -680,13 +630,6 @@ async function cleanupOldProjectionKeysBestEffort(kv, protectedRevision = null) 
   } catch (error) {
     return { ok: false, deleted: 0, error: String(error?.message || error) }
   }
-}
-
-export function cleanupIconoplasmExtensionBlocklistProjectionHistory(
-  kv,
-  { protectedRevision = null } = {},
-) {
-  return cleanupOldProjectionKeysBestEffort(kv, protectedRevision)
 }
 
 export function iconoplasmExtensionBlocklistPublicationState(policy, projection) {
@@ -906,7 +849,6 @@ export async function publishIconoplasmExtensionBlocklistPolicy(
         ],
       ).run()
       if (changedRows(acknowledged) === 1) {
-        cachePublishedProjection(kv, publishedAfter)
         return {
           ok: true,
           changed: true,

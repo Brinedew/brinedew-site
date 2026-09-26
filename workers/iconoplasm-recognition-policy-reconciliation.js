@@ -2,7 +2,6 @@
 // exact desired-state dependency revisions persisted by each administrator
 // save, then exposed through one atomic immutable KV pair projection.
 import {
-  cleanupIconoplasmExtensionBlocklistProjectionHistory,
   parseIconoplasmPublishedExtensionBlocklistProjection,
   readAuthoritativePublishedIconoplasmExtensionBlocklist,
   readIconoplasmExtensionBlocklistPolicy,
@@ -16,7 +15,6 @@ import {
   iconoplasmPublicationAliasManifestFromPolicy,
 } from "./iconoplasm-publication-aliases.js"
 import {
-  cleanupIconoplasmPublicationAliasProjectionHistory,
   readAuthoritativePublishedIconoplasmPublicationAliases,
   readIconoplasmPublicationAliasPolicy,
   readIconoplasmPublishedScannerVersion,
