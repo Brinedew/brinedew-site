@@ -65,7 +65,6 @@ function getCorsHeaders(origin, requestHost = "") {
 }
 
 // Backward compatibility - default CORS headers for main domain
-const CORS_HEADERS = getCorsHeaders("https://brinedew.bio", "brinedew.bio")
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const BYTES_PER_GB = 1024 * 1024 * 1024
 const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB)
@@ -76,7 +75,6 @@ const STRUCTURE_CACHE_META_PREFIX = "structure_meta:"
 const STRUCTURE_CACHE_TARGET_RATIO = 0.9
 const DAILY_TARGET_SALT = "geneguessr-v2-939b5a0b"
 const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
-const DAILY_BOOTSTRAP_CACHE_TTL = 86400 // 24 hours
 const DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS = 5 * 60 * 1000
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
@@ -1427,10 +1425,7 @@ import {
   markStructureFailure,
   clearStructureFailure,
 } from "./lib/protein-store.js"
-import {
-  resolveStructureRepresentation,
-  buildStructureMetaFromStoredSource,
-} from "./lib/structure-utils.js"
+import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 import { getDailyGuessAggregates, recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
@@ -3546,23 +3541,6 @@ function resolveSessionCookie(request) {
     .slice(0, 32)
 
   return { sessionToken, isNew: true }
-}
-
-function resolveSessionContext(request) {
-  const url = new URL(request.url)
-  const practiceMode = url.searchParams.get("practice") === "1"
-  const practiceRestart = practiceMode && url.searchParams.get("restart") === "1"
-
-  const { sessionToken, isNew } = resolveSessionCookie(request)
-  const baseSessionId = `guest_${sessionToken}`
-
-  return {
-    practiceMode,
-    practiceRestart,
-    sessionId: practiceMode ? `practice_${baseSessionId}` : baseSessionId,
-    sessionToken,
-    needsSessionCookie: isNew,
-  }
 }
 
 async function resolveSessionContextAsync(request, env, options = {}) {
