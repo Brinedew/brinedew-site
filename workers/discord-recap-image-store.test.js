@@ -8,7 +8,6 @@ import {
   putDiscordRecapImage,
   headDiscordRecapImage,
   loadDiscordRecapImageBytes,
-  deleteDiscordRecapImage,
 } from "./lib/discord-recap-images.js"
 
 // ARCHITECTURE FENCE [GG-002]: these tests deliberately distinguish an HTTP
@@ -240,17 +239,6 @@ test("head reports existence and size via the storage API", async () => {
       const head = await headDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY)
       assert.equal(head.size, 4242)
       assert.equal(head.key, IMAGE_KEY)
-    },
-  )
-})
-
-test("delete issues a DELETE against the storage API", async () => {
-  await withMockedFetch(
-    () => new Response(null, { status: 200 }),
-    async (calls) => {
-      const acted = await deleteDiscordRecapImage(BUNNY_ENV, IMAGE_IDENTITY)
-      assert.equal(acted, true)
-      assert.equal(calls[0].init.method, "DELETE")
     },
   )
 })
