@@ -376,9 +376,3 @@ generated website or extension copies.
 9. Verify the extension on a normal web page in the same two network states.
 10. Run the shared delivery, extension worker, public media, image-edit, storage,
     packaging, and build tests before deployment.
-
-## Stable /blot/{SYMBOL}.webp alias on Bunny (B-846)
-
-The short link is served from the mutable Bunny object `BLOT/{SYMBOL}.WEBP`, so a hotlinked figure costs Bunny bandwidth, not Worker requests. Its one writer is `workers/lib/iconoplasm-blot-alias.js`: the publisher refreshes it from the verified blot bytes on every blot change, and `scripts/refresh-blot-aliases.mjs` backfills or repairs named genes through `POST /api/iconoplasm/admin/blot-aliases/refresh`. Every write is followed by a purge of the exact public URL, using the Worker secret `BUNNY_ACCOUNT_API_KEY`. That is a Bunny account API key, created and owned by the site owner on 2026-09-25; the storage-zone key cannot purge. The alias is a projection: a failed write or purge is reported, never blocks publication, and is fixed by the next write or by the script.
-
-Check a gene with `node scripts/refresh-blot-aliases.mjs --verify SYMBOL`: the catalog, Worker and alias hashes must match.
