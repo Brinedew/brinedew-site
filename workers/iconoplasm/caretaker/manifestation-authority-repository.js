@@ -281,20 +281,6 @@ async function readHead(db, geneId) {
   return row
 }
 
-async function readSelection(db, selectionId) {
-  if (!selectionId) return null
-  return first(
-    db,
-    `SELECT canonical_selection_id, gene_id, previous_selection_id, previous_revision_id,
-            selected_manifestation_id, selected_revision_id, actor_account_id,
-            caretaker_assignment_id, reason, command_id, head_version,
-            gene_revision, created_at
-       FROM icono_manifestation_canonical_selections
-      WHERE canonical_selection_id = ?`,
-    selectionId,
-  )
-}
-
 async function readAssignment(db, assignmentId) {
   return first(
     db,
@@ -638,44 +624,6 @@ function commandInputs({ commandId, requestSha256, actorKind = "account", actorA
   }
 }
 
-export async function readManifestationAuthorityGeneState(db, rawGeneId) {
-  requireDatabase(db)
-  const gene = await requireActiveGene(db, rawGeneId)
-  const head = await readHead(db, gene.gene_id)
-  const assignment = await first(
-    db,
-    `SELECT caretaker_assignment_id, gene_id, account_id, status,
-            assignment_version, terms_version_id, entitlement_policy_version,
-            entitlement_grace_ends_at, relinquish_policy, started_at,
-            suspended_at, ended_at
-       FROM icono_caretaker_assignments
-      WHERE gene_id = ? AND status IN ('pending_acceptance', 'active', 'suspended')
-      LIMIT 1`,
-    gene.gene_id,
-  )
-  const manifestation = head.canonical_manifestation_id
-    ? await readManifestation(db, head.canonical_manifestation_id)
-    : null
-  const revision = head.canonical_revision_id
-    ? await readRevision(db, head.canonical_revision_id)
-    : null
-  const selection = await readSelection(db, head.canonical_selection_id)
-  return Object.freeze({
-    schema_version: 1,
-    last_event_sequence: Number(head.last_event_sequence),
-    gene: geneSnapshot(gene),
-    assignment: assignmentSnapshot(assignment),
-    manifestation: manifestationSnapshot(manifestation),
-    canonical: canonicalSnapshot(head),
-    changed_revision: revisionSnapshot(revision),
-    changed_selection: selectionSnapshot(selection),
-    changed_aliases: [],
-    changed_derivative: null,
-    derivative_head: null,
-    tombstones: [],
-  })
-}
-
 export {
   all,
   assignmentSnapshot,
@@ -698,7 +646,6 @@ export {
   readManifestation,
   readReceipt,
   readRevision,
-  readSelection,
   receiptResult,
   requireActiveAccount,
   requireActiveGene,

@@ -10,7 +10,6 @@ import {
   endCaretakerAssignment,
   offerCaretakerAssignment,
   readCaretakerGeneDossier,
-  readManifestationAuthorityGeneState,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
   registerGeneIdentity,
@@ -1173,7 +1172,12 @@ test("the schema rejects predictable locators, oversized bodies, invalid JSON, a
     }),
     { code: "INVALID_BODY_SIZE" },
   )
-  const snapshot = await readManifestationAuthorityGeneState(context.db, context.geneId)
-  assert.equal(snapshot.last_event_sequence > 0, true)
-  assert.equal(snapshot.canonical.manifestation_revision_id, context.seedRevisionId)
+  // The refused save left the head untouched.
+  const head = context.db.raw
+    .prepare(
+      "SELECT last_event_sequence, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
+    )
+    .get(context.geneId)
+  assert.equal(head.last_event_sequence > 0, true)
+  assert.equal(head.canonical_revision_id, context.seedRevisionId)
 })
