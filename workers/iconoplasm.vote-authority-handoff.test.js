@@ -354,3 +354,71 @@ for (const [name, responses, expectedCode] of [
     assert.equal(coordinator.getMeta("authority_epoch"), "v2")
   })
 }
+
+// B-876 (gene HR, 26 Sep): new candidates arrived for a published v2 gene
+// without changing its winner. The handoff imported them, but the selection
+// identity ignored the candidate set, so nothing re-published and the gene
+// page gallery stayed stale indefinitely.
+function candidateOnlySource(jobVersion, candidates) {
+  return {
+    prepare(query) {
+      if (/FROM icono_sync_finalization_jobs/.test(query)) {
+        return {
+          bind: (_symbol, version) => ({
+            first: async () =>
+              version === jobVersion
+                ? { job_version: jobVersion, status: "queued", phase: "completed_pending_finalize" }
+                : null,
+          }),
+        }
+      }
+      return { bind: () => ({ all: async () => ({ results: structuredClone(candidates) }) }) }
+    },
+  }
+}
+
+async function handoff(coordinator, jobVersion) {
+  const response = await coordinator.fetch(
+    new Request("https://coordinator/publication/finalization-handoff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol: "TP53", job_version: jobVersion }),
+    }),
+  )
+  return response.json()
+}
+
+test("a finalization that only adds candidates republishes the gene card (B-876)", async (t) => {
+  const { coordinator } = await seeded(t)
+  await publishWinningVote(coordinator)
+  const published = coordinator.publication.read()
+  assert.equal(published.pending, false)
+
+  coordinator.env = {
+    ICONOPLASM_DB: candidateOnlySource(2, retainedCandidates(["a", "b", "c"])),
+  }
+  const receipt = await handoff(coordinator, 2)
+  assert.equal(receipt.accepted, true)
+  assert.equal(receipt.candidate_changed, true)
+  const after = coordinator.publication.read()
+  assert.equal(after.pending, true, "an added candidate must re-publish the gene card")
+  assert.equal(after.desiredVersion, published.desiredVersion + 1)
+  assert.equal(
+    after.selectionRef.includes(`winner=${sha("b")}`),
+    true,
+    "the winner itself is unchanged",
+  )
+})
+
+test("a finalization that changes no candidate spends no publication (B-876)", async (t) => {
+  const { coordinator } = await seeded(t)
+  await publishWinningVote(coordinator)
+  coordinator.env = {
+    ICONOPLASM_DB: candidateOnlySource(2, retainedCandidates(["a", "b"])),
+  }
+  const before = coordinator.publication.read()
+  const receipt = await handoff(coordinator, 2)
+  assert.equal(receipt.accepted, true)
+  assert.equal(receipt.candidate_changed, false)
+  assert.deepEqual(coordinator.publication.read(), before)
+})

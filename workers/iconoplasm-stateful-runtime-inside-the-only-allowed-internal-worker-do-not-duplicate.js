@@ -17149,6 +17149,7 @@ export class IconoplasmVoteCoordinator {
       selectionRef: composeGeneSelectionReference({
         symbol: normalizeSymbol(this.getMeta("symbol")),
         winner,
+        candidateSetRevision: Number(this.getMeta("candidate_authority_revision")) || 0,
         caretakerSupervoteVersion: Number(caretaker?.supervote_version || 0),
         caretakerDirection:
           caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
