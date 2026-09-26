@@ -414,9 +414,10 @@ test("new candidate modal tabs separate free queue and configured image API gene
   )
   assert.match(
     app,
-    /data-icono-request-image-publish hidden disabled/,
-    "direct generation should not show publish until a candidate exists",
+    /data-icono-request-image-publish disabled>/,
+    "direct generation keeps publish visible but disabled until a candidate exists (B-867)",
   )
+  assert.doesNotMatch(app, /directPublishButton\.hidden\s*=/)
   assert.match(
     app,
     /class="icono-request-footer" slot="footer"[\s\S]*data-icono-request-free-footer[\s\S]*data-icono-request-free-submit[\s\S]*data-icono-request-direct-footer hidden[\s\S]*data-icono-request-image-generate[\s\S]*data-icono-request-image-publish/,
