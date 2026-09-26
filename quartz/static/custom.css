@@ -1757,7 +1757,7 @@ body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after 
   min-height: 2.15rem;
   padding: 0.35rem 1rem;
   border: 1px solid var(--accent);
-  border-radius: 999px;
+  border-radius: var(--icono-control-radius, 0);
   background: transparent;
   color: var(--accent);
   font-family: "Crimson Pro", serif;
