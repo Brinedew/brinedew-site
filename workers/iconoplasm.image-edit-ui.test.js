@@ -65,8 +65,10 @@ test("B-517 edit blot UI uses one dialog modal and the direct image-edit APIs", 
   )
   assert.match(
     dialogMarkup,
-    /<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish<\/button>/,
+    /<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish<\/button>/,
   )
+  // B-867: the next step stays visible and greyed out; it never pops in.
+  assert.doesNotMatch(app, /publishButton\.hidden\s*=/)
   assert.ok(
     dialogMarkup.indexOf("data-icono-image-edit-submit") <
       dialogMarkup.indexOf("data-icono-image-edit-publish"),
