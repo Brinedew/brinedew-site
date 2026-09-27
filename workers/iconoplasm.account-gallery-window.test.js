@@ -995,3 +995,171 @@ test("account gallery endpoint has an explicit budget class", () => {
   assert.equal(route?.budgetFamily, "account_gallery_window")
   assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
 })
+
+// B-885 (27 Sep 2026): the home collection died with Cloudflare 1102 "Worker
+// exceeded resource limits" for the two largest shelves (2,106 and 1,584
+// genes). Every window enriched the WHOLE shelf (a three-table join, 250 genes
+// per query, one mapped object per gene) and only then kept 24. The window
+// must enrich exactly the rows it returns, for both scopes, and those rows must
+// still carry the enriched fields.
+function manyGeneDb() {
+  const db = new FakeDb()
+  db.rows = Array.from({ length: 101 }, (_, index) => {
+    const number = String(index).padStart(3, "0")
+    const day = String(1 + Math.floor(index / 24)).padStart(2, "0")
+    const hour = String(index % 24).padStart(2, "0")
+    return db.row(
+      index % 2 ? "user-123" : "user-456",
+      `G${number}`,
+      `2026-04-${day}T${hour}:00:00Z`,
+      index,
+    )
+  })
+  return db
+}
+
+function enrichmentCalls(db) {
+  return db.calls
+    .filter((call) => /FROM icono_gene_catalog gc/.test(call.sql))
+    .map((call) => JSON.parse(String(call.args[0] || "[]")))
+}
+
+for (const scope of ["personal", "shared"]) {
+  test(`${scope} account gallery window enriches only the rows it returns (B-885)`, async () => {
+    const db = manyGeneDb()
+    resetIconoplasmRuntimeCachesForTest()
+    const env = buildEnv({ db, version: `test-vm-version-page-first-${scope}` })
+    env.KV.put(
+      `iconoplasm:card-catalog:test-vm-version-page-first-${scope}`,
+      JSON.stringify(
+        completeCardCatalogArtifact(
+          db.rows.map((row) => row.gene_symbol),
+          `test-vm-version-page-first-${scope}`,
+        ),
+      ),
+    )
+    const query = scope === "shared" ? "&scope=shared" : ""
+    const first =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}`,
+          { headers: { Cookie: "session=abc" } },
+        ),
+        env,
+      )
+    const payload = await first.json()
+    assert.equal(first.status, 200)
+    assert.equal(payload.items.length, 3)
+    const enriched = enrichmentCalls(db).flat()
+    assert.deepEqual(
+      [...enriched].sort(),
+      payload.items.map((item) => item.symbol).sort(),
+      `${scope}: enriched ${enriched.length} genes to return 3`,
+    )
+    for (const item of payload.items) {
+      assert.equal(
+        item.discovery.full_name,
+        `${item.symbol} full name`,
+        `${scope}: enrichment lost`,
+      )
+    }
+
+    // The next page (after the cursor) is still correct and still bounded.
+    db.calls.length = 0
+    const next =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}&after=${encodeURIComponent(payload.next_cursor)}`,
+          { headers: { Cookie: "session=abc" } },
+        ),
+        env,
+      )
+    const nextPayload = await next.json()
+    assert.equal(next.status, 200)
+    assert.equal(nextPayload.items.length, 3)
+    assert.ok(
+      nextPayload.items[0].discovery.first_discovered_at <=
+        payload.items[2].discovery.first_discovered_at,
+      `${scope}: the next page is not older than the first`,
+    )
+    assert.ok(enrichmentCalls(db).flat().length <= 3, `${scope}: second page enriched too much`)
+  })
+}
+
+// B-885 step 2: the shared window mapped EVERY shared discovery's ordinal to
+// its symbol (8 lookup queries of 500 at 3,681 discoveries; 42% of all D1 rows
+// read on 27 Sep, with the hourly publisher) to show one page. Newest order
+// pages by time first and names only the page, including ties that share a
+// second, walked end to end in both directions.
+test("shared newest window names only the page and pages ties exactly (B-885)", async () => {
+  const db = new FakeDb()
+  // 60 genes in 12 distinct seconds: ties of five share every timestamp.
+  db.rows = Array.from({ length: 60 }, (_, index) => {
+    const second = String(Math.floor(index / 5)).padStart(2, "0")
+    return db.row(
+      `user-${index % 7}`,
+      `T${String(59 - index).padStart(2, "0")}`,
+      `2026-05-01T00:00:${second}Z`,
+      index,
+    )
+  })
+  resetIconoplasmRuntimeCachesForTest()
+  const env = buildEnv({ db, version: "test-vm-version-shared-ties" })
+  env.KV.put(
+    "iconoplasm:card-catalog:test-vm-version-shared-ties",
+    JSON.stringify(
+      completeCardCatalogArtifact(
+        db.rows.map((row) => row.gene_symbol),
+        "test-vm-version-shared-ties",
+      ),
+    ),
+  )
+  const expected = [...db.rows]
+    .sort(
+      (a, b) =>
+        b.first_discovered_at.localeCompare(a.first_discovered_at) ||
+        a.gene_symbol.localeCompare(b.gene_symbol),
+    )
+    .map((row) => row.gene_symbol)
+  const ordinalLookups = () =>
+    db.calls
+      .filter((call) => /FROM icono_discovery_ordinals_v2\s+WHERE ordinal IN/.test(call.sql))
+      .flatMap((call) => JSON.parse(String(call.args[0] || "[]")))
+  const page = async (cursorParam) => {
+    db.calls.length = 0
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=7&scope=shared${cursorParam}`,
+        ),
+        env,
+      )
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    // At most the page, one look-ahead, and the ties on both boundaries.
+    assert.ok(ordinalLookups().length <= 7 + 1 + 5 + 5, `named ${ordinalLookups().length} genes`)
+    return payload
+  }
+  const forward = []
+  let payload = await page("")
+  const pages = [payload]
+  forward.push(...payload.items.map((item) => item.symbol))
+  while (payload.has_more) {
+    payload = await page(`&after=${encodeURIComponent(payload.next_cursor)}`)
+    pages.push(payload)
+    forward.push(...payload.items.map((item) => item.symbol))
+  }
+  assert.deepEqual(forward, expected, "forward walk")
+  assert.equal(pages.length, Math.ceil(60 / 7))
+
+  // Backward from the last page reproduces every earlier page.
+  let back = pages[pages.length - 1]
+  for (let index = pages.length - 2; index >= 0; index--) {
+    back = await page(`&before=${encodeURIComponent(back.previous_cursor)}`)
+    assert.deepEqual(
+      back.items.map((item) => item.symbol),
+      pages[index].items.map((item) => item.symbol),
+      `backward page ${index}`,
+    )
+  }
+})
