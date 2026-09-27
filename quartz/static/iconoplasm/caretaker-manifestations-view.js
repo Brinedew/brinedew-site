@@ -33,16 +33,12 @@ function provenanceMarkup(revision, escapeHtml) {
   if (!provenance || typeof provenance !== "object") return ""
   const origin = String(provenance.origin || "")
   const source = String(provenance.source_label || provenance.model_id || origin)
-  const details = [
-    source,
-    provenance.recipe_version ? `recipe ${provenance.recipe_version}` : "",
-    provenance.source_body_sha256
-      ? `source ${String(provenance.source_body_sha256).slice(0, 12)}…`
-      : "",
-  ].filter(Boolean)
+  // B-874 walkthrough: recipe numbers and source hashes meant nothing to a
+  // caretaker. The model that wrote the tags is the one fact worth showing.
+  const details = [source].filter(Boolean)
   if (!details.length) return ""
   return (
-    '<details class="icono-caretaker-provenance"><summary>Generation provenance</summary><p>' +
+    '<details class="icono-caretaker-provenance"><summary>How the tags were made</summary><p>' +
     escapeHtml(details.join(" — ")) +
     "</p></details>"
   )
@@ -60,12 +56,11 @@ function derivativeMarkup(revision, escapeHtml) {
         : state === "stale"
           ? "Tags stale"
           : "Tags pending"
-  const detail = derivative.recipe_version ? ` — recipe ${derivative.recipe_version}` : ""
   return (
     '<p class="icono-caretaker-derivative" data-state="' +
     escapeHtml(state) +
     '">' +
-    escapeHtml(label + detail) +
+    escapeHtml(label) +
     "</p>"
   )
 }
@@ -513,19 +508,23 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     '<dialog class="icono-caretaker-dialog" data-icono-caretaker-dialog aria-labelledby="icono-caretaker-title">' +
     '<section class="icono-caretaker-panel">' +
     '<header class="icono-caretaker-panel__header"><div>' +
-    '<p class="icono-caretaker-panel__eyebrow">' +
-    esc(dossier.gene.symbol) +
-    "</p>" +
-    '<h2 id="icono-caretaker-title">Caretaker record</h2>' +
+    // B-874 walkthrough: the title names the task, not a database object, and
+    // the state pill appears only when the state is news (never for "active").
+    '<p class="icono-caretaker-panel__eyebrow">Caretaker</p>' +
+    '<h2 id="icono-caretaker-title">' +
+    esc(
+      (dossier.viewer.can_accept ? "Invitation to care for " : "Caring for ") + dossier.gene.symbol,
+    ) +
+    "</h2>" +
     "</div>" +
-    (assignmentState
+    (assignmentState && assignmentState !== "active"
       ? '<span class="icono-caretaker-panel__state" data-state="' +
         esc(assignmentState) +
         '">' +
         esc(assignmentState.replaceAll("_", " ")) +
         "</span>"
       : "") +
-    '<button type="button" class="icono-caretaker-dialog__close" data-icono-caretaker-close aria-label="Close caretaker record">×</button>' +
+    '<button type="button" class="icono-caretaker-dialog__close" data-icono-caretaker-close aria-label="Close">×</button>' +
     "</header>"
 
   if (dossier.gene.status === "merged") {
@@ -586,7 +585,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   }
 
   body +=
-    '<div class="icono-caretaker-tabs" role="tablist" aria-label="Caretaker record sections">' +
+    '<div class="icono-caretaker-tabs" role="tablist" aria-label="Caretaker sections">' +
     '<button type="button" role="tab" aria-selected="true" aria-controls="icono-caretaker-tab-manifestation" id="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tab="manifestation">Manifestation</button>' +
     '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-history" id="icono-caretaker-tab-button-history" data-icono-caretaker-tab="history" tabindex="-1">History</button>' +
     '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-settings" id="icono-caretaker-tab-button-settings" data-icono-caretaker-tab="settings" tabindex="-1">Settings</button>' +
@@ -608,11 +607,21 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       '<label class="icono-caretaker-pane__label" for="icono-caretaker-prose">Manifestation</label>' +
       '<textarea id="icono-caretaker-prose" rows="8" maxlength="' +
       MAX_PROSE_CODE_POINTS +
-      '" data-icono-caretaker-prose autofocus' +
+      '" data-icono-caretaker-prose autofocus aria-describedby="icono-caretaker-prose-purpose"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       ">" +
       esc(currentBody) +
       "</textarea>" +
+      // B-874 walkthrough, item 3: what this text is for used to live only in a
+      // grey footer sentence the eye reached last. It now sits under the box.
+      '<p class="icono-caretaker-editor__purpose" id="icono-caretaker-prose-purpose">' +
+      esc(
+        `New pictures of ${dossier.gene.symbol} are drawn from this text and its tags. ` +
+          (own?.public_page_visible
+            ? "Readers also see it on the gene page."
+            : "Readers don’t see it; you can show it in Settings."),
+      ) +
+      "</p>" +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-count>' +
       codePointLength(currentBody).toLocaleString() +
       " / " +
