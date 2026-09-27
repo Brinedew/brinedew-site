@@ -1008,7 +1008,12 @@ function manyGeneDb() {
     const number = String(index).padStart(3, "0")
     const day = String(1 + Math.floor(index / 24)).padStart(2, "0")
     const hour = String(index % 24).padStart(2, "0")
-    return db.row(index % 2 ? "user-123" : "user-456", `G${number}`, `2026-04-${day}T${hour}:00:00Z`, index)
+    return db.row(
+      index % 2 ? "user-123" : "user-456",
+      `G${number}`,
+      `2026-04-${day}T${hour}:00:00Z`,
+      index,
+    )
   })
   return db
 }
@@ -1034,13 +1039,14 @@ for (const scope of ["personal", "shared"]) {
       ),
     )
     const query = scope === "shared" ? "&scope=shared" : ""
-    const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}`,
-        { headers: { Cookie: "session=abc" } },
-      ),
-      env,
-    )
+    const first =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}`,
+          { headers: { Cookie: "session=abc" } },
+        ),
+        env,
+      )
     const payload = await first.json()
     assert.equal(first.status, 200)
     assert.equal(payload.items.length, 3)
@@ -1051,18 +1057,23 @@ for (const scope of ["personal", "shared"]) {
       `${scope}: enriched ${enriched.length} genes to return 3`,
     )
     for (const item of payload.items) {
-      assert.equal(item.discovery.full_name, `${item.symbol} full name`, `${scope}: enrichment lost`)
+      assert.equal(
+        item.discovery.full_name,
+        `${item.symbol} full name`,
+        `${scope}: enrichment lost`,
+      )
     }
 
     // The next page (after the cursor) is still correct and still bounded.
     db.calls.length = 0
-    const next = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}&after=${encodeURIComponent(payload.next_cursor)}`,
-        { headers: { Cookie: "session=abc" } },
-      ),
-      env,
-    )
+    const next =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}&after=${encodeURIComponent(payload.next_cursor)}`,
+          { headers: { Cookie: "session=abc" } },
+        ),
+        env,
+      )
     const nextPayload = await next.json()
     assert.equal(next.status, 200)
     assert.equal(nextPayload.items.length, 3)
