@@ -865,7 +865,12 @@ test("authenticated request options return rich emulsion rows from the dedicated
   assert.equal(payload.authenticated, true)
   assert.equal(payload.request_options.length, 1)
   assert.equal(payload.request_options[0]?.label, "A1-93-19")
-  assert.equal(payload.request_options[0]?.artist_tag, "anima")
+  // Artist identities are private (B-883): the option may not carry them in
+  // any field, including the label, secondary line and search text.
+  assert.equal("artist_tag" in payload.request_options[0], false)
+  assert.equal("artist_name" in payload.request_options[0], false)
+  assert.equal("artist_id" in payload.request_options[0], false)
+  assert.doesNotMatch(JSON.stringify(payload.request_options), /Anima Archive|"@?anima"/)
   assert.equal(payload.request_options[0]?.vote_h_index, 4)
   assert.equal(payload.request_options[0]?.preview_assets.length, 6)
   assert.equal(payload.request_options[0]?.preview_assets[0]?.gene_symbol, "INS")
