@@ -250,6 +250,22 @@ test("the saves toggle opens a session in the live modal and closing it keeps th
   }
 })
 
+test("versions show their author's name, and the Original row says Original once", () => {
+  const d = handover()
+  d.manifestations.push({
+    manifestation_id: "manifestation_seed",
+    origin: "system_seed",
+    author_label: "Original manifestation",
+    status: "active",
+    revisions: [{ ...revision("seed", -600, "Seed text"), event_sequence: 0 }],
+  })
+  const view = history(d)
+  assert.equal(view.sessions[0].text.includes("Bob"), true, view.sessions[0].text)
+  assert.equal(view.sessions[1].text.includes("Ada"), true, view.sessions[1].text)
+  const seed = view.sessions.at(-1).text
+  assert.equal(seed.match(/Original/g)?.length, 1, seed)
+})
+
 test("a withdrawn caretaker's run says it was withdrawn", () => {
   const d = handover()
   d.manifestations[0].status = "withdrawn"

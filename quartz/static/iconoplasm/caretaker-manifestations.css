@@ -116,7 +116,10 @@
   margin: 0 1.1rem;
   padding: 0.15rem;
   border-bottom: 1px solid var(--ui-border);
-  overflow-x: auto;
+  /* Scrolls on a very narrow phone, like Material and iOS tab bars, but never
+     draws a bar: on Windows an empty scrollbar track sat under the tabs. */
+  overflow: auto hidden;
+  scrollbar-width: none;
 }
 
 .icono-caretaker-tabs button {
@@ -241,7 +244,9 @@
   .icono-caretaker-tag-scroll {
     flex: 1;
     min-height: 0;
-    overflow: auto;
+    /* Vertical only: tags wrap. With overflow:auto a sub-pixel overflow drew an
+       empty horizontal scrollbar on Windows. */
+    overflow: hidden auto;
     padding-right: 0.25rem;
   }
 }
