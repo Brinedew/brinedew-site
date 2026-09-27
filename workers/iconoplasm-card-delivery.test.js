@@ -150,6 +150,62 @@ test("public card and released hover readers use exact Bunny objects without KV 
   }
 })
 
+// IPD-001 / B-881: when Bunny is unreachable the website reader retries the
+// same path on the canonical origin. Seen live on 27 Sep: the gallery object
+// 404'd there because this route only knew five kinds, so TP53 still showed
+// "Gene page temporarily unavailable" with Bunny blocked. The kind list is read
+// from the reader itself, so the two cannot drift apart again.
+test("the canonical origin serves every object kind the website reader requests", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const readerSource = await readFile(
+    new URL("../quartz/static/iconoplasm/publication-reader.js", import.meta.url),
+    "utf8",
+  )
+  const kinds = [
+    ...new Set([...readerSource.matchAll(/immutableObject\("([a-z]+)"/g)].map((m) => m[1])),
+  ]
+  assert.equal(kinds.length >= 6, true, `reader kinds parsed: ${kinds.join(", ")}`)
+  const bodies = new Map()
+  const env = {
+    PUBLIC_RATE_LIMIT_120: { limit: async () => ({ success: true }) },
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "fixture",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+    ICONOPLASM_DB: {
+      prepare() {
+        throw new Error("public D1 forbidden")
+      },
+    },
+  }
+  const original = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    const key = new URL(url).pathname.replace(/^\/fixture\//, "")
+    return bodies.has(key) ? new Response(bodies.get(key)) : new Response(null, { status: 404 })
+  }
+  try {
+    for (const kind of [...kinds, "shards"]) {
+      const text = canonicalPublishedJson({ kind, fixture: true })
+      const hash = await publishedObjectHash(new TextEncoder().encode(text))
+      const key = `published-cards/v2/immutable/${kind}/${hash}.json`
+      bodies.set(key, text)
+      const response = await worker.fetch(
+        new Request(`https://iconoplasm.brinedew.bio/${key}`),
+        env,
+        { waitUntil() {} },
+      )
+      if (kind === "shards") {
+        // Packed shards (up to 4 MiB) are never a reader fallback.
+        assert.equal(response.status, 404, "shards stay off the canonical origin")
+      } else {
+        assert.equal(response.status, 200, `${kind} is served by the canonical origin`)
+        assert.equal(await response.text(), text, `${kind} bytes are exact`)
+      }
+    }
+  } finally {
+    globalThis.fetch = original
+    resetIconoplasmRuntimeCachesForTest()
+  }
+})
+
 test("v2 hover compatibility keeps lane failures independent and rejects unbound identities", async () => {
   const hash = "a".repeat(64)
   const indexKey = `published-cards/v2/immutable/indexes/${"b".repeat(64)}.json`
