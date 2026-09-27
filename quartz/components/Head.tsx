@@ -774,9 +774,12 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         {pageJs
           .filter((resource) => resource.loadTime === "beforeDOMReady")
           .map((res) => JSResourceToScriptElement(res, true))}
+        {/* B-883: the consent box sits bottom-right above everything, which is
+            where dialogs keep their main button. It steps aside while a modal
+            dialog is open and returns when the dialog closes. */}
         <style
           dangerouslySetInnerHTML={{
-            __html: `.brinedew-analytics-consent{position:fixed;z-index:2147483000;right:1rem;bottom:1rem;max-width:min(28rem,calc(100vw - 2rem));padding:.85rem .95rem;border:1px solid var(--lightgray);background:var(--light);color:var(--dark);box-shadow:0 .5rem 1.75rem rgba(0,0,0,.16);font-family:var(--bodyFont);font-size:.92rem;line-height:1.35}.brinedew-analytics-consent p{margin:0 0 .65rem}.brinedew-analytics-consent a{color:var(--secondary)}.brinedew-analytics-consent__actions{display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap}.brinedew-analytics-consent button{appearance:none;border:1px solid var(--darkgray);border-radius:.25rem;padding:.45rem .75rem;background:transparent;color:var(--dark);font:inherit;cursor:pointer}.brinedew-analytics-consent button[data-analytics-consent-accept]{background:var(--dark);color:var(--light);border-color:var(--dark)}`,
+            __html: `.brinedew-analytics-consent{position:fixed;z-index:2147483000;right:1rem;bottom:1rem;max-width:min(28rem,calc(100vw - 2rem));padding:.85rem .95rem;border:1px solid var(--lightgray);background:var(--light);color:var(--dark);box-shadow:0 .5rem 1.75rem rgba(0,0,0,.16);font-family:var(--bodyFont);font-size:.92rem;line-height:1.35}.brinedew-analytics-consent p{margin:0 0 .65rem}.brinedew-analytics-consent a{color:var(--secondary)}.brinedew-analytics-consent__actions{display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap}.brinedew-analytics-consent button{appearance:none;border:1px solid var(--darkgray);border-radius:.25rem;padding:.45rem .75rem;background:transparent;color:var(--dark);font:inherit;cursor:pointer}.brinedew-analytics-consent button[data-analytics-consent-accept]{background:var(--dark);color:var(--light);border-color:var(--dark)}body:has(sl-dialog[open],dialog[open]) .brinedew-analytics-consent{display:none}`,
           }}
         />
         <script

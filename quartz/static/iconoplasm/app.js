@@ -140,6 +140,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
   var ICONO_STAR_ICON =
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m10 2.9 2.15 4.35 4.8.7-3.47 3.38.82 4.77-4.3-2.26-4.3 2.26.82-4.77L3.05 7.95l4.8-.7L10 2.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+  var ICONO_CHECK_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m5 10.4 3.2 3.1L15 6.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  var ICONO_CLOSE_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m5.5 5.5 9 9m0-9-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
+  var ICONO_SEARCH_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="8.75" cy="8.75" r="5.25" stroke="currentColor" stroke-width="1.6"/><path d="m12.75 12.75 3.75 3.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
   var portraitDetailCache = Object.create(null)
   var portraitDetailPromiseCache = Object.create(null)
   var geneCardArtifactCache = Object.create(null)
@@ -698,6 +704,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
     syncSelectAllFavoriteButtons(document)
+    document.dispatchEvent(new CustomEvent("icono-emulsion-favorites-change"))
   })
 
   function publishFailureMessage(error, fallback, resultLabel) {
@@ -5376,23 +5383,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       String(item.primary_label || "").trim() ||
       String(item.label || "").trim() ||
       String(item.emulsion_id || "").trim() ||
-      String(item.artist_tag || "").trim() ||
-      String(item.artist_name || "").trim() ||
       String(item.vision_id || "").trim() ||
       "Specific emulsion"
-    )
-  }
-
-  function requestOptionSecondaryLabel(option) {
-    var item = option || {}
-    return (
-      String(item.secondary_label || "").trim() ||
-      [item.artist_tag, item.artist_name, item.vision_id]
-        .map(function (value) {
-          return String(value || "").trim()
-        })
-        .filter(Boolean)
-        .join(" · ")
     )
   }
 
@@ -5433,42 +5425,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return html
   }
 
-  function renderRequestOptionButtonMarkup(
-    option,
-    selectedVisionState,
-    isRandom,
-    optionAttribute,
-    favoriteEnabled,
-  ) {
+  // A listbox option for the Image API lane's "use my emulsion" combobox. The
+  // Free queue has its own card grid (renderRequestStyleCardMarkup).
+  function renderRequestOptionButtonMarkup(option, selectedValue, optionAttribute) {
     var item = option || {}
     var attributeName = String(optionAttribute || "data-icono-request-option").trim()
-    var optionValue = isRandom
-      ? ""
-      : String(
-          String(item.option_type || "") === "user_emulsion"
-            ? item.user_emulsion_id || item.emulsion_id || ""
-            : item.vision_id || "",
-        ).trim()
-    var isSelected =
-      selectedVisionState instanceof Set
-        ? selectedVisionState.has(optionValue)
-        : String(selectedVisionState || "").trim() === optionValue
-    var primary = isRandom ? "Random emulsion" : requestOptionPrimaryLabel(item)
+    var optionValue = String(
+      String(item.option_type || "") === "user_emulsion"
+        ? item.user_emulsion_id || item.emulsion_id || ""
+        : item.vision_id || "",
+    ).trim()
+    var isSelected = String(selectedValue || "").trim() === optionValue
     var optionId =
       "icono-request-option-" +
-      String(optionValue || "random")
+      optionValue
         .replace(/[^a-z0-9_-]+/gi, "-")
         .replace(/^-+|-+$/g, "")
         .toLowerCase()
-    var selectButton =
+    return (
       '<button type="button" class="icono-request-option' +
       (isSelected ? " is-selected" : "") +
-      (isRandom ? " is-random" : "") +
       '" id="' +
       optionId +
-      '"' +
-      (favoriteEnabled ? "" : ' role="option"') +
-      (favoriteEnabled ? ' aria-pressed="' : ' aria-selected="') +
+      '" role="option" aria-selected="' +
       (isSelected ? "true" : "false") +
       '" ' +
       esc(attributeName) +
@@ -5478,26 +5457,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<span class="icono-request-option-copy">' +
       '<span class="icono-request-option-title-row">' +
       '<span class="icono-request-option-title">' +
-      esc(primary) +
+      esc(requestOptionPrimaryLabel(item)) +
       "</span>" +
       '<span class="icono-request-option-selected-mark" aria-hidden="true">✓</span>' +
       "</span>" +
       "</span>" +
       renderRequestOptionPreviewStripMarkup(item) +
       "</button>"
-    if (!favoriteEnabled) return selectButton
-    return (
-      '<div class="icono-request-option-row' +
-      (isRandom ? " is-random" : "") +
-      '" role="listitem">' +
-      selectButton +
-      (isRandom || item.is_preallocated_without_preview
-        ? ""
-        : renderEmulsionFavoriteButtonMarkup(
-            item.emulsion_family_id || item.emulsion_id,
-            "icono-emulsion-favorite-button--picker",
-          )) +
-      "</div>"
     )
   }
 
@@ -5554,35 +5520,134 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function renderRequestFormMarkup(symbol, options) {
-    var config = options || {}
-    var disabledAttr = config.disabled ? ' disabled aria-disabled="true"' : ""
-    // Public visitors should see "style", not the internal "emulsion" workflow term.
-    var placeholder = String(config.placeholder || "pick an emulsion").trim() || "pick an emulsion"
+  // B-883: the Free queue is a style grid (3:4 cards) beside a "Your batch"
+  // tray, not an autocomplete dropdown. Public copy says "style"; artists are
+  // never shown, so the search takes a style number or code only.
+  function renderRequestFormMarkup(symbol) {
     return (
       '<form id="icono-request-form-' +
       esc(symbol) +
       '" data-icono-request-form class="icono-request-form">' +
-      '<div class="icono-search icono-search--toolbar icono-request-search">' +
-      '<div class="icono-search-wrapper icono-request-picker-search" data-icono-request-picker>' +
-      '<input id="icono-request-query-' +
-      esc(symbol) +
-      '" data-icono-request-query class="icono-search-input icono-request-picker-input" type="search" autocomplete="off" placeholder="' +
-      esc(placeholder) +
-      '" role="searchbox" aria-expanded="false" aria-controls="icono-request-results-' +
-      esc(symbol) +
-      // Aria-label was "Search emulsion lane" — internal workflow jargon that
-      // confuses screen-reader users. Mirror the placeholder copy instead.
-      '" aria-label="Search styles for new candidate"' +
-      disabledAttr +
-      ">" +
       '<input type="hidden" data-icono-request-vision value="">' +
-      '<div class="icono-search-results icono-request-results" id="icono-request-results-' +
-      esc(symbol) +
-      '" role="list" aria-label="Emulsions" data-icono-request-results hidden></div>' +
+      '<div class="icono-request-browser">' +
+      '<div class="icono-request-browse" data-icono-request-browse>' +
+      '<div class="icono-request-tools">' +
+      '<div class="icono-request-views" role="group" aria-label="Show">' +
+      '<button type="button" class="icono-request-view" data-icono-request-view="favorites" aria-pressed="false">Favorites <span data-icono-request-view-count></span></button>' +
+      '<button type="button" class="icono-request-view" data-icono-request-view="all" aria-pressed="true">All styles <span data-icono-request-view-count></span></button>' +
       "</div>" +
+      '<button type="button" class="icono-button icono-button--small icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
+      '<label class="icono-request-find">' +
+      ICONO_SEARCH_ICON +
+      '<input data-icono-request-query type="search" autocomplete="off" placeholder="Style number" aria-label="Find a style by number">' +
+      "</label>" +
+      "</div>" +
+      '<div class="icono-request-grid" data-icono-request-results role="list" aria-label="Styles" aria-busy="true"></div>' +
+      "</div>" +
+      '<aside class="icono-request-batch" data-icono-request-batch aria-label="Your batch">' +
+      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><span class="icono-request-batch-count" data-icono-request-batch-count>0 of 20</span></div>' +
+      '<div class="icono-request-batch-meter" aria-hidden="true"><span data-icono-request-batch-meter></span></div>' +
+      // Divs with list roles: Quartz styles bare ul/li inside the article.
+      '<div class="icono-request-batch-list" role="list" data-icono-request-batch-list></div>' +
+      '<p class="icono-request-batch-empty" data-icono-request-batch-empty>Pick styles on the left. With none picked, the queue draws a random style.</p>' +
+      "</aside>" +
       "</div>" +
       "</form>"
+    )
+  }
+
+  // One style card: the toggle (art + number) with the favorite star and the
+  // queued badge as siblings, never nested inside the toggle button.
+  function renderRequestStyleCardMarkup(option, isSelected, queuedCount) {
+    var item = option || {}
+    var visionId = String(item.vision_id || "").trim()
+    var label = requestOptionPrimaryLabel(item)
+    var previews = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
+      .map(requestOptionPreviewUrl)
+      .filter(Boolean)
+    // Portraits are 3:4. Four previews make a 2x2 mosaic that keeps 3:4;
+    // fewer would crop into slivers, so the first one fills the card.
+    var shown = previews.length >= 4 ? previews.slice(0, 4) : previews.slice(0, 1)
+    var art = shown.length
+      ? shown
+          .map(function (url) {
+            return '<img src="' + esc(url) + '" alt="" loading="lazy" decoding="async">'
+          })
+          .join("")
+      : '<span class="icono-request-card-empty">' +
+        (item.is_preallocated_without_preview ? "First blot" : "No blots yet") +
+        "</span>"
+    var imageCount = Number(item.image_count || 0) || 0
+    return (
+      '<div class="icono-request-card' +
+      (isSelected ? " is-selected" : "") +
+      '" role="listitem" data-icono-request-card="' +
+      esc(label) +
+      '">' +
+      '<button type="button" class="icono-request-card-toggle" data-icono-request-option="' +
+      esc(visionId) +
+      '" aria-pressed="' +
+      (isSelected ? "true" : "false") +
+      '" aria-label="Style ' +
+      esc(label) +
+      '">' +
+      '<span class="icono-request-card-art' +
+      (shown.length === 4 ? " is-mosaic" : "") +
+      '">' +
+      art +
+      "</span>" +
+      '<span class="icono-request-card-meta"><span class="icono-request-card-label">' +
+      esc(label) +
+      "</span>" +
+      (queuedCount
+        ? '<span class="icono-request-card-queued" data-icono-request-queued>' +
+          esc(String(queuedCount)) +
+          " queued</span>"
+        : imageCount
+          ? '<span class="icono-request-card-count">' +
+            esc(String(imageCount)) +
+            " blot" +
+            (imageCount === 1 ? "" : "s") +
+            "</span>"
+          : "") +
+      "</span>" +
+      '<span class="icono-request-card-check" aria-hidden="true">' +
+      ICONO_CHECK_ICON +
+      "</span>" +
+      "</button>" +
+      (item.is_preallocated_without_preview
+        ? ""
+        : renderEmulsionFavoriteButtonMarkup(
+            item.emulsion_family_id || item.emulsion_id,
+            "icono-emulsion-favorite-button--card",
+          )) +
+      "</div>"
+    )
+  }
+
+  function renderRequestBatchRowMarkup(option) {
+    var item = option || {}
+    var visionId = String(item.vision_id || "").trim()
+    var label = requestOptionPrimaryLabel(item)
+    var first = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
+      .map(requestOptionPreviewUrl)
+      .filter(Boolean)[0]
+    return (
+      '<div class="icono-request-batch-row" role="listitem" data-icono-request-batch-row>' +
+      '<span class="icono-request-batch-thumb">' +
+      (first ? '<img src="' + esc(first) + '" alt="" loading="lazy" decoding="async">' : "") +
+      "</span>" +
+      '<span class="icono-request-batch-label">' +
+      esc(label) +
+      "</span>" +
+      '<button type="button" class="icono-button icono-button--icon icono-request-batch-remove" data-icono-request-batch-remove="' +
+      esc(visionId) +
+      '" aria-label="Remove ' +
+      esc(label) +
+      ' from the batch">' +
+      ICONO_CLOSE_ICON +
+      "</button>" +
+      "</div>"
     )
   }
 
@@ -5645,8 +5710,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       renderRequestDirectGenerationMarkup() +
       "</section>" +
       "</div>" +
-      "<div data-icono-request-my-summary hidden></div>" +
-      "<div data-icono-request-gene-summary hidden></div>" +
       '<div data-icono-request-note hidden style="font-size:0.92rem;"></div>' +
       "</div>" +
       "</div>"
@@ -5680,7 +5743,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-footer" slot="footer">' +
       '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-      '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
       '<button type="submit" form="icono-request-form-' +
       esc(safeSymbol) +
       '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
@@ -6737,44 +6799,41 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       note.style.color = tone === "error" ? "#b42318" : tone === "success" ? "#0f766e" : "inherit"
     }
 
-    function updateSummaryHosts(myLaneSummary, geneLaneSummary) {
-      var mySummaryHost = body.querySelector("[data-icono-request-my-summary]")
-      var geneSummaryHost = body.querySelector("[data-icono-request-gene-summary]")
-      if (mySummaryHost) {
-        var myHtml = renderGeneRequestSummaryMarkup(
-          "Your open requests",
-          myLaneSummary,
-          "my_request_count",
+    // B-883: the open-request lists moved out of this dialog (the request
+    // inbox owns them). What a picker needs is "this style is already queued
+    // for this gene", keyed by style family, painted as a badge on its card.
+    var queuedCountByStyle = Object.create(null)
+    function rememberQueuedStyles(geneLaneSummary) {
+      queuedCountByStyle = Object.create(null)
+      var lanes = Array.isArray(geneLaneSummary) ? geneLaneSummary : []
+      for (var i = 0; i < lanes.length; i++) {
+        var lane = lanes[i] || {}
+        if (String(lane.request_mode || "").toLowerCase() !== "specific") continue
+        var familyId = normalizeEmulsionFamilyId(
+          lane.requested_emulsion_id || lane.requested_emulsion_label || "",
         )
-        mySummaryHost.innerHTML = myHtml
-        mySummaryHost.hidden = !String(myHtml || "").trim()
-      }
-      if (geneSummaryHost) {
-        var geneHtml = renderGeneRequestSummaryMarkup(
-          "Open requests on this gene",
-          geneLaneSummary,
-          "request_count",
-        )
-        geneSummaryHost.innerHTML = geneHtml
-        geneSummaryHost.hidden = !String(geneHtml || "").trim()
+        var visionSlot = /-([1-9][0-9]*)$/.exec(String(lane.requested_vision_id || ""))
+        var key = familyId || (visionSlot ? "0-" + visionSlot[1] : "")
+        if (!key) continue
+        queuedCountByStyle[key] =
+          (queuedCountByStyle[key] || 0) + (Number(lane.request_count || 0) || 0)
       }
     }
 
     function wireAuthenticatedRequestForm(summaryState) {
       var safeState = summaryState || {}
-      var myLaneSummary = Array.isArray(safeState.my_lane_summary) ? safeState.my_lane_summary : []
-      var geneLaneSummary = Array.isArray(safeState.gene_lane_summary)
-        ? safeState.gene_lane_summary
-        : []
-      updateSummaryHosts(myLaneSummary, geneLaneSummary)
+      rememberQueuedStyles(safeState.gene_lane_summary)
 
       var form = body.querySelector("[data-icono-request-form]")
       var hiddenInput = body.querySelector("[data-icono-request-vision]")
       var queryInput = body.querySelector("[data-icono-request-query]")
       var results = body.querySelector("[data-icono-request-results]")
-      var picker = body.querySelector("[data-icono-request-picker]")
-      if (!form || !hiddenInput || !queryInput || !results || !picker) return
-      if (form._iconoRequestFormWired) return
+      if (!form || !hiddenInput || !queryInput || !results) return
+      if (form._iconoRequestFormWired) {
+        if (typeof form._iconoRepaintRequestResults === "function")
+          form._iconoRepaintRequestResults()
+        return
+      }
       form._iconoRequestFormWired = true
       var directPanel = body.querySelector("[data-icono-request-direct-panel]")
       var queueSubmitButton = dialog
@@ -6815,9 +6874,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var optionsLoaded = false
       var selectedRequestVisionIds = new Set([""])
       var requestSelectionLimit = 20
-      var activeIndex = -1
       var filteredOptions = []
-      var pickerOpen = false
+      var requestView = ""
+      var browse = body.querySelector("[data-icono-request-browse]")
+      var batchTray = body.querySelector("[data-icono-request-batch]")
       var directUserEmulsionOptions = []
       var directUserEmulsionOptionsLoaded = false
       var directUserEmulsionOptionsLoading = null
@@ -7159,12 +7219,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
       }
 
-      function openResults() {
-        pickerOpen = true
-        results.hidden = false
-        queryInput.setAttribute("aria-expanded", "true")
-      }
-
       function requestOptionsQueryKey(query) {
         var cleaned = String(query || "")
           .trim()
@@ -7269,15 +7323,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .toLowerCase()
         if (!cleanedQuery) return 0
         var primary = requestOptionPrimaryLabel(option).toLowerCase()
-        var secondary = requestOptionSecondaryLabel(option).toLowerCase()
         var searchText = String((option && option.search_text) || "").toLowerCase()
         if (primary === cleanedQuery) return 0
         if (primary.indexOf(cleanedQuery) === 0) return 1
         if (searchText.indexOf(cleanedQuery) === 0) return 2
-        if (secondary.indexOf(cleanedQuery) === 0) return 3
-        if (primary.indexOf(cleanedQuery) >= 0) return 4
-        if (searchText.indexOf(cleanedQuery) >= 0) return 5
-        if (secondary.indexOf(cleanedQuery) >= 0) return 6
+        if (primary.indexOf(cleanedQuery) >= 0) return 3
+        if (searchText.indexOf(cleanedQuery) >= 0) return 4
         return 99
       }
 
@@ -7321,9 +7372,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var matched = sourceOptions.filter(function (option) {
           if (optionPredicate && !optionPredicate(option)) return false
           if (!terms.length) return true
+          // Style numbers and codes only: artists are never shown, so they
+          // must not be findable either (B-883).
           var haystack = [
             requestOptionPrimaryLabel(option),
-            requestOptionSecondaryLabel(option),
             String((option && option.search_text) || ""),
           ]
             .join(" ")
@@ -7348,79 +7400,106 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return favorites.concat(others.slice(0, 6))
       }
 
-      function paintActiveOption() {
-        var items = results.querySelectorAll(".icono-request-option")
-        for (var i = 0; i < items.length; i++) {
-          items[i].classList.toggle("active", i === activeIndex)
-        }
-        var activeItem = items[activeIndex] || null
-        if (activeItem && activeItem.id) {
-          queryInput.setAttribute("aria-activedescendant", activeItem.id)
-        } else {
-          queryInput.removeAttribute("aria-activedescendant")
+      // Two views, one order. "All styles" is every queueable style by vote
+      // strength (h-index, then live, score, blots); "Favorites" is the same
+      // order filtered to the user's stars. A typed number searches both.
+      function styleGridOptions(renderQuery, loadedOptions) {
+        var cleanedQuery = String(renderQuery || "")
+          .trim()
+          .toLowerCase()
+        var terms = cleanedQuery ? cleanedQuery.split(/\s+/g).filter(Boolean) : []
+        var list = (Array.isArray(loadedOptions) ? loadedOptions : []).filter(function (option) {
+          if (!isQueueRequestOption(option)) return false
+          if (!terms.length) return requestView !== "favorites" || isFavoriteRequestOption(option)
+          var haystack = (
+            requestOptionPrimaryLabel(option) +
+            " " +
+            String((option && option.search_text) || "")
+          ).toLowerCase()
+          return terms.every(function (term) {
+            return haystack.indexOf(term) >= 0
+          })
+        })
+        list.sort(function (a, b) {
+          var scoreDiff = scoreRequestOption(a, cleanedQuery) - scoreRequestOption(b, cleanedQuery)
+          return scoreDiff || compareRequestOptionStrength(a, b)
+        })
+        return list
+      }
+
+      function styleQueuedCount(option) {
+        var key = normalizeEmulsionFamilyId(
+          (option && (option.emulsion_family_id || option.emulsion_id)) || "",
+        )
+        return key ? queuedCountByStyle[key] || 0 : 0
+      }
+
+      function paintRequestViews() {
+        var favoriteCount = requestOptions.filter(function (option) {
+          return isQueueRequestOption(option) && isFavoriteRequestOption(option)
+        }).length
+        var allCount = requestOptions.filter(isQueueRequestOption).length
+        var views = body.querySelectorAll("[data-icono-request-view]")
+        for (var i = 0; i < views.length; i++) {
+          var key = views[i].getAttribute("data-icono-request-view")
+          views[i].setAttribute("aria-pressed", key === requestView ? "true" : "false")
+          var count = views[i].querySelector("[data-icono-request-view-count]")
+          if (count) count.textContent = String(key === "favorites" ? favoriteCount : allCount)
         }
       }
 
       function paintRequestResults(renderQuery, loadedOptions) {
-        filteredOptions = filterRequestOptions(renderQuery, loadedOptions, isQueueRequestOption)
-        var hasQuery = !!String(renderQuery || "").trim()
-        var html = hasQuery
-          ? ""
-          : renderRequestOptionButtonMarkup(null, selectedRequestVisionIds, true, null, true)
-        if (filteredOptions.length) {
-          var favoriteOptions = filteredOptions.filter(isFavoriteRequestOption)
-          var otherOptions = filteredOptions.filter(function (option) {
-            return !isFavoriteRequestOption(option)
+        if (!requestView) requestView = emulsionFavorites.ids().length ? "favorites" : "all"
+        filteredOptions = styleGridOptions(renderQuery, loadedOptions)
+        rememberRequestOptions(filteredOptions)
+        var html = filteredOptions
+          .map(function (option) {
+            return renderRequestStyleCardMarkup(
+              option,
+              selectedRequestVisionIds.has(String(option.vision_id || "").trim()),
+              styleQueuedCount(option),
+            )
           })
-          if (hasQuery) {
-            html += filteredOptions
-              .map(function (option) {
-                return renderRequestOptionButtonMarkup(
-                  option,
-                  selectedRequestVisionIds,
-                  false,
-                  null,
-                  true,
-                )
-              })
-              .join("")
-          } else {
-            if (favoriteOptions.length) {
-              html += '<div class="icono-request-option-group-label">Favorites</div>'
-            }
-            html += favoriteOptions
-              .map(function (option) {
-                return renderRequestOptionButtonMarkup(
-                  option,
-                  selectedRequestVisionIds,
-                  false,
-                  null,
-                  true,
-                )
-              })
-              .join("")
-            if (otherOptions.length) {
-              html += '<div class="icono-request-option-group-label">Other emulsions</div>'
-            }
-            html += otherOptions
-              .map(function (option) {
-                return renderRequestOptionButtonMarkup(
-                  option,
-                  selectedRequestVisionIds,
-                  false,
-                  null,
-                  true,
-                )
-              })
-              .join("")
-          }
-        } else {
-          html +=
-            '<div class="icono-request-results-empty">No emulsions match that number or artist.</div>'
+          .join("")
+        if (!html) {
+          html =
+            '<p class="icono-request-grid-empty">' +
+            (String(renderQuery || "").trim()
+              ? "No style has that number."
+              : requestView === "favorites"
+                ? "No favorites yet. Star a style in All styles to keep it here."
+                : "No styles to show.") +
+            "</p>"
         }
         results.innerHTML = html
         results.removeAttribute("aria-busy")
-        paintActiveOption()
+        paintRequestViews()
+        paintRequestBatch()
+      }
+
+      function paintRequestBatch() {
+        if (!batchTray) return
+        var picked = Array.from(selectedRequestVisionIds).filter(Boolean)
+        var count = batchTray.querySelector("[data-icono-request-batch-count]")
+        if (count) count.textContent = picked.length + " of " + requestSelectionLimit
+        var meter = batchTray.querySelector("[data-icono-request-batch-meter]")
+        if (meter) meter.style.width = (picked.length / requestSelectionLimit) * 100 + "%"
+        var list = batchTray.querySelector("[data-icono-request-batch-list]")
+        if (list) {
+          list.innerHTML = picked
+            .map(function (visionId) {
+              return renderRequestBatchRowMarkup(
+                requestOptionsByVisionId[visionId] || { vision_id: visionId },
+              )
+            })
+            .join("")
+        }
+        var empty = batchTray.querySelector("[data-icono-request-batch-empty]")
+        if (empty) empty.hidden = picked.length > 0
+      }
+
+      form._iconoRepaintRequestResults = function () {
+        if (optionsLoaded) void renderResultsList()
       }
 
       function scheduleNumericRequestHydration(renderQuery, immediateOption) {
@@ -7446,7 +7525,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       async function renderResultsList() {
         var renderQuery = queryInput.value
-        openResults()
         var immediateOption = requestOptionFromImmediateNumericQuery(renderQuery)
         if (immediateOption) {
           rememberRequestOptions([immediateOption])
@@ -7478,7 +7556,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         } catch (error) {
           results.removeAttribute("aria-busy")
           results.innerHTML =
-            '<div class="icono-request-results-empty">Could not load emulsions. Try again.</div>'
+            '<p class="icono-request-grid-empty">Could not load styles. Try again.</p>'
           return
         }
         if (queryInput.value !== renderQuery) {
@@ -7497,9 +7575,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             optionButtons[i].getAttribute("data-icono-request-option") || "",
           ).trim()
           var selected = selectedRequestVisionIds.has(optionVisionId)
-          optionButtons[i].classList.toggle("is-selected", selected)
+          var card = optionButtons[i].closest("[data-icono-request-card]")
+          if (card) card.classList.toggle("is-selected", selected)
           optionButtons[i].setAttribute("aria-pressed", selected ? "true" : "false")
         }
+        paintRequestBatch()
         if (queueSubmitButton) {
           var queueLabel = "Queue random"
           if (selectedVisionIds.length === 1) {
@@ -7543,7 +7623,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
         updateQueueSelectionControls()
         if (favorites.length > selectable.length) {
-          setStatus("Selected the first " + selectable.length + " favorites for this batch.", "")
+          setStatus("Batch limit: " + requestSelectionLimit + " styles.", "")
         }
       }
 
@@ -7557,7 +7637,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           if (selectedRequestVisionIds.has(visionId)) {
             selectedRequestVisionIds.delete(visionId)
           } else if (selectedRequestVisionIds.size >= requestSelectionLimit) {
-            setStatus("Choose up to " + requestSelectionLimit + " emulsions at once.", "error")
+            setStatus("Choose up to " + requestSelectionLimit + " styles at once.", "error")
             return
           } else {
             selectedRequestVisionIds.add(visionId)
@@ -7565,7 +7645,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
         }
         updateQueueSelectionControls()
-        openResults()
       }
 
       function closeDirectUserEmulsionResults() {
@@ -7600,7 +7679,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return renderRequestOptionButtonMarkup(
           option,
           selectedUserEmulsionId,
-          false,
           "data-icono-request-direct-emulsion-option",
         )
       }
@@ -7657,54 +7735,51 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         closeDirectUserEmulsionResults()
       }
 
-      queryInput.addEventListener("focus", function () {
-        void renderResultsList()
-      })
-      queryInput.addEventListener("click", function () {
-        void renderResultsList()
-      })
+      // Typing waits for a pause: each distinct query is one Worker request.
+      var queryTimer = null
       queryInput.addEventListener("input", function () {
         updateDirectGenerationButtons()
-        activeIndex = -1
-        void renderResultsList()
+        if (queryTimer) window.clearTimeout(queryTimer)
+        queryTimer = window.setTimeout(function () {
+          queryTimer = null
+          void renderResultsList()
+        }, 180)
       })
       queryInput.addEventListener("keydown", function (event) {
-        var items = results.querySelectorAll(".icono-request-option")
-        if (event.key === "ArrowDown") {
+        // Enter must not submit the queue form from the search box.
+        if (event.key === "Enter") event.preventDefault()
+        if (event.key === "Escape" && queryInput.value) {
           event.preventDefault()
-          if (!pickerOpen) {
-            void renderResultsList()
-            return
-          }
-          activeIndex = Math.min(activeIndex + 1, items.length - 1)
-          paintActiveOption()
-          return
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault()
-          if (!pickerOpen) {
-            void renderResultsList()
-            return
-          }
-          activeIndex = Math.max(activeIndex - 1, 0)
-          paintActiveOption()
-          return
-        }
-        if (event.key === "Enter" && pickerOpen) {
-          event.preventDefault()
-          var activeItem = items[activeIndex >= 0 ? activeIndex : 0]
-          if (activeItem) activeItem.click()
-          return
-        }
-        if (event.key === "Escape") {
-          if (queryInput.value) {
-            event.preventDefault()
-            queryInput.value = ""
-            activeIndex = -1
-            void renderResultsList()
-          }
+          queryInput.value = ""
+          void renderResultsList()
         }
       })
+      if (panel._iconoFavoriteViewsHandler) {
+        document.removeEventListener(
+          "icono-emulsion-favorites-change",
+          panel._iconoFavoriteViewsHandler,
+        )
+      }
+      panel._iconoFavoriteViewsHandler = paintRequestViews
+      document.addEventListener("icono-emulsion-favorites-change", paintRequestViews)
+      var viewButtons = body.querySelectorAll("[data-icono-request-view]")
+      for (var viewIndex = 0; viewIndex < viewButtons.length; viewIndex++) {
+        viewButtons[viewIndex].addEventListener("click", function (event) {
+          requestView = event.currentTarget.getAttribute("data-icono-request-view") || "all"
+          if (browse) browse.scrollTop = 0
+          void renderResultsList()
+        })
+      }
+      if (batchTray) {
+        batchTray.addEventListener("click", function (event) {
+          var remove = event.target.closest("[data-icono-request-batch-remove]")
+          if (!remove) return
+          var visionId = String(remove.getAttribute("data-icono-request-batch-remove") || "")
+          if (visionId && selectedRequestVisionIds.has(visionId)) {
+            setSelection(requestOptionsByVisionId[visionId] || { vision_id: visionId })
+          }
+        })
+      }
       results.addEventListener("click", function (event) {
         var button = event.target.closest("[data-icono-request-option]")
         if (!button) return
