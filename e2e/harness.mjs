@@ -70,6 +70,14 @@ export async function launchChrome(t) {
 // `api(pathname, request)` returns a JSON body to mock that call, or
 // undefined to fall through: a signed-in /api/auth/me, real public reads,
 // and {} for everything else.
+// A mocked API answer with a non-200 status, e.g. `new HttpStatus(503, {...})`.
+export class HttpStatus {
+  constructor(status, body = {}) {
+    this.status = status
+    this.body = body
+  }
+}
+
 export async function routeProduction(context, localOrigin, api = () => undefined) {
   await context.addCookies([
     {
@@ -87,6 +95,13 @@ export async function routeProduction(context, localOrigin, api = () => undefine
       const json = (body) =>
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) })
       const mocked = api(url.pathname, route.request())
+      if (mocked instanceof HttpStatus) {
+        return route.fulfill({
+          status: mocked.status,
+          contentType: "application/json",
+          body: JSON.stringify(mocked.body),
+        })
+      }
       if (mocked !== undefined) return json(mocked)
       if (url.pathname === "/api/auth/me") {
         return json({

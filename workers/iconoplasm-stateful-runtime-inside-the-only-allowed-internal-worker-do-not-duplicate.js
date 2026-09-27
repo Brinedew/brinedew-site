@@ -9585,16 +9585,23 @@ function parseGenerationRequestPreviewAssetsJson(raw) {
   }
 }
 
+// A style card shows at most four 3:4 previews (B-883), so the options list
+// ships four medium URLs per style and nothing else image-shaped. It used to
+// ship every rollup preview with both renditions: 318 KB per dialog open,
+// 257 KB of it unrendered, on a route the free plan's 10 ms CPU cap already
+// kills now and then (B-884).
+const GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT = 4
+
 function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreviewRows) {
   const base = portraitBase(url, env)
-  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows).map((row) => ({
-    gene_symbol: row.gene_symbol,
-    asset_sha256: row.asset_sha256,
-    is_current: Boolean(row.is_current),
-    preview_rank: Number(row.preview_rank || 0) || 0,
-    medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
-    thumb_url: adminPortraitUrl(base, row.asset_sha256 || "", "thumb"),
-  }))
+  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows)
+    .slice(0, GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT)
+    .map((row) => ({
+      gene_symbol: row.gene_symbol,
+      asset_sha256: row.asset_sha256,
+      is_current: Boolean(row.is_current),
+      medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
+    }))
 }
 
 async function fetchGenerationRequestVisionPreviewRowsForRollup(
