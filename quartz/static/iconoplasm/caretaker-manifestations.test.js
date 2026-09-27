@@ -288,6 +288,8 @@ test("a new tenure forks an older lineage and may withdraw it like any steward (
 test("purged history remains attributable but cannot be selected, forked, or rendered", () => {
   const purged = dossier()
   const version = purged.manifestations[1]
+  // A former caretaker's lineage, not the seed: the seed row is titled Original.
+  version.origin = "caretaker"
   version.author_label = "Former caretaker 7H2Q"
   version.revisions = [
     {

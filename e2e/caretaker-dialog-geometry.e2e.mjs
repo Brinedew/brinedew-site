@@ -104,6 +104,9 @@ function measure() {
     dialog: { left: d.left, right: d.right, top: d.top, bottom: d.bottom },
     footerOverflow: footer ? footer.scrollWidth - footer.clientWidth : 0,
     titleFont: title ? getComputedStyle(title).fontFamily : null,
+    // Headless Chrome hides scrollbars, so geometry cannot see this one: on
+    // Windows the tab bar drew an empty scrollbar track under the tabs.
+    tabsScrollbar: getComputedStyle(document.querySelector(".icono-caretaker-tabs")).scrollbarWidth,
     titleCloseOverlap:
       t && c
         ? !(t.right <= c.left || c.right <= t.left || t.bottom <= c.top || c.bottom <= t.top)
@@ -232,6 +235,7 @@ test("the caretaker dialog fits, uses the UI fonts and never clips its buttons",
         }
         assert.doesNotMatch(String(m.titleFont), /Crimson/, `${where}: title in blog serif`)
         assert.equal(m.titleCloseOverlap, false, `${where}: title overlaps Close`)
+        assert.equal(m.tabsScrollbar, "none", `${where}: the tab bar draws a scrollbar`)
         await context.close()
       }
     }
