@@ -4,6 +4,20 @@ export const ICONOPLASM_API_SCHEMA_VERSION = 4
 export const ICONOPLASM_PUBLIC_API_PREFIX = `/api/public/${ICONOPLASM_PUBLIC_API_VERSION}`
 export const ICONOPLASM_SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 
+// IPD-001 / B-881: every immutable object kind the website reader and the
+// extension may fetch from the canonical origin when Bunny is unreachable. The
+// delivery handler shares this list. Packed shards (up to 4 MiB) stay off it.
+export const PUBLIC_ORIGIN_OBJECT_KINDS = Object.freeze([
+  "cards",
+  "genes",
+  "portraits",
+  "indexes",
+  "manifests",
+  "galleries",
+  "catalogs",
+  "catalogindexes",
+])
+
 export function iconoplasmPublicApiPath(suffix = "") {
   const normalized = String(suffix || "")
   if (!normalized) return ICONOPLASM_PUBLIC_API_PREFIX
@@ -197,7 +211,9 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   contract({
     id: "public_card_object",
     match: pattern(
-      /^\/published-cards\/v2\/immutable\/(cards|genes|portraits|indexes|manifests)\/([a-f0-9]{64})\.json$/,
+      new RegExp(
+        `^/published-cards/v2/immutable/(${PUBLIC_ORIGIN_OBJECT_KINDS.join("|")})/([a-f0-9]{64})\\.json$`,
+      ),
       ["kind", "hash"],
     ),
     methods: GET,
