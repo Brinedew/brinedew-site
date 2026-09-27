@@ -995,3 +995,82 @@ test("account gallery endpoint has an explicit budget class", () => {
   assert.equal(route?.budgetFamily, "account_gallery_window")
   assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
 })
+
+// B-885 (27 Sep 2026): the home collection died with Cloudflare 1102 "Worker
+// exceeded resource limits" for the two largest shelves (2,106 and 1,584
+// genes). Every window enriched the WHOLE shelf (a three-table join, 250 genes
+// per query, one mapped object per gene) and only then kept 24. The window
+// must enrich exactly the rows it returns, for both scopes, and those rows must
+// still carry the enriched fields.
+function manyGeneDb() {
+  const db = new FakeDb()
+  db.rows = Array.from({ length: 101 }, (_, index) => {
+    const number = String(index).padStart(3, "0")
+    const day = String(1 + Math.floor(index / 24)).padStart(2, "0")
+    const hour = String(index % 24).padStart(2, "0")
+    return db.row(index % 2 ? "user-123" : "user-456", `G${number}`, `2026-04-${day}T${hour}:00:00Z`, index)
+  })
+  return db
+}
+
+function enrichmentCalls(db) {
+  return db.calls
+    .filter((call) => /FROM icono_gene_catalog gc/.test(call.sql))
+    .map((call) => JSON.parse(String(call.args[0] || "[]")))
+}
+
+for (const scope of ["personal", "shared"]) {
+  test(`${scope} account gallery window enriches only the rows it returns (B-885)`, async () => {
+    const db = manyGeneDb()
+    resetIconoplasmRuntimeCachesForTest()
+    const env = buildEnv({ db, version: `test-vm-version-page-first-${scope}` })
+    env.KV.put(
+      `iconoplasm:card-catalog:test-vm-version-page-first-${scope}`,
+      JSON.stringify(
+        completeCardCatalogArtifact(
+          db.rows.map((row) => row.gene_symbol),
+          `test-vm-version-page-first-${scope}`,
+        ),
+      ),
+    )
+    const query = scope === "shared" ? "&scope=shared" : ""
+    const first = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}`,
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
+    const payload = await first.json()
+    assert.equal(first.status, 200)
+    assert.equal(payload.items.length, 3)
+    const enriched = enrichmentCalls(db).flat()
+    assert.deepEqual(
+      [...enriched].sort(),
+      payload.items.map((item) => item.symbol).sort(),
+      `${scope}: enriched ${enriched.length} genes to return 3`,
+    )
+    for (const item of payload.items) {
+      assert.equal(item.discovery.full_name, `${item.symbol} full name`, `${scope}: enrichment lost`)
+    }
+
+    // The next page (after the cursor) is still correct and still bounded.
+    db.calls.length = 0
+    const next = await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}&after=${encodeURIComponent(payload.next_cursor)}`,
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
+    const nextPayload = await next.json()
+    assert.equal(next.status, 200)
+    assert.equal(nextPayload.items.length, 3)
+    assert.ok(
+      nextPayload.items[0].discovery.first_discovered_at <=
+        payload.items[2].discovery.first_discovered_at,
+      `${scope}: the next page is not older than the first`,
+    )
+    assert.ok(enrichmentCalls(db).flat().length <= 3, `${scope}: second page enriched too much`)
+  })
+}

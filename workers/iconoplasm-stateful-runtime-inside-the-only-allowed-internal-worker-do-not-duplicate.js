@@ -11948,13 +11948,19 @@ async function enrichGeneDiscoveryRows(env, rows) {
   )
 }
 
-async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+// The shelf as compact rows (symbol, first/last times, counts), before the
+// per-gene metadata join. Windows page these and enrich only what they return.
+async function compactShelfBaseRows(env, { userId } = {}) {
   const state = await readCompactUserStateForRequest(env, {
     userId,
   })
   if (!state) return []
   const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
-  const rows = compactShelfRowsFromChronology(chronology)
+  return compactShelfRowsFromChronology(chronology)
+}
+
+async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+  const rows = await compactShelfBaseRows(env, { userId })
   const bounded =
     limit == null
       ? rows
@@ -12160,10 +12166,13 @@ async function listUserGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const decorated = await compactShelfRows(env, { userId: userIdNorm, isAdmin })
-  return paginateCompactDiscoveryRows({
-    decorated,
+  // Page first, then enrich only the page (B-885). Paging needs only the
+  // symbol and first-discovery time, which the compact rows already carry.
+  // Enriching the whole shelf first cost a three-table join per 250 genes and
+  // one mapped object per gene on every home view; at 1,584 and 2,106 genes it
+  // tipped the free plan's CPU cap into a Cloudflare 1102 on every load.
+  const page = paginateCompactDiscoveryRows({
+    decorated: await compactShelfBaseRows(env, { userId: userIdNorm }),
     limit: cleanedLimit,
     order: resolvedOrder,
     scope: "personal",
@@ -12171,6 +12180,7 @@ async function listUserGeneDiscoveryWindow(
     before,
     cursorValue,
   })
+  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
 }
 
 async function listSharedGeneDiscoveryWindow(
@@ -12199,12 +12209,9 @@ async function listSharedGeneDiscoveryWindow(
     env.ICONOPLASM_DB,
     summaries.map((summary) => summary.ordinal),
   )
-  const decorated = await enrichGeneDiscoveryRows(
-    env,
-    compactSharedRowsFromSummaries(summaries, symbols),
-  )
-  return paginateCompactDiscoveryRows({
-    decorated,
+  // Page first, then enrich only the page (B-885), as in the personal window.
+  const page = paginateCompactDiscoveryRows({
+    decorated: compactSharedRowsFromSummaries(summaries, symbols),
     limit: cleanedLimit,
     order: resolvedOrder,
     scope: "shared",
@@ -12212,6 +12219,7 @@ async function listSharedGeneDiscoveryWindow(
     before,
     cursorValue,
   })
+  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
 }
 
 async function countUserGeneDiscoveries(env, { userId } = {}) {
