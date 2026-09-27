@@ -2,6 +2,7 @@ import { readIconoplasmSettings } from "../site-preferences.js?v=2624be2e2b452a3
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
+  sortDiscoveryEntries,
   normalizeHomeCollectionOrder,
 } from "./discovery-collection.js?v=b8fe92f593f7a045"
 import {
@@ -44,8 +45,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=6d7a1f8b7ffdb909"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=4fbc6b53a222756a"
+} from "./diagram-studio.js?v=4a126d3258383ad7"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=51df3bb3bf10f985"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -769,11 +770,43 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function fetchDiscoveryState(order, seed, init) {
     var resolvedOrder = normalizeHomeCollectionOrder(order || HOME_COLLECTION_DEFAULT_ORDER)
-    var path = "/api/iconoplasm/discoveries/me?order=" + encodeURIComponent(resolvedOrder)
+    // B-885: the bare shelf. Sort fields come from the published catalog in
+    // this browser (withDiscoveryMetrics), so the server no longer enriches
+    // every discovered gene on each home view.
+    var path =
+      "/api/iconoplasm/discoveries/me?order=" + encodeURIComponent(resolvedOrder) + "&shape=compact"
     if (resolvedOrder === "random" && seed) {
       path += "&seed=" + encodeURIComponent(String(seed))
     }
     return fetchAuthedJSON(path, init)
+  }
+
+  // Joins each compact discovery with its gene's sort fields (the published
+  // catalog, plus the page-view table for popularity; both static and cached),
+  // then sorts with the same comparator guests use.
+  function withDiscoveryMetrics(discoveries, order, seed) {
+    var publicationReader = window.IconoplasmPublicationReader
+    if (!publicationReader || typeof publicationReader.geneMetrics !== "function") {
+      return Promise.reject(new Error("Immutable Iconoplasm publication reader is unavailable"))
+    }
+    return Promise.all([
+      publicationReader.geneMetrics(),
+      import("./wiki-pageviews.js?v=cb3a800cea17433a"),
+    ]).then(function (loaded) {
+      var metrics = loaded[0]
+      var pageviews = loaded[1].ICONOPLASM_WIKI_PAGEVIEWS
+      var joined = (Array.isArray(discoveries) ? discoveries : []).map(function (row) {
+        var symbol = normalizedSymbol(row && row.gene_symbol)
+        return Object.assign({}, metrics.get(symbol) || {}, row, {
+          popularity_score: Number(pageviews[symbol] || 0),
+        })
+      })
+      var entries = normalizeDiscoveryEntries(joined)
+      // normalizeDiscoveryEntries keeps only known fields; the random order
+      // reads its seed from each entry.
+      for (var i = 0; i < entries.length; i++) entries[i].random_seed = seed || ""
+      return sortDiscoveryEntries(entries, order)
+    })
   }
 
   function fetchHomeCollectionCounts() {
@@ -8402,6 +8435,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return fetchDiscoveryState(galleryState.order, galleryState.seed, {
             signal: signal,
           })
+        })
+        .then(function (discoveryData) {
+          discoveryData = discoveryData || {}
+          if (disposed || !discoveryData.authenticated || discoveryData.shape !== "compact") {
+            return discoveryData
+          }
+          var seed =
+            galleryState.order === "random" ? String(discoveryData.seed || galleryState.seed) : ""
+          return withDiscoveryMetrics(discoveryData.discoveries, galleryState.order, seed).then(
+            function (sorted) {
+              return Object.assign({}, discoveryData, { discoveries: sorted })
+            },
+          )
         })
         .then(function (discoveryData) {
           if (disposed) return
