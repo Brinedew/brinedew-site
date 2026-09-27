@@ -182,12 +182,12 @@ test("Iconoplasm request picker is a style grid with sibling favorite controls",
   )
   assert.match(
     app,
-    /class="icono-button icono-button--small icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites/,
-    "the bulk-favorite action is a shared button beside the view switch, never a text link",
+    /data-icono-request-free-footer>'[\s\S]{0,120}class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites<\/button>'[\s\S]{0,120}type="submit"/,
+    "the bulk-favorite action is a shared button in the footer, left of Queue, never a text link",
   )
   assert.match(
     app,
-    /buttons\[i\]\.textContent = "Select all " \+ favoriteCount \+ " favorites"/,
+    /setAttribute\("aria-label", "Select all " \+ favoriteCount \+ " favorites"\)/,
     "the bulk-favorite action should expose the user's current favorite count",
   )
   assert.match(
@@ -284,7 +284,7 @@ test("Iconoplasm request picker is a style grid with sibling favorite controls",
   )
   assert.match(
     app,
-    /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery\)/,
+    /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery, \{ silent: true \}\)/,
     "numeric preview hydration should be debounced behind the immediate result",
   )
   assert.match(

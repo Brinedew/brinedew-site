@@ -625,7 +625,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var buttons = (root || document).querySelectorAll("[data-icono-request-select-all-favorites]")
     var favoriteCount = emulsionFavorites.ids().length
     for (var i = 0; i < buttons.length; i++) {
-      buttons[i].textContent = "Select all " + favoriteCount + " favorites"
+      // Phones drop the noun so the button shares the footer row with
+      // "Queue 20 candidates"; the accessible name keeps it.
+      // One outer span: .icono-button is a flex box, and a bare inner span
+      // would become its own flex item.
+      buttons[i].innerHTML =
+        "<span>Select all " +
+        favoriteCount +
+        '<span class="icono-request-select-all-noun"> favorites</span></span>'
+      buttons[i].setAttribute("aria-label", "Select all " + favoriteCount + " favorites")
       buttons[i].hidden = !emulsionFavorites.isLoaded() || favoriteCount === 0
     }
   }
@@ -5530,13 +5538,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '" data-icono-request-form class="icono-request-form">' +
       '<input type="hidden" data-icono-request-vision value="">' +
       '<div class="icono-request-browser">' +
+      // Grid areas place the search: beside the views on desktop, docked
+      // under the cards on a phone (B-884), so only the views sit above them.
       '<div class="icono-request-browse" data-icono-request-browse>' +
-      '<div class="icono-request-tools">' +
       '<div class="icono-request-views" role="group" aria-label="Show">' +
       '<button type="button" class="icono-request-view" data-icono-request-view="favorites" aria-pressed="false">Favorites <span data-icono-request-view-count></span></button>' +
       '<button type="button" class="icono-request-view" data-icono-request-view="all" aria-pressed="true">All styles <span data-icono-request-view-count></span></button>' +
       "</div>" +
-      '<button type="button" class="icono-button icono-button--small icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
+      '<div class="icono-request-find-dock">' +
       '<label class="icono-request-find">' +
       ICONO_SEARCH_ICON +
       '<input data-icono-request-query type="search" autocomplete="off" placeholder="Style number" aria-label="Find a style by number">' +
@@ -5556,8 +5565,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // One style card: the toggle (art + number) with the favorite star and the
-  // queued badge as siblings, never nested inside the toggle button.
+  // One style card: the toggle (the art) and, under it, the caption row with
+  // the number, the favorite star right after it (as on the gene page's
+  // "Emulsion 21329 ☆") and the count or queued badge. The star is never
+  // nested in the toggle; a click anywhere else on the card toggles it.
   function renderRequestStyleCardMarkup(option, isSelected, queuedCount) {
     var item = option || {}
     var visionId = String(item.vision_id || "").trim()
@@ -5596,9 +5607,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '">' +
       art +
       "</span>" +
-      '<span class="icono-request-card-meta"><span class="icono-request-card-label">' +
+      '<span class="icono-request-card-check" aria-hidden="true">' +
+      ICONO_CHECK_ICON +
+      "</span>" +
+      "</button>" +
+      '<div class="icono-request-card-meta"><span class="icono-request-card-label">' +
       esc(label) +
       "</span>" +
+      (item.is_preallocated_without_preview
+        ? ""
+        : renderEmulsionFavoriteButtonMarkup(
+            item.emulsion_family_id || item.emulsion_id,
+            "icono-emulsion-favorite-button--card",
+          )) +
       (queuedCount
         ? '<span class="icono-request-card-queued" data-icono-request-queued>' +
           esc(String(queuedCount)) +
@@ -5610,17 +5631,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             (imageCount === 1 ? "" : "s") +
             "</span>"
           : "") +
-      "</span>" +
-      '<span class="icono-request-card-check" aria-hidden="true">' +
-      ICONO_CHECK_ICON +
-      "</span>" +
-      "</button>" +
-      (item.is_preallocated_without_preview
-        ? ""
-        : renderEmulsionFavoriteButtonMarkup(
-            item.emulsion_family_id || item.emulsion_id,
-            "icono-emulsion-favorite-button--card",
-          )) +
+      "</div>" +
       "</div>"
     )
   }
@@ -5743,6 +5754,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-footer" slot="footer">' +
       '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
+      // Secondary left, primary right: the dialog's one action bar (B-884).
+      '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
       '<button type="submit" form="icono-request-form-' +
       esc(safeSymbol) +
       '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
@@ -7280,6 +7293,26 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       }
 
+      // The free plan sometimes ends a request that runs past its 10 ms CPU
+      // cap, most often on a fresh isolate; the edge then answers 503 (B-884:
+      // 4 of these a day, measured). This list is a read, so asking again is
+      // safe: two more tries, 0.6 s then 1.2 s apart, on a 5xx or a dropped
+      // connection. A 4xx (signed out) is final.
+      function fetchRequestOptionsWithRetry(url) {
+        var attempt = 0
+        function run() {
+          return fetchJSON(url, { credentials: "include" }).catch(function (error) {
+            var status = Number(error && error.status) || 0
+            if ((status && status < 500) || attempt >= 2) throw error
+            attempt += 1
+            return new Promise(function (resolve) {
+              window.setTimeout(resolve, attempt * 600)
+            }).then(run)
+          })
+        }
+        return run()
+      }
+
       function ensureRequestOptionsLoaded(query, options) {
         var config = options || {}
         var queryKey = requestOptionsQueryKey(query)
@@ -7288,9 +7321,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (requestOptionsLoadingByQuery[queryKey]) return requestOptionsLoadingByQuery[queryKey]
         var requestOptionsUrl = "/api/iconoplasm/requests/options"
         if (queryKey) requestOptionsUrl += "?query=" + encodeURIComponent(queryKey)
-        requestOptionsLoadingByQuery[queryKey] = fetchJSON(requestOptionsUrl, {
-          credentials: "include",
-        })
+        requestOptionsLoadingByQuery[queryKey] = fetchRequestOptionsWithRetry(requestOptionsUrl)
           .then(function (payload) {
             var loadedOptions = Array.isArray(payload && payload.request_options)
               ? payload.request_options
@@ -7552,11 +7583,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
         var loadedOptions
         try {
-          loadedOptions = await ensureRequestOptionsLoaded(renderQuery)
+          // Silent: the grid says what happened; no bare "HTTP 503" status.
+          loadedOptions = await ensureRequestOptionsLoaded(renderQuery, { silent: true })
         } catch (error) {
           results.removeAttribute("aria-busy")
           results.innerHTML =
-            '<p class="icono-request-grid-empty">Could not load styles. Try again.</p>'
+            '<div class="icono-request-grid-empty" role="status">' +
+            "<p>Could not load styles.</p>" +
+            '<button type="button" class="icono-button icono-button--small" data-icono-request-retry>Try again</button>' +
+            "</div>"
           return
         }
         if (queryInput.value !== renderQuery) {
@@ -7781,7 +7816,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         })
       }
       results.addEventListener("click", function (event) {
-        var button = event.target.closest("[data-icono-request-option]")
+        if (event.target.closest("[data-icono-request-retry]")) {
+          results.innerHTML = ""
+          void renderResultsList()
+          return
+        }
+        // The star has its own action; anywhere else on a card toggles it.
+        if (event.target.closest("[data-icono-emulsion-favorite]")) return
+        var cardElement = event.target.closest("[data-icono-request-card]")
+        var button = cardElement
+          ? cardElement.querySelector("[data-icono-request-option]")
+          : event.target.closest("[data-icono-request-option]")
         if (!button) return
         var visionId = String(button.getAttribute("data-icono-request-option") || "").trim()
         if (!visionId) {

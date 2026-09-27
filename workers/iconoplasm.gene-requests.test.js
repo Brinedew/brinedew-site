@@ -872,12 +872,17 @@ test("authenticated request options return rich emulsion rows from the dedicated
   assert.equal("artist_id" in payload.request_options[0], false)
   assert.doesNotMatch(JSON.stringify(payload.request_options), /Anima Archive|"@?anima"/)
   assert.equal(payload.request_options[0]?.vote_h_index, 4)
-  assert.equal(payload.request_options[0]?.preview_assets.length, 6)
+  // B-884: a card shows at most four 3:4 previews, so the option carries four
+  // medium URLs and nothing else image-shaped (the payload was 318 KB, 257 KB
+  // of it preview records nobody rendered).
+  assert.equal(payload.request_options[0]?.preview_assets.length, 4)
   assert.equal(payload.request_options[0]?.preview_assets[0]?.gene_symbol, "INS")
   assert.match(
-    String(payload.request_options[0]?.preview_assets[0]?.thumb_url || ""),
-    /\/portraits\/v1\/aa\/a{60}0000\/thumb\.webp$/,
+    String(payload.request_options[0]?.preview_assets[0]?.medium_url || ""),
+    /\/portraits\/v1\/aa\/a{60}0000\/medium\.webp$/,
   )
+  assert.equal("thumb_url" in payload.request_options[0].preview_assets[0], false)
+  assert.equal("preview_rank" in payload.request_options[0].preview_assets[0], false)
   assert.equal(env.gatewayDb.optionRollupReads, 1)
   assert.match(
     String(env.gatewayDb.lastOptionRollupSql || ""),
@@ -1196,8 +1201,8 @@ test("authenticated request options include shared user emulsions with preview t
   assert.equal(userOption.owner_username, "loweren")
   assert.equal(userOption.preview_assets.length, 1)
   assert.match(
-    String(userOption.preview_assets[0].thumb_url || ""),
-    /\/portraits\/v1\/dd\/d{64}\/thumb\.webp$/,
+    String(userOption.preview_assets[0].medium_url || ""),
+    /\/portraits\/v1\/dd\/d{64}\/medium\.webp$/,
   )
   assert.equal(env.gatewayDb.userEmulsionReads, 1)
   assert.equal(env.gatewayDb.userEmulsionPreviewReads, 1)
