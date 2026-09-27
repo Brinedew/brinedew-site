@@ -9512,40 +9512,24 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
   }
 }
 
+// Public request-option labels. Artist identities are private (the Anima slot
+// contract ships none, B-883): no artist tag, name or ID may reach the label,
+// the secondary line, the search text or the payload of a request option.
 function generationRequestVisionOptionLabels(row) {
   const emulsionId = unqualifiedEmulsionDisplayCode(publicEmulsionIdForRow(row))
   const displayEmulsionCode = emulsionId
-  const artistId = publicArtistIdForRow(row)
-  const artistTag = sanitizeText(row?.artist_tag || "", 255) || ""
-  const artistName = sanitizeText(row?.artist_name || "", 255) || ""
   const visionId = sanitizeVoteVisionId(row?.vision_id || "")
   const workflowLabel = sanitizeText(row?.workflow_label || "", 255) || ""
-  const primaryLabel = displayEmulsionCode || artistTag || artistName || artistId || visionId
+  const primaryLabel = displayEmulsionCode || visionId
   const secondaryParts = []
-  if (artistTag && artistTag !== primaryLabel) secondaryParts.push(artistTag)
-  if (artistName && artistName !== primaryLabel && artistName !== artistTag)
-    secondaryParts.push(artistName)
-  if (artistId && artistId !== primaryLabel && artistId !== artistTag)
-    secondaryParts.push(`artist ${artistId}`)
   if (workflowLabel && workflowLabel !== primaryLabel) secondaryParts.push(workflowLabel)
   if (visionId && visionId !== primaryLabel) secondaryParts.push(visionId)
   return {
     emulsionId,
-    artistId,
-    artistTag,
-    artistName,
     visionId,
     primaryLabel: primaryLabel || "Specific emulsion",
     secondaryLabel: secondaryParts.join(" · "),
-    searchText: [
-      displayEmulsionCode,
-      emulsionId,
-      artistId,
-      artistTag,
-      artistName,
-      workflowLabel,
-      visionId,
-    ]
+    searchText: [displayEmulsionCode, emulsionId, workflowLabel, visionId]
       .filter(Boolean)
       .join(" "),
   }
@@ -10402,9 +10386,6 @@ function mapGenerationRequestVisionOptionRows(env, url, rows) {
         secondary_label: labels.secondaryLabel,
         search_text: labels.searchText,
         emulsion_id: labels.emulsionId,
-        artist_id: labels.artistId,
-        artist_tag: labels.artistTag,
-        artist_name: labels.artistName,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
         score: Number(row?.score || 0),
@@ -10798,15 +10779,11 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
       compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper"),
     )
     const visionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower")
-    const artistPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower").replace(
-      /^@+/,
-      "",
-    )
-    const artistTagPrefix = artistPrefix ? `@${artistPrefix}` : ""
     const emulsionUpper = textPrefixUpperBound(emulsionPrefix)
     const visionUpper = textPrefixUpperBound(visionPrefix)
-    const artistUpper = textPrefixUpperBound(artistPrefix)
-    const artistTagUpper = textPrefixUpperBound(artistTagPrefix)
+    // Style search matches the style number and vision ID only. Artist
+    // identities are private (B-883): the picker never shows them, so the
+    // search must not find a style by its artist either.
     // D1 cost fence: this is query-aware search, not live discovery. It must
     // stay on the precomputed request-option rollup so typing "0-2" cannot
     // fan out into admin/portrait scans on every logged-in gene page.
@@ -10814,8 +10791,6 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
       `SELECT
          vision_id,
          emulsion_id,
-         artist_tag,
-         artist_name,
          workflow_id,
          workflow_label,
          prompt_version,
@@ -10832,8 +10807,6 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
          AND (
            (emulsion_id >= ? AND emulsion_id < ?)
            OR (vision_id >= ? AND vision_id < ?)
-           OR (artist_tag >= ? AND artist_tag < ?)
-           OR (artist_tag >= ? AND artist_tag < ?)
          )
        ORDER BY
          CASE
@@ -10841,11 +10814,7 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
            WHEN emulsion_id >= ? AND emulsion_id < ? THEN 1
            WHEN vision_id = ? THEN 2
            WHEN vision_id >= ? AND vision_id < ? THEN 3
-           WHEN artist_tag = ? THEN 4
-           WHEN artist_tag >= ? AND artist_tag < ? THEN 5
-           WHEN artist_tag = ? THEN 6
-           WHEN artist_tag >= ? AND artist_tag < ? THEN 7
-           ELSE 8
+           ELSE 4
          END ASC,
          vote_h_index DESC,
          live_count DESC,
@@ -10859,22 +10828,12 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
         emulsionUpper,
         visionPrefix,
         visionUpper,
-        artistPrefix,
-        artistUpper,
-        artistTagPrefix,
-        artistTagUpper,
         emulsionPrefix,
         emulsionPrefix,
         emulsionUpper,
         visionPrefix,
         visionPrefix,
         visionUpper,
-        artistPrefix,
-        artistPrefix,
-        artistUpper,
-        artistTagPrefix,
-        artistTagPrefix,
-        artistTagUpper,
       )
       .all()
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
