@@ -156,28 +156,99 @@ function defaultSelectedRevisionId(dossier, revisions) {
   return String(revisions[0]?.revision?.manifestation_revision_id || "")
 }
 
-function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, revisions) {
+// B-874 (owner, 27 Sep 2026: "imagine all the inter-caretaker conflicts and
+// optimize to survive those, not too spammy"). Autosave writes a version at
+// every pause, so History groups them into sessions like Google Docs: one row
+// per caretaker's run of saves, expandable to single saves. A session never
+// spans two lineages, so a change of caretaker always starts a new row. That
+// keeps the version before someone else's run one visible click away, which is
+// the point Wikipedia's rollback returns to; "Edit from here" on it undoes the
+// whole run. 30 minutes of quiet also ends a session (the common web-analytics
+// session timeout).
+const SESSION_GAP_MS = 30 * 60 * 1000
+
+function historySessions(revisions) {
+  const sessions = []
+  for (const item of revisions) {
+    const session = sessions[sessions.length - 1]
+    const newer = session?.items[session.items.length - 1]
+    const gap =
+      Date.parse(newer?.revision?.created_at || "") - Date.parse(item.revision?.created_at || "")
+    const sameRun =
+      newer &&
+      item.manifestation?.origin !== "system_seed" &&
+      String(newer.manifestation?.manifestation_id || "") ===
+        String(item.manifestation?.manifestation_id || "") &&
+      !(gap > SESSION_GAP_MS)
+    if (sameRun) session.items.push(item)
+    else sessions.push({ items: [item] })
+  }
+  for (const session of sessions) {
+    session.id = String(session.items[session.items.length - 1].revision?.manifestation_revision_id)
+  }
+  return sessions
+}
+
+// A session is open when the caretaker opened it, or when it holds the selected
+// version below its header row (otherwise the selection would be invisible).
+function openSessionIds(sessions, selectedId, expandedSessions) {
+  const open = new Set(Array.from(expandedSessions || [], String))
+  for (const session of sessions) {
+    if (
+      session.items.slice(1).some((item) => item.revision?.manifestation_revision_id === selectedId)
+    )
+      open.add(session.id)
+  }
+  return open
+}
+
+// Every row, and the preview, compares a version with the row below it on
+// screen: a closed session shows what the whole run changed, an open one each save.
+function visibleRevisions(sessions, open) {
+  return sessions.flatMap((session) =>
+    open.has(session.id) ? session.items : session.items.slice(0, 1),
+  )
+}
+
+function deltaMarkup(item, previous, escapeHtml) {
+  const revision = item.revision || {}
+  if (!versionBodyAvailable(revision)) {
+    return '<span class="icono-caretaker-timeline__delta">Text removed</span>'
+  }
+  if (!previous) return '<span class="icono-caretaker-timeline__delta">First version</span>'
+  if (!versionBodyAvailable(previous.revision)) return ""
+  if (String(previous.revision.body || "") === String(revision.body || "")) {
+    const before = previous.revision.derivative?.tags_sha256
+    const after = revision.derivative?.tags_sha256
+    return (
+      '<span class="icono-caretaker-timeline__delta">' +
+      (before && after && before !== after ? "Tags changed" : "No text change") +
+      "</span>"
+    )
+  }
+  const { added, removed } = wordDelta(previous.revision.body, revision.body)
+  return (
+    '<span class="icono-caretaker-timeline__delta" aria-label="' +
+    escapeHtml(`${added} words added, ${removed} removed`) +
+    '"><span class="icono-caretaker-delta-add">+' +
+    added +
+    '</span> <span class="icono-caretaker-delta-remove">−' +
+    removed +
+    "</span></span>"
+  )
+}
+
+function timelineItemMarkup(item, previous, context, options = {}) {
+  const { dossier, selectedId, escapeHtml, revisions } = context
   const revision = item.revision || {}
   const revisionId = String(revision.manifestation_revision_id || "")
-  const canonical = revisionId && revisionId === dossier.head.canonical_revision_id
+  const canonical =
+    options.marked ?? (revisionId && revisionId === dossier.head.canonical_revision_id)
   const when = relativeTime(revision.created_at)
   const absolute = absoluteDate(revision)
-  let delta = '<span class="icono-caretaker-timeline__delta">First version</span>'
-  if (!versionBodyAvailable(revision)) {
-    delta = '<span class="icono-caretaker-timeline__delta">Text removed</span>'
-  } else if (previous && versionBodyAvailable(previous.revision)) {
-    const { added, removed } = wordDelta(previous.revision.body, revision.body)
-    delta =
-      '<span class="icono-caretaker-timeline__delta" aria-label="' +
-      escapeHtml(`${added} words added, ${removed} removed`) +
-      '"><span class="icono-caretaker-delta-add">+' +
-      added +
-      '</span> <span class="icono-caretaker-delta-remove">−' +
-      removed +
-      "</span></span>"
-  }
+  const withdrawn = options.header && item.manifestation?.status === "withdrawn"
   return (
-    '<div role="listitem"><button type="button" class="icono-caretaker-timeline__item" data-icono-caretaker-version="' +
+    '<button type="button" class="icono-caretaker-timeline__item" data-icono-caretaker-version="' +
     escapeHtml(revisionId) +
     '"' +
     (revisionId === selectedId ? ' aria-current="true"' : "") +
@@ -197,9 +268,57 @@ function timelineItemMarkup(item, previous, dossier, selectedId, escapeHtml, rev
         "</time> · "
       : "") +
     escapeHtml(versionAuthor(item.manifestation)) +
+    (withdrawn ? " · Withdrawn" : "") +
     "</span>" +
-    delta +
-    "</button></div>"
+    deltaMarkup(item, previous, escapeHtml) +
+    "</button>"
+  )
+}
+
+function sessionMarkup(session, open, visible, context) {
+  const { dossier, escapeHtml } = context
+  const isOpen = open.has(session.id)
+  const previousOf = (item) => visible[visible.indexOf(item) + 1] || null
+  const canonical = String(dossier.head.canonical_revision_id || "")
+  const holdsSource = session.items.some(
+    (item) => item.revision?.manifestation_revision_id === canonical,
+  )
+  const [head, ...inner] = session.items
+  return (
+    '<div role="listitem" class="icono-caretaker-session" data-icono-caretaker-session="' +
+    escapeHtml(session.id) +
+    '">' +
+    timelineItemMarkup(head, previousOf(head), context, {
+      header: true,
+      // A closed session carries the image-source mark of any version inside it.
+      marked: isOpen ? undefined : holdsSource,
+    }) +
+    (inner.length
+      ? '<button type="button" class="icono-caretaker-session__toggle" data-icono-caretaker-session-toggle="' +
+        escapeHtml(session.id) +
+        '" aria-expanded="' +
+        (isOpen ? "true" : "false") +
+        '">' +
+        escapeHtml(`${session.items.length} saves`) +
+        "</button>" +
+        '<div role="list" class="icono-caretaker-session__versions" data-icono-caretaker-session-versions' +
+        (isOpen ? "" : " hidden") +
+        ">" +
+        inner
+          .map(
+            (item) =>
+              '<div role="listitem">' +
+              timelineItemMarkup(
+                item,
+                context.revisions[context.revisions.indexOf(item) + 1] || null,
+                context,
+              ) +
+              "</div>",
+          )
+          .join("") +
+        "</div>"
+      : "") +
+    "</div>"
   )
 }
 
@@ -239,7 +358,7 @@ function greyButton(title, label) {
   )
 }
 
-export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
+export function historyPreviewMarkup(dossier, selectedId, escapeHtml, expandedSessions) {
   const revisions = allRevisions(dossier)
   const index = revisions.findIndex(function (item) {
     return item.revision?.manifestation_revision_id === selectedId
@@ -248,7 +367,10 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
     return '<section class="icono-caretaker-preview" data-icono-caretaker-preview></section>'
   }
   const item = revisions[index]
-  const previous = revisions[index + 1] || null
+  const sessions = historySessions(revisions)
+  const visible = visibleRevisions(sessions, openSessionIds(sessions, selectedId, expandedSessions))
+  const shown = visible.indexOf(item)
+  const previous = (shown < 0 ? revisions[index + 1] : visible[shown + 1]) || null
   const revision = item.revision || {}
   const manifestation = item.manifestation || {}
   const canonical = selectedId === dossier.head.canonical_revision_id
@@ -307,33 +429,27 @@ export function historyPreviewMarkup(dossier, selectedId, escapeHtml) {
   )
 }
 
-function historyMarkup(dossier, revisions, selectedId, escapeHtml) {
+export function historyMarkup(dossier, selectedId, escapeHtml, expandedSessions) {
+  const revisions = allRevisions(dossier)
   if (!revisions.length) {
     return '<p class="icono-caretaker-empty">No versions yet. Your first save becomes version 1.</p>'
   }
+  const sessions = historySessions(revisions)
+  const open = openSessionIds(sessions, selectedId, expandedSessions)
+  const visible = visibleRevisions(sessions, open)
+  const context = { dossier, selectedId, escapeHtml, revisions }
   return (
-    '<div class="icono-caretaker-history">' +
+    '<div class="icono-caretaker-history" data-icono-caretaker-history>' +
     // role=list divs, not <ol>: the blog's .markdown-preview-view :is(ul, ol) rule
     // outranks app classes and re-adds numbering (see Linear pet-peeves doc, #2).
     '<nav class="icono-caretaker-timeline-pane" aria-label="Versions"><div class="icono-caretaker-timeline" role="list">' +
-    revisions
-      .map(function (item, index) {
-        return timelineItemMarkup(
-          item,
-          revisions[index + 1] || null,
-          dossier,
-          selectedId,
-          escapeHtml,
-          revisions,
-        )
-      })
-      .join("") +
+    sessions.map((session) => sessionMarkup(session, open, visible, context)).join("") +
     "</div>" +
     (dossier.history?.next_cursor
       ? '<button type="button" class="icono-button icono-button--small icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
       : "") +
     "</nav>" +
-    historyPreviewMarkup(dossier, selectedId, escapeHtml) +
+    historyPreviewMarkup(dossier, selectedId, escapeHtml, expandedSessions) +
     "</div>"
   )
 }
@@ -528,9 +644,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-history" aria-labelledby="icono-caretaker-tab-button-history" data-icono-caretaker-tabpanel="history" hidden>'
   body += historyMarkup(
     dossier,
-    revisions,
     String(options.selectedRevisionId || "") || defaultSelectedRevisionId(dossier, revisions),
     esc,
+    options.expandedSessions,
   )
   body += "</div>"
 
