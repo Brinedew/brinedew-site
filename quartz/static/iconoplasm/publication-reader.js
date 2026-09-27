@@ -1,4 +1,7 @@
 const CDN = "https://iconoplasmportraits.b-cdn.net"
+const ORIGIN = "https://iconoplasm.brinedew.bio"
+// A healthy Bunny edge answers these small JSON objects in well under a second.
+const CDN_TIMEOUT_MS = 4000
 const HEAD_PATH = "/api/public/v1/card-current"
 const HEAD_STORAGE_KEY = "iconoplasm.publication-head.v1"
 const HASH = /^[a-f0-9]{64}$/
@@ -135,6 +138,7 @@ export function mergePublishedGeneOverlay(base, overlay) {
 export function createIconoplasmPublicationReader(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis)
   const storage = options.storage ?? globalThis.localStorage ?? null
+  const cdnTimeoutMs = Number(options.cdnTimeoutMs) || CDN_TIMEOUT_MS
   const objects = new Map()
   let headPromise = null
   let catalogPromise = null
@@ -158,8 +162,12 @@ export function createIconoplasmPublicationReader(options = {}) {
     }
   }
 
-  async function fetchJson(url, limit) {
-    const response = await fetchImpl(url, { method: "GET", credentials: "omit" })
+  async function fetchFrom(origin, path, limit, timeoutMs) {
+    const response = await fetchImpl(origin + path, {
+      method: "GET",
+      credentials: "omit",
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+    })
     if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
     const text = await response.text()
     if (new TextEncoder().encode(text).byteLength > limit) {
@@ -168,16 +176,52 @@ export function createIconoplasmPublicationReader(options = {}) {
     return { value: JSON.parse(text), text }
   }
 
+  // IPD-001 (architecture-fences.json): Bunny accelerates; the first-party origin is
+  // canonical, and a failed accelerator affects only this reader. On 27 Sep 2026
+  // an ISP resolver failed to resolve the Bunny host and a first-time reader got
+  // "Gene page temporarily unavailable". A failed Bunny request now retries the
+  // same public path on the canonical origin, and after a network failure or
+  // timeout the rest of this page skips Bunny. Healthy readers never touch the
+  // origin, and immutable bytes are hash-checked whichever source served them.
+  // A reader that already holds a coherent head never needs the origin for it:
+  // the stored head is free and exact. Only a reader with nothing stored falls
+  // through to the origin for the head, so a Bunny head outage does not fan
+  // returning readers into Worker requests.
+  let cdnUnreachable = false
+  async function fromCdn(path, limit) {
+    if (cdnUnreachable) throw new Error("Publication CDN unreachable")
+    try {
+      return await fetchFrom(CDN, path, limit, cdnTimeoutMs)
+    } catch (error) {
+      if (!String(error?.message || "").startsWith("Publication HTTP")) cdnUnreachable = true
+      throw error
+    }
+  }
+
+  async function fetchJson(path, limit) {
+    try {
+      return await fromCdn(path, limit)
+    } catch {
+      return fetchFrom(ORIGIN, path, limit)
+    }
+  }
+
   async function currentHead() {
     if (headPromise) return headPromise
     headPromise = (async () => {
       try {
-        const head = parseHead((await fetchJson(CDN + HEAD_PATH, 2048)).value)
+        const head = parseHead((await fromCdn(HEAD_PATH, 2048)).value)
         if (!head) throw new Error("Invalid publication head")
         return head
       } catch {
         const prior = storedHead()
         if (prior) return prior
+        try {
+          const head = parseHead((await fetchFrom(ORIGIN, HEAD_PATH, 2048)).value)
+          if (head) return head
+        } catch {
+          // Both sources failed; report the reader-facing condition below.
+        }
         throw new Error("No coherent Iconoplasm publication is available")
       }
     })().finally(() => {
@@ -195,7 +239,7 @@ export function createIconoplasmPublicationReader(options = {}) {
       // B-792/B-793: cards, genes and immutable candidate gallery pages share
       // the publisher's 256 KiB bound. Other kinds keep theirs.
       const { value, text } = await fetchJson(
-        CDN + path,
+        path,
         kind === "cards" || kind === "genes" || kind === "galleries"
           ? 256 * 1024
           : kind === "catalogs"
