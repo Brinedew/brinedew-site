@@ -425,6 +425,15 @@
   font-size: 0.76rem;
 }
 
+/* B-874: what the text is for, read right under the box instead of last. */
+.icono-caretaker-editor__purpose {
+  margin: 0;
+  color: var(--darkgray);
+  font-family: var(--icono-action-font);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
 .icono-caretaker-editor__basis {
   margin: 0;
   padding: 0.5rem 0.65rem;
