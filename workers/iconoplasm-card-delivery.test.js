@@ -273,3 +273,83 @@ test("v2 hover compatibility keeps lane failures independent and rejects unbound
   directory.entries[0][3] = "invalid"
   assert.equal((await read("portraits")).status, 503)
 })
+
+// B-885: the signed-in home window asks for 12 cards whose genes are scattered
+// across the catalog. Above 10 symbols the reader loaded every packed shard
+// that held one of them (up to 450 cards and ~2 MB of JSON each, all at once),
+// which blew the 128 MB isolate limit: Cloudflare 1102 on every 24-card window
+// and on scattered 12-card ones (measured live, 27 Sep). A home window must use
+// exact card objects: at most 12 cards + 12 directories = 24 subrequests,
+// under the Free plan's 50.
+test("a scattered 12-card window reads exact card objects, never packed shards (B-885)", async () => {
+  const bodies = new Map()
+  async function object(kind, value) {
+    const text = canonicalPublishedJson(value)
+    const hash = await publishedObjectHash(new TextEncoder().encode(text))
+    const key = `published-cards/v2/immutable/${kind}/${hash}.json`
+    bodies.set(key, text)
+    return { key, hash }
+  }
+  const symbols = Array.from({ length: 12 }, (_, i) => `G${String(i).padStart(2, "0")}`)
+  const shards = []
+  for (const symbol of symbols) {
+    const card = {
+      __complete: true,
+      schema_version: "iconoplasm.mobileCard.v1",
+      symbol,
+      full_name: `${symbol} full name`,
+      portrait: { status: "missing" },
+      field_status: {},
+      payload: { symbol, portrait: { status: "missing" } },
+    }
+    const full = await object("cards", card)
+    const gene = await object("genes", card.payload)
+    const portrait = await object("portraits", { symbol, portrait: card.portrait })
+    const index = await object("indexes", {
+      schema_version: 2,
+      entries: [[symbol, full.hash, gene.hash, portrait.hash]],
+    })
+    shards.push({
+      key: `published-cards/v2/immutable/shards/${"d".repeat(60)}${String(shards.length).padStart(4, "0")}.json`,
+      content_hash: "c".repeat(64),
+      card_count: 450,
+      first_symbol: symbol,
+      last_symbol: symbol,
+      delivery_indexes: [{ key: index.key, first_symbol: symbol, last_symbol: symbol }],
+    })
+  }
+  const root = await object("manifests", {
+    schema: "iconoplasm.cardCatalog.v1",
+    storage: "bunny_card_catalog_v2",
+    card_count: symbols.length,
+    catalog_gene_count: symbols.length,
+    shards,
+  })
+  const env = {
+    KV: { get: () => JSON.stringify({ current: `ccv2-${root.hash}`, previous: null }) },
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "fixture",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+  }
+  const original = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url) => {
+    const key = new URL(url).pathname.replace(/^\/fixture\//, "")
+    calls.push(key)
+    assert.equal(key.includes("/shards/"), false, `read a packed shard: ${key}`)
+    assert.ok(bodies.has(key), key)
+    return new Response(bodies.get(key))
+  }
+  try {
+    resetIconoplasmRuntimeCachesForTest()
+    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(
+      env,
+      `ccv2-${root.hash}`,
+      symbols,
+      { allowWholeArtifact: false },
+    )
+    assert.deepEqual([...artifact.bySymbol.keys()].sort(), symbols)
+    assert.ok(calls.length <= 1 + 24, `${calls.length} subrequests for 12 cards`)
+  } finally {
+    globalThis.fetch = original
+  }
+})
