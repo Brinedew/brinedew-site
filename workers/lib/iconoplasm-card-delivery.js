@@ -1,3 +1,4 @@
+import { PUBLIC_ORIGIN_OBJECT_KINDS } from "../iconoplasm-route-contract.js"
 import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
@@ -48,8 +49,7 @@ export function createPublishedCardDeliveryHandlers({ barrier, readerView = null
     },
     async object({ request, env, ctx, match }) {
       const { kind, hash } = match.params
-      if (!["cards", "genes", "portraits", "indexes", "catalogs", "manifests"].includes(kind))
-        return new Response(null, { status: 404 })
+      if (!PUBLIC_ORIGIN_OBJECT_KINDS.includes(kind)) return new Response(null, { status: 404 })
       const url = new URL(request.url)
       url.search = ""
       const cacheKey = new Request(url)
