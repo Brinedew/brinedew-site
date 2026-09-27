@@ -142,6 +142,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   const objects = new Map()
   let headPromise = null
   let catalogPromise = null
+  let geneMetricsCache = null
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
@@ -527,6 +528,47 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
+  // B-885: the home sort fields, per gene, from the compact catalog indexes
+  // this page already loads for search and the gallery. A signed-in shelf
+  // sorts on these in the browser instead of asking the server to enrich
+  // every discovered gene. Keyed by upper-case symbol (discoveries are
+  // upper-case; the catalog keeps "C1orf112"). Popularity is not here: the
+  // published cards carry 0 for every gene (measured 27 Sep), so the page
+  // takes it from wiki-pageviews.js, the table the server enrichment used.
+  async function geneMetrics() {
+    return fromCoherentPublication("gene-metrics", async (head) => {
+      const { version, indexes } = await catalogIndexes(head)
+      if (geneMetricsCache?.version === version) return geneMetricsCache.value
+      const bySymbol = new Map()
+      for (const index of indexes) {
+        const names = new Map(index.search_entries.map(([symbol, name]) => [symbol, name]))
+        for (const [
+          symbol,
+          ,
+          ,
+          ,
+          votes,
+          publishedAt,
+          ,
+          uniqueness,
+          weight,
+          age,
+        ] of index.gallery_entries) {
+          bySymbol.set(String(symbol).toUpperCase(), {
+            full_name: String(names.get(symbol) || ""),
+            image_score: Number(votes || 0),
+            published_at: String(publishedAt || ""),
+            uniqueness_rank: nullableNumber(uniqueness),
+            weight_kg: nullableNumber(weight),
+            age_years: nullableNumber(age),
+          })
+        }
+      }
+      geneMetricsCache = { version, value: bySymbol }
+      return bySymbol
+    })
+  }
+
   async function gallery({ order = "votes", offset = 0, limit = 24, seed = "" } = {}) {
     const start = Math.max(0, Number(offset) || 0)
     const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
@@ -634,7 +676,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
-  return { currentHead, gene, genes, candidateGallery, search, gallery, metadata }
+  return { currentHead, gene, genes, candidateGallery, search, gallery, geneMetrics, metadata }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
