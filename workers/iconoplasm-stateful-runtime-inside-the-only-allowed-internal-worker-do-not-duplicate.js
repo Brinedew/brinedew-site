@@ -12079,6 +12079,42 @@ function validateAccountGalleryCursor(raw, order, scope) {
   return { ok: true, value: { ...value, symbol, first_discovered_at: time } }
 }
 
+// The shared summaries a newest page can draw from, chosen by time alone so
+// only these need names (B-885). Keeps every summary in the cursor's own
+// second (the symbol tie-break decides which side of the cursor it falls on),
+// then limit + 1 beyond it (the +1 answers has_more), then the rest of the
+// last kept second so a tie is never split. paginateCompactDiscoveryRows makes
+// the exact page from these. Seconds match isoFromEpochSeconds' rounding.
+function sharedNewestPageCandidates(summaries, { limit, backward, cursorValue }) {
+  const at = (summary) => Math.floor(Number(summary?.first_at) || 0)
+  const cursorMs = cursorValue ? Date.parse(cursorValue.first_discovered_at || "") : Number.NaN
+  if (cursorValue && !Number.isFinite(cursorMs)) return summaries
+  const cursorAt = cursorValue ? Math.floor(cursorMs / 1000) : null
+  const eligible =
+    cursorAt == null
+      ? summaries
+      : summaries.filter((summary) =>
+          backward ? at(summary) >= cursorAt : at(summary) <= cursorAt,
+        )
+  const sorted = [...eligible].sort((left, right) =>
+    backward ? at(left) - at(right) : at(right) - at(left),
+  )
+  const picked = []
+  let beyondCursor = 0
+  let lastAt = null
+  for (const summary of sorted) {
+    const time = at(summary)
+    const atCursor = cursorAt != null && time === cursorAt
+    if (!atCursor && beyondCursor > limit && time !== lastAt) break
+    picked.push(summary)
+    if (!atCursor) {
+      beyondCursor += 1
+      lastAt = time
+    }
+  }
+  return picked
+}
+
 function paginateCompactDiscoveryRows({
   decorated,
   limit,
@@ -12097,12 +12133,17 @@ function paginateCompactDiscoveryRows({
         : left.gene_symbol.localeCompare(right.gene_symbol),
     )
   } else {
-    sorted.sort((left, right) => {
-      const timeCompare = backward
-        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "")
-        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "")
-      return timeCompare || left.gene_symbol.localeCompare(right.gene_symbol)
-    })
+    // Newest is time descending, then symbol ascending. Walking backward is
+    // its exact mirror (time ascending, symbol DESCENDING); the old ascending
+    // tie-break returned the wrong genes when a page boundary split a second
+    // shared by several discoveries (found by the B-885 tie walk).
+    sorted.sort((left, right) =>
+      backward
+        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "") ||
+          right.gene_symbol.localeCompare(left.gene_symbol)
+        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "") ||
+          left.gene_symbol.localeCompare(right.gene_symbol),
+    )
   }
   let filtered = sorted
   if (cursorValue) {
@@ -12204,7 +12245,20 @@ async function listSharedGeneDiscoveryWindow(
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
   const shared = await readSharedCompactState(env.ICONOPLASM_DB)
-  const summaries = compactSharedSummaries(shared)
+  const allSummaries = compactSharedSummaries(shared)
+  // Newest pages by time before naming anything (B-885): only the page's
+  // ordinals, one look-ahead and the ties on each boundary are mapped to
+  // symbols. Mapping every shared discovery (3,681 on 27 Sep, up to the whole
+  // 19k catalog) cost ~2k D1 rows per 500 on every view. Symbol order still
+  // needs every name to sort by.
+  const summaries =
+    resolvedOrder === "newest"
+      ? sharedNewestPageCandidates(allSummaries, {
+          limit: cleanedLimit,
+          backward: Boolean(before),
+          cursorValue,
+        })
+      : allSummaries
   const symbols = await readCanonicalSymbolsForOrdinals(
     env.ICONOPLASM_DB,
     summaries.map((summary) => summary.ordinal),

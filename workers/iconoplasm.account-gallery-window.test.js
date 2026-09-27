@@ -1085,3 +1085,81 @@ for (const scope of ["personal", "shared"]) {
     assert.ok(enrichmentCalls(db).flat().length <= 3, `${scope}: second page enriched too much`)
   })
 }
+
+// B-885 step 2: the shared window mapped EVERY shared discovery's ordinal to
+// its symbol (8 lookup queries of 500 at 3,681 discoveries; 42% of all D1 rows
+// read on 27 Sep, with the hourly publisher) to show one page. Newest order
+// pages by time first and names only the page, including ties that share a
+// second, walked end to end in both directions.
+test("shared newest window names only the page and pages ties exactly (B-885)", async () => {
+  const db = new FakeDb()
+  // 60 genes in 12 distinct seconds: ties of five share every timestamp.
+  db.rows = Array.from({ length: 60 }, (_, index) => {
+    const second = String(Math.floor(index / 5)).padStart(2, "0")
+    return db.row(
+      `user-${index % 7}`,
+      `T${String(59 - index).padStart(2, "0")}`,
+      `2026-05-01T00:00:${second}Z`,
+      index,
+    )
+  })
+  resetIconoplasmRuntimeCachesForTest()
+  const env = buildEnv({ db, version: "test-vm-version-shared-ties" })
+  env.KV.put(
+    "iconoplasm:card-catalog:test-vm-version-shared-ties",
+    JSON.stringify(
+      completeCardCatalogArtifact(
+        db.rows.map((row) => row.gene_symbol),
+        "test-vm-version-shared-ties",
+      ),
+    ),
+  )
+  const expected = [...db.rows]
+    .sort(
+      (a, b) =>
+        b.first_discovered_at.localeCompare(a.first_discovered_at) ||
+        a.gene_symbol.localeCompare(b.gene_symbol),
+    )
+    .map((row) => row.gene_symbol)
+  const ordinalLookups = () =>
+    db.calls
+      .filter((call) => /FROM icono_discovery_ordinals_v2\s+WHERE ordinal IN/.test(call.sql))
+      .flatMap((call) => JSON.parse(String(call.args[0] || "[]")))
+  const page = async (cursorParam) => {
+    db.calls.length = 0
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=7&scope=shared${cursorParam}`,
+        ),
+        env,
+      )
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    // At most the page, one look-ahead, and the ties on both boundaries.
+    assert.ok(ordinalLookups().length <= 7 + 1 + 5 + 5, `named ${ordinalLookups().length} genes`)
+    return payload
+  }
+  const forward = []
+  let payload = await page("")
+  const pages = [payload]
+  forward.push(...payload.items.map((item) => item.symbol))
+  while (payload.has_more) {
+    payload = await page(`&after=${encodeURIComponent(payload.next_cursor)}`)
+    pages.push(payload)
+    forward.push(...payload.items.map((item) => item.symbol))
+  }
+  assert.deepEqual(forward, expected, "forward walk")
+  assert.equal(pages.length, Math.ceil(60 / 7))
+
+  // Backward from the last page reproduces every earlier page.
+  let back = pages[pages.length - 1]
+  for (let index = pages.length - 2; index >= 0; index--) {
+    back = await page(`&before=${encodeURIComponent(back.previous_cursor)}`)
+    assert.deepEqual(
+      back.items.map((item) => item.symbol),
+      pages[index].items.map((item) => item.symbol),
+      `backward page ${index}`,
+    )
+  }
+})
