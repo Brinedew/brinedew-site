@@ -12013,7 +12013,12 @@ async function listUserGeneDiscoveries(
 }
 
 const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
-const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 48
+// 12 cards + 12 directories = at most 24 storage subrequests per window on
+// the exact-object path (Free plan cap: 50). The home page asks for 4, then 12
+// (8 on phones); a larger request is clamped and pages on with the cursor
+// (B-885: at 24 and 48 the window read packed shards and hit Cloudflare 1102).
+const PUBLISHED_EXACT_CARD_READ_LIMIT = 12
+const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = PUBLISHED_EXACT_CARD_READ_LIMIT
 const ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS = new Set(["newest", "symbol"])
 
 // Account windows are one signed-in shelf path, not the global gallery model.
@@ -32178,9 +32183,16 @@ async function readPublishedCardCatalogArtifact(
   }
   let parsed = await readPublishedCardCatalogManifest(env, artifactVersion)
   // A one-gene hover or site card must not parse a 750-card packed shard on a
-  // cold Free Worker. Bulk pages keep packed reads; <=10 cards use small exact
-  // objects, bounded even when every directory and storage fallback is cold.
-  if (parsed?.storage === CARD_PUBLICATION_STORAGE && requestedSymbols?.length <= 10) {
+  // cold Free Worker. Bulk pages keep packed reads; up to
+  // PUBLISHED_EXACT_CARD_READ_LIMIT cards use small exact objects, bounded even
+  // when every directory and storage fallback is cold. B-885: the signed-in
+  // home window asks for 12 SCATTERED cards; at 11-12 it fell through to packed
+  // reads of up to 12 shards (~2 MB of JSON each, all at once) and died with
+  // Cloudflare 1102 (memory) on the owner's home page.
+  if (
+    parsed?.storage === CARD_PUBLICATION_STORAGE &&
+    requestedSymbols?.length <= PUBLISHED_EXACT_CARD_READ_LIMIT
+  ) {
     return readPublishedBunnyCards(env, parsed, requestedSymbols)
   }
   const contentAddressed =
