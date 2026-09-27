@@ -107,6 +107,11 @@ function measure() {
     // Headless Chrome hides scrollbars, so geometry cannot see this one: on
     // Windows the tab bar drew an empty scrollbar track under the tabs.
     tabsScrollbar: getComputedStyle(document.querySelector(".icono-caretaker-tabs")).scrollbarWidth,
+    // The tag panel scrolls vertically only; overflow-x:auto drew an empty bar.
+    tagScrollOverflowX: (() => {
+      const tags = document.querySelector(".icono-caretaker-tag-scroll")
+      return tags ? getComputedStyle(tags).overflowX : "hidden"
+    })(),
     titleCloseOverlap:
       t && c
         ? !(t.right <= c.left || c.right <= t.left || t.bottom <= c.top || c.bottom <= t.top)
@@ -236,6 +241,7 @@ test("the caretaker dialog fits, uses the UI fonts and never clips its buttons",
         assert.doesNotMatch(String(m.titleFont), /Crimson/, `${where}: title in blog serif`)
         assert.equal(m.titleCloseOverlap, false, `${where}: title overlaps Close`)
         assert.equal(m.tabsScrollbar, "none", `${where}: the tab bar draws a scrollbar`)
+        assert.equal(m.tagScrollOverflowX, "hidden", `${where}: the tag panel scrolls sideways`)
         await context.close()
       }
     }
