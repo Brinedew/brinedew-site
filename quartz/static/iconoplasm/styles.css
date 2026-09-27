@@ -992,9 +992,21 @@ sl-dialog:not(:defined) {
   justify-content: space-between;
 }
 
-/* B-883: the one queue action sits at the dialog's bottom-right. */
+/* B-883: the queue action sits at the dialog's bottom-right. B-884: "Select
+   all N favorites" is the bar's secondary action, on the left; Queue stays
+   right even when it is hidden (no favorites) or the row ever wraps. */
 .icono-request-free-actions {
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.icono-request-free-actions > .icono-request-select-all-favorites {
+  margin-right: auto;
+}
+
+.icono-request-free-actions > [hidden] {
+  display: none;
 }
 
 /* B-867: Generate and Publish are always both present (Publish greys out
@@ -1503,7 +1515,17 @@ img-comparison-slider.rendered [slot="second"] {
   min-height: 0;
 }
 
+/* Desktop: the view switch and the search share the top row. Phones move the
+   search under the cards (see the media query below). */
 .icono-request-browse {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "views find"
+    "grid grid";
+  align-content: start;
+  align-items: center;
+  gap: 0.9rem 0.6rem;
   min-width: 0;
   min-height: 0;
   padding: 0.2rem 0.35rem 1rem 0.2rem;
@@ -1511,12 +1533,18 @@ img-comparison-slider.rendered [slot="second"] {
   overscroll-behavior: contain;
 }
 
-.icono-request-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  padding-bottom: 0.9rem;
+.icono-request-browse > .icono-request-views {
+  grid-area: views;
+  justify-self: start;
+}
+
+.icono-request-find-dock {
+  grid-area: find;
+  min-width: 0;
+}
+
+.icono-request-browse > .icono-request-grid {
+  grid-area: grid;
 }
 
 /* The view switch is the method tabs' segmented look at the small size. */
@@ -1559,12 +1587,12 @@ img-comparison-slider.rendered [slot="second"] {
 
 .icono-request-find {
   display: flex;
-  flex: 1 1 11rem;
   align-items: center;
   gap: 0.45rem;
-  max-width: 16rem;
+  box-sizing: border-box;
+  width: 16rem;
+  max-width: 100%;
   min-height: 2rem;
-  margin-left: auto;
   padding: 0 0.6rem;
   border: 1px solid var(--icono-action-border);
   border-radius: var(--icono-control-radius);
@@ -1611,9 +1639,16 @@ img-comparison-slider.rendered [slot="second"] {
   font: 0.8rem / 1.45 var(--icono-action-font);
 }
 
+.icono-request-grid-empty p {
+  margin: 0 0 0.75rem;
+}
+
+/* The whole card is the pick target (the click handler forwards to the
+   toggle); only the star keeps its own action. */
 .icono-request-card {
   position: relative;
   min-width: 0;
+  cursor: pointer;
 }
 
 .icono-request-card-toggle {
@@ -1664,7 +1699,7 @@ img-comparison-slider.rendered [slot="second"] {
   font: 0.76rem / 1.2 var(--icono-action-font);
 }
 
-.icono-request-card-toggle:hover .icono-request-card-art {
+.icono-request-card:hover .icono-request-card-art {
   border-color: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
 }
 
@@ -1702,22 +1737,29 @@ img-comparison-slider.rendered [slot="second"] {
   opacity: 1;
 }
 
+/* Number, star, then the count pushed right: the gene page's
+   "Emulsion 21329 ☆" pattern, on the card's caption line. */
 .icono-request-card-meta {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.1rem;
   min-width: 0;
-  padding: 0 0.1rem;
+  margin-top: 0.3rem;
+  padding: 0 0 0 0.1rem;
 }
 
 .icono-request-card-label {
+  min-width: 0;
+  overflow: hidden;
   color: var(--dark);
   font: 600 0.92rem / 1.2 var(--icono-action-font);
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icono-request-card-count {
+  margin-left: auto;
   color: color-mix(in srgb, var(--dark) 58%, var(--light) 42%);
   font: 0.72rem / 1.2 var(--icono-action-font);
   white-space: nowrap;
@@ -1725,6 +1767,7 @@ img-comparison-slider.rendered [slot="second"] {
 
 /* The style is already queued for this gene: said on the card, not in prose. */
 .icono-request-card-queued {
+  margin-left: auto;
   padding: 0.12rem 0.35rem;
   border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--ui-border) 45%);
   color: color-mix(in srgb, var(--accent) 78%, var(--dark) 22%);
@@ -1844,9 +1887,60 @@ img-comparison-slider.rendered [slot="second"] {
     gap: 1rem 0.7rem;
   }
 
+  /* B-884: only the view switch sits above the cards. The search docks at
+     the bottom of the scroller: under the gallery, in thumb reach, and in
+     view while the cards scroll behind it. */
+  /* The grid row takes the spare height, so a short list (a few favorites,
+     the load error) still leaves the search at the bottom, not mid-sheet. */
+  .icono-request-browse {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "views"
+      "grid"
+      "find";
+    align-content: stretch;
+    padding-bottom: 0;
+  }
+
+  .icono-request-browse > .icono-request-grid {
+    align-self: start;
+  }
+
+  .icono-request-find-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    /* Out to the scroller's edges (its padding), so a picked card's outline
+       cannot peek past the dock while the cards scroll behind it. */
+    margin-inline: -0.2rem -0.35rem;
+    padding: 0.6rem 0.35rem 0.7rem 0.2rem;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
+    background: color-mix(in srgb, var(--light) 98%, white 2%);
+  }
+
   .icono-request-find {
-    max-width: none;
-    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* Phones: narrower gutters, so the grid gains width and the footer holds
+   "Select all N" beside "Queue 20 candidates" on one line down to 360 px. */
+@media (max-width: 599px) {
+  .icono-request-dialog {
+    --width: calc(100vw - 1rem);
+  }
+
+  .icono-request-dialog::part(body) {
+    padding: 0.85rem 0.75rem 0;
+  }
+
+  .icono-request-dialog::part(footer) {
+    padding: 0.7rem 0.75rem 0.8rem;
+  }
+
+  .icono-request-select-all-noun {
+    display: none;
   }
 }
 
@@ -2283,18 +2377,19 @@ img-comparison-slider.rendered [slot="second"] {
   color: color-mix(in srgb, #b42318 76%, var(--dark) 24%);
 }
 
-/* On a style card the star sits over the art's top-right corner. The plate is
-   there for contrast on any portrait; the favorite state stays in the star. */
+/* On a style card the star follows the number on the caption line (B-884:
+   over the art it hid a portrait). 36px square keeps a usable touch target. */
 .icono-emulsion-favorite-button--card {
-  position: absolute;
-  top: 0.3rem;
-  right: 0.3rem;
-  width: 2.5rem;
-  min-width: 2.5rem;
-  height: 2.5rem;
-  min-height: 2.5rem;
-  border-radius: var(--icono-radius-md);
-  background: color-mix(in srgb, var(--light) 86%, transparent);
+  flex: none;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.icono-emulsion-favorite-button--card svg {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .icono-request-option + .icono-request-option {

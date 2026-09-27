@@ -7,24 +7,33 @@
 // 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop;
 // 2. anything artist-shaped reaches the page: the search offers artists, a
 //    card shows an artist label, or typing an artist name finds a style;
-// 3. "Select all N favorites" is not a shared `.icono-button`, or it sits in
-//    the fixed chrome (it lives with the view switch, which scrolls; a phone
-//    footer cannot hold it and "Queue 20 candidates" on one line);
+// 3. "Select all N favorites" is not a shared `.icono-button`, or it is not
+//    in the footer on the Queue button's row, to its left (B-884: in the top
+//    panel it cost phones a whole row). On a phone it reads "Select all N" so
+//    it fits beside "Queue 20 candidates" without wrapping;
 // 4. the view switch offers anything beyond Favorites and All styles;
 // 5. the dialog explains open requests in prose instead of marking the card
 //    ("2 queued") of a style that is already queued for this gene;
-// 6. on a phone, more than the title and the method switch stay fixed above
-//    the grid (search and views must scroll away with it);
+// 6. on a phone, anything besides the view switch sits between the method
+//    switch and the first card, or the search is above the grid instead of
+//    docked below it (where it stays visible while the grid scrolls);
 // 7. the primary action is not at the bottom-right of the dialog;
 // 8. the primary label does not follow the batch (random, one number, N);
 // 9. the desktop tray is missing, miscounts, or cannot remove a style, or the
 //    tray shows on a phone;
 // 10. Select all favorites breaks the 20-style limit;
 // 11. the queue request payload changes shape (random vs specific batch);
-// 12. the card star no longer toggles a favorite;
+// 12. the card star no longer toggles a favorite, covers the art, or leaves
+//     the style number's line (it sits right after the number, as on the gene
+//     page); clicking the star picks the card, or clicking the number doesn't;
 // 13. the dialog scrolls sideways at phone width;
 // 14. the analytics consent box (EU/UK, bottom-right, top z-index) covers the
-//     bottom-right Queue button while the dialog is open.
+//     bottom-right Queue button while the dialog is open;
+// 15. the first style-list request fails (the free plan ends a request that
+//     runs past its CPU cap: the edge answers 503) and the grid stays blank,
+//     or shows a bare "HTTP 503", until the reader switches views (B-884);
+// 16. the list keeps failing and the grid offers no way to try again, or the
+//     Try again button does not load the styles once the server recovers.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -33,7 +42,15 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { HOST, OUT, VIEWPORTS, launchChrome, routeProduction, startSite } from "./harness.mjs"
+import {
+  HOST,
+  HttpStatus,
+  OUT,
+  VIEWPORTS,
+  launchChrome,
+  routeProduction,
+  startSite,
+} from "./harness.mjs"
 
 const SLOTS = [
   36978, 51084, 31261, 1184, 21006, 22811, 20128, 20910, 55908, 2561, 21404, 30593, 255, 21329,
@@ -45,17 +62,17 @@ const SINGLE_PREVIEW_SLOT = 11111
 const EMPTY_SLOT = 33333
 const QUEUED_SLOT = 51084
 
+// The server's shape since B-884: at most 4 previews, medium (3:4) only.
 function previewAssets(slot) {
   if (slot === EMPTY_SLOT) return []
-  const count = slot === SINGLE_PREVIEW_SLOT ? 1 : 5
+  const count = slot === SINGLE_PREVIEW_SLOT ? 1 : 4
   return Array.from({ length: count }, (_, i) => {
     const sha = `${String(slot).padStart(6, "0")}${i}`.padEnd(64, "a")
-    const base = `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}`
     return {
-      gene_symbol: ["TP53", "ATM", "ADO", "TH", "MTOR"][i],
+      gene_symbol: ["TP53", "ATM", "ADO", "TH"][i],
       asset_sha256: sha,
-      medium_url: `${base}/medium.webp`,
-      thumb_url: `${base}/thumb.webp`,
+      is_current: i === 0,
+      medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
     }
   })
 }
@@ -79,8 +96,11 @@ const OPTIONS = SLOTS.map((slot, index) => ({
   is_favorite: FAVORITES.includes(`0-${slot}`),
 }))
 
-function createApi(posts) {
-  return (pathname, request) => {
+// `options.failFirst` answers that many style-list requests with the edge's
+// 503; `options.failing()` keeps answering 503 while it returns true.
+function createApi(posts, options = {}) {
+  let optionsCalls = 0
+  const api = (pathname, request) => {
     if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(pathname)) {
       const specific = {
         request_mode: "specific",
@@ -97,7 +117,16 @@ function createApi(posts) {
         gene_lane_summary: [specific, random],
       }
     }
-    if (pathname === "/api/iconoplasm/requests/options") return { request_options: OPTIONS }
+    if (pathname === "/api/iconoplasm/requests/options") {
+      optionsCalls += 1
+      if (optionsCalls <= (options.failFirst || 0) || options.failing?.()) {
+        return new HttpStatus(503, {
+          error: "The only allowed stateful worker is unavailable",
+          code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_UNAVAILABLE",
+        })
+      }
+      return { request_options: OPTIONS }
+    }
     if (pathname === "/api/iconoplasm/emulsion-favorites") {
       return { favorite_emulsion_ids: FAVORITES }
     }
@@ -112,6 +141,8 @@ function createApi(posts) {
     }
     return undefined
   }
+  api.optionsCalls = () => optionsCalls
+  return api
 }
 
 // Every portrait is served as a 384x512 (3:4) picture, a distinct hue per URL.
@@ -151,7 +182,18 @@ function measurePicker() {
   const images = [...dialog.querySelectorAll(".icono-request-card-art img")].filter(visible)
   const selectAll = dialog.querySelector("[data-icono-request-select-all-favorites]")
   const primary = dialog.querySelector("[data-icono-request-free-submit]")
+  const footer = dialog.querySelector("[data-icono-request-free-footer]")
   const tray = dialog.querySelector("[data-icono-request-batch]")
+  const viewSwitch = dialog.querySelector(".icono-request-views")
+  const find = dialog.querySelector(".icono-request-find")
+  const firstCard = cards.find(visible)
+  // Each visible card's star against its number and its art.
+  const stars = cards.filter(visible).map((c) => ({
+    card: c.getAttribute("data-icono-request-card"),
+    art: box(c.querySelector(".icono-request-card-art")),
+    label: box(c.querySelector(".icono-request-card-label")),
+    star: box(c.querySelector("[data-icono-emulsion-favorite]")),
+  }))
   const text = dialog.innerText
   const attributes = [...dialog.querySelectorAll("*")]
     .flatMap((el) => [...el.attributes].map((a) => a.value))
@@ -163,10 +205,16 @@ function measurePicker() {
     tabs: box(tabs),
     browse: box(browse),
     browseScrolls: browse ? browse.scrollHeight > browse.clientHeight : false,
-    searchInsideBrowse: !!(browse && search && browse.contains(search)),
     viewsInsideBrowse: views.length > 0 && views.every((v) => browse && browse.contains(v)),
-    selectAllInsideBrowse: !!(browse && selectAll && browse.contains(selectAll)),
+    selectAllInFooter: !!(footer && selectAll && footer.contains(selectAll)),
     tabsInsideBrowse: !!(browse && tabs && browse.contains(tabs)),
+    viewSwitch: box(viewSwitch),
+    find: box(find),
+    firstCard: box(firstCard),
+    stars,
+    gridText: dialog.querySelector("[data-icono-request-results]")?.innerText.trim() || "",
+    retryVisible: visible(dialog.querySelector("[data-icono-request-retry]")),
+    bareHttpStatus: /HTTP \d{3}/.test(text),
     searchPlaceholder: search ? search.getAttribute("placeholder") : null,
     searchLabel: search ? search.getAttribute("aria-label") : null,
     views: views.map((v) => ({
@@ -191,7 +239,8 @@ function measurePicker() {
       ? {
           tag: selectAll.tagName,
           className: String(selectAll.className),
-          text: selectAll.textContent.trim(),
+          text: selectAll.innerText.trim(),
+          ariaLabel: selectAll.getAttribute("aria-label") || "",
           visible: visible(selectAll),
           ...box(selectAll),
         }
@@ -239,7 +288,9 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         await context.addInitScript(() =>
           localStorage.setItem("iconoplasm.new-candidate-tab", "free"),
         )
-        await routeProduction(context, origin, createApi(posts))
+        // 15. Every run starts with the edge's 503 on the first style-list load.
+        const api = createApi(posts, { failFirst: 1 })
+        await routeProduction(context, origin, api)
         await routePortraits(context)
         const page = await context.newPage()
         await page.goto(`${HOST}/gene/TP53`)
@@ -249,6 +300,9 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
 
         const first = await page.evaluate(measurePicker)
         report.push({ where, moment: "open", ...first })
+
+        assert.ok(api.optionsCalls() >= 2, `${where}: the failed load was not retried`)
+        assert.equal(first.bareHttpStatus, false, `${where}: the dialog shows a bare HTTP status`)
 
         // 1. 3:4 cards from 3:4 previews, never the square thumb crop.
         assert.ok(first.visibleCards >= 4, `${where}: only ${first.visibleCards} cards visible`)
@@ -266,12 +320,23 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.equal(/artist/i.test(first.searchPlaceholder || ""), false, `${where}: placeholder`)
         assert.equal(/artist/i.test(first.searchLabel || ""), false, `${where}: search label`)
 
-        // 3. Select all favorites is a shared button.
+        // 3. Select all favorites is a shared button in the footer, left of Queue.
+        const desktop = size === "desktop"
         assert.ok(first.selectAll && first.selectAll.visible, `${where}: Select all is missing`)
         assert.equal(first.selectAll.tag, "BUTTON", `${where}: Select all is not a button`)
         assert.match(first.selectAll.className, /\bicono-button\b/, `${where}: Select all style`)
-        assert.equal(first.selectAll.text, "Select all 22 favorites", `${where}: Select all label`)
-        assert.equal(first.selectAllInsideBrowse, true, `${where}: Select all is fixed chrome`)
+        assert.equal(
+          first.selectAll.text,
+          desktop ? "Select all 22 favorites" : "Select all 22",
+          `${where}: Select all label`,
+        )
+        assert.equal(first.selectAll.ariaLabel, "Select all 22 favorites", `${where}: aria-label`)
+        assert.equal(first.selectAllInFooter, true, `${where}: Select all is not in the footer`)
+        assert.ok(first.selectAll.right < first.primary.left, `${where}: Select all is not left`)
+        assert.ok(
+          Math.abs(first.selectAll.top - first.primary.top) < 2,
+          `${where}: Select all and Queue are on different rows`,
+        )
 
         // 4. Two views only.
         assert.deepEqual(
@@ -290,15 +355,47 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           `${where}: queued badge`,
         )
 
-        // 6. Phones: only the title and the method switch stay fixed.
-        assert.equal(first.searchInsideBrowse, true, `${where}: search is outside the scroller`)
+        // 6. Only the view switch sits between the method switch and the
+        // cards; on a phone the search is docked below the grid, in view.
         assert.equal(first.viewsInsideBrowse, true, `${where}: views are outside the scroller`)
         assert.equal(first.tabsInsideBrowse, false, `${where}: tabs scroll away`)
         assert.ok(
           first.browse.top - first.tabs.bottom < 20,
           `${where}: ${Math.round(first.browse.top - first.tabs.bottom)} px of fixed chrome between the method switch and the grid`,
         )
+        assert.ok(
+          first.firstCard.top - first.viewSwitch.bottom < 24,
+          `${where}: ${Math.round(first.firstCard.top - first.viewSwitch.bottom)} px between the view switch and the first card`,
+        )
+        if (desktop) {
+          assert.ok(
+            Math.abs(first.find.top - first.viewSwitch.top) < 8,
+            `${where}: search is not on the view switch's row`,
+          )
+        } else {
+          assert.ok(first.find.top >= first.firstCard.bottom, `${where}: search is above the grid`)
+          assert.ok(
+            first.find.bottom <= first.browse.bottom + 1 && first.find.top >= first.browse.top,
+            `${where}: the docked search is out of view`,
+          )
+        }
         assert.equal(first.horizontalOverflow, false, `${where}: sideways scroll`)
+
+        // 12. The star sits right after the number, on its line, off the art.
+        for (const s of first.stars) {
+          const at = `${where} card ${s.card}`
+          if (!s.star) continue // a style without portraits has no star
+          assert.ok(s.star.top >= s.art.bottom - 0.5, `${at}: the star covers the art`)
+          const starMid = (s.star.top + s.star.bottom) / 2
+          assert.ok(
+            starMid > s.label.top && starMid < s.label.bottom,
+            `${at}: the star is off the number's line`,
+          )
+          assert.ok(
+            s.star.left >= s.label.right - 1 && s.star.left - s.label.right < 12,
+            `${at}: the star is not right after the number`,
+          )
+        }
 
         // 7. Primary bottom-right.
         const p = first.primary
@@ -319,14 +416,14 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
 
         // 8 + 9. Labels and tray follow the batch.
         assert.equal(p.text, "Queue random", `${where}: empty-batch label`)
-        const desktop = size === "desktop"
         assert.equal(first.trayVisible, desktop, `${where}: tray visibility`)
         if (desktop) assert.equal(first.trayCount, "0 of 20", `${where}: empty tray count`)
 
         await page.click(card(36978))
         let m = await page.evaluate(measurePicker)
         assert.equal(m.primary.text, "Queue 36978", `${where}: one-pick label`)
-        await page.click(card(31261))
+        // 12. The number picks its card too.
+        await page.click(`[data-icono-request-card='31261'] .icono-request-card-label`)
         m = await page.evaluate(measurePicker)
         assert.equal(m.primary.text, "Queue 2 candidates", `${where}: two-pick label`)
         if (desktop) {
@@ -357,6 +454,12 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         m = await page.evaluate(measurePicker)
         assert.equal(m.primary.text, "Queue 20 candidates", `${where}: select-all label`)
         if (desktop) assert.equal(m.trayCount, "20 of 20", `${where}: select-all tray`)
+        // 3. The longest Queue label still shares the row, on one line each.
+        assert.ok(
+          Math.abs(m.selectAll.top - m.primary.top) < 2 && m.selectAll.right < m.primary.left,
+          `${where}: Select all and "Queue 20 candidates" do not share the footer row`,
+        )
+        assert.ok(m.primary.h < 48 && m.selectAll.h < 48, `${where}: a footer label wrapped`)
         await page.screenshot({ path: shot("all-favorites") })
 
         // 2 again: typing an artist name finds nothing; a number finds its card.
@@ -381,8 +484,10 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.match(m.views[1].text, new RegExp(`${OPTIONS.length}`), `${where}: All count`)
 
         // 12. The card star toggles a favorite.
+        // ...and does not pick or un-pick the card it sits on.
         const star = `[data-icono-request-card='${ARTIST_SLOT}'] [data-icono-emulsion-favorite]`
         const before = await page.getAttribute(star, "aria-pressed")
+        const pickedBefore = await page.getAttribute(card(ARTIST_SLOT), "aria-pressed")
         await page.click(star)
         await page.waitForFunction(
           ([selector, previous]) =>
@@ -390,17 +495,21 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           [star, before],
           { timeout: 5_000 },
         )
+        assert.equal(
+          await page.getAttribute(card(ARTIST_SLOT), "aria-pressed"),
+          pickedBefore,
+          `${where}: the star click toggled the card`,
+        )
 
-        // 6 again: on a phone the search scrolls away with the grid.
+        // 6 again: on a phone the docked search stays in view while the grid scrolls.
         if (!desktop) {
           await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 400))
           await page.waitForTimeout(150)
-          const searchTop = await page.$eval(
-            "[data-icono-request-query]",
-            (el) => el.getBoundingClientRect().bottom,
-          )
           m = await page.evaluate(measurePicker)
-          assert.ok(searchTop < m.browse.top, `${where}: search did not scroll away`)
+          assert.ok(
+            m.find.bottom <= m.browse.bottom + 1 && m.find.top >= m.browse.top,
+            `${where}: the docked search scrolled out of view`,
+          )
           await page.screenshot({ path: shot("scrolled") })
         }
 
@@ -428,6 +537,52 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
     }
   } finally {
     writeFileSync(path.join(OUT, "style-picker.json"), JSON.stringify(report, null, 2))
+    server.close()
+    await browser.close()
+  }
+})
+
+test("a style list that keeps failing offers Try again, which loads it once the server recovers", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  mkdirSync(OUT, { recursive: true })
+  try {
+    const [width, height] = VIEWPORTS.find(([, , size]) => size === "phone")
+    const context = await browser.newContext({ viewport: { width, height } })
+    await context.addInitScript(() => localStorage.setItem("iconoplasm.new-candidate-tab", "free"))
+    let failing = true
+    const api = createApi([], { failing: () => failing })
+    await routeProduction(context, origin, api)
+    await routePortraits(context)
+    const page = await context.newPage()
+    await page.goto(`${HOST}/gene/TP53`)
+    await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
+    await page.click("[data-icono-request-dialog-open]")
+    await page.waitForSelector(`${DIALOG}[open]`)
+    await page.click("[data-icono-request-tab='free']")
+
+    // 16. After the retries the grid says what happened and offers a retry.
+    await page.waitForSelector("[data-icono-request-retry]", { timeout: 15_000 })
+    let m = await page.evaluate(measurePicker)
+    await page.screenshot({ path: path.join(OUT, "style-picker-phone-light-load-failed.png") })
+    assert.equal(api.optionsCalls(), 3, "one load plus two retries")
+    assert.match(m.gridText, /Could not load styles/, "failure message")
+    assert.equal(m.retryVisible, true, "Try again is not visible")
+    assert.equal(m.bareHttpStatus, false, "the dialog shows a bare HTTP status")
+    // 6. A short grid still leaves the docked search at the bottom.
+    assert.ok(
+      m.browse.bottom - m.find.bottom < 20,
+      `the search floats ${Math.round(m.browse.bottom - m.find.bottom)} px above the bottom`,
+    )
+
+    failing = false
+    await page.click("[data-icono-request-retry]")
+    await page.waitForSelector("[data-icono-request-card]", { timeout: 15_000 })
+    m = await page.evaluate(measurePicker)
+    assert.ok(m.visibleCards >= 4, `only ${m.visibleCards} cards after Try again`)
+    await context.close()
+  } finally {
     server.close()
     await browser.close()
   }
