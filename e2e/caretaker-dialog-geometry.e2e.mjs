@@ -241,7 +241,13 @@ test("the caretaker dialog fits, uses the UI fonts and never clips its buttons",
         assert.doesNotMatch(String(m.titleFont), /Crimson/, `${where}: title in blog serif`)
         assert.equal(m.titleCloseOverlap, false, `${where}: title overlaps Close`)
         assert.equal(m.tabsScrollbar, "none", `${where}: the tab bar draws a scrollbar`)
-        assert.equal(m.tagScrollOverflowX, "hidden", `${where}: the tag panel scrolls sideways`)
+        // Desktop scrolls vertically (overflow-x hidden); phones don't scroll the
+        // panel at all (visible). Either way, no sideways scrollbar.
+        assert.equal(
+          ["hidden", "visible", "clip"].includes(m.tagScrollOverflowX),
+          true,
+          `${where}: the tag panel scrolls sideways (${m.tagScrollOverflowX})`,
+        )
         await context.close()
       }
     }
