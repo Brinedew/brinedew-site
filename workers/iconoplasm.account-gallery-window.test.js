@@ -1163,3 +1163,54 @@ test("shared newest window names only the page and pages ties exactly (B-885)", 
     )
   }
 })
+
+// B-885 step 3: /discoveries/me served every non-newest home sort by enriching
+// the whole shelf (1,601 calls on 27 Sep, ~4.6 D1 rows per gene each). The
+// browser already downloads the published catalog, which carries every sort
+// field, so `shape=compact` returns the bare shelf: no enrichment query, no
+// server sort. Tabs still running the old script keep the enriched shape.
+test("discoveries/me shape=compact returns the bare shelf without enriching it (B-885)", async () => {
+  const db = new FakeDb()
+  db.rows = Array.from({ length: 101 }, (_, index) =>
+    db.row(
+      "user-123",
+      `C${String(index).padStart(3, "0")}`,
+      `2026-04-${String(1 + (index % 28)).padStart(2, "0")}T00:00:00Z`,
+      index,
+    ),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+  const env = buildEnv({ db, version: "test-vm-version-compact" })
+  const call = (query) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?${query}`, {
+        headers: { Cookie: "session=abc" },
+      }),
+      env,
+    )
+  const enrichments = () => db.calls.filter((c) => /FROM icono_gene_catalog gc/.test(c.sql)).length
+
+  db.calls.length = 0
+  const response = await call("order=popularity&shape=compact")
+  const payload = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(payload.shape, "compact")
+  assert.equal(enrichments(), 0, "compact shape ran an enrichment query")
+  assert.equal(payload.discovered_count, 101)
+  assert.equal(payload.discoveries.length, 101)
+  const first = payload.discoveries[0]
+  assert.deepEqual(Object.keys(first).sort(), [
+    "encounter_count",
+    "first_discovered_at",
+    "gene_symbol",
+    "last_encountered_at",
+  ])
+  assert.match(first.first_discovered_at, /^2026-04-\d\dT00:00:00Z$/)
+
+  // The enriched shape is unchanged for tabs on the old script.
+  db.calls.length = 0
+  const legacy = await (await call("order=popularity")).json()
+  assert.equal(legacy.shape, undefined)
+  assert.ok(enrichments() > 0, "the legacy shape stopped enriching")
+  assert.equal(legacy.discoveries[0].full_name.endsWith("full name"), true)
+})

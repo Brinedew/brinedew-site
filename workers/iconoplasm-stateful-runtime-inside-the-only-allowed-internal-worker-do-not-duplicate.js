@@ -222,7 +222,9 @@ import {
   readRequestNotificationInbox,
   resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
-import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
+// One copy for the worker and the browser (B-885): the home page sorts a
+// signed-in shelf by popularity locally, and the published catalog has none.
+import { ICONOPLASM_WIKI_PAGEVIEWS } from "../quartz/static/iconoplasm/wiki-pageviews.js"
 import {
   ICONOPLASM_GENE_CARD_HEIGHT,
   ICONOPLASM_GENE_CARD_QUEUE_KIND,
@@ -35520,6 +35522,38 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const userId = normalizeUserId(sessionUser.user_id)
       const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
+      if (url.searchParams.get("shape") === "compact" && !showAllRequested) {
+        // B-885: the bare shelf. The home page joins every sort field from
+        // the published catalog it already downloads and sorts locally, so
+        // this reads only the chronology: no per-gene enrichment join (which
+        // was ~4.6 D1 rows per gene on every non-newest home view) and no
+        // server sort. Newest first, the order the page shows by default.
+        const compactRows = (await compactShelfBaseRows(env, { userId }))
+          .map((row) => ({
+            gene_symbol: row.gene_symbol,
+            first_discovered_at: row.first_discovered_at,
+            last_encountered_at: row.last_encountered_at,
+            encounter_count: row.encounter_count,
+          }))
+          .reverse()
+        return done(
+          "discoveries_me",
+          json(
+            {
+              ok: true,
+              authenticated: true,
+              shape: "compact",
+              user: { id: userId, username: sessionUser.username || null },
+              order: requestedOrder,
+              ...(requestedSeed ? { seed: requestedSeed } : {}),
+              discoveries: compactRows,
+              discovered_count: compactRows.length,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
       const discoveries = showAllApplied
         ? await listAllCatalogGeneDiscoveriesForAdmin(env, {
