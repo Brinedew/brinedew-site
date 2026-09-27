@@ -163,13 +163,26 @@ export function createIconoplasmPublicationReader(options = {}) {
   }
 
   async function fetchFrom(origin, path, limit, timeoutMs) {
-    const response = await fetchImpl(origin + path, {
-      method: "GET",
-      credentials: "omit",
-      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
-    })
-    if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
-    const text = await response.text()
+    // A plain timer, cleared once the body has arrived. AbortSignal.timeout()
+    // uses an unreferenced timer in Node, so a hung request let the test
+    // process exit mid-read.
+    const controller = timeoutMs ? new AbortController() : null
+    const timer = controller
+      ? setTimeout(() => controller.abort(new Error("Publication request timed out")), timeoutMs)
+      : null
+    let response
+    let text
+    try {
+      response = await fetchImpl(origin + path, {
+        method: "GET",
+        credentials: "omit",
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
+      text = await response.text()
+    } finally {
+      clearTimeout(timer)
+    }
     if (new TextEncoder().encode(text).byteLength > limit) {
       throw new Error("Publication object exceeds browser limit")
     }
