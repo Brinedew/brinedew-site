@@ -762,6 +762,49 @@
   font-size: 0.72rem;
 }
 
+/* B-874: one row per caretaker's session of saves; the single saves fold under it. */
+.icono-caretaker-session__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.25rem 0.7rem;
+  padding: 0.1rem 0.3rem;
+  border: 0;
+  border-radius: var(--icono-radius-md);
+  background: transparent;
+  color: var(--darkgray);
+  font: 0.7rem / 1.3 var(--icono-action-font);
+  cursor: pointer;
+}
+
+.icono-caretaker-session__toggle::before {
+  content: "";
+  width: 0.35rem;
+  height: 0.35rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+.icono-caretaker-session__toggle[aria-expanded="true"]::before {
+  transform: rotate(45deg);
+}
+
+.icono-caretaker-session__toggle:hover {
+  color: var(--dark);
+  background: color-mix(in srgb, var(--dark) 6%, transparent);
+}
+
+.icono-caretaker-session__versions {
+  margin-inline-start: 0.7rem;
+  border-inline-start: 1px solid var(--lightgray);
+}
+
+.icono-caretaker-session__versions[hidden] {
+  display: none;
+}
+
 .icono-caretaker-delta-add {
   color: oklch(62% 0.13 150);
 }
