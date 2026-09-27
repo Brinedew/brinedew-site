@@ -112,11 +112,11 @@ function relativeTime(iso) {
   return "just now"
 }
 
+// The author's name, as on every Wikipedia revision ("You" for the viewer). The
+// seed row is already titled "Original", so it carries no second label.
 function versionAuthor(manifestation) {
-  return String(
-    manifestation?.author_label ||
-      (manifestation?.origin === "system_seed" ? "Original" : "Previous caretaker"),
-  )
+  if (manifestation?.origin === "system_seed") return ""
+  return String(manifestation?.author_label || "Previous caretaker")
 }
 
 function absoluteDate(revision) {
@@ -253,17 +253,21 @@ function timelineItemMarkup(item, previous, context, options = {}) {
     (canonical ? SOURCE_MARK : "") +
     "</span>" +
     '<span class="icono-caretaker-timeline__meta">' +
-    (when
-      ? '<time datetime="' +
-        escapeHtml(String(revision.created_at || "")) +
-        '" title="' +
-        escapeHtml(absolute) +
-        '">' +
-        escapeHtml(when) +
-        "</time> · "
-      : "") +
-    escapeHtml(versionAuthor(item.manifestation)) +
-    (withdrawn ? " · Withdrawn" : "") +
+    [
+      when
+        ? '<time datetime="' +
+          escapeHtml(String(revision.created_at || "")) +
+          '" title="' +
+          escapeHtml(absolute) +
+          '">' +
+          escapeHtml(when) +
+          "</time>"
+        : "",
+      escapeHtml(versionAuthor(item.manifestation)),
+      withdrawn ? "Withdrawn" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") +
     "</span>" +
     deltaMarkup(item, previous, escapeHtml) +
     "</button>"

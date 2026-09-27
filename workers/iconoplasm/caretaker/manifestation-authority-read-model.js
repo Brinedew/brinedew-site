@@ -52,9 +52,15 @@ async function requireGeneDossierAuthority(db, { geneId, actorAccountId, adminis
 
 // B-860: versions carry no author names. Pride belongs to the caretaker role,
 // not to a text, so nobody sees a version as "theirs" to defend.
-function authorCredit(row) {
+// Versions carry their author's name, as every Wikipedia revision does (owner,
+// 27 Sep 2026). B-860's stewardship took away the author's veto, not their
+// credit; a name also shows the next caretaker where someone else's run began.
+// A removed account never shows its old name (courtesy vanishing).
+function authorCredit(row, viewerAccountId) {
   if (row.origin === "system_seed" || !row.author_account_id) return "Original manifestation"
-  return "Caretaker manifestation"
+  if (row.author_account_id === viewerAccountId) return "You"
+  if (row.author_account_status === "tombstoned") return "Removed account"
+  return String(row.author_public_credit_label || "Anonymous caretaker")
 }
 
 function browserManifestation(row, authority) {
@@ -76,7 +82,7 @@ function browserManifestation(row, authority) {
     public_page_visible: Boolean(row.public_page_visible),
     author_is_viewer: own,
     belongs_to_current_assignment: Boolean(currentAssignment),
-    author_label: authorCredit(row),
+    author_label: authorCredit(row, authority.actor.account_id),
     can_withdraw: Boolean(steward && row.status === "active" && !row.non_withdrawable),
     can_restore: Boolean(
       steward && row.status === "withdrawn" && !row.non_withdrawable && row.restore_body_available,
