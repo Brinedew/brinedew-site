@@ -45,6 +45,12 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const DISCOVERY_USER_SHELF_MIGRATION_NAME = "0110_discovery_user_shelf.sql"
+export const DISCOVERY_USER_SHELF_MIGRATION_STATEMENTS = Object.freeze([
+  "ALTER TABLE icono_discovery_user_state_v2\n  ADD COLUMN shelf_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(shelf_json) AND length(shelf_json) <= 1048576);",
+  "ALTER TABLE icono_discovery_user_state_v2\n  ADD COLUMN shelf_state_version INTEGER NOT NULL DEFAULT 0 CHECK(shelf_state_version >= 0);",
+  "UPDATE icono_discovery_user_state_v2\nSET\n  shelf_json = (\n    SELECT COALESCE(json_group_array(json_array(symbol, first_at, last_at, encounters)), '[]')\n    FROM (\n      SELECT symbol, MIN(at) AS first_at, MAX(at) AS last_at, COUNT(*) AS encounters\n      FROM (\n        SELECT\n          upper(trim(COALESCE(json_extract(event.value, '$.symbol'), ''))) AS symbol,\n          CASE\n            WHEN typeof(json_extract(event.value, '$.at')) IN ('integer', 'real')\n              AND json_extract(event.value, '$.at') >= 0\n              THEN CAST(json_extract(event.value, '$.at') AS INTEGER)\n            ELSE 0\n          END AS at\n        FROM (\n          SELECT chunk.events_json AS events\n          FROM icono_discovery_chronology_v2 AS chunk\n          WHERE chunk.user_id = icono_discovery_user_state_v2.user_id\n          UNION ALL\n          SELECT icono_discovery_user_state_v2.active_events_json\n        ) AS source, json_each(source.events) AS event\n      )\n      WHERE symbol <> ''\n      GROUP BY symbol\n      ORDER BY first_at, symbol\n    )\n  ),\n  shelf_state_version = state_version;"
+])
 export const PUBLISH_STATE_UPDATED_INDEX_MIGRATION_NAME = "0109_publish_state_updated_index.sql"
 export const PUBLISH_STATE_UPDATED_INDEX_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE INDEX IF NOT EXISTS idx_icono_publish_state_updated\n  ON icono_publish_state (updated_at);"
