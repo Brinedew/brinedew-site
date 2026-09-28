@@ -60,7 +60,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="caretaker-admin" data-caretaker-admin>
         <header class="caretaker-admin__header">
           <div>
-            <p class="caretaker-admin__eyebrow">Manifestation authority</p>
             <h2>Gene caretakers</h2>
             <p class="small">Inspect every active or ended tenure and make lifecycle changes without editing a caretaker's prose. Users claim available genes from the gene page.</p>
           </div>
@@ -214,7 +213,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         <section class="cost-hero">
           <div class="cost-toolbar">
             <div>
-              <div class="cost-kicker">Iconoplasm observability</div>
               <h2>Cloudflare account capacity</h2>
               <p class="small">Opening this tab queries current account-wide meters once. Historical charts use the last published snapshot and show its age.</p>
             </div>
@@ -398,7 +396,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           </table>
         </div>
         <aside class="request-detail-panel" id="requests-detail" tabindex="-1">
-          <div class="detail-kicker">Request detail</div>
           <div class="detail-title">Pick a request</div>
           <div class="detail-copy">Click a row to inspect IDs, source asset, emulsion, prompt, and fulfillment fields.</div>
         </aside>
@@ -416,7 +413,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
       <section class="prompt-editor prompt-prefix-editor" id="prompt-prefix-editor">
         <div>
-          <div class="detail-kicker">Always-on prompt</div>
           <h2>Shared prefix</h2>
           <p class="small" id="prompt-prefix-description">This prefix is prepended once to every edit-blot prompt. It is not tied to a checkbox.</p>
         </div>
@@ -433,7 +429,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </section>
       <section class="prompt-editor prompt-suffix-editor" id="prompt-suffix-editor">
         <div>
-          <div class="detail-kicker">Always-on prompt</div>
           <h2>Shared suffix</h2>
           <p class="small" id="prompt-suffix-description">This suffix is appended once to every edit-blot prompt. It is not tied to a checkbox.</p>
         </div>
@@ -454,7 +449,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
         </section>
         <section class="prompt-editor" id="prompt-template-editor">
           <div>
-            <div class="detail-kicker">Selected prompt</div>
             <h2 id="prompt-template-heading">Pick a prompt</h2>
             <p class="small" id="prompt-template-description">Open this tab to load the editable image edit prompt templates.</p>
           </div>
@@ -485,7 +479,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <section class="recognition-workspace" aria-labelledby="recognition-heading">
         <header class="recognition-head">
           <div>
-            <p class="recognition-kicker">Text recognition</p>
             <h2 id="recognition-heading">Recognition rules</h2>
             <p class="recognition-intro">Control the labels Iconoplasm recognizes on pages. Alias mappings send a label to one canonical gene; the blocklist suppresses ambiguous aliases.</p>
           </div>
@@ -699,7 +692,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="gallery-layout">
         <div class="gallery-grid" id="gallery-grid"></div>
         <aside class="gallery-sidebar" id="gallery-detail">
-          <div class="detail-kicker">Gene review</div>
           <div class="detail-title">Pick a gene</div>
           <div class="detail-copy">The gallery now works like a visual inbox. Click any card to inspect candidates, notes, and recent admin actions.</div>
         </aside>
@@ -771,7 +763,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </div>
             <div class="vision-cleanup-panel" id="vision-cleanup-panel"></div>
             <div class="vision-quick-actions">
-              <div class="detail-kicker">Monitoring</div>
               <div class="vision-quick-context" id="vision-quick-context">This tab is for style-level blocklisting. Use gene review if only one image is bad.</div>
               <div class="vision-dashboard-actions">
                 <button class="btn-flat" type="button" id="vision-open-current-gene" disabled>Open current gene</button>
