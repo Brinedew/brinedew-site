@@ -154,25 +154,16 @@
   line-height: 1.45;
 }
 
-.icono-caretaker-panel__eyebrow,
-.icono-caretaker-panel__state {
-  font-family: var(--icono-action-font);
-  font-size: 0.7rem;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
-}
-
-.icono-caretaker-panel__eyebrow {
-  margin: 0;
-  color: var(--secondary);
-}
-
 .icono-caretaker-panel__state {
   flex: 0 0 auto;
   padding: 0.28rem 0.48rem;
   border: 1px solid var(--ui-border);
   border-radius: var(--icono-radius-sm);
   background: color-mix(in srgb, var(--light) 56%, var(--ui-bg) 44%);
+  font-family: var(--icono-action-font);
+  font-size: 0.7rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
 }
 
 .icono-caretaker-editor,

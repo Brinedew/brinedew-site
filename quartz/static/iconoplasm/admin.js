@@ -887,7 +887,7 @@
     var fullUrl = result.full_url || imageUrl
     return [
       '<section class="request-result-panel">',
-      '<div><div class="detail-kicker">Result image</div><div class="detail-copy">The blot produced by this request remains attached to its history row.</div></div>',
+      '<div><div class="detail-copy">The blot produced by this request remains attached to its history row.</div></div>',
       imageUrl
         ? '<a class="request-result-preview" href="' +
           esc(fullUrl) +
@@ -1062,7 +1062,6 @@
     })
     if (!selected) {
       els.requestsDetail.innerHTML = [
-        '<div class="detail-kicker">Request detail</div>',
         '<div class="detail-title">Pick a request</div>',
         '<div class="detail-copy">Click a row to inspect IDs, source asset, emulsion, prompt, and fulfillment fields.</div>',
       ].join("")
@@ -1070,7 +1069,6 @@
     }
     var raw = JSON.stringify(selected, null, 2)
     els.requestsDetail.innerHTML = [
-      '<div class="detail-kicker">Request detail</div>',
       '<div class="detail-title">' +
         esc(selected.gene_symbol || "Unknown gene") +
         " · #" +
@@ -8770,7 +8768,6 @@
         els.visionCleanupSummary.textContent = "Click a row or thumbnail to inspect this artist."
       }
       els.visionCleanupPanel.innerHTML = [
-        '<div class="detail-kicker">Artist workbench</div>',
         '<div class="detail-title">Pick a vision</div>',
         '<div class="detail-copy">The scorecard can now open straight into this side panel. Pick a row to compare that artist across genes, scrub left and right, and run quick actions without leaving the table.</div>',
       ].join("")
@@ -8802,7 +8799,6 @@
     }
 
     els.visionCleanupPanel.innerHTML = [
-      '<div class="detail-kicker">Artist workbench</div>',
       '<div class="vision-panel-header">',
       '<div class="detail-title">' +
         esc(vision.artist_name || vision.artist_tag || vision.vision_id || "Unknown vision") +
@@ -9487,7 +9483,6 @@
     var detail = state.selectedGeneDetail
     if (!detail) {
       els.detail.innerHTML = [
-        '<div class="detail-kicker">Gene review</div>',
         '<div class="detail-title">Pick a gene</div>',
         '<div class="detail-copy">Click any gene to inspect candidates. The canonical blot is what the extension shows; votes auto-pick it unless a manual override is active.</div>',
       ].join("")
@@ -9506,7 +9501,6 @@
     state.selectedCandidateSha = heroCandidate ? String(heroCandidate.asset_sha256 || "") : ""
 
     els.detail.innerHTML = [
-      '<div class="detail-kicker">Gene review</div>',
       heroCandidate
         ? [
             '<div class="detail-hero">',
@@ -9659,7 +9653,6 @@
     state.selectedGeneDetail = null
     state.selectedCandidateSha = ""
     els.detail.innerHTML = [
-      '<div class="detail-kicker">Gene review</div>',
       '<div class="detail-title">' + esc(safeSymbol) + "</div>",
       '<div class="detail-copy">Loading candidate blots, canonical state, and recent events…</div>',
     ].join("")
