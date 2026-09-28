@@ -627,3 +627,65 @@ test("admins may show the full catalog while non-admins cannot", async () => {
   ).json()
   assert.equal(nonAdmin.show_all_applied, false)
 })
+
+// B-887 step 5: the hourly publisher named EVERY shared discovery each run
+// (~15k D1 rows an hour on 27 Sep, 42% of all reads with the shared window,
+// growing with every new discovery). It now names only ordinals that are new
+// since the published list; a quiet hour costs the shared-state row alone. A
+// renamed canonical symbol is picked up by one full rebuild per UTC day.
+test("the hourly symbol publisher names only new shared ordinals (B-887)", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const db = env.gatewayEnv.ICONOPLASM_DB
+  const named = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    const statement = prepare(sql)
+    if (!/FROM icono_discovery_ordinals_v2\s+WHERE ordinal IN/.test(sql)) return statement
+    const bind = statement.bind.bind(statement)
+    statement.bind = (...args) => {
+      named.push(...JSON.parse(String(args[0] || "[]")))
+      return bind(...args)
+    }
+    return statement
+  }
+  const publish = (now) => publishSharedGeneDiscoverySymbols(env.gatewayEnv, { now })
+  const day1 = Date.parse("2026-09-28T10:00:00Z")
+
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("TP53", 1000), hoverEncounter("EGFR", 1001)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  const first = await publish(day1)
+  assert.equal(first.changed, true)
+  assert.equal(named.length, 2, "the first publish names every shared ordinal")
+
+  named.length = 0
+  const quiet = await publish(day1 + 3_600_000)
+  assert.equal(quiet.changed, false)
+  assert.equal(named.length, 0, `a quiet hour named ${named.length} genes`)
+
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:2",
+    encounters: [hoverEncounter("FURIN", 2000), hoverEncounter("TP53", 2001)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  named.length = 0
+  const grown = await publish(day1 + 7_200_000)
+  assert.equal(grown.changed, true)
+  assert.equal(named.length, 1, `named ${named.length} genes for one new discovery`)
+  const published = JSON.parse(
+    await env.gatewayEnv.KV.get("iconoplasm:shared-gene-discovery-symbols:v1"),
+  )
+  assert.deepEqual(published.symbols, ["EGFR", "FURIN", "TP53"])
+
+  // The next UTC day rebuilds in full once, then goes quiet again.
+  named.length = 0
+  await publish(day1 + 24 * 3_600_000)
+  assert.equal(named.length, 3, "the daily full rebuild did not run")
+  named.length = 0
+  await publish(day1 + 25 * 3_600_000)
+  assert.equal(named.length, 0)
+})
