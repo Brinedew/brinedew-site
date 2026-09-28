@@ -3,21 +3,18 @@ import { resolveRelative } from "@quartz-community/utils/path"
 import { archiveDate, partitionArchive } from "../archive"
 
 interface ArchiveCopy {
-  eyebrow: string
   description: string
   draftDescription: string
 }
 
 const archiveCopy: Record<string, ArchiveCopy> = {
   "content/post": {
-    eyebrow: "ESSAYS & ARGUMENTS",
     description:
       "Long-form writing on molecular biology, aging, evolution, and the incentives around science.",
     draftDescription:
       "Public works in progress. These may contain gaps, rough edges, and conclusions that change.",
   },
   "content/wiki": {
-    eyebrow: "RESEARCH LIBRARY",
     description: "AI-assisted primers, lab notes, and memory aids for molecular cell biology.",
     draftDescription:
       "Open research notes. Useful now, but still being checked, expanded, or reorganized.",
@@ -91,14 +88,8 @@ export function ArchiveIndex({
   return (
     <main class="archive-index">
       <header class="archive-index__masthead">
-        <p class="archive-index__eyebrow">{copy.eyebrow}</p>
         <h1>{title}</h1>
         <p class="archive-index__dek">{copy.description}</p>
-        <p class="archive-index__summary">
-          <span>{published.length} published</span>
-          <span aria-hidden="true">·</span>
-          <span>{drafts.length} working drafts</span>
-        </p>
       </header>
 
       <section
@@ -107,9 +98,6 @@ export function ArchiveIndex({
       >
         <div class="archive-index__section-heading">
           <div>
-            <p class="archive-index__section-number" aria-hidden="true">
-              01
-            </p>
             <h2 id={publishedId}>Published</h2>
           </div>
           <p>
@@ -130,9 +118,6 @@ export function ArchiveIndex({
       >
         <div class="archive-index__section-heading">
           <div>
-            <p class="archive-index__section-number" aria-hidden="true">
-              02
-            </p>
             <h2 id={draftsId}>Working drafts</h2>
           </div>
           <p>{copy.draftDescription}</p>

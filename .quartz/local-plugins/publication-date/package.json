@@ -12,7 +12,7 @@
     "preact": "^10.28.2"
   },
   "quartz": {
-    "category": "component",
+    "category": "transformer",
     "components": {
       "PublicationDate": {
         "displayName": "Publication Date",

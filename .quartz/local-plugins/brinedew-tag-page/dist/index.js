@@ -3,7 +3,7 @@ import {
   TagContent_default,
   getAllSegmentPrefixes,
   joinSegments
-} from "./chunk-ZNU5FPVD.js";
+} from "./chunk-Y6SJMLER.js";
 
 // src/pageType.ts
 var defaultDisplayNames = {

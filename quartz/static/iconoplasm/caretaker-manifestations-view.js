@@ -514,7 +514,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     '<header class="icono-caretaker-panel__header"><div>' +
     // B-874 walkthrough: the title names the task, not a database object, and
     // the state pill appears only when the state is news (never for "active").
-    '<p class="icono-caretaker-panel__eyebrow">Caretaker</p>' +
     '<h2 id="icono-caretaker-title">' +
     esc(
       (dossier.viewer.can_accept ? "Invitation to care for " : "Caring for ") + dossier.gene.symbol,

@@ -308,12 +308,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   min-width: 0;
 }
 
-.icono-home-auth-kicker {
+.icono-gene-request-summary-title {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--dark);
 }
 
 .icono-home-auth-title {
@@ -3019,14 +3018,6 @@ img-comparison-slider.rendered [slot="second"] {
   gap: 0.15rem;
 }
 
-.icono-gallery-kicker {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
-}
-
 .icono-gallery-count {
   font-size: 0.92rem;
   color: var(--dark);
@@ -3960,8 +3951,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   }
 }
 
-.icono-collection-label,
-.icono-empty-kicker {
+.icono-collection-label {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   letter-spacing: 0.12em;
@@ -4038,15 +4028,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
     color-mix(in srgb, var(--light) 96%, #fff1f1 4%);
   color: var(--dark);
   box-shadow: 0 14px 32px rgba(56, 28, 24, 0.12);
-}
-
-.icono-mobile-data-failure-kicker {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  line-height: 1.2;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, #8f1d2c 72%, var(--dark) 28%);
 }
 
 .icono-mobile-data-failure-symbol {
@@ -4802,16 +4783,6 @@ body:has(.icono-candidate-delete-dialog[open]) {
   display: grid;
   gap: 0.8rem;
   padding: clamp(1.25rem, 4vw, 1.75rem);
-}
-
-.icono-candidate-delete-eyebrow {
-  margin: 0;
-  color: #8f2b24;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .icono-candidate-delete-title {
@@ -5621,19 +5592,22 @@ html[data-theme="dark"] .icono-card--brick {
   background: color-mix(in srgb, var(--ui-bg) 80%, var(--light));
   box-shadow: 0 10px 24px rgba(33, 21, 12, 0.05);
 }
-.icono-clans-kicker,
+.icono-clans-title {
+  margin: 0;
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--dark);
+}
 .icono-clans-sec {
+  margin: 1.5rem 2px 0.7rem;
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
-}
-.icono-clans-kicker {
-  margin: 0;
-}
-.icono-clans-sec {
-  margin: 1.5rem 2px 0.7rem;
 }
 .icono-clans-count {
   font-family: "League Spartan", "Bahnschrift", sans-serif;
@@ -5691,20 +5665,19 @@ html[data-theme="dark"] .icono-card--brick {
 .icono-clan-head-l {
   min-width: 0;
 }
-.icono-clan-k {
+.icono-clan-acc {
   display: inline-block;
+  margin-top: 3px;
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--secondary, var(--darkgray));
   text-decoration: none;
 }
-a.icono-clan-k:hover {
+a.icono-clan-acc:hover {
   color: var(--accent);
 }
 .icono-clan-nm {
-  margin-top: 1px;
   font-family: "Special Elite", Georgia, serif;
   font-size: 20px;
   line-height: 1.1;
@@ -6125,15 +6098,6 @@ body.icono-studio-route #iconoplasm-root {
   gap: 1rem;
   padding: clamp(0.7rem, 2vw, 1.25rem) 0 1.1rem;
   border-bottom: 1px solid var(--studio-rule);
-}
-
-.icono-studio-kicker {
-  margin: 0 0 0.2rem;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--studio-red);
 }
 
 .icono-studio-masthead h1 {
@@ -6844,14 +6808,6 @@ body.icono-studio-route #iconoplasm-root {
   margin-block: clamp(1.1rem, 3vw, 2rem);
   padding-block: clamp(1rem, 2vw, 1.4rem);
   border-block: 1px solid var(--ui-border);
-}
-
-.icono-public-manifestation__eyebrow {
-  margin: 0 0 0.3rem;
-  color: var(--secondary);
-  font: 700 0.7rem/1.2 var(--icono-action-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .icono-public-manifestation h2 {

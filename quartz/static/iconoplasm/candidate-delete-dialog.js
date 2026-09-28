@@ -96,10 +96,6 @@ export function openCandidateDeleteDialog(options = {}) {
   const panel = ownerDocument.createElement("div")
   panel.className = "icono-candidate-delete-panel"
 
-  const eyebrow = ownerDocument.createElement("p")
-  eyebrow.className = "icono-candidate-delete-eyebrow"
-  eyebrow.textContent = "Permanent admin action"
-
   const title = ownerDocument.createElement("h2")
   title.className = "icono-candidate-delete-title"
   title.id = "icono-candidate-delete-title"
@@ -139,7 +135,7 @@ export function openCandidateDeleteDialog(options = {}) {
   confirmButton.textContent = "Delete candidate"
 
   actions.append(cancelButton, confirmButton)
-  panel.append(eyebrow, title, identityEl, consequence, status, actions)
+  panel.append(title, identityEl, consequence, status, actions)
   dialog.appendChild(panel)
 
   let isSubmitting = false

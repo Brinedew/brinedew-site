@@ -68,19 +68,6 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
       margin-bottom: 16px;
     }
 
-    .kicker {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 11px;
-      border-radius: 999px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 0.76rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
     h1,
     p {
       margin: 0;
@@ -248,7 +235,6 @@ export function renderIconoplasmArtistStylesHtml({ turnstileSiteKey = "" } = {})
 <body>
   <main class="wrap">
     <section class="hero">
-      <div class="kicker">Iconoplasm opt-out</div>
       <h1>Blocklist an artist tag.</h1>
     </section>
 
