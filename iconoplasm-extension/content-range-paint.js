@@ -39,6 +39,27 @@
         // unbroken strip, so a layer placed in its second column lands off to
         // the side and the pill vanishes (Wikipedia's multi-column gene lists).
         if (style.display !== "inline" && element.getClientRects().length > 1) continue
+        // B-837: a table with a caption paints local-attachment layers displaced
+        // by the caption height, so a pill placed on the table lands below its
+        // word (Wikipedia's captioned gene tables). The table's row group holds
+        // the word and renders the layer at the measured coordinates.
+        if (element.tagName === "TABLE" && element.caption) {
+          const rowGroup = element.tBodies[0]
+          const rowBox =
+            rowGroup && rowGroup.getClientRects().length === 1
+              ? rowGroup.getBoundingClientRect()
+              : null
+          if (
+            rowBox &&
+            rowBox.left <= rect.left &&
+            rowBox.right >= rect.right &&
+            rowBox.top <= rect.top &&
+            rowBox.bottom >= rect.bottom
+          ) {
+            selected = rowGroup
+            break
+          }
+        }
         const box = element.getBoundingClientRect()
         selected = element
         const opaque =
