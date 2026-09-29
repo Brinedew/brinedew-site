@@ -8,9 +8,14 @@
 //    because the chosen surface is a box fragmented across columns and its
 //    background is painted as one unbroken strip, off to the side;
 // 2. a word in the first column loses its pill;
-// 3. the painter picks a fragmented box as its surface at all.
+// 3. the painter picks a fragmented box as its surface at all;
+// 4. a word in a captioned table gets its pill displaced by the caption
+//    height, because the chosen surface is the captioned table itself; the
+//    table's row group renders at the measured coordinates.
+//    (Wikipedia's captioned gene tables.)
 //
-// The fixture mirrors Wikipedia's markup: div.div-col (column-width) > ul > li.
+// The fixtures mirror Wikipedia's markup: div.div-col (column-width) > ul > li,
+// and table.wikitable with a caption and tbody > tr > td.
 // Screenshots land in artifacts/e2e/.
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -31,6 +36,25 @@ const FIXTURE = `<!doctype html><html><head><style>
   (gene) => `<li><a href="#">${gene}</a>: encoding protein</li>`,
 ).join("")}</ul></div><p>See also: other chromosomes.</p></main></body></html>`
 
+const CAPTIONED_GENES = Array.from(
+  { length: 6 },
+  (_, index) => `GENE${String(index + 1).padStart(2, "0")}`,
+)
+const CAPTIONED_FIXTURE = `<!doctype html><html><head><style>
+  body { font: 14px/1.6 sans-serif; margin: 24px; background: #fff; color: #202122; }
+  .mw-parser-output { padding: 16px 24px; }
+  table.wikitable { background: #f8f9fa; border-collapse: collapse; margin: 1em 0; }
+  table.wikitable caption { font-weight: bold; padding: 6px; }
+  table.wikitable th, table.wikitable td { border: 1px solid #a2a9b1; padding: 0.2em 0.4em; }
+  table.wikitable a { color: #3366cc; }
+</style></head><body><main class="mw-parser-output"><h2>Gene list</h2>
+<table class="wikitable"><caption>Genes on the non-recombining portion</caption>
+<thead><tr><th>Name</th><th>X paralog</th><th>Note</th></tr></thead>
+<tbody>${CAPTIONED_GENES.map(
+  (gene) =>
+    `<tr><td><a href="#">${gene}</a></td><td><a href="#">X ${gene}</a></td><td>Note for ${gene}.</td></tr>`,
+).join("")}</tbody></table></main></body></html>`
+
 // Counts pill-red pixels inside a page-coordinate box of a PNG screenshot,
 // decoded by the browser itself so the test needs no image library.
 async function redPixels(page, png, box) {
@@ -50,6 +74,43 @@ async function redPixels(page, png, box) {
         if (pixels[index] > 200 && pixels[index + 1] < 80 && pixels[index + 2] < 80) count += 1
       }
       return count
+    },
+    { data: png.toString("base64"), box },
+  )
+}
+
+// The red fill's pixel bounds inside a page-coordinate box of a PNG screenshot,
+// decoded by the browser itself so the test needs no image library.
+async function redBounds(page, png, box) {
+  return page.evaluate(
+    async ({ data, box }) => {
+      const image = new Image()
+      image.src = `data:image/png;base64,${data}`
+      await image.decode()
+      const canvas = document.createElement("canvas")
+      canvas.width = image.width
+      canvas.height = image.height
+      const context = canvas.getContext("2d")
+      context.drawImage(image, 0, 0)
+      const pixels = context.getImageData(box.x, box.y, box.width, box.height).data
+      let count = 0
+      let minX = box.width
+      let minY = box.height
+      let maxX = -1
+      let maxY = -1
+      for (let y = 0; y < box.height; y += 1) {
+        for (let x = 0; x < box.width; x += 1) {
+          const index = (y * box.width + x) * 4
+          if (pixels[index] > 200 && pixels[index + 1] < 80 && pixels[index + 2] < 80) {
+            count += 1
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
+        }
+      }
+      return { count, minX, minY, maxX, maxY }
     },
     { data: png.toString("base64"), box },
   )
@@ -131,4 +192,76 @@ test("gene pills paint in every column of a multi-column list", async (t) => {
   // 2. and 1. a visible pill behind each word (a pill this size is hundreds of pixels)
   assert.ok(firstRed > 100, `first-column pill missing (${firstRed} red pixels)`)
   assert.ok(secondRed > 100, `second-column pill missing (${secondRed} red pixels)`)
+})
+
+test("gene pills paint on their word in a captioned table", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  t.after(() => browser.close())
+  const page = await browser.newPage({ viewport: { width: 900, height: 700 } })
+  await page.setContent(CAPTIONED_FIXTURE)
+  await page.addScriptTag({
+    path: path.join(ROOT, "iconoplasm-extension", "content-range-paint.js"),
+  })
+
+  const painted = await page.evaluate(() => {
+    const runtime = {
+      getCanvasShape: () => ({
+        kind: "pill",
+        fillSpreadEm: 0.12,
+        ringSpreadEm: 0.2,
+        radiusEm: 0.45,
+        fillAlpha: 1,
+        ringColor: "rgb(120, 0, 0)",
+      }),
+    }
+    const paint = globalThis.IconoplasmRangePaint.createRangePaint({
+      documentRef: document,
+      highlightRuntime: runtime,
+    })
+    const anchor = [...document.querySelectorAll("table.wikitable tbody a")].find(
+      (candidate) => candidate.textContent === "GENE03",
+    )
+    const range = document.createRange()
+    range.selectNodeContents(anchor)
+    const item = { range }
+    paint.paint(item, "rgb(255, 0, 0)", 7)
+    paint.flush()
+    const rect = range.getBoundingClientRect()
+    const surface = item.paintSurface?.element
+    return {
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+      surface: surface?.tagName || null,
+      surfaceFragments: surface?.getClientRects().length ?? null,
+      surfaceIsCaptioned: Boolean(surface?.caption),
+    }
+  })
+
+  mkdirSync(OUT, { recursive: true })
+  const png = await page.screenshot()
+  writeFileSync(path.join(OUT, "extension-range-paint-captioned-table.png"), png)
+  const boundsBox = {
+    x: Math.max(0, Math.floor(painted.rect.x - 60)),
+    y: Math.max(0, Math.floor(painted.rect.y - 60)),
+    width: Math.ceil(painted.rect.width + 120),
+    height: Math.ceil(painted.rect.height + 120),
+  }
+  const bounds = await redBounds(page, png, boundsBox)
+  writeFileSync(
+    path.join(OUT, "extension-range-paint-captioned-table.json"),
+    JSON.stringify({ painted, boundsBox, bounds }, null, 2),
+  )
+
+  // 4. never the captioned table itself: its local-attachment background
+  // origin is displaced by the caption height.
+  assert.equal(painted.surfaceIsCaptioned, false, `surface ${painted.surface} carries a caption`)
+  assert.equal(painted.surfaceFragments, 1, `surface ${painted.surface} is fragmented`)
+  // and the pill lands on the word, not one caption-height below it.
+  assert.ok(bounds.count > 100, `captioned-table pill missing (${bounds.count} red pixels)`)
+  const wordCenterX = painted.rect.x + painted.rect.width / 2 - boundsBox.x
+  const wordCenterY = painted.rect.y + painted.rect.height / 2 - boundsBox.y
+  const centerX = (bounds.minX + bounds.maxX + 1) / 2
+  const centerY = (bounds.minY + bounds.maxY + 1) / 2
+  assert.ok(Math.abs(centerX - wordCenterX) <= 6, `pill centre x off by ${centerX - wordCenterX}`)
+  assert.ok(Math.abs(centerY - wordCenterY) <= 6, `pill centre y off by ${centerY - wordCenterY}`)
 })
