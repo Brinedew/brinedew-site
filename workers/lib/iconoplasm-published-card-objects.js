@@ -37,7 +37,12 @@ export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   indexes: 65536,
   catalogindexes: 128 * 1024,
   catalogs: 512 * 1024,
-  manifests: 65536,
+  // B-892 hot fix: the root manifest refs every shard and each shard's
+  // delivery indexes, so it grows with the catalog's shard count. The live
+  // manifest reached 65,029 of the original 64 KiB bound and the next commit
+  // measured 65,690. Sized like the B-792 sibling kinds; this is a reader
+  // budget, not a provider requirement.
+  manifests: 256 * 1024,
   shards: 4 * 1024 * 1024,
 })
 const HASH = /^[a-f0-9]{64}$/

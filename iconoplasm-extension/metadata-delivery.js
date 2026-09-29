@@ -98,7 +98,9 @@
             data.snapshot_version !== version ||
             !Array.isArray(data.ranges) ||
             !data.ranges.length ||
-            data.ranges.length > 64
+            // B-892 hot fix: sanity bound only; the live catalog already
+            // exceeds the old 64-range cap.
+            data.ranges.length > 1024
           )
             return null
           let previous = ""
@@ -211,11 +213,12 @@
           controller.signal,
           tab,
           (value) => Boolean(value && typeof value === "object"),
-          // B-792: the genes lane carries the complete published candidate
-          // pool, so it shares the publisher's 256 KiB bound. A released
-          // extension that still holds the older 64 KiB limit degrades to the
-          // service worker's direct fetch fallback; it is never broken by it.
-          { hash, limit: kind === "genes" ? 256 * 1024 : 65536 },
+          // B-792/B-892: the genes lane carries the complete published
+          // candidate pool and the root manifest refs every shard, so both
+          // share the publisher's 256 KiB bound. A released extension that
+          // still holds the older limits degrades to the service worker's
+          // direct fetch fallback; it is never broken by it.
+          { hash, limit: kind === "genes" || kind === "manifests" ? 256 * 1024 : 65536 },
         )
           .then((value) => {
             if (kind === "manifests" || kind === "indexes") boundedSet(objects, key, value, 16)
@@ -246,7 +249,8 @@
       if (
         root.storage !== "bunny_card_catalog_v2" ||
         !Array.isArray(root.shards) ||
-        root.shards.length > 64
+        // B-892 hot fix: sanity bound only; the manifest byte bound is real.
+        root.shards.length > 1024
       )
         throw new Error("Invalid card manifest")
       const shard = root.shards.find(
