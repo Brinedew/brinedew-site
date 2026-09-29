@@ -19,10 +19,11 @@ export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   compactIndexBytes: 128 * 1024,
   resultPageBytes: 512 * 1024,
   searchRequests: 2 + MAX_CATALOG_INDEXES + MAX_SEARCH_RESULTS,
-  searchBytes: 2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_SEARCH_RESULTS * 512 * 1024,
+  searchBytes:
+    2048 + 256 * 1024 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_SEARCH_RESULTS * 512 * 1024,
   galleryRequests: 2 + MAX_CATALOG_INDEXES + MAX_GALLERY_PAGE_SIZE,
   galleryBytes:
-    2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_GALLERY_PAGE_SIZE * 512 * 1024,
+    2048 + 256 * 1024 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_GALLERY_PAGE_SIZE * 512 * 1024,
 })
 
 function normalizedSymbol(value) {
@@ -250,11 +251,11 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (objects.has(cacheKey)) return objects.get(cacheKey)
     const path = `/published-cards/v2/immutable/${cacheKey}.json`
     const promise = (async () => {
-      // B-792/B-793: cards, genes and immutable candidate gallery pages share
-      // the publisher's 256 KiB bound. Other kinds keep theirs.
+      // B-792/B-793/B-892: cards, genes, gallery pages and the root manifest
+      // share the publisher's 256 KiB bound. Other kinds keep theirs.
       const { value, text } = await fetchJson(
         path,
-        kind === "cards" || kind === "genes" || kind === "galleries"
+        kind === "cards" || kind === "genes" || kind === "galleries" || kind === "manifests"
           ? 256 * 1024
           : kind === "catalogs"
             ? 512 * 1024

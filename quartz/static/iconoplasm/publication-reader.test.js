@@ -792,9 +792,9 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
     compactIndexBytes: 131072,
     resultPageBytes: 524288,
     searchRequests: 110,
-    searchBytes: 18_941_952,
+    searchBytes: 19_138_560,
     galleryRequests: 122,
-    galleryBytes: 25_233_408,
+    galleryBytes: 25_430_016,
   })
 })
 
