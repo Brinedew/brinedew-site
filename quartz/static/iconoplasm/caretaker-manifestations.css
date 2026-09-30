@@ -87,15 +87,6 @@
   font-size: 0.78rem;
 }
 
-.icono-caretaker-footer__source {
-  display: contents;
-}
-
-.icono-caretaker-footnote {
-  color: var(--darkgray);
-  font-size: 0.78rem;
-}
-
 .icono-caretaker-link-button {
   margin-left: 0.4rem;
   padding: 0;
@@ -125,7 +116,10 @@
   margin: 0 1.1rem;
   padding: 0.15rem;
   border-bottom: 1px solid var(--ui-border);
-  overflow-x: auto;
+  /* Scrolls on a very narrow phone, like Material and iOS tab bars, but never
+     draws a bar: on Windows an empty scrollbar track sat under the tabs. */
+  overflow: auto hidden;
+  scrollbar-width: none;
 }
 
 .icono-caretaker-tabs button {
@@ -160,25 +154,16 @@
   line-height: 1.45;
 }
 
-.icono-caretaker-panel__eyebrow,
-.icono-caretaker-panel__state {
-  font-family: var(--icono-action-font);
-  font-size: 0.7rem;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
-}
-
-.icono-caretaker-panel__eyebrow {
-  margin: 0;
-  color: var(--secondary);
-}
-
 .icono-caretaker-panel__state {
   flex: 0 0 auto;
   padding: 0.28rem 0.48rem;
   border: 1px solid var(--ui-border);
   border-radius: var(--icono-radius-sm);
   background: color-mix(in srgb, var(--light) 56%, var(--ui-bg) 44%);
+  font-family: var(--icono-action-font);
+  font-size: 0.7rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
 }
 
 .icono-caretaker-editor,
@@ -250,7 +235,9 @@
   .icono-caretaker-tag-scroll {
     flex: 1;
     min-height: 0;
-    overflow: auto;
+    /* Vertical only: tags wrap. With overflow:auto a sub-pixel overflow drew an
+       empty horizontal scrollbar on Windows. */
+    overflow: hidden auto;
     padding-right: 0.25rem;
   }
 }
@@ -296,8 +283,7 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--dark) 7%, var(--light));
 }
-.icono-caretaker-tag-values button,
-.icono-caretaker-add-category {
+.icono-caretaker-tag-values button {
   border: 0;
   background: transparent;
   color: var(--dark);
@@ -314,12 +300,10 @@
   flex: none;
   color: var(--darkgray);
 }
-.icono-caretaker-tag-values button:hover,
-.icono-caretaker-add-category:hover {
+.icono-caretaker-tag-values button:hover {
   background: color-mix(in srgb, var(--dark) 9%, transparent);
 }
 .icono-caretaker-tag-values button:focus-visible,
-.icono-caretaker-add-category:focus-visible,
 .icono-caretaker-tag-input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -335,10 +319,6 @@
   color: var(--dark);
   padding: 0.25rem 0.4rem;
   font: 0.8rem/1.4 var(--icono-action-font);
-}
-.icono-caretaker-add-category {
-  margin-top: 0.65rem;
-  color: var(--darkgray);
 }
 @media (max-width: 30rem) {
   .icono-caretaker-tag-row {
@@ -441,6 +421,15 @@
   font-size: 0.76rem;
 }
 
+/* B-874: what the text is for, read right under the box instead of last. */
+.icono-caretaker-editor__purpose {
+  margin: 0;
+  color: var(--darkgray);
+  font-family: var(--icono-action-font);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
 .icono-caretaker-editor__basis {
   margin: 0;
   padding: 0.5rem 0.65rem;
@@ -456,12 +445,61 @@
   font: 0.76rem/1.45 var(--icono-action-font);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="pending"] {
+/* B-874: the save state is a cloud glyph (Google Docs convention), never a word.
+   Hollow = unsaved, arrow = saving, check = saved, slash = failed. */
+[data-icono-caretaker-autosave-state] {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  color: var(--darkgray);
+}
+
+.icono-caretaker-cloud {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icono-caretaker-cloud__mark {
+  display: none;
+}
+
+[data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"],
+[data-icono-caretaker-autosave-state][data-state="saved"] [data-mark="saved"],
+[data-icono-caretaker-autosave-state][data-state="failed"] [data-mark="failed"] {
+  display: inline;
+}
+
+[data-icono-caretaker-autosave-state][data-state="unsaved"],
+[data-icono-caretaker-autosave-state][data-state="saving"] {
   color: var(--secondary);
 }
 
-[data-icono-caretaker-autosave-state][data-tone="error"] {
+[data-icono-caretaker-autosave-state][data-state="unsaved"] .icono-caretaker-cloud__shape {
+  stroke-dasharray: 2.4 2.2;
+}
+
+[data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"] {
+    animation: icono-caretaker-cloud-lift 0.9s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes icono-caretaker-cloud-lift {
+  from {
+    transform: translateY(1px);
+  }
+  to {
+    transform: translateY(-1.5px);
+  }
 }
 
 .icono-caretaker-editor__actions {
@@ -657,23 +695,23 @@
   letter-spacing: 0;
 }
 
-/* "Use my version" is an editor action: only on the Manifestation tab. */
-.icono-caretaker-panel:has([data-icono-caretaker-tabpanel="manifestation"][hidden])
-  .icono-caretaker-footer__source {
-  display: none;
+/* B-874: marks the version new images are drawn from. A picture, not the word
+   "public", which belongs to the gene-page switch alone. */
+.icono-caretaker-source-mark {
+  display: inline-flex;
+  margin-inline-start: 0.45rem;
+  color: var(--accent);
+  vertical-align: -0.2em;
 }
 
-.icono-caretaker-badge {
-  display: inline-block;
-  margin-inline-start: 0.45rem;
-  padding: 0.12rem 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--ui-border));
-  border-radius: var(--icono-radius-pill);
-  color: var(--accent);
-  font: 600 0.62rem / 1.2 var(--icono-action-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  vertical-align: 0.1em;
+.icono-caretaker-source-mark svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .icono-caretaker-history {
@@ -727,6 +765,49 @@
 .icono-caretaker-timeline__delta {
   color: var(--darkgray);
   font-size: 0.72rem;
+}
+
+/* B-874: one row per caretaker's session of saves; the single saves fold under it. */
+.icono-caretaker-session__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.25rem 0.7rem;
+  padding: 0.1rem 0.3rem;
+  border: 0;
+  border-radius: var(--icono-radius-md);
+  background: transparent;
+  color: var(--darkgray);
+  font: 0.7rem / 1.3 var(--icono-action-font);
+  cursor: pointer;
+}
+
+.icono-caretaker-session__toggle::before {
+  content: "";
+  width: 0.35rem;
+  height: 0.35rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+.icono-caretaker-session__toggle[aria-expanded="true"]::before {
+  transform: rotate(45deg);
+}
+
+.icono-caretaker-session__toggle:hover {
+  color: var(--dark);
+  background: color-mix(in srgb, var(--dark) 6%, transparent);
+}
+
+.icono-caretaker-session__versions {
+  margin-inline-start: 0.7rem;
+  border-inline-start: 1px solid var(--lightgray);
+}
+
+.icono-caretaker-session__versions[hidden] {
+  display: none;
 }
 
 .icono-caretaker-delta-add {

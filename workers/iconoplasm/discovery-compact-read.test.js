@@ -4,7 +4,6 @@ import {
   compactShelfRowsFromChronology,
   compactSharedRowsFromSummaries,
   isoFromEpochSeconds,
-  sortCompactShelfRows,
 } from "./discovery-compact-read.js"
 
 function event(symbol, at, overrides = {}) {
@@ -83,20 +82,4 @@ test("shared rows project discoverer counts through the ordinal dictionary", () 
     new Map(),
   )
   assert.deepEqual(missing, [])
-})
-
-test("newest order is timestamp-descending with a stable symbol tiebreak", () => {
-  const rows = [
-    { gene_symbol: "TP53", first_discovered_at: "2026-01-01T00:00:00.000Z" },
-    { gene_symbol: "BRCA1", first_discovered_at: "2026-02-01T00:00:00.000Z" },
-    { gene_symbol: "EGFR", first_discovered_at: "2026-02-01T00:00:00.000Z" },
-  ]
-  assert.deepEqual(
-    sortCompactShelfRows(rows, "newest", null).map((row) => row.gene_symbol),
-    ["BRCA1", "EGFR", "TP53"],
-  )
-  assert.deepEqual(
-    sortCompactShelfRows(rows, "symbol", null).map((row) => row.gene_symbol),
-    ["BRCA1", "EGFR", "TP53"],
-  )
 })

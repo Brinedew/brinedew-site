@@ -160,9 +160,9 @@ test("gene documents are one static SPA shell and never enter Worker execution",
   )
   assert.equal(config.assets.run_worker_first.includes("/robots.txt"), false)
   assert.equal(config.assets.run_worker_first.includes("/portraits/*"), true)
-  // B-807: the website reader reads publication objects from Bunny only; the
-  // exact immutable prefix reaches the Worker solely as the released
-  // extension's origin fallback.
+  // B-807, IPD-001: healthy readers take publication objects from Bunny. The
+  // exact immutable prefix reaches the Worker only as the origin fallback, for
+  // the extension and for a website reader whose Bunny request failed.
   assert.deepEqual(
     config.assets.run_worker_first.filter((pattern) => pattern.startsWith("/published-cards")),
     ["/published-cards/v2/immutable/*"],
@@ -458,6 +458,121 @@ test("a healthy Bunny response never starts a browser-side canonical-origin hedg
   assert.equal(originRequests, 0)
 })
 
+// IPD-001: Bunny accelerates; the first-party origin stays canonical, and a
+// failed accelerator affects only the requesting context. Seen live on
+// 27 Sep 2026: a Vietnamese ISP resolver briefly failed to resolve
+// iconoplasmportraits.b-cdn.net (ERR_NAME_NOT_RESOLVED), and a first-time
+// reader got "Gene page temporarily unavailable" for STAT5A. Ways this breaks:
+// 1. a DNS or network failure on Bunny leaves the page with nothing;
+// 2. every later object waits on Bunny again (one timeout per object);
+// 3. a Bunny 5xx on one object sinks the whole page;
+// 4. a hung Bunny connection never gives up;
+// 5. the canonical origin is trusted blindly (bytes not checked by hash);
+// 6. the fallback reaches anything but the two public immutable routes.
+const CANONICAL = "https://iconoplasm.brinedew.bio"
+const BUNNY = "https://iconoplasmportraits.b-cdn.net"
+
+function serveFixture(fixture, parsed) {
+  if (parsed.pathname === "/api/public/v1/card-current") {
+    return new Response(fixture.head, { status: 200 })
+  }
+  const body = fixture.objects.get(parsed.pathname)
+  return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
+}
+
+function publicImmutableRoute(pathname) {
+  return (
+    pathname === "/api/public/v1/card-current" ||
+    pathname.startsWith("/published-cards/v2/immutable/")
+  )
+}
+
+test("a reader whose resolver cannot find Bunny still gets the gene from the canonical origin", async () => {
+  const fixture = await immutableFixture()
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      if (parsed.origin === BUNNY) throw new TypeError("Failed to fetch")
+      return serveFixture(fixture, parsed)
+    },
+  })
+  assert.equal((await reader.gene("TP53")).symbol, "TP53", "1: the page gets its gene")
+  assert.equal(
+    requests.filter((request) => request.origin === BUNNY).length,
+    1,
+    "2: after one network failure the rest of the page skips Bunny",
+  )
+  assert.equal(
+    requests.every(
+      (request) =>
+        request.origin === BUNNY ||
+        (request.origin === CANONICAL && publicImmutableRoute(request.pathname)),
+    ),
+    true,
+    "6: only the public immutable routes are used as fallback",
+  )
+})
+
+test("a Bunny 5xx on one object falls back for that object only", async () => {
+  const fixture = await immutableFixture()
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      if (parsed.origin === BUNNY && parsed.pathname === fixture.manifestObject.path) {
+        return new Response(null, { status: 503 })
+      }
+      return serveFixture(fixture, parsed)
+    },
+  })
+  assert.equal((await reader.gene("TP53")).symbol, "TP53", "3: one bad object is recovered")
+  const canonical = requests.filter((request) => request.origin === CANONICAL)
+  assert.deepEqual(
+    canonical.map((request) => request.pathname),
+    [fixture.manifestObject.path],
+    "3: only the failed object came from the canonical origin",
+  )
+})
+
+test("a hung Bunny connection gives up after the timeout and uses the canonical origin", async () => {
+  const fixture = await immutableFixture()
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    cdnTimeoutMs: 30,
+    fetchImpl: (url, init) => {
+      const parsed = new URL(url)
+      if (parsed.origin === BUNNY) {
+        return new Promise((_, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(init.signal.reason)),
+        )
+      }
+      return Promise.resolve(serveFixture(fixture, parsed))
+    },
+  })
+  assert.equal((await reader.gene("TP53")).symbol, "TP53", "4: the hang ends in a gene")
+})
+
+test("bytes from the canonical origin are still checked against their hash", async () => {
+  const fixture = await immutableFixture()
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      if (parsed.origin === BUNNY) throw new TypeError("Failed to fetch")
+      if (parsed.pathname === fixture.geneObject.path) {
+        return new Response(fixture.geneObject.body.replace("Guardian", "Tampered"))
+      }
+      return serveFixture(fixture, parsed)
+    },
+  })
+  await assert.rejects(reader.gene("TP53"), "5: a tampered object is refused")
+})
+
 test("a failed Bunny head keeps the coherent prior publication without stateful reconstruction", async () => {
   const fixture = await immutableFixture()
   const storage = new Map([["iconoplasm.publication-head.v1", fixture.head]])
@@ -677,9 +792,9 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
     compactIndexBytes: 131072,
     resultPageBytes: 524288,
     searchRequests: 110,
-    searchBytes: 18_941_952,
+    searchBytes: 19_138_560,
     galleryRequests: 122,
-    galleryBytes: 25_233_408,
+    galleryBytes: 25_430_016,
   })
 })
 

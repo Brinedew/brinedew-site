@@ -32,7 +32,6 @@ import {
   compactSharedRowsFromSummaries,
   compactSharedSummaries,
   compactShelfRowsFromChronology,
-  sortCompactShelfRows,
 } from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
@@ -76,6 +75,7 @@ import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
+import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import { mergePublishedGeneOverlay } from "../quartz/static/iconoplasm/publication-reader.js"
 import {
@@ -222,7 +222,9 @@ import {
   readRequestNotificationInbox,
   resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
-import { ICONOPLASM_WIKI_PAGEVIEWS } from "./iconoplasm-wiki-pageviews.js"
+// One copy for the worker and the browser (B-885): the home page sorts a
+// signed-in shelf by popularity locally, and the published catalog has none.
+import { ICONOPLASM_WIKI_PAGEVIEWS } from "../quartz/static/iconoplasm/wiki-pageviews.js"
 import {
   ICONOPLASM_GENE_CARD_HEIGHT,
   ICONOPLASM_GENE_CARD_QUEUE_KIND,
@@ -253,12 +255,8 @@ import {
   iconoplasmGeneBlotWebpDimensions,
   registerIconoplasmGeneBlot,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import { applyIconoplasmPublicationAliasPolicyToGene } from "./iconoplasm-publication-aliases.js"
 import {
-  applyIconoplasmPublicationAliasPolicyToGene,
-  ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
-} from "./iconoplasm-publication-aliases.js"
-import {
-  readPublishedIconoplasmPublicationAliasesByVersionToken,
   readIconoplasmPublicationAliasPolicy,
   resetIconoplasmPublicationAliasPublicCacheForTests,
   validateIconoplasmPublicationAliasesAgainstPublishedScanner,
@@ -1138,12 +1136,6 @@ const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
 // every dirty shard is ready for one atomic version flip. This is a cost and CPU
 // boundary, not a trigger for a broader fallback.
 const CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP = 6
-// One step can write two replacement shard blobs per dirty baseline shard (a
-// local split), plus the manifest, publication cursor cleanup, watermark, and
-// gallery-version barrier. Budget admission is derived from that bounded path;
-// it must never reserve for a hypothetical complete-catalog rewrite.
-const CARD_CATALOG_DIRTY_SHARD_PUBLICATION_MAX_KV_WRITES =
-  CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP * 2 + 4
 // The gene universe is fixed and currently below 20k. Querying one extra symbol
 // lets publication fail explicitly if that invariant changes; it must never turn
 // a large delta into a surprise full-catalog rebuild.
@@ -2030,11 +2022,7 @@ function isIconoplasmDailyBudgetError(error) {
       "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
       "COST_AUTHORITY_STORAGE_READ_QUOTA",
       "QUEUE_ACCOUNT_DAILY_LIMIT",
-      "MUTATION_LANE_CAPACITY_EXHAUSTED",
       "MUTATION_PROVIDER_HEADROOM_RESERVED",
-      "MUTATION_PROVIDER_OBSERVATION_MISSING",
-      "MUTATION_PROVIDER_OBSERVATION_STALE",
-      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
     ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
@@ -2188,16 +2176,7 @@ async function reserveIconoplasmMutationWrites(
     }),
   )
   const payload = await response.json().catch(() => null)
-  if (
-    response.status === 429 &&
-    [
-      "MUTATION_LANE_CAPACITY_EXHAUSTED",
-      "MUTATION_PROVIDER_HEADROOM_RESERVED",
-      "MUTATION_PROVIDER_OBSERVATION_MISSING",
-      "MUTATION_PROVIDER_OBSERVATION_STALE",
-      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
-    ].includes(payload?.code)
-  ) {
+  if (response.status === 429 && ["MUTATION_PROVIDER_HEADROOM_RESERVED"].includes(payload?.code)) {
     return payload
   }
   if (!response.ok || payload?.ok !== true) {
@@ -3855,10 +3834,6 @@ function mapUserEmulsionVersionRow(row, sessionUser = null) {
   )
 }
 
-function publicUserEmulsionIdForRow(row) {
-  return mapUserEmulsionRow(row).id
-}
-
 async function getUserEmulsionForSession(env, sessionUser) {
   const userId = normalizeUserId(sessionUser?.user_id || "")
   if (!userId || !env.DB) return mapUserEmulsionRow(null, sessionUser)
@@ -3905,35 +3880,6 @@ function parseUserEmulsionPublicId(raw) {
     ownerSlug: match[1],
     revision: Number.parseInt(match[2], 10),
   }
-}
-
-async function getUserEmulsionByPublicId(env, publicId) {
-  const parsed = parseUserEmulsionPublicId(publicId)
-  if (!parsed || !env.DB) return null
-  const versionRow = await env.DB.prepare(
-    `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text,
-            COALESCE(s.slot, 0) AS public_slot
-       FROM iconoplasm_user_emulsion_versions v
-       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
-      WHERE v.public_id = ?
-        AND COALESCE(emulsion_text, '') <> ''
-      LIMIT 1`,
-  )
-    .bind(parsed.publicId)
-    .first()
-  const versionMapped = versionRow ? mapUserEmulsionVersionRow(versionRow) : null
-  if (versionMapped?.text && versionMapped.id === parsed.publicId) return versionMapped
-  const row = await env.DB.prepare(
-    `SELECT discord_id, username, iconoplasm_emulsion_text, iconoplasm_emulsion_revision, iconoplasm_emulsion_public_id
-       FROM users
-      WHERE iconoplasm_emulsion_public_id = ?
-        AND COALESCE(iconoplasm_emulsion_text, '') <> ''
-      LIMIT 1`,
-  )
-    .bind(parsed.publicId)
-    .first()
-  const mapped = row ? mapUserEmulsionRow(row) : null
-  return mapped?.text && mapped.id === parsed.publicId ? mapped : null
 }
 
 async function getUserEmulsionByPublicIdForSession(env, sessionUser, publicId) {
@@ -8835,7 +8781,7 @@ function candidateGenerationCommunityCommentsSnapshot(comments, { limit = 12 } =
   return sanitizeText(lines.join("\n"), 3000) || ""
 }
 
-function buildCandidateGenerationPrompt({
+export function buildCandidateGenerationPrompt({
   symbol,
   geneContext,
   promptBodyMode = "taggerizer_prompt",
@@ -8845,7 +8791,14 @@ function buildCandidateGenerationPrompt({
   const geneSymbol = normalizeSymbol(symbol || geneContext?.gene_symbol || "") || ""
   const fullName = sanitizeText(geneContext?.full_name || "", 255) || ""
   const manifestation = sanitizeText(geneContext?.manifestation || "", 4000) || ""
-  const tags = normalizeTaggerizerPrompt(geneContext?.manifestation_tags)
+  // B-879: the retired colors tags pull image generation off course; they are
+  // dropped here, using the grouping saved with the flat list.
+  const tags = normalizeTaggerizerPrompt(
+    promptTagsWithoutRetired(
+      geneContext?.manifestation_tags,
+      geneContext?.manifestation_fields_json,
+    ),
+  )
   const bodyMode = normalizeCandidatePromptBodyMode(promptBodyMode)
   const essenceSuffix = candidateGenerationEssenceSuffix(geneContext)
   let promptBody = bodyMode === "taggerizer_prompt" ? tags : manifestation
@@ -9548,40 +9501,24 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
   }
 }
 
+// Public request-option labels. Artist identities are private (the Anima slot
+// contract ships none, B-883): no artist tag, name or ID may reach the label,
+// the secondary line, the search text or the payload of a request option.
 function generationRequestVisionOptionLabels(row) {
   const emulsionId = unqualifiedEmulsionDisplayCode(publicEmulsionIdForRow(row))
   const displayEmulsionCode = emulsionId
-  const artistId = publicArtistIdForRow(row)
-  const artistTag = sanitizeText(row?.artist_tag || "", 255) || ""
-  const artistName = sanitizeText(row?.artist_name || "", 255) || ""
   const visionId = sanitizeVoteVisionId(row?.vision_id || "")
   const workflowLabel = sanitizeText(row?.workflow_label || "", 255) || ""
-  const primaryLabel = displayEmulsionCode || artistTag || artistName || artistId || visionId
+  const primaryLabel = displayEmulsionCode || visionId
   const secondaryParts = []
-  if (artistTag && artistTag !== primaryLabel) secondaryParts.push(artistTag)
-  if (artistName && artistName !== primaryLabel && artistName !== artistTag)
-    secondaryParts.push(artistName)
-  if (artistId && artistId !== primaryLabel && artistId !== artistTag)
-    secondaryParts.push(`artist ${artistId}`)
   if (workflowLabel && workflowLabel !== primaryLabel) secondaryParts.push(workflowLabel)
   if (visionId && visionId !== primaryLabel) secondaryParts.push(visionId)
   return {
     emulsionId,
-    artistId,
-    artistTag,
-    artistName,
     visionId,
     primaryLabel: primaryLabel || "Specific emulsion",
     secondaryLabel: secondaryParts.join(" · "),
-    searchText: [
-      displayEmulsionCode,
-      emulsionId,
-      artistId,
-      artistTag,
-      artistName,
-      workflowLabel,
-      visionId,
-    ]
+    searchText: [displayEmulsionCode, emulsionId, workflowLabel, visionId]
       .filter(Boolean)
       .join(" "),
   }
@@ -9637,16 +9574,23 @@ function parseGenerationRequestPreviewAssetsJson(raw) {
   }
 }
 
+// A style card shows at most four 3:4 previews (B-883), so the options list
+// ships four medium URLs per style and nothing else image-shaped. It used to
+// ship every rollup preview with both renditions: 318 KB per dialog open,
+// 257 KB of it unrendered, on a route the free plan's 10 ms CPU cap already
+// kills now and then (B-884).
+const GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT = 4
+
 function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreviewRows) {
   const base = portraitBase(url, env)
-  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows).map((row) => ({
-    gene_symbol: row.gene_symbol,
-    asset_sha256: row.asset_sha256,
-    is_current: Boolean(row.is_current),
-    preview_rank: Number(row.preview_rank || 0) || 0,
-    medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
-    thumb_url: adminPortraitUrl(base, row.asset_sha256 || "", "thumb"),
-  }))
+  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows)
+    .slice(0, GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT)
+    .map((row) => ({
+      gene_symbol: row.gene_symbol,
+      asset_sha256: row.asset_sha256,
+      is_current: Boolean(row.is_current),
+      medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
+    }))
 }
 
 async function fetchGenerationRequestVisionPreviewRowsForRollup(
@@ -10438,9 +10382,6 @@ function mapGenerationRequestVisionOptionRows(env, url, rows) {
         secondary_label: labels.secondaryLabel,
         search_text: labels.searchText,
         emulsion_id: labels.emulsionId,
-        artist_id: labels.artistId,
-        artist_tag: labels.artistTag,
-        artist_name: labels.artistName,
         image_count: Number(row?.image_count || 0),
         live_count: Number(row?.live_count || 0),
         score: Number(row?.score || 0),
@@ -10834,15 +10775,11 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
       compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper"),
     )
     const visionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower")
-    const artistPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower").replace(
-      /^@+/,
-      "",
-    )
-    const artistTagPrefix = artistPrefix ? `@${artistPrefix}` : ""
     const emulsionUpper = textPrefixUpperBound(emulsionPrefix)
     const visionUpper = textPrefixUpperBound(visionPrefix)
-    const artistUpper = textPrefixUpperBound(artistPrefix)
-    const artistTagUpper = textPrefixUpperBound(artistTagPrefix)
+    // Style search matches the style number and vision ID only. Artist
+    // identities are private (B-883): the picker never shows them, so the
+    // search must not find a style by its artist either.
     // D1 cost fence: this is query-aware search, not live discovery. It must
     // stay on the precomputed request-option rollup so typing "0-2" cannot
     // fan out into admin/portrait scans on every logged-in gene page.
@@ -10850,8 +10787,6 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
       `SELECT
          vision_id,
          emulsion_id,
-         artist_tag,
-         artist_name,
          workflow_id,
          workflow_label,
          prompt_version,
@@ -10868,8 +10803,6 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
          AND (
            (emulsion_id >= ? AND emulsion_id < ?)
            OR (vision_id >= ? AND vision_id < ?)
-           OR (artist_tag >= ? AND artist_tag < ?)
-           OR (artist_tag >= ? AND artist_tag < ?)
          )
        ORDER BY
          CASE
@@ -10877,11 +10810,7 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
            WHEN emulsion_id >= ? AND emulsion_id < ? THEN 1
            WHEN vision_id = ? THEN 2
            WHEN vision_id >= ? AND vision_id < ? THEN 3
-           WHEN artist_tag = ? THEN 4
-           WHEN artist_tag >= ? AND artist_tag < ? THEN 5
-           WHEN artist_tag = ? THEN 6
-           WHEN artist_tag >= ? AND artist_tag < ? THEN 7
-           ELSE 8
+           ELSE 4
          END ASC,
          vote_h_index DESC,
          live_count DESC,
@@ -10895,22 +10824,12 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
         emulsionUpper,
         visionPrefix,
         visionUpper,
-        artistPrefix,
-        artistUpper,
-        artistTagPrefix,
-        artistTagUpper,
         emulsionPrefix,
         emulsionPrefix,
         emulsionUpper,
         visionPrefix,
         visionPrefix,
         visionUpper,
-        artistPrefix,
-        artistPrefix,
-        artistUpper,
-        artistTagPrefix,
-        artistTagPrefix,
-        artistTagUpper,
       )
       .all()
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
@@ -11771,7 +11690,7 @@ async function recordCompactDiscoveryEncounters(
     const error = new Error(
       "Discovery capacity is reserved for other mutation lanes; retain the exact batch for retry",
     )
-    error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+    error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
     error.mutation_lane = admission
     throw error
   }
@@ -11846,17 +11765,38 @@ async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {})
   return normalizeSharedDiscoverySymbolList([...symbols.values()])
 }
 
-async function writeSharedGeneDiscoverySymbolCache(env, symbols) {
+// `ordinals` and `full_rebuild_day` let the hourly publisher name only new
+// discoveries (B-887). Readers use `symbols` alone; a payload without
+// ordinals (the rebuild path, or one from before B-887) forces a full run.
+async function writeSharedGeneDiscoverySymbolCache(
+  env,
+  symbols,
+  { ordinals = null, fullRebuildDay = "", now = Date.now() } = {},
+) {
   if (!env.KV) return
   const normalized = normalizeSharedDiscoverySymbolList(symbols)
   await env.KV.put(
     KV_SHARED_GENE_DISCOVERY_SYMBOLS,
     JSON.stringify({
       schema: "iconoplasm.sharedGeneDiscoverySymbols.v1",
-      updated_at: new Date().toISOString(),
+      updated_at: new Date(now).toISOString(),
       symbols: normalized,
+      ...(Array.isArray(ordinals) ? { ordinals, full_rebuild_day: fullRebuildDay } : {}),
     }),
   )
+}
+
+async function readSharedGeneDiscoverySymbolPayload(env) {
+  try {
+    const raw = await env.KV?.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
+    const published = raw == null ? null : JSON.parse(raw)
+    return published?.schema === "iconoplasm.sharedGeneDiscoverySymbols.v1" &&
+      Array.isArray(published.symbols)
+      ? published
+      : null
+  } catch {
+    return null
+  }
 }
 
 async function readSharedGeneDiscoverySymbols(env) {
@@ -11877,21 +11817,51 @@ async function readSharedGeneDiscoverySymbols(env) {
   }
 }
 
-export async function publishSharedGeneDiscoverySymbols(env) {
+// Hourly. B-887 step 5: it used to name every shared ordinal on every run
+// (~15k D1 rows an hour on 27 Sep, growing with each discovery). Shared
+// ordinals only accumulate, so within a UTC day it names just the ordinals new
+// since the published list; a quiet hour reads the one shared-state row. One
+// full rebuild per UTC day (or whenever an ordinal disappears, e.g. after the
+// admin rollup rebuild) picks up renamed canonical symbols.
+export async function publishSharedGeneDiscoverySymbols(env, { now = Date.now() } = {}) {
   if (!env?.KV || !env?.ICONOPLASM_DB) {
     return { ok: false, skipped: true, reason: "bindings_missing" }
   }
-  const nextSymbols = await readSharedGeneDiscoverySymbolsFromD1(env, { limit: 20000 })
-  const currentSymbols = await readSharedGeneDiscoverySymbols(env)
-  const unchanged =
-    currentSymbols !== null &&
-    currentSymbols.length === nextSymbols.length &&
-    currentSymbols.every((symbol, index) => symbol === nextSymbols[index])
-  if (unchanged) {
-    return { ok: true, changed: false, symbol_count: nextSymbols.length }
+  const today = new Date(now).toISOString().slice(0, 10)
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const ordinals = compactSharedSummaries(shared)
+    .map((summary) => Number(summary.ordinal))
+    .slice(0, 20000)
+    .sort((left, right) => left - right)
+  const published = await readSharedGeneDiscoverySymbolPayload(env)
+  if (Array.isArray(published?.ordinals) && published.full_rebuild_day === today) {
+    const current = new Set(ordinals)
+    const prior = new Set(published.ordinals.map(Number))
+    if ([...prior].every((ordinal) => current.has(ordinal))) {
+      const added = ordinals.filter((ordinal) => !prior.has(ordinal))
+      if (!added.length) {
+        return { ok: true, changed: false, symbol_count: published.symbols.length }
+      }
+      const names = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, added)
+      const symbols = normalizeSharedDiscoverySymbolList([...published.symbols, ...names.values()])
+      await writeSharedGeneDiscoverySymbolCache(env, symbols, {
+        ordinals,
+        fullRebuildDay: today,
+        now,
+      })
+      return { ok: true, changed: true, symbol_count: symbols.length, named: added.length }
+    }
   }
-  await writeSharedGeneDiscoverySymbolCache(env, nextSymbols)
-  return { ok: true, changed: true, symbol_count: nextSymbols.length }
+  const names = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, ordinals)
+  const symbols = normalizeSharedDiscoverySymbolList([...names.values()])
+  const unchanged =
+    Array.isArray(published?.symbols) &&
+    published.symbols.length === symbols.length &&
+    published.symbols.every((symbol, index) => symbol === symbols[index])
+  // Always rewrite on a full run (at most once per UTC day, or after an
+  // ordinal vanished) so the next hours have today's ordinals to diff against.
+  await writeSharedGeneDiscoverySymbolCache(env, symbols, { ordinals, fullRebuildDay: today, now })
+  return { ok: true, changed: !unchanged, symbol_count: symbols.length, named: ordinals.length }
 }
 
 // Repair path: rebuild the compact shared aggregate from the durable per-user
@@ -12025,13 +11995,19 @@ async function enrichGeneDiscoveryRows(env, rows) {
   )
 }
 
-async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+// The shelf as compact rows (symbol, first/last times, counts), before the
+// per-gene metadata join. Windows page these and enrich only what they return.
+async function compactShelfBaseRows(env, { userId } = {}) {
   const state = await readCompactUserStateForRequest(env, {
     userId,
   })
   if (!state) return []
   const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
-  const rows = compactShelfRowsFromChronology(chronology)
+  return compactShelfRowsFromChronology(chronology)
+}
+
+async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
+  const rows = await compactShelfBaseRows(env, { userId })
   const bounded =
     limit == null
       ? rows
@@ -12075,7 +12051,12 @@ async function listUserGeneDiscoveries(
 }
 
 const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
-const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 48
+// 12 cards + 12 directories = at most 24 storage subrequests per window on
+// the exact-object path (Free plan cap: 50). The home page asks for 4, then 12
+// (8 on phones); a larger request is clamped and pages on with the cursor
+// (B-885: at 24 and 48 the window read packed shards and hit Cloudflare 1102).
+const PUBLISHED_EXACT_CARD_READ_LIMIT = 12
+const ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = PUBLISHED_EXACT_CARD_READ_LIMIT
 const ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS = new Set(["newest", "symbol"])
 
 // Account windows are one signed-in shelf path, not the global gallery model.
@@ -12150,6 +12131,42 @@ function validateAccountGalleryCursor(raw, order, scope) {
   return { ok: true, value: { ...value, symbol, first_discovered_at: time } }
 }
 
+// The shared summaries a newest page can draw from, chosen by time alone so
+// only these need names (B-885). Keeps every summary in the cursor's own
+// second (the symbol tie-break decides which side of the cursor it falls on),
+// then limit + 1 beyond it (the +1 answers has_more), then the rest of the
+// last kept second so a tie is never split. paginateCompactDiscoveryRows makes
+// the exact page from these. Seconds match isoFromEpochSeconds' rounding.
+function sharedNewestPageCandidates(summaries, { limit, backward, cursorValue }) {
+  const at = (summary) => Math.floor(Number(summary?.first_at) || 0)
+  const cursorMs = cursorValue ? Date.parse(cursorValue.first_discovered_at || "") : Number.NaN
+  if (cursorValue && !Number.isFinite(cursorMs)) return summaries
+  const cursorAt = cursorValue ? Math.floor(cursorMs / 1000) : null
+  const eligible =
+    cursorAt == null
+      ? summaries
+      : summaries.filter((summary) =>
+          backward ? at(summary) >= cursorAt : at(summary) <= cursorAt,
+        )
+  const sorted = [...eligible].sort((left, right) =>
+    backward ? at(left) - at(right) : at(right) - at(left),
+  )
+  const picked = []
+  let beyondCursor = 0
+  let lastAt = null
+  for (const summary of sorted) {
+    const time = at(summary)
+    const atCursor = cursorAt != null && time === cursorAt
+    if (!atCursor && beyondCursor > limit && time !== lastAt) break
+    picked.push(summary)
+    if (!atCursor) {
+      beyondCursor += 1
+      lastAt = time
+    }
+  }
+  return picked
+}
+
 function paginateCompactDiscoveryRows({
   decorated,
   limit,
@@ -12168,12 +12185,17 @@ function paginateCompactDiscoveryRows({
         : left.gene_symbol.localeCompare(right.gene_symbol),
     )
   } else {
-    sorted.sort((left, right) => {
-      const timeCompare = backward
-        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "")
-        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "")
-      return timeCompare || left.gene_symbol.localeCompare(right.gene_symbol)
-    })
+    // Newest is time descending, then symbol ascending. Walking backward is
+    // its exact mirror (time ascending, symbol DESCENDING); the old ascending
+    // tie-break returned the wrong genes when a page boundary split a second
+    // shared by several discoveries (found by the B-885 tie walk).
+    sorted.sort((left, right) =>
+      backward
+        ? (left.first_discovered_at || "").localeCompare(right.first_discovered_at || "") ||
+          right.gene_symbol.localeCompare(left.gene_symbol)
+        : (right.first_discovered_at || "").localeCompare(left.first_discovered_at || "") ||
+          left.gene_symbol.localeCompare(right.gene_symbol),
+    )
   }
   let filtered = sorted
   if (cursorValue) {
@@ -12237,10 +12259,13 @@ async function listUserGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const decorated = await compactShelfRows(env, { userId: userIdNorm, isAdmin })
-  return paginateCompactDiscoveryRows({
-    decorated,
+  // Page first, then enrich only the page (B-885). Paging needs only the
+  // symbol and first-discovery time, which the compact rows already carry.
+  // Enriching the whole shelf first cost a three-table join per 250 genes and
+  // one mapped object per gene on every home view; at 1,584 and 2,106 genes it
+  // tipped the free plan's CPU cap into a Cloudflare 1102 on every load.
+  const page = paginateCompactDiscoveryRows({
+    decorated: await compactShelfBaseRows(env, { userId: userIdNorm }),
     limit: cleanedLimit,
     order: resolvedOrder,
     scope: "personal",
@@ -12248,6 +12273,7 @@ async function listUserGeneDiscoveryWindow(
     before,
     cursorValue,
   })
+  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
 }
 
 async function listSharedGeneDiscoveryWindow(
@@ -12271,17 +12297,27 @@ async function listSharedGeneDiscoveryWindow(
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
   const shared = await readSharedCompactState(env.ICONOPLASM_DB)
-  const summaries = compactSharedSummaries(shared)
+  const allSummaries = compactSharedSummaries(shared)
+  // Newest pages by time before naming anything (B-885): only the page's
+  // ordinals, one look-ahead and the ties on each boundary are mapped to
+  // symbols. Mapping every shared discovery (3,681 on 27 Sep, up to the whole
+  // 19k catalog) cost ~2k D1 rows per 500 on every view. Symbol order still
+  // needs every name to sort by.
+  const summaries =
+    resolvedOrder === "newest"
+      ? sharedNewestPageCandidates(allSummaries, {
+          limit: cleanedLimit,
+          backward: Boolean(before),
+          cursorValue,
+        })
+      : allSummaries
   const symbols = await readCanonicalSymbolsForOrdinals(
     env.ICONOPLASM_DB,
     summaries.map((summary) => summary.ordinal),
   )
-  const decorated = await enrichGeneDiscoveryRows(
-    env,
-    compactSharedRowsFromSummaries(summaries, symbols),
-  )
-  return paginateCompactDiscoveryRows({
-    decorated,
+  // Page first, then enrich only the page (B-885), as in the personal window.
+  const page = paginateCompactDiscoveryRows({
+    decorated: compactSharedRowsFromSummaries(summaries, symbols),
     limit: cleanedLimit,
     order: resolvedOrder,
     scope: "shared",
@@ -12289,6 +12325,7 @@ async function listSharedGeneDiscoveryWindow(
     before,
     cursorValue,
   })
+  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
 }
 
 async function countUserGeneDiscoveries(env, { userId } = {}) {
@@ -12385,20 +12422,26 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
   )
   const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
+  let recorded = null
   if (requestedSymbols.length) {
     const lookup = await readDiscoveryDictionaryForSymbols(env, requestedSymbols)
     const state = await readCompactUserStateForRequest(env, {
       userId: userIdNorm,
     })
     const membership = String(state?.membership_b64 || "")
+    // The dictionary is lazy: most catalog genes acquire an ordinal only when
+    // someone first discovers them (3,678 of ~19k on 2026-09-26). A symbol
+    // without one is therefore fresh, not unknown; the recorder assigns it or
+    // reports it dropped if it is not a catalog gene. Filtering on "has an
+    // ordinal" silently lost every never-seen gene a guest merged (B-869).
     const fresh = requestedSymbols.filter((symbol) => {
       const ordinal = lookup.byName.get(symbol)
-      return ordinal != null && !hasDiscoveryOrdinal(membership, ordinal)
+      return ordinal == null || !hasDiscoveryOrdinal(membership, ordinal)
     })
     if (fresh.length) {
       const at = Math.floor(Date.now() / 1000)
       const digest = await sha256Hex(`guest-merge:${userIdNorm}:${requestedSymbols.join(",")}`)
-      await recordCompactDiscoveryEncounters(env, {
+      recorded = await recordCompactDiscoveryEncounters(env, {
         userId: userIdNorm,
         isAdmin,
         batchId: `guest.merge.${digest.slice(0, 48)}`,
@@ -12416,6 +12459,7 @@ async function mergeGuestGeneDiscoveries(env, { userId, symbols = [] } = {}) {
     ok: true,
     merged_count: requestedSymbols.length,
     merged_symbols: requestedSymbols,
+    dropped_symbols: recorded?.dropped || [],
   }
 }
 
@@ -15194,10 +15238,6 @@ async function inspectAdminAssetStorageRows(
   return out
 }
 
-async function writeStorageAuditQueueInspectionResult(env, result) {
-  return (await writeStorageAuditQueueInspectionResults(env, [result])) > 0
-}
-
 async function writeStorageAuditQueueInspectionResults(env, rows) {
   if (!env.ICONOPLASM_DB) return 0
   const successRows = []
@@ -17190,6 +17230,7 @@ export class IconoplasmVoteCoordinator {
       selectionRef: composeGeneSelectionReference({
         symbol: normalizeSymbol(this.getMeta("symbol")),
         winner,
+        candidateSetRevision: Number(this.getMeta("candidate_authority_revision")) || 0,
         caretakerSupervoteVersion: Number(caretaker?.supervote_version || 0),
         caretakerDirection:
           caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
@@ -18023,7 +18064,7 @@ export class IconoplasmVoteCoordinator {
       const error = new Error(
         "Vote D1 delivery is pending because the user-action mutation lane is full",
       )
-      error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+      error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
       throw error
     }
 
@@ -19766,136 +19807,74 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     )
   }
 
+  // The newest same-day sample of the account-wide D1 rows-written meter, or
+  // null. A sample only sets the admission baseline and the start of the
+  // counted reservation window; its absence never refuses work (B-897). A
+  // sample younger than five minutes is reused; otherwise the scheduled KV
+  // projection is read and, if that is also older, the live provider meter.
+  // Failed attempts retry at most once a minute and never discard the last
+  // good same-day sample.
   async providerD1Observation(dayKey) {
     const now = Date.now()
-    const cachedObservedAt = Date.parse(String(this.providerObservationCache?.observed_at || ""))
-    const cachedObservationIsFresh =
-      Number.isFinite(cachedObservedAt) &&
-      cachedObservedAt <= now + 60_000 &&
-      now - cachedObservedAt <= 90 * 60_000
-    const cacheReusable = this.providerObservationCache?.ok
-      ? cachedObservationIsFresh
-      : now - this.providerObservationCheckedAt < 60_000
-    if (
-      this.providerObservationCache &&
-      cacheReusable &&
-      this.providerObservationCache.day_key === dayKey
-    ) {
-      return this.providerObservationCache
-    }
+    const fresh = (sample) =>
+      sample?.ok === true &&
+      sample.day_key === dayKey &&
+      now - Date.parse(sample.observed_at) < 5 * 60_000
+    const cached =
+      this.providerObservationCache?.day_key === dayKey ? this.providerObservationCache : null
+    if (fresh(cached) || now - this.providerObservationCheckedAt < 60_000) return cached
     this.providerObservationCheckedAt = now
-    // D1 allowances are account-wide. Staging owns an isolated application KV,
-    // but must admit mutations against the same provider observation as
-    // production; otherwise every staging mutation fails closed forever.
-    const providerObservationKv = this.env?.PROD_KV || this.env?.KV
-    let failure = null
-    if (!providerObservationKv || typeof providerObservationKv.get !== "function") {
-      failure = {
-        ok: false,
-        code: "MUTATION_PROVIDER_OBSERVATION_MISSING",
-        day_key: dayKey,
-      }
-    }
-    let snapshot
-    if (!failure) {
-      try {
-        snapshot = await providerObservationKv.get(KV_OBSERVABILITY_SNAPSHOT, "json")
-      } catch {
-        snapshot = null
-      }
-      // Rolling deploy compatibility: the previous snapshot schema already
-      // carried the same covered, account-wide D1 day and rows-written values.
-      // Accept that exact source until the refreshed publisher adds the flatter
-      // providerAdmission projection; never accept an uncovered daily bucket.
-      const legacyCurrentDay = snapshot?.d1?.currentDay
-      const provider =
-        snapshot?.providerAdmission ||
-        (legacyCurrentDay?.covered === true
-          ? {
-              accountId: "bound-cloudflare-account",
-              dayKey: legacyCurrentDay.date,
-              rowsWritten: legacyCurrentDay.rowsWritten,
-            }
-          : null)
-      const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
-      const accountId = String(provider?.accountId || "").trim()
-      const observedDay = String(provider?.dayKey || "").trim()
-      const rowsWritten = Number(provider?.rowsWritten)
+
+    const newer = (sample) => {
+      const observedAt = Date.parse(String(sample?.observed_at || ""))
       if (
-        !provider ||
         !Number.isFinite(observedAt) ||
-        !accountId ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(observedDay) ||
-        !Number.isSafeInteger(rowsWritten) ||
-        rowsWritten < 0
-      ) {
-        failure = {
-          ok: false,
-          code: snapshot
-            ? "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
-            : "MUTATION_PROVIDER_OBSERVATION_MISSING",
-          day_key: dayKey,
-        }
-      } else if (
-        observedDay !== dayKey ||
         observedAt > now + 60_000 ||
-        now - observedAt > 90 * 60_000
+        new Date(observedAt).toISOString().slice(0, 10) !== dayKey ||
+        !Number.isSafeInteger(sample?.rows_written) ||
+        sample.rows_written < 0
+      )
+        return
+      if (
+        !this.providerObservationCache?.ok ||
+        this.providerObservationCache.day_key !== dayKey ||
+        observedAt > Date.parse(this.providerObservationCache.observed_at)
       ) {
-        failure = {
-          ok: false,
-          code: "MUTATION_PROVIDER_OBSERVATION_STALE",
-          day_key: dayKey,
-          observed_day_key: observedDay,
-          observed_at: new Date(observedAt).toISOString(),
-        }
-      } else {
-        this.providerObservationCache = {
-          ok: true,
-          day_key: dayKey,
-          account_id: accountId,
-          rows_written: rowsWritten,
-          observed_at: new Date(observedAt).toISOString(),
-          source: "projected_provider",
-        }
-        return this.providerObservationCache
+        this.providerObservationCache = { ok: true, day_key: dayKey, ...sample }
       }
     }
 
-    // The scheduled projection is a cache, not the authority. GitHub can delay
-    // scheduled workflows for nearly an hour, especially around UTC rollover.
-    // Ask Cloudflare's live account-wide meter once from this singleton and
-    // cache a valid sample for the same 90-minute admission window. If the live
-    // authority is unavailable or malformed, retain the projection's exact
-    // fail-closed result.
+    // D1 allowances are account-wide. Staging owns an isolated application KV
+    // but reads the same provider observation as production.
+    const providerObservationKv = this.env?.PROD_KV || this.env?.KV
+    try {
+      const snapshot = await providerObservationKv?.get?.(KV_OBSERVABILITY_SNAPSHOT, "json")
+      const provider = snapshot?.providerAdmission
+      if (String(provider?.dayKey || "") === dayKey) {
+        newer({
+          rows_written: Number(provider?.rowsWritten),
+          observed_at: String(snapshot?.generatedAt || ""),
+          account_id: String(provider?.accountId || ""),
+          source: "projected_provider",
+        })
+      }
+    } catch {}
+    if (fresh(this.providerObservationCache)) return this.providerObservationCache
+
+    // The scheduled projection is a cache, not the authority: GitHub runs its
+    // "hourly" schedule 4-11 times a day (B-893). Ask the live meter.
     try {
       const live = await this.accountUsage.refresh()
-      const measuredAt = Number(live?.measured_at)
-      const liveDay = String(live?.day || "").trim()
-      const liveRowsWritten = Number(live?.rows_written)
-      if (
-        liveDay === dayKey &&
-        Number.isFinite(measuredAt) &&
-        measuredAt <= now + 60_000 &&
-        now - measuredAt <= 90 * 60_000 &&
-        Number.isSafeInteger(liveRowsWritten) &&
-        liveRowsWritten >= 0
-      ) {
-        this.providerObservationCache = {
-          ok: true,
-          day_key: dayKey,
+      if (String(live?.day || "") === dayKey) {
+        newer({
+          rows_written: Number(live?.rows_written),
+          observed_at: new Date(Number(live?.measured_at)).toISOString(),
           account_id: String(this.env.CLOUDFLARE_ACCOUNT_ID || "live-provider"),
-          rows_written: liveRowsWritten,
-          observed_at: new Date(measuredAt).toISOString(),
           source: "live_provider",
-        }
-        return this.providerObservationCache
+        })
       }
-    } catch {
-      // Keep the original projection failure below. Unknown capacity must never
-      // become admitted capacity merely because both observation paths failed.
-    }
-    this.providerObservationCache = failure
-    return this.providerObservationCache
+    } catch {}
+    return this.providerObservationCache?.day_key === dayKey ? this.providerObservationCache : null
   }
 
   cycleUsageRow(cycleKey) {
@@ -20215,7 +20194,11 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
               ? "rows_written_daily_smart"
               : null,
       updated_at: row?.updated_at || null,
-      mutation_lanes: this.mutationReservations.snapshot(dayKey, rowsWritten),
+      mutation_lanes: this.mutationReservations.snapshot(dayKey, {
+        provider_rows_written: this.providerObservationCache?.rows_written,
+        observed_at: this.providerObservationCache?.observed_at,
+        local_rows_written: rowsWritten,
+      }),
     }
   }
 
@@ -20246,26 +20229,17 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/reserve-mutation-writes") {
+      // B-897: a missing observation is not a refusal. The ledger then counts
+      // every receipt since midnight at worst case (see the lane module).
       const providerObservation = await this.providerD1Observation(dayKey)
-      if (providerObservation.ok !== true) {
-        return Response.json(
-          {
-            ...providerObservation,
-            disposition: "pending_or_retryable_refusal",
-          },
-          { status: 429 },
-        )
-      }
-      const providerRowsWritten = Math.max(
-        Math.max(0, Number(this.usageRow(dayKey)?.rows_written || 0) || 0),
-        providerObservation.rows_written,
-      )
       const reservation = this.mutationReservations.reserve({
         day: dayKey,
         lane: payload?.lane,
         operation_id: payload?.operation_id,
         units: payload?.units,
-        provider_rows_written: providerRowsWritten,
+        provider_rows_written: providerObservation?.rows_written,
+        observed_at: providerObservation?.observed_at,
+        local_rows_written: this.usageRow(dayKey)?.rows_written,
       })
       return Response.json(reservation, { status: reservation.ok === false ? 429 : 200 })
     }
@@ -20282,7 +20256,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/mutation-reservation-snapshot") {
-      return Response.json(this.mutationReservations.snapshot(dayKey))
+      const providerObservation = await this.providerD1Observation(dayKey)
+      return Response.json(
+        this.mutationReservations.snapshot(dayKey, {
+          provider_rows_written: providerObservation?.rows_written,
+          observed_at: providerObservation?.observed_at,
+          local_rows_written: this.usageRow(dayKey)?.rows_written,
+        }),
+      )
     }
 
     if (url.pathname === "/snapshot") {
@@ -20900,6 +20881,44 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
 
+  // B-888 (30 Sep 2026): one vote owner. The per-gene vote authority holds the
+  // votes; D1's summary is a delivered copy that can lag for as long as a
+  // delivery waits on budget admission. Electing here from that copy made
+  // reconcile promote ADO's newest zero-vote upload while the authority
+  // published the upvoted one, so the catalog and the gene page disagreed for
+  // three days. Every caller now elects from the authority's own summaries,
+  // exactly like the vote projection job. If the authority cannot be read,
+  // nothing is elected from D1: the durable projection job owns the retry.
+  if (iconoplasmVoteCoordinatorBinding(env)) {
+    let coordinatorState = null
+    try {
+      coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: symbolNorm })
+    } catch (error) {
+      const deferred = await scheduleVoteProjectionRefresh(env, null, {
+        symbol: symbolNorm,
+        actorId,
+        reason,
+      })
+      return {
+        ok: true,
+        changed: false,
+        code: "DEFERRED_TO_VOTE_AUTHORITY",
+        durable: Boolean(deferred?.durable),
+        error: sanitizeText(String(error?.message || error), 300),
+      }
+    }
+    return autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+      symbol: symbolNorm,
+      actorId,
+      reason,
+      assetSummaries: Array.isArray(coordinatorState?.asset_summaries)
+        ? coordinatorState.asset_summaries
+        : [],
+    })
+  }
+
+  // No vote authority is bound (isolated tests and tooling only): D1's summary
+  // is then the only vote source there is.
   const currentRow = await env.ICONOPLASM_DB.prepare(
     `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
      FROM icono_publish_state
@@ -21053,25 +21072,6 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   }
 }
 
-async function getArtistStyleBlacklistRow(env, artistTag) {
-  if (!env.ICONOPLASM_DB) return null
-  const artistTagNorm = normalizeArtistTag(artistTag)
-  if (!artistTagNorm) return null
-  try {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
-       FROM icono_artist_style_blacklist
-       WHERE lower(artist_tag) = ?
-       LIMIT 1`,
-    )
-      .bind(artistTagNorm)
-      .first()
-    return row || null
-  } catch {
-    return null
-  }
-}
-
 async function iconoExistingAssetsBatch(env, rawItems) {
   const out = new Map()
   if (!env.ICONOPLASM_DB || !Array.isArray(rawItems) || rawItems.length <= 0) return out
@@ -21129,69 +21129,6 @@ async function iconoExistingAssetsBatch(env, rawItems) {
       const assetSha = normalizeSha256(row?.asset_sha256 || "")
       if (!symbol || !assetSha) continue
       out.set(`${symbol}|${assetSha}`, row)
-    }
-  } catch {}
-  return out
-}
-
-async function iconoPublishStateBatch(env, rawSymbols) {
-  const out = new Map()
-  if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return out
-  const symbols = Array.from(
-    new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
-  )
-  if (symbols.length <= 0) return out
-  try {
-    const { results } = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT upper(value) AS symbol
-         FROM json_each(?)
-       )
-       SELECT
-         ps.gene_symbol AS symbol,
-         COALESCE(ps.current_asset_sha256, '') AS current_asset_sha256,
-         COALESCE(ps.admin_override, 0) AS admin_override
-       FROM icono_publish_state ps
-       JOIN incoming i
-         ON ps.gene_symbol = i.symbol`,
-    )
-      .bind(JSON.stringify(symbols))
-      .all()
-    for (const row of results || []) {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      if (!symbol) continue
-      out.set(symbol, {
-        current_asset_sha256: normalizeSha256(row?.current_asset_sha256 || "") || null,
-        admin_override: Number(row?.admin_override || 0) > 0,
-      })
-    }
-  } catch {}
-  return out
-}
-
-async function iconoBlacklistRowsBatch(env, rawArtistTags) {
-  const out = new Map()
-  if (!env.ICONOPLASM_DB || !Array.isArray(rawArtistTags) || rawArtistTags.length <= 0) return out
-  const artistTags = Array.from(
-    new Set(rawArtistTags.map((value) => normalizeArtistTag(value)).filter(Boolean)),
-  )
-  if (artistTags.length <= 0) return out
-  try {
-    const { results } = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT lower(value) AS artist_tag
-         FROM json_each(?)
-       )
-       SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
-       FROM icono_artist_style_blacklist
-       WHERE lower(artist_tag) IN (SELECT artist_tag FROM incoming)`,
-    )
-      .bind(JSON.stringify(artistTags))
-      .all()
-    for (const row of results || []) {
-      const artistTag = normalizeArtistTag(row?.artist_tag || "")
-      if (!artistTag) continue
-      out.set(artistTag, row)
     }
   } catch {}
   return out
@@ -21299,24 +21236,6 @@ function compareAdminLeaderRows(left, right, currentAssetSha = null) {
       ) ||
     compareNullableTextAsc(left?.asset_sha256 || "", right?.asset_sha256 || "")
   return compareCaretakerWeightedCandidates(left, right, existingTieBreak)
-}
-
-async function listAdminReadModelSymbols(env) {
-  if (!env.ICONOPLASM_DB) return []
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol FROM icono_gene_catalog
-     UNION
-     SELECT gene_symbol FROM icono_portrait_assets
-     UNION
-     SELECT gene_symbol FROM icono_publish_state`,
-  ).all()
-  return Array.from(
-    new Set(
-      (Array.isArray(resp?.results) ? resp.results : [])
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter(Boolean),
-    ),
-  )
 }
 
 async function listAdminReadModelSymbolsAfter(env, rawAfterSymbol = "", limit = 0) {
@@ -29786,21 +29705,28 @@ async function publishedDeltaGeneBlotPriorityPage(env, { after = "", limit = 25 
   const pageLimit = Math.max(1, Math.min(25, limit))
   const remaining = symbols.filter((symbol) => symbol > after)
   const page = remaining.slice(0, pageLimit)
+  // B-894: these reads used to run one after another, so a page cost the sum
+  // of up to 25 Bunny round trips (5-8 s measured) and one slow object held the
+  // drain's only worker thread past its patience. Same reads, same bound,
+  // overlapped: the page now costs roughly its slowest object.
+  const loaded = await Promise.all(
+    page.map((symbol) =>
+      readPublishedBunnyCardObject(env, chain.entries.get(symbol).card.key, (value) =>
+        Boolean(value?.symbol === symbol && value?.payload),
+      ),
+    ),
+  )
   const cards = new Map()
-  for (const symbol of page) {
-    const entry = chain.entries.get(symbol)
-    const card = await readPublishedBunnyCardObject(env, entry.card.key, (value) =>
-      Boolean(value?.symbol === symbol && value?.payload),
-    )
-    if (!card?.payload) {
+  page.forEach((symbol, index) => {
+    if (!loaded[index]?.payload) {
       throw geneBlotServiceError(
         503,
         "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
         "An advertised gene card is unavailable.",
       )
     }
-    cards.set(symbol, card.payload)
-  }
+    cards.set(symbol, loaded[index].payload)
+  })
   const ready = await exactReadyGeneBlotsForPublishedCards(env, cards)
   const items = page
     .map((symbol) =>
@@ -32280,9 +32206,16 @@ async function readPublishedCardCatalogArtifact(
   }
   let parsed = await readPublishedCardCatalogManifest(env, artifactVersion)
   // A one-gene hover or site card must not parse a 750-card packed shard on a
-  // cold Free Worker. Bulk pages keep packed reads; <=10 cards use small exact
-  // objects, bounded even when every directory and storage fallback is cold.
-  if (parsed?.storage === CARD_PUBLICATION_STORAGE && requestedSymbols?.length <= 10) {
+  // cold Free Worker. Bulk pages keep packed reads; up to
+  // PUBLISHED_EXACT_CARD_READ_LIMIT cards use small exact objects, bounded even
+  // when every directory and storage fallback is cold. B-885: the signed-in
+  // home window asks for 12 SCATTERED cards; at 11-12 it fell through to packed
+  // reads of up to 12 shards (~2 MB of JSON each, all at once) and died with
+  // Cloudflare 1102 (memory) on the owner's home page.
+  if (
+    parsed?.storage === CARD_PUBLICATION_STORAGE &&
+    requestedSymbols?.length <= PUBLISHED_EXACT_CARD_READ_LIMIT
+  ) {
     return readPublishedBunnyCards(env, parsed, requestedSymbols)
   }
   const contentAddressed =
@@ -35483,13 +35416,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
-        if (
-          code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
-          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
-        ) {
+        if (code === "MUTATION_PROVIDER_HEADROOM_RESERVED") {
           return done(
             "discoveries_batch_capacity",
             json(
@@ -35624,6 +35551,38 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const userId = normalizeUserId(sessionUser.user_id)
       const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
+      if (url.searchParams.get("shape") === "compact" && !showAllRequested) {
+        // B-885: the bare shelf. The home page joins every sort field from
+        // the published catalog it already downloads and sorts locally, so
+        // this reads only the chronology: no per-gene enrichment join (which
+        // was ~4.6 D1 rows per gene on every non-newest home view) and no
+        // server sort. Newest first, the order the page shows by default.
+        const compactRows = (await compactShelfBaseRows(env, { userId }))
+          .map((row) => ({
+            gene_symbol: row.gene_symbol,
+            first_discovered_at: row.first_discovered_at,
+            last_encountered_at: row.last_encountered_at,
+            encounter_count: row.encounter_count,
+          }))
+          .reverse()
+        return done(
+          "discoveries_me",
+          json(
+            {
+              ok: true,
+              authenticated: true,
+              shape: "compact",
+              user: { id: userId, username: sessionUser.username || null },
+              order: requestedOrder,
+              ...(requestedSeed ? { seed: requestedSeed } : {}),
+              discoveries: compactRows,
+              discovered_count: compactRows.length,
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
+      }
       const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
       const discoveries = showAllApplied
         ? await listAllCatalogGeneDiscoveriesForAdmin(env, {
@@ -35961,12 +35920,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
       } catch (error) {
         const code = String(error?.code || "")
-        const capacityRefusal =
-          code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
-          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
+        const capacityRefusal = code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
         if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
           return done(
             "discoveries_merge_capacity",
@@ -36026,6 +35980,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             merged_symbols: result.merged_symbols,
             checked_symbols: result.merged_symbols,
             discovered_symbols: result.merged_symbols,
+            dropped_symbols: result.dropped_symbols,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -37852,6 +37807,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         ...mutableGeneContext,
         manifestation: exactSource.prose,
         manifestation_tags: exactSource.tags,
+        // The grouping of this exact source, not of whatever the gene context held.
+        manifestation_fields_json: exactSource.tags_fields_json,
         sample_label: exactSource.source_sample_label,
         sample_number: exactSource.source_sample_number,
         sample_text_hash: exactSource.source_sample_text_sha256,

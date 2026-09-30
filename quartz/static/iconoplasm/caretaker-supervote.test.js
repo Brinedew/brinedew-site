@@ -100,9 +100,9 @@ test("the selected ordinary vote button carries a non-color 10x marker and no pa
     selected.parentElement.querySelector("[data-icono-caretaker-supervote-mark]").textContent,
     "+10",
   )
-  assert.equal(selected.querySelector("[data-icono-caretaker-supervote-mark]"), null)
+  assert.equal(selected.querySelector("[data-icono-caretaker-supervote-mark]") === null, true)
   assert.match(selected.getAttribute("aria-label"), /Long-press to recall your \+10/)
-  assert.equal(root.querySelector(".icono-caretaker-supervote"), null)
+  assert.equal(root.querySelector(".icono-caretaker-supervote") === null, true)
   assert.equal(root.querySelector(`[data-icono-gene-vote-box]`).dataset.imageScore, "4")
 })
 

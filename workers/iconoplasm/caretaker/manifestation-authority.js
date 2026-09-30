@@ -2,7 +2,6 @@ export {
   MANIFESTATION_AUTHORITY_EVENT_TYPE,
   ManifestationAuthorityError,
 } from "./manifestation-authority-contract.js"
-export { readManifestationAuthorityGeneState } from "./manifestation-authority-repository.js"
 export {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
   claimCaretakerAssignment,
@@ -30,7 +29,6 @@ export {
 export { createCaretakerManifestationHttpHandler } from "./manifestation-authority-http-handlers.js"
 export { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
 export * from "./manifestation-authority-sync.js"
-export * from "./manifestation-authority-checkpoints.js"
 export * from "./manifestation-derivative-commands.js"
 export * from "./manifestation-upload-intents.js"
 export { projectAuthorityAccountStatus } from "./authority-account-projection.js"

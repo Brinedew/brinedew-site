@@ -1,18 +1,12 @@
-// Starter rows mirror the authoring prompt; saved category names are never a whitelist.
-export const TAG_CATEGORIES = [
-  "archetype",
-  "body",
-  "face",
-  "hair",
-  "outfit",
-  "accessories",
-  "fantastical",
-  "action",
-  "pose",
-  "signature",
-  "background",
-  "composition",
-]
+// B-879: the category tree, the pose_mood rename and the retired colors category
+// live in shared/iconoplasm-tag-categories.js, the one copy on the website.
+import {
+  TAG_CATEGORIES,
+  promptTagsWithoutRetired,
+  upcastTagFields,
+} from "./generated/tag-categories.js?v=34136cdc4f5ec6dd"
+
+export { TAG_CATEGORIES }
 
 export function readTagFields(source) {
   return JSON.parse(source?.dataset.fieldsJson || "{}")
@@ -30,7 +24,11 @@ export function mountCaretakerTagEditor(form) {
   const host = form?.querySelector("[data-icono-caretaker-tag-categories]")
   if (!source || !host) return
   const doc = host.ownerDocument
-  const fields = Object.assign(Object.create(null), readTagFields(source))
+  const saved = readTagFields(source)
+  // Retired colors tags are parasitic in image prompts: they leave the editor and
+  // the flat list together, so the next save stores neither.
+  source.value = promptTagsWithoutRetired(source.value, saved)
+  const fields = upcastTagFields(saved)
   const known = new Set(
     Object.values(fields)
       .flat()
@@ -44,7 +42,6 @@ export function mountCaretakerTagEditor(form) {
       ...ungrouped,
     ]
   }
-  for (const key of TAG_CATEGORIES) if (!Object.hasOwn(fields, key)) fields[key] = []
   source.dataset.fieldsJson = JSON.stringify(fields)
 
   function button(text, label, action) {
@@ -159,34 +156,6 @@ export function mountCaretakerTagEditor(form) {
       row.append(label, values)
       host.append(row)
     }
-    const addCategory = button("+ Category", "Add category", () => {
-      const input = doc.createElement("input")
-      input.className = "icono-caretaker-tag-input"
-      input.placeholder = "Category"
-      input.setAttribute("aria-label", "Category name")
-      addCategory.replaceWith(input)
-      input.addEventListener("keydown", (event) => {
-        if (event.isComposing) return
-        if (event.key === "Escape") {
-          event.preventDefault()
-          render()
-        }
-        if (event.key !== "Enter") return
-        event.preventDefault()
-        const name = input.value.trim()
-        if (!name) return
-        if (!Object.hasOwn(fields, name)) fields[name] = []
-        commit()
-        render()
-        const row = [...host.querySelectorAll("[data-tag-category]")].find(
-          (node) => node.dataset.tagCategory === name,
-        )
-        row?.querySelector("[data-add-tag]")?.click()
-      })
-      input.focus()
-    })
-    addCategory.className = "icono-caretaker-add-category"
-    host.append(addCategory)
   }
   render()
   source.dataset.fieldsJson = JSON.stringify(fields)

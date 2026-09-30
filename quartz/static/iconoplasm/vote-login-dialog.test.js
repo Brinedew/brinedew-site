@@ -78,7 +78,7 @@ test("guest voting opens one native modal and deliberately focuses the Discord a
   assert.equal(dialog.open, true, "showModal must put the dialog in the top layer")
   assert.deepEqual(harness.showModalCalls, [dialog])
   assert.equal(harness.createdDialogs.length, 1)
-  assert.equal(harness.document.body.lastElementChild, dialog)
+  assert.equal(harness.document.body.lastElementChild === dialog, true)
   assert.equal(dialog.getAttribute("aria-labelledby"), "icono-vote-login-title")
   assert.equal(dialog.querySelector("h2")?.textContent, "Log in with Discord to vote")
   assert.deepEqual(
@@ -91,17 +91,15 @@ test("guest voting opens one native modal and deliberately focuses the Discord a
 
   const loginLink = dialog.querySelector("[data-icono-vote-login-link]")
   assert.equal(loginLink?.getAttribute("href"), "/api/auth/discord?return_to=%2Fgenes%2FTP53")
-  assert.deepEqual(harness.focusCalls.at(-1), {
-    element: loginLink,
-    options: { preventScroll: true },
-  })
+  assert.equal(harness.focusCalls.at(-1)?.element === loginLink, true)
+  assert.deepEqual(harness.focusCalls.at(-1)?.options, { preventScroll: true })
 
   const repeated = openVoteLoginDialog({
     document: harness.document,
     loginUrl: "/ignored-while-open",
     returnFocus: harness.source,
   })
-  assert.equal(repeated, dialog)
+  assert.equal(repeated === dialog, true)
   assert.equal(harness.createdDialogs.length, 1, "repeated auth failures must not stack modals")
 })
 
@@ -131,12 +129,10 @@ test("native close and cancel lifecycles remove the modal and restore its vote c
 
   dialog.querySelector(".icono-vote-login-close")?.dispatchEvent(new harness.window.Event("click"))
 
-  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]"), null)
+  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]") === null, true)
   assert.equal(dialog.returnValue, "dismiss")
-  assert.deepEqual(harness.focusCalls.at(-1), {
-    element: harness.source,
-    options: { preventScroll: true },
-  })
+  assert.equal(harness.focusCalls.at(-1)?.element === harness.source, true)
+  assert.deepEqual(harness.focusCalls.at(-1)?.options, { preventScroll: true })
 
   const reopened = openVoteLoginDialog({
     document: harness.document,
@@ -147,8 +143,8 @@ test("native close and cancel lifecycles remove the modal and restore its vote c
   assert.equal(reopened.dispatchEvent(cancel), true, "Escape must remain on the native cancel path")
   reopened.close()
 
-  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]"), null)
-  assert.equal(harness.focusCalls.at(-1)?.element, harness.source)
+  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]") === null, true)
+  assert.equal(harness.focusCalls.at(-1)?.element === harness.source, true)
 })
 
 test("clicking the backdrop dismisses, while clicks inside the card stay open", () => {
@@ -166,9 +162,9 @@ test("clicking the backdrop dismisses, while clicks inside the card stay open", 
   assert.equal(inside.open, true, "content clicks must not dismiss even with outside coordinates")
 
   clickAt(harness.window, inside, 50, 50)
-  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]"), null)
+  assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]") === null, true)
   assert.equal(inside.returnValue, "dismiss")
-  assert.equal(harness.focusCalls.at(-1)?.element, harness.source)
+  assert.equal(harness.focusCalls.at(-1)?.element === harness.source, true)
 })
 
 test("the modal refuses to create a dead Discord action", () => {

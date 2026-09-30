@@ -147,9 +147,3 @@ export async function hydratePublicCanonicalGeneRecords(
   await Promise.all(workers)
   return output
 }
-
-export async function hydratePublicCanonicalGeneRecord(env, record, dependencies) {
-  if (!record) return record
-  const [hydrated] = await hydratePublicCanonicalGeneRecords(env, [record], dependencies)
-  return hydrated
-}

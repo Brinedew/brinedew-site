@@ -15,7 +15,9 @@
  */
 import { compareCaretakerWeightedCandidates } from "../caretaker/caretaker-supervote.js"
 
-export const GENE_AUTHORITY_SELECTION_REFERENCE_SCHEMA = "gene-authority-selection-v1"
+// v2 (B-876): the reference also carries the candidate-set revision, because
+// the published card includes the whole gallery, not only the winner.
+export const GENE_AUTHORITY_SELECTION_REFERENCE_SCHEMA = "gene-authority-selection-v2"
 
 const SHA256 = /^[a-f0-9]{64}$/
 
@@ -133,6 +135,7 @@ export function composeGeneSelectionReference(fields = {}) {
       .slice(0, 32)}`,
     `winner=${winner?.asset_sha256 || "none"}`,
     `candidate_revision=${Math.max(0, Number(winner?.revision || 0) || 0)}`,
+    `candidate_set=${Math.max(0, Number(fields?.candidateSetRevision || 0) || 0)}`,
     `caretaker=${Math.max(0, Number(fields?.caretakerSupervoteVersion || 0) || 0)}:${Number(fields?.caretakerDirection || 0) || 0}`,
     `admin=${fields?.adminOverride ? 1 : 0}`,
   ]

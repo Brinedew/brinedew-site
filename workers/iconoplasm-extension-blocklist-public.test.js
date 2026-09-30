@@ -5,10 +5,7 @@ import test from "node:test"
 // ARCHITECTURE FENCE [IPD-008]: public manifest traffic must stay entirely on
 // published artifacts even when an ICONOPLASM_DB binding exists.
 
-import {
-  iconoplasmExtensionBlocklistKvKey,
-  resetIconoplasmExtensionBlocklistPublicCacheForTests,
-} from "./iconoplasm-extension-blocklist-policy.js"
+import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
 import { resetIconoplasmRecognitionPolicyPublicCacheForTests } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -115,7 +112,6 @@ async function getManifest(env, headers = {}) {
 }
 
 test("public manifest skips a corrupt higher key, stays KV-only, and includes revision in ETag", async () => {
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const kv = publicManifestKv()
   const env = {
@@ -141,7 +137,6 @@ test("public manifest skips a corrupt higher key, stays KV-only, and includes re
   assert.equal(unchanged.status, 304)
 
   kv.entries.set(iconoplasmExtensionBlocklistKvKey(2), projection(2, ARCH_VERSION, ["ARCH"]))
-  resetIconoplasmExtensionBlocklistPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
   const changed = await getManifest(env, { "If-None-Match": firstEtag })
   const changedPayload = await changed.json()

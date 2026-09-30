@@ -10,7 +10,6 @@ import {
   endCaretakerAssignment,
   offerCaretakerAssignment,
   readCaretakerGeneDossier,
-  readManifestationAuthorityGeneState,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
   registerGeneIdentity,
@@ -908,6 +907,16 @@ test("only the gene's caretaker can withdraw a lineage; fallback and restoration
 test("the gene's current caretaker manages every lineage; a former author has no veto (B-860)", async (t) => {
   const context = await bootstrap(t, "4101")
   const first = await saveFirst(context.db, context, "4101")
+  // Versions carry names, as on Wikipedia (owner, 27 Sep 2026): stewardship
+  // takes away the author's veto, not their credit. The viewer sees "You".
+  context.db.raw
+    .prepare("UPDATE icono_authority_accounts SET public_credit_label = ? WHERE account_id = ?")
+    .run("Ada Lovelace", USER)
+  const authorLabelFor = async (actorAccountId) =>
+    (
+      await readCaretakerGeneDossier(context.db, { geneId: context.geneId, actorAccountId })
+    ).manifestations.find((item) => item.manifestation_id === first.manifestation_id)?.author_label
+  assert.equal(await authorLabelFor(USER), "You")
   const selected = await selectSavedRevision(context.db, {
     assignmentId: context.assignmentId,
     geneId: context.geneId,
@@ -1020,6 +1029,16 @@ test("the gene's current caretaker manages every lineage; a former author has no
     ...command("command_steward_restore_4101", "b", OTHER),
   })
   assert.equal(restored.status, "active")
+
+  // The next caretaker sees the predecessor's name on the predecessor's text;
+  // a removed account shows as removed, never under its old name.
+  assert.equal(await authorLabelFor(OTHER), "Ada Lovelace")
+  context.db.raw
+    .prepare(
+      "UPDATE icono_authority_accounts SET status = 'tombstoned', erasure_requested_at = ?, tombstoned_at = ? WHERE account_id = ?",
+    )
+    .run(NOW, NOW, USER)
+  assert.equal(await authorLabelFor(OTHER), "Removed account")
 })
 
 test("assignment end atomically freezes the final retain or withdraw policy", async (t) => {
@@ -1173,7 +1192,12 @@ test("the schema rejects predictable locators, oversized bodies, invalid JSON, a
     }),
     { code: "INVALID_BODY_SIZE" },
   )
-  const snapshot = await readManifestationAuthorityGeneState(context.db, context.geneId)
-  assert.equal(snapshot.last_event_sequence > 0, true)
-  assert.equal(snapshot.canonical.manifestation_revision_id, context.seedRevisionId)
+  // The refused save left the head untouched.
+  const head = context.db.raw
+    .prepare(
+      "SELECT last_event_sequence, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
+    )
+    .get(context.geneId)
+  assert.equal(head.last_event_sequence > 0, true)
+  assert.equal(head.canonical_revision_id, context.seedRevisionId)
 })

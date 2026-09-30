@@ -13,7 +13,6 @@ import {
   claimCompactDiscoveryMigrationLease,
   migrateLegacyDiscoveryPage,
 } from "./iconoplasm/discovery-compact-migrate.js"
-import { evolveAndPersistDiscoveryDictionary } from "./iconoplasm/discovery-ordinal-store.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
 // the actual handlers with the actual compact SQL, not a SQL-string mock.
@@ -195,7 +194,6 @@ async function buildEnv({
       "INSERT INTO icono_admin_gene_rollup (gene_symbol, live_upvotes, live_score, live_created_at, current_asset_sha256) VALUES (?, ?, ?, ?, ?)",
     )
     .run("TP53", 3, 3, "2025-04-01T00:00:01Z", "a".repeat(64))
-  await evolveAndPersistDiscoveryDictionary(db, { symbols: CATALOG.map(([symbol]) => symbol) })
   const gatewayEnv = {
     ICONOPLASM_DB: db,
     GAME_SESSIONS: new FakeGameSessions(sessions),
@@ -502,6 +500,27 @@ test("guest merge converges into compact membership without double counting", as
   assert.equal(JSON.parse(after.active_events_json).length, 2)
 })
 
+// Production's dictionary is lazy (3,678 of ~19k genes had ordinals on
+// 2026-09-26). A merged catalog gene nobody has discovered yet must be
+// recorded, and a name outside the catalog must be reported, not stored.
+test("guest merge records never-seen catalog genes and reports non-catalog names", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const response = await invoke(
+    post("/api/iconoplasm/discoveries/merge", {
+      cookie: "session=abc",
+      body: { symbols: ["TP53", "NOTAGENE"] },
+    }),
+    env,
+  )
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.deepEqual(payload.dropped_symbols, ["NOTAGENE"])
+  const state = await env.gatewayDb
+    .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+    .first()
+  assert.equal(Number(state.member_count), 1)
+})
+
 test("guest merge reports capacity refusal as retryable pending work instead of a crash", async () => {
   const env = await buildEnv({
     sessions: sessionFor("reader"),
@@ -607,4 +626,66 @@ test("admins may show the full catalog while non-admins cannot", async () => {
     await invoke(get("/api/iconoplasm/discoveries/me?show_all=1", { cookie: "session=abc" }), env)
   ).json()
   assert.equal(nonAdmin.show_all_applied, false)
+})
+
+// B-887 step 5: the hourly publisher named EVERY shared discovery each run
+// (~15k D1 rows an hour on 27 Sep, 42% of all reads with the shared window,
+// growing with every new discovery). It now names only ordinals that are new
+// since the published list; a quiet hour costs the shared-state row alone. A
+// renamed canonical symbol is picked up by one full rebuild per UTC day.
+test("the hourly symbol publisher names only new shared ordinals (B-887)", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const db = env.gatewayEnv.ICONOPLASM_DB
+  const named = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    const statement = prepare(sql)
+    if (!/FROM icono_discovery_ordinals_v2\s+WHERE ordinal IN/.test(sql)) return statement
+    const bind = statement.bind.bind(statement)
+    statement.bind = (...args) => {
+      named.push(...JSON.parse(String(args[0] || "[]")))
+      return bind(...args)
+    }
+    return statement
+  }
+  const publish = (now) => publishSharedGeneDiscoverySymbols(env.gatewayEnv, { now })
+  const day1 = Date.parse("2026-09-28T10:00:00Z")
+
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("TP53", 1000), hoverEncounter("EGFR", 1001)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  const first = await publish(day1)
+  assert.equal(first.changed, true)
+  assert.equal(named.length, 2, "the first publish names every shared ordinal")
+
+  named.length = 0
+  const quiet = await publish(day1 + 3_600_000)
+  assert.equal(quiet.changed, false)
+  assert.equal(named.length, 0, `a quiet hour named ${named.length} genes`)
+
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:2",
+    encounters: [hoverEncounter("FURIN", 2000), hoverEncounter("TP53", 2001)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  named.length = 0
+  const grown = await publish(day1 + 7_200_000)
+  assert.equal(grown.changed, true)
+  assert.equal(named.length, 1, `named ${named.length} genes for one new discovery`)
+  const published = JSON.parse(
+    await env.gatewayEnv.KV.get("iconoplasm:shared-gene-discovery-symbols:v1"),
+  )
+  assert.deepEqual(published.symbols, ["EGFR", "FURIN", "TP53"])
+
+  // The next UTC day rebuilds in full once, then goes quiet again.
+  named.length = 0
+  await publish(day1 + 24 * 3_600_000)
+  assert.equal(named.length, 3, "the daily full rebuild did not run")
+  named.length = 0
+  await publish(day1 + 25 * 3_600_000)
+  assert.equal(named.length, 0)
 })

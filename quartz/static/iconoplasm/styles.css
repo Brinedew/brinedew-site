@@ -308,12 +308,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   min-width: 0;
 }
 
-.icono-home-auth-kicker {
+.icono-gene-request-summary-title {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--dark);
 }
 
 .icono-home-auth-title {
@@ -992,9 +991,21 @@ sl-dialog:not(:defined) {
   justify-content: space-between;
 }
 
+/* B-883: the queue action sits at the dialog's bottom-right. B-884: "Select
+   all N favorites" is the bar's secondary action, on the left; Queue stays
+   right even when it is hidden (no favorites) or the row ever wraps. */
 .icono-request-free-actions {
-  justify-content: flex-start;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.icono-request-free-actions > .icono-request-select-all-favorites {
+  margin-right: auto;
+}
+
+.icono-request-free-actions > [hidden] {
+  display: none;
 }
 
 /* B-867: Generate and Publish are always both present (Publish greys out
@@ -1436,6 +1447,502 @@ img-comparison-slider.rendered [slot="second"] {
   color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
 }
 
+/* ───────── B-883: the Free queue style picker ─────────
+   A grid of 3:4 style cards beside a "Your batch" tray, inside a dialog of
+   fixed height. Only the dialog title and the method tabs stay put; the view
+   switch, search and cards scroll together in [data-icono-request-browse]. */
+.icono-request-dialog::part(panel) {
+  height: min(48rem, calc(100dvh - 2rem));
+}
+
+.icono-request-dialog::part(body) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.icono-request-dialog .icono-request-dialog-shell,
+.icono-request-dialog .icono-request-shell,
+.icono-request-dialog .icono-request-actions,
+.icono-request-dialog .icono-request-lanes {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.icono-request-dialog .icono-request-lane {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.icono-request-dialog .icono-request-lane--api {
+  overflow-y: auto;
+}
+
+.icono-request-dialog .icono-request-lane--queue {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.icono-request-dialog .icono-request-lane[hidden] {
+  display: none;
+}
+
+/* Column, so the browser fills the form on the main axis. (The generic form
+   rule's `align-items: start` would stop a row-direction stretch, and the
+   grid would grow to its content and be clipped instead of scrolling.) */
+.icono-request-lane--queue .icono-request-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.icono-request-browser {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  /* One row capped at the dialog height, so the grid scrolls inside it
+     instead of growing and being clipped by the panel. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1rem;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+/* Desktop: the view switch and the search share the top row. Phones move the
+   search under the cards (see the media query below). */
+.icono-request-browse {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "views find"
+    "grid grid";
+  align-content: start;
+  align-items: center;
+  gap: 0.9rem 0.6rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.2rem 0.35rem 1rem 0.2rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.icono-request-browse > .icono-request-views {
+  grid-area: views;
+  justify-self: start;
+}
+
+.icono-request-find-dock {
+  grid-area: find;
+  min-width: 0;
+}
+
+.icono-request-browse > .icono-request-grid {
+  grid-area: grid;
+}
+
+/* The view switch is the method tabs' segmented look at the small size. */
+.icono-request-views {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: var(--icono-control-radius);
+  background: color-mix(in srgb, var(--ui-border) 34%, var(--light) 66%);
+}
+
+.icono-request-view {
+  appearance: none;
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--icono-control-radius);
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
+  font: 600 0.76rem / 1 var(--icono-action-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.icono-request-view[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--ui-border) 76%, var(--dark) 24%);
+  background: var(--light);
+  color: var(--dark);
+}
+
+.icono-request-view span {
+  font-weight: 400;
+  color: color-mix(in srgb, var(--dark) 55%, var(--light) 45%);
+}
+
+.icono-request-view:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-request-find {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  box-sizing: border-box;
+  width: 16rem;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--icono-action-border);
+  border-radius: var(--icono-control-radius);
+  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+  color: color-mix(in srgb, var(--dark) 58%, var(--light) 42%);
+}
+
+.icono-request-find:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--ui-border) 42%);
+}
+
+.icono-request-find svg {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.icono-request-find input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.35rem 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--dark);
+  font: 0.8rem / 1.2 var(--icono-action-font);
+}
+
+.icono-request-find input::placeholder {
+  color: color-mix(in srgb, var(--dark) 46%, var(--light) 54%);
+}
+
+.icono-request-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.25rem, 1fr));
+  gap: 1.1rem 0.85rem;
+  align-content: start;
+}
+
+.icono-request-grid-empty {
+  grid-column: 1 / -1;
+  margin: 1.5rem 0;
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+  font: 0.8rem / 1.45 var(--icono-action-font);
+}
+
+.icono-request-grid-empty p {
+  margin: 0 0 0.75rem;
+}
+
+/* The whole card is the pick target (the click handler forwards to the
+   toggle); only the star keeps its own action. */
+.icono-request-card {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.icono-request-card-toggle {
+  appearance: none;
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Portraits are 3:4, so the card is too: one portrait, or a 2x2 of them. */
+.icono-request-card-art {
+  position: relative;
+  display: grid;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--icono-ring-image) 74%, var(--dark) 12%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--ui-bg) 84%, white 16%);
+  transition: border-color 0.14s var(--icono-ease-out);
+}
+
+.icono-request-card-art.is-mosaic {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: var(--light);
+}
+
+.icono-request-card-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+
+.icono-request-card-empty {
+  align-self: center;
+  justify-self: center;
+  color: color-mix(in srgb, var(--dark) 58%, var(--light) 42%);
+  font: 0.76rem / 1.2 var(--icono-action-font);
+}
+
+.icono-request-card:hover .icono-request-card-art {
+  border-color: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
+}
+
+.icono-request-card-toggle:focus-visible {
+  outline: none;
+}
+
+.icono-request-card-toggle:focus-visible .icono-request-card-art,
+.icono-request-card.is-selected .icono-request-card-art {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-request-card-check {
+  position: absolute;
+  top: 0.45rem;
+  left: 0.45rem;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: var(--icono-radius-md);
+  background: var(--accent);
+  color: var(--light);
+  opacity: 0;
+  transition: opacity 0.14s var(--icono-ease-out);
+}
+
+.icono-request-card-check svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.icono-request-card.is-selected .icono-request-card-check {
+  opacity: 1;
+}
+
+/* Number, star, then the count pushed right: the gene page's
+   "Emulsion 21329 ☆" pattern, on the card's caption line. */
+.icono-request-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 0;
+  margin-top: 0.3rem;
+  padding: 0 0 0 0.1rem;
+}
+
+.icono-request-card-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dark);
+  font: 600 0.92rem / 1.2 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icono-request-card-count {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--dark) 58%, var(--light) 42%);
+  font: 0.72rem / 1.2 var(--icono-action-font);
+  white-space: nowrap;
+}
+
+/* The style is already queued for this gene: said on the card, not in prose. */
+.icono-request-card-queued {
+  margin-left: auto;
+  padding: 0.12rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--ui-border) 45%);
+  color: color-mix(in srgb, var(--accent) 78%, var(--dark) 22%);
+  font: 600 0.7rem / 1.2 var(--icono-action-font);
+  white-space: nowrap;
+}
+
+.icono-request-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  padding: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--light) 96%, white 4%);
+}
+
+.icono-request-batch-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.icono-request-batch-title {
+  color: var(--dark);
+  font: 600 0.88rem / 1.2 var(--icono-action-font);
+}
+
+.icono-request-batch-count {
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+  font: 0.78rem / 1.2 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.icono-request-batch-meter {
+  height: 3px;
+  background: color-mix(in srgb, var(--ui-border) 70%, var(--light) 30%);
+}
+
+.icono-request-batch-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.18s var(--icono-ease-out);
+}
+
+.icono-request-batch-list {
+  display: grid;
+  flex: 0 1 auto;
+  align-content: start;
+  gap: 0.35rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.icono-request-batch-row {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
+  background: var(--light);
+}
+
+.icono-request-batch-thumb {
+  display: block;
+  width: 2.1rem;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--ui-bg) 84%, white 16%);
+}
+
+.icono-request-batch-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icono-request-batch-label {
+  color: var(--dark);
+  font: 600 0.84rem / 1.2 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.icono-request-batch-empty {
+  margin: 0;
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+  font: 0.78rem / 1.5 var(--icono-action-font);
+}
+
+.icono-request-batch-empty[hidden] {
+  display: none;
+}
+
+/* Phones and narrow dialogs: no tray (the queue button carries the count),
+   two columns of cards. */
+@media (max-width: 899px) {
+  .icono-request-browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .icono-request-batch {
+    display: none;
+  }
+
+  .icono-request-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 0.7rem;
+  }
+
+  /* B-884: only the view switch sits above the cards. The search docks at
+     the bottom of the scroller: under the gallery, in thumb reach, and in
+     view while the cards scroll behind it. */
+  /* The grid row takes the spare height, so a short list (a few favorites,
+     the load error) still leaves the search at the bottom, not mid-sheet. */
+  .icono-request-browse {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "views"
+      "grid"
+      "find";
+    align-content: stretch;
+    padding-bottom: 0;
+  }
+
+  .icono-request-browse > .icono-request-grid {
+    align-self: start;
+  }
+
+  .icono-request-find-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    /* Out to the scroller's edges (its padding), so a picked card's outline
+       cannot peek past the dock while the cards scroll behind it. */
+    margin-inline: -0.2rem -0.35rem;
+    padding: 0.6rem 0.35rem 0.7rem 0.2rem;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
+    background: color-mix(in srgb, var(--light) 98%, white 2%);
+  }
+
+  .icono-request-find {
+    width: 100%;
+  }
+}
+
+/* Phones: narrower gutters, so the grid gains width and the footer holds
+   "Select all N" beside "Queue 20 candidates" on one line down to 360 px. */
+@media (max-width: 599px) {
+  .icono-request-dialog {
+    --width: calc(100vw - 1rem);
+  }
+
+  .icono-request-dialog::part(body) {
+    padding: 0.85rem 0.75rem 0;
+  }
+
+  .icono-request-dialog::part(footer) {
+    padding: 0.7rem 0.75rem 0.8rem;
+  }
+
+  .icono-request-select-all-noun {
+    display: none;
+  }
+}
+
 .icono-request-form {
   display: grid;
   grid-template-columns: 1fr;
@@ -1808,37 +2315,6 @@ img-comparison-slider.rendered [slot="second"] {
   transition: background 0.12s ease;
 }
 
-.icono-request-option-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 3.25rem;
-  align-items: stretch;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
-}
-
-.icono-request-option-row.is-random {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.icono-request-option-row:first-child,
-.icono-request-option-group-label + .icono-request-option-row {
-  border-top: none;
-}
-
-.icono-request-option-row .icono-request-option {
-  min-width: 0;
-}
-
-.icono-request-option-group-label {
-  padding: 0.58rem 0.85rem 0.42rem;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
-  color: color-mix(in srgb, var(--dark) 66%, var(--secondary) 34%);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .icono-emulsion-favorite-button {
   appearance: none;
   display: inline-flex;
@@ -1900,9 +2376,19 @@ img-comparison-slider.rendered [slot="second"] {
   color: color-mix(in srgb, #b42318 76%, var(--dark) 24%);
 }
 
-.icono-emulsion-favorite-button--picker {
-  align-self: center;
-  justify-self: center;
+/* On a style card the star follows the number on the caption line (B-884:
+   over the art it hid a portrait). 36px square keeps a usable touch target. */
+.icono-emulsion-favorite-button--card {
+  flex: none;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+}
+
+.icono-emulsion-favorite-button--card svg {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .icono-request-option + .icono-request-option {
@@ -2530,14 +3016,6 @@ img-comparison-slider.rendered [slot="second"] {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-}
-
-.icono-gallery-kicker {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
 }
 
 .icono-gallery-count {
@@ -3473,8 +3951,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   }
 }
 
-.icono-collection-label,
-.icono-empty-kicker {
+.icono-collection-label {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.72rem;
   letter-spacing: 0.12em;
@@ -3551,15 +4028,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
     color-mix(in srgb, var(--light) 96%, #fff1f1 4%);
   color: var(--dark);
   box-shadow: 0 14px 32px rgba(56, 28, 24, 0.12);
-}
-
-.icono-mobile-data-failure-kicker {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  line-height: 1.2;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, #8f1d2c 72%, var(--dark) 28%);
 }
 
 .icono-mobile-data-failure-symbol {
@@ -4315,16 +4783,6 @@ body:has(.icono-candidate-delete-dialog[open]) {
   display: grid;
   gap: 0.8rem;
   padding: clamp(1.25rem, 4vw, 1.75rem);
-}
-
-.icono-candidate-delete-eyebrow {
-  margin: 0;
-  color: #8f2b24;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .icono-candidate-delete-title {
@@ -5134,19 +5592,22 @@ html[data-theme="dark"] .icono-card--brick {
   background: color-mix(in srgb, var(--ui-bg) 80%, var(--light));
   box-shadow: 0 10px 24px rgba(33, 21, 12, 0.05);
 }
-.icono-clans-kicker,
+.icono-clans-title {
+  margin: 0;
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--dark);
+}
 .icono-clans-sec {
+  margin: 1.5rem 2px 0.7rem;
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
-}
-.icono-clans-kicker {
-  margin: 0;
-}
-.icono-clans-sec {
-  margin: 1.5rem 2px 0.7rem;
 }
 .icono-clans-count {
   font-family: "League Spartan", "Bahnschrift", sans-serif;
@@ -5204,20 +5665,19 @@ html[data-theme="dark"] .icono-card--brick {
 .icono-clan-head-l {
   min-width: 0;
 }
-.icono-clan-k {
+.icono-clan-acc {
   display: inline-block;
+  margin-top: 3px;
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--secondary, var(--darkgray));
   text-decoration: none;
 }
-a.icono-clan-k:hover {
+a.icono-clan-acc:hover {
   color: var(--accent);
 }
 .icono-clan-nm {
-  margin-top: 1px;
   font-family: "Special Elite", Georgia, serif;
   font-size: 20px;
   line-height: 1.1;
@@ -5638,15 +6098,6 @@ body.icono-studio-route #iconoplasm-root {
   gap: 1rem;
   padding: clamp(0.7rem, 2vw, 1.25rem) 0 1.1rem;
   border-bottom: 1px solid var(--studio-rule);
-}
-
-.icono-studio-kicker {
-  margin: 0 0 0.2rem;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--studio-red);
 }
 
 .icono-studio-masthead h1 {
@@ -6357,14 +6808,6 @@ body.icono-studio-route #iconoplasm-root {
   margin-block: clamp(1.1rem, 3vw, 2rem);
   padding-block: clamp(1rem, 2vw, 1.4rem);
   border-block: 1px solid var(--ui-border);
-}
-
-.icono-public-manifestation__eyebrow {
-  margin: 0 0 0.3rem;
-  color: var(--secondary);
-  font: 700 0.7rem/1.2 var(--icono-action-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .icono-public-manifestation h2 {

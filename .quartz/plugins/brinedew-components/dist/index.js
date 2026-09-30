@@ -2136,177 +2136,6 @@ var ContactForm = (opts = {}) => {
 };
 var ContactForm_default = ContactForm;
 
-// src/components/PublicationDate.tsx
-var PublicationDate_default = (() => {
-  const PublicationDate = ({
-    cfg,
-    fileData,
-    displayClass
-  }) => {
-    const slug2 = String(fileData.slug ?? "");
-    const fm = fileData.frontmatter ?? {};
-    const hasAuthorDate = fm.date !== void 0 || fm.published !== void 0 || fm.created !== void 0;
-    if (!hasAuthorDate || slug2 === "index" || slug2.startsWith("tags/") || slug2.startsWith("apps/") || slug2.startsWith("settings")) {
-      return null;
-    }
-    let date;
-    try {
-      const defaultDateType = fileData.defaultDateType ?? cfg.defaultDateType;
-      if (!defaultDateType) return null;
-      date = getDate({
-        ...fileData,
-        defaultDateType
-      });
-    } catch {
-      return null;
-    }
-    if (!date) return null;
-    const locale = cfg.locale ?? "en-US";
-    return /* @__PURE__ */ u2("p", { class: `content-meta${displayClass ? ` ${displayClass}` : ""}`, children: /* @__PURE__ */ u2("time", { datetime: date.toISOString(), children: formatDate(date, locale) }) });
-  };
-  PublicationDate.css = `
-.content-meta {
-  margin: 0 0 1.1rem;
-  color: var(--gray);
-  font-size: 0.92rem;
-  letter-spacing: 0.01em;
-}
-`;
-  return PublicationDate;
-});
-
-// src/plugins/imageCaptions.ts
-function isElement(node) {
-  return !!node && node.type === "element";
-}
-function isWhitespaceText(node) {
-  return !!node && node.type === "text" && !node.value.trim();
-}
-function imageInside(node) {
-  if (!isElement(node)) return void 0;
-  if (node.tagName === "img") return node;
-  if (node.tagName !== "a") return void 0;
-  const meaningful = node.children.filter((child2) => !isWhitespaceText(child2));
-  if (meaningful.length !== 1) return void 0;
-  const child = meaningful[0];
-  return isElement(child) && child.tagName === "img" ? child : void 0;
-}
-function trimmedPhrasing(nodes) {
-  const next = [...nodes];
-  const first = next[0];
-  const last = next[next.length - 1];
-  if (first?.type === "text") first.value = first.value.replace(/^\s+/, "");
-  if (last?.type === "text") last.value = last.value.replace(/\s+$/, "");
-  return next.filter((node) => !isWhitespaceText(node));
-}
-function captionFor(img) {
-  const properties = img.properties;
-  let alt = typeof properties.alt === "string" ? properties.alt.trim() : "";
-  const width = String(properties.width ?? "");
-  const height = String(properties.height ?? "");
-  if (alt.endsWith(",") && /^(?:18|19|20)\d{2}$/.test(width) && (!height || height === "auto")) {
-    alt = `${alt} ${width}`;
-    delete properties.width;
-  }
-  if (properties.width === "auto") delete properties.width;
-  if (properties.height === "auto") delete properties.height;
-  return alt;
-}
-function figureFor(media, img) {
-  const caption = captionFor(img);
-  const children = [media];
-  if (caption) {
-    img.properties.alt = "";
-    children.push({
-      type: "element",
-      tagName: "figcaption",
-      properties: {},
-      children: [{ type: "text", value: caption }]
-    });
-  }
-  return {
-    type: "element",
-    tagName: "figure",
-    properties: { className: [caption ? "image-with-caption" : "image-without-caption"] },
-    children
-  };
-}
-function splitImageParagraph(paragraph) {
-  if (!paragraph.children.some((child) => imageInside(child))) return void 0;
-  const replacement = [];
-  let phrasing = [];
-  const flushPhrasing = () => {
-    const children = trimmedPhrasing(phrasing);
-    phrasing = [];
-    if (children.length === 0) return;
-    replacement.push({
-      type: "element",
-      tagName: "p",
-      properties: { ...paragraph.properties },
-      children
-    });
-  };
-  for (const child of paragraph.children) {
-    const img = imageInside(child);
-    if (!img) {
-      phrasing.push(child);
-      continue;
-    }
-    flushPhrasing();
-    replacement.push(figureFor(child, img));
-  }
-  flushPhrasing();
-  return replacement;
-}
-function normalizeImageCaptions(parent) {
-  for (let index = 0; index < parent.children.length; index++) {
-    const node = parent.children[index];
-    if (!isElement(node)) continue;
-    if (node.tagName === "figure") continue;
-    if (node.tagName === "p") {
-      const replacement = splitImageParagraph(node);
-      if (replacement) {
-        parent.children.splice(index, 1, ...replacement);
-        index += replacement.length - 1;
-        continue;
-      }
-    }
-    normalizeImageCaptions(node);
-  }
-}
-var ImageCaptions = () => {
-  return {
-    name: "brinedew-image-captions",
-    htmlPlugins() {
-      return [
-        () => (tree) => {
-          normalizeImageCaptions(tree);
-        }
-      ];
-    }
-  };
-};
-
-// src/plugins/draftTagInjector.ts
-var rehypeDraftTag = () => {
-  return (_tree, file) => {
-    const frontmatter = file.data.frontmatter;
-    if (!frontmatter) return;
-    const isDraft = frontmatter.draft === true || frontmatter.draft === "true";
-    if (!isDraft) return;
-    const tags = frontmatter.tags ?? [];
-    if (!tags.includes("draft")) {
-      frontmatter.tags = [...tags, "draft"];
-    }
-  };
-};
-var DraftTagInjector = () => ({
-  name: "brinedew-draft-tag-injector",
-  htmlPlugins() {
-    return [rehypeDraftTag];
-  }
-});
-
 // ../../../node_modules/.pnpm/unist-util-is@6.0.1/node_modules/unist-util-is/lib/index.js
 var convert = (
   // Note: overloads in JSDoc can’t yet use different `@template`s.
@@ -2510,6 +2339,192 @@ function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
   }
 }
 
+// src/plugins/publicationDate.ts
+var skippedSlugPrefixes = ["tags/", "apps/", "settings"];
+function hasAuthorDate(frontmatter) {
+  return frontmatter.date !== void 0 || frontmatter.published !== void 0 || frontmatter.created !== void 0;
+}
+function dateParagraph(date) {
+  return {
+    type: "element",
+    tagName: "p",
+    properties: { className: ["content-meta"] },
+    children: [
+      {
+        type: "element",
+        tagName: "time",
+        properties: { datetime: date.toISOString() },
+        children: [{ type: "text", value: formatDate(date, "en-US") }]
+      }
+    ]
+  };
+}
+var PublicationDate = () => {
+  return {
+    name: "brinedew-publication-date",
+    htmlPlugins() {
+      return [
+        () => (tree, file) => {
+          const data = file.data;
+          const slug2 = String(data.slug ?? "");
+          const frontmatter = data.frontmatter ?? {};
+          if (!hasAuthorDate(frontmatter) || slug2 === "index" || skippedSlugPrefixes.some((prefix) => slug2.startsWith(prefix))) {
+            return;
+          }
+          let date;
+          try {
+            date = getDate(data);
+          } catch {
+            return;
+          }
+          if (!date) return;
+          let inserted = false;
+          visit(tree, "element", (node, index, parent) => {
+            if (inserted || node.tagName !== "h1" || index === void 0 || !parent) return;
+            parent.children.splice(index + 1, 0, dateParagraph(date));
+            inserted = true;
+          });
+          if (!inserted) {
+            tree.children.unshift(dateParagraph(date));
+          }
+        }
+      ];
+    }
+  };
+};
+
+// src/plugins/imageCaptions.ts
+function isElement(node) {
+  return !!node && node.type === "element";
+}
+function isWhitespaceText(node) {
+  return !!node && node.type === "text" && !node.value.trim();
+}
+function imageInside(node) {
+  if (!isElement(node)) return void 0;
+  if (node.tagName === "img") return node;
+  if (node.tagName !== "a") return void 0;
+  const meaningful = node.children.filter((child2) => !isWhitespaceText(child2));
+  if (meaningful.length !== 1) return void 0;
+  const child = meaningful[0];
+  return isElement(child) && child.tagName === "img" ? child : void 0;
+}
+function trimmedPhrasing(nodes) {
+  const next = [...nodes];
+  const first = next[0];
+  const last = next[next.length - 1];
+  if (first?.type === "text") first.value = first.value.replace(/^\s+/, "");
+  if (last?.type === "text") last.value = last.value.replace(/\s+$/, "");
+  return next.filter((node) => !isWhitespaceText(node));
+}
+function captionFor(img) {
+  const properties = img.properties;
+  let alt = typeof properties.alt === "string" ? properties.alt.trim() : "";
+  const width = String(properties.width ?? "");
+  const height = String(properties.height ?? "");
+  if (alt.endsWith(",") && /^(?:18|19|20)\d{2}$/.test(width) && (!height || height === "auto")) {
+    alt = `${alt} ${width}`;
+    delete properties.width;
+  }
+  if (properties.width === "auto") delete properties.width;
+  if (properties.height === "auto") delete properties.height;
+  return alt;
+}
+function figureFor(media, img) {
+  const caption = captionFor(img);
+  const children = [media];
+  if (caption) {
+    img.properties.alt = "";
+    children.push({
+      type: "element",
+      tagName: "figcaption",
+      properties: {},
+      children: [{ type: "text", value: caption }]
+    });
+  }
+  return {
+    type: "element",
+    tagName: "figure",
+    properties: { className: [caption ? "image-with-caption" : "image-without-caption"] },
+    children
+  };
+}
+function splitImageParagraph(paragraph) {
+  if (!paragraph.children.some((child) => imageInside(child))) return void 0;
+  const replacement = [];
+  let phrasing = [];
+  const flushPhrasing = () => {
+    const children = trimmedPhrasing(phrasing);
+    phrasing = [];
+    if (children.length === 0) return;
+    replacement.push({
+      type: "element",
+      tagName: "p",
+      properties: { ...paragraph.properties },
+      children
+    });
+  };
+  for (const child of paragraph.children) {
+    const img = imageInside(child);
+    if (!img) {
+      phrasing.push(child);
+      continue;
+    }
+    flushPhrasing();
+    replacement.push(figureFor(child, img));
+  }
+  flushPhrasing();
+  return replacement;
+}
+function normalizeImageCaptions(parent) {
+  for (let index = 0; index < parent.children.length; index++) {
+    const node = parent.children[index];
+    if (!isElement(node)) continue;
+    if (node.tagName === "figure") continue;
+    if (node.tagName === "p") {
+      const replacement = splitImageParagraph(node);
+      if (replacement) {
+        parent.children.splice(index, 1, ...replacement);
+        index += replacement.length - 1;
+        continue;
+      }
+    }
+    normalizeImageCaptions(node);
+  }
+}
+var ImageCaptions = () => {
+  return {
+    name: "brinedew-image-captions",
+    htmlPlugins() {
+      return [
+        () => (tree) => {
+          normalizeImageCaptions(tree);
+        }
+      ];
+    }
+  };
+};
+
+// src/plugins/draftTagInjector.ts
+var rehypeDraftTag = () => {
+  return (_tree, file) => {
+    const frontmatter = file.data.frontmatter;
+    if (!frontmatter) return;
+    const isDraft = frontmatter.draft === true || frontmatter.draft === "true";
+    if (!isDraft) return;
+    const tags = frontmatter.tags ?? [];
+    if (!tags.includes("draft")) {
+      frontmatter.tags = [...tags, "draft"];
+    }
+  };
+};
+var DraftTagInjector = () => ({
+  name: "brinedew-draft-tag-injector",
+  htmlPlugins() {
+    return [rehypeDraftTag];
+  }
+});
+
 // src/plugins/essayNormalizer.ts
 var isElement2 = (node) => !!node && node.type === "element";
 var isWhitespaceText2 = (node) => !!node && node.type === "text" && !node.value.trim();
@@ -2639,6 +2654,6 @@ export {
   IconoplasmPageSwitcher_default as IconoplasmPageSwitcher,
   ImageCaptions,
   ProteinInfobox_default as ProteinInfobox,
-  PublicationDate_default as PublicationDate,
+  PublicationDate,
   TagSections_default as TagSections
 };

@@ -15,19 +15,3 @@ export function parseDiscoveryMembershipSymbols(raw = "[]") {
     throw new Error("Invalid discovery symbol")
   return [...new Set(values.map((value) => value.trim().toUpperCase()))]
 }
-
-export async function readDiscoveryMembership(db, userId, symbols) {
-  if (!symbols.length) return []
-  // Raw keys preserve the composite PK seek even for a lifelong collector.
-  // json_each avoids a variable count above D1's statement binding limit.
-  const result = await db
-    .prepare(
-      `SELECT gene_symbol
-    FROM icono_gene_discoveries
-    WHERE user_id = ? AND gene_symbol IN (SELECT value FROM json_each(?))
-    ORDER BY gene_symbol`,
-    )
-    .bind(userId, JSON.stringify(symbols))
-    .all()
-  return (result.results || []).map((row) => row.gene_symbol)
-}

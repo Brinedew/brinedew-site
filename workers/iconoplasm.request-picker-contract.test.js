@@ -25,21 +25,14 @@ const slotContract = readFileSync(
   "utf8",
 )
 
-test("Iconoplasm request picker uses a searchable list with sibling favorite controls", () => {
-  assert.match(
-    app,
-    /class="icono-search-input icono-request-picker-input"/,
-    "request picker should reuse the shared Iconoplasm search input styling",
-  )
+// B-883 replaced the Free queue dropdown with a style grid and batch tray. Its
+// geometry, 3:4 cards, labels and payloads are checked in a real browser by
+// e2e/request-style-picker.e2e.mjs; this file keeps the source-level contracts.
+test("Iconoplasm request picker is a style grid with sibling favorite controls", () => {
   assert.doesNotMatch(
     app,
     /data-icono-request-inline-submit/,
     "the Free queue action should not compete with the search field",
-  )
-  assert.match(
-    app,
-    /String\(config\.placeholder \|\| "pick an emulsion"\)/,
-    "request picker should keep the short placeholder copy",
   )
   assert.doesNotMatch(
     app,
@@ -49,8 +42,24 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   const queueMarkupStart = app.indexOf("function renderRequestFormMarkup")
   const queueMarkupEnd = app.indexOf("function renderRequestDirectGenerationMarkup")
   const queueMarkup = app.slice(queueMarkupStart, queueMarkupEnd)
-  assert.match(queueMarkup, /role="searchbox"/)
-  assert.match(queueMarkup, /role="list" aria-label="Emulsions"/)
+  assert.match(queueMarkup, /placeholder="Style number"/, "the search takes a style number")
+  assert.doesNotMatch(app, /number or artist/i, "artists are private and never searchable")
+  assert.match(queueMarkup, /role="list" aria-label="Styles"/)
+  assert.match(
+    queueMarkup,
+    /data-icono-request-view="favorites"[\s\S]*data-icono-request-view="all"/,
+    "two views only: Favorites and All styles",
+  )
+  assert.match(
+    queueMarkup,
+    /'" role="listitem" data-icono-request-card="'[\s\S]*class="icono-request-card-toggle" data-icono-request-option="'[\s\S]*"<\/button>" \+[\s\S]*renderEmulsionFavoriteButtonMarkup/,
+    "each card is a non-interactive list item holding the toggle and, beside it, the star",
+  )
+  assert.match(
+    queueMarkup,
+    /previews\.length >= 4 \? previews\.slice\(0, 4\) : previews\.slice\(0, 1\)/,
+    "3:4 portraits make a 2x2 mosaic or one full card, never slivers",
+  )
   assert.match(
     css,
     /\.icono-request-results\[hidden\]\s*\{\s*display:\s*none;/,
@@ -75,11 +84,6 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     css,
     /\.icono-request-dialog \.icono-request-results\s*\{[\s\S]*align-content:\s*start;/,
     "one result row must stay content-height instead of stretching across the reserved list area",
-  )
-  assert.match(
-    app,
-    /class="icono-request-option-row'[\s\S]{0,120}'" role="listitem"/,
-    "every selectable emulsion should be wrapped in a non-interactive list row",
   )
   assert.match(app, /data-icono-emulsion-favorite=/)
   assert.match(
@@ -132,24 +136,23 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     1,
     "favorite handling must not be called on a replaceable gene-page island",
   )
-  assert.match(
-    app,
-    /favoriteOptions\.length[\s\S]*>Favorites<[\s\S]*otherOptions\.length[\s\S]*>Other emulsions</,
-  )
-  assert.match(
-    app,
-    /var selectButton =[\s\S]*if \(!favoriteEnabled\) return selectButton[\s\S]*class="icono-request-option-row[\s\S]*selectButton \+[\s\S]*renderEmulsionFavoriteButtonMarkup/,
-    "favorite controls must be composed beside the completed selection button",
-  )
-  assert.match(
+  assert.doesNotMatch(
     app,
     /Random emulsion/,
-    "request picker should present Random emulsion as the default first option",
+    "random is the empty batch (the button says Queue random), not a list row",
   )
-  assert.match(
+  const gridStart = app.indexOf("function styleGridOptions")
+  const gridEnd = app.indexOf("function styleQueuedCount", gridStart)
+  assert.ok(gridStart > 0 && gridEnd > gridStart, "the style grid has one filter function")
+  assert.doesNotMatch(
+    app.slice(gridStart, gridEnd),
+    /\.slice\(/,
+    "All styles shows every style; the dropdown-era cap of six is gone",
+  )
+  assert.doesNotMatch(
     app,
-    /var hasQuery = !!String\(renderQuery \|\| ""\)\.trim\(\)[\s\S]*var html = hasQuery[\s\S]*\? ""[\s\S]*: renderRequestOptionButtonMarkup/,
-    "a typed search should show matching emulsions rather than keeping Random above them",
+    /data-icono-request-my-summary|data-icono-request-gene-summary/,
+    "open requests belong to the request inbox, not to prose in the picker",
   )
   assert.doesNotMatch(
     app,
@@ -169,8 +172,8 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /var selectedRequestVisionIds = new Set\(\[""\]\)[\s\S]*function setSelection\(option\)[\s\S]*selectedRequestVisionIds\.add\(visionId\)[\s\S]*openResults\(\)/,
-    "each emulsion click should add to a persistent batch while keeping the list open",
+    /var selectedRequestVisionIds = new Set\(\[""\]\)[\s\S]*function setSelection\(option\)[\s\S]*selectedRequestVisionIds\.add\(visionId\)[\s\S]*updateQueueSelectionControls\(\)/,
+    "each card click should add to a persistent batch",
   )
   assert.match(
     app,
@@ -179,12 +182,12 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /data-icono-request-select-all-favorites hidden>Select all 0 favorites/,
-    "the footer should reserve one unobtrusive bulk-favorite action",
+    /data-icono-request-free-footer>'[\s\S]{0,120}class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites<\/button>'[\s\S]{0,120}type="submit"/,
+    "the bulk-favorite action is a shared button in the footer, left of Queue, never a text link",
   )
   assert.match(
     app,
-    /buttons\[i\]\.textContent = "Select all " \+ favoriteCount \+ " favorites"/,
+    /setAttribute\("aria-label", "Select all " \+ favoriteCount \+ " favorites"\)/,
     "the bulk-favorite action should expose the user's current favorite count",
   )
   assert.match(
@@ -200,9 +203,9 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
     "partial failures should preserve only the selections that still need attention",
   )
   assert.match(
-    app,
-    /favoriteEnabled \? ' aria-pressed="' : ' aria-selected="'/,
-    "multi-select row buttons should expose toggle state without misusing option semantics",
+    queueMarkup,
+    /data-icono-request-option="'[\s\S]{0,40}'" aria-pressed="'/,
+    "multi-select cards expose toggle state without misusing option semantics",
   )
   assert.match(
     css,
@@ -281,7 +284,7 @@ test("Iconoplasm request picker uses a searchable list with sibling favorite con
   )
   assert.match(
     app,
-    /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery\)/,
+    /scheduleNumericRequestHydration[\s\S]*window\.setTimeout[\s\S]*ensureRequestOptionsLoaded\(renderQuery, \{ silent: true \}\)/,
     "numeric preview hydration should be debounced behind the immediate result",
   )
   assert.match(

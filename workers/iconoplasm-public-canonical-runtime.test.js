@@ -4,9 +4,13 @@ import test from "node:test"
 import {
   IconoplasmPublicCanonicalRuntimeError,
   PUBLIC_CANONICAL_MATERIALIZATION_BATCH_LIMIT,
-  hydratePublicCanonicalGeneRecord,
   hydratePublicCanonicalGeneRecords,
 } from "./iconoplasm-public-canonical-runtime.js"
+
+async function hydrateOne(env, record, dependencies) {
+  const [hydrated] = await hydratePublicCanonicalGeneRecords(env, [record], dependencies)
+  return hydrated
+}
 
 function database(mode) {
   return {
@@ -80,7 +84,7 @@ test("legacy publication remains unchanged before authority cutover", async () =
 })
 
 test("authoritative publication carries exact public body identity and compound Tags", async () => {
-  const output = await hydratePublicCanonicalGeneRecord(
+  const output = await hydrateOne(
     {
       ICONOPLASM_DB: database("authoritative"),
       ICONOPLASM_AUTHORING_DB: {},
@@ -97,7 +101,7 @@ test("authoritative publication carries exact public body identity and compound 
 test("hidden canonical manifestations expose no prose to the public gene payload", async () => {
   const hidden = material()
   hidden.canonical.public_page_visible = false
-  const output = await hydratePublicCanonicalGeneRecord(
+  const output = await hydrateOne(
     {
       ICONOPLASM_DB: database("authoritative"),
       ICONOPLASM_AUTHORING_DB: {},
@@ -111,7 +115,7 @@ test("hidden canonical manifestations expose no prose to the public gene payload
 
 test("shadow-frozen publication pauses instead of exposing shadow material", async () => {
   await assert.rejects(
-    hydratePublicCanonicalGeneRecord(
+    hydrateOne(
       { ICONOPLASM_DB: database("shadow_frozen"), ICONOPLASM_AUTHORING_DB: {} },
       { symbol: "TP53" },
       { readMaterial: async () => material() },
@@ -124,7 +128,7 @@ test("shadow-frozen publication pauses instead of exposing shadow material", asy
 
 test("authoritative mode never falls back when the authoring binding is missing", async () => {
   await assert.rejects(
-    hydratePublicCanonicalGeneRecord(
+    hydrateOne(
       { ICONOPLASM_DB: database("authoritative") },
       { symbol: "TP53", manifestation: "legacy must not leak" },
     ),
@@ -147,7 +151,7 @@ test("missing or unknown authority state fails closed without exposing legacy ma
   }
   for (const primaryDb of [missingState, database("unexpected_mode")]) {
     await assert.rejects(
-      hydratePublicCanonicalGeneRecord(
+      hydrateOne(
         { ICONOPLASM_DB: primaryDb, ICONOPLASM_AUTHORING_DB: {} },
         { symbol: "TP53", manifestation: "legacy must not leak" },
         {

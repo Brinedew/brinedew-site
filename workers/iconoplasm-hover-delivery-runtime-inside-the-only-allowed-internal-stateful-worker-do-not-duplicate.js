@@ -38,7 +38,10 @@ export function createHoverDeliveryHandlers({
     )
       return null
     const refs = value.shards
-    if (!Array.isArray(refs) || !refs.length || refs.length > 64) return null
+    // B-892 hot fix: sanity bound only; the manifest byte bound is the real
+    // ceiling. 64 was below the live 68-shard catalog, which turned the
+    // published head's delivery index into a 503.
+    if (!Array.isArray(refs) || !refs.length || refs.length > 1024) return null
     let previous = ""
     for (const ref of refs) {
       if (

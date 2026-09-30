@@ -1,4 +1,7 @@
 const CDN = "https://iconoplasmportraits.b-cdn.net"
+const ORIGIN = "https://iconoplasm.brinedew.bio"
+// A healthy Bunny edge answers these small JSON objects in well under a second.
+const CDN_TIMEOUT_MS = 4000
 const HEAD_PATH = "/api/public/v1/card-current"
 const HEAD_STORAGE_KEY = "iconoplasm.publication-head.v1"
 const HASH = /^[a-f0-9]{64}$/
@@ -16,10 +19,11 @@ export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   compactIndexBytes: 128 * 1024,
   resultPageBytes: 512 * 1024,
   searchRequests: 2 + MAX_CATALOG_INDEXES + MAX_SEARCH_RESULTS,
-  searchBytes: 2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_SEARCH_RESULTS * 512 * 1024,
+  searchBytes:
+    2048 + 256 * 1024 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_SEARCH_RESULTS * 512 * 1024,
   galleryRequests: 2 + MAX_CATALOG_INDEXES + MAX_GALLERY_PAGE_SIZE,
   galleryBytes:
-    2048 + 65536 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_GALLERY_PAGE_SIZE * 512 * 1024,
+    2048 + 256 * 1024 + MAX_CATALOG_INDEXES * 128 * 1024 + MAX_GALLERY_PAGE_SIZE * 512 * 1024,
 })
 
 function normalizedSymbol(value) {
@@ -135,9 +139,11 @@ export function mergePublishedGeneOverlay(base, overlay) {
 export function createIconoplasmPublicationReader(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch?.bind(globalThis)
   const storage = options.storage ?? globalThis.localStorage ?? null
+  const cdnTimeoutMs = Number(options.cdnTimeoutMs) || CDN_TIMEOUT_MS
   const objects = new Map()
   let headPromise = null
   let catalogPromise = null
+  let geneMetricsCache = null
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
@@ -158,26 +164,79 @@ export function createIconoplasmPublicationReader(options = {}) {
     }
   }
 
-  async function fetchJson(url, limit) {
-    const response = await fetchImpl(url, { method: "GET", credentials: "omit" })
-    if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
-    const text = await response.text()
+  async function fetchFrom(origin, path, limit, timeoutMs) {
+    // A plain timer, cleared once the body has arrived. AbortSignal.timeout()
+    // uses an unreferenced timer in Node, so a hung request let the test
+    // process exit mid-read.
+    const controller = timeoutMs ? new AbortController() : null
+    const timer = controller
+      ? setTimeout(() => controller.abort(new Error("Publication request timed out")), timeoutMs)
+      : null
+    let response
+    let text
+    try {
+      response = await fetchImpl(origin + path, {
+        method: "GET",
+        credentials: "omit",
+        ...(controller ? { signal: controller.signal } : {}),
+      })
+      if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
+      text = await response.text()
+    } finally {
+      clearTimeout(timer)
+    }
     if (new TextEncoder().encode(text).byteLength > limit) {
       throw new Error("Publication object exceeds browser limit")
     }
     return { value: JSON.parse(text), text }
   }
 
+  // IPD-001 (architecture-fences.json): Bunny accelerates; the first-party origin is
+  // canonical, and a failed accelerator affects only this reader. On 27 Sep 2026
+  // an ISP resolver failed to resolve the Bunny host and a first-time reader got
+  // "Gene page temporarily unavailable". A failed Bunny request now retries the
+  // same public path on the canonical origin, and after a network failure or
+  // timeout the rest of this page skips Bunny. Healthy readers never touch the
+  // origin, and immutable bytes are hash-checked whichever source served them.
+  // A reader that already holds a coherent head never needs the origin for it:
+  // the stored head is free and exact. Only a reader with nothing stored falls
+  // through to the origin for the head, so a Bunny head outage does not fan
+  // returning readers into Worker requests.
+  let cdnUnreachable = false
+  async function fromCdn(path, limit) {
+    if (cdnUnreachable) throw new Error("Publication CDN unreachable")
+    try {
+      return await fetchFrom(CDN, path, limit, cdnTimeoutMs)
+    } catch (error) {
+      if (!String(error?.message || "").startsWith("Publication HTTP")) cdnUnreachable = true
+      throw error
+    }
+  }
+
+  async function fetchJson(path, limit) {
+    try {
+      return await fromCdn(path, limit)
+    } catch {
+      return fetchFrom(ORIGIN, path, limit)
+    }
+  }
+
   async function currentHead() {
     if (headPromise) return headPromise
     headPromise = (async () => {
       try {
-        const head = parseHead((await fetchJson(CDN + HEAD_PATH, 2048)).value)
+        const head = parseHead((await fromCdn(HEAD_PATH, 2048)).value)
         if (!head) throw new Error("Invalid publication head")
         return head
       } catch {
         const prior = storedHead()
         if (prior) return prior
+        try {
+          const head = parseHead((await fetchFrom(ORIGIN, HEAD_PATH, 2048)).value)
+          if (head) return head
+        } catch {
+          // Both sources failed; report the reader-facing condition below.
+        }
         throw new Error("No coherent Iconoplasm publication is available")
       }
     })().finally(() => {
@@ -192,11 +251,11 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (objects.has(cacheKey)) return objects.get(cacheKey)
     const path = `/published-cards/v2/immutable/${cacheKey}.json`
     const promise = (async () => {
-      // B-792/B-793: cards, genes and immutable candidate gallery pages share
-      // the publisher's 256 KiB bound. Other kinds keep theirs.
+      // B-792/B-793/B-892: cards, genes, gallery pages and the root manifest
+      // share the publisher's 256 KiB bound. Other kinds keep theirs.
       const { value, text } = await fetchJson(
-        CDN + path,
-        kind === "cards" || kind === "genes" || kind === "galleries"
+        path,
+        kind === "cards" || kind === "genes" || kind === "galleries" || kind === "manifests"
           ? 256 * 1024
           : kind === "catalogs"
             ? 512 * 1024
@@ -470,6 +529,47 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
+  // B-885: the home sort fields, per gene, from the compact catalog indexes
+  // this page already loads for search and the gallery. A signed-in shelf
+  // sorts on these in the browser instead of asking the server to enrich
+  // every discovered gene. Keyed by upper-case symbol (discoveries are
+  // upper-case; the catalog keeps "C1orf112"). Popularity is not here: the
+  // published cards carry 0 for every gene (measured 27 Sep), so the page
+  // takes it from wiki-pageviews.js, the table the server enrichment used.
+  async function geneMetrics() {
+    return fromCoherentPublication("gene-metrics", async (head) => {
+      const { version, indexes } = await catalogIndexes(head)
+      if (geneMetricsCache?.version === version) return geneMetricsCache.value
+      const bySymbol = new Map()
+      for (const index of indexes) {
+        const names = new Map(index.search_entries.map(([symbol, name]) => [symbol, name]))
+        for (const [
+          symbol,
+          ,
+          ,
+          ,
+          votes,
+          publishedAt,
+          ,
+          uniqueness,
+          weight,
+          age,
+        ] of index.gallery_entries) {
+          bySymbol.set(String(symbol).toUpperCase(), {
+            full_name: String(names.get(symbol) || ""),
+            image_score: Number(votes || 0),
+            published_at: String(publishedAt || ""),
+            uniqueness_rank: nullableNumber(uniqueness),
+            weight_kg: nullableNumber(weight),
+            age_years: nullableNumber(age),
+          })
+        }
+      }
+      geneMetricsCache = { version, value: bySymbol }
+      return bySymbol
+    })
+  }
+
   async function gallery({ order = "votes", offset = 0, limit = 24, seed = "" } = {}) {
     const start = Math.max(0, Number(offset) || 0)
     const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
@@ -577,7 +677,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
-  return { currentHead, gene, genes, candidateGallery, search, gallery, metadata }
+  return { currentHead, gene, genes, candidateGallery, search, gallery, geneMetrics, metadata }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
