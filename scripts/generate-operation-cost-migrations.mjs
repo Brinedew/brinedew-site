@@ -154,6 +154,16 @@ function output() {
   }
   const migrations = [
     [
+      "FINALIZATION_HANDOFF_RETIREMENT",
+      "0110_retire_finalization_publication_handoff.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0110_retire_finalization_publication_handoff.sql",
+        0,
+        4,
+      ),
+    ],
+    [
       "DISCOVERY_USER_SHELF",
       "0111_discovery_user_shelf.sql",
       reviewedMigrationStatements("migrations-iconoplasm", "0111_discovery_user_shelf.sql", 0, 3),

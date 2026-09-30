@@ -1,7 +1,7 @@
 // ../../../node_modules/.pnpm/github-slugger@2.0.0/node_modules/github-slugger/index.js
 var own = Object.hasOwnProperty;
 
-// ../../../node_modules/.pnpm/@quartz-community+utils@htt_0cfbeb8e17e882336c3b6fb8d860c4b0/node_modules/@quartz-community/utils/dist/path.js
+// ../../../node_modules/.pnpm/@quartz-community+utils@0.1_236326e92195e1478e36b265a65fb1bd/node_modules/@quartz-community/utils/dist/path.js
 function simplifySlug(fp) {
   const res = stripSlashes(trimSuffix(fp, "index"), true);
   return res.length === 0 ? "/" : res;
@@ -86,7 +86,7 @@ function partitionArchive(pages, sort = byArchiveDate) {
   };
 }
 
-// ../../../node_modules/.pnpm/preact@10.29.7_preact-render-to-string@6.7.0/node_modules/preact/dist/preact.mjs
+// ../../../node_modules/.pnpm/preact@10.29.8_preact-render-to-string@6.7.0/node_modules/preact/dist/preact.mjs
 var n;
 var l;
 var u;
@@ -151,8 +151,8 @@ function H() {
   }
 }
 function L(n2, l2, u3, t2, i2, r2, o2, e2, f3, c2, a2) {
-  var s2, h2, p2, v2, y2, _2, g2, m2 = t2 && t2.__k || w, b2 = l2.length;
-  for (f3 = T(u3, l2, m2, f3, b2), s2 = 0; s2 < b2; s2++) null != (p2 = u3.__k[s2]) && (h2 = -1 != p2.__i && m2[p2.__i] || d, p2.__i = s2, _2 = q(n2, p2, h2, i2, r2, o2, e2, f3, c2, a2), v2 = p2.__e, p2.ref && h2.ref != p2.ref && (h2.ref && J(h2.ref, null, p2), a2.push(p2.ref, p2.__c || v2, p2)), null == y2 && null != v2 && (y2 = v2), (g2 = !!(4 & p2.__u)) || h2.__k === p2.__k ? (f3 = j(p2, f3, n2, g2), g2 && h2.__e && (h2.__e = null)) : "function" == typeof p2.type && void 0 !== _2 ? f3 = _2 : v2 && (f3 = v2.nextSibling), p2.__u &= -7);
+  var s2, h2, p2, v2, y2, _2, g2 = t2 && t2.__k || w, m2 = l2.length;
+  for (f3 = T(u3, l2, g2, f3, m2), s2 = 0; s2 < m2; s2++) null != (p2 = u3.__k[s2]) && (h2 = -1 != p2.__i && g2[p2.__i] || d, p2.__i = s2, _2 = q(n2, p2, h2, i2, r2, o2, e2, f3, c2, a2), v2 = p2.__e, p2.ref && h2.ref != p2.ref && (h2.ref && J(h2.ref, null, p2), a2.push(p2.ref, p2.__c || v2, p2)), null == y2 && null != v2 && (y2 = v2), 4 & p2.__u ? (f3 = j(p2, f3, n2), h2.__e && (h2.__e = null)) : "function" == typeof p2.type && void 0 !== _2 ? f3 = _2 : v2 && (f3 = v2.nextSibling), p2.__u &= -7);
   return u3.__e = y2, f3;
 }
 function T(n2, l2, u3, t2, i2) {
@@ -161,13 +161,13 @@ function T(n2, l2, u3, t2, i2) {
   if (s2) for (r2 = 0; r2 < a2; r2++) null != (e2 = u3[r2]) && 0 == (2 & e2.__u) && (e2.__e == t2 && (t2 = $(e2)), K(e2, e2));
   return t2;
 }
-function j(n2, l2, u3, t2) {
-  var i2, r2;
+function j(n2, l2, u3) {
+  var t2, i2;
   if ("function" == typeof n2.type) {
-    for (i2 = n2.__k, r2 = 0; i2 && r2 < i2.length; r2++) i2[r2] && (i2[r2].__ = n2, l2 = j(i2[r2], l2, u3, t2));
+    for (t2 = n2.__k, i2 = 0; t2 && i2 < t2.length; i2++) t2[i2] && (t2[i2].__ = n2, l2 = j(t2[i2], l2, u3));
     return l2;
   }
-  n2.__e != l2 && (t2 && (l2 && n2.type && !l2.parentNode && (l2 = $(n2)), u3.insertBefore(n2.__e, l2 || null)), l2 = n2.__e);
+  n2.__e != l2 && (l2 && n2.type && !l2.parentNode && (l2 = $(n2)), l2 = u3.insertBefore(n2.__e, l2 || null));
   do {
     l2 = l2 && l2.nextSibling;
   } while (null != l2 && 8 == l2.nodeType);
@@ -213,35 +213,35 @@ function V(n2) {
   };
 }
 function q(n2, u3, t2, i2, r2, o2, e2, f3, c2, a2) {
-  var s2, h2, p2, v2, y2, d2, _2, k, x2, M, $2, I2, P2, A2, H2, T2, j2 = u3.type;
+  var s2, h2, p2, v2, y2, d2, _2, k, x2, M, I2, P2, A2, H2, T2, j2, F = u3.type;
   if (void 0 !== u3.constructor) return null;
   128 & t2.__u && (c2 = !!(32 & t2.__u), o2 = [f3 = u3.__e = t2.__e]), (s2 = l.__b) && s2(u3);
-  n: if ("function" == typeof j2) {
+  n: if ("function" == typeof F) {
     h2 = e2.length;
     try {
-      if (x2 = u3.props, M = j2.prototype && j2.prototype.render, $2 = (s2 = j2.contextType) && i2[s2.__c], I2 = s2 ? $2 ? $2.props.value : s2.__ : i2, t2.__c ? k = (p2 = u3.__c = t2.__c).__ = p2.__E : (M ? u3.__c = p2 = new j2(x2, I2) : (u3.__c = p2 = new C(x2, I2), p2.constructor = j2, p2.render = Q), $2 && $2.sub(p2), p2.state || (p2.state = {}), p2.__n = i2, v2 = p2.__d = true, p2.__h = [], p2._sb = []), M && null == p2.__s && (p2.__s = p2.state), M && null != j2.getDerivedStateFromProps && (p2.__s == p2.state && (p2.__s = m({}, p2.__s)), m(p2.__s, j2.getDerivedStateFromProps(x2, p2.__s))), y2 = p2.props, d2 = p2.state, p2.__v = u3, v2) M && null == j2.getDerivedStateFromProps && null != p2.componentWillMount && p2.componentWillMount(), M && null != p2.componentDidMount && p2.__h.push(p2.componentDidMount);
+      if (x2 = u3.props, M = F.prototype && F.prototype.render, I2 = (s2 = F.contextType) && i2[s2.__c], P2 = s2 ? I2 ? I2.props.value : s2.__ : i2, t2.__c ? k = (p2 = u3.__c = t2.__c).__ = p2.__E : (M ? u3.__c = p2 = new F(x2, P2) : (u3.__c = p2 = new C(x2, P2), p2.constructor = F, p2.render = Q), I2 && I2.sub(p2), p2.state || (p2.state = {}), p2.__n = i2, v2 = p2.__d = true, p2.__h = [], p2._sb = []), M && null == p2.__s && (p2.__s = p2.state), M && null != F.getDerivedStateFromProps && (p2.__s == p2.state && (p2.__s = m({}, p2.__s)), m(p2.__s, F.getDerivedStateFromProps(x2, p2.__s))), y2 = p2.props, d2 = p2.state, p2.__v = u3, v2) M && null == F.getDerivedStateFromProps && null != p2.componentWillMount && p2.componentWillMount(), M && null != p2.componentDidMount && p2.__h.push(p2.componentDidMount);
       else {
-        if (M && null == j2.getDerivedStateFromProps && x2 !== y2 && null != p2.componentWillReceiveProps && p2.componentWillReceiveProps(x2, I2), u3.__v == t2.__v || !p2.__e && null != p2.shouldComponentUpdate && false === p2.shouldComponentUpdate(x2, p2.__s, I2)) {
+        if (M && null == F.getDerivedStateFromProps && x2 !== y2 && null != p2.componentWillReceiveProps && p2.componentWillReceiveProps(x2, P2), u3.__v == t2.__v || !p2.__e && null != p2.shouldComponentUpdate && false === p2.shouldComponentUpdate(x2, p2.__s, P2)) {
           u3.__v != t2.__v && (p2.props = x2, p2.state = p2.__s, p2.__d = false), u3.__e = t2.__e, u3.__k = t2.__k, u3.__k.some(function(n3) {
             n3 && (n3.__ = u3);
-          }), w.push.apply(p2.__h, p2._sb), p2._sb = [], p2.__h.length && e2.push(p2);
+          }), w.push.apply(p2.__h, p2._sb), p2._sb = [], p2.__h.length && e2.push(p2), f3 = $(t2);
           break n;
         }
-        null != p2.componentWillUpdate && p2.componentWillUpdate(x2, p2.__s, I2), M && null != p2.componentDidUpdate && p2.__h.push(function() {
+        null != p2.componentWillUpdate && p2.componentWillUpdate(x2, p2.__s, P2), M && null != p2.componentDidUpdate && p2.__h.push(function() {
           p2.componentDidUpdate(y2, d2, _2);
         });
       }
-      if (p2.context = I2, p2.props = x2, p2.__P = n2, p2.__e = false, P2 = l.__r, A2 = 0, M) p2.state = p2.__s, p2.__d = false, P2 && P2(u3), s2 = p2.render(p2.props, p2.state, p2.context), w.push.apply(p2.__h, p2._sb), p2._sb = [];
+      if (p2.context = P2, p2.props = x2, p2.__P = n2, p2.__e = false, A2 = l.__r, H2 = 0, M) p2.state = p2.__s, p2.__d = false, A2 && A2(u3), s2 = p2.render(p2.props, p2.state, p2.context), w.push.apply(p2.__h, p2._sb), p2._sb = [];
       else do {
-        p2.__d = false, P2 && P2(u3), s2 = p2.render(p2.props, p2.state, p2.context), p2.state = p2.__s;
-      } while (p2.__d && ++A2 < 25);
-      p2.state = p2.__s, null != p2.getChildContext && (i2 = m(m({}, i2), p2.getChildContext())), M && !v2 && null != p2.getSnapshotBeforeUpdate && (_2 = p2.getSnapshotBeforeUpdate(y2, d2)), H2 = null != s2 && s2.type === S && null == s2.key ? E(s2.props.children) : s2, f3 = L(n2, g(H2) ? H2 : [H2], u3, t2, i2, r2, o2, e2, f3, c2, a2), p2.base = u3.__e, u3.__u &= -161, p2.__h.length && e2.push(p2), k && (p2.__E = p2.__ = null);
+        p2.__d = false, A2 && A2(u3), s2 = p2.render(p2.props, p2.state, p2.context), p2.state = p2.__s;
+      } while (p2.__d && ++H2 < 25);
+      p2.state = p2.__s, null != p2.getChildContext && (i2 = m(m({}, i2), p2.getChildContext())), M && !v2 && null != p2.getSnapshotBeforeUpdate && (_2 = p2.getSnapshotBeforeUpdate(y2, d2)), T2 = null != s2 && s2.type === S && null == s2.key ? E(s2.props.children) : s2, f3 = L(n2, g(T2) ? T2 : [T2], u3, t2, i2, r2, o2, e2, f3, c2, a2), p2.base = u3.__e, u3.__u &= -161, p2.__h.length && e2.push(p2), k && (p2.__E = p2.__ = null);
     } catch (n3) {
       if (e2.length = h2, u3.__v = null, c2 || null != o2) {
         if (n3.then) {
           for (u3.__u |= c2 ? 160 : 128; f3 && 8 == f3.nodeType && f3.nextSibling; ) f3 = f3.nextSibling;
           null != o2 && (o2[o2.indexOf(f3)] = null), u3.__e = f3;
-        } else if (null != o2) for (T2 = o2.length; T2--; ) b(o2[T2]);
+        } else if (null != o2) for (j2 = o2.length; j2--; ) b(o2[j2]);
       } else u3.__e = t2.__e;
       null == u3.__k && (u3.__k = t2.__k || []), n3.then || B(u3), l.__e(n3, u3, t2);
     }
@@ -333,7 +333,7 @@ n = w.slice, l = { __e: function(n2, l2, u3, t2) {
   return n2.__v.__b - l2.__v.__b;
 }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, a = "__a" + f, s = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
-// ../../../node_modules/.pnpm/preact@10.29.7_preact-render-to-string@6.7.0/node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
+// ../../../node_modules/.pnpm/preact@10.29.8_preact-render-to-string@6.7.0/node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
 var f2 = 0;
 function u2(e2, t2, n2, o2, i2, u3) {
   t2 || (t2 = {});
@@ -365,17 +365,15 @@ function PageList({ fileData, allFiles, pages, limit, sort }) {
 }
 
 // src/styles/tagPage.scss
-var tagPage_default = ".archive-index-shell {\n  --archive-rule: color-mix(in srgb, var(--dark) 18%, transparent);\n  --archive-muted: color-mix(in srgb, var(--dark) 66%, var(--light));\n}\n\n.archive-index {\n  box-sizing: border-box;\n  width: min(100%, 64rem);\n  margin: 0 auto;\n  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(0rem, 2vw, 1rem) 2rem;\n}\n\n.archive-index__masthead {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  column-gap: clamp(1.5rem, 5vw, 4rem);\n  padding-bottom: clamp(2rem, 5vw, 4rem);\n  border-bottom: 1px solid var(--archive-rule);\n}\n\n.archive-index__eyebrow,\n.archive-index__summary,\n.archive-index__section-number {\n  margin: 0;\n  color: var(--archive-muted);\n  font-size: 0.72rem;\n  font-weight: 600;\n  letter-spacing: 0.11em;\n  text-transform: uppercase;\n}\n\n.archive-index__masthead h1 {\n  grid-column: 1/-1;\n  max-width: 11ch;\n  margin: 0.25rem 0 0;\n  font-size: clamp(3.4rem, 9vw, 7.4rem);\n  font-weight: 500;\n  line-height: 0.88;\n  letter-spacing: -0.035em;\n  text-wrap: balance;\n}\n\n.archive-index__dek {\n  max-width: 37rem;\n  margin: clamp(1.5rem, 3vw, 2.25rem) 0 0;\n  color: var(--secondary);\n  font-size: clamp(1.12rem, 1.8vw, 1.38rem);\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__summary {\n  display: flex;\n  align-items: end;\n  gap: 0.55rem;\n  margin-top: clamp(1.5rem, 3vw, 2.25rem);\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}\n\n.archive-index__section {\n  padding: clamp(2.25rem, 5vw, 4rem) 0 0;\n}\n\n.archive-index__section + .archive-index__section {\n  margin-top: clamp(2.5rem, 7vw, 5.5rem);\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__section-heading {\n  display: grid;\n  grid-template-columns: minmax(12rem, 0.8fr) minmax(16rem, 1.2fr);\n  gap: clamp(1rem, 4vw, 4rem);\n  align-items: end;\n  margin-bottom: clamp(1.25rem, 3vw, 2rem);\n}\n\n.archive-index__section-heading > div {\n  display: flex;\n  gap: 0.85rem;\n  align-items: baseline;\n}\n\n.archive-index__section-heading h2 {\n  margin: 0;\n  font-size: clamp(1.8rem, 3vw, 2.5rem);\n  font-weight: 500;\n  line-height: 1;\n  text-wrap: balance;\n}\n\n.archive-index__section-heading > p {\n  max-width: 34rem;\n  margin: 0;\n  color: var(--archive-muted);\n  font-size: 0.98rem;\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__list {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  column-gap: clamp(1.5rem, 5vw, 4rem);\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.archive-index__entry {\n  min-width: 0;\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__link {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 1rem;\n  align-items: baseline;\n  min-height: 3.75rem;\n  padding: 0.78rem 0 0.82rem;\n  color: var(--dark);\n  text-decoration-color: color-mix(in srgb, var(--dark) 40%, transparent);\n  text-decoration-thickness: 1px;\n  text-underline-offset: 0.16em;\n}\n\n.archive-index__link:hover,\n.archive-index__link:focus-visible {\n  color: var(--tertiary);\n}\n\n.archive-index__title {\n  min-width: 0;\n  font-size: 1.08rem;\n  font-weight: 500;\n  line-height: 1.18;\n  text-wrap: pretty;\n}\n\n.archive-index__date {\n  color: var(--archive-muted);\n  font-size: 0.76rem;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}\n\n.archive-index__section--drafts .archive-index__title {\n  color: var(--secondary);\n  font-weight: 400;\n}\n\n.archive-index__section--drafts .archive-index__link:hover .archive-index__title,\n.archive-index__section--drafts .archive-index__link:focus-visible .archive-index__title {\n  color: var(--tertiary);\n}\n\n.archive-index__empty {\n  margin: 0;\n  padding: 1rem 0;\n  border-top: 1px solid var(--archive-rule);\n  color: var(--archive-muted);\n}\n\n.tag-page-listing,\n.tag-index {\n  padding-top: 2rem;\n}\n\n.tag-page-listing > header {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 2rem;\n  border-bottom: 1px solid var(--archive-rule, var(--lightgray));\n}\n\n.tag-page-list,\n.tag-index ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.tag-page-list li {\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.tag-page-list a {\n  display: flex;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.75rem 0;\n}\n\n@media (max-width: 800px) {\n  .archive-index {\n    padding-top: 1.25rem;\n  }\n  .archive-index__masthead,\n  .archive-index__section-heading,\n  .archive-index__list {\n    grid-template-columns: minmax(0, 1fr);\n  }\n  .archive-index__summary {\n    flex-wrap: wrap;\n    white-space: normal;\n  }\n  .archive-index__section-heading {\n    align-items: start;\n  }\n  .archive-index__section-heading > p {\n    padding-left: 2rem;\n  }\n  .archive-index__masthead h1 {\n    font-size: clamp(3.2rem, 20vw, 5rem);\n  }\n}\n@media (max-width: 480px) {\n  .archive-index__link {\n    grid-template-columns: minmax(0, 1fr);\n    gap: 0.35rem;\n  }\n}";
+var tagPage_default = ".archive-index-shell {\n  --archive-rule: color-mix(in srgb, var(--dark) 18%, transparent);\n  --archive-muted: color-mix(in srgb, var(--dark) 66%, var(--light));\n}\n\n.archive-index {\n  box-sizing: border-box;\n  width: min(100%, 64rem);\n  margin: 0 auto;\n  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(0rem, 2vw, 1rem) 2rem;\n}\n\n.archive-index__masthead {\n  padding-bottom: clamp(2rem, 5vw, 4rem);\n  border-bottom: 1px solid var(--archive-rule);\n}\n\n.archive-index__masthead h1 {\n  max-width: 11ch;\n  margin: 0;\n  font-size: clamp(3.4rem, 9vw, 7.4rem);\n  font-weight: 500;\n  line-height: 0.88;\n  letter-spacing: -0.035em;\n  text-wrap: balance;\n}\n\n.archive-index__dek {\n  max-width: 37rem;\n  margin: clamp(1.5rem, 3vw, 2.25rem) 0 0;\n  color: var(--secondary);\n  font-size: clamp(1.12rem, 1.8vw, 1.38rem);\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__section {\n  padding: clamp(2.25rem, 5vw, 4rem) 0 0;\n}\n\n.archive-index__section + .archive-index__section {\n  margin-top: clamp(2.5rem, 7vw, 5.5rem);\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__section-heading {\n  display: grid;\n  grid-template-columns: minmax(12rem, 0.8fr) minmax(16rem, 1.2fr);\n  gap: clamp(1rem, 4vw, 4rem);\n  align-items: end;\n  margin-bottom: clamp(1.25rem, 3vw, 2rem);\n}\n\n.archive-index__section-heading h2 {\n  margin: 0;\n  font-size: clamp(1.8rem, 3vw, 2.5rem);\n  font-weight: 500;\n  line-height: 1;\n  text-wrap: balance;\n}\n\n.archive-index__section-heading > p {\n  max-width: 34rem;\n  margin: 0;\n  color: var(--archive-muted);\n  font-size: 0.98rem;\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__list {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  column-gap: clamp(1.5rem, 5vw, 4rem);\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.archive-index__entry {\n  min-width: 0;\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__link {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 1rem;\n  align-items: baseline;\n  min-height: 3.75rem;\n  padding: 0.78rem 0 0.82rem;\n  color: var(--dark);\n  text-decoration-color: color-mix(in srgb, var(--dark) 40%, transparent);\n  text-decoration-thickness: 1px;\n  text-underline-offset: 0.16em;\n}\n\n.archive-index__link:hover,\n.archive-index__link:focus-visible {\n  color: var(--tertiary);\n}\n\n.archive-index__title {\n  min-width: 0;\n  font-size: 1.08rem;\n  font-weight: 500;\n  line-height: 1.18;\n  text-wrap: pretty;\n}\n\n.archive-index__date {\n  color: var(--archive-muted);\n  font-size: 0.76rem;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}\n\n.archive-index__section--drafts .archive-index__title {\n  color: var(--secondary);\n  font-weight: 400;\n}\n\n.archive-index__section--drafts .archive-index__link:hover .archive-index__title,\n.archive-index__section--drafts .archive-index__link:focus-visible .archive-index__title {\n  color: var(--tertiary);\n}\n\n.archive-index__empty {\n  margin: 0;\n  padding: 1rem 0;\n  border-top: 1px solid var(--archive-rule);\n  color: var(--archive-muted);\n}\n\n.tag-page-listing,\n.tag-index {\n  padding-top: 2rem;\n}\n\n.tag-page-listing > header {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 2rem;\n  border-bottom: 1px solid var(--archive-rule, var(--lightgray));\n}\n\n.tag-page-list,\n.tag-index ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.tag-page-list li {\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.tag-page-list a {\n  display: flex;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.75rem 0;\n}\n\n@media (max-width: 800px) {\n  .archive-index {\n    padding-top: 1.25rem;\n  }\n  .archive-index__section-heading,\n  .archive-index__list {\n    grid-template-columns: minmax(0, 1fr);\n  }\n  .archive-index__section-heading {\n    align-items: start;\n  }\n  .archive-index__section-heading > p {\n    padding-left: 2rem;\n  }\n  .archive-index__masthead h1 {\n    font-size: clamp(3.2rem, 20vw, 5rem);\n  }\n}\n@media (max-width: 480px) {\n  .archive-index__link {\n    grid-template-columns: minmax(0, 1fr);\n    gap: 0.35rem;\n  }\n}";
 
 // src/components/ArchiveIndex.tsx
 var archiveCopy = {
   "content/post": {
-    eyebrow: "ESSAYS & ARGUMENTS",
     description: "Long-form writing on molecular biology, aging, evolution, and the incentives around science.",
     draftDescription: "Public works in progress. These may contain gaps, rough edges, and conclusions that change."
   },
   "content/wiki": {
-    eyebrow: "RESEARCH LIBRARY",
     description: "AI-assisted primers, lab notes, and memory aids for molecular cell biology.",
     draftDescription: "Open research notes. Useful now, but still being checked, expanded, or reorganized."
   }
@@ -418,20 +416,8 @@ function ArchiveIndex({
   const draftsId = `${tag.replaceAll("/", "-")}-drafts`;
   return /* @__PURE__ */ u2("main", { class: "archive-index", children: [
     /* @__PURE__ */ u2("header", { class: "archive-index__masthead", children: [
-      /* @__PURE__ */ u2("p", { class: "archive-index__eyebrow", children: copy.eyebrow }),
       /* @__PURE__ */ u2("h1", { children: title }),
-      /* @__PURE__ */ u2("p", { class: "archive-index__dek", children: copy.description }),
-      /* @__PURE__ */ u2("p", { class: "archive-index__summary", children: [
-        /* @__PURE__ */ u2("span", { children: [
-          published.length,
-          " published"
-        ] }),
-        /* @__PURE__ */ u2("span", { "aria-hidden": "true", children: "\xB7" }),
-        /* @__PURE__ */ u2("span", { children: [
-          drafts.length,
-          " working drafts"
-        ] })
-      ] })
+      /* @__PURE__ */ u2("p", { class: "archive-index__dek", children: copy.description })
     ] }),
     /* @__PURE__ */ u2(
       "section",
@@ -440,10 +426,7 @@ function ArchiveIndex({
         "aria-labelledby": publishedId,
         children: [
           /* @__PURE__ */ u2("div", { class: "archive-index__section-heading", children: [
-            /* @__PURE__ */ u2("div", { children: [
-              /* @__PURE__ */ u2("p", { class: "archive-index__section-number", "aria-hidden": "true", children: "01" }),
-              /* @__PURE__ */ u2("h2", { id: publishedId, children: "Published" })
-            ] }),
+            /* @__PURE__ */ u2("div", { children: /* @__PURE__ */ u2("h2", { id: publishedId, children: "Published" }) }),
             /* @__PURE__ */ u2("p", { children: [
               published.length,
               " finished ",
@@ -469,10 +452,7 @@ function ArchiveIndex({
         "aria-labelledby": draftsId,
         children: [
           /* @__PURE__ */ u2("div", { class: "archive-index__section-heading", children: [
-            /* @__PURE__ */ u2("div", { children: [
-              /* @__PURE__ */ u2("p", { class: "archive-index__section-number", "aria-hidden": "true", children: "02" }),
-              /* @__PURE__ */ u2("h2", { id: draftsId, children: "Working drafts" })
-            ] }),
+            /* @__PURE__ */ u2("div", { children: /* @__PURE__ */ u2("h2", { id: draftsId, children: "Working drafts" }) }),
             /* @__PURE__ */ u2("p", { children: copy.draftDescription })
           ] }),
           /* @__PURE__ */ u2(

@@ -45,6 +45,13 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME = "0110_retire_finalization_publication_handoff.sql"
+export const FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS = Object.freeze([
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_insert;",
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_update;",
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_delete;",
+  "DROP TABLE IF EXISTS icono_sync_finalization_publication;"
+])
 export const DISCOVERY_USER_SHELF_MIGRATION_NAME = "0111_discovery_user_shelf.sql"
 export const DISCOVERY_USER_SHELF_MIGRATION_STATEMENTS = Object.freeze([
   "ALTER TABLE icono_discovery_user_state_v2\n  ADD COLUMN shelf_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(shelf_json) AND length(shelf_json) <= 1048576);",

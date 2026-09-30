@@ -364,29 +364,6 @@ class FakeStatement {
         ).length,
       }
     }
-    if (this.sql.includes("RETURNING enqueued_version")) {
-      const [token, until, version, , now] = this.args
-      const state = this.db.handoff
-      if (
-        [...this.db.jobs.values()].some((row) => row.status !== "completed") ||
-        state.enqueued_version !== version ||
-        state.notified_version >= version ||
-        state.next_attempt_at > now
-      )
-        return null
-      Object.assign(state, { lease_token: token, next_attempt_at: until })
-      return { enqueued_version: version }
-    }
-    if (this.sql.includes("RETURNING notified_version")) {
-      const [version, token] = this.args
-      if (this.db.handoff.lease_token !== token) return null
-      Object.assign(this.db.handoff, {
-        notified_version: version,
-        lease_token: "",
-        next_attempt_at: "",
-      })
-      return { notified_version: version }
-    }
     if (this.sql.includes("AS has_runnable")) {
       const rows = [...this.db.jobs.values()]
       const eligible = rows.filter(
@@ -419,10 +396,6 @@ class FakeStatement {
         : new Set(JSON.parse(this.args[0]))
       const jobs = [...this.db.jobs.values()].filter((row) => !scope || scope.has(row.gene_symbol))
       return {
-        ...this.db.handoff,
-        terminal_phase_count: jobs.filter(
-          (row) => row.status !== "completed" && row.phase === "completed",
-        ).length,
         queued_count: jobs.filter((row) => row.status === "queued").length,
         running_count: jobs.filter((row) => row.status === "running").length,
         retrying_count: jobs.filter((row) => row.status === "retrying").length,
@@ -663,11 +636,6 @@ class FakeStatement {
 
   async run() {
     this.db.calls.push({ method: "run", sql: this.sql, args: this.args })
-    if (this.sql.includes("UPDATE icono_sync_finalization_publication")) {
-      if (this.db.handoff.lease_token === this.args[1])
-        Object.assign(this.db.handoff, { lease_token: "", next_attempt_at: this.args[0] })
-      return { success: true }
-    }
     if (
       this.sql.includes("CREATE TABLE IF NOT EXISTS icono_sync_finalization_jobs") ||
       this.sql.includes("CREATE INDEX IF NOT EXISTS idx_icono_sync_finalization_jobs")
@@ -675,7 +643,6 @@ class FakeStatement {
       return { success: true }
     }
     if (this.sql.includes("INSERT INTO icono_sync_finalization_jobs")) {
-      this.db.handoff.enqueued_version += 1
       const [
         symbol,
         actorId,
@@ -803,12 +770,6 @@ class FakeStatement {
 class FakeIconoplasmDb {
   constructor({ jobs = [] } = {}) {
     this.calls = []
-    this.handoff = {
-      enqueued_version: jobs.some((job) => job.status !== "completed") ? 1 : 0,
-      notified_version: 0,
-      lease_token: "",
-      next_attempt_at: "",
-    }
     this.jobs = new Map()
     for (const job of Array.isArray(jobs) ? jobs : []) {
       const symbol = String(job?.gene_symbol || "")

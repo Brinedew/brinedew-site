@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.8 - 2026-09-30
+
+* Fixed gene name highlights displaying wrong in in multi-column tables.
 ## 0.5.7 - 2026-09-06
 
 * hotfix for previous release
