@@ -1,28 +1,83 @@
 // ARCHITECTURE FENCE [IPD-004]
 // One concern, one owner: these reservations live inside the existing shared
 // Iconoplasm daily-budget Durable Object. They are not a second coordinator.
-// Each accepted operation keeps its full reservation after an uncertain
-// outcome, and no lane may spend another lane's unused capacity.
+//
+// Admission is measured against the one real resource, Cloudflare's account
+// D1 rows-written meter (100k/day on the free plan):
+//
+//   pressure = provider rows written, observed at T
+//            + worst-case units of every reservation made since T - 15 min
+//
+// The 15 minutes cover analytics lag: once the provider meter can see an
+// operation's real writes, its worst-case receipt stops counting. An uncertain
+// reservation is never cleared or refunded; it simply ages into the meter.
+// With no observation today the baseline is midnight's exact zero and every
+// receipt since midnight counts, so unknown capacity is never assumed.
+//
+// B-897 (30 Sep 2026): the previous four fixed lanes summed every reservation
+// *started* today at worst case and never subtracted. 200 retried 50-unit
+// finalization phases parked laptop delivery for a whole UTC day while the
+// provider meter sat near 12%. Background work now stops at 70% of the meter
+// and user actions at 90%, so users always keep a band background cannot take.
 
 export const D1_PROVIDER_DAILY_WRITE_LIMIT = 100_000
-export const MUTATION_UNALLOCATED_HEADROOM = 30_000
-export const MUTATION_ORDINARY_DAILY_CEILING =
-  D1_PROVIDER_DAILY_WRITE_LIMIT - MUTATION_UNALLOCATED_HEADROOM
+export const MUTATION_BACKGROUND_CEILING = 70_000
+export const MUTATION_USER_ACTION_CEILING = 90_000
+export const MUTATION_ANALYTICS_LAG_MS = 15 * 60_000
+export const MUTATION_PRESSURE_BUCKET_MS = 15 * 60_000
+export const MUTATION_OBSERVATION_FUTURE_TOLERANCE_MS = 60_000
 export const MUTATION_COMPLETED_RETRY_HORIZON_DAYS = 32
 export const MUTATION_TOMBSTONE_RETENTION_DAYS = 32
 export const MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY =
   70_000 * (MUTATION_COMPLETED_RETRY_HORIZON_DAYS + MUTATION_TOMBSTONE_RETENTION_DAYS)
-export const MUTATION_LANE_DAILY_LIMITS = Object.freeze({
-  user_action: 40_000,
-  publication: 10_000,
-  finalization_recovery: 10_000,
-  laptop_delivery: 10_000,
+export const MUTATION_LANE_CEILINGS = Object.freeze({
+  user_action: MUTATION_USER_ACTION_CEILING,
+  publication: MUTATION_BACKGROUND_CEILING,
+  finalization_recovery: MUTATION_BACKGROUND_CEILING,
+  laptop_delivery: MUTATION_BACKGROUND_CEILING,
 })
 
-const LANES = new Set(Object.keys(MUTATION_LANE_DAILY_LIMITS))
-const ALLOCATED = Object.values(MUTATION_LANE_DAILY_LIMITS).reduce((sum, value) => sum + value, 0)
-if (ALLOCATED + MUTATION_UNALLOCATED_HEADROOM !== D1_PROVIDER_DAILY_WRITE_LIMIT) {
-  throw new Error("Mutation lane allocation must retain exactly 30 percent provider headroom")
+const LANES = new Set(Object.keys(MUTATION_LANE_CEILINGS))
+const PRESSURE_SQL = `SELECT COALESCE(SUM(reserved_units), 0) AS units
+   FROM daily_mutation_pressure_buckets
+   WHERE day = ? AND bucket_start >= ?`
+
+function bucketStart(ms) {
+  // "YYYY-MM-DDTHH:MM", UTC, floored to the bucket; sorts lexicographically.
+  return new Date(Math.floor(ms / MUTATION_PRESSURE_BUCKET_MS) * MUTATION_PRESSURE_BUCKET_MS)
+    .toISOString()
+    .slice(0, 16)
+}
+
+function timeMs(value, fallback) {
+  const parsed = Date.parse(String(value ?? ""))
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+// The counted window starts 15 minutes before a valid same-day observation,
+// or at midnight when there is none. Yesterday's and future-dated samples are
+// not baselines for today.
+// Locally recorded writes are live but partial; the provider meter is
+// complete but lags. The baseline takes whichever is higher.
+function pressureWindow(day, { provider_rows_written, local_rows_written, observed_at, now } = {}) {
+  const midnight = Date.parse(`${day}T00:00:00.000Z`)
+  const nowMs = timeMs(now, Date.now())
+  const observedMs = timeMs(observed_at, Number.NaN)
+  const observed =
+    Number.isFinite(observedMs) &&
+    new Date(observedMs).toISOString().slice(0, 10) === day &&
+    observedMs <= nowMs + MUTATION_OBSERVATION_FUTURE_TOLERANCE_MS
+  return {
+    nowMs,
+    baseline: Math.max(
+      observed ? Math.max(0, Number(provider_rows_written || 0) || 0) : 0,
+      Math.max(0, Number(local_rows_written || 0) || 0),
+    ),
+    observed_at: observed ? new Date(observedMs).toISOString() : null,
+    from: bucketStart(
+      Math.max(midnight, observed ? observedMs - MUTATION_ANALYTICS_LAG_MS : midnight),
+    ),
+  }
 }
 
 export class MutationLaneReservationError extends Error {
@@ -58,13 +113,20 @@ export class DailyMutationLaneReservations {
         : (callback) => callback()
   }
 
+  get pressureSql() {
+    return PRESSURE_SQL
+  }
+
   initialize() {
-    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS daily_mutation_lane_usage (
+    // B-897: the per-lane day totals were the fixed-lane meter. Pressure
+    // buckets replace them; a day holds at most 96 bucket rows.
+    this.storage.sql.exec(`DROP TABLE IF EXISTS daily_mutation_lane_usage`)
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS daily_mutation_pressure_buckets (
       day TEXT NOT NULL,
-      lane TEXT NOT NULL,
+      bucket_start TEXT NOT NULL,
       reserved_units INTEGER NOT NULL DEFAULT 0,
       reservation_count INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY(day, lane)
+      PRIMARY KEY(day, bucket_start)
     )`)
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS daily_mutation_lane_reservations (
       operation_id TEXT PRIMARY KEY,
@@ -117,7 +179,7 @@ export class DailyMutationLaneReservations {
     const operationId = cleanIdentity(input.operation_id)
     const units = Number(input.units)
     requireValue(
-      Number.isSafeInteger(units) && units > 0 && units <= MUTATION_LANE_DAILY_LIMITS[lane],
+      Number.isSafeInteger(units) && units > 0 && units <= MUTATION_LANE_CEILINGS[lane],
       "MUTATION_RESERVATION_UNITS_INVALID",
     )
 
@@ -155,38 +217,11 @@ export class DailyMutationLaneReservations {
         }
       }
 
-      const usage = this.row(
-        `SELECT reserved_units, reservation_count
-         FROM daily_mutation_lane_usage
-         WHERE day = ? AND lane = ?`,
-        day,
-        lane,
-      )
-      const used = Math.max(0, Number(usage?.reserved_units || 0) || 0)
-      const limit = MUTATION_LANE_DAILY_LIMITS[lane]
-      if (used + units > limit) {
-        return {
-          ok: false,
-          code: "MUTATION_LANE_CAPACITY_EXHAUSTED",
-          disposition: lane === "user_action" ? "pending_or_retryable_refusal" : "durable_pending",
-          day,
-          lane,
-          requested_units: units,
-          reserved_units: used,
-          lane_limit: limit,
-          lane_remaining: Math.max(0, limit - used),
-        }
-      }
-
-      const allLaneUsage = this.row(
-        `SELECT COALESCE(SUM(reserved_units), 0) AS reserved_units
-         FROM daily_mutation_lane_usage
-         WHERE day = ?`,
-        day,
-      )
-      const allLaneReservedUnits = Math.max(0, Number(allLaneUsage?.reserved_units || 0) || 0)
-      const providerRowsWritten = Math.max(0, Number(input.provider_rows_written || 0) || 0)
-      if (providerRowsWritten + allLaneReservedUnits + units > MUTATION_ORDINARY_DAILY_CEILING) {
+      const window = pressureWindow(day, input)
+      const inFlightUnits = this.inFlightUnits(day, window.from)
+      const ceiling = MUTATION_LANE_CEILINGS[lane]
+      const pressure = window.baseline + inFlightUnits + units
+      if (pressure > ceiling) {
         return {
           ok: false,
           code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
@@ -194,13 +229,11 @@ export class DailyMutationLaneReservations {
           day,
           lane,
           requested_units: units,
-          provider_rows_written: providerRowsWritten,
-          all_lane_reserved_units: allLaneReservedUnits,
-          ordinary_ceiling: MUTATION_ORDINARY_DAILY_CEILING,
-          provider_remaining: Math.max(
-            0,
-            MUTATION_ORDINARY_DAILY_CEILING - providerRowsWritten - allLaneReservedUnits,
-          ),
+          provider_rows_written: window.baseline,
+          observed_at: window.observed_at,
+          in_flight_units: inFlightUnits,
+          ceiling,
+          remaining: Math.max(0, ceiling - window.baseline - inFlightUnits),
         }
       }
 
@@ -214,14 +247,14 @@ export class DailyMutationLaneReservations {
         units,
       )
       this.storage.sql.exec(
-        `INSERT INTO daily_mutation_lane_usage
-         (day, lane, reserved_units, reservation_count)
+        `INSERT INTO daily_mutation_pressure_buckets
+         (day, bucket_start, reserved_units, reservation_count)
          VALUES (?, ?, ?, 1)
-         ON CONFLICT(day, lane) DO UPDATE SET
-           reserved_units = daily_mutation_lane_usage.reserved_units + excluded.reserved_units,
-           reservation_count = daily_mutation_lane_usage.reservation_count + 1`,
+         ON CONFLICT(day, bucket_start) DO UPDATE SET
+           reserved_units = daily_mutation_pressure_buckets.reserved_units + excluded.reserved_units,
+           reservation_count = daily_mutation_pressure_buckets.reservation_count + 1`,
         day,
-        lane,
+        bucketStart(window.nowMs),
         units,
       )
       return {
@@ -231,10 +264,15 @@ export class DailyMutationLaneReservations {
         lane,
         operation_id: operationId,
         reserved_units: units,
-        lane_limit: limit,
-        lane_remaining: limit - used - units,
+        pressure,
+        ceiling,
+        remaining: ceiling - pressure,
       }
     })
+  }
+
+  inFlightUnits(day, from) {
+    return Math.max(0, Number(this.row(PRESSURE_SQL, day, from)?.units || 0) || 0)
   }
 
   complete(input) {
@@ -360,36 +398,24 @@ export class DailyMutationLaneReservations {
     return candidates.length ? Math.min(...candidates) : null
   }
 
-  snapshot(day, providerRowsWritten = 0) {
+  snapshot(day, observation = {}) {
     const safeDay = cleanDay(day)
-    const rows = this.storage.sql
-      .exec(
-        `SELECT lane, reserved_units, reservation_count
-         FROM daily_mutation_lane_usage
-         WHERE day = ?`,
-        safeDay,
-      )
-      .toArray()
-    const byLane = new Map(rows.map((row) => [row.lane, row]))
+    const window = pressureWindow(safeDay, observation)
+    const inFlightUnits = this.inFlightUnits(safeDay, window.from)
+    const pressure = window.baseline + inFlightUnits
     return {
       day: safeDay,
       provider_limit: D1_PROVIDER_DAILY_WRITE_LIMIT,
-      ordinary_ceiling: MUTATION_ORDINARY_DAILY_CEILING,
-      provider_rows_written: Math.max(0, Number(providerRowsWritten || 0) || 0),
-      unallocated_headroom: MUTATION_UNALLOCATED_HEADROOM,
+      provider_rows_written: window.baseline,
+      observed_at: window.observed_at,
+      counted_from: window.from,
+      in_flight_units: inFlightUnits,
+      pressure,
       lanes: Object.fromEntries(
-        Object.entries(MUTATION_LANE_DAILY_LIMITS).map(([lane, limit]) => {
-          const reserved = Math.max(0, Number(byLane.get(lane)?.reserved_units || 0) || 0)
-          return [
-            lane,
-            {
-              limit,
-              reserved,
-              remaining: Math.max(0, limit - reserved),
-              reservations: Math.max(0, Number(byLane.get(lane)?.reservation_count || 0) || 0),
-            },
-          ]
-        }),
+        Object.entries(MUTATION_LANE_CEILINGS).map(([lane, limit]) => [
+          lane,
+          { limit, remaining: Math.max(0, limit - pressure) },
+        ]),
       ),
     }
   }
