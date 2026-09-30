@@ -181,7 +181,11 @@ import {
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
-import { readBrinedewAccount } from "./lib/brinedew-account-identity.js"
+import {
+  BrinedewAccountIdentityError,
+  eraseBrinedewAccountOnRequest,
+  readBrinedewAccount,
+} from "./lib/brinedew-account-identity.js"
 import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
 import {
   drainBrinedewAuthorityAccountProjectionOutbox,
@@ -35011,6 +35015,46 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
             error: sanitizeText(String(error?.message || error), 300),
           },
           Number.isSafeInteger(error?.status) && error.status >= 400 ? error.status : 503,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+  },
+  // B-871: fulfil an erasure request. The account projection outbox carries
+  // the result into the caretaker authority (assignments end, credit shows the
+  // anonymous label) on its scheduled drain.
+  "admin_account.erase": async ({ request, env, done }) => {
+    if (!(await isIconoplasmAdmin(request, env)))
+      return done("admin_account_erase_403", json({ error: "Unauthorized" }, 403))
+    if (!env.DB)
+      return done("admin_account_erase_503", json({ error: "Account database unavailable" }, 503))
+    const payload = await request.json().catch(() => ({}))
+    try {
+      const account = await eraseBrinedewAccountOnRequest(env.DB, {
+        accountId: payload?.account_id,
+        commandId: payload?.command_id,
+        reasonCode: payload?.reason_code || "erasure_request",
+      })
+      return done(
+        "admin_account_erase",
+        json({ ok: true, account }, 200, { "Cache-Control": "no-store" }),
+      )
+    } catch (error) {
+      const status =
+        error instanceof BrinedewAccountIdentityError
+          ? error.status || 409
+          : error instanceof TypeError
+            ? 400
+            : 503
+      return done(
+        "admin_account_erase_error",
+        json(
+          {
+            ok: false,
+            code: String(error?.code || (status === 400 ? "INVALID_REQUEST" : "ERASURE_FAILED")),
+            error: sanitizeText(String(error?.message || error), 300),
+          },
+          status,
           { "Cache-Control": "no-store" },
         ),
       )

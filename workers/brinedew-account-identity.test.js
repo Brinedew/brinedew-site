@@ -7,6 +7,7 @@ import {
   brinedewFormerAuthorLabel,
   disableBrinedewAccount,
   eraseBrinedewAccount,
+  eraseBrinedewAccountOnRequest,
   hydrateBrinedewSessionAccountIdentity,
   linkBrinedewProviderIdentity,
   resolveBrinedewAccountIdentity,
@@ -392,4 +393,62 @@ test("erasure removes active provider links and public credit but preserves immu
     .get(accountId)
   assert.match(erasureLinkEvent.provider_subject_fingerprint, /^sha256:[0-9a-f]{64}$/)
   assert.equal(erasureLinkEvent.provider_subject_fingerprint.includes("discord-one"), false)
+})
+
+// B-871 (26 Sep 2026): the privacy page promises that an erased account loses
+// its provider identity while retained authorship shows a stable anonymous
+// label, but nothing in production could perform an erasure. Failure modes:
+// 1. an erasure request needs two hand-typed commands and can stop halfway;
+// 2. replaying the same request double-applies or errors;
+// 3. an unknown account, or a second request under a different command after
+//    erasure, looks like success;
+// 4. the request leaves the caretaker withdraw policy (not implemented
+//    downstream) reachable, contradicting the promised retained history.
+test("one erasure request completes the promised erasure and replays idempotently (B-871)", async () => {
+  const database = migratedDatabase()
+  const db = new SqliteD1(database)
+  const accountId = database
+    .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-one'`)
+    .get().account_id
+
+  const erased = await eraseBrinedewAccountOnRequest(db, {
+    accountId,
+    commandId: "erasure-request-7",
+    now: 50,
+  })
+  assert.equal(erased.status, "erased")
+  assert.equal(erased.author_label, await brinedewFormerAuthorLabel(accountId))
+  assert.equal(
+    database
+      .prepare(`SELECT count(*) AS count FROM brinedew_account_identities WHERE account_id = ?`)
+      .get(accountId).count,
+    0,
+  )
+  const pending = database
+    .prepare(
+      `SELECT final_leave_policy FROM brinedew_account_lifecycle_events
+        WHERE account_id = ? AND to_status = 'erasure_pending'`,
+    )
+    .get(accountId)
+  assert.equal(pending.final_leave_policy, "retain")
+
+  const replay = await eraseBrinedewAccountOnRequest(db, {
+    accountId,
+    commandId: "erasure-request-7",
+    now: 60,
+  })
+  assert.equal(replay.replay, true)
+  assert.equal(replay.status, "erased")
+
+  await assert.rejects(
+    eraseBrinedewAccountOnRequest(db, { accountId, commandId: "erasure-request-8", now: 70 }),
+    /already erased/,
+  )
+  await assert.rejects(
+    eraseBrinedewAccountOnRequest(db, {
+      accountId: "acct_" + "0".repeat(26),
+      commandId: "erasure-request-9",
+    }),
+    (error) => error?.code === "ACCOUNT_NOT_FOUND" || error instanceof TypeError,
+  )
 })

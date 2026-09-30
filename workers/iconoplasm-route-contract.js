@@ -867,6 +867,15 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
     budgetFamily: "admin_caretaker_mutation",
   }),
+  // B-871: one operator command fulfils an erasure request (privacy page).
+  iconoplasmApiContract({
+    apiHandler: "admin_account.erase",
+    id: "admin_account_erase",
+    match: exact("/api/iconoplasm/admin/accounts/erase"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_caretaker_mutation",
+  }),
   iconoplasmApiContract({
     apiHandler: "manifestation_authority_sync",
     id: "authority_events",
