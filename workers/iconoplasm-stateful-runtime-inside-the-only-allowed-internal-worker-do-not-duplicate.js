@@ -20881,6 +20881,44 @@ async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
 
+  // B-888 (30 Sep 2026): one vote owner. The per-gene vote authority holds the
+  // votes; D1's summary is a delivered copy that can lag for as long as a
+  // delivery waits on budget admission. Electing here from that copy made
+  // reconcile promote ADO's newest zero-vote upload while the authority
+  // published the upvoted one, so the catalog and the gene page disagreed for
+  // three days. Every caller now elects from the authority's own summaries,
+  // exactly like the vote projection job. If the authority cannot be read,
+  // nothing is elected from D1: the durable projection job owns the retry.
+  if (iconoplasmVoteCoordinatorBinding(env)) {
+    let coordinatorState = null
+    try {
+      coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: symbolNorm })
+    } catch (error) {
+      const deferred = await scheduleVoteProjectionRefresh(env, null, {
+        symbol: symbolNorm,
+        actorId,
+        reason,
+      })
+      return {
+        ok: true,
+        changed: false,
+        code: "DEFERRED_TO_VOTE_AUTHORITY",
+        durable: Boolean(deferred?.durable),
+        error: sanitizeText(String(error?.message || error), 300),
+      }
+    }
+    return autoPromoteTopVotedPortraitFromCoordinatorState(env, {
+      symbol: symbolNorm,
+      actorId,
+      reason,
+      assetSummaries: Array.isArray(coordinatorState?.asset_summaries)
+        ? coordinatorState.asset_summaries
+        : [],
+    })
+  }
+
+  // No vote authority is bound (isolated tests and tooling only): D1's summary
+  // is then the only vote source there is.
   const currentRow = await env.ICONOPLASM_DB.prepare(
     `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
      FROM icono_publish_state
