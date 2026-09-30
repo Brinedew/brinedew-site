@@ -1,3 +1,4 @@
+import { ICONOPLASM_WIKI_PAGEVIEWS } from "../../quartz/static/iconoplasm/wiki-pageviews.js"
 import { planCandidateGalleryPages, writeCandidateGallery } from "./iconoplasm-candidate-gallery.js"
 import {
   canonicalPublishedJson,
@@ -112,7 +113,9 @@ export function publicCatalogEntry(card) {
       record.uniqueness_rank != null && Number.isFinite(Number(record.uniqueness_rank))
         ? Number(record.uniqueness_rank)
         : null,
-    popularity_score: Number(record.popularity_score || 0),
+    // B-886: the composed card never carries popularity; the page-view table
+    // is the one source (the signed-in shelf joins the same table).
+    popularity_score: Number(record.popularity_score || ICONOPLASM_WIKI_PAGEVIEWS[symbol] || 0),
     portrait: record.portrait ?? null,
     blot: record.blot ?? null,
     image_upvotes: current?.image_upvotes || 0,
