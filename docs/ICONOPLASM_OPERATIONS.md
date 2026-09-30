@@ -323,6 +323,10 @@ its last same-day provider sample (or since midnight) when a sample is missing.
 The old "Durable Objects guard lost live telemetry" pause and its message were
 deleted: one failed GraphQL read used to park a publication until the UTC reset.
 
+When a meter is unreadable, fix the credential: `CLOUDFLARE_API_TOKEN` must be
+the account-owned `iconoplasm-admin` token that can read `CLOUDFLARE_ACCOUNT_ID`;
+do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path.
+
 ## account erasure request
 
 The privacy pages promise erasure. Fulfil a verified request with one command
