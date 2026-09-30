@@ -1,7 +1,7 @@
 import {
   createPortraitDeliverySession,
   normalizePortraitDeliveryPolicy,
-} from "./generated/portrait-delivery-core.js?v=41e0512bcdf1ba3a"
+} from "./generated/portrait-delivery-core.js?v=03c1bb31bbe5f918"
 
 const SESSION_KEY = "iconoplasm.portrait-delivery.v2"
 
@@ -34,7 +34,9 @@ function imageProbe(ImageCtor, setTimer, clearTimer) {
       image.onload = () => settle(true)
       image.onerror = () => settle(false)
       timer = setTimer(() => {
-        settle(false)
+        // No answer inside the ceiling is not the same as a refusal: the
+        // session treats it as transient and re-probes after the retry window.
+        settle("timeout")
         try {
           image.src = ""
         } catch (_error) {}
@@ -58,6 +60,7 @@ export function createPortraitDelivery(options = {}) {
         options.setTimeoutRef ?? globalThis.setTimeout,
         options.clearTimeoutRef ?? globalThis.clearTimeout,
       ),
+    now: options.nowRef,
     persist(state) {
       try {
         storage?.setItem?.(SESSION_KEY, JSON.stringify(state))

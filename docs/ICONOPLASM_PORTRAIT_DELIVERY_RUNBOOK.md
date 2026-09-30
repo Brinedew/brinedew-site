@@ -246,11 +246,23 @@ browser would otherwise keep the old routing code despite a successful deploy.
   or fails. Once canonical succeeds, later images use it alone; their alternate
   can start only if canonical itself fails. `hedgeDelayMs: null` means no timer,
   not a zero-delay race.
-- A month-long regional DNS block is not a brief outage. There is no timed CDN
-  recovery policy, 30-second probe, or per-image CDN retry while canonical works.
-  The existing tab decision survives ordinary reloads. A new tab has a new
-  decision; a browser's DNS/VPN change is not reliably detectable and must not
-  be inferred from elapsed time or fluctuating connection-speed estimates.
+- A month-long regional DNS block is not a brief outage. A definitive probe
+  failure (DNS error, HTTP error, `onerror`) has no timed CDN recovery policy,
+  30-second probe, or per-image CDN retry while canonical works. The existing
+  tab decision survives ordinary reloads. A new tab has a new decision; a
+  browser's DNS/VPN change is not reliably detectable and must not be inferred
+  from elapsed time or fluctuating connection-speed estimates.
+- A probe **timeout** is a different signal (2026-10-01). Cold Bunny objects
+  measured 0.4 to 1.7 s from a healthy network against the 2.5 s ceiling, and
+  one clean browser tripped the fallback on its first visit, after which every
+  image on every page in that tab became a metered Worker request. A timeout
+  therefore selects canonical now and arms one re-probe after
+  `accelerator_retry_after_ms` (default 60 s, server-configurable 5 s to 10 min).
+  Inside the window nothing re-probes and there is no hedge. A second timeout
+  re-arms the window; a definitive failure afterwards makes the block permanent;
+  a canonical failure while the CDN is only timed out tries the CDN again
+  instead of going terminal. Cost on a truly black-holed network: one 2.5 s
+  probe per minute per tab, no Worker requests.
 - Native completion carries its decision identity. A late result from a former
   decision (or a former worker instance) cannot overwrite a newer route choice.
 - A selected source failure switches once to the other source.
