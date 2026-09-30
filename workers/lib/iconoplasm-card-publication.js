@@ -3,6 +3,7 @@ import {
   canonicalPublishedJson,
   PUBLISHED_CARD_OBJECT_LIMITS,
   publishedCardObjectKey,
+  stableGeneObjectKey,
 } from "./iconoplasm-published-card-objects.js"
 
 // ARCHITECTURE FENCE [IPD-011]: one durable publication job owns the head.
@@ -19,17 +20,24 @@ const CARD_PUBLICATION_CONCURRENCY = 2
 // object costs a PUT and verified GET; leave 18 for old-shard reads, redirects
 // and provider variance. Gallery pages cannot consume this reserve.
 const CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE = 16
-// Checking origin before upload can cost GET + PUT + verified GET on a miss.
-// Keep that optional path to 12 objects (36 requests), with 14 left for other
-// work; larger phases retain the existing PUT + verified GET path.
-const CARD_PUBLICATION_MAX_REUSED_OBJECTS_PER_PHASE = 12
+// The same 32 calls expressed as subrequests, so a phase can be sized by its
+// actual call pattern: an immutable object is PUT + verified GET (2 calls); a
+// rematerialization first checks origin (GET + PUT + GET on a miss, 3 calls);
+// the stable gene object (B-898) is always PUT + verified GET (2 calls) and is
+// never reused because its URL is fixed and its bytes change.
+const CARD_PUBLICATION_PHASE_SUBREQUEST_BUDGET = CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE * 2
+function publicationPhaseCalls(publication, { reuse }) {
+  const immutable = publication.count - 1
+  return (reuse ? 3 : 2) * immutable + 2
+}
 
 function publicationObjectPlan(symbol, projected) {
   const candidates = Array.isArray(projected?.portrait_candidates)
     ? projected.portrait_candidates
     : []
   const pages = planCandidateGalleryPages(symbol, candidates)
-  const count = 3 + pages.length
+  // 3 immutable objects + 1 stable gene object (B-898) + gallery pages.
+  const count = 4 + pages.length
   if (count > CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE) {
     const error = new Error(
       `Candidate gallery for ${symbol} needs ${count} verified objects; one publication phase supports at most ${CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE}`,
@@ -289,6 +297,18 @@ export function createCardPublication({
       delete geneRecord.portrait_candidates
       geneRecord.candidate_count = gallery.candidate_count
       geneRecord.candidate_gallery = gallery.candidate_gallery
+      // B-898 Stage 1: the stable object is the whole gene in one fetch. It is
+      // the projected record with its complete candidate pool inline, at a
+      // fixed URL, rewritten on every publication of this gene. It is written
+      // in the same phase as the immutable objects so a reader never sees a
+      // gene whose stable object lags its immutable receipts.
+      const stableGene = {
+        ...publication.projected,
+        portrait_candidates: publication.candidates,
+        candidate_count: publication.candidates.length,
+        stable_object_version: 3,
+        published_at: now(),
+      }
       const [full, gene, portrait] = await settlePublicationWrites([
         objects.write("cards", stable, { reuseExisting: identity.reuseExisting === true }),
         objects.write("genes", geneRecord, { reuseExisting: identity.reuseExisting === true }),
@@ -296,6 +316,9 @@ export function createCardPublication({
           reuseExisting: identity.reuseExisting === true,
         }),
       ])
+      // After the immutable group settles, so two cards in flight still keep
+      // the six-pipeline ceiling (three core objects each) noted below.
+      await objects.writeStable(stableGeneObjectKey(symbol), stableGene)
       return [full, gene, portrait]
     } catch (error) {
       if (error && typeof error === "object") {
@@ -485,18 +508,23 @@ export function createCardPublication({
     const slice = []
     const projections = new Map()
     let objectsInPhase = 0
+    let callsInPhase = 0
+    const reuse = job.rematerialize === true
     for (const symbol of candidateSymbols) {
       const card = bySymbol.get(symbol)
       if (card) {
         if (!source.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
         const stable = source.stable(card)
         const publication = publicationObjectPlan(symbol, source.project(stable.payload))
+        const calls = publicationPhaseCalls(publication, { reuse })
         if (
           slice.length &&
-          objectsInPhase + publication.count > CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE
+          (objectsInPhase + publication.count > CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE ||
+            callsInPhase + calls > CARD_PUBLICATION_PHASE_SUBREQUEST_BUDGET)
         )
           break
         objectsInPhase += publication.count
+        callsInPhase += calls
         projections.set(symbol, { stable, publication })
       }
       slice.push(symbol)
@@ -518,9 +546,9 @@ export function createCardPublication({
       offset: job.offset,
       started_at: job.started_at,
       rematerialize: job.rematerialize === true,
-      reuseExisting:
-        job.rematerialize === true &&
-        objectsInPhase <= CARD_PUBLICATION_MAX_REUSED_OBJECTS_PER_PHASE,
+      // The phase above was sized for the origin-check call pattern, so a
+      // rematerialization always reuses exact existing bytes.
+      reuseExisting: reuse,
     }
     for (let offset = 0; offset < slice.length; offset += CARD_PUBLICATION_CONCURRENCY) {
       const group = await settlePublicationWrites(

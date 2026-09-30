@@ -280,3 +280,59 @@ test("a card without a blot needs no image verification", async () => {
   const { store } = fixture()
   assert.deepEqual(await store.verifyBlot("ADAP1", null), { skipped: true })
 })
+
+// B-898 Stage 1: the stable gene object writer.
+test("the stable gene object is written to a fixed key with a short TTL and verified by read-back", async () => {
+  const { store, calls, objects } = fixture()
+  const headers = []
+  const seen = createPublishedCardObjectStore(env, {
+    request: async (url, init, key) => {
+      if (init.method === "PUT") headers.push(init.headers)
+      calls.push({ method: init.method, key, url })
+      if (init.method === "PUT") {
+        objects.set(key, init.body.slice())
+        return new Response(null, { status: 201 })
+      }
+      return objects.has(key) ? new Response(objects.get(key)) : new Response(null, { status: 404 })
+    },
+  })
+  const first = await seen.writeStable("genes/v3/TP53.json", { symbol: "TP53", n: 1 })
+  const second = await seen.writeStable("genes/v3/TP53.json", { symbol: "TP53", n: 2 })
+  assert.equal(first.key, "genes/v3/TP53.json")
+  assert.equal(second.key, first.key)
+  assert.notEqual(second.hash, first.hash)
+  assert.equal(headers[0]["Cache-Control"], "public, max-age=300, stale-while-revalidate=86400")
+  assert.equal(headers[0]["Content-Type"], "application/json")
+  assert.deepEqual(
+    calls.map((c) => c.method),
+    ["PUT", "GET", "PUT", "GET"],
+  )
+  assert.ok(calls[0].url.endsWith("/test-zone/genes/v3/TP53.json"))
+  void store
+})
+
+test("the stable gene object rejects foreign keys, oversized bodies and unreadable writes", async () => {
+  const { store } = fixture()
+  await assert.rejects(
+    store.writeStable("published-cards/v2/immutable/genes/x.json", {}),
+    /Invalid stable gene object key/,
+  )
+  await assert.rejects(
+    store.writeStable("genes/v3/tp53.json", {}),
+    /Invalid stable gene object key/,
+  )
+  await assert.rejects(
+    store.writeStable("genes/v3/TP53.json", { blob: "x".repeat(1024 * 1024) }),
+    (error) => error.code === "PUBLISHED_OBJECT_OVERSIZED" && error.permanent === true,
+  )
+  const unreadable = fixture({ alterRead: () => null })
+  await assert.rejects(
+    unreadable.store.writeStable("genes/v3/TP53.json", { symbol: "TP53" }),
+    /not yet readable/,
+  )
+  const corrupt = fixture({ alterRead: () => new TextEncoder().encode("{}") })
+  await assert.rejects(
+    corrupt.store.writeStable("genes/v3/TP53.json", { symbol: "TP53" }),
+    /hash mismatch/,
+  )
+})
