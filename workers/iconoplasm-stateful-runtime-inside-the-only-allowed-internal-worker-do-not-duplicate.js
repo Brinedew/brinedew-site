@@ -4,6 +4,7 @@ import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import { DailyMutationLaneReservations } from "./lib/iconoplasm-mutation-lane-reservations.js"
 import {
   createDiscoveryOrdinalDictionary,
+  discoveryShelfIsCurrent,
   hasDiscoveryOrdinal,
 } from "./iconoplasm/discovery-compact-state.js"
 import {
@@ -32,6 +33,7 @@ import {
   compactSharedRowsFromSummaries,
   compactSharedSummaries,
   compactShelfRowsFromChronology,
+  compactShelfRowsFromShelf,
 } from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
@@ -12002,6 +12004,11 @@ async function compactShelfBaseRows(env, { userId } = {}) {
     userId,
   })
   if (!state) return []
+  // B-887: one user-state row instead of the whole chronology (0.5-1 MB and
+  // 6-9 ms of CPU for the largest shelves on every home view). A shelf not
+  // stamped with the current state version is never trusted: the chronology
+  // fold below stays the correct, slower path until a write heals it.
+  if (discoveryShelfIsCurrent(state)) return compactShelfRowsFromShelf(state.shelf)
   const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userId)
   return compactShelfRowsFromChronology(chronology)
 }

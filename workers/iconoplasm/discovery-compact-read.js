@@ -83,6 +83,36 @@ export function compactShelfRowsFromChronology({ chunks = [], active_events = []
   }))
 }
 
+// B-887: the same rows from the per-user shelf ([symbol, first_at, last_at,
+// count]), in the same order, without reading the chronology. The shelf keeps
+// no per-event source, trigger or dwell (no reader uses them), so those are
+// blank. Callers must check the shelf is current first.
+export function compactShelfRowsFromShelf(shelf) {
+  const rows = (Array.isArray(shelf) ? shelf : [])
+    .filter((entry) => Array.isArray(entry) && String(entry[0] || "").trim())
+    .map(([symbol, firstAt, lastAt, count]) => ({
+      gene_symbol: String(symbol).trim().toUpperCase(),
+      first_at: Math.max(0, Math.floor(Number(firstAt) || 0)),
+      last_at: Math.max(0, Math.floor(Number(lastAt) || 0)),
+      encounter_count: Math.max(0, Math.floor(Number(count) || 0)),
+      first_source: "",
+      last_source: "",
+      first_trigger: "",
+      last_trigger: "",
+      first_dwell_ms: null,
+      last_dwell_ms: null,
+    }))
+  rows.sort(
+    (left, right) =>
+      left.first_at - right.first_at || left.gene_symbol.localeCompare(right.gene_symbol),
+  )
+  return rows.map((row) => ({
+    ...row,
+    first_discovered_at: isoFromEpochSeconds(row.first_at),
+    last_encountered_at: isoFromEpochSeconds(row.last_at),
+  }))
+}
+
 export function compactSharedSummaries(rawState) {
   return readSharedDiscoveryOrdinalSummaries(rawState)
 }

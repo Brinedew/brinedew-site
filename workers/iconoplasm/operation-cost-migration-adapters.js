@@ -19,6 +19,7 @@ import { createVoteWakeMigrationCostAdapter } from "./operation-cost-vote-wake-m
 import { createCompactDiscoveryActivationMigrationCostAdapter } from "./operation-cost-compact-discovery-activation-migration-adapter.js"
 import { createPublishStateIndexMigrationCostAdapter } from "./operation-cost-publish-state-index-migration-adapter.js"
 import { createFinalizationHandoffRetirementMigrationCostAdapter } from "./operation-cost-finalization-handoff-retirement-migration-adapter.js"
+import { createDiscoveryShelfMigrationCostAdapter } from "./operation-cost-discovery-shelf-migration-adapter.js"
 import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
   createInboxCountersMigrationCostAdapter,
@@ -35,6 +36,10 @@ export function createMigrationOperationCostAdapters(env, identities) {
         db: env.ICONOPLASM_DB,
         ...identities,
       }),
+    ],
+    [
+      "iconoplasm-migration-0111",
+      createDiscoveryShelfMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
     ],
     [
       "iconoplasm-migration-0109",

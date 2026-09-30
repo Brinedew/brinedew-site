@@ -138,7 +138,38 @@ function normalizeUserState(raw = {}) {
     next_chunk_seq: Number(raw.next_chunk_seq || 1),
     active_events: activeEvents,
     recent_receipts: receipts,
+    shelf: Array.isArray(raw.shelf) ? raw.shelf.map((entry) => [...entry]) : [],
+    shelf_state_version: Number(raw.shelf_state_version || 0),
   }
+}
+
+// B-887: the shelf is [symbol, first_at, last_at, encounter_count] per gene,
+// the same fold compactShelfRowsFromChronology makes from the chronology. It is
+// valid only when stamped with the state version it was folded to; a new user
+// (no row, both versions 0) starts with a valid empty shelf.
+export function discoveryShelfIsCurrent(state) {
+  return (
+    !!state &&
+    Array.isArray(state.shelf) &&
+    Number(state.shelf_state_version || 0) === Number(state.state_version || 0)
+  )
+}
+
+function foldIntoShelf(bySymbol, event) {
+  const prior = bySymbol.get(event.symbol)
+  if (!prior) {
+    bySymbol.set(event.symbol, [event.symbol, event.at, event.at, 1])
+    return
+  }
+  prior[1] = Math.min(prior[1], event.at)
+  prior[2] = Math.max(prior[2], event.at)
+  prior[3] += 1
+}
+
+function shelfArray(bySymbol) {
+  return [...bySymbol.values()].sort(
+    (left, right) => left[1] - right[1] || (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0),
+  )
 }
 
 function normalizeEncounter(raw, dictionary) {
@@ -225,6 +256,10 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
     discoveryMembershipByteLength(maxOrdinal),
   )
   const shared = new Map()
+  const shelfCurrent = discoveryShelfIsCurrent(state)
+  const shelf = new Map(
+    shelfCurrent ? state.shelf.map((entry) => [String(entry[0]), [...entry]]) : [],
+  )
   const sealedChunks = []
   let memberCount = state.member_count
   let nextEventSeq = Math.max(1, state.next_event_seq)
@@ -254,6 +289,7 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
         latest_at: event.at,
       })
     }
+    if (shelfCurrent) foldIntoShelf(shelf, event)
     activeEvents.push({
       seq: nextEventSeq++,
       ordinal: event.ordinal,
@@ -311,6 +347,10 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
     next_chunk_seq: nextChunkSeq,
     active_events: activeEvents,
     recent_receipts: recentReceipts,
+    // A stale shelf is carried unchanged and keeps its old stamp, so it can
+    // never look current; the recorder heals it from the chronology.
+    shelf: shelfCurrent ? shelfArray(shelf) : state.shelf,
+    shelf_state_version: shelfCurrent ? nextStateVersion : state.shelf_state_version,
   }
   return {
     replay: false,

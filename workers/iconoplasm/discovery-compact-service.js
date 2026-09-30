@@ -1,8 +1,33 @@
-import { applyDiscoveryBatch, applySharedDiscoveryDeltas } from "./discovery-compact-state.js"
+import { compactShelfRowsFromChronology } from "./discovery-compact-read.js"
+import {
+  applyDiscoveryBatch,
+  applySharedDiscoveryDeltas,
+  discoveryShelfIsCurrent,
+} from "./discovery-compact-state.js"
 import {
   commitCompactDiscoveryBatch,
+  readCompactDiscoveryChronology,
   readCompactDiscoveryState,
 } from "./discovery-compact-store.js"
+
+// B-887: a user whose shelf is stale (the row predates migration 0111's
+// backfill, or an older writer bumped the state without folding) is healed
+// here, once, from the chronology. The CAS on state_version makes a
+// concurrent commit between the two reads a clean retry, never a double count.
+async function withCurrentShelf(db, userId, user) {
+  if (!user || discoveryShelfIsCurrent(user)) return user
+  const chronology = await readCompactDiscoveryChronology(db, userId)
+  return {
+    ...user,
+    shelf: compactShelfRowsFromChronology(chronology).map((row) => [
+      row.gene_symbol,
+      row.first_at,
+      row.last_at,
+      row.encounter_count,
+    ]),
+    shelf_state_version: user.state_version,
+  }
+}
 
 export class DiscoveryCompactConflictError extends Error {
   constructor(attempts) {
@@ -71,6 +96,7 @@ export async function recordCompactDiscoveryBatch(
 
   for (let attempt = 1; attempt <= attemptsLimit; attempt++) {
     const current = await readCompactDiscoveryState(db, userId)
+    current.user = await withCurrentShelf(db, userId, current.user)
     const applied = applyDiscoveryBatch(current.user, { batchId, dictionary, encounters })
     if (applied.replay) {
       onAttempt?.({ attempt, replay: true, conflict: false })

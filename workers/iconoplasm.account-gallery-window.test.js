@@ -1214,3 +1214,83 @@ test("discoveries/me shape=compact returns the bare shelf without enriching it (
   assert.ok(enrichments() > 0, "the legacy shape stopped enriching")
   assert.equal(legacy.discoveries[0].full_name.endsWith("full name"), true)
 })
+
+// B-887: with a current shelf the home window and the compact shelf read one
+// user-state row and never the chronology; a shelf not stamped with the
+// current state version is never trusted, even when its content is wrong.
+test("home reads use a current shelf and ignore a stale one (B-887)", async () => {
+  const db = new FakeDb()
+  db.rows = Array.from({ length: 30 }, (_, index) =>
+    db.row(
+      "user-123",
+      `S${String(index).padStart(2, "0")}`,
+      `2026-03-${String(1 + index).padStart(2, "0")}T00:00:00Z`,
+      index,
+    ),
+  )
+  resetIconoplasmRuntimeCachesForTest()
+  const env = buildEnv({ db, version: "test-vm-version-shelf" })
+  env.KV.put(
+    "iconoplasm:card-catalog:test-vm-version-shelf",
+    JSON.stringify(
+      completeCardCatalogArtifact(
+        db.rows.map((row) => row.gene_symbol),
+        "test-vm-version-shelf",
+      ),
+    ),
+  )
+  const call = async (path) => {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio${path}`, {
+          headers: { Cookie: "session=abc" },
+        }),
+        env,
+      )
+    assert.equal(response.status, 200, path)
+    return response.json()
+  }
+  const window = "/api/iconoplasm/account-gallery-window?order=newest&limit=5"
+  const compact = "/api/iconoplasm/discoveries/me?order=popularity&shape=compact"
+  const chronologyReads = () =>
+    db.calls.filter((c) => /FROM icono_discovery_chronology_v2/.test(c.sql)).length
+  const view = (payload) => ({
+    window: payload.window.items.map((item) => [
+      item.symbol,
+      item.discovery.first_discovered_at,
+      item.discovery.last_encountered_at,
+      item.discovery.encounter_count,
+    ]),
+    compact: payload.compact.discoveries,
+  })
+
+  // The truth: the chronology fold (no row has a current shelf yet).
+  const truth = view({ window: await call(window), compact: await call(compact) })
+  assert.ok(chronologyReads() > 0)
+
+  // A current shelf: same answers, zero chronology reads.
+  const shelf = db.rows.map((row) => {
+    const at = Math.floor(Date.parse(row.first_discovered_at) / 1000)
+    return [row.gene_symbol, at, at, 1]
+  })
+  db.raw
+    .prepare(
+      "UPDATE icono_discovery_user_state_v2 SET shelf_json = ?, shelf_state_version = state_version WHERE user_id = 'user-123'",
+    )
+    .run(JSON.stringify(shelf))
+  db.calls.length = 0
+  const fromShelf = view({ window: await call(window), compact: await call(compact) })
+  assert.equal(chronologyReads(), 0, "read the chronology with a current shelf")
+  assert.deepEqual(fromShelf, truth)
+
+  // A stale stamp with wrong content: the chronology answers, not the shelf.
+  db.raw
+    .prepare(
+      "UPDATE icono_discovery_user_state_v2 SET shelf_json = '[[\"WRONG\",1,1,1]]', shelf_state_version = state_version - 1 WHERE user_id = 'user-123'",
+    )
+    .run()
+  db.calls.length = 0
+  const fromStale = view({ window: await call(window), compact: await call(compact) })
+  assert.ok(chronologyReads() > 0, "trusted a stale shelf")
+  assert.deepEqual(fromStale, truth)
+})
