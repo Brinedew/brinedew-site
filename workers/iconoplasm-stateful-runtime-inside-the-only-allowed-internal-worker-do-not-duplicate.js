@@ -34166,6 +34166,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(args.request, await publishedCardDeliveryHandlers.current(args)),
   public_card_object: async (args) =>
     asHead(args.request, await publishedCardDeliveryHandlers.object(args)),
+  public_stable_gene_object: async (args) =>
+    asHead(args.request, await publishedCardDeliveryHandlers.stableGene(args)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),

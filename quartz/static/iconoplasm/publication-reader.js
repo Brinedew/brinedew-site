@@ -14,6 +14,15 @@ const MAX_CATALOG_INDEXES = 96
 const MAX_SEARCH_RESULTS = 12
 const MAX_GALLERY_PAGE_SIZE = 24
 const MAX_CANDIDATE_GALLERY_PAGES = 64
+// B-898: one stable object per gene at a fixed URL, written by every publication
+// with the complete candidate pool inline. It replaces the head -> manifest ->
+// indexes -> gene -> delta walk (8 to 15 fetches). The publisher bounds it at
+// 1 MiB; a 250-candidate gene is about 260 KiB.
+const STABLE_GENE_PATH_PREFIX = "/genes/v3/"
+// The same bytes on the canonical origin, for readers whose network cannot
+// reach Bunny. Under /api/* so it needs no new static-first route entry.
+const STABLE_GENE_ORIGIN_PREFIX = "/api/public/v1/stable-genes/"
+const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
 export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   catalogIndexes: MAX_CATALOG_INDEXES,
   compactIndexBytes: 128 * 1024,
@@ -350,9 +359,48 @@ export function createIconoplasmPublicationReader(options = {}) {
     return withImmutableMedia(await baseGene(manifest, key))
   }
 
+  function validStableGene(value, key) {
+    return (
+      value &&
+      typeof value === "object" &&
+      value.stable_object_version === 3 &&
+      normalizedSymbol(value.symbol) === key &&
+      Array.isArray(value.portrait_candidates) &&
+      "portrait" in value
+    )
+  }
+
+  // Bunny first. A CDN 404 (not yet backfilled) or malformed object falls back
+  // to the immutable tree without touching the origin, so the transition never
+  // adds Worker requests. Only an unreachable CDN hedges to the canonical
+  // origin's first-party copy of the same object.
+  async function stableGene(key) {
+    const path = `${STABLE_GENE_PATH_PREFIX}${key}.json`
+    let value
+    try {
+      value = (await fromCdn(path, STABLE_GENE_OBJECT_LIMIT)).value
+    } catch (error) {
+      if (String(error?.message || "").startsWith("Publication HTTP")) return undefined
+      try {
+        value = (
+          await fetchFrom(
+            ORIGIN,
+            `${STABLE_GENE_ORIGIN_PREFIX}${key}.json`,
+            STABLE_GENE_OBJECT_LIMIT,
+          )
+        ).value
+      } catch {
+        return undefined
+      }
+    }
+    return validStableGene(value, key) ? withImmutableMedia(value) : undefined
+  }
+
   async function gene(symbol) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
+    const stable = await stableGene(key)
+    if (stable !== undefined) return stable
     return fromCoherentPublication(`gene:${key}`, (head) => geneFromPublication(head, key))
   }
 
