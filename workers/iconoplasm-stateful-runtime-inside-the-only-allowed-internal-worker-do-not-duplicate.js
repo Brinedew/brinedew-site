@@ -29616,21 +29616,28 @@ async function publishedDeltaGeneBlotPriorityPage(env, { after = "", limit = 25 
   const pageLimit = Math.max(1, Math.min(25, limit))
   const remaining = symbols.filter((symbol) => symbol > after)
   const page = remaining.slice(0, pageLimit)
+  // B-894: these reads used to run one after another, so a page cost the sum
+  // of up to 25 Bunny round trips (5-8 s measured) and one slow object held the
+  // drain's only worker thread past its patience. Same reads, same bound,
+  // overlapped: the page now costs roughly its slowest object.
+  const loaded = await Promise.all(
+    page.map((symbol) =>
+      readPublishedBunnyCardObject(env, chain.entries.get(symbol).card.key, (value) =>
+        Boolean(value?.symbol === symbol && value?.payload),
+      ),
+    ),
+  )
   const cards = new Map()
-  for (const symbol of page) {
-    const entry = chain.entries.get(symbol)
-    const card = await readPublishedBunnyCardObject(env, entry.card.key, (value) =>
-      Boolean(value?.symbol === symbol && value?.payload),
-    )
-    if (!card?.payload) {
+  page.forEach((symbol, index) => {
+    if (!loaded[index]?.payload) {
       throw geneBlotServiceError(
         503,
         "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
         "An advertised gene card is unavailable.",
       )
     }
-    cards.set(symbol, card.payload)
-  }
+    cards.set(symbol, loaded[index].payload)
+  })
   const ready = await exactReadyGeneBlotsForPublishedCards(env, cards)
   const items = page
     .map((symbol) =>
