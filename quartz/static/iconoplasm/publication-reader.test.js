@@ -404,6 +404,56 @@ test("the archive reads a 67-shard publication without entering the stateful ori
   assert.equal(requested.filter((url) => url.pathname.includes("/catalogindexes/")).length, 67)
 })
 
+// B-886: the published catalog carries popularity 0 for every gene (the card
+// never sets it). The page-view table the site already ships is the one
+// source; the guest "Most popular" order joins it instead of trusting the
+// column, exactly like the signed-in shelf (B-885).
+test("the guest Most popular order ranks by Wikipedia page views, not the catalog's zero column", async () => {
+  const objects = new Map()
+  const shards = []
+  for (const symbol of ["ACTB", "INS", "ZZZ-UNKNOWN"]) {
+    const page = await immutableFixtureObject("catalogs", {
+      schema_version: 1,
+      entries: [{ symbol, full_name: symbol, image_score: 0 }],
+    })
+    const catalogIndex = await immutableFixtureObject("catalogindexes", {
+      schema_version: 2,
+      pages: [{ first_symbol: symbol, last_symbol: symbol, key: page.path.slice(1) }],
+      search_entries: [[symbol, symbol, 0, 0]],
+      gallery_entries: [[symbol, 0, 0, 0, 0]],
+    })
+    objects.set(page.path, page.body)
+    objects.set(catalogIndex.path, catalogIndex.body)
+    shards.push({
+      first_symbol: symbol,
+      last_symbol: symbol,
+      catalog_index: { key: catalogIndex.path.slice(1), page_count: 1 },
+    })
+  }
+  const manifest = await immutableFixtureObject("manifests", {
+    storage: "bunny_card_catalog_v2",
+    card_count: 3,
+    shards,
+  })
+  objects.set(manifest.path, manifest.body)
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      if (parsed.pathname === "/api/public/v1/card-current") {
+        return new Response(JSON.stringify({ schema_version: 2, current: `ccv2-${manifest.hash}` }))
+      }
+      const body = objects.get(parsed.pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+
+  const popular = await reader.gallery({ order: "popular", limit: 3 })
+  assert.deepEqual(
+    popular.items.map((item) => item.symbol),
+    ["INS", "ACTB", "ZZZ-UNKNOWN"],
+  )
+})
+
 test("a legacy immutable gene without candidates remains a complete static dossier", async () => {
   const fixture = await immutableFixture()
   const legacyGene = { ...fixture.gene }
