@@ -313,41 +313,34 @@ Avoid these even if they look faster:
   immutable objects and the gene's active authority. Compare retained D1 rows
   only after identifying their epoch and role.
 
-## website ops sync: durable objects telemetry guard
+## website ops sync: missing Cloudflare telemetry
 
-If Website Ops shows a last-finished message like:
+Missing telemetry is not a pause (B-897, 30 Sep 2026). The workstation budget
+registry shows an unreadable meter as `needs_telemetry` and keeps syncing; only
+a meter known to have crossed its ceiling pauses sync. The Worker's D1 write
+admission is the authority, and it counts every worst-case reservation since
+its last same-day provider sample (or since midnight) when a sample is missing.
+The old "Durable Objects guard lost live telemetry" pause and its message were
+deleted: one failed GraphQL read used to park a publication until the UTC reset.
 
-`Paused website sync because the local Cloudflare Durable Objects guard lost live telemetry. Website Ops will not keep mutating blindly past the 50% DO ceiling. (live DO telemetry unavailable during candidate ingest batch)`
+When a meter is unreadable, fix the credential: `CLOUDFLARE_API_TOKEN` must be
+the account-owned `iconoplasm-admin` token that can read `CLOUDFLARE_ACCOUNT_ID`;
+do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path.
 
-then treat that as a **real stop condition**, not a flaky retry candidate.
+## account erasure request
 
-What it means:
+The privacy pages promise erasure. Fulfil a verified request with one command
+(B-871):
 
-- the workstation could no longer read live Cloudflare Durable Objects `rows_written` usage
-- the local 50% DO guard therefore could not prove remaining headroom
-- the sync intentionally failed closed during a mutating stage instead of guessing
+`POST /api/iconoplasm/admin/accounts/erase` with
+`{"account_id": "...", "command_id": "<unique per request>", "reason_code": "user_request"}`
+and the admin token.
 
-What to do next:
-
-1. fix Cloudflare telemetry/auth first
-
-- check the Website Ops Cloudflare diagnostic in the GUI
-- verify `CLOUDFLARE_API_TOKEN` is the account-owned `iconoplasm-admin` token and can read `CLOUDFLARE_ACCOUNT_ID`
-- do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path
-
-2. confirm the DO usage panel is green again
-3. reconcile the original operation's durable identity, accepted receipts and
-   independently frozen membership; resume only the verified bounded V2 path
-   after its activation/capacity gates pass. Restored telemetry never authorizes
-   global `run-sync` or proves that its consumption defect is fixed.
-
-What **not** to do:
-
-- do **not** keep pressing `Run Sync` blindly
-- do **not** loosen the DO guard just to get a run through
-- do **not** treat repeated retries as progress; they only replay candidate ingest without a trustworthy DO budget reading
-
-This guard is intentional. The problem to fix is telemetry/auth availability, not the existence of the guardrail.
+It requests erasure with the `retain` caretaker policy and completes it: provider
+identities are removed, the public name becomes the stable "Former caretaker"
+label, and retained history keeps the account id. The account projection outbox
+then ends caretaker assignments on its scheduled drain. Re-sending the same
+`command_id` replays; a different `command_id` on an erased account refuses.
 
 ## observability snapshot publication and freshness
 

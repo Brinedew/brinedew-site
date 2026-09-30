@@ -931,6 +931,45 @@ export async function eraseBrinedewAccount(
   return { ...(await readBrinedewAccount(db, accountId)), replay: false }
 }
 
+/**
+ * B-871: one operator command fulfils an erasure request exactly as the
+ * privacy page promises. It requests erasure with the "retain" caretaker
+ * policy (history stays under the anonymous label; per-text withdrawal is the
+ * author's own action), then completes it. Both transitions are keyed by the
+ * request's command id, so a retried request replays instead of repeating.
+ */
+export async function eraseBrinedewAccountOnRequest(
+  db,
+  {
+    accountId: accountIdValue,
+    commandId: commandIdValue,
+    reasonCode = "erasure_request",
+    actorAccountId = null,
+    now = Date.now(),
+  } = {},
+) {
+  requireDb(db)
+  const accountId = normalizeBrinedewAccountId(accountIdValue)
+  if (!accountId) throw new TypeError("Invalid Brinedew account ID")
+  const commandId = normalizeCommandId(commandIdValue)
+  const current = await readBrinedewAccount(db, accountId)
+  if (!current) {
+    throw new BrinedewAccountIdentityError("ACCOUNT_NOT_FOUND", "Brinedew account not found", 404)
+  }
+  if (current.status !== "erased" && current.status !== "erasure_pending") {
+    await setBrinedewAccountStatus(db, {
+      accountId,
+      status: "erasure_pending",
+      commandId: `${commandId}.request`,
+      reasonCode,
+      finalLeavePolicy: "retain",
+      actorAccountId,
+      now,
+    })
+  }
+  return eraseBrinedewAccount(db, { accountId, commandId, reasonCode, actorAccountId, now })
+}
+
 export async function hydrateBrinedewSessionAccountIdentity(db, session, options = {}) {
   requireDb(db)
   const current = session && typeof session === "object" ? session : {}
