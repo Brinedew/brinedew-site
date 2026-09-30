@@ -337,6 +337,7 @@ identities are removed, the public name becomes the stable "Former caretaker"
 label, and retained history keeps the account id. The account projection outbox
 then ends caretaker assignments on its scheduled drain. Re-sending the same
 `command_id` replays; a different `command_id` on an erased account refuses.
+
 ## observability snapshot publication and freshness
 
 The admin Observability tab is fed by Cloudflare GraphQL data collected out of band. The live admin request path must never query GraphQL, D1, or a Durable Object to explain its own telemetry.
