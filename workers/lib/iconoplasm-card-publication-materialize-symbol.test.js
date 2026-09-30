@@ -27,9 +27,9 @@ function fakeObjects({ failStable = false } = {}) {
   return {
     written,
     stable,
-    async writeStable(key, value) {
+    async writeStable(key, value, options) {
       if (failStable) throw new Error("injected stable object failure")
-      stable.push({ key, value })
+      stable.push({ key, value, purge: options?.purge })
       return { key, hash: "e".repeat(64), size: 1 }
     },
     async write(kind, value) {
@@ -138,6 +138,7 @@ test("materializeSymbol writes the one stable gene object with its pool inline (
   await publisher.materializeSymbol("tp53", { portraitAssetSha256: "d".repeat(64) })
   assert.equal(objects.stable.length, 1)
   assert.equal(objects.stable[0].key, "genes/v3/TP53.json")
+  assert.equal(objects.stable[0].purge, true, "a per-gene rewrite purges its CDN URL")
   assert.deepEqual(objects.stable[0].value.portrait_candidates, pool)
   assert.equal(objects.stable[0].value.candidate_count, 2)
   assert.equal(objects.stable[0].value.stable_object_version, 3)
