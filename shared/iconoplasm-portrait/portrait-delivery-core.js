@@ -17,6 +17,11 @@ export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
   }),
   probe_timeout_ms: 2500,
   fallback_hedge_delay_ms: 350,
+  // A probe that times out is ambiguous: a cold CDN object measured 0.4-1.7 s
+  // from a healthy network, so a slow first byte must not convert the tab into
+  // first-party (Worker-metered) image delivery for its whole life. Only a
+  // timeout arms this retry; a definitive DNS/HTTP failure stays permanent.
+  accelerator_retry_after_ms: 60_000,
   decision_scope: "tab",
 })
 
@@ -51,6 +56,11 @@ export function normalizePortraitDeliveryPolicy(
     (rawAccelerator.enabled ?? fallbackAccelerator.enabled) === true && Boolean(acceleratorOrigin)
   const timeout = Number(raw.probe_timeout_ms ?? fallback.probe_timeout_ms)
   const hedgeDelay = Number(raw.fallback_hedge_delay_ms ?? fallback.fallback_hedge_delay_ms)
+  const retryAfter = Number(
+    raw.accelerator_retry_after_ms ??
+      fallback.accelerator_retry_after_ms ??
+      DEFAULT_PORTRAIT_DELIVERY_POLICY.accelerator_retry_after_ms,
+  )
 
   if (!canonicalOrigin)
     throw new Error("Portrait delivery policy requires an HTTPS canonical_origin")
@@ -70,6 +80,9 @@ export function normalizePortraitDeliveryPolicy(
     fallback_hedge_delay_ms: Number.isFinite(hedgeDelay)
       ? Math.max(0, Math.min(2000, Math.round(hedgeDelay)))
       : 350,
+    accelerator_retry_after_ms: Number.isFinite(retryAfter)
+      ? Math.max(5_000, Math.min(600_000, Math.round(retryAfter)))
+      : 60_000,
     decision_scope: "tab",
   })
 }
@@ -88,7 +101,33 @@ export function normalizePortraitDeliveryState(
     if (state === "undecided" || state === "accelerator") state = "canonical"
   }
   if (failed.includes("accelerator") && failed.includes("canonical")) state = "terminal_failure"
+  const retryAt = Number(rawState?.accelerator_retry_at)
+  if (
+    Number.isFinite(retryAt) &&
+    retryAt > 0 &&
+    failed.includes("accelerator") &&
+    normalizedPolicy.accelerator.enabled &&
+    state === "canonical"
+  ) {
+    return { state, failed, accelerator_retry_at: Math.round(retryAt) }
+  }
   return { state, failed }
+}
+
+// A transient accelerator failure expires: once the retry time has passed the
+// tab is undecided again and the next image re-probes the CDN once.
+export function expirePortraitDeliveryRetry(
+  rawState,
+  now = Date.now(),
+  policy = DEFAULT_PORTRAIT_DELIVERY_POLICY,
+) {
+  const current = normalizePortraitDeliveryState(rawState, policy)
+  const retryAt = current.accelerator_retry_at
+  if (!retryAt || !(Number(now) >= retryAt)) return current
+  return normalizePortraitDeliveryState(
+    { state: "undecided", failed: current.failed.filter((item) => item !== "accelerator") },
+    policy,
+  )
 }
 
 export function portraitPath(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY_POLICY) {
@@ -136,6 +175,7 @@ export function transitionPortraitDelivery(
   rawState,
   event,
   policy = DEFAULT_PORTRAIT_DELIVERY_POLICY,
+  now = Date.now(),
 ) {
   const normalizedPolicy = normalizePortraitDeliveryPolicy(policy)
   const current = normalizePortraitDeliveryState(rawState, normalizedPolicy)
@@ -147,20 +187,45 @@ export function transitionPortraitDelivery(
       normalizedPolicy,
     )
   }
-  if (type !== "source_failed" || !source || current.failed.includes(source)) return current
+  if (type !== "source_failed" || !source) return current
+  if (current.failed.includes(source)) {
+    // A definitive failure after a transient one makes the block permanent.
+    if (source === "accelerator" && current.accelerator_retry_at && event?.transient !== true) {
+      return normalizePortraitDeliveryState(
+        { state: current.state, failed: current.failed },
+        normalizedPolicy,
+      )
+    }
+    return current
+  }
 
   const failed = Array.from(new Set([...current.failed, source]))
   const alternate = source === "accelerator" ? "canonical" : "accelerator"
+  if (source === "canonical" && current.accelerator_retry_at) {
+    // The accelerator only timed out earlier; canonical failing outright is the
+    // stronger signal, so try the accelerator again instead of going terminal.
+    return normalizePortraitDeliveryState(
+      { state: "accelerator", failed: ["canonical"] },
+      normalizedPolicy,
+    )
+  }
   if (
     failed.includes(alternate) ||
     (alternate === "accelerator" && !normalizedPolicy.accelerator.enabled)
   ) {
     return normalizePortraitDeliveryState({ state: "terminal_failure", failed }, normalizedPolicy)
   }
+  const retry =
+    source === "accelerator" && event?.transient === true
+      ? { accelerator_retry_at: Number(now) + normalizedPolicy.accelerator_retry_after_ms }
+      : {}
   if (current.state === source || current.state === "undecided") {
-    return normalizePortraitDeliveryState({ state: alternate, failed }, normalizedPolicy)
+    return normalizePortraitDeliveryState({ state: alternate, failed, ...retry }, normalizedPolicy)
   }
-  return normalizePortraitDeliveryState({ state: current.state, failed }, normalizedPolicy)
+  return normalizePortraitDeliveryState(
+    { state: current.state, failed, ...retry },
+    normalizedPolicy,
+  )
 }
 
 export function createPortraitDeliverySession(options = {}) {
@@ -171,11 +236,14 @@ export function createPortraitDeliverySession(options = {}) {
   let decisionPromise = null
   const probe = typeof options.probe === "function" ? options.probe : null
   const persist = typeof options.persist === "function" ? options.persist : null
+  const now = typeof options.now === "function" ? options.now : () => Date.now()
 
   function commit(nextState) {
     const normalized = normalizePortraitDeliveryState(nextState, policy)
     const changed =
-      normalized.state !== state.state || normalized.failed.join("|") !== state.failed.join("|")
+      normalized.state !== state.state ||
+      normalized.failed.join("|") !== state.failed.join("|") ||
+      (normalized.accelerator_retry_at || 0) !== (state.accelerator_retry_at || 0)
     state = normalized
     if (changed) decisionRevision += 1
     if (changed && persist)
@@ -183,7 +251,16 @@ export function createPortraitDeliverySession(options = {}) {
     return changed
   }
 
+  // Called before every read of the decision: an expired transient failure
+  // returns the tab to "undecided" so the next ensure() re-probes once.
+  function refresh() {
+    if (!state.accelerator_retry_at) return
+    const expired = expirePortraitDeliveryRetry(state, now(), policy)
+    if (expired.state !== state.state) commit(expired)
+  }
+
   function selectedSource() {
+    refresh()
     if (state.state === "accelerator" || state.state === "canonical") return state.state
     if (state.failed.includes("accelerator") || !policy.accelerator.enabled) return "canonical"
     return "accelerator"
@@ -240,6 +317,7 @@ export function createPortraitDeliverySession(options = {}) {
   async function ensure(rawUrl) {
     const path = portraitPath(rawUrl, policy)
     if (!path) return String(rawUrl || "").trim()
+    refresh()
     if (state.state !== "undecided") return resolve(rawUrl)
     if (decisionPromise) {
       await decisionPromise
@@ -257,11 +335,16 @@ export function createPortraitDeliverySession(options = {}) {
     }
     const acceleratorUrl = portraitUrlForSource(path, "accelerator", policy)
     decisionPromise = Promise.resolve(probe(acceleratorUrl, policy.probe_timeout_ms))
-      .then((succeeded) => {
-        const event = succeeded
-          ? { type: "source_succeeded", source: "accelerator" }
-          : { type: "source_failed", source: "accelerator" }
-        commit(transitionPortraitDelivery(state, event, policy))
+      .then((result) => {
+        // true: CDN answered. "timeout": no answer within the probe ceiling,
+        // which is ambiguous and expires. Anything else: definitive failure.
+        const event =
+          result === true
+            ? { type: "source_succeeded", source: "accelerator" }
+            : result === "timeout"
+              ? { type: "source_failed", source: "accelerator", transient: true }
+              : { type: "source_failed", source: "accelerator" }
+        commit(transitionPortraitDelivery(state, event, policy, now()))
         return selectedSource()
       })
       .catch(() => {
@@ -304,6 +387,7 @@ export function createPortraitDeliverySession(options = {}) {
   }
 
   function snapshot() {
+    refresh()
     return { ...state, failed: [...state.failed] }
   }
 
