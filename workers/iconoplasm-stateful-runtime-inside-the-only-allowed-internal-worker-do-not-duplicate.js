@@ -2022,11 +2022,7 @@ function isIconoplasmDailyBudgetError(error) {
       "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
       "COST_AUTHORITY_STORAGE_READ_QUOTA",
       "QUEUE_ACCOUNT_DAILY_LIMIT",
-      "MUTATION_LANE_CAPACITY_EXHAUSTED",
       "MUTATION_PROVIDER_HEADROOM_RESERVED",
-      "MUTATION_PROVIDER_OBSERVATION_MISSING",
-      "MUTATION_PROVIDER_OBSERVATION_STALE",
-      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
     ].includes(error?.code) ||
     isD1DailyRowReadLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
@@ -2180,16 +2176,7 @@ async function reserveIconoplasmMutationWrites(
     }),
   )
   const payload = await response.json().catch(() => null)
-  if (
-    response.status === 429 &&
-    [
-      "MUTATION_LANE_CAPACITY_EXHAUSTED",
-      "MUTATION_PROVIDER_HEADROOM_RESERVED",
-      "MUTATION_PROVIDER_OBSERVATION_MISSING",
-      "MUTATION_PROVIDER_OBSERVATION_STALE",
-      "MUTATION_PROVIDER_OBSERVATION_MALFORMED",
-    ].includes(payload?.code)
-  ) {
+  if (response.status === 429 && ["MUTATION_PROVIDER_HEADROOM_RESERVED"].includes(payload?.code)) {
     return payload
   }
   if (!response.ok || payload?.ok !== true) {
@@ -11703,7 +11690,7 @@ async function recordCompactDiscoveryEncounters(
     const error = new Error(
       "Discovery capacity is reserved for other mutation lanes; retain the exact batch for retry",
     )
-    error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+    error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
     error.mutation_lane = admission
     throw error
   }
@@ -18077,7 +18064,7 @@ export class IconoplasmVoteCoordinator {
       const error = new Error(
         "Vote D1 delivery is pending because the user-action mutation lane is full",
       )
-      error.code = admission?.code || "MUTATION_LANE_CAPACITY_EXHAUSTED"
+      error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
       throw error
     }
 
@@ -19820,136 +19807,74 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     )
   }
 
+  // The newest same-day sample of the account-wide D1 rows-written meter, or
+  // null. A sample only sets the admission baseline and the start of the
+  // counted reservation window; its absence never refuses work (B-897). A
+  // sample younger than five minutes is reused; otherwise the scheduled KV
+  // projection is read and, if that is also older, the live provider meter.
+  // Failed attempts retry at most once a minute and never discard the last
+  // good same-day sample.
   async providerD1Observation(dayKey) {
     const now = Date.now()
-    const cachedObservedAt = Date.parse(String(this.providerObservationCache?.observed_at || ""))
-    const cachedObservationIsFresh =
-      Number.isFinite(cachedObservedAt) &&
-      cachedObservedAt <= now + 60_000 &&
-      now - cachedObservedAt <= 90 * 60_000
-    const cacheReusable = this.providerObservationCache?.ok
-      ? cachedObservationIsFresh
-      : now - this.providerObservationCheckedAt < 60_000
-    if (
-      this.providerObservationCache &&
-      cacheReusable &&
-      this.providerObservationCache.day_key === dayKey
-    ) {
-      return this.providerObservationCache
-    }
+    const fresh = (sample) =>
+      sample?.ok === true &&
+      sample.day_key === dayKey &&
+      now - Date.parse(sample.observed_at) < 5 * 60_000
+    const cached =
+      this.providerObservationCache?.day_key === dayKey ? this.providerObservationCache : null
+    if (fresh(cached) || now - this.providerObservationCheckedAt < 60_000) return cached
     this.providerObservationCheckedAt = now
-    // D1 allowances are account-wide. Staging owns an isolated application KV,
-    // but must admit mutations against the same provider observation as
-    // production; otherwise every staging mutation fails closed forever.
-    const providerObservationKv = this.env?.PROD_KV || this.env?.KV
-    let failure = null
-    if (!providerObservationKv || typeof providerObservationKv.get !== "function") {
-      failure = {
-        ok: false,
-        code: "MUTATION_PROVIDER_OBSERVATION_MISSING",
-        day_key: dayKey,
-      }
-    }
-    let snapshot
-    if (!failure) {
-      try {
-        snapshot = await providerObservationKv.get(KV_OBSERVABILITY_SNAPSHOT, "json")
-      } catch {
-        snapshot = null
-      }
-      // Rolling deploy compatibility: the previous snapshot schema already
-      // carried the same covered, account-wide D1 day and rows-written values.
-      // Accept that exact source until the refreshed publisher adds the flatter
-      // providerAdmission projection; never accept an uncovered daily bucket.
-      const legacyCurrentDay = snapshot?.d1?.currentDay
-      const provider =
-        snapshot?.providerAdmission ||
-        (legacyCurrentDay?.covered === true
-          ? {
-              accountId: "bound-cloudflare-account",
-              dayKey: legacyCurrentDay.date,
-              rowsWritten: legacyCurrentDay.rowsWritten,
-            }
-          : null)
-      const observedAt = Date.parse(String(snapshot?.generatedAt || ""))
-      const accountId = String(provider?.accountId || "").trim()
-      const observedDay = String(provider?.dayKey || "").trim()
-      const rowsWritten = Number(provider?.rowsWritten)
+
+    const newer = (sample) => {
+      const observedAt = Date.parse(String(sample?.observed_at || ""))
       if (
-        !provider ||
         !Number.isFinite(observedAt) ||
-        !accountId ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(observedDay) ||
-        !Number.isSafeInteger(rowsWritten) ||
-        rowsWritten < 0
-      ) {
-        failure = {
-          ok: false,
-          code: snapshot
-            ? "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
-            : "MUTATION_PROVIDER_OBSERVATION_MISSING",
-          day_key: dayKey,
-        }
-      } else if (
-        observedDay !== dayKey ||
         observedAt > now + 60_000 ||
-        now - observedAt > 90 * 60_000
+        new Date(observedAt).toISOString().slice(0, 10) !== dayKey ||
+        !Number.isSafeInteger(sample?.rows_written) ||
+        sample.rows_written < 0
+      )
+        return
+      if (
+        !this.providerObservationCache?.ok ||
+        this.providerObservationCache.day_key !== dayKey ||
+        observedAt > Date.parse(this.providerObservationCache.observed_at)
       ) {
-        failure = {
-          ok: false,
-          code: "MUTATION_PROVIDER_OBSERVATION_STALE",
-          day_key: dayKey,
-          observed_day_key: observedDay,
-          observed_at: new Date(observedAt).toISOString(),
-        }
-      } else {
-        this.providerObservationCache = {
-          ok: true,
-          day_key: dayKey,
-          account_id: accountId,
-          rows_written: rowsWritten,
-          observed_at: new Date(observedAt).toISOString(),
-          source: "projected_provider",
-        }
-        return this.providerObservationCache
+        this.providerObservationCache = { ok: true, day_key: dayKey, ...sample }
       }
     }
 
-    // The scheduled projection is a cache, not the authority. GitHub can delay
-    // scheduled workflows for nearly an hour, especially around UTC rollover.
-    // Ask Cloudflare's live account-wide meter once from this singleton and
-    // cache a valid sample for the same 90-minute admission window. If the live
-    // authority is unavailable or malformed, retain the projection's exact
-    // fail-closed result.
+    // D1 allowances are account-wide. Staging owns an isolated application KV
+    // but reads the same provider observation as production.
+    const providerObservationKv = this.env?.PROD_KV || this.env?.KV
+    try {
+      const snapshot = await providerObservationKv?.get?.(KV_OBSERVABILITY_SNAPSHOT, "json")
+      const provider = snapshot?.providerAdmission
+      if (String(provider?.dayKey || "") === dayKey) {
+        newer({
+          rows_written: Number(provider?.rowsWritten),
+          observed_at: String(snapshot?.generatedAt || ""),
+          account_id: String(provider?.accountId || ""),
+          source: "projected_provider",
+        })
+      }
+    } catch {}
+    if (fresh(this.providerObservationCache)) return this.providerObservationCache
+
+    // The scheduled projection is a cache, not the authority: GitHub runs its
+    // "hourly" schedule 4-11 times a day (B-893). Ask the live meter.
     try {
       const live = await this.accountUsage.refresh()
-      const measuredAt = Number(live?.measured_at)
-      const liveDay = String(live?.day || "").trim()
-      const liveRowsWritten = Number(live?.rows_written)
-      if (
-        liveDay === dayKey &&
-        Number.isFinite(measuredAt) &&
-        measuredAt <= now + 60_000 &&
-        now - measuredAt <= 90 * 60_000 &&
-        Number.isSafeInteger(liveRowsWritten) &&
-        liveRowsWritten >= 0
-      ) {
-        this.providerObservationCache = {
-          ok: true,
-          day_key: dayKey,
+      if (String(live?.day || "") === dayKey) {
+        newer({
+          rows_written: Number(live?.rows_written),
+          observed_at: new Date(Number(live?.measured_at)).toISOString(),
           account_id: String(this.env.CLOUDFLARE_ACCOUNT_ID || "live-provider"),
-          rows_written: liveRowsWritten,
-          observed_at: new Date(measuredAt).toISOString(),
           source: "live_provider",
-        }
-        return this.providerObservationCache
+        })
       }
-    } catch {
-      // Keep the original projection failure below. Unknown capacity must never
-      // become admitted capacity merely because both observation paths failed.
-    }
-    this.providerObservationCache = failure
-    return this.providerObservationCache
+    } catch {}
+    return this.providerObservationCache?.day_key === dayKey ? this.providerObservationCache : null
   }
 
   cycleUsageRow(cycleKey) {
@@ -20269,7 +20194,11 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
               ? "rows_written_daily_smart"
               : null,
       updated_at: row?.updated_at || null,
-      mutation_lanes: this.mutationReservations.snapshot(dayKey, rowsWritten),
+      mutation_lanes: this.mutationReservations.snapshot(dayKey, {
+        provider_rows_written: this.providerObservationCache?.rows_written,
+        observed_at: this.providerObservationCache?.observed_at,
+        local_rows_written: rowsWritten,
+      }),
     }
   }
 
@@ -20300,26 +20229,17 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/reserve-mutation-writes") {
+      // B-897: a missing observation is not a refusal. The ledger then counts
+      // every receipt since midnight at worst case (see the lane module).
       const providerObservation = await this.providerD1Observation(dayKey)
-      if (providerObservation.ok !== true) {
-        return Response.json(
-          {
-            ...providerObservation,
-            disposition: "pending_or_retryable_refusal",
-          },
-          { status: 429 },
-        )
-      }
-      const providerRowsWritten = Math.max(
-        Math.max(0, Number(this.usageRow(dayKey)?.rows_written || 0) || 0),
-        providerObservation.rows_written,
-      )
       const reservation = this.mutationReservations.reserve({
         day: dayKey,
         lane: payload?.lane,
         operation_id: payload?.operation_id,
         units: payload?.units,
-        provider_rows_written: providerRowsWritten,
+        provider_rows_written: providerObservation?.rows_written,
+        observed_at: providerObservation?.observed_at,
+        local_rows_written: this.usageRow(dayKey)?.rows_written,
       })
       return Response.json(reservation, { status: reservation.ok === false ? 429 : 200 })
     }
@@ -20336,7 +20256,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/mutation-reservation-snapshot") {
-      return Response.json(this.mutationReservations.snapshot(dayKey))
+      const providerObservation = await this.providerD1Observation(dayKey)
+      return Response.json(
+        this.mutationReservations.snapshot(dayKey, {
+          provider_rows_written: providerObservation?.rows_written,
+          observed_at: providerObservation?.observed_at,
+          local_rows_written: this.usageRow(dayKey)?.rows_written,
+        }),
+      )
     }
 
     if (url.pathname === "/snapshot") {
@@ -29740,21 +29667,28 @@ async function publishedDeltaGeneBlotPriorityPage(env, { after = "", limit = 25 
   const pageLimit = Math.max(1, Math.min(25, limit))
   const remaining = symbols.filter((symbol) => symbol > after)
   const page = remaining.slice(0, pageLimit)
+  // B-894: these reads used to run one after another, so a page cost the sum
+  // of up to 25 Bunny round trips (5-8 s measured) and one slow object held the
+  // drain's only worker thread past its patience. Same reads, same bound,
+  // overlapped: the page now costs roughly its slowest object.
+  const loaded = await Promise.all(
+    page.map((symbol) =>
+      readPublishedBunnyCardObject(env, chain.entries.get(symbol).card.key, (value) =>
+        Boolean(value?.symbol === symbol && value?.payload),
+      ),
+    ),
+  )
   const cards = new Map()
-  for (const symbol of page) {
-    const entry = chain.entries.get(symbol)
-    const card = await readPublishedBunnyCardObject(env, entry.card.key, (value) =>
-      Boolean(value?.symbol === symbol && value?.payload),
-    )
-    if (!card?.payload) {
+  page.forEach((symbol, index) => {
+    if (!loaded[index]?.payload) {
       throw geneBlotServiceError(
         503,
         "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
         "An advertised gene card is unavailable.",
       )
     }
-    cards.set(symbol, card.payload)
-  }
+    cards.set(symbol, loaded[index].payload)
+  })
   const ready = await exactReadyGeneBlotsForPublishedCards(env, cards)
   const items = page
     .map((symbol) =>
@@ -35444,13 +35378,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
-        if (
-          code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
-          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
-        ) {
+        if (code === "MUTATION_PROVIDER_HEADROOM_RESERVED") {
           return done(
             "discoveries_batch_capacity",
             json(
@@ -35954,12 +35882,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
       } catch (error) {
         const code = String(error?.code || "")
-        const capacityRefusal =
-          code === "MUTATION_LANE_CAPACITY_EXHAUSTED" ||
-          code === "MUTATION_PROVIDER_HEADROOM_RESERVED" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MISSING" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_STALE" ||
-          code === "MUTATION_PROVIDER_OBSERVATION_MALFORMED"
+        const capacityRefusal = code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
         if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
           return done(
             "discoveries_merge_capacity",

@@ -39,14 +39,14 @@ import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=9ba98a9e51b6ae85"
+} from "./candidate-delete-dialog.js?v=c919d8078bda6d9d"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=4a126d3258383ad7"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=51df3bb3bf10f985"
+} from "./diagram-studio.js?v=49378bfd15bb8a53"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=830f2da5c52cec81"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -285,7 +285,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=c692178bd9ad9c1b", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=219ede1bd8a6a75f", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -301,7 +301,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=8252ad6a9802b124"),
+      import("./caretaker-manifestations.js?v=34a62bd7961d1c5a"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
     ]).then(function (modules) {
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -2519,7 +2519,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<article class="icono-mobile-data-failure-card" data-icono-mobile-data-failure="' +
         esc(symbol) +
         '">' +
-        '<div class="icono-mobile-data-failure-kicker">dossier unavailable</div>' +
         '<div class="icono-mobile-data-failure-symbol">' +
         esc(symbol) +
         "</div>" +
@@ -2612,7 +2611,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>"
     return (
       '<section class="icono-empty icono-empty--collection">' +
-      '<div class="icono-empty-kicker">collection pending</div>' +
       "<h2>" +
       esc(title) +
       "</h2>" +
@@ -5398,7 +5396,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!safeRows.length) return ""
     var html =
       '<div class="icono-gene-request-summary">' +
-      '<div class="icono-home-auth-kicker">' +
+      '<div class="icono-gene-request-summary-title">' +
       esc(title) +
       "</div>" +
       '<ul style="margin:8px 0 0;padding-left:18px;display:grid;gap:6px;">'
@@ -8091,7 +8089,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           if (freeFooter) freeFooter.hidden = true
           body.innerHTML =
             '<div class="icono-home-auth-copy">' +
-            '<div class="icono-home-auth-kicker">request access</div>' +
             '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
             '<div class="icono-home-auth-note">Requests feed the free generation queue. You can choose a specific emulsion ID after login.</div>' +
             "</div>" +
@@ -10094,7 +10091,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     return (
       '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
-      '<p class="icono-public-manifestation__eyebrow">Caretaker manifestation</p>' +
       '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
       '<p class="icono-public-manifestation__body">' +
       esc(String(publicManifestation.prose)) +
@@ -10465,15 +10461,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function clanKickerMarkup(clan) {
+  function clanAccessionMarkup(clan) {
     var label = clan && clan.accession ? "Pfam · " + clan.accession : "Pfam clan"
     return clan && clan.pfam_url
-      ? '<a class="icono-clan-k" href="' +
+      ? '<a class="icono-clan-acc" href="' +
           esc(clan.pfam_url) +
           '" target="_blank" rel="noopener noreferrer">' +
           esc(label) +
           "</a>"
-      : '<span class="icono-clan-k">' + esc(label) + "</span>"
+      : '<span class="icono-clan-acc">' + esc(label) + "</span>"
   }
 
   // The aesthetic is the family's "look" — rendered in the Caveat teal pen voice
@@ -10504,7 +10500,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return base
   }
 
-  // One row per clan: kicker + name on the left, the aesthetic pen-mark on the
+  // One row per clan: name + accession on the left, the aesthetic pen-mark on the
   // right, then a 2x2 reel of portrait tiles flanked by prev/next arrows. The
   // overview ships only the first page (four); the arrows lazy-fetch later pages
   // so a clan with hundreds of discoveries never dumps them all into one card.
@@ -10524,10 +10520,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       totalPages +
       '">' +
       '<div class="icono-clan-head"><div class="icono-clan-head-l">' +
-      clanKickerMarkup(clan) +
       '<div class="icono-clan-nm">' +
       esc(clanName) +
-      "</div></div>" +
+      "</div>" +
+      clanAccessionMarkup(clan) +
+      "</div>" +
       clanAestheticMarkup(clan) +
       "</div>" +
       '<div class="icono-clan-reel">' +
@@ -10613,15 +10610,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   var ICONO_CLANS_UNFILED_SHOWN = 60
 
-  // Archive-style progress header (design system .arch-head): mono kicker, a big
-  // League Spartan count, a typewriter sub line, a teal progress bar.
+  // Clan progress header: the page title, a big League Spartan count, a
+  // typewriter sub line, a teal progress bar.
   function clanHeadMarkup(data) {
     var total = Number(data && data.total_clans) || 0
     var revealed = data && Array.isArray(data.clans) ? data.clans : []
     var discoveredCount = Number(data && data.discovered_clan_count) || revealed.length
     var pct = total > 0 ? Math.round((discoveredCount / total) * 100) : 0
     return (
-      '<h1 class="icono-clans-kicker">Clans</h1>' +
+      '<h1 class="icono-clans-title">Clans</h1>' +
       '<div class="icono-clans-count">' +
       discoveredCount +
       "</div>" +
