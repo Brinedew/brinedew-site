@@ -70,9 +70,10 @@ async function applyStatements(db, statements) {
   for (const statement of statements) await db.prepare(statement).run()
 }
 
+// The installed compact schema: 0106, plus 0111's per-user shelf (B-887).
 function compactMigrationStatements() {
-  return sqlStatements(
-    readFileSync(new URL("0106_compact_discovery_state_v2.sql", migrationRoot), "utf8"),
+  return ["0106_compact_discovery_state_v2.sql", "0111_discovery_user_shelf.sql"].flatMap((name) =>
+    sqlStatements(readFileSync(new URL(name, migrationRoot), "utf8")),
   )
 }
 
