@@ -5,10 +5,7 @@ import test from "node:test"
 import {
   SCOPED_READY_FINALIZATION_SQL,
   COMPLETE_READY_FINALIZATION_SQL,
-  readFinalizationPublicationBarrier,
   drainCompletedFinalization,
-  claimFinalizationPublication,
-  acknowledgeFinalizationPublication,
 } from "./sync-finalization-publication.js"
 import { writeSyncFinalizationJobState } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -16,7 +13,7 @@ const source = (name) =>
   readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8")
 const now = "2026-09-09T03:00:00.000Z"
 
-function installFinalizationSchema(sqlite, { handoff = true } = {}) {
+function installFinalizationSchema(sqlite) {
   for (const file of [
     "0028_add_finalization_jobs.sql",
     "0094_finalization_summary.sql",
@@ -25,7 +22,6 @@ function installFinalizationSchema(sqlite, { handoff = true } = {}) {
     "0103_finalization_running_index.sql",
   ])
     sqlite.exec(source(file))
-  if (handoff) sqlite.exec(source("0101_finalization_publication_barrier.sql"))
 }
 
 function sqliteD1(db) {
@@ -257,29 +253,6 @@ test("vision cursor transitions retain their exact version fence", async () => {
       },
       { job_version: 2, vision_ids_json: '["anima-v1-2"]' },
     )
-  } finally {
-    sqlite.close()
-  }
-})
-
-test("historical singleton handoff lease remains version fenced until deletion migration", async () => {
-  const sqlite = new DatabaseSync(":memory:")
-  try {
-    installFinalizationSchema(sqlite)
-    const db = sqliteD1(sqlite)
-    sqlite
-      .prepare(
-        "UPDATE icono_sync_finalization_publication SET enqueued_version=2,notified_version=1,next_attempt_at='' WHERE singleton=1",
-      )
-      .run()
-    let barrier = await readFinalizationPublicationBarrier(db)
-    assert.equal(barrier.enqueued_version, 2)
-    assert.equal(barrier.notified_version, 1)
-    assert.ok(await claimFinalizationPublication(db, 2, now, "old-lease"))
-    assert.equal(await acknowledgeFinalizationPublication(db, "other-lease", 2), null)
-    assert.ok(await acknowledgeFinalizationPublication(db, "old-lease", 2))
-    barrier = await readFinalizationPublicationBarrier(db)
-    assert.equal(barrier.enqueued_version, barrier.notified_version)
   } finally {
     sqlite.close()
   }

@@ -119,8 +119,8 @@ includesOrFail(
 )
 includesOrFail(
   finalizationPublication,
-  "completeReadyFinalizationPage(db, symbols, now)",
-  "Finalization must retain exact scoped or global completion pages.",
+  "finalized = await completeReadyFinalizationRows(db, rows, now)",
+  "Finalization must complete the exact scoped page the per-gene publisher accepted.",
 )
 includesOrFail(
   finalizationPublication,
