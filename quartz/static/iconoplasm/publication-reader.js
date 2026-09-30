@@ -574,6 +574,12 @@ export function createIconoplasmPublicationReader(options = {}) {
     const start = Math.max(0, Number(offset) || 0)
     const size = Math.max(1, Math.min(MAX_GALLERY_PAGE_SIZE, Number(limit) || 24))
     const scope = `gallery:${encodeURIComponent(order)}:${start}:${size}:${encodeURIComponent(seed)}`
+    // B-886: the published popularity column is 0 for every gene. The static
+    // page-view table is the one source; it loads only for the order that
+    // needs it, so other guest views never pay its bytes.
+    const pageviews = ["popular", "popularity"].includes(order)
+      ? (await import("./wiki-pageviews.js?v=cb3a800cea17433a")).ICONOPLASM_WIKI_PAGEVIEWS
+      : null
     return fromCoherentPublication(scope, async (head) => {
       const { version, indexes } = await catalogIndexes(head)
       const rows = indexes.flatMap((index, indexNumber) =>
@@ -594,7 +600,7 @@ export function createIconoplasmPublicationReader(options = {}) {
             symbol,
             page,
             offset: itemOffset,
-            popularity: Number(popularity || 0),
+            popularity: Number(pageviews?.[String(symbol).toUpperCase()] || popularity || 0),
             votes: Number(votes || 0),
             publishedAt: String(publishedAt || ""),
             nameLength: Number(nameLength || symbol.length),
