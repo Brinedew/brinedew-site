@@ -83,6 +83,12 @@ function fixture(count = 9) {
     },
   }
   const objects = {
+    async writeStable(key, value) {
+      if (failure === "stable") throw new Error("injected stable object failure")
+      bytes.set(key, canonicalPublishedJson(value))
+      writes.push({ kind: "stable", key })
+      return { key, hash: "e".repeat(64), size: 1 }
+    },
     async write(kind, value) {
       if (failure === kind) throw new Error("injected object failure")
       const serialized = canonicalPublishedJson(value)
@@ -223,7 +229,9 @@ test("publication starts at most six storage pipelines and preserves bounded sub
   await p.step()
   assert.equal(peak, 6)
   assert.equal(active, 0)
-  assert.equal(f.writes.length, CARD_PUBLICATION_BATCH * 3)
+  // B-898: plus one stable gene object per card, written after the group.
+  assert.equal(f.writes.filter((w) => w.kind !== "stable").length, CARD_PUBLICATION_BATCH * 3)
+  assert.equal(f.writes.filter((w) => w.kind === "stable").length, CARD_PUBLICATION_BATCH)
   assert.equal(f.repository.prepared().length, CARD_PUBLICATION_BATCH)
 })
 
@@ -386,9 +394,11 @@ test("multi-page galleries finish in smaller phases without crossing the Free su
   const p = f.create()
   await p.bootstrap()
   let previousWrites = 0
+  // Each card is 3 core objects + 1 stable object + 2 gallery pages = 12 calls,
+  // so two cards fill the 32-call phase budget (B-898 adds the stable object).
   for (const [offset, expectedWrites] of [
-    [3, 15],
-    [4, 5],
+    [2, 12],
+    [4, 12],
   ]) {
     await p.step()
     const phaseWrites = f.writes.length - previousWrites
@@ -417,7 +427,7 @@ test("a thousand candidates publish in one bounded phase and the next phase cont
   await p.bootstrap()
   await p.step()
   assert.equal(p.status().job.offset, 1)
-  assert.equal(f.writes.length, 11, "eight gallery pages and three core objects")
+  assert.equal(f.writes.length, 12, "eight gallery pages, three core objects, one stable object")
   assert.equal(p.status().head, null)
   await drain(p)
   assert.equal(p.status().head.current.manifest.card_count, 2)
@@ -680,7 +690,7 @@ test("repeat rematerialization verifies existing objects before upload within it
   assert.equal(calls.filter((call) => call.kind === "cards").length, 4)
 })
 
-test("a large rematerialization phase keeps its original two-call object budget", async () => {
+test("a large rematerialization phase is sized for origin checks and still reuses bytes", async () => {
   const f = fixture(3)
   const p = f.create()
   await p.bootstrap()
@@ -700,10 +710,14 @@ test("a large rematerialization phase keeps its original two-call object budget"
   await drain(p)
 
   assert.equal(calls.filter((call) => call.kind === "galleries").length, 6)
+  // B-898: the planner sizes a rematerialization phase by its GET+PUT+GET call
+  // pattern (plus 2 calls per stable object), so every phase reuses bytes and
+  // none can exceed the 32-call budget. 3 cards x (5 immutable x 3 + 2) = 51
+  // calls, so this pass takes two phases instead of one unbounded one.
   assert.equal(
     calls
       .filter((call) => ["cards", "genes", "portraits", "galleries"].includes(call.kind))
-      .every((call) => !call.options?.reuseExisting),
+      .every((call) => call.options?.reuseExisting === true),
     true,
   )
 })
@@ -731,4 +745,27 @@ test("a missing source card fails a rematerialization closed instead of deleting
   assert.equal(committed.previous.version, original.current.version)
   assert.equal(committed.current.manifest.card_count, 9)
   assert.equal(restarted.status().job, null)
+})
+
+test("a full publication writes one stable gene object per card at a fixed key (B-898)", async () => {
+  const f = fixture(5)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  assert.ok(p.status().head)
+  const stableKeys = f.writes.filter((w) => w.kind === "stable").map((w) => w.key)
+  assert.deepEqual(
+    [...new Set(stableKeys)].sort(),
+    f.cards.map((card) => `genes/v3/${card.symbol}.json`).sort(),
+  )
+})
+
+test("a failed stable gene object write keeps the head where it was (B-898)", async () => {
+  const f = fixture(2)
+  const p = f.create()
+  await p.bootstrap()
+  f.fail("stable")
+  await p.step().catch(() => {})
+  await p.step().catch(() => {})
+  assert.equal(p.status().head, null)
 })
