@@ -19,6 +19,31 @@ R2 dependency, paid Workers upgrade or second canonical selection is permitted.
 The migration retains the frozen legacy head until the complete new catalog is
 ready. B-716 remains the deployment, installed-browser and capacity proof owner.
 
+## Stable gene object (B-898, Stage 1 of the 2026-10-01 diagnosis)
+
+Every publication of a gene, per-gene or batch, also writes one mutable object
+at a fixed key, `genes/v3/<SYMBOL>.json`, in the same Bunny storage zone
+(`writeStable` in `workers/lib/iconoplasm-published-card-objects.js`). It is the
+projected gene record with its complete candidate pool inline, `candidate_count`,
+`stable_object_version: 3` and `published_at`. Cache-Control is
+`public, max-age=300, stale-while-revalidate=86400`; the writer verifies the
+bytes by authenticated read-back before it returns, and it runs after the
+immutable group of the same phase so the six-pipeline ceiling holds. It costs
+two subrequests per gene, which the phase planner counts.
+
+Why: readers today resolve a gene through head → manifest → indexes → gene →
+delta chain (8 to 15 fetches and a "which pool is newer" rule). The stable
+object is the one URL that replaces that walk. This is the dual-write step;
+readers switch to it in the next step, and the manifest tree and delta chain
+are deleted after installed extension builds have moved over.
+
+Known bounded race, accepted for dual-write: two publications of one gene can
+overlap (a per-gene materialization during a base release). Each PUT is
+verified, so the writer never reports success for bytes it did not see, but a
+stalled older PUT that lands after a newer one leaves the older content until
+the next publication of that gene. The head path still carries the immutable
+truth during dual-write; Stage 2 gives each gene one writer.
+
 ## Image ontology
 
 - **Portrait** is the generated character image selected by `asset_sha256`. It is source material.
