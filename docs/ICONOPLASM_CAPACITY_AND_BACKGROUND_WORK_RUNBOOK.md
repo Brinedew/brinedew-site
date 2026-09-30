@@ -86,15 +86,16 @@ Verify all of the following from current sources:
 
 1. The intended operation has one named owner and one idempotent identity.
 2. Its worst-case work is bounded and admitted before dispatch.
-3. Provider telemetry is fresh for the current UTC day and account scope.
-4. The shared capacity ledger is available and includes retained uncertain
+3. The shared capacity ledger is available and includes retained uncertain
    reservations.
-5. The operation leaves protected headroom for public reading and recovery.
-6. A failure has one durable retry owner rather than a blind retry loop.
+4. The operation leaves protected headroom for public reading and recovery.
+5. A failure has one durable retry owner rather than a blind retry loop.
 
-Missing, stale, malformed, or exhausted evidence fails closed for new mutation
-work. It does not justify inventing capacity, refunding an uncertain reservation,
-or waiting without a durable executor.
+Exhausted evidence refuses new mutation work. Missing or late telemetry does
+not refuse it: D1 write admission then counts every worst-case receipt since the
+last same-day provider sample (or since midnight, when the meter is exactly
+zero). A telemetry outage never becomes invented capacity, a refunded uncertain
+reservation, or a whole-day stall (B-897, 30 Sep 2026).
 
 ## Current inspection commands
 
@@ -131,12 +132,16 @@ Every mutation or background operation must declare:
 - a reviewed worst-case bound;
 - the durable completion or retry destination.
 
-Reserve before dispatch. Settle from provider receipts when the outcome is
-known. Retain the reservation when the outcome is uncertain. No lane borrows
-another lane's unused budget.
+Reserve before dispatch. D1 write admission measures pressure: the provider's
+rows-written meter plus the worst-case units of every reservation made since
+15 minutes before that meter was sampled. An uncertain reservation is never
+refunded; it keeps counting until the meter can see its real writes. Background
+lanes stop at 70% of the daily meter and user actions at 90%, so users always
+keep a band that background work cannot take.
 
-Exact ceilings and lane allocations live in executable policy, not this
-runbook. Tests must fail when a new path bypasses that policy.
+Exact ceilings live in executable policy
+(`workers/lib/iconoplasm-mutation-lane-reservations.js`), not this runbook.
+Tests must fail when a new path bypasses that policy.
 
 ## Public-read behavior
 

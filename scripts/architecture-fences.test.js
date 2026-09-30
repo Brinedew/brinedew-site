@@ -323,11 +323,12 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   assert.match(runtime, /lane: "publication"/)
   assert.match(runtime, /lane: "finalization_recovery"/)
   assert.match(runtime, /lane: "laptop_delivery"/)
-  assert.match(lanes, /MUTATION_UNALLOCATED_HEADROOM = 30_000/)
-  assert.match(lanes, /user_action: 40_000/)
-  assert.match(lanes, /publication: 10_000/)
-  assert.match(lanes, /finalization_recovery: 10_000/)
-  assert.match(lanes, /laptop_delivery: 10_000/)
+  // B-897: admission is measured provider pressure, not fixed lane totals.
+  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = 70_000/)
+  assert.match(lanes, /MUTATION_USER_ACTION_CEILING = 90_000/)
+  assert.match(lanes, /MUTATION_ANALYTICS_LAG_MS = 15 \* 60_000/)
+  assert.doesNotMatch(lanes, /daily_mutation_lane_usage \(/)
+  assert.doesNotMatch(runtime, /MUTATION_PROVIDER_OBSERVATION_(MISSING|STALE|MALFORMED)/)
   assert.doesNotMatch(
     lanes,
     /previous\.day === day\s*&&/,

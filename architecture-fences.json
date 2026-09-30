@@ -91,7 +91,7 @@
       "title": "Queue wakeups follow durable due times",
       "decision": "Automatic messages wake durable due work; they are not polling tokens. Repeated dirty work is coalesced, and every mutation is admitted before it spends shared capacity.",
       "reason": "Blind retries and one-message-per-event designs can exhaust queues and databases without producing user value.",
-      "change_control": "A replacement must preserve durable intent, idempotency, bounded idle cost, and fail-closed admission. Queue topology, batch sizes, lanes, and schedules may change.",
+      "change_control": "A replacement must preserve durable intent, idempotency, bounded idle cost, and admission against measured provider pressure that never assumes unknown capacity. Queue topology, batch sizes, lanes, and schedules may change. Missing telemetry must not become a whole-day refusal (B-897).",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy"],

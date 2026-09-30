@@ -14,7 +14,6 @@ import {
 import {
   DailyMutationLaneReservations,
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
-  MUTATION_LANE_DAILY_LIMITS,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
 
 const voteProjectionSchema = [
@@ -318,88 +317,235 @@ test("an initial Queue send failure leaves the durable gene retryable and the ne
   assert.equal(row.wake_version, 2)
 })
 
-test("mutation lanes retain 30 percent global headroom and cannot borrow another lane", () => {
+function pressureLedger() {
   const raw = new DatabaseSync(":memory:")
-  raw.exec(`
-    CREATE TABLE mutation_reservation_audit (
-      operation_id TEXT NOT NULL,
-      lane TEXT NOT NULL,
-      reserved_units INTEGER NOT NULL
-    );
-  `)
-  const storage = {
-    sql: {
-      exec(sql, ...args) {
-        const statement = raw.prepare(sql)
-        if (statement.columns().length) return { toArray: () => statement.all(...args) }
-        statement.run(...args)
-        return { toArray: () => [] }
-      },
-    },
-    transactionSync(callback) {
-      raw.exec("BEGIN IMMEDIATE")
-      try {
-        const result = callback()
-        raw.exec("COMMIT")
-        return result
-      } catch (error) {
-        raw.exec("ROLLBACK")
-        throw error
-      }
-    },
-  }
-  const ledger = new DailyMutationLaneReservations(storage)
+  const ledger = new DailyMutationLaneReservations(sqliteDoStorage(raw))
   ledger.initialize()
-  raw.exec(`
-    CREATE TRIGGER mutation_reservation_write_audit
-    AFTER INSERT ON daily_mutation_lane_reservations
-    BEGIN
-      INSERT INTO mutation_reservation_audit(operation_id, lane, reserved_units)
-      VALUES (NEW.operation_id, NEW.lane, NEW.reserved_units);
-    END;
-  `)
+  return { raw, ledger }
+}
 
-  const day = "2026-09-19"
-  const reserve = (lane, operationId, units) =>
-    ledger.reserve({ day, lane, operation_id: operationId, units })
-  for (const [lane, limit] of Object.entries(MUTATION_LANE_DAILY_LIMITS)) {
-    const receipt = reserve(lane, `${lane}:full`, limit)
+// B-897: the old fixed lanes summed every reservation started today at its
+// worst-case size and never subtracted, so 200 retried 50-unit phases parked
+// the laptop lane for a whole UTC day while the provider meter sat at 12%.
+test("reservations the provider meter can already see stop counting against admission", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const day = "2026-09-30"
+  for (let index = 0; index < 200; index += 1) {
+    const receipt = ledger.reserve({
+      day,
+      lane: "laptop_delivery",
+      operation_id: `finalization:EPYC:${index}:vision_rollups`,
+      units: 50,
+      now: "2026-09-30T08:30:00.000Z",
+    })
     assert.equal(receipt.ok, true)
-    assert.equal(receipt.replayed, false)
+  }
+  const admitted = ledger.reserve({
+    day,
+    lane: "laptop_delivery",
+    operation_id: "finalization:EPYC:201:vision_rollups",
+    units: 50,
+    provider_rows_written: 12_000,
+    observed_at: "2026-09-30T13:00:00.000Z",
+    now: "2026-09-30T13:02:00.000Z",
+  })
+  assert.equal(admitted.ok, true)
+  assert.equal(admitted.replayed, false)
+  assert.equal(admitted.pressure, 12_050)
+})
+
+test("recent reservations accumulate until the background ceiling refuses", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const day = "2026-09-30"
+  const at = {
+    provider_rows_written: 0,
+    observed_at: "2026-09-30T12:00:00.000Z",
+    now: "2026-09-30T12:01:00.000Z",
+  }
+  for (let index = 0; index < 7; index += 1) {
+    assert.equal(
+      ledger.reserve({
+        day,
+        lane: "publication",
+        operation_id: `burst:${index}`,
+        units: 10_000,
+        ...at,
+      }).ok,
+      true,
+    )
+  }
+  const refused = ledger.reserve({
+    day,
+    lane: "publication",
+    operation_id: "burst:7",
+    units: 1,
+    ...at,
+  })
+  assert.equal(refused.ok, false)
+  assert.equal(refused.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+  assert.equal(refused.in_flight_units, 70_000)
+  assert.equal(refused.ceiling, 70_000)
+  // Users keep the band above background work.
+  assert.equal(
+    ledger.reserve({ day, lane: "user_action", operation_id: "burst:user", units: 20_000, ...at })
+      .ok,
+    true,
+  )
+  assert.equal(
+    ledger.reserve({ day, lane: "user_action", operation_id: "burst:user:over", units: 1, ...at })
+      .ok,
+    false,
+  )
+})
+
+test("without any provider observation today every reservation since midnight counts", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const day = "2026-09-30"
+  const early = ledger.reserve({
+    day,
+    lane: "finalization_recovery",
+    operation_id: "blind:early",
+    units: 69_950,
+    now: "2026-09-30T00:05:00.000Z",
+  })
+  assert.equal(early.ok, true)
+  const late = ledger.reserve({
+    day,
+    lane: "finalization_recovery",
+    operation_id: "blind:late",
+    units: 51,
+    now: "2026-09-30T23:55:00.000Z",
+  })
+  assert.equal(late.ok, false)
+  assert.equal(late.in_flight_units, 69_950)
+  // Yesterday's observation is not a baseline for today.
+  const stale = ledger.reserve({
+    day,
+    lane: "finalization_recovery",
+    operation_id: "blind:stale-observation",
+    units: 51,
+    provider_rows_written: 0,
+    observed_at: "2026-09-29T23:59:00.000Z",
+    now: "2026-09-30T23:55:00.000Z",
+  })
+  assert.equal(stale.ok, false)
+  // A future-dated observation is ignored the same way.
+  const future = ledger.reserve({
+    day,
+    lane: "finalization_recovery",
+    operation_id: "blind:future-observation",
+    units: 51,
+    provider_rows_written: 0,
+    observed_at: "2026-09-30T23:58:00.000Z",
+    now: "2026-09-30T23:55:00.000Z",
+  })
+  assert.equal(future.ok, false)
+})
+
+test("user actions are admitted above the background ceiling up to 90 percent", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const day = "2026-09-30"
+  const at = {
+    provider_rows_written: 69_999,
+    observed_at: "2026-09-30T12:00:00.000Z",
+    now: "2026-09-30T12:01:00.000Z",
   }
   assert.equal(
-    Object.values(MUTATION_LANE_DAILY_LIMITS).reduce((sum, value) => sum + value, 0),
-    70_000,
+    ledger.reserve({ day, lane: "publication", operation_id: "tier:bg", units: 2, ...at }).ok,
+    false,
   )
   assert.equal(
-    reserve("user_action", "user-action:overflow", 1).code,
-    "MUTATION_LANE_CAPACITY_EXHAUSTED",
+    ledger.reserve({ day, lane: "user_action", operation_id: "tier:user", units: 20_001, ...at })
+      .ok,
+    true,
   )
-  assert.equal(reserve("publication", "publication:overflow", 1).ok, false)
-  const replay = reserve("laptop_delivery", "laptop_delivery:full", 10_000)
+  assert.equal(
+    ledger.reserve({ day, lane: "user_action", operation_id: "tier:user:over", units: 1, ...at })
+      .ok,
+    false,
+  )
+})
+
+test("an exact operation replays its original reservation without counting twice", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const at = {
+    provider_rows_written: 0,
+    observed_at: "2026-09-19T12:00:00.000Z",
+    now: "2026-09-19T12:01:00.000Z",
+  }
+  const first = ledger.reserve({
+    day: "2026-09-19",
+    lane: "laptop_delivery",
+    operation_id: "exact:op",
+    units: 69_000,
+    ...at,
+  })
+  assert.equal(first.ok, true)
+  const replay = ledger.reserve({
+    day: "2026-09-19",
+    lane: "laptop_delivery",
+    operation_id: "exact:op",
+    units: 69_000,
+    ...at,
+  })
   assert.equal(replay.ok, true)
   assert.equal(replay.replayed, true)
+  assert.equal(ledger.snapshot("2026-09-19", { ...at }).in_flight_units, 69_000)
   const afterMidnight = ledger.reserve({
     day: "2026-09-20",
     lane: "laptop_delivery",
-    operation_id: "laptop_delivery:full",
-    units: 10_000,
+    operation_id: "exact:op",
+    units: 69_000,
+    now: "2026-09-20T00:01:00.000Z",
   })
-  assert.equal(afterMidnight.ok, true)
   assert.equal(afterMidnight.replayed, true)
-  assert.equal(afterMidnight.day, day)
-  assert.equal(afterMidnight.requested_day, "2026-09-20")
-  assert.equal(afterMidnight.carried_from_day, day)
-  assert.equal(ledger.snapshot("2026-09-20").lanes.laptop_delivery.reserved, 0)
+  assert.equal(afterMidnight.carried_from_day, "2026-09-19")
+  assert.equal(
+    ledger.snapshot("2026-09-20", { now: "2026-09-20T00:01:00.000Z" }).in_flight_units,
+    0,
+  )
   assert.throws(
-    () => reserve("laptop_delivery", "laptop_delivery:full", 9_999),
+    () =>
+      ledger.reserve({
+        day: "2026-09-19",
+        lane: "laptop_delivery",
+        operation_id: "exact:op",
+        units: 68_999,
+        ...at,
+      }),
     /MUTATION_RESERVATION_IDENTITY_MISMATCH/,
   )
-  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM mutation_reservation_audit").get().n, 4)
-  raw.close()
+  assert.throws(
+    () =>
+      ledger.reserve({
+        day: "2026-09-19",
+        lane: "user_action",
+        operation_id: "exact:op",
+        units: 69_000,
+        ...at,
+      }),
+    /MUTATION_RESERVATION_IDENTITY_MISMATCH/,
+  )
 })
 
-test("authoritative provider writes consume the same 70 percent ordinary ceiling as lane reservations", async (t) => {
+test("admission reads pressure buckets by primary key, never the reservation table", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const plan = raw
+    .prepare(`EXPLAIN QUERY PLAN ${ledger.pressureSql}`)
+    .all("2026-09-30", "2026-09-30T11:45")
+    .map((row) => String(row.detail))
+    .join("\n")
+  assert.match(plan, /daily_mutation_pressure_buckets USING (PRIMARY KEY|INDEX sqlite_autoindex)/)
+  assert.doesNotMatch(plan, /daily_mutation_lane_reservations/)
+})
+
+test("locally recorded writes and recent reservations share the background ceiling", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
   const storage = sqliteDoStorage(raw)
@@ -449,233 +595,174 @@ test("authoritative provider writes consume the same 70 percent ordinary ceiling
   assert.deepEqual(
     Object.fromEntries(
       Object.entries(await refused.json()).filter(([key]) =>
-        ["code", "provider_rows_written", "all_lane_reserved_units", "ordinary_ceiling"].includes(
-          key,
-        ),
+        ["code", "provider_rows_written", "in_flight_units", "ceiling"].includes(key),
       ),
     ),
     {
       code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
       provider_rows_written: 65_000,
-      all_lane_reserved_units: 5_000,
-      ordinary_ceiling: 70_000,
+      in_flight_units: 5_000,
+      ceiling: 70_000,
     },
   )
 })
 
-test("mutation admission fails closed when the account-wide provider observation is missing", async (t) => {
-  const raw = new DatabaseSync(":memory:")
-  t.after(() => raw.close())
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate({
-    storage: sqliteDoStorage(raw),
-    blockConcurrencyWhile(callback) {
-      return callback()
+function budgetOwner(raw, env = {}, options = {}) {
+  return new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    {
+      storage: sqliteDoStorage(raw),
+      blockConcurrencyWhile(callback) {
+        return callback()
+      },
     },
-  })
-  const response = await owner.fetch(
+    env,
+    options,
+  )
+}
+
+function reserveThrough(owner, { lane = "user_action", operationId, units = 1, day } = {}) {
+  return owner.fetch(
     new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        day_key: new Date().toISOString().slice(0, 10),
-        lane: "user_action",
-        operation_id: "provider-observation:missing",
-        units: 1,
+        day_key: day || new Date().toISOString().slice(0, 10),
+        lane,
+        operation_id: operationId,
+        units,
       }),
     }),
   )
-  assert.equal(response.status, 429)
-  assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_MISSING")
+}
+
+// B-897 / #180: a missing or late telemetry sample used to answer 429 for
+// every lane while the provider had room. Unknown capacity is still never
+// assumed: the baseline is midnight's exact zero plus every worst-case receipt.
+test("missing provider telemetry admits against our own worst-case receipts, never a 429", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const owner = budgetOwner(raw)
+  const response = await reserveThrough(owner, { operationId: "provider-observation:missing" })
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).ok, true)
 })
 
 test("staging admission reads the shared account-wide provider observation from PROD_KV", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
-    {
-      storage: sqliteDoStorage(raw),
-      blockConcurrencyWhile(callback) {
-        return callback()
-      },
-    },
-    {
-      KV: { get: async () => null },
-      PROD_KV: providerObservationKv({ rowsWritten: 0 }),
-    },
-  )
-  const response = await owner.fetch(
-    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day_key: new Date().toISOString().slice(0, 10),
-        lane: "user_action",
-        operation_id: "provider-observation:shared-production-kv",
-        units: 1,
-      }),
-    }),
-  )
-  assert.equal(response.status, 200)
-  assert.equal((await response.json()).ok, true)
-})
-
-test("mutation admission accepts the equivalent legacy snapshot during rolling deployment", async (t) => {
-  const raw = new DatabaseSync(":memory:")
-  t.after(() => raw.close())
-  const generatedAt = new Date().toISOString()
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
-    {
-      storage: sqliteDoStorage(raw),
-      blockConcurrencyWhile(callback) {
-        return callback()
-      },
-    },
-    {
-      KV: {
-        async get(key, type) {
-          assert.equal(key, "iconoplasm:observability-snapshot:v1")
-          assert.equal(type, "json")
-          return {
-            schemaVersion: 3,
-            generatedAt,
-            d1: {
-              currentDay: {
-                date: generatedAt.slice(0, 10),
-                rowsWritten: 14,
-                covered: true,
-              },
-            },
-          }
-        },
-      },
-    },
-  )
-  const response = await owner.fetch(
-    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day_key: generatedAt.slice(0, 10),
-        lane: "user_action",
-        operation_id: "provider-observation:legacy-rollout",
-        units: 1,
-      }),
-    }),
-  )
-  assert.equal(response.status, 200)
-  assert.equal((await response.json()).ok, true)
-})
-
-test("mutation admission fails closed when the account-wide provider observation is stale", async (t) => {
-  const raw = new DatabaseSync(":memory:")
-  t.after(() => raw.close())
-  const staleAt = new Date(Date.now() - 91 * 60_000).toISOString()
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
-    {
-      storage: sqliteDoStorage(raw),
-      blockConcurrencyWhile(callback) {
-        return callback()
-      },
-    },
-    { KV: providerObservationKv({ generatedAt: staleAt }) },
-  )
-  const response = await owner.fetch(
-    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day_key: new Date().toISOString().slice(0, 10),
-        lane: "user_action",
-        operation_id: "provider-observation:stale",
-        units: 1,
-      }),
-    }),
-  )
+  const owner = budgetOwner(raw, {
+    KV: { get: async () => null },
+    PROD_KV: providerObservationKv({ rowsWritten: 50_000 }),
+  })
+  const response = await reserveThrough(owner, {
+    lane: "publication",
+    operationId: "provider-observation:shared-production-kv",
+    units: 20_001,
+  })
   assert.equal(response.status, 429)
-  assert.equal((await response.json()).code, "MUTATION_PROVIDER_OBSERVATION_STALE")
+  assert.equal((await response.json()).provider_rows_written, 50_000)
 })
 
-test("stale projected telemetry is refreshed once from the live provider authority", async (t) => {
+test("a late projection is refreshed once from the live provider authority", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
   const staleAt = new Date(Date.now() - 91 * 60_000).toISOString()
   const day = new Date().toISOString().slice(0, 10)
   let refreshes = 0
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
-    {
-      storage: sqliteDoStorage(raw),
-      blockConcurrencyWhile(callback) {
-        return callback()
-      },
-    },
+  const owner = budgetOwner(
+    raw,
     { KV: providerObservationKv({ generatedAt: staleAt }) },
     {
       accountUsage: {
         async refresh() {
           refreshes += 1
-          return {
-            day,
-            measured_at: Date.now(),
-            rows_read: 0,
-            rows_written: 123,
-            requests: 1,
-          }
+          return { day, measured_at: Date.now(), rows_read: 0, rows_written: 123, requests: 1 }
         },
       },
     },
   )
-  const reserve = (operationId) =>
-    owner.fetch(
-      new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          day_key: day,
-          lane: "user_action",
-          operation_id: operationId,
-          units: 1,
-        }),
-      }),
-    )
-
-  const first = await reserve("provider-observation:live-refresh:first")
+  const first = await reserveThrough(owner, {
+    day,
+    operationId: "provider-observation:live-refresh:first",
+  })
   assert.equal(first.status, 200)
   assert.equal((await first.json()).ok, true)
   assert.equal(owner.providerObservationCache?.rows_written, 123)
   assert.equal(owner.providerObservationCache?.source, "live_provider")
-  const second = await reserve("provider-observation:live-refresh:second")
+  const second = await reserveThrough(owner, {
+    day,
+    operationId: "provider-observation:live-refresh:second",
+  })
   assert.equal(second.status, 200)
   assert.equal(refreshes, 1)
 })
 
-test("fresh account-wide provider writes from other databases consume ordinary headroom", async (t) => {
+test("a failed live refresh keeps the last good same-day observation", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
-  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+  let kvReads = 0
+  const owner = budgetOwner(
+    raw,
     {
-      storage: sqliteDoStorage(raw),
-      blockConcurrencyWhile(callback) {
-        return callback()
+      KV: {
+        async get() {
+          kvReads += 1
+          if (kvReads > 1) throw new Error("KV unavailable")
+          return {
+            generatedAt: new Date().toISOString(),
+            providerAdmission: {
+              accountId: "account-test",
+              dayKey: new Date().toISOString().slice(0, 10),
+              rowsWritten: 69_990,
+            },
+          }
+        },
       },
     },
-    { KV: providerObservationKv({ rowsWritten: 69_999 }) },
+    {
+      accountUsage: {
+        async refresh() {
+          throw new Error("analytics unavailable")
+        },
+      },
+    },
   )
-  const response = await owner.fetch(
-    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-mutation-writes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day_key: new Date().toISOString().slice(0, 10),
-        lane: "user_action",
-        operation_id: "provider-observation:cross-database",
-        units: 2,
-      }),
-    }),
+  assert.equal(
+    (await reserveThrough(owner, { lane: "publication", operationId: "good:1", units: 5 })).status,
+    200,
   )
-  assert.equal(response.status, 429)
-  const payload = await response.json()
+  owner.providerObservationCheckedAt = 0
+  owner.providerObservationCache = {
+    ...owner.providerObservationCache,
+    observed_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+  }
+  const refused = await reserveThrough(owner, {
+    lane: "publication",
+    operationId: "good:2",
+    units: 6,
+  })
+  assert.equal(refused.status, 429)
+  assert.equal((await refused.json()).provider_rows_written, 69_990)
+})
+
+test("provider writes from other databases hold background work below users", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const owner = budgetOwner(raw, { KV: providerObservationKv({ rowsWritten: 69_999 }) })
+  const background = await reserveThrough(owner, {
+    lane: "publication",
+    operationId: "provider-observation:cross-database:bg",
+    units: 2,
+  })
+  assert.equal(background.status, 429)
+  const payload = await background.json()
   assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
   assert.equal(payload.provider_rows_written, 69_999)
+  const user = await reserveThrough(owner, {
+    operationId: "provider-observation:cross-database:user",
+    units: 2,
+  })
+  assert.equal(user.status, 200)
 })
 
 test("daily-budget owner schedules terminal compaction at the next no-traffic eligibility", async (t) => {
@@ -791,7 +878,7 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
         return Response.json(
           {
             ok: false,
-            code: "MUTATION_LANE_CAPACITY_EXHAUSTED",
+            code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
             disposition: "pending_or_retryable_refusal",
           },
           { status: 429 },
@@ -1059,7 +1146,7 @@ test("finalization recovery lane refuses a durable phase before its first mutati
         const body = await request.json()
         reservations.push(body)
         return Response.json(
-          { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
           { status: 429 },
         )
       },
@@ -1139,7 +1226,7 @@ test("completed-pending finalization reserves once for one bounded completion pa
         const body = await request.json()
         reservations.push(body)
         return Response.json(
-          { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
           { status: 429 },
         )
       },
@@ -1173,7 +1260,7 @@ test("publication lane refuses vote projection before D1 mutation", async () => 
         const body = await request.json()
         reservations.push(body)
         return Response.json(
-          { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
           { status: 429 },
         )
       },
@@ -1429,7 +1516,7 @@ test("workstation mutation route refuses in the laptop lane before D1", async ()
         calls.push({ path, body })
         assert.equal(path, "/reserve-mutation-writes")
         return Response.json(
-          { ok: false, code: "MUTATION_LANE_CAPACITY_EXHAUSTED" },
+          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
           { status: 429 },
         )
       },
