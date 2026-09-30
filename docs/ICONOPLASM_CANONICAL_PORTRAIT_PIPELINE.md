@@ -28,8 +28,17 @@ projected gene record with its complete candidate pool inline, `candidate_count`
 `stable_object_version: 3` and `published_at`. Cache-Control is
 `public, max-age=300, stale-while-revalidate=86400`; the writer verifies the
 bytes by authenticated read-back before it returns, and it runs after the
-immutable group of the same phase so the six-pipeline ceiling holds. It costs
-two subrequests per gene, which the phase planner counts.
+immutable group of the same phase so the six-pipeline ceiling holds.
+
+The pull zone does not honour that header: measured on 2026-09-30 22:53Z, the
+CDN served `genes/v3/A1BG.json` with `Cache-Control: public, max-age=2592000`.
+So every ordinary rewrite also purges its exact CDN URL through the Bunny API
+(`BUNNY_ACCOUNT_API_KEY`, free, no request fees): PUT + verified GET + purge is
+three subrequests per gene, which the phase planner counts, and three ordinary
+cards fit a phase. A full rematerialization skips per-object purges and issues
+one wildcard purge of `genes/v3/*` right before the head commits. Without the
+account key the write still succeeds and reports `purged: false`; a refused
+purge throws so the gene is retried.
 
 Why: readers today resolve a gene through head → manifest → indexes → gene →
 delta chain (8 to 15 fetches and a "which pool is newer" rule). The stable

@@ -1,4 +1,5 @@
 import {
+  externalPortraitPublicUrl,
   externalPortraitReadCandidates,
   externalPortraitStoragePassword,
   externalPortraitStorageUrl,
@@ -53,6 +54,13 @@ export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
 export const STABLE_GENE_OBJECT_PREFIX = "genes/v3"
 export const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
 export const STABLE_GENE_OBJECT_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400"
+// Measured 2026-09-30 22:53Z: the pull zone served genes/v3/A1BG.json with
+// `Cache-Control: public, max-age=2592000` and CDN-Cache: HIT, i.e. the zone
+// applies its own 30-day expiration and ignores the header above. A rewritten
+// gene would therefore sit stale on the edge for a month. Every rewrite purges
+// its exact CDN URL through the Bunny API (free, no request fees); a full
+// rematerialization purges the prefix once at commit instead of 19k times.
+export const BUNNY_PURGE_ENDPOINT = "https://api.bunny.net/purge"
 const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
 
@@ -354,7 +362,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
   // the immutable objects: the bytes are read back through authenticated
   // Storage and hash-compared before this returns, so a caller that sees
   // success knows the exact bytes are on the origin.
-  async function writeStable(key, value) {
+  async function writeStable(key, value, { purge = true } = {}) {
     const identity = stableGeneObjectIdentity(key)
     const bytes = encoder.encode(canonicalPublishedJson(value))
     if (bytes.byteLength > identity.limit) {
@@ -397,7 +405,33 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     const readBack = await boundedBytes(check, identity.limit, bodyTimeoutMs)
     if ((await publishedObjectHash(readBack)) !== hash)
       throw new Error("Stable gene object read-back hash mismatch")
-    return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
+    const purged = purge ? await purgeCdnUrl(externalPortraitPublicUrl(env, key), key) : false
+    return { key, hash, size: bytes.byteLength, symbol: identity.symbol, purged }
+  }
+
+  // Exact-URL CDN purge. Returns false when no account key is configured (the
+  // object is still correct on the origin; only edge freshness is unbounded),
+  // and throws on a refused purge so the publication retries the gene.
+  async function purgeCdnUrl(publicUrl, key) {
+    const accountKey = String(env?.BUNNY_ACCOUNT_API_KEY || "").trim()
+    if (!accountKey || !publicUrl) return false
+    const response = await send(
+      `${BUNNY_PURGE_ENDPOINT}?url=${encodeURIComponent(publicUrl)}&async=true`,
+      { method: "POST", headers: { AccessKey: accountKey } },
+      key,
+    )
+    await response.body?.cancel().catch(() => {})
+    if (!response.ok) throw new Error(`CDN purge failed (${response.status})`)
+    return true
+  }
+
+  // One wildcard purge for the whole stable-object prefix, used after a full
+  // rematerialization has rewritten every gene.
+  async function purgeStablePrefix() {
+    return purgeCdnUrl(
+      externalPortraitPublicUrl(env, `${STABLE_GENE_OBJECT_PREFIX}/*`),
+      `${STABLE_GENE_OBJECT_PREFIX}/*`,
+    )
   }
 
   return {
@@ -405,6 +439,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     verifyReaderResolvable,
     verifyBlot,
     writeStable,
+    purgeStablePrefix,
     async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
