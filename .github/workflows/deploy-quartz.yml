@@ -346,6 +346,17 @@ jobs:
         # Wrangler-owned consumer instead of restoring CLI default batch sizes.
         run: node scripts/reconcile-iconoplasm-finalization-queue.mjs --apply
 
+      # B-847: reviewed online migrations (plan entries marked "online": true)
+      # apply here, before the code that uses them, with the app live. A refusal
+      # stops the release before anything changes; the installed code keeps
+      # serving. Migrations without "online" still need data_maintenance=true.
+      - name: Apply reviewed online D1 migrations
+        if: inputs.data_maintenance != true
+        timeout-minutes: 10
+        env:
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+        run: node scripts/apply-online-d1-migrations.mjs
+
       # A code release changes a Worker version, not its routes, queue consumers,
       # or Cron triggers. Cloudflare manages those triggers separately from versions.
       # ARCHITECTURE FENCE [IPD-004]: preserve durable wake intent on code pushes.
