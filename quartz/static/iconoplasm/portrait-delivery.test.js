@@ -216,3 +216,57 @@ test("both failed sources enter terminal failure without flipping forever", () =
     failed: ["accelerator", "canonical"],
   })
 })
+
+test("a probe that only times out is retried once the window passes; a hard error is not", async () => {
+  let clock = 1_000_000
+  const timers = []
+  const controlled = controlledImages()
+  const storage = memoryStorage()
+  const delivery = createPortraitDelivery({
+    sessionStorageRef: storage,
+    ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
+    nowRef: () => clock,
+    setTimeoutRef: (fn) => timers.push(fn) && timers.length,
+    clearTimeoutRef: () => {},
+  })
+
+  const first = delivery.ensure("https://iconoplasm.brinedew.bio/portraits/v1/a.webp")
+  await Promise.resolve()
+  assert.equal(controlled.images.length, 1)
+  timers.shift()() // the 2.5 s probe ceiling fires with no answer
+  assert.equal(await first, "https://iconoplasm.brinedew.bio/portraits/v1/a.webp")
+  const stored = JSON.parse(storage.getItem("iconoplasm.portrait-delivery.v2"))
+  assert.equal(stored.state, "canonical")
+  assert.equal(stored.accelerator_retry_at, clock + 60_000)
+
+  clock += 59_000
+  assert.equal(
+    await delivery.ensure("https://iconoplasm.brinedew.bio/portraits/v1/b.webp"),
+    "https://iconoplasm.brinedew.bio/portraits/v1/b.webp",
+  )
+  assert.equal(controlled.images.length, 1, "inside the window nothing re-probes")
+
+  clock += 2_000
+  const retry = delivery.ensure("https://iconoplasm.brinedew.bio/portraits/v1/c.webp")
+  await Promise.resolve()
+  assert.equal(controlled.images.length, 2)
+  controlled.images[1].onload()
+  assert.equal(await retry, "https://iconoplasmportraits.b-cdn.net/portraits/v1/c.webp")
+  assert.deepEqual(delivery.state(), { state: "accelerator", failed: [] })
+
+  // A definitive refusal (DNS/HTTP error) still parks the tab with no retry.
+  const blocked = createPortraitDelivery({
+    sessionStorageRef: memoryStorage(),
+    ImageCtor: controlled.ImageCtor,
+    policy: enabledAcceleratorPolicy,
+    nowRef: () => clock,
+    setTimeoutRef: (fn) => timers.push(fn) && timers.length,
+    clearTimeoutRef: () => {},
+  })
+  const hard = blocked.ensure("https://iconoplasm.brinedew.bio/portraits/v1/d.webp")
+  await Promise.resolve()
+  controlled.images.at(-1).onerror()
+  await hard
+  assert.deepEqual(blocked.state(), { state: "canonical", failed: ["accelerator"] })
+})
