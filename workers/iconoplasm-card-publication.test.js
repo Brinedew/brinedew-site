@@ -82,12 +82,18 @@ function fixture(count = 9) {
       }
     },
   }
+  const purges = []
   const objects = {
-    async writeStable(key, value) {
+    async writeStable(key, value, options) {
       if (failure === "stable") throw new Error("injected stable object failure")
       bytes.set(key, canonicalPublishedJson(value))
-      writes.push({ kind: "stable", key })
+      writes.push({ kind: "stable", key, purge: options?.purge })
       return { key, hash: "e".repeat(64), size: 1 }
+    },
+    async purgeStablePrefix() {
+      if (failure === "purge") throw new Error("injected purge failure")
+      purges.push("genes/v3/*")
+      return true
     },
     async write(kind, value) {
       if (failure === kind) throw new Error("injected object failure")
@@ -146,6 +152,7 @@ function fixture(count = 9) {
     repository,
     objects,
     writes,
+    purges,
     blots,
     cards,
     source,
@@ -205,7 +212,8 @@ test("a catalog manifest waits for public CDN readability before replacing the h
 })
 
 async function drain(publisher) {
-  for (let i = 0; i < 500; i++) if (!(await publisher.step()).more) return
+  // 750 cards at 3 per phase plus blot, index, shard and commit steps.
+  for (let i = 0; i < 800; i++) if (!(await publisher.step()).more) return
   throw new Error("publication failed to drain")
 }
 
@@ -768,4 +776,33 @@ test("a failed stable gene object write keeps the head where it was (B-898)", as
   await p.step().catch(() => {})
   await p.step().catch(() => {})
   assert.equal(p.status().head, null)
+})
+
+test("ordinary publications purge each stable object; a rematerialization purges the prefix once (B-898)", async () => {
+  const f = fixture(3)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  assert.ok(f.writes.filter((w) => w.kind === "stable").every((w) => w.purge === true))
+  assert.deepEqual(f.purges, [])
+
+  const before = f.writes.length
+  await p.rematerialize()
+  await drain(p)
+  const rematWrites = f.writes.slice(before).filter((w) => w.kind === "stable")
+  assert.equal(rematWrites.length, 3)
+  assert.ok(rematWrites.every((w) => w.purge === false))
+  assert.deepEqual(f.purges, ["genes/v3/*"])
+})
+
+test("a refused prefix purge keeps the rematerialization head where it was (B-898)", async () => {
+  const f = fixture(2)
+  const p = f.create()
+  await p.bootstrap()
+  await drain(p)
+  const original = p.status().head
+  await p.rematerialize()
+  f.fail("purge")
+  await assert.rejects(drain(p), /injected purge failure/)
+  assert.deepEqual(p.status().head, original)
 })
