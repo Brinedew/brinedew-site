@@ -12,9 +12,12 @@ import {
 // Do not replace the head with a mutable Bunny PUT: a timed-out old PUT can
 // complete after a newer PUT. HTTP caching of the ordered head has no such race.
 export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
-// Four ordinary cards fit one phase. Larger galleries consume more than one
-// object per card, so prepare() sizes its actual prefix before any upload.
-export const CARD_PUBLICATION_BATCH = 4
+// Three ordinary cards fit one phase: 3 immutable objects x 2 calls + the
+// stable gene object's PUT + verified GET + exact CDN purge = 9 calls per card
+// against the 32-call phase budget (B-898; four fit before the purge). Larger
+// galleries consume more objects per card, so prepare() sizes its actual
+// prefix before any upload.
+export const CARD_PUBLICATION_BATCH = 3
 const CARD_PUBLICATION_CONCURRENCY = 2
 // Cloudflare Free allows 50 external subrequests per invocation. Each immutable
 // object costs a PUT and verified GET; leave 18 for old-shard reads, redirects
@@ -23,12 +26,13 @@ const CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE = 16
 // The same 32 calls expressed as subrequests, so a phase can be sized by its
 // actual call pattern: an immutable object is PUT + verified GET (2 calls); a
 // rematerialization first checks origin (GET + PUT + GET on a miss, 3 calls);
-// the stable gene object (B-898) is always PUT + verified GET (2 calls) and is
-// never reused because its URL is fixed and its bytes change.
+// the stable gene object (B-898) is PUT + verified GET + exact CDN purge (3
+// calls) on an ordinary publication, and PUT + GET (2 calls) during a
+// rematerialization, which purges the whole prefix once at commit instead.
 const CARD_PUBLICATION_PHASE_SUBREQUEST_BUDGET = CARD_PUBLICATION_MAX_VERIFIED_OBJECTS_PER_PHASE * 2
 function publicationPhaseCalls(publication, { reuse }) {
   const immutable = publication.count - 1
-  return (reuse ? 3 : 2) * immutable + 2
+  return (reuse ? 3 : 2) * immutable + (reuse ? 2 : 3)
 }
 
 function publicationObjectPlan(symbol, projected) {
@@ -318,7 +322,9 @@ export function createCardPublication({
       ])
       // After the immutable group settles, so two cards in flight still keep
       // the six-pipeline ceiling (three core objects each) noted below.
-      await objects.writeStable(stableGeneObjectKey(symbol), stableGene)
+      await objects.writeStable(stableGeneObjectKey(symbol), stableGene, {
+        purge: identity.rematerialize !== true,
+      })
       return [full, gene, portrait]
     } catch (error) {
       if (error && typeof error === "object") {
@@ -776,6 +782,10 @@ export function createCardPublication({
     // until readers can fetch this exact manifest; a vote otherwise causes 503s.
     const readable = await objects.verifyReaderResolvable(object.key)
     if (!readable.ready) throw new Error("Published catalog manifest is not reader-resolvable")
+    // A rematerialization rewrote every stable gene object without per-object
+    // purges; one wildcard purge before the head moves makes the edge fresh.
+    // A refused purge throws here, before the transaction, so the commit retries.
+    if (job.rematerialize) await objects.purgeStablePrefix()
     const version = `ccv2-${object.hash}`
     const current = { version, key: object.key, manifest, published_at: now() }
     // All bytes were verified before this single transaction. Neither the
