@@ -1,13 +1,17 @@
 import { execFileSync, spawnSync } from "node:child_process"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
+import { ONLINE_MIGRATION_DATABASES } from "./apply-online-d1-migrations.mjs"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
-// Wrangler route/config edits ship with the tested code. Only data migrations
-// and the named account policy/topology owners require a maintenance release.
+// Wrangler route/config edits ship with the tested code. Data migrations and
+// the named account policy/topology owners require a maintenance release,
+// except reviewed online migrations, which apply-online-d1-migrations.mjs runs
+// before the Worker deploy (B-847). The cost plan itself is ordinary code: that
+// step validates every pending entry before anything applies.
 const MAINTENANCE_PATH =
-  /^(?:cloudflare\/(?:operation-cost-migration-plan|deployment-topology|iconoplasm-crawler-policy)\.json$)|\.sql$/i
+  /^(?:cloudflare\/(?:deployment-topology|iconoplasm-crawler-policy)\.json$)|\.sql$/i
 const MIGRATION_BINDINGS = Object.freeze({
   migrations: "DB",
   "workers/benchmark/migrations": "DB",
@@ -87,12 +91,32 @@ export async function readAppliedChangedMigrations({
   return applied
 }
 
+// Source paths of plan entries reviewed as online (B-847), limited to the
+// databases the online step migrates.
+export function reviewedOnlineMigrationPaths(
+  manifest = JSON.parse(
+    readFileSync(
+      new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url),
+      "utf8",
+    ),
+  ),
+) {
+  const paths = new Set()
+  for (const [key, entry] of Object.entries(manifest?.migrations || {})) {
+    const [resource, name] = key.split("/")
+    const directory = ONLINE_MIGRATION_DATABASES[resource]
+    if (entry?.online === true && directory && name) paths.add(`${directory}/${name}`)
+  }
+  return paths
+}
+
 export function verifyCodeReleaseScope({
   state,
   headSha,
   changedPaths,
   installedIsAncestor,
   appliedMigrations = new Set(),
+  onlineMigrations = new Set(),
 }) {
   if (state?.schema_transition || state?.reader_recovery)
     throw new Error("CODE_RELEASE_INCOMPATIBLE_STATE")
@@ -103,7 +127,8 @@ export function verifyCodeReleaseScope({
   if (
     changedPaths.some(
       (path) =>
-        MAINTENANCE_PATH.test(path) && (!migrationBinding(path) || !appliedMigrations.has(path)),
+        MAINTENANCE_PATH.test(path) &&
+        (!migrationBinding(path) || (!appliedMigrations.has(path) && !onlineMigrations.has(path))),
     )
   )
     throw new Error("CODE_RELEASE_REQUIRES_MAINTENANCE")
@@ -138,6 +163,7 @@ async function main() {
     changedPaths,
     installedIsAncestor: ancestor,
     appliedMigrations,
+    onlineMigrations: reviewedOnlineMigrationPaths(),
   })
   if (process.env.GITHUB_ENV)
     appendFileSync(process.env.GITHUB_ENV, `ICONOPLASM_INSTALLED_SHA=${installed}\n`)
