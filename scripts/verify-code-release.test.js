@@ -2,7 +2,11 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
-import { readAppliedChangedMigrations, verifyCodeReleaseScope } from "./verify-code-release.mjs"
+import {
+  readAppliedChangedMigrations,
+  reviewedOnlineMigrationPaths,
+  verifyCodeReleaseScope,
+} from "./verify-code-release.mjs"
 
 const installed = "a".repeat(40)
 const head = "b".repeat(40)
@@ -38,7 +42,6 @@ test("a routine release refuses unapplied data or owned topology changes before 
     "migrations-iconoplasm-authoring/0100_new_field.sql",
     "migrations-iconoplasm-event-archive/0100_new_field.sql",
     "workers/benchmark/migrations/0100_new_field.sql",
-    "cloudflare/operation-cost-migration-plan.json",
     "cloudflare/deployment-topology.json",
   ]) {
     assert.throws(
@@ -53,6 +56,49 @@ test("a routine release refuses unapplied data or owned topology changes before 
       path,
     )
   }
+})
+
+// B-847: a reviewed online migration (and the plan entry that declares it)
+// ships on the ordinary push; the online step applies it before the Worker.
+test("a reviewed online migration and its plan entry are ordinary releases", () => {
+  const changedPaths = [
+    "workers/fix.js",
+    "migrations-iconoplasm/0110_drop.sql",
+    "cloudflare/operation-cost-migration-plan.json",
+  ]
+  assert.deepEqual(
+    verifyCodeReleaseScope({
+      state,
+      headSha: head,
+      changedPaths,
+      installedIsAncestor: true,
+      onlineMigrations: new Set(["migrations-iconoplasm/0110_drop.sql"]),
+    }).changed_paths,
+    changedPaths,
+  )
+  assert.throws(
+    () =>
+      verifyCodeReleaseScope({
+        state,
+        headSha: head,
+        changedPaths: ["migrations-iconoplasm/0111_offline.sql"],
+        installedIsAncestor: true,
+        onlineMigrations: new Set(["migrations-iconoplasm/0110_drop.sql"]),
+      }),
+    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+  )
+  assert.deepEqual(
+    [
+      ...reviewedOnlineMigrationPaths({
+        migrations: {
+          "iconoplasm/0110_drop.sql": { online: true },
+          "iconoplasm/0112_offline.sql": {},
+          "geneguessr/0050_x.sql": { online: true },
+        },
+      }),
+    ],
+    ["migrations-iconoplasm/0110_drop.sql"],
+  )
 })
 
 test("a routing-only Wrangler edit is ordinary deployable code", () => {
