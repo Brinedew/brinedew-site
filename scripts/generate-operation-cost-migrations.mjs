@@ -154,6 +154,16 @@ function output() {
   }
   const migrations = [
     [
+      "FINALIZATION_HANDOFF_RETIREMENT",
+      "0110_retire_finalization_publication_handoff.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0110_retire_finalization_publication_handoff.sql",
+        0,
+        4,
+      ),
+    ],
+    [
       "PUBLISH_STATE_UPDATED_INDEX",
       "0109_publish_state_updated_index.sql",
       reviewedMigrationStatements(

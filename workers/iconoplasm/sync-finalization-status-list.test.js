@@ -81,7 +81,6 @@ test(
         "0094_finalization_summary.sql",
         "0099_finalization_queue_indexes.sql",
         "0100_finalization_job_version.sql",
-        "0101_finalization_publication_barrier.sql",
         "0103_finalization_running_index.sql",
       ])
         schema.exec(source(name))
@@ -93,9 +92,6 @@ test(
         .all())
         await db.prepare(sql).run()
       await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
-      await db
-        .prepare("INSERT INTO icono_sync_finalization_publication VALUES(1,0,0,0,'','')")
-        .run()
       await db
         .prepare(
           "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",

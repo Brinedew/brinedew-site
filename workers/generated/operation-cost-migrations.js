@@ -45,6 +45,13 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME = "0110_retire_finalization_publication_handoff.sql"
+export const FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS = Object.freeze([
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_insert;",
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_update;",
+  "DROP TRIGGER IF EXISTS trg_icono_finalization_publication_delete;",
+  "DROP TABLE IF EXISTS icono_sync_finalization_publication;"
+])
 export const PUBLISH_STATE_UPDATED_INDEX_MIGRATION_NAME = "0109_publish_state_updated_index.sql"
 export const PUBLISH_STATE_UPDATED_INDEX_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE INDEX IF NOT EXISTS idx_icono_publish_state_updated\n  ON icono_publish_state (updated_at);"
