@@ -10,7 +10,7 @@ import {
   readCompactDiscoveryState,
 } from "./discovery-compact-store.js"
 
-// B-887: a user whose shelf is stale (the row predates migration 0110's
+// B-887: a user whose shelf is stale (the row predates migration 0111's
 // backfill, or an older writer bumped the state without folding) is healed
 // here, once, from the chronology. The CAS on state_version makes a
 // concurrent commit between the two reads a clean retry, never a double count.

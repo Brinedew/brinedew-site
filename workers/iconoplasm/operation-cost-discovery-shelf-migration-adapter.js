@@ -27,7 +27,7 @@ export function discoveryShelfSchemaGuard() {
   ELSE 1 END AS admitted`
 }
 
-// B-887 migration 0110: two constant-default ADD COLUMNs (schema only, no row
+// B-887 migration 0111: two constant-default ADD COLUMNs (schema only, no row
 // rewrite) and one UPDATE that folds every user's chronology into their shelf.
 // The guards refuse a database past max_users / max_chunks, so the bound below
 // holds: ROWS_READ_PER_EVENT per event plus the chunk, user, guard and schema

@@ -45,7 +45,7 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
-export const DISCOVERY_USER_SHELF_MIGRATION_NAME = "0110_discovery_user_shelf.sql"
+export const DISCOVERY_USER_SHELF_MIGRATION_NAME = "0111_discovery_user_shelf.sql"
 export const DISCOVERY_USER_SHELF_MIGRATION_STATEMENTS = Object.freeze([
   "ALTER TABLE icono_discovery_user_state_v2\n  ADD COLUMN shelf_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(shelf_json) AND length(shelf_json) <= 1048576);",
   "ALTER TABLE icono_discovery_user_state_v2\n  ADD COLUMN shelf_state_version INTEGER NOT NULL DEFAULT 0 CHECK(shelf_state_version >= 0);",

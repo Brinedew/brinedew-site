@@ -155,8 +155,8 @@ function output() {
   const migrations = [
     [
       "DISCOVERY_USER_SHELF",
-      "0110_discovery_user_shelf.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0110_discovery_user_shelf.sql", 0, 3),
+      "0111_discovery_user_shelf.sql",
+      reviewedMigrationStatements("migrations-iconoplasm", "0111_discovery_user_shelf.sql", 0, 3),
     ],
     [
       "PUBLISH_STATE_UPDATED_INDEX",

@@ -2,7 +2,7 @@
 // O(history) chronology fold on every signed-in home view.
 //
 // Ways it can fail, written before the code:
-// 1. migration 0110's backfill disagrees with the chronology fold (symbol case
+// 1. migration 0111's backfill disagrees with the chronology fold (symbol case
 //    and whitespace, min/max times, repeat counts, the unsealed active tail,
 //    events without a symbol);
 // 2. a discovery write leaves the shelf stale (a new gene missing, a repeat
@@ -27,7 +27,7 @@ import {
 import { recordCompactDiscoveryBatch } from "./discovery-compact-service.js"
 
 const MIGRATION_SQL = readFileSync(
-  new URL("../../migrations-iconoplasm/0110_discovery_user_shelf.sql", import.meta.url),
+  new URL("../../migrations-iconoplasm/0111_discovery_user_shelf.sql", import.meta.url),
   "utf8",
 )
 
@@ -86,17 +86,17 @@ function event(seq, symbol, at) {
   return { seq, ordinal: seq, symbol, at, source: "gene_page_visit", trigger: "gene_page_visit" }
 }
 
-// The schema as it was before 0110: no shelf columns.
+// The schema as it was before 0111: no shelf columns.
 function preMigrationSchema() {
   const schema = DISCOVERY_COMPACT_SCHEMA_SQL.replace(
     /,\n\s*shelf_json[^\n]*\n\s*shelf_state_version[^\n]*/,
     "",
   )
-  assert.doesNotMatch(schema, /shelf_/, "could not rebuild the pre-0110 schema")
+  assert.doesNotMatch(schema, /shelf_/, "could not rebuild the pre-0111 schema")
   return schema
 }
 
-test("migration 0110 backfills every shelf exactly as the chronology fold (B-887)", () => {
+test("migration 0111 backfills every shelf exactly as the chronology fold (B-887)", () => {
   const db = new D1Like(preMigrationSchema())
   const insertUser = db.raw.prepare(
     `INSERT INTO icono_discovery_user_state_v2 (user_id, dictionary_version, state_version,
@@ -249,7 +249,7 @@ test("randomized batches keep the shelf equal to the chronology fold (B-887)", a
   assert.deepEqual(sortedShelf(state.user.shelf), foldOf(chronology))
 })
 
-test("the 0110 cost adapter refuses a database past its reviewed bound (B-887)", async () => {
+test("the 0111 cost adapter refuses a database past its reviewed bound (B-887)", async () => {
   const { createDiscoveryShelfMigrationCostAdapter } =
     await import("./operation-cost-discovery-shelf-migration-adapter.js")
   const adapter = createDiscoveryShelfMigrationCostAdapter({
@@ -266,7 +266,7 @@ test("the 0110 cost adapter refuses a database past its reviewed bound (B-887)",
       new URL("../../cloudflare/operation-cost-migration-plan.json", import.meta.url),
       "utf8",
     ),
-  ).migrations["iconoplasm/0110_discovery_user_shelf.sql"]
+  ).migrations["iconoplasm/0111_discovery_user_shelf.sql"]
   const prepared = await adapter.prepare(plan.arguments)
   const worstEvents = (plan.arguments.max_chunks + plan.arguments.max_users) * 64
   assert.ok(
@@ -282,7 +282,7 @@ test("the 0110 cost adapter refuses a database past its reviewed bound (B-887)",
     plan.arguments.max_users >= 2 * 38 && plan.arguments.max_chunks >= 224 + 100,
     "no headroom",
   )
-  assert.equal(prepared.statements.at(-1).parameters[0], "0110_discovery_user_shelf.sql")
+  assert.equal(prepared.statements.at(-1).parameters[0], "0111_discovery_user_shelf.sql")
 
   // The guards run first and abort the batch when the data outgrew the bound.
   const db = new D1Like(preMigrationSchema())

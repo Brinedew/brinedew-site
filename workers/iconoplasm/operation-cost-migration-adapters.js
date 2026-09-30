@@ -30,7 +30,7 @@ import {
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
     [
-      "iconoplasm-migration-0110",
+      "iconoplasm-migration-0111",
       createDiscoveryShelfMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
     ],
     [
