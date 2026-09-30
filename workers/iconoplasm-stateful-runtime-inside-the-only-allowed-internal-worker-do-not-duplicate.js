@@ -11765,17 +11765,38 @@ async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {})
   return normalizeSharedDiscoverySymbolList([...symbols.values()])
 }
 
-async function writeSharedGeneDiscoverySymbolCache(env, symbols) {
+// `ordinals` and `full_rebuild_day` let the hourly publisher name only new
+// discoveries (B-887). Readers use `symbols` alone; a payload without
+// ordinals (the rebuild path, or one from before B-887) forces a full run.
+async function writeSharedGeneDiscoverySymbolCache(
+  env,
+  symbols,
+  { ordinals = null, fullRebuildDay = "", now = Date.now() } = {},
+) {
   if (!env.KV) return
   const normalized = normalizeSharedDiscoverySymbolList(symbols)
   await env.KV.put(
     KV_SHARED_GENE_DISCOVERY_SYMBOLS,
     JSON.stringify({
       schema: "iconoplasm.sharedGeneDiscoverySymbols.v1",
-      updated_at: new Date().toISOString(),
+      updated_at: new Date(now).toISOString(),
       symbols: normalized,
+      ...(Array.isArray(ordinals) ? { ordinals, full_rebuild_day: fullRebuildDay } : {}),
     }),
   )
+}
+
+async function readSharedGeneDiscoverySymbolPayload(env) {
+  try {
+    const raw = await env.KV?.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
+    const published = raw == null ? null : JSON.parse(raw)
+    return published?.schema === "iconoplasm.sharedGeneDiscoverySymbols.v1" &&
+      Array.isArray(published.symbols)
+      ? published
+      : null
+  } catch {
+    return null
+  }
 }
 
 async function readSharedGeneDiscoverySymbols(env) {
@@ -11796,21 +11817,51 @@ async function readSharedGeneDiscoverySymbols(env) {
   }
 }
 
-export async function publishSharedGeneDiscoverySymbols(env) {
+// Hourly. B-887 step 5: it used to name every shared ordinal on every run
+// (~15k D1 rows an hour on 27 Sep, growing with each discovery). Shared
+// ordinals only accumulate, so within a UTC day it names just the ordinals new
+// since the published list; a quiet hour reads the one shared-state row. One
+// full rebuild per UTC day (or whenever an ordinal disappears, e.g. after the
+// admin rollup rebuild) picks up renamed canonical symbols.
+export async function publishSharedGeneDiscoverySymbols(env, { now = Date.now() } = {}) {
   if (!env?.KV || !env?.ICONOPLASM_DB) {
     return { ok: false, skipped: true, reason: "bindings_missing" }
   }
-  const nextSymbols = await readSharedGeneDiscoverySymbolsFromD1(env, { limit: 20000 })
-  const currentSymbols = await readSharedGeneDiscoverySymbols(env)
-  const unchanged =
-    currentSymbols !== null &&
-    currentSymbols.length === nextSymbols.length &&
-    currentSymbols.every((symbol, index) => symbol === nextSymbols[index])
-  if (unchanged) {
-    return { ok: true, changed: false, symbol_count: nextSymbols.length }
+  const today = new Date(now).toISOString().slice(0, 10)
+  const shared = await readSharedCompactState(env.ICONOPLASM_DB)
+  const ordinals = compactSharedSummaries(shared)
+    .map((summary) => Number(summary.ordinal))
+    .slice(0, 20000)
+    .sort((left, right) => left - right)
+  const published = await readSharedGeneDiscoverySymbolPayload(env)
+  if (Array.isArray(published?.ordinals) && published.full_rebuild_day === today) {
+    const current = new Set(ordinals)
+    const prior = new Set(published.ordinals.map(Number))
+    if ([...prior].every((ordinal) => current.has(ordinal))) {
+      const added = ordinals.filter((ordinal) => !prior.has(ordinal))
+      if (!added.length) {
+        return { ok: true, changed: false, symbol_count: published.symbols.length }
+      }
+      const names = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, added)
+      const symbols = normalizeSharedDiscoverySymbolList([...published.symbols, ...names.values()])
+      await writeSharedGeneDiscoverySymbolCache(env, symbols, {
+        ordinals,
+        fullRebuildDay: today,
+        now,
+      })
+      return { ok: true, changed: true, symbol_count: symbols.length, named: added.length }
+    }
   }
-  await writeSharedGeneDiscoverySymbolCache(env, nextSymbols)
-  return { ok: true, changed: true, symbol_count: nextSymbols.length }
+  const names = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, ordinals)
+  const symbols = normalizeSharedDiscoverySymbolList([...names.values()])
+  const unchanged =
+    Array.isArray(published?.symbols) &&
+    published.symbols.length === symbols.length &&
+    published.symbols.every((symbol, index) => symbol === symbols[index])
+  // Always rewrite on a full run (at most once per UTC day, or after an
+  // ordinal vanished) so the next hours have today's ordinals to diff against.
+  await writeSharedGeneDiscoverySymbolCache(env, symbols, { ordinals, fullRebuildDay: today, now })
+  return { ok: true, changed: !unchanged, symbol_count: symbols.length, named: ordinals.length }
 }
 
 // Repair path: rebuild the compact shared aggregate from the durable per-user
