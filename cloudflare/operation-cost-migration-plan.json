@@ -12,6 +12,10 @@
   },
   "migrations": {
     "iconoplasm/0110_retire_finalization_publication_handoff.sql": {
+      "online": true,
+      "guards": [
+        { "sql": "SELECT COUNT(*) AS n FROM icono_sync_finalization_publication", "max": 1 }
+      ],
       "adapter_id": "iconoplasm-migration-0110",
       "arguments": { "max_schema_rows": 512 },
       "migration_protocol": "one-migration-per-release-v1",
