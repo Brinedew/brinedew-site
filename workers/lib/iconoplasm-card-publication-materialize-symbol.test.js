@@ -20,11 +20,18 @@ function fakeRepository() {
   }
 }
 
-function fakeObjects() {
+function fakeObjects({ failStable = false } = {}) {
   const written = []
-  const hashByKind = { cards: "a", genes: "b", portraits: "c" }
+  const stable = []
+  const hashByKind = { cards: "a", genes: "b", portraits: "c", galleries: "f" }
   return {
     written,
+    stable,
+    async writeStable(key, value) {
+      if (failStable) throw new Error("injected stable object failure")
+      stable.push({ key, value })
+      return { key, hash: "e".repeat(64), size: 1 }
+    },
     async write(kind, value) {
       const hash = hashByKind[kind].repeat(64)
       written.push({ kind, value })
@@ -105,4 +112,47 @@ test("materializeSymbol reports a withdrawn gene with no card instead of inventi
   assert.equal(result.withdrawn, true)
   assert.equal(result.receipts, null)
   assert.equal(objects.written.length, 0)
+})
+
+// B-898 Stage 1 failure modes, written before the code:
+// 1. the per-gene path writes exactly one stable object at a fixed key;
+// 2. it carries the complete candidate pool inline and the count;
+// 3. the key does not depend on content, so a second publication overwrites it;
+// 4. a failed stable write fails the materialization (no partial receipts).
+test("materializeSymbol writes the one stable gene object with its pool inline (B-898)", async () => {
+  const objects = fakeObjects()
+  const pool = [
+    { asset_sha256: "1".repeat(64), image_score: 3 },
+    { asset_sha256: "2".repeat(64), image_score: 1 },
+  ]
+  const source = fakeSource({
+    materialize: async (symbols, { portraitOverrides } = {}) =>
+      symbols.map((symbol) => ({
+        symbol,
+        __complete: true,
+        payload: { symbol, portrait_candidates: pool, overrides: portraitOverrides },
+      })),
+  })
+  source.project = (payload) => payload
+  const publisher = publisherFor(source, objects)
+  await publisher.materializeSymbol("tp53", { portraitAssetSha256: "d".repeat(64) })
+  assert.equal(objects.stable.length, 1)
+  assert.equal(objects.stable[0].key, "genes/v3/TP53.json")
+  assert.deepEqual(objects.stable[0].value.portrait_candidates, pool)
+  assert.equal(objects.stable[0].value.candidate_count, 2)
+  assert.equal(objects.stable[0].value.stable_object_version, 3)
+  assert.equal(objects.stable[0].value.published_at, "2026-09-14T00:00:00Z")
+  assert.deepEqual(objects.stable[0].value.overrides, { TP53: "d".repeat(64) })
+
+  await publisher.materializeSymbol("tp53", { portraitAssetSha256: "1".repeat(64) })
+  assert.equal(objects.stable[1].key, objects.stable[0].key, "fixed URL, rewritten in place")
+})
+
+test("a failed stable gene object write fails the per-gene materialization (B-898)", async () => {
+  const objects = fakeObjects({ failStable: true })
+  const publisher = publisherFor(fakeSource(), objects)
+  await assert.rejects(
+    publisher.materializeSymbol("tp53", { portraitAssetSha256: "d".repeat(64) }),
+    /injected stable object failure/,
+  )
 })

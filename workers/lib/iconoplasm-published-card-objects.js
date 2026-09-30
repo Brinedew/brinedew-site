@@ -45,8 +45,33 @@ export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
   manifests: 256 * 1024,
   shards: 4 * 1024 * 1024,
 })
+// B-898 (Stage 1): ONE stable, mutable object per gene. Readers fetch this
+// single URL instead of walking head -> manifest -> indexes -> gene -> delta.
+// It is rewritten in place whenever the gene changes and carries the complete
+// candidate pool inline, so there is nothing else to resolve. Short TTL plus
+// stale-while-revalidate bounds staleness without a purge credential.
+export const STABLE_GENE_OBJECT_PREFIX = "genes/v3"
+export const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
+export const STABLE_GENE_OBJECT_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400"
 const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
+
+export function stableGeneObjectKey(symbol) {
+  const clean = String(symbol || "")
+    .trim()
+    .toUpperCase()
+  if (!SYMBOL.test(clean)) throw new Error("Invalid stable gene object symbol")
+  return `${STABLE_GENE_OBJECT_PREFIX}/${clean}.json`
+}
+
+function stableGeneObjectIdentity(key) {
+  const prefix = `${STABLE_GENE_OBJECT_PREFIX}/`
+  if (typeof key !== "string" || !key.startsWith(prefix) || !key.endsWith(".json"))
+    throw new Error("Invalid stable gene object key")
+  const symbol = key.slice(prefix.length, -".json".length)
+  if (!SYMBOL.test(symbol)) throw new Error("Invalid stable gene object key")
+  return { symbol, limit: STABLE_GENE_OBJECT_LIMIT }
+}
 const BLOT_FINGERPRINT = /^[a-f0-9]{32,64}$/
 const encoder = new TextEncoder()
 const BLOT_BYTE_LIMIT = 5 * 1024 * 1024
@@ -325,10 +350,61 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
       sources: verifiedSources,
     }
   }
+  // Stable (mutable, fixed-URL) gene object. Same PUT-then-verify discipline as
+  // the immutable objects: the bytes are read back through authenticated
+  // Storage and hash-compared before this returns, so a caller that sees
+  // success knows the exact bytes are on the origin.
+  async function writeStable(key, value) {
+    const identity = stableGeneObjectIdentity(key)
+    const bytes = encoder.encode(canonicalPublishedJson(value))
+    if (bytes.byteLength > identity.limit) {
+      const error = new Error(
+        `Stable gene object exceeds its byte limit: key=${key}, bytes=${bytes.byteLength}, limit=${identity.limit}`,
+      )
+      error.code = "PUBLISHED_OBJECT_OVERSIZED"
+      error.permanent = true
+      error.details = { object_kind: "stable_gene", bytes: bytes.byteLength, limit: identity.limit }
+      throw error
+    }
+    const hash = await publishedObjectHash(bytes)
+    const url = externalPortraitStorageUrl(env, key)
+    const password = externalPortraitStoragePassword(env)
+    if (!url || !password) throw new Error("Bunny published-object writes are not configured")
+    const response = await send(
+      url,
+      {
+        method: "PUT",
+        headers: {
+          AccessKey: password,
+          "Content-Type": "application/json",
+          "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+        },
+        body: bytes,
+      },
+      key,
+    )
+    await response.body?.cancel().catch(() => {})
+    if (!response.ok) throw new Error(`Stable gene object PUT failed (${response.status})`)
+    const check = await send(
+      url,
+      { method: "GET", headers: { AccessKey: password, Accept: "application/json" } },
+      key,
+    )
+    if (!check.ok) {
+      await check.body?.cancel().catch(() => {})
+      throw new Error("Stable gene object PUT is not yet readable")
+    }
+    const readBack = await boundedBytes(check, identity.limit, bodyTimeoutMs)
+    if ((await publishedObjectHash(readBack)) !== hash)
+      throw new Error("Stable gene object read-back hash mismatch")
+    return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
+  }
+
   return {
     read,
     verifyReaderResolvable,
     verifyBlot,
+    writeStable,
     async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")
