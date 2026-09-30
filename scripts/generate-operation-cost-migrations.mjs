@@ -164,6 +164,11 @@ function output() {
       ),
     ],
     [
+      "DISCOVERY_USER_SHELF",
+      "0111_discovery_user_shelf.sql",
+      reviewedMigrationStatements("migrations-iconoplasm", "0111_discovery_user_shelf.sql", 0, 3),
+    ],
+    [
       "PUBLISH_STATE_UPDATED_INDEX",
       "0109_publish_state_updated_index.sql",
       reviewedMigrationStatements(

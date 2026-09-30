@@ -1,6 +1,7 @@
 const USER_SELECT_SQL = `SELECT
   dictionary_version, state_version, membership_b64, member_count,
-  next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id
+  next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id,
+  shelf_json, shelf_state_version
 FROM icono_discovery_user_state_v2 WHERE user_id = ?`
 
 const SHARED_SELECT_SQL = `SELECT
@@ -19,8 +20,9 @@ SELECT 0 WHERE
 
 const USER_UPSERT_SQL = `INSERT INTO icono_discovery_user_state_v2 (
   user_id, dictionary_version, state_version, membership_b64, member_count,
-  next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  next_event_seq, next_chunk_seq, active_events_json, recent_receipts_json, last_batch_id,
+  shelf_json, shelf_state_version, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 ON CONFLICT(user_id) DO UPDATE SET
   dictionary_version = excluded.dictionary_version,
   state_version = excluded.state_version,
@@ -31,6 +33,8 @@ ON CONFLICT(user_id) DO UPDATE SET
   active_events_json = excluded.active_events_json,
   recent_receipts_json = excluded.recent_receipts_json,
   last_batch_id = excluded.last_batch_id,
+  shelf_json = excluded.shelf_json,
+  shelf_state_version = excluded.shelf_state_version,
   updated_at = CURRENT_TIMESTAMP
 WHERE icono_discovery_user_state_v2.state_version = ?
 RETURNING state_version, last_batch_id`
@@ -98,6 +102,8 @@ export async function readCompactDiscoveryState(db, userId) {
           active_events: parseJsonArray(user.active_events_json),
           recent_receipts: parseJsonArray(user.recent_receipts_json),
           last_batch_id: String(user.last_batch_id || ""),
+          shelf: parseJsonArray(user.shelf_json),
+          shelf_state_version: Number(user.shelf_state_version || 0),
         }
       : null,
     shared: {
@@ -140,6 +146,8 @@ export async function readCompactUserState(db, userId) {
     active_events: parseJsonArray(result.active_events_json),
     recent_receipts: parseJsonArray(result.recent_receipts_json),
     last_batch_id: String(result.last_batch_id || ""),
+    shelf: parseJsonArray(result.shelf_json),
+    shelf_state_version: Number(result.shelf_state_version || 0),
   }
 }
 
@@ -199,6 +207,8 @@ export async function commitCompactDiscoveryBatch(
         JSON.stringify(nextUserState.active_events || []),
         JSON.stringify(nextUserState.recent_receipts || []),
         batchId,
+        JSON.stringify(Array.isArray(nextUserState.shelf) ? nextUserState.shelf : []),
+        Number(nextUserState.shelf_state_version || 0),
         expectedUserVersion,
       ),
   ]
@@ -280,7 +290,9 @@ CREATE TABLE icono_discovery_user_state_v2 (
   active_events_json TEXT NOT NULL CHECK(json_valid(active_events_json) AND length(active_events_json) <= 262144),
   recent_receipts_json TEXT NOT NULL CHECK(json_valid(recent_receipts_json) AND length(recent_receipts_json) <= 131072),
   last_batch_id TEXT NOT NULL CHECK(length(last_batch_id) <= 128),
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  shelf_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(shelf_json) AND length(shelf_json) <= 1048576),
+  shelf_state_version INTEGER NOT NULL DEFAULT 0 CHECK(shelf_state_version >= 0)
 ) WITHOUT ROWID;
 CREATE TABLE icono_discovery_shared_state_v2 (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),

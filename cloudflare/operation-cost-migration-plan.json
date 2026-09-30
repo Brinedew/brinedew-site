@@ -21,6 +21,17 @@
       "migration_protocol": "one-migration-per-release-v1",
       "prediction": { "rows_read": 3000, "rows_written": 16, "requests": 1 }
     },
+    "iconoplasm/0111_discovery_user_shelf.sql": {
+      "online": true,
+      "guards": [
+        { "sql": "SELECT COUNT(*) AS n FROM icono_discovery_user_state_v2", "max": 100 },
+        { "sql": "SELECT COUNT(*) AS n FROM icono_discovery_chronology_v2", "max": 400 }
+      ],
+      "adapter_id": "iconoplasm-migration-0111",
+      "arguments": { "max_users": 100, "max_chunks": 400 },
+      "migration_protocol": "one-migration-per-release-v1",
+      "prediction": { "rows_read": 100000, "rows_written": 300, "requests": 1 }
+    },
     "iconoplasm/0109_publish_state_updated_index.sql": {
       "adapter_id": "iconoplasm-migration-0109",
       "arguments": { "max_rows": 19400, "max_schema_rows": 512 },
