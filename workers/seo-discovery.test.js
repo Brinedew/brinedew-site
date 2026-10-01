@@ -18,6 +18,10 @@ import {
   iconoplasmGeneBlotFingerprint,
   iconoplasmGeneBlotObjectKey,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import {
+  STABLE_GENE_STORAGE_HOST,
+  stableGeneStorageEnv,
+} from "./test-helpers/stable-gene-objects.js"
 
 const originalFetch = globalThis.fetch
 const originalCaches = globalThis.caches
@@ -1068,10 +1072,17 @@ test("complete gene metadata is indexable while incomplete records retain noinde
 })
 
 test("gene discovery redirects aliases, rejects junk URLs, and fail-closes missing profiles", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])
+  // B-898 Stage 1 (step B): without a route-table row the canonical lookup
+  // reads one stable gene object from Bunny Storage; a 404 there falls through
+  // to catalog alias resolution, so storage is configured and empty here.
+  const env = {
+    ...(await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])),
+    ...stableGeneStorageEnv(),
+  }
 
   globalThis.fetch = async (url) => {
     const requestUrl = new URL(String(url))
+    if (requestUrl.hostname === STABLE_GENE_STORAGE_HOST) return new Response(null, { status: 404 })
     assert.equal(requestUrl.pathname, "/apps/iconoplasm/index")
     return htmlResponse(`<!doctype html>
 <html>

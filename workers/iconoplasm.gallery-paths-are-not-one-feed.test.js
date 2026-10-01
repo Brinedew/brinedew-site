@@ -78,5 +78,8 @@ test("worker comments pin public gallery, account windows, and published card ar
   assert.match(workerSource, /Only these supported orders can use this cursor shape/)
   assert.match(workerSource, /Classic public gallery mode has its own order machinery/)
   assert.match(workerSource, /Card payloads have one runtime path/)
-  assert.match(workerSource, /published card-catalog artifact/)
+  // B-898 Stage 1 (step B): that one path is the stable gene object, not the
+  // retired card-catalog artifact tree.
+  assert.match(workerSource, /one stable object per gene/)
+  assert.match(workerSource, /THE ONLY per-gene reader for first-party card/)
 })
