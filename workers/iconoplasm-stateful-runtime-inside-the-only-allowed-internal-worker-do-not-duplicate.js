@@ -89,6 +89,7 @@ import {
 import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
+  stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
 import {
   callCardPublication,
@@ -34115,16 +34116,36 @@ export async function handlePublishedImageAssetRoute(
   })
 }
 
+// B-898 Stage 1: the one stable gene object at genes/v3/<SYMBOL>.json is the
+// whole published card for the blot route. One authenticated Bunny Storage
+// read; no KV head pointer, no manifest, no delta chain, no D1. Returns the
+// parsed object, null when Bunny has no object for the symbol, and throws on a
+// storage failure or an unparsable body so the caller answers 503 no-store.
+async function readStableGeneObjectForBlot(env, symbol) {
+  const object = await createPublishedCardObjectStore(env).readStable(stableGeneObjectKey(symbol))
+  if (!object) return null
+  const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(object.bytes))
+  return parsed && typeof parsed === "object" ? parsed : null
+}
+
 async function handleSemanticGeneBlot(request, env, symbolValue) {
   const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
   if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
-  const published = await readPublishedGeneCardPortraitProjection(env, symbol)
-  if (published.kind === "unavailable") {
-    return json(cardArtifactUnavailablePayload(published.version), 503, {
-      "Cache-Control": "no-store",
-    })
+  let card
+  try {
+    card = await readStableGeneObjectForBlot(env, symbol)
+  } catch (error) {
+    console.error("Iconoplasm blot stable gene object read failed:", String(error))
+    return json(
+      {
+        ok: false,
+        code: CARD_ARTIFACT_UNAVAILABLE,
+        error: "The published gene object is temporarily unavailable.",
+      },
+      503,
+      { "Cache-Control": "no-store" },
+    )
   }
-  const card = published.kind === "available" ? published.payload : null
   const cardSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
   const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
@@ -34133,7 +34154,7 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       "Cache-Control": "no-store",
     })
   }
-  // The exact published card is the authority. Its renderer revision, symbol,
+  // The stable gene object is the authority. Its renderer revision, symbol,
   // name, and portrait SHA deterministically identify the immutable Bunny key.
   // Blot materialization therefore never needs a second KV catalog publication.
   const blotFingerprint = iconoplasmGeneBlotFingerprint(card)
@@ -34193,7 +34214,9 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       ...iconoplasmImageLicenseResponseHeaders(iconoplasmGeneBlotCdnUrl(env, selectedObjectKey)),
       "Access-Control-Allow-Origin": "*",
       "X-Iconoplasm-Blot-Fingerprint": selectedFingerprint,
-      "X-Iconoplasm-Card-Version": published.version,
+      "X-Iconoplasm-Card-Version": String(
+        card.published_at || `stable-v${card.stable_object_version ?? ""}`,
+      ),
     },
   })
 }
