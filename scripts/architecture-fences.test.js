@@ -226,16 +226,22 @@ test("IPD-001 late image results cannot undo a newer source decision", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-008]
-test("IPD-008 keeps foreground hover on immutable cancellable reads and cross-site portrait reuse", () => {
+test("IPD-008 keeps foreground hover on the stable CDN gene object and cross-site portrait reuse", () => {
   const contentSource = readRepositoryFile("iconoplasm-extension/content.js")
   const apiSource = readRepositoryFile("iconoplasm-extension/content-api.js")
   const portraitSource = readRepositoryFile("iconoplasm-extension/content-portrait-cache.js")
+  const background = readRepositoryFile("iconoplasm-extension/service-worker.js")
   const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
   const runtimeSource = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
 
-  assert.match(contentSource, /\/api\/public\/v1\/card-snapshots\//)
+  // B-898 stage 1: hover detail is the one stable object per gene on the free
+  // CDN. The metered card-snapshots routes remain the website's fallback only;
+  // the extension must never reference them again.
+  assert.doesNotMatch(contentSource, /\/api\/public\/v1\/card-snapshots\//)
+  assert.match(background, /https:\/\/iconoplasmportraits\.b-cdn\.net\/genes\/v3\//)
+  assert.doesNotMatch(background, /card-snapshots|card-content\/v1|delivery-index/)
   assert.match(contentSource, /priority:\s*"foreground"/)
   assert.match(apiSource, /CANCEL_ICONOPLASM_API_FETCH/)
   assert.match(apiSource, /ICONOPLASM_CONTEXT_INVALIDATED/)
@@ -250,9 +256,7 @@ test("IPD-008 keeps foreground hover on immutable cancellable reads and cross-si
   )
   assert.match(portraitSource, /GET_PORTRAIT_DATA_URL/)
   assert.doesNotMatch(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
-  const background = readRepositoryFile("iconoplasm-extension/service-worker.js")
   assert.match(background, /portraitByteCache\.get/)
-  assert.match(background, /cardResponseCache\.get/)
   assert.doesNotMatch(
     contentSource,
     /storageApi: chrome\.storage\.local|\.hydratePersistentCache\(/,

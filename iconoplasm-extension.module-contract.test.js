@@ -564,26 +564,27 @@ test("DO NOT DELETE: a blocked phrase suppresses nested highlights without block
   )
 })
 
-test("DO NOT DELETE: simple card batch request includes fields consumed by its metadata rows", () => {
+test("DO NOT DELETE: simple card metadata rows read the whole stable gene object", () => {
+  // B-898 stage 1 replaced the projected POST /genes/batch request with one
+  // stable object per gene. The rows consume essence, first_publication_year,
+  // molecular_weight_kda, primary_tissue and portrait straight from that record,
+  // so no field list, batch URL or metered card route may reappear here.
   const source = readUtf8("./iconoplasm-extension/content.js")
-  const fieldsMatch = source.match(
-    /const GENE_DETAIL_BATCH_FIELDS = Object\.freeze\(\[([\s\S]*?)\]\)/,
+  assert.match(
+    source,
+    /IconoCardShared\.collectTooltipMetaRows\(detail, \{/,
+    "the metadata renderer should receive the whole stable gene record",
   )
-  assert.ok(fieldsMatch, "content.js should define the projected batch fields for hover details")
-  const fields = [...fieldsMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1])
-
-  for (const field of [
-    "essence",
-    "first_publication_year",
-    "molecular_weight_kda",
-    "primary_tissue",
-    "portrait",
-  ]) {
-    assert.ok(
-      fields.includes(field),
-      `${field} should be requested because the simple card metadata renderer consumes it`,
-    )
-  }
+  assert.doesNotMatch(
+    source,
+    /GENE_DETAIL_BATCH_FIELDS|\/api\/public\/v1\/genes\/batch|\/api\/public\/v1\/card-snapshots\//,
+    "hover detail must not regain a projected batch request or a metered card route",
+  )
+  assert.match(
+    source,
+    /type: "ICONOPLASM_STABLE_GENE"/,
+    "hover detail should ask the service worker for the stable CDN object",
+  )
 })
 
 test("DO NOT DELETE: simple card metadata renders mass, age, and tissue when projected fields exist", async () => {
@@ -898,8 +899,8 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
   )
   assert.match(
     source,
-    /async function prepareReadingSessionSymbol\(symbol\)[\s\S]*priority: "background"[\s\S]*awaitPersistentCache: false[\s\S]*getUsablePortraitSrc\(portraitUrl\)/,
-    "the reading session should prepare immutable detail and a usable portrait without waiting for whole-cache hydration",
+    /async function prepareReadingSessionSymbol\(symbol\)[\s\S]*priority: "background"[\s\S]*getUsablePortraitSrc\(portraitUrl\)/,
+    "the reading session should prepare the stable gene object and a usable portrait in the background",
   )
   assert.match(
     source,
@@ -938,17 +939,17 @@ test("DO NOT DELETE: reading-session preparation replaces pointer prediction bef
   )
 })
 
-test("DO NOT DELETE: simple hover portraits hydrate from the bounded card projection, never scanner metadata", () => {
+test("DO NOT DELETE: simple hover portraits hydrate from the stable gene object, never scanner metadata", () => {
   const source = readUtf8("./iconoplasm-extension/content.js")
   assert.match(
     source,
-    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(geneDetail, portraitLocator\)/,
-    "simple cards must resolve portraits from coherent detail or locator projection",
+    /function loadSimpleTooltipPortrait\(\{[\s\S]*portraitSrc:\s*buildTooltipFramePortraitSrc\(geneDetail\)/,
+    "simple cards must resolve portraits from the published record",
   )
   assert.match(
     source,
-    /function buildTooltipFramePortraitSrc\(geneDetail, portraitLocator = null\)[\s\S]*coherentPortraitRecord\(geneDetail, portraitLocator\)/,
-    "portrait resolution must use a bounded projection from the named card snapshot",
+    /function buildTooltipFramePortraitSrc\(geneDetail\)[\s\S]*publishedPortraitRecord\(geneDetail\)/,
+    "portrait resolution must require a published asset sha on the stable record",
   )
   assert.doesNotMatch(
     source,
@@ -957,18 +958,18 @@ test("DO NOT DELETE: simple hover portraits hydrate from the bounded card projec
   )
   assert.match(
     source,
-    /loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail:\s*geneDetailCache\.has\(symbol\)\s*\?\s*geneDetailCache\.get\(symbol\)\s*:\s*null[\s\S]*portraitLocator: initialPortraitLocator[\s\S]*portraitRefs/,
-    "warm detail and locator projections should feed the simple portrait on first hover",
+    /loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail:\s*geneDetailCache\.has\(symbol\)\s*\?\s*geneDetailCache\.get\(symbol\)\s*:\s*null[\s\S]*portraitRefs/,
+    "a warm stable record should feed the simple portrait on first hover",
   )
   assert.match(
     source,
     /hoverGeneDetailPromise\.then\(\(geneDetail\)\s*=>\s*\{[\s\S]*if\s*\(portraitRefs\)\s*\{[\s\S]*loadSimpleTooltipPortrait\(\{[\s\S]*geneDetail,[\s\S]*portraitRefs/,
     "a cold simple hover must rehydrate its portrait when authoritative detail arrives",
   )
-  assert.match(
+  assert.doesNotMatch(
     source,
-    /hoverPortraitLocatorPromise\.then\(\(portraitLocator\)\s*=>\s*\{[\s\S]*loadSimpleTooltipPortrait\(\{[\s\S]*portraitLocator,[\s\S]*portraitRefs/,
-    "a cold simple hover must hydrate its portrait when the locator arrives independently",
+    /hoverPortraitLocatorPromise|portraitLocatorCache/,
+    "there is one stable record per gene; a second portrait-locator lane must not return",
   )
 })
 
@@ -1057,7 +1058,7 @@ test("DO NOT DELETE: extension runtime typography uses Iconoplasm fonts, not leg
   )
   assert.match(
     contentSource,
-    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*function ensureArticleCards\(\)[\s\S]*void injectFonts\(\)[\s\S]*GET_CARD_FRESHNESS/,
+    /function injectFonts\(\)[\s\S]*document\.fonts\.load[\s\S]*function ensureArticleCards\(\)[\s\S]*void injectFonts\(\)/,
     "card initialization starts packaged fonts before metadata, while cache-only recognition remains renderer-free",
   )
 })

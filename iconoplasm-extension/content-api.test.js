@@ -124,7 +124,7 @@ test("content API bridge propagates abort to the real service-worker fetch", asy
   assert.equal(messages[1].requestId, messages[0].requestId)
 })
 
-test("content API bridge returns a fetch-shaped immutable GET response", async () => {
+test("content API bridge returns a fetch-shaped GET response", async () => {
   const createExtensionApiFetch = loadFactory()
   const runtime = {
     lastError: null,
@@ -133,9 +133,7 @@ test("content API bridge returns a fetch-shaped immutable GET response", async (
     },
   }
   const fetchImpl = createExtensionApiFetch({ runtime })
-  const response = await fetchImpl(
-    "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/v1/genes/TP53",
-  )
+  const response = await fetchImpl("https://iconoplasm.brinedew.bio/api/public/v1/genes/TP53/votes")
 
   assert.equal(response.ok, true)
   assert.equal(response.status, 200)

@@ -14,22 +14,21 @@ test("article startup separates recognition from portrait freshness without a se
   )
   assert.match(content, /requestGeneData\(chrome,\s*{[\s\S]*?cacheOnly: true/)
   assert.match(content, /async function fetchGeneDetailsBatch[^]*?await ensureArticleCards\(\)/)
-  assert.match(
-    content,
-    /async function fetchPortraitLocatorsBatch[^]*?await ensureArticleCards\(\)/,
-  )
   const cards = content.slice(
     content.indexOf("function ensureArticleCards()"),
     content.indexOf("// -- DOM scanning"),
   )
-  assert.match(cards, /adoptCardSnapshotRevision\(revision\)/)
+  // B-898 stage 1: the stable gene object has no epoch, so article startup
+  // prepares only the frame and fonts; it never asks the background for a
+  // card head and never clones a saved cache.
+  assert.match(cards, /ensureLitArchivalFrame\(\)/)
+  assert.match(cards, /injectFonts\(\)/)
+  assert.doesNotMatch(cards, /GET_CARD_FRESHNESS|cardSnapshotVersion|adoptCardSnapshotRevision/)
   assert.doesNotMatch(
     cards,
     /hydratePersistentCache/,
     "article startup must not clone the full saved cache",
   )
-  assert.match(cards, /articleScannerPayload.cardFreshness/)
-  assert.match(cards, /GET_CARD_FRESHNESS/)
 })
 
 test("cooperative matcher yields on busy turns and remains lexically identical to synchronous matcher", async () => {

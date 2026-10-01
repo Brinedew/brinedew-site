@@ -1,25 +1,30 @@
 # Iconoplasm extension contract
 
-## Candidate immutable metadata delivery
+## Hover detail: one stable object per gene (B-898 stage 1, extension 0.5.9)
 
-The candidate service worker may optimize exact-snapshot gene and portrait GETs
-using `card-snapshots/:snapshot/delivery-index` (schema 1). Ordered tuples
-`[first_symbol,last_symbol,shard_sha256]` reference the existing published card
-shards. The index is bounded to 64 ranges and 16 KiB, cached by snapshot, fetched
-on demand only, and never replaces the portrait-free scanner.
+The hover card reads one stable, mutable object per gene from the free CDN:
+`https://iconoplasmportraits.b-cdn.net/genes/v3/<SYMBOL>.json`. The object
+carries `stable_object_version: 3`, the gene's `symbol`, `full_name`,
+`color`, `essence`, trait origins, and the published `portrait` (or
+`null`) with its `asset_sha256` and immutable `/portraits/v1/` URLs. The
+Website purges that exact CDN URL on every rewrite, so reading it costs zero
+metered Worker requests. The service worker validates the object the same way
+the website's reader does (version 3, same symbol, a `portrait_candidates`
+array, a `portrait` key), caches it in memory for five minutes (errors for
+thirty seconds), and answers one `ICONOPLASM_STABLE_GENE` message per
+symbol. A CDN `404` or a malformed object means "no card for this gene", not
+an error, and is cached for the same TTL so repeated hovers never become a
+retry storm. The request carries no cookies and no client-version header, so
+every reader shares one CDN cache entry per gene.
 
-`card-content/v1/:shard_sha256/{genes|portraits}/:symbol` returns schema 1,
-`content_hash`, `symbol`, `lane`, and `record`. It excludes publication epoch
-fields so unchanged shard hashes can be reused across snapshots. The extension
-validates identity and restores the named snapshot envelope before existing
-consumers see it. Changed winning cards change the shard hash. This is transport
-under the same gallery barrier, not a new canonical portrait authority.
-
-These credential-free public projections may be cached at the existing Bunny
-hostname; private APIs and mutations are never intercepted. The two lanes keep
-independent deadlines. Missing index, CDN failure or unavailable content returns
-to the existing exact-snapshot route. Installed packages retain that route until
-the next human-authorized release. No release version is advanced by this change.
+Extension 0.5.9 retired the immutable card tree reader: the
+`card-snapshots/:snapshot/{genes|portraits}/:symbol` routes, the
+`delivery-index` and `card-content/v1` shard resolution, the `card-current`
+head poll, the per-article `ccv2-` epoch selection, the separate
+portrait-locator lane, and the 32 MiB IndexedDB of exact card responses. Those
+Worker routes remain the website's own fallback and the compatibility surface
+for 0.5.8; the extension never references them again. The first 0.5.9 startup
+removes the retired storage keys and deletes the old card-response database.
 
 `publisher-release.json` is the complete, inspectable authority for browser
 releases. `version` and `catalog_contract` identify the newest human-authorized
@@ -80,35 +85,23 @@ revisions remain server-side publication metadata, while installed clients keep
 receiving the same independent `publication_aliases` and `extension_blocklist`
 payloads in one manifest response.
 
-The manifest may also expose `card_snapshot_version`. It is an immutable
-publication boundary, not a new catalog schema: extensions that understand it
-select separate exact-snapshot hover-detail and portrait-locator records
-when it changes, while older extensions safely ignore it. Current extensions
-read rich detail through
-`GET /api/public/v1/card-snapshots/:snapshot/genes/:symbol` and the compact
-portrait locator through
-`GET /api/public/v1/card-snapshots/:snapshot/portraits/:symbol`. Both URLs name
-the same card snapshot and are immutable, so the browser and CDN can reuse them
-without re-running a body-keyed Worker POST. The locator is projected directly
-from that card payload; it is not a second image index, publication, or
-authority. Neither endpoint falls back to mutable D1 state. The compatibility
-`POST /api/public/v1/genes/batch` projection remains available to the one
-supported predecessor and echoes `snapshot_version`; transient failures are
-never durable negative-cache entries. Only the current and immediately
-previous publication barriers are addressable, matching the documented
-one-release compatibility window; retired or invented snapshot versions fail
-closed without becoming immutable negative cache entries.
+The manifest may still expose `card_snapshot_version`. Extension 0.5.9 and
+later ignore it: hover detail has no epoch because the stable gene object is
+rewritten in place. The supported predecessor, 0.5.8, still selects
+exact-snapshot hover-detail and portrait-locator records through
+`GET /api/public/v1/card-snapshots/:snapshot/{genes|portraits}/:symbol`, so
+those routes and the `card_snapshot_version` field stay served until that
+compatibility window closes.
 
 The scanner index remains stale-while-revalidate so highlights never wait on
-the network, and healthy tabs make no extra manifest request. A retired detail
-or locator URL returns `410` with `code: "card_snapshot_retired"`. That explicit
-signal starts one deduplicated, cache-busted read of the existing small manifest.
-The changed `card_snapshot_version` aborts retired detail/locator requests,
-clears both revision-keyed caches, and retries the currently visible hover
-without requiring a reload. An unchanged scanner artifact is not downloaded.
+the network, and healthy tabs make no extra manifest request. The manifest is
+read from the Bunny copy first and from the canonical origin only when the CDN
+copy is unusable; neither read carries a client-version header.
 
-Foreground detail and locator reads have independent four-second deadlines and propagate cancellation
-from the current hover through the content bridge to the service-worker fetch.
+A foreground hover shares one in-flight stable-object request per symbol with
+speculative preparation; cancelling the hover releases the page's wait without
+discarding the shared result. Vote and discovery requests still propagate
+cancellation from the content bridge to the service-worker fetch.
 One tab-scoped reading session receives recognized anchors from both HTML and PDF.
 Catalog initialization, including a cold scanner-artifact fetch, begins only after
 the host `load` event. Recognition scans then replace text cooperatively in bounded idle slices. The session
@@ -125,9 +118,9 @@ once; only a real viewport/inventory event may restore an evicted image or retry
 a failed preparation after backoff. This prevents cache churn and timer polling.
 Data Saver and 2G disable preparation. A foreground hover bypasses the host-page
 gate, reuses matching in-flight work, and is otherwise a
-recovery path, not the normal loading trigger. Portrait delivery may complete
-from the locator lane while rich detail remains stalled; if both projections
-arrive with different portrait SHAs, the portrait and vote controls fail closed.
+recovery path, not the normal loading trigger. The portrait and the vote
+controls come from the same stable object as the card text, so there is no
+second projection that could disagree with it.
 Packaged card fonts begin loading
 during initialization, including inside the persistent rich-card frame.
 The background runtime retains exact immutable portrait bytes across websites.
@@ -135,16 +128,16 @@ Only a cache miss invokes the shared Bunny-first source plan and its 350 ms
 canonical hedge. The displaying frame (or simple host layout) decodes the
 returned data URL; it never downloads the same HTTPS image a second time.
 
-The background owns one IndexedDB store for both exact-snapshot metadata lanes
-(32 MiB total, 64 KiB per record, 32,768-entry safety ceiling) and one for immutable
-portraits (64 MiB total, 512 KiB per image, 8,192-entry safety ceiling). Both use
-transactional byte accounting and LRU eviction; reads update small recency records
-without rewriting image bytes. Pages never clone or rewrite the full saved cache.
-Old detail/locator collections migrate at extension upgrade/startup, with deletion
-only after durable writes. Legacy Cache Storage bytes migrate lazily by exact key.
-Extension updates also compact legacy portrait-heavy scanner storage. No
-`unlimitedStorage` permission is required; the scanner/settings remain within
-`storage.local`, while the bounded image and metadata stores use IndexedDB.
+The background owns one IndexedDB store for immutable portraits (64 MiB
+total, 512 KiB per image, 8,192-entry safety ceiling) with transactional byte
+accounting and LRU eviction; reads update small recency records without
+rewriting image bytes. Stable gene objects live only in a bounded in-memory
+cache (512 entries, five-minute TTL) in the service worker plus a page-local
+copy of the same size; the browser HTTP cache is their persistent layer. Pages
+never clone or rewrite a saved collection. Extension updates compact legacy
+portrait-heavy scanner storage and delete the retired card-response database.
+No `unlimitedStorage` permission is required; the scanner/settings remain
+within `storage.local`, while the bounded image store uses IndexedDB.
 
 For portrait architecture and operations, read
 `../docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
