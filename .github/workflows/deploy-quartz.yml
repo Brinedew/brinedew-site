@@ -411,6 +411,15 @@ jobs:
             geneguessr-api \
             "iconoplasm.brinedew.bio/*"
 
+      # B-898: the Bunny pull zone's CORS extensions are owned by
+      # bunny/the-only-iconoplasm-pull-zone-policy.json and applied through the
+      # live Worker, which holds the account key. Never edit the zone by hand.
+      - name: Reconcile the Iconoplasm Bunny pull zone policy
+        if: steps.migrations.outputs.continuation_required != 'true'
+        env:
+          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+        run: node scripts/reconcile-iconoplasm-pull-zone.mjs
+
       # Publish browser code last. Additive backend contracts are safe for the
       # previous frontend, while the reverse order can expose controls whose
       # migrations and authenticated handlers do not exist yet.

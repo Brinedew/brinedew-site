@@ -163,6 +163,7 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
+import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -1629,7 +1630,9 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_local_removals_ack" ||
     family === "admin_artist_styles_remove" ||
     family === "admin_artist_blacklist_pending" ||
-    family === "admin_artist_blacklist_ack"
+    family === "admin_artist_blacklist_ack" ||
+    // B-898: two Bunny API calls, no D1.
+    family === "admin_publication_pull_zone"
   ) {
     return "admin_operational"
   }
@@ -35138,6 +35141,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     listBacklog: listIconoplasmGeneBlotBacklog,
     upload: uploadIconoplasmGeneBlot,
   }),
+  ...createIconoplasmAdminPullZoneHandlers({ isAdmin: isIconoplasmAdmin, json }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,
     isAdmin: isIconoplasmAdmin,
