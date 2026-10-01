@@ -1343,6 +1343,7 @@ import {
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
+import { dispatchIconoplasmCatalogPublication } from "./iconoplasm-catalog-dispatch.js"
 import {
   iconoplasmBackgroundJob,
   runIconoplasmBackgroundJob,
@@ -3276,7 +3277,16 @@ export default {
     if (iconoplasmBackgroundJob(backgroundEvent)) {
       if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") return
       const background = await runIconoplasmBackgroundJob(backgroundEvent, {
-        gallery: () => runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx),
+        // B-898: the quarter-hour catalog tick also tells GitHub Actions to
+        // rebuild the stable catalog object when the publish high water moved.
+        gallery: async () => {
+          const publication = await runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx)
+          const dispatch = await dispatchIconoplasmCatalogPublication(env).catch((error) => ({
+            dispatched: false,
+            reason: String(error?.message || error),
+          }))
+          return { publication, catalog_dispatch: dispatch }
+        },
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
         discoveryMigration: () => migrateIconoplasmCompactDiscoveryForScheduled(env),
