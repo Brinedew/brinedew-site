@@ -166,6 +166,8 @@ import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-rou
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
+import { createIconoplasmAdminRepublishHandlers } from "./iconoplasm-admin-republish-route.js"
+import { composeStableGeneObject } from "./lib/iconoplasm-stable-gene-object.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -1597,6 +1599,8 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
     family === "admin_blots_upload" ||
+    // B-898: about five subrequests and a few D1 rows per gene, bounded per call.
+    family === "admin_publication_republish" ||
     family === "admin_gallery_dirty_shard_publication" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
@@ -17455,83 +17459,48 @@ export class IconoplasmVoteCoordinator {
    * adapter is absent and no attempt is opened, so an unwired gene costs zero
    * publication writes. Tests may override this method.
    */
+  /**
+   * B-898 (deletion stage): the gene's stable object is rewritten in process by
+   * the one per-gene publisher; no coordinator hop, no immutable receipts, no
+   * reader handoff. The receipt the publication state records is the stable
+   * object's key and content hash. Tests may override this method.
+   */
   genePublicationAdapter(env = this.env) {
-    const binding = env?.ICONOPLASM_CARD_PUBLICATION
-    if (!binding) return null
+    if (!env?.ICONOPLASM_DB) return null
     return async (ticket, { symbol } = {}) => {
       const cleanSymbol = normalizeSymbol(symbol)
       if (!cleanSymbol) throw new Error("Gene publication requires a symbol")
       const winnerAssetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
-      const stub = binding.get(binding.idFromName("canonical-cards-v2"))
-      const response = await stub.fetch("https://card-publication.internal/materialize-symbol", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          symbol: cleanSymbol,
-          portrait_asset_sha256: winnerAssetSha,
+      let result
+      try {
+        result = await publishIconoplasmGeneStableObject(env, cleanSymbol, {
+          portraitAssetSha256: winnerAssetSha,
           // An explicit empty selection publishes the gene's portrait-less
-          // tombstone version instead of resurrecting stale D1 canon.
+          // version instead of resurrecting stale D1 canon.
           withdraw: !winnerAssetSha,
-        }),
-      })
-      const data = await response.json().catch(() => null)
-      if (!response.ok || data?.ok !== true) {
+        })
+      } catch (error) {
         const failure = new Error(
-          `Card materialization failed (${Number(response.status || 0) || "no"} status)`,
+          `Gene publication failed: ${sanitizeText(String(error?.message || error), 300)}`,
         )
-        failure.code = String(data?.code || "CARD_MATERIALIZATION_FAILED")
-        // Resource-specific deferral: a schema transition or admission pause
-        // carries its own retry deadline instead of becoming a blind 1s loop.
-        const retryAfterMs = Number(data?.retry_after_ms)
-        if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
-          failure.retryAt = Date.now() + retryAfterMs
-        }
+        failure.code = String(error?.code || "GENE_PUBLICATION_FAILED")
         throw failure
       }
-      // Bind the receipt to the requested gene and exact source selection: a
-      // correctly shaped receipt for another gene must never clear this gene's
-      // pending publication.
-      if (normalizeSymbol(data?.symbol || "") !== cleanSymbol) {
-        const failure = new Error("Card materialization receipt names another gene")
-        failure.code = "CARD_RECEIPT_WRONG_GENE"
+      if (!result?.stable?.key || !normalizeSha256(result.stable.hash || "")) {
+        const failure = new Error("Gene publication returned no stable object receipt")
+        failure.code = "GENE_RECEIPT_MISSING"
         throw failure
       }
-      const echoedAsset = normalizeSha256(data?.selected_asset_sha256 || "") || null
-      if ((echoedAsset || null) !== (winnerAssetSha || null)) {
-        const failure = new Error("Card materialization receipt names another source selection")
+      if ((result.selected_asset_sha256 || null) !== (winnerAssetSha || null)) {
+        const failure = new Error("Gene publication receipt names another source selection")
         failure.code = "CARD_RECEIPT_WRONG_SELECTION"
         throw failure
       }
-      const receipt = data?.receipts?.card
-      const contentSha256 = normalizeSha256(receipt?.hash || "")
-      const objectKey = sanitizeText(receipt?.key || "", 512)
-      if (!contentSha256 || !objectKey) {
-        const failure = new Error("Card materialization returned no verified card receipt")
-        failure.code = "CARD_RECEIPT_MISSING"
-        throw failure
+      return {
+        selectionKey: ticket.selectionKey,
+        contentSha256: normalizeSha256(result.stable.hash),
+        objectKey: result.stable.key,
       }
-      // Preserve the projection references the reader plane needs alongside the
-      // exact card receipt. The object store already verified every hash before
-      // this receipt was returned.
-      const geneReceipt = data?.receipts?.gene
-      const portraitReceipt = data?.receipts?.portrait
-      const projections = {}
-      for (const [kind, value] of [
-        ["gene", geneReceipt],
-        ["portrait", portraitReceipt],
-      ]) {
-        const projectionKey = sanitizeText(value?.key || "", 512)
-        const projectionHash = normalizeSha256(value?.hash || "")
-        if (!projectionKey || !projectionHash) {
-          const failure = new Error(
-            `Card materialization is missing the ${kind} projection receipt`,
-          )
-          failure.code = "CARD_RECEIPT_INCOMPLETE"
-          throw failure
-        }
-        projections[kind] = { key: projectionKey, hash: projectionHash }
-      }
-      return { selectionKey: ticket.selectionKey, contentSha256, objectKey, projections }
     }
   }
 
@@ -27934,8 +27903,10 @@ async function currentGalleryVersion(env) {
   return barrier.current
 }
 
-export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordinatorClass(
-  (env) => ({
+// B-898: the one publication source. The per-gene publisher below and the
+// (retiring) card-publication coordinator read genes through the same adapter.
+function cardPublicationSourceForEnv(env) {
+  return {
     buildRevision: CARD_CATALOG_BUILD_REVISION,
     // Revisions 2-4 retain the same immutable card, gene and portrait object
     // contracts. The migration adds the compact catalog projection and a new
@@ -28052,8 +28023,68 @@ export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordin
         })
       await advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols)
     },
-  }),
+  }
+}
+
+export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordinatorClass(
+  cardPublicationSourceForEnv,
 )
+
+/**
+ * B-898 (deletion stage, step A): THE ONLY per-gene publisher. Rewrites the
+ * gene's stable object genes/v3/<SYMBOL>.json from D1 and the authoring store,
+ * purges its CDN URL, projects the selected winner into D1, keeps the gene's
+ * route membership, and advances its print-copy materialization. About five
+ * subrequests, no Durable Object, no index tree. Called by the vote authority
+ * when a winner changes and by the republish admin route the Actions publisher
+ * drives for every other canonical change.
+ */
+export async function publishIconoplasmGeneStableObject(
+  env,
+  symbolValue,
+  { portraitAssetSha256 = null, withdraw = false, source = null, objects = null } = {},
+) {
+  const symbol = normalizeSymbol(symbolValue)
+  if (!symbol) throw new Error("A symbol is required to publish a gene")
+  const selected = withdraw ? null : normalizeSha256(portraitAssetSha256 || "") || null
+  const adapter = source || cardPublicationSourceForEnv(env)
+  const store = objects || createPublishedCardObjectStore(env)
+  const overrides =
+    withdraw || !selected ? { [symbol]: withdraw ? "none" : "" } : { [symbol]: selected }
+  const cards = await adapter.materialize([symbol], { portraitOverrides: overrides })
+  const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
+  if (!card) return { symbol, withdrawn: true, stable: null }
+  if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
+  const stableCard = adapter.stable(card)
+  const projected = adapter.project(stableCard.payload)
+  const object = composeStableGeneObject(projected, {
+    ...(selected ? { selectedAssetSha256: selected } : {}),
+  })
+  const stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
+  if (typeof adapter.publishSelection === "function") {
+    await adapter.publishSelection(symbol, selected)
+  }
+  if (env?.ICONOPLASM_DB) {
+    await env.ICONOPLASM_DB.prepare(
+      `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
+       SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ?`,
+    )
+      .bind(symbol)
+      .run()
+    await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
+      symbol,
+      cardFingerprint: iconoplasmGeneCardFingerprint(stableCard.payload),
+      assetSha256: iconoplasmPrintCopyAssetSha(stableCard.payload),
+    })
+  }
+  return {
+    symbol,
+    withdrawn: false,
+    selected_asset_sha256: selected,
+    stable: { key: stable.key, hash: stable.hash, size: stable.size, purged: stable.purged },
+    published_at: object.published_at,
+  }
+}
 
 function normalizeGalleryVersionBarrierValue(value) {
   if (value && typeof value === "object") {
@@ -35214,6 +35245,11 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     json,
     putObject: putPortraitStorageObject,
     purgeObject: (env, key) => createPublishedCardObjectStore(env).purgeStableKey(key),
+  }),
+  ...createIconoplasmAdminRepublishHandlers({
+    isAdmin: isIconoplasmAdmin,
+    json,
+    publish: (env, symbol) => publishIconoplasmGeneStableObject(env, symbol),
   }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,
