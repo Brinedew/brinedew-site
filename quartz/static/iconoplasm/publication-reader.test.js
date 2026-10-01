@@ -533,7 +533,9 @@ function serveFixture(fixture, parsed) {
 function publicImmutableRoute(pathname) {
   return (
     pathname === "/api/public/v1/card-current" ||
-    pathname.startsWith("/published-cards/v2/immutable/")
+    pathname.startsWith("/published-cards/v2/immutable/") ||
+    // B-898: the canonical-origin copy of the stable gene object.
+    pathname.startsWith("/api/public/v1/stable-genes/")
   )
 }
 
@@ -977,4 +979,132 @@ test("a failed gallery page rejects the dossier load instead of rendering an emp
     },
   })
   await assert.rejects(load.fetchCompleteGeneDetailFromEndpoint("TP53"), /HTTP 404/)
+})
+
+// B-898 Stage 1, step 2: the gene page reads the one stable object per gene.
+// Failure modes written before the code:
+// 1. stable object present on Bunny -> exactly one fetch, no head/manifest walk;
+// 2. CDN 404 (gene not yet backfilled) -> immutable tree, and no origin request;
+// 3. malformed stable object -> immutable tree;
+// 4. CDN unreachable -> canonical-origin copy of the same stable object;
+// 5. the inline pool feeds candidateGallery() without any further fetch;
+// 6. portrait media on the stable record are rewritten to the CDN.
+function stableGeneFixture(gene) {
+  return {
+    ...gene,
+    portrait_candidates: [
+      { asset_sha256: "a".repeat(64), is_current: true, image_score: 4 },
+      { asset_sha256: "b".repeat(64), is_current: false, image_score: 1 },
+    ],
+    candidate_count: 2,
+    stable_object_version: 3,
+    published_at: "2026-09-30T22:52:55.283Z",
+  }
+}
+
+test("a gene with a stable object is one CDN fetch and never walks the immutable tree (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const stable = JSON.stringify(stableGeneFixture(fixture.gene))
+  const requests = []
+  const cacheModes = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url, init) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      cacheModes.push(init?.cache)
+      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(stable, { status: 200 })
+      if (parsed.pathname === "/api/public/v1/card-current")
+        return new Response(fixture.head, { status: 200 })
+      const body = fixture.objects.get(parsed.pathname)
+      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
+    },
+  })
+  const gene = await reader.gene("tp53")
+  assert.equal(gene.symbol, "TP53")
+  assert.equal(gene.stable_object_version, 3)
+  assert.deepEqual(
+    requests.map((r) => r.origin + r.pathname),
+    ["https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json"],
+  )
+  assert.equal(
+    gene.portrait.medium_url,
+    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
+  )
+  // 7. the CDN stamps stable objects with a 30-day max-age; the reader must
+  //    revalidate them on every read instead of trusting the browser cache.
+  assert.deepEqual(cacheModes, ["no-cache"])
+  const before = requests.length
+  const pool = await reader.candidateGallery(gene)
+  assert.equal(pool.count, 2)
+  assert.equal(pool.candidates[0].is_current, true)
+  assert.equal(requests.length, before, "the inline pool needs no gallery page fetch")
+})
+
+test("a gene without a stable object yet falls back to the immutable tree without touching the origin (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(null, { status: 404 })
+      if (parsed.pathname === "/api/public/v1/card-current")
+        return new Response(fixture.head, { status: 200 })
+      const body = fixture.objects.get(parsed.pathname)
+      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
+    },
+  })
+  const gene = await reader.gene("TP53")
+  assert.equal(gene.symbol, "TP53")
+  assert.equal(gene.stable_object_version, undefined)
+  assert.equal(
+    requests.every((r) => r.origin === "https://iconoplasmportraits.b-cdn.net"),
+    true,
+    "a CDN 404 must not become a Worker request",
+  )
+  assert.equal(requests[0].pathname, "/genes/v3/TP53.json")
+})
+
+test("a malformed stable object falls back to the immutable tree (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const wrong = JSON.stringify({ ...stableGeneFixture(fixture.gene), symbol: "BRCA1" })
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(wrong, { status: 200 })
+      if (parsed.pathname === "/api/public/v1/card-current")
+        return new Response(fixture.head, { status: 200 })
+      const body = fixture.objects.get(parsed.pathname)
+      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
+    },
+  })
+  const gene = await reader.gene("TP53")
+  assert.equal(gene.symbol, "TP53")
+  assert.equal(gene.stable_object_version, undefined)
+})
+
+test("an unreachable CDN hedges the stable object to the canonical origin (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const stable = JSON.stringify(stableGeneFixture(fixture.gene))
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      if (parsed.origin === "https://iconoplasmportraits.b-cdn.net")
+        throw new TypeError("Failed to fetch")
+      if (parsed.pathname === "/api/public/v1/stable-genes/TP53.json")
+        return new Response(stable, { status: 200 })
+      return new Response(null, { status: 404 })
+    },
+  })
+  const gene = await reader.gene("TP53")
+  assert.equal(gene.stable_object_version, 3)
+  assert.deepEqual(
+    requests.map((r) => r.origin + r.pathname),
+    [
+      "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json",
+      "https://iconoplasm.brinedew.bio/api/public/v1/stable-genes/TP53.json",
+    ],
+  )
 })
