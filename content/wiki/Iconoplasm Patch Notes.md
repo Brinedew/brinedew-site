@@ -10,6 +10,10 @@ draft: false
 
 ## Unreleased
 
+## 0.5.9 - 2026-10-01
+
+* Hover cards now load each gene from a single always-current file on the free CDN, so hovering never spends metered server requests and reflects portrait changes within minutes.
+
 ## 0.5.8 - 2026-09-30
 
 * Fixed gene name highlights displaying wrong in in multi-column tables.
