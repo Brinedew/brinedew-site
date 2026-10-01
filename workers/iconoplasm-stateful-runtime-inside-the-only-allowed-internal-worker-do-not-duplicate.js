@@ -28047,10 +28047,15 @@ export async function publishIconoplasmGeneStableObject(
   const symbol = normalizeSymbol(symbolValue)
   if (!symbol) throw new Error("A symbol is required to publish a gene")
   const selected = withdraw ? null : normalizeSha256(portraitAssetSha256 || "") || null
+  // Three cases, and the difference matters (2026-10-01: a republish with no
+  // selection was treated as a withdrawal and nulled a gene's winner):
+  // an explicit winner overrides D1 and is projected back into it; a
+  // withdrawal publishes the portrait-less version and projects null; no
+  // selection at all publishes whatever D1 holds and projects nothing.
+  const explicit = withdraw || selected !== null
   const adapter = source || cardPublicationSourceForEnv(env)
   const store = objects || createPublishedCardObjectStore(env)
-  const overrides =
-    withdraw || !selected ? { [symbol]: withdraw ? "none" : "" } : { [symbol]: selected }
+  const overrides = withdraw ? { [symbol]: "none" } : selected ? { [symbol]: selected } : null
   const cards = await adapter.materialize([symbol], { portraitOverrides: overrides })
   const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
   if (!card) return { symbol, withdrawn: true, stable: null }
@@ -28061,7 +28066,7 @@ export async function publishIconoplasmGeneStableObject(
     ...(selected ? { selectedAssetSha256: selected } : {}),
   })
   const stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
-  if (typeof adapter.publishSelection === "function") {
+  if (explicit && typeof adapter.publishSelection === "function") {
     await adapter.publishSelection(symbol, selected)
   }
   if (env?.ICONOPLASM_DB) {
