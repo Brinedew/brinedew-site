@@ -275,36 +275,34 @@ test("raw file PDF wrappers do not initialize a second extension surface", async
   assert.match(content, /if \(isOuterRawFilePdfDocument\) return/)
 })
 
-test("hover portrait discovery is snapshot-keyed and independent of rich-detail success", async () => {
+test("hover detail is one stable CDN object per gene; no metered snapshot routes remain", async () => {
   const content = await readFile(new URL("./content.js", import.meta.url), "utf8")
+  const background = await readFile(new URL("./service-worker.js", import.meta.url), "utf8")
 
-  assert.match(
-    content,
-    /ICONOPLASM_PORTRAIT_LOCATOR_PREFIX\}\$\{encodeURIComponent\(revision\)\}\/portraits\//,
-  )
-  // Recognition may precede the fresh card head, but both lanes must await its
-  // article-scoped selection before hydration (not adopt the cached scanner epoch).
-  assert.match(content, /adoptCardSnapshotRevision\(revision\)/)
-  assert.match(
-    content,
-    /const revision = selection\?\.cardSnapshotVersion \|\| articleScannerPayload.cardSnapshotVersion/,
-  )
-  assert.match(
-    content,
-    /async function fetchPortraitLocatorsBatch[^]*?await ensureArticleCards\(\)/,
-  )
-  assert.doesNotMatch(content, /changes\.iconoplasm_card_snapshot_version\?\.newValue/)
-  assert.match(content, /REFRESH_CARD_SNAPSHOT/)
-  assert.match(content, /retryVisible && activeTooltipAnchor\?\.isConnected/)
+  // B-898 stage 1. Failure modes this guards: a leftover reference to the
+  // retired immutable tree would quietly put hover back on metered Worker
+  // requests; a second portrait-locator lane would reintroduce the sha
+  // mismatch dance; a page-level persistent copy would clone the cache.
+  for (const source of [content, background]) {
+    assert.doesNotMatch(source, /\/api\/public\/v1\/card-snapshots\//)
+    assert.doesNotMatch(source, /card-content\/v1/)
+    assert.doesNotMatch(source, /delivery-index/)
+    assert.doesNotMatch(source, /ccv2-/)
+    assert.doesNotMatch(source, /REFRESH_CARD_SNAPSHOT|GET_CARD_FRESHNESS/)
+    // The one allowed mention is the retired storage key the cleanup removes.
+    assert.doesNotMatch(source, /portraitLocator|portrait_locator(?!_cache_v1)/)
+  }
+  assert.match(background, /https:\/\/iconoplasmportraits\.b-cdn\.net\/genes\/v3\//)
+  assert.match(content, /type: "ICONOPLASM_STABLE_GENE"/)
+  assert.match(background, /msg\.type === "ICONOPLASM_STABLE_GENE"/)
+  assert.match(content, /async function fetchGeneDetailsBatch[^]*?await ensureArticleCards\(\)/)
+  assert.match(content, /priority: "foreground"/)
+  assert.match(content, /const hoverGeneDetailPromise =/)
   assert.doesNotMatch(
     content,
-    /portraitLocatorStore\.hydratePersistentCache\(\)/,
-    "locator persistence belongs to the background exact-record cache",
+    /storageApi: chrome\.storage\.local|hydratePersistentCache/,
+    "pages keep a small in-memory TTL cache; the browser HTTP cache is the persistent layer",
   )
-  assert.match(content, /const hoverGeneDetailPromise =/)
-  assert.match(content, /const hoverPortraitLocatorPromise =/)
-  assert.match(content, /hoverPortraitLocatorPromise\.then\(\(portraitLocator\) =>/)
-  assert.match(content, /published portrait locator\/detail mismatch; portrait suppressed/)
 })
 
 test("DO NOT DELETE: extension fonts resolve from the extension runtime on every host", async () => {
