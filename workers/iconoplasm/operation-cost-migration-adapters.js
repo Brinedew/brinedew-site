@@ -20,6 +20,7 @@ import { createCompactDiscoveryActivationMigrationCostAdapter } from "./operatio
 import { createPublishStateIndexMigrationCostAdapter } from "./operation-cost-publish-state-index-migration-adapter.js"
 import { createFinalizationHandoffRetirementMigrationCostAdapter } from "./operation-cost-finalization-handoff-retirement-migration-adapter.js"
 import { createDiscoveryShelfMigrationCostAdapter } from "./operation-cost-discovery-shelf-migration-adapter.js"
+import { createGeneBlotBacklogWatermarkMigrationCostAdapter } from "./operation-cost-gene-blot-backlog-watermark-migration-adapter.js"
 import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
   createInboxCountersMigrationCostAdapter,
@@ -30,6 +31,13 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0112",
+      createGeneBlotBacklogWatermarkMigrationCostAdapter({
+        db: env.ICONOPLASM_DB,
+        ...identities,
+      }),
+    ],
     [
       "iconoplasm-migration-0110",
       createFinalizationHandoffRetirementMigrationCostAdapter({

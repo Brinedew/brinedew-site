@@ -19,7 +19,6 @@ import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  listIconoplasmGeneBlotBacklog,
   buildPublishedScannerArtifact,
   buildPortraitAwareManifestHash,
   mergePublishedPortraitRefsIntoArtifact,
@@ -2154,58 +2153,4 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
   assert.equal(payload?.card_snapshot_version, `test-card-v1.c${chainRef.hash}`)
   assert.equal(payload?.portrait?.asset_sha256, deltaPortrait)
   assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
-
-  const adminEnv = { ...env, ICONOPLASM_DB: env.gatewayDb }
-  const backlog = await listIconoplasmGeneBlotBacklog(adminEnv, {
-    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
-      method: "POST",
-    }),
-    payload: { scope: "published", symbols: ["A1BG"], limit: 1 },
-  })
-  assert.equal(backlog.snapshot_version, `test-card-v1.c${chainRef.hash}`)
-  assert.equal(backlog.items.length, 1)
-  assert.equal(backlog.items[0].portrait_asset_sha256, deltaPortrait)
-  assert.equal(backlog.items[0].blot_fingerprint, iconoplasmGeneBlotFingerprint(deltaCard.payload))
-
-  await kv.put(
-    "iconoplasm:card-catalog-publish-watermark:v1",
-    JSON.stringify({ watermark_event_id: 10, watermark_event_at: "2026-09-23 18:00:00" }),
-  )
-  const automaticBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
-    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
-      method: "POST",
-    }),
-    payload: { scope: "candidate", limit: 25 },
-  })
-  assert.equal(
-    automaticBacklog.items.length,
-    1,
-    JSON.stringify({ scanned: automaticBacklog.scanned, symbols: automaticBacklog.symbols }),
-  )
-  assert.equal(automaticBacklog.items[0].scope, "published")
-  assert.equal(automaticBacklog.items[0].portrait_asset_sha256, deltaPortrait)
-
-  const fingerprint = iconoplasmGeneBlotFingerprint(deltaCard.payload)
-  env.gatewayDb.blots.set("A1BG", {
-    gene_blot_fingerprint: fingerprint,
-    gene_blot_portrait_asset_sha256: deltaPortrait,
-    gene_blot_asset_sha256: "c".repeat(64),
-    gene_blot_object_key: iconoplasmGeneBlotObjectKey("A1BG", fingerprint),
-    gene_blot_width: 768,
-    gene_blot_height: 1024,
-  })
-  const readyBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
-    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
-      method: "POST",
-    }),
-    payload: { scope: "published", symbols: ["A1BG"], limit: 1 },
-  })
-  assert.deepEqual(readyBacklog.items, [])
-  const readyAutomaticBacklog = await listIconoplasmGeneBlotBacklog(adminEnv, {
-    request: new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/backlog", {
-      method: "POST",
-    }),
-    payload: { scope: "candidate", limit: 25 },
-  })
-  assert.deepEqual(readyAutomaticBacklog.items, [])
 })

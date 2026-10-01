@@ -231,19 +231,44 @@ test("registering the first canonical blot writes its row and event once", async
   assert.equal(batches, 1)
 })
 
-test("published blot retries read exact versioned cards by explicit symbol", () => {
-  const backlog = runtimeSource.slice(
-    runtimeSource.indexOf("export async function listIconoplasmGeneBlotBacklog"),
-    runtimeSource.indexOf("export async function uploadIconoplasmGeneBlot"),
+test("the blot backlog answers from D1 and stable gene objects, never the deleted publication tree", () => {
+  // B-898 Stage 1 (step B): the drain backlog must not regain the coordinator
+  // watermark, the KV head, the manifest shards or the delta chain.
+  const block = runtimeSource.slice(
+    runtimeSource.indexOf("const GENE_BLOT_BACKLOG_EVENT_WINDOW"),
+    runtimeSource.indexOf("async function uploadIconoplasmGeneBlot"),
   )
-  assert.match(backlog, /Array\.isArray\(payload\?\.symbols\)/)
-  assert.match(backlog, /readPublishedCardCatalogArtifact\(env, version, requestedSymbols/)
-  assert.match(backlog, /allowWholeArtifact: false/)
-  assert.match(backlog, /automatic: false/)
-  assert.doesNotMatch(
-    backlog.slice(backlog.indexOf("if (requestedSymbols.length)")),
-    /cardCatalogRecordsForArtifact/,
-  )
+  assert.ok(block.length > 0, "the blot backlog block must precede the upload handler")
+  assert.match(block, /export async function listIconoplasmGeneBlotBacklog/)
+  assert.match(block, /Array\.isArray\(payload\?\.symbols\)/)
+  assert.match(block, /automatic: false/)
+  assert.match(block, /readStableGeneObjectForBlot\(env, symbol\)/)
+  assert.match(block, /icono_gene_blot_backlog_watermark/)
+  assert.match(block, /icono_published_gene_routes r/)
+  for (const retired of [
+    /readPublishedCardCatalogArtifact/,
+    /readPublishedCardCatalogManifest/,
+    /readCardCatalogPublishWatermark/,
+    /advertisedGeneDeltaViewForDetail/,
+    /readGeneDeltaChain/,
+    /readPublishedGeneCardPortraitProjection/,
+    /currentMobileCardSnapshotVersion/,
+    /env\.KV/,
+  ]) {
+    assert.doesNotMatch(block, retired, `blot backlog regained the publication tree: ${retired}`)
+  }
+  // Every D1 statement in the block (template literals that name a FROM table)
+  // is a key range or key list with a page bound.
+  const literals = block.split("`").filter((_segment, index) => index % 2 === 1)
+  const statements = literals.filter((sql) => /\bFROM icono_/.test(sql))
+  assert.ok(statements.length >= 4, "watermark, newest event, event window, readiness, routes")
+  for (const sql of statements) {
+    assert.match(sql, /\bWHERE\b/, `unbounded blot backlog read: ${sql.slice(0, 80)}`)
+    assert.ok(
+      /\bLIMIT\b/.test(sql) || /\bIN \(/.test(sql),
+      `page-unbounded read: ${sql.slice(0, 80)}`,
+    )
+  }
 })
 
 test("candidate blot readiness is checked after canonical card hydration", () => {
