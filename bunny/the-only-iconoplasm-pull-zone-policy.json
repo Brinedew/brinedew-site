@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "pullZoneName": "iconoplasmportraits",
+  "why": "B-898: readers fetch genes/v3/<SYMBOL>.json and catalog/v3/index.json straight from the CDN with fetch(), so Bunny must add Access-Control-Allow-Origin for .json. Bunny applies CORS headers per file extension; webp was already listed, json was not (measured 2026-10-01 15:03Z: the stable object had no CORS header, the old tree got its header from the Worker origin). Applied by POST /api/iconoplasm/admin/publication/reconcile-pull-zone with the Worker's own Bunny account key; scripts/reconcile-iconoplasm-pull-zone.mjs sends this file from the deploy.",
+  "settings": {
+    "EnableAccessControlOriginHeader": true
+  },
+  "ensureAccessControlOriginHeaderExtensions": ["json", "webp"]
+}
