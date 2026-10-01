@@ -190,6 +190,39 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex")
 }
 
+// B-898 (deletion stage): before the catalog is rebuilt, every changed gene
+// gets its stable object rewritten by the Worker, which alone can read the
+// authoring store. Eight genes per call keeps the Worker under its subrequest
+// ceiling; a gene that fails is retried once and then reported, never silently
+// skipped, so the catalog row and the gene object are rebuilt from the same
+// D1 state.
+async function republishGenes(symbols) {
+  const failed = []
+  let published = 0
+  for (let index = 0; index < symbols.length; index += 8) {
+    const batch = symbols.slice(index, index + 8)
+    let reply = null
+    for (let attempt = 1; attempt <= 2 && !reply; attempt += 1) {
+      const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ symbols: batch }),
+      })
+      const body = await response.json().catch(() => null)
+      if (response.ok && body?.ok === true) reply = body
+      else if (attempt === 2)
+        throw new Error(`Republish failed (${response.status}): ${JSON.stringify(body)}`)
+      else await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+    published += Number(reply.published || 0)
+    for (const result of reply.results || []) if (result.ok !== true) failed.push(result)
+  }
+  return { published, failed }
+}
+
 async function upload(bytes) {
   const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/catalog-object`, {
     method: "PUT",
@@ -251,6 +284,7 @@ async function main() {
       genes = all.rows
       reads += all.reads
     } else {
+      if (!DRY_RUN) receipt.republish = await republishGenes(dirty.symbols)
       const changed = await readRowsFor(dirty.symbols)
       reads += changed.reads
       const bySymbol = new Map(previous.genes.map((row) => [row[0], row]))
