@@ -29733,108 +29733,94 @@ function geneBlotServiceError(status, code, message) {
   return error
 }
 
-async function priorityGeneBlotSymbols(env) {
-  const watermark = await readCardCatalogPublishWatermark(env)
-  const afterEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
-  const afterEventAt = watermark?.watermark_event_at || null
-  if (!afterEventId && !afterEventAt) {
-    throw geneBlotServiceError(
-      503,
-      "BLOT_PUBLICATION_WATERMARK_REQUIRED",
-      "Priority blot discovery requires the published card watermark.",
-    )
-  }
-  const highWater = await maxCardCatalogPublishEventPosition(env)
-  const changed = await cardCatalogChangedSymbolsWithinPublicationWindow(env, {
-    afterEventId,
-    afterEventAt,
-    throughEventId: highWater.id,
-    throughEventAt: highWater.created_at,
-    limit: 101,
-    actions: CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS,
-  })
-  if (changed.truncated) {
-    throw geneBlotServiceError(
-      503,
-      "BLOT_PRIORITY_SET_SAFETY_LIMIT",
-      "More than 100 priority genes are pending; refusing an unbounded workstation batch.",
-    )
-  }
+// B-898 Stage 1 (step B): the workstation blot drain learns which genes need a
+// print-copy blot from D1 and the stable gene objects (genes/v3/<SYMBOL>.json)
+// alone. No coordinator status, no KV head, no manifest shards, no delta chain:
+// those cost 2-8 s per poll and hung past 35 s on 3 of 15 probes (B-894).
+//
+// Reads per call, automatic candidate scope: one watermark row, one indexed
+// event window (<= GENE_BLOT_BACKLOG_EVENT_WINDOW rows on
+// idx_icono_publish_events_card_catalog_window), one readiness join per 90
+// distinct symbols (publish_state x blot row by primary key), then at most
+// `limit` (<= 25) authenticated storage reads for the genes whose D1 blot row
+// is not current. An idle poll is two rows read and zero writes. The watermark
+// row is written only when the examined window actually advanced.
+const GENE_BLOT_BACKLOG_EVENT_WINDOW = 200
+const GENE_BLOT_BACKLOG_MAX_STORAGE_READS = 25
+const GENE_BLOT_BACKLOG_PAGE_CAP = 250
+const GENE_BLOT_BACKLOG_SNAPSHOT_VERSION = "genes-v3"
+const GENE_BLOT_READINESS_SELECT = `SELECT s.gene_symbol,
+            s.current_asset_sha256,
+            b.blot_fingerprint,
+            b.portrait_asset_sha256 AS blot_portrait_asset_sha256,
+            b.renderer_revision AS blot_renderer_revision`
+
+function geneBlotBacklogWatermarkStatements(env) {
   return {
-    symbols: changed.symbols,
-    through_event_id: Math.max(0, Number(highWater.id || 0) || 0),
-    through_event_at: highWater.created_at || null,
+    read: env.ICONOPLASM_DB.prepare(
+      `SELECT through_event_id
+         FROM icono_gene_blot_backlog_watermark
+        WHERE watermark_key = 'candidate'
+        LIMIT 1`,
+    ),
+    advance: (throughEventId) =>
+      env.ICONOPLASM_DB.prepare(
+        `INSERT INTO icono_gene_blot_backlog_watermark (watermark_key, through_event_id, updated_at)
+         VALUES ('candidate', ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(watermark_key) DO UPDATE SET
+           through_event_id = MAX(icono_gene_blot_backlog_watermark.through_event_id, excluded.through_event_id),
+           updated_at = CURRENT_TIMESTAMP
+         WHERE excluded.through_event_id > icono_gene_blot_backlog_watermark.through_event_id`,
+      ).bind(throughEventId),
   }
 }
 
-async function publishedDeltaGeneBlotPriorityPage(env, { after = "", limit = 25 } = {}) {
-  const advertised = await advertisedGeneDeltaViewForDetail(env)
-  const current = await currentMobileCardSnapshotVersion(env)
-  if (!advertised || advertised.base !== String(current?.current || "")) {
-    return { symbols: new Set(), scanned: 0, items: [], hasMore: false, nextAfter: null }
-  }
-  const chainHash = parsePublishedViewId(advertised.view).chainHash
-  const chain = await readGeneDeltaChain({
-    readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
-    chainHash,
-    base: advertised.base,
-  })
-  if (!chain.ok) {
-    throw geneBlotServiceError(
-      503,
-      "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-      "The advertised published gene view is unavailable.",
-    )
-  }
-  const symbols = [...chain.entries]
-    .filter(([, entry]) => entry.status === "committed")
-    .map(([symbol]) => symbol)
-    .sort()
-  // The published chain is the authority after a vote, including when the
-  // publication watermark has advanced past that vote while Drain was asleep.
-  // One bounded page keeps Bunny reads within a free-tier Worker request.
-  const pageLimit = Math.max(1, Math.min(25, limit))
-  const remaining = symbols.filter((symbol) => symbol > after)
-  const page = remaining.slice(0, pageLimit)
-  // B-894: these reads used to run one after another, so a page cost the sum
-  // of up to 25 Bunny round trips (5-8 s measured) and one slow object held the
-  // drain's only worker thread past its patience. Same reads, same bound,
-  // overlapped: the page now costs roughly its slowest object.
-  const loaded = await Promise.all(
-    page.map((symbol) =>
-      readPublishedBunnyCardObject(env, chain.entries.get(symbol).card.key, (value) =>
-        Boolean(value?.symbol === symbol && value?.payload),
-      ),
-    ),
+async function newestCanonicalPublishEventId(env) {
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT id
+       FROM icono_publish_events
+      WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
+      ORDER BY id DESC
+      LIMIT 1`,
   )
-  const cards = new Map()
-  page.forEach((symbol, index) => {
-    if (!loaded[index]?.payload) {
-      throw geneBlotServiceError(
-        503,
-        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-        "An advertised gene card is unavailable.",
-      )
-    }
-    cards.set(symbol, loaded[index].payload)
-  })
-  const ready = await exactReadyGeneBlotsForPublishedCards(env, cards)
-  const items = page
-    .map((symbol) =>
-      geneBlotBacklogItem(
-        projectCardBlot(cards.get(symbol), ready.get(symbol) || cards.get(symbol)?.blot),
-        "published",
-      ),
+    .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
+    .first()
+  return Math.max(0, Number(row?.id || 0) || 0)
+}
+
+// Readiness of each symbol from D1 alone: the current winner and the blot row
+// the workstation registered. A gene without a winner needs no blot. A row
+// whose portrait sha and renderer revision match the winner is the necessary
+// condition for "current"; the exact fingerprint (it also covers full_name)
+// is settled against the stable object only for genes that fail this filter.
+async function geneBlotReadinessRows(env, symbols) {
+  const bySymbol = new Map()
+  const D1_MAX_BOUND_PARAMS = 90
+  for (let index = 0; index < symbols.length; index += D1_MAX_BOUND_PARAMS) {
+    const batch = symbols.slice(index, index + D1_MAX_BOUND_PARAMS)
+    const result = await env.ICONOPLASM_DB.prepare(
+      `${GENE_BLOT_READINESS_SELECT}
+         FROM icono_publish_state s
+         LEFT JOIN icono_gene_blot_materializations b ON b.gene_symbol = s.gene_symbol
+        WHERE s.gene_symbol IN (${batch.map(() => "?").join(",")})`,
     )
-    .filter(Boolean)
-  const hasMore = remaining.length > page.length
-  return {
-    symbols: new Set(symbols),
-    scanned: page.length,
-    items,
-    hasMore,
-    nextAfter: hasMore ? page.at(-1) : null,
+      .bind(...batch)
+      .all()
+    for (const row of Array.isArray(result?.results) ? result.results : []) {
+      const symbol = normalizeSymbol(row?.gene_symbol || "")
+      if (symbol) bySymbol.set(symbol, row)
+    }
   }
+  return bySymbol
+}
+
+function geneBlotRowIsCurrent(row) {
+  const winner = normalizeSha256(row?.current_asset_sha256 || "")
+  if (!winner) return true
+  return (
+    normalizeSha256(row?.blot_portrait_asset_sha256 || "") === winner &&
+    String(row?.blot_renderer_revision || "") === ICONOPLASM_GENE_BLOT_RENDERER_REVISION
+  )
 }
 
 function geneBlotBacklogItem(card, scope) {
@@ -29844,15 +29830,9 @@ function geneBlotBacklogItem(card, scope) {
     return null
   }
   const fingerprint = iconoplasmGeneBlotFingerprint(card)
-  const current = card?.blot && typeof card.blot === "object" ? card.blot : null
-  if (
-    current?.status === "ready" &&
-    String(current.blot_fingerprint || "").toLowerCase() === fingerprint &&
-    normalizeSha256(current.portrait_asset_sha256 || "") ===
-      normalizeSha256(portrait.asset_sha256 || "")
-  ) {
-    return null
-  }
+  // The drain renders the card; the candidate pool is reader detail and would
+  // multiply the page size by the number of candidates per gene.
+  const { portrait_candidates: _pool, ...cardPayload } = card
   return {
     symbol,
     scope,
@@ -29861,23 +29841,243 @@ function geneBlotBacklogItem(card, scope) {
     width: ICONOPLASM_GENE_BLOT_WIDTH,
     height: ICONOPLASM_GENE_BLOT_HEIGHT,
     portrait_asset_sha256: normalizeSha256(portrait.asset_sha256),
-    portrait_url: String(portrait.hero_url || ""),
-    card_payload: card,
+    portrait_url:
+      String(portrait.hero_url || "") ||
+      adminPortraitUrl(ICONOPLASM_CANONICAL_ORIGIN, portrait.asset_sha256, "full") ||
+      "",
+    card_payload: cardPayload,
     upload_url: `/api/iconoplasm/admin/blots/${encodeURIComponent(symbol)}?scope=${encodeURIComponent(scope)}&fingerprint=${encodeURIComponent(fingerprint)}`,
+  }
+}
+
+// One storage read for one gene whose D1 blot row is not current. Outcomes:
+//   listed  - the stable object matches D1's winner and needs this blot;
+//   ready   - the object's fingerprint already matches the registered row
+//             (only full_name could differ from the D1 prefilter);
+//   missing - no stable object yet (the publisher has not written it);
+//   stale   - the object's portrait is behind D1 (the Actions publisher has not
+//             rewritten it yet); listing it would hand out the wrong fingerprint;
+//   error   - storage failed; the page goes on without this gene.
+async function geneBlotBacklogDecision(env, symbol, row, scope) {
+  let card
+  try {
+    card = await readStableGeneObjectForBlot(env, symbol)
+  } catch (error) {
+    return { kind: "error", error: String(error?.message || error) }
+  }
+  if (!card) return { kind: "missing" }
+  const winner = normalizeSha256(row?.current_asset_sha256 || "")
+  const objectSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
+  const objectSha = normalizeSha256(card?.portrait?.asset_sha256 || "")
+  if (objectSymbol !== symbol || card?.portrait?.status !== "published" || objectSha !== winner) {
+    return { kind: "stale" }
+  }
+  const item = geneBlotBacklogItem(card, scope)
+  if (!item) return { kind: "stale" }
+  if (
+    String(row?.blot_fingerprint || "").toLowerCase() === item.blot_fingerprint &&
+    normalizeSha256(row?.blot_portrait_asset_sha256 || "") === winner
+  ) {
+    return { kind: "ready" }
+  }
+  return { kind: "listed", item }
+}
+
+async function geneBlotBacklogDecisions(env, symbols, rowsBySymbol, scope) {
+  const settled = await Promise.all(
+    symbols.map((symbol) => geneBlotBacklogDecision(env, symbol, rowsBySymbol.get(symbol), scope)),
+  )
+  const decisions = new Map()
+  const skipped = { missing: 0, stale: 0, errors: 0 }
+  symbols.forEach((symbol, index) => {
+    const decision = settled[index]
+    decisions.set(symbol, decision)
+    if (decision.kind === "missing") skipped.missing += 1
+    else if (decision.kind === "stale") skipped.stale += 1
+    else if (decision.kind === "error") {
+      skipped.errors += 1
+      console.warn(`Iconoplasm blot backlog skipped ${symbol}: ${decision.error}`)
+    }
+  })
+  return { decisions, skipped }
+}
+
+// Explicit symbols (the drain's finalization lane and published retries):
+// readiness for exactly those genes, storage reads for the ones that are not
+// current, bounded by `limit`.
+async function geneBlotBacklogForSymbols(env, symbols, { scope, limit }) {
+  const rowsBySymbol = await geneBlotReadinessRows(env, symbols)
+  const pending = symbols.filter((symbol) => !geneBlotRowIsCurrent(rowsBySymbol.get(symbol)))
+  const page = pending.slice(0, limit)
+  const { decisions, skipped } = await geneBlotBacklogDecisions(env, page, rowsBySymbol, scope)
+  const items = page
+    .map((symbol) => decisions.get(symbol))
+    .filter((d) => d.kind === "listed")
+    .map((d) => d.item)
+  return { items, skipped, complete: pending.length <= limit, scanned: symbols.length }
+}
+
+// Automatic candidate scope: canonical-affecting publish events after the
+// examined watermark (or the drain's own resume cursor), in event order.
+async function automaticCandidateGeneBlotBacklog(env, { after, limit }) {
+  const watermark = geneBlotBacklogWatermarkStatements(env)
+  const stored = await watermark.read.first()
+  const storedThrough = stored ? Math.max(0, Number(stored.through_event_id || 0) || 0) : null
+  const cursor = /^\d+$/.test(after) ? Number.parseInt(after, 10) : null
+  // A cold mark starts at the newest event: history is the published walk's
+  // job, and walking it here would cost 200 rows per poll for days.
+  const since = cursor ?? storedThrough ?? (await newestCanonicalPublishEventId(env))
+  const result = await env.ICONOPLASM_DB.prepare(
+    `SELECT id, gene_symbol
+       FROM icono_publish_events
+      WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
+        AND id > ?
+      ORDER BY id ASC
+      LIMIT ?`,
+  )
+    .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, since, GENE_BLOT_BACKLOG_EVENT_WINDOW + 1)
+    .all()
+  const allEvents = (Array.isArray(result?.results) ? result.results : [])
+    .map((row) => ({ id: Number(row?.id || 0), symbol: normalizeSymbol(row?.gene_symbol || "") }))
+    .filter((event) => event.id > 0 && event.symbol)
+  const moreEvents = allEvents.length > GENE_BLOT_BACKLOG_EVENT_WINDOW
+  const events = allEvents.slice(0, GENE_BLOT_BACKLOG_EVENT_WINDOW)
+  const symbols = [...new Set(events.map((event) => event.symbol))]
+  const rowsBySymbol = symbols.length ? await geneBlotReadinessRows(env, symbols) : new Map()
+
+  // Pass 1: which genes need a storage read, in first-event order, up to limit.
+  const toRead = []
+  let pageFull = false
+  for (const symbol of symbols) {
+    if (geneBlotRowIsCurrent(rowsBySymbol.get(symbol))) continue
+    if (toRead.length >= limit) {
+      pageFull = true
+      break
+    }
+    toRead.push(symbol)
+  }
+  const { decisions, skipped } = await geneBlotBacklogDecisions(
+    env,
+    toRead,
+    rowsBySymbol,
+    "candidate",
+  )
+
+  // Pass 2: the examined mark advances past satisfied and handed-out genes in
+  // event order and stops at the first held gene (missing, stale, error) or
+  // at the first gene the page had no room for.
+  let through = since
+  let held = false
+  for (const event of events) {
+    const decision = decisions.get(event.symbol)
+    const current = geneBlotRowIsCurrent(rowsBySymbol.get(event.symbol))
+    if (!current && !decision) break
+    if (!current && decision.kind !== "listed" && decision.kind !== "ready") {
+      held = true
+      break
+    }
+    through = event.id
+  }
+  if (storedThrough === null || through > storedThrough) await watermark.advance(through).run()
+
+  const items = toRead
+    .map((symbol) => decisions.get(symbol))
+    .filter((d) => d.kind === "listed")
+    .map((d) => d.item)
+  const complete = !pageFull && !moreEvents && !held
+  return {
+    ok: true,
+    scope: "candidate",
+    automatic: true,
+    items,
+    symbols: items.map((item) => item.symbol),
+    candidate_symbols: items.map((item) => item.symbol),
+    scanned: symbols.length,
+    pending_item_count: items.length + (pageFull ? 1 : 0),
+    skipped,
+    render_queue_complete: complete,
+    through_event_id: through,
+    through_event_at: null,
+    done: complete,
+    next_after: complete ? null : String(through),
+  }
+}
+
+// Published scope without symbols: the drain's full backfill walk. Keyset by
+// symbol over route membership joined to the winner and the blot row; storage
+// reads only for genes whose row is not current, at most 25 per page, and the
+// page ends at the last examined symbol so the drain resumes exactly there.
+async function publishedGeneBlotBacklogPage(env, { after, limit }) {
+  const pageLimit = Math.max(1, Math.min(GENE_BLOT_BACKLOG_PAGE_CAP, limit))
+  const result = await env.ICONOPLASM_DB.prepare(
+    `${GENE_BLOT_READINESS_SELECT.replace("s.gene_symbol,", "r.gene_symbol,")}
+       FROM icono_published_gene_routes r
+       LEFT JOIN icono_publish_state s ON s.gene_symbol = r.gene_symbol
+       LEFT JOIN icono_gene_blot_materializations b ON b.gene_symbol = r.gene_symbol
+      WHERE r.gene_symbol > ?
+      ORDER BY r.gene_symbol ASC
+      LIMIT ?`,
+  )
+    .bind(after, pageLimit + 1)
+    .all()
+  const allRows = Array.isArray(result?.results) ? result.results : []
+  const moreRows = allRows.length > pageLimit
+  const rows = allRows.slice(0, pageLimit)
+  const rowsBySymbol = new Map()
+  const examined = []
+  const toRead = []
+  for (const row of rows) {
+    const symbol = normalizeSymbol(row?.gene_symbol || "")
+    if (!symbol) continue
+    if (!geneBlotRowIsCurrent(row)) {
+      if (toRead.length >= GENE_BLOT_BACKLOG_MAX_STORAGE_READS) break
+      toRead.push(symbol)
+    }
+    rowsBySymbol.set(symbol, row)
+    examined.push(symbol)
+  }
+  const { decisions, skipped } = await geneBlotBacklogDecisions(
+    env,
+    toRead,
+    rowsBySymbol,
+    "published",
+  )
+  const items = toRead
+    .map((symbol) => decisions.get(symbol))
+    .filter((d) => d.kind === "listed")
+    .map((d) => d.item)
+  const done = !moreRows && examined.length === rows.length
+  return {
+    ok: true,
+    scope: "published",
+    automatic: true,
+    items,
+    symbols: examined,
+    scanned: examined.length,
+    skipped,
+    snapshot_version: GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
+    done,
+    next_after: examined.length ? examined.at(-1) : after || null,
   }
 }
 
 async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
   if (scope === "published") {
-    const published = await readPublishedGeneCardPortraitProjection(env, symbol)
-    if (published.kind === "unavailable") {
+    // The stable gene object is the published card (B-898); an upload for the
+    // published lane is verified against the same object the backlog listed.
+    let card
+    try {
+      card = await readStableGeneObjectForBlot(env, symbol)
+    } catch {
       throw geneBlotServiceError(
         503,
         "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-        "The exact published card artifact is unavailable.",
+        "The published gene object is unavailable.",
       )
     }
-    return published.kind === "available" ? published.payload : null
+    return card && normalizeSymbol(card?.symbol || card?.canonical_symbol || "") === symbol
+      ? card
+      : null
   }
   if (scope !== "candidate") {
     throw geneBlotServiceError(
@@ -29894,67 +30094,6 @@ async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
   return records[0] || null
 }
 
-export async function pagePublishedCardCatalogArtifact(
-  env,
-  artifactVersion,
-  { after = "", limit = 25 } = {},
-) {
-  const version = String(artifactVersion || "").trim()
-  const cursor = normalizeSymbol(after)
-  const pageLimit = Math.max(1, Math.min(250, Number(limit) || 25))
-  const manifest = await readPublishedCardCatalogManifest(env, version)
-  if (!manifest) return null
-  const totalCount = Array.isArray(manifest.shards)
-    ? manifest.shards.reduce(
-        (sum, shard) => sum + Math.max(0, Number(shard?.card_count || 0) || 0),
-        0,
-      )
-    : Math.max(0, Number(manifest.card_count || manifest.catalog_gene_count || 0) || 0)
-
-  const records = []
-  const appendCards = (cards) => {
-    for (const card of Array.isArray(cards) ? cards : []) {
-      const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
-      if (!symbol || symbol <= cursor) continue
-      records.push(card?.payload && typeof card.payload === "object" ? card.payload : card)
-      if (records.length > pageLimit) return false
-    }
-    return true
-  }
-
-  if (Array.isArray(manifest.shards)) {
-    const contentAddressed =
-      manifest.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
-      manifest.storage === CARD_PUBLICATION_STORAGE
-    const shards = manifest.shards.slice().sort((a, b) => Number(a?.index) - Number(b?.index))
-    for (const shard of shards) {
-      const last = normalizeSymbol(shard?.last_symbol || "")
-      if (last && last <= cursor) continue
-      const parsed = await readPublishedCardCatalogShard(env, version, shard, contentAddressed)
-      if (!parsed) return null
-      if (!appendCards(parsed.cards)) break
-    }
-  } else {
-    const whole = normalizeCardCatalogArtifact(manifest)
-    if (!whole || !appendCards(whole.cards)) {
-      if (!whole) return null
-    }
-  }
-
-  const hasMore = records.length > pageLimit
-  const page = records.slice(0, pageLimit)
-  return {
-    records: page,
-    total_count: totalCount,
-    done: !hasMore,
-    next_after: page.length
-      ? normalizeSymbol(
-          page[page.length - 1]?.symbol || page[page.length - 1]?.canonical_symbol || "",
-        )
-      : cursor || null,
-  }
-}
-
 export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   const url = new URL(request.url)
   const scope = String(payload?.scope || url.searchParams.get("scope") || "published")
@@ -29964,191 +30103,53 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
     String(payload?.limit || url.searchParams.get("limit") || "25"),
     10,
   )
-  const limit = Math.max(1, Math.min(250, Number.isFinite(requestedLimit) ? requestedLimit : 25))
-  if (scope === "candidate") {
-    const requestedSymbols = normalizeRequestedSymbols(
-      Array.isArray(payload?.symbols) ? payload.symbols : [],
-      100,
-    )
-    const priority = requestedSymbols.length ? null : await priorityGeneBlotSymbols(env)
-    const delta = requestedSymbols.length
-      ? { symbols: new Set(), scanned: 0, items: [], hasMore: false, nextAfter: null }
-      : await publishedDeltaGeneBlotPriorityPage(env, {
-          after: normalizeSymbol(payload?.after || "") || "",
-          limit,
-        })
-    // A symbol named by the advertised view belongs to that published card;
-    // the legacy D1 candidate row can still describe its previous portrait.
-    const symbols = requestedSymbols.length
-      ? requestedSymbols
-      : priority.symbols.filter((symbol) => !delta.symbols.has(symbol))
-    if (!symbols.length && !delta.scanned) {
-      return {
-        ok: true,
-        scope,
-        automatic: requestedSymbols.length === 0,
-        items: [],
-        symbols: [],
-        scanned: 0,
-        pending_item_count: 0,
-        render_queue_complete: true,
-        through_event_id: priority?.through_event_id || null,
-        through_event_at: priority?.through_event_at || null,
-        done: true,
-        next_after: null,
-      }
-    }
-    const records = symbols.length
-      ? await cardCatalogRecordsForArtifact(env, {
-          requestUrl: request.url,
-          symbols,
-          snapshotVersion: "candidate",
-        })
-      : []
-    const candidateItems = records
-      .map((record) => geneBlotBacklogItem(record, scope))
-      .filter(Boolean)
-    const pendingItems = [...delta.items, ...candidateItems]
-    return {
-      ok: true,
-      scope,
-      automatic: requestedSymbols.length === 0,
-      items: pendingItems.slice(0, limit),
-      symbols: [...new Set([...symbols, ...delta.items.map((item) => item.symbol)])],
-      candidate_symbols: symbols,
-      scanned: records.length + delta.scanned,
-      pending_item_count: pendingItems.length,
-      render_queue_complete: pendingItems.length <= limit && !delta.hasMore,
-      through_event_id: priority?.through_event_id || null,
-      through_event_at: priority?.through_event_at || null,
-      done: pendingItems.length <= limit && !delta.hasMore,
-      next_after: delta.nextAfter,
-    }
-  }
-  if (scope !== "published") {
+  const limit = Math.max(
+    1,
+    Math.min(GENE_BLOT_BACKLOG_PAGE_CAP, Number.isFinite(requestedLimit) ? requestedLimit : 25),
+  )
+  const readLimit = Math.min(limit, GENE_BLOT_BACKLOG_MAX_STORAGE_READS)
+  if (scope !== "candidate" && scope !== "published") {
     throw geneBlotServiceError(
       400,
       "INVALID_BLOT_SCOPE",
       "Blot scope must be published or candidate.",
     )
   }
-  const after = normalizeSymbol(payload?.after || url.searchParams.get("after") || "")
-  const requestedVersion = String(
-    payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
-  ).trim()
-  const versionInfo = requestedVersion ? null : await currentMobileCardSnapshotVersion(env)
-  const version = requestedVersion || String(versionInfo?.current || "").trim()
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(payload?.symbols) ? payload.symbols : [],
     100,
   )
+  const after = String(payload?.after || url.searchParams.get("after") || "")
+    .trim()
+    .toUpperCase()
   if (requestedSymbols.length) {
-    if (!requestedVersion) {
-      // A voted winner can live in the advertised delta while the base card
-      // still describes the previous portrait. Resolve the same exact card as
-      // the public blot URL; an old base card must not hide pending work.
-      const records = []
-      for (const symbol of requestedSymbols) {
-        const published = await readPublishedGeneCardPortraitProjection(env, symbol)
-        if (published.kind === "unavailable") {
-          throw geneBlotServiceError(
-            503,
-            "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-            "The exact published card artifact is unavailable.",
-          )
-        }
-        if (published.kind === "available") records.push(published.payload)
-      }
-      const advertised = await advertisedGeneDeltaViewForDetail(env)
-      const symbols = records
-        .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
-        .filter(Boolean)
-      const readyBlots = await exactReadyGeneBlotsForPublishedCards(
-        env,
-        new Map(records.map((record) => [normalizeSymbol(record?.symbol || ""), record])),
-      )
-      const currentRecords = records.map((record) =>
-        projectCardBlot(
-          record,
-          readyBlots.get(normalizeSymbol(record?.symbol || "")) || record.blot,
-        ),
-      )
-      return {
-        ok: true,
-        scope,
-        automatic: false,
-        items: currentRecords
-          .map((record) => geneBlotBacklogItem(record, scope))
-          .filter(Boolean)
-          .slice(0, limit),
-        symbols,
-        snapshot_version: advertised?.base === version ? advertised.view : version,
-        scanned: symbols.length,
-        total_count: symbols.length,
-        done: true,
-        next_after: null,
-      }
-    }
-    const artifact = version
-      ? await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
-          allowWholeArtifact: false,
-        })
-      : null
-    if (!artifact) {
-      throw geneBlotServiceError(
-        503,
-        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-        "The exact published card artifact is unavailable.",
-      )
-    }
-    const records = requestedSymbols
-      .map((symbol) => artifact.bySymbol.get(symbol))
-      .filter(Boolean)
-      .map((card) => (card?.payload && typeof card.payload === "object" ? card.payload : card))
-    const symbols = records
-      .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
-      .filter(Boolean)
+    const requestedVersion = String(
+      payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
+    ).trim()
+    const page = await geneBlotBacklogForSymbols(env, requestedSymbols, { scope, limit: readLimit })
     return {
       ok: true,
       scope,
       automatic: false,
-      items: records
-        .map((record) => geneBlotBacklogItem(record, scope))
-        .filter(Boolean)
-        .slice(0, limit),
-      symbols,
-      snapshot_version: version,
-      scanned: symbols.length,
-      total_count: symbols.length,
-      done: true,
+      items: page.items,
+      symbols: requestedSymbols,
+      candidate_symbols: requestedSymbols,
+      scanned: page.scanned,
+      pending_item_count: page.items.length,
+      skipped: page.skipped,
+      render_queue_complete: page.complete,
+      through_event_id: null,
+      through_event_at: null,
+      snapshot_version: requestedVersion || GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
+      total_count: requestedSymbols.length,
+      done: page.complete,
       next_after: null,
     }
   }
-  const page = version
-    ? await pagePublishedCardCatalogArtifact(env, version, { after, limit })
-    : null
-  if (!page) {
-    throw geneBlotServiceError(
-      503,
-      "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-      "The exact published card artifact is unavailable.",
-    )
+  if (scope === "candidate") {
+    return automaticCandidateGeneBlotBacklog(env, { after, limit: readLimit })
   }
-  const records = page.records
-  const symbols = records
-    .map((record) => normalizeSymbol(record?.symbol || record?.canonical_symbol || ""))
-    .filter(Boolean)
-  return {
-    ok: true,
-    scope,
-    items: records.map((record) => geneBlotBacklogItem(record, scope)).filter(Boolean),
-    symbols,
-    snapshot_version: version,
-    scanned: symbols.length,
-    total_count: page.total_count,
-    done: page.done,
-    next_after: page.next_after,
-  }
+  return publishedGeneBlotBacklogPage(env, { after: normalizeSymbol(after) || "", limit })
 }
 
 async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {

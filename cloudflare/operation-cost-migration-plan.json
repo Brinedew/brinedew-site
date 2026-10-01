@@ -11,6 +11,19 @@
     "kv_lists": 0
   },
   "migrations": {
+    "iconoplasm/0112_gene_blot_backlog_watermark.sql": {
+      "online": true,
+      "guards": [
+        {
+          "sql": "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name = 'icono_gene_blot_backlog_watermark'",
+          "max": 0
+        }
+      ],
+      "adapter_id": "iconoplasm-migration-0112",
+      "arguments": { "max_schema_rows": 512 },
+      "migration_protocol": "one-migration-per-release-v1",
+      "prediction": { "rows_read": 3000, "rows_written": 16, "requests": 1 }
+    },
     "iconoplasm/0110_retire_finalization_publication_handoff.sql": {
       "online": true,
       "guards": [
