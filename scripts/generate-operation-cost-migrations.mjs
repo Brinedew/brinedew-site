@@ -154,6 +154,16 @@ function output() {
   }
   const migrations = [
     [
+      "GENE_BLOT_BACKLOG_WATERMARK",
+      "0112_gene_blot_backlog_watermark.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0112_gene_blot_backlog_watermark.sql",
+        0,
+        1,
+      ),
+    ],
+    [
       "FINALIZATION_HANDOFF_RETIREMENT",
       "0110_retire_finalization_publication_handoff.sql",
       reviewedMigrationStatements(
