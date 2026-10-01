@@ -28001,6 +28001,43 @@ export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordin
     stable: stableCardCatalogMaterialValue,
     project: (payload) => stableCardCatalogMaterialValue(projectGeneRecord(payload, null)),
     locator: (card) => publishedPortraitLocatorFromCard(card, ""),
+    // B-888: project the winner a per-gene publication just wrote into D1
+    // `icono_publish_state`, approve that asset, and record one `publish`
+    // event (a canonical-affecting action, so the next base release rewrites
+    // this gene from the same decision). A row with an admin override is
+    // left alone; an unchanged winner writes nothing. Measured 2026-09-30: 50
+    // of the 60 genes in the delta chain disagreed with D1 because D1 only ever
+    // learned the winner through a second election run on the next touch.
+    async publishSelection(symbol, assetSha256) {
+      const symbolNorm = normalizeSymbol(symbol)
+      if (!symbolNorm) return
+      const asset = normalizeSha256(assetSha256 || "") || null
+      const actor = "vote_authority"
+      await env.ICONOPLASM_DB.batch([
+        env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
+           SELECT ?, current_asset_sha256, ?, 'publish', ?, 'Vote authority published this winner (B-888 projection)'
+           FROM icono_publish_state
+           WHERE gene_symbol = ?
+             AND COALESCE(admin_override, 0) = 0
+             AND current_asset_sha256 IS NOT ?`,
+        ).bind(symbolNorm, asset, actor, symbolNorm, asset),
+        env.ICONOPLASM_DB.prepare(
+          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
+           VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
+           ON CONFLICT(gene_symbol) DO UPDATE SET
+             current_asset_sha256 = excluded.current_asset_sha256,
+             updated_by = excluded.updated_by,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE COALESCE(icono_publish_state.admin_override, 0) = 0
+             AND icono_publish_state.current_asset_sha256 IS NOT excluded.current_asset_sha256`,
+        ).bind(symbolNorm, asset, actor),
+        env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_portrait_assets SET status = 'approved'
+           WHERE gene_symbol = ? AND asset_sha256 = ? AND status = 'draft'`,
+        ).bind(symbolNorm, asset || ""),
+      ])
+    },
     async afterCommit({ version, after, through, symbols, offset }) {
       if (offset === 0)
         await syncPublishedGeneRouteMembershipAfterPublication(env, {
@@ -34169,6 +34206,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(args.request, await publishedCardDeliveryHandlers.current(args)),
   public_card_object: async (args) =>
     asHead(args.request, await publishedCardDeliveryHandlers.object(args)),
+  public_stable_gene_object: async (args) =>
+    asHead(args.request, await publishedCardDeliveryHandlers.stableGene(args)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),

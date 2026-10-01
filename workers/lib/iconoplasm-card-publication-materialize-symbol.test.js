@@ -157,3 +157,39 @@ test("a failed stable gene object write fails the per-gene materialization (B-89
     /injected stable object failure/,
   )
 })
+
+// B-888: D1 `icono_publish_state` is a projection of the winner this
+// publication just wrote, never a second election. Failure modes written
+// before the code:
+// 1. a per-gene publication hands the selected winner to the source after the
+//    objects are written;
+// 2. a withdrawal hands a null selection;
+// 3. an invalid card hands nothing (no objects, no projection);
+// 4. a source without the hook (tests, legacy adapters) still publishes.
+test("materializeSymbol projects the selected winner into the source after writing (B-888)", async () => {
+  const objects = fakeObjects()
+  const projected = []
+  const source = fakeSource()
+  source.publishSelection = async (symbol, assetSha256) => {
+    projected.push({ symbol, assetSha256, objectsWritten: objects.written.length })
+  }
+  const publisher = publisherFor(source, objects)
+  await publisher.materializeSymbol("tp53", { portraitAssetSha256: "D".repeat(64) })
+  assert.deepEqual(projected, [{ symbol: "TP53", assetSha256: "d".repeat(64), objectsWritten: 3 }])
+
+  await publisher.materializeSymbol("tp53", { withdraw: true })
+  assert.deepEqual(projected[1], { symbol: "TP53", assetSha256: null, objectsWritten: 6 })
+})
+
+test("an invalid card projects nothing (B-888)", async () => {
+  const projected = []
+  const source = fakeSource({ complete: false })
+  source.publishSelection = async (...args) => projected.push(args)
+  await assert.rejects(
+    publisherFor(source, fakeObjects()).materializeSymbol("TP53", {
+      portraitAssetSha256: "d".repeat(64),
+    }),
+    /Invalid canonical card/,
+  )
+  assert.equal(projected.length, 0)
+})

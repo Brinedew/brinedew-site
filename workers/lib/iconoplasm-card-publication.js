@@ -839,14 +839,21 @@ export function createCardPublication({
     if (!card) return { symbol: cleanSymbol, withdrawn: true, receipts: null }
     if (!source.complete(card)) throw new Error(`Invalid canonical card: ${cleanSymbol}`)
     const stable = source.stable(card)
+    const selected = cleanAssetSha ? cleanAssetSha.toLowerCase() : null
     const [full, gene, portrait] = await writeCardObjects(cleanSymbol, stable, {
       per_symbol: true,
-      selected_asset_sha256: cleanAssetSha ? cleanAssetSha.toLowerCase() : null,
+      selected_asset_sha256: selected,
     })
+    // B-888: the winner just published is the one decision. The source records
+    // it in D1 (publish state + event) so the catalog, the batch materializer
+    // and the stable object never hold a second election for this gene.
+    if (typeof source.publishSelection === "function") {
+      await source.publishSelection(cleanSymbol, selected)
+    }
     return {
       symbol: cleanSymbol,
       withdrawn: false,
-      selected_asset_sha256: cleanAssetSha ? cleanAssetSha.toLowerCase() : null,
+      selected_asset_sha256: selected,
       receipts: { card: full, gene, portrait },
     }
   }
