@@ -21,6 +21,34 @@ import {
 
 const originalFetch = globalThis.fetch
 const originalCaches = globalThis.caches
+
+// B-898 Stage 1, step B: the gene page, site detail, public media and the
+// image resolver read the one stable gene object genes/v3/<SYMBOL>.json from
+// authenticated Bunny Storage through global fetch. Every test in this file
+// replaces globalThis.fetch with an HTML-shell stub that asserts on the
+// pathname, so storage reads are routed here first and never reach the stub.
+// buildPublishedCatalogEnv fills stableGeneObjects (storage path -> JSON) and
+// sets the storage settings on the env; a gene with no object answers 404.
+const STABLE_STORAGE_HOST = "storage.test"
+const STABLE_STORAGE_ZONE = "seo-test-zone"
+const STABLE_PUBLISHED_AT = "2026-08-23T00:00:00.000Z"
+const stableGeneObjects = new Map()
+let shellFetch = originalFetch
+async function routedFetch(input, init) {
+  const url = new URL(input instanceof Request ? input.url : String(input))
+  if (url.hostname !== STABLE_STORAGE_HOST) return shellFetch(input, init)
+  const value = stableGeneObjects.get(url.pathname)
+  return value
+    ? new Response(value, { status: 200, headers: { "content-type": "application/json" } })
+    : new Response(null, { status: 404 })
+}
+Object.defineProperty(globalThis, "fetch", {
+  configurable: true,
+  get: () => routedFetch,
+  set: (fn) => {
+    shellFetch = fn
+  },
+})
 const rootRobotsSource = new URL("../content/robots.txt", import.meta.url)
 const appsIndexSource = new URL("../content/apps/index.md", import.meta.url)
 const geneguessrStaticAppSource = new URL("../quartz/static/geneguessr/app.js", import.meta.url)
@@ -236,6 +264,20 @@ async function buildPublishedCatalogEnv(
         },
       }
     })
+  stableGeneObjects.clear()
+  for (const card of cards) {
+    stableGeneObjects.set(
+      `/${STABLE_STORAGE_ZONE}/genes/v3/${card.symbol}.json`,
+      JSON.stringify({
+        ...card.payload,
+        canonical_symbol: card.symbol,
+        portrait_candidates: [],
+        candidate_count: 0,
+        stable_object_version: 3,
+        published_at: STABLE_PUBLISHED_AT,
+      }),
+    )
+  }
   const store = new Map([
     [
       "iconoplasm:catalog-manifest",
@@ -302,6 +344,10 @@ async function buildPublishedCatalogEnv(
     ],
   ])
   const env = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STABLE_STORAGE_ZONE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: STABLE_STORAGE_HOST,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
     KV: {
       async get(key) {
         return store.get(key) || null
@@ -802,7 +848,7 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   assert.ok(bootstrapMatch)
   const bootstrap = JSON.parse(bootstrapMatch[1])
   assert.equal(bootstrap.source, "site_gene_detail")
-  assert.match(bootstrap.payload.card_snapshot_version, /^card-seofixture/)
+  assert.equal(bootstrap.payload.card_snapshot_version, STABLE_PUBLISHED_AT)
   assert.equal(bootstrap.payload.portrait.asset_sha256, publishedCardPortraitSha)
 })
 

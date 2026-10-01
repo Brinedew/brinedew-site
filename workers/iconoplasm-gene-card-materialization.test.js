@@ -242,7 +242,9 @@ test("the blot backlog answers from D1 and stable gene objects, never the delete
   assert.match(block, /export async function listIconoplasmGeneBlotBacklog/)
   assert.match(block, /Array\.isArray\(payload\?\.symbols\)/)
   assert.match(block, /automatic: false/)
-  assert.match(block, /readStableGeneObjectForBlot\(env, symbol\)/)
+  // readStableGeneObject (renamed from readStableGeneObjectForBlot once every
+  // gene reader moved onto it, B-898 step B) is the one stable-object reader.
+  assert.match(block, /readStableGeneObject\(env, symbol\)/)
   assert.match(block, /icono_gene_blot_backlog_watermark/)
   assert.match(block, /icono_published_gene_routes r/)
   for (const retired of [
