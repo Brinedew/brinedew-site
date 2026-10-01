@@ -1307,6 +1307,15 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_blots_upload",
     apiHandler: "admin_blots.upload",
   }),
+  iconoplasmApiContract({
+    // B-898: apply bunny/the-only-iconoplasm-pull-zone-policy.json (CORS extensions).
+    id: "admin_publication_pull_zone",
+    match: exact("/api/iconoplasm/admin/publication/reconcile-pull-zone"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_publication_pull_zone",
+    apiHandler: "admin_publication.pull_zone_reconcile",
+  }),
   adminApiContract(
     "admin_gallery_publish_status",
     "/gallery/publish-status",
