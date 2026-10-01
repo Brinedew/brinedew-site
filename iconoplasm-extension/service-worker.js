@@ -209,8 +209,11 @@ async function readStableGene(symbol) {
     const response = await fetchWithTimeout(
       `${STABLE_GENE_CDN_PREFIX}${symbol}.json`,
       // No cookies and no client-version header: every reader must share one
-      // CDN cache entry per gene, or the free CDN stops being free.
-      { credentials: "omit" },
+      // CDN cache entry per gene, or the free CDN stops being free. The pull
+      // zone stamps a 30-day max-age on the object while the Worker purges it
+      // on every rewrite, so revalidate instead of trusting the HTTP cache: a
+      // 304 when nothing changed, the new bytes otherwise.
+      { credentials: "omit", cache: "no-cache" },
       STABLE_GENE_FETCH_TIMEOUT_MS,
     )
     if (response.status === 404) return { status: "missing", gene: null }

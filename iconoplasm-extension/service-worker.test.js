@@ -617,6 +617,7 @@ test("the hover card reads one stable object per gene from the CDN and caches it
     assert.equal(wikipedia.gene.portrait.asset_sha256, "e".repeat(64))
     assert.equal(calls.length, 1)
     assert.equal(calls[0].init.credentials, "omit")
+    assert.equal(calls[0].init.cache, "no-cache", "a 30-day CDN max-age must not pin a stale gene")
     assert.equal(
       new Headers(calls[0].init.headers || {}).has("X-Iconoplasm-Extension-Version"),
       false,
