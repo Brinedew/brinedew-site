@@ -150,7 +150,6 @@ globalThis.IconoplasmPortraitDelivery =
 await import("./generated/catalog-contract.js")
 await import("./publication-alias-overlay.js")
 await import("./content-settings.js")
-await import("./metadata-delivery.js")
 await import("./immutable-response-cache.js")
 await import("./content-portrait-cache.js")
 await import("./service-worker.js")
@@ -557,59 +556,281 @@ test("another website reuses the exact portrait without a source probe or networ
   }
 })
 
-test("exact public card responses cross websites without refetching metadata or mixing snapshots", async () => {
+// B-898 stage 1: the hover card reads one stable object per gene from the free
+// CDN. Failure modes pinned here before the service worker was rewritten:
+// 1. Stable object served -> one CDN fetch, credentials omitted, record mapped.
+// 2. Cache hit within the 5-minute TTL -> no second fetch, across tabs.
+// 3. CDN 404 -> "missing" (no card), cached for the TTL: no retry storm.
+// 4. Malformed object (wrong version, other symbol, no portrait key) -> missing.
+// 5. Transport error -> "error", remembered only briefly so the next hover retries.
+// 6. Invalid symbol -> refused without any fetch.
+// 7. No request ever reaches the metered card-snapshots/card-content routes.
+// 8. The catalog manifest is read from the CDN first and falls back to the
+//    origin, without a client-version header that would fragment the cache.
+// 9. Install/startup cleanup drops the retired epoch keys and the old
+//    32 MiB card-response IndexedDB.
+
+const STABLE_CDN = "https://iconoplasmportraits.b-cdn.net/genes/v3/"
+
+function stableObject(symbol) {
+  return {
+    symbol,
+    canonical_symbol: symbol,
+    full_name: `${symbol} full name`,
+    color: "#35353c",
+    essence: { name: `${symbol} full name` },
+    stable_object_version: 3,
+    candidate_count: 1,
+    portrait: {
+      asset_sha256: "e".repeat(64),
+      status: "published",
+      medium_url: `https://iconoplasm.brinedew.bio/portraits/v1/ee/${"e".repeat(64)}/medium.webp`,
+      width: 768,
+      height: 1024,
+    },
+    portrait_candidates: [],
+    published_at: "2026-10-01T00:00:00.000Z",
+  }
+}
+
+function sendStableGene(symbol, tabId = 1301) {
+  return new Promise((resolve) =>
+    messageListener({ type: "ICONOPLASM_STABLE_GENE", symbol }, { tab: { id: tabId } }, resolve),
+  )
+}
+
+test("the hover card reads one stable object per gene from the CDN and caches it across tabs", async () => {
   const originalFetch = globalThis.fetch
-  const version = `ccv2-${"d".repeat(64)}`
-  const url = `https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/${version}/genes/BRCA1`
+  hooks.stableGeneCache.clear()
   const calls = []
-  globalThis.fetch = async (input) => {
-    calls.push(String(input))
-    if (String(input).includes("/published-cards/")) throw new Error("CDN unavailable")
-    return Response.json({ snapshot_version: version, gene: { symbol: "BRCA1" }, missing: [] })
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    calls.push({ url, init })
+    if (url === `${STABLE_CDN}TP53.json`) return Response.json(stableObject("TP53"))
+    throw new Error(`Unexpected URL: ${url}`)
   }
   try {
-    const wikipedia = await hooks.fetchIconoplasmApi({ url }, { tab: { id: 1201 } })
+    const wikipedia = await sendStableGene("tp53", 1301)
     assert.equal(wikipedia.ok, true)
-    const previous = calls.length
-    const paper = await hooks.fetchIconoplasmApi({ url }, { tab: { id: 1202 } })
-    assert.equal(paper.text, wikipedia.text)
-    assert.equal(calls.length, previous)
-    await hooks.fetchIconoplasmApi(
-      { url: url.replace(version, `ccv2-${"e".repeat(64)}`) },
-      { tab: { id: 1202 } },
+    assert.equal(wikipedia.status, "found")
+    assert.equal(wikipedia.gene.full_name, "TP53 full name")
+    assert.equal(wikipedia.gene.portrait.asset_sha256, "e".repeat(64))
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].init.credentials, "omit")
+    assert.equal(calls[0].init.cache, "no-cache", "a 30-day CDN max-age must not pin a stale gene")
+    assert.equal(
+      new Headers(calls[0].init.headers || {}).has("X-Iconoplasm-Extension-Version"),
+      false,
+      "a client-version header would fragment the shared CDN cache",
     )
-    assert.ok(calls.length > previous, "a new snapshot cannot use another epoch's response")
+    const paper = await sendStableGene("TP53", 1302)
+    assert.equal(paper.status, "found")
+    assert.equal(calls.length, 1, "a second tab reuses the cached object within the TTL")
+    const entry = hooks.stableGeneCache.get("TP53")
+    assert.ok(entry.expiresAt - Date.now() > 290_000 && entry.expiresAt - Date.now() <= 300_000)
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("a CDN 404 is a missing card for the TTL, never a retry storm or a metered fallback", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  let fetches = 0
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url.includes("/api/public/v1/card-snapshots/") || url.includes("/card-content/")) {
+      throw new Error(`metered Worker route reached: ${url}`)
+    }
+    fetches += 1
+    return new Response("<html>Not found</html>", {
+      status: 404,
+      headers: { "Content-Type": "text/html" },
+    })
+  }
+  try {
+    for (let hover = 0; hover < 20; hover += 1) {
+      const response = await sendStableGene("NOTAGENE")
+      assert.equal(response.ok, true)
+      assert.equal(response.status, "missing")
+      assert.equal(response.gene, null)
+    }
+    assert.equal(fetches, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("a malformed stable object is a missing card", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  const bodies = {
+    OLDV: { ...stableObject("OLDV"), stable_object_version: 2 },
+    OTHER: stableObject("SOMEONEELSE"),
+    NOPORTRAIT: (() => {
+      const value = stableObject("NOPORTRAIT")
+      delete value.portrait
+      return value
+    })(),
+    NOPOOL: { ...stableObject("NOPOOL"), portrait_candidates: null },
+    NOTJSON: "not json at all",
+  }
+  globalThis.fetch = async (input) => {
+    const symbol = String(input)
+      .slice(STABLE_CDN.length)
+      .replace(/\.json$/, "")
+    const body = bodies[symbol]
+    return typeof body === "string" ? new Response(body, { status: 200 }) : Response.json(body)
+  }
+  try {
+    for (const symbol of Object.keys(bodies)) {
+      const response = await sendStableGene(symbol)
+      assert.equal(response.status, "missing", symbol)
+      assert.equal(response.gene, null, symbol)
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("a transport error is reported, remembered briefly, and retried on the next hover", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  let attempts = 0
+  globalThis.fetch = async () => {
+    attempts += 1
+    if (attempts === 1) throw new TypeError("Failed to fetch")
+    if (attempts === 2) return new Response("", { status: 503 })
+    return Response.json(stableObject("TP53"))
+  }
+  try {
+    const offline = await sendStableGene("TP53")
+    assert.equal(offline.status, "error")
+    const errorEntry = hooks.stableGeneCache.get("TP53")
+    assert.equal(errorEntry.status, "error")
+    assert.ok(errorEntry.expiresAt - Date.now() <= 30_000, "errors expire within 30 s")
+    const again = await sendStableGene("TP53")
+    assert.equal(again.status, "error", "a fresh error entry is reused within its short TTL")
+    assert.equal(attempts, 1)
+    hooks.stableGeneCache.clear()
+    assert.equal((await sendStableGene("TP53")).status, "error")
+    assert.equal(attempts, 2)
+    hooks.stableGeneCache.clear()
+    assert.equal((await sendStableGene("TP53")).status, "found")
+    assert.equal(attempts, 3)
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("an invalid symbol is refused without any fetch", async () => {
+  const originalFetch = globalThis.fetch
+  let fetches = 0
+  globalThis.fetch = async () => {
+    fetches += 1
+    throw new Error("must not fetch")
+  }
+  try {
+    for (const symbol of ["", "../manifest", "TP53/x", "a".repeat(80), null]) {
+      const response = await sendStableGene(symbol)
+      assert.equal(response.ok, false, String(symbol))
+    }
+    assert.equal(fetches, 0)
   } finally {
     globalThis.fetch = originalFetch
   }
 })
 
-test("upgrade migrates exact legacy card projections and removes them only after durable writes", async (t) => {
-  const version = `ccv2-${"9".repeat(64)}`
-  const key = "iconoplasm_published_gene_detail_cache_v1"
-  const record = { symbol: "BRCA1", name: "saved identity" }
-  storageState.set(key, { schema_version: 1, revision: version, entries: [["BRCA1", record]] })
-  let committed = false
-  const writes = t.mock.method(hooks.cardResponseCache, "put", async () => committed)
+test("the catalog manifest is read from the CDN first and falls back to the origin", async () => {
+  const originalFetch = globalThis.fetch
+  storageState.clear()
+  const calls = []
+  const manifest = {
+    build_version: "catalog-cdn-first",
+    catalog_hash: "catalog-cdn-first",
+    artifact_url: "https://example.test/catalog.json",
+    artifact_schema_version: 5,
+    artifact_contract_revision: 1,
+    min_extension_version: "1.0.0",
+    gene_count: 7,
+    portrait_delivery: portraitDeliveryPolicy,
+    scanner_artifact: scannerManifest("scanner-cdn-first"),
+    publication_aliases: requestedOverlay,
+  }
+  let cdnHealthy = false
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    calls.push({ url, init })
+    if (url === "https://iconoplasmportraits.b-cdn.net/api/public/v1/catalog/manifest") {
+      if (!cdnHealthy) return new Response("edge error", { status: 502 })
+      return Response.json(manifest)
+    }
+    if (url === "https://iconoplasm.brinedew.bio/api/public/v1/catalog/manifest") {
+      return Response.json(manifest)
+    }
+    throw new Error(`Unexpected URL: ${url}`)
+  }
   try {
-    await hooks.migrateLegacyCardCaches()
-    assert.ok(storageState.has(key), "a failed disk commit cannot discard the old cache")
-    committed = true
-    await hooks.migrateLegacyCardCaches()
-    assert.equal(storageState.has(key), false)
-    const [url, bytes, contentType] = writes.mock.calls.at(-1).arguments
-    assert.equal(
-      url,
-      `https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/${version}/genes/BRCA1`,
+    storageState.set("iconoplasm_genes", { RELA: { n: "RELA" } })
+    storageState.set("iconoplasm_gene_count", 1)
+    rememberScannerState("scanner-cdn-first")
+    storageState.set("iconoplasm_alias_overlay_version", "v1-test")
+    storageState.set("iconoplasm_alias_overlay_applied", {})
+    const fallback = await hooks.fetchGeneData()
+    assert.equal(fallback.gene_count, 7)
+    assert.deepEqual(
+      calls.map((call) => new URL(call.url).host),
+      ["iconoplasmportraits.b-cdn.net", "iconoplasm.brinedew.bio"],
     )
-    assert.equal(contentType, "application/json")
-    assert.deepEqual(JSON.parse(new TextDecoder().decode(bytes)), {
-      snapshot_version: version,
-      canonical_key: "symbol",
-      gene: record,
-      missing: [],
-    })
+    for (const call of calls) {
+      assert.equal(call.init.credentials, "omit")
+      assert.equal(
+        new Headers(call.init.headers || {}).has("X-Iconoplasm-Extension-Version"),
+        false,
+      )
+    }
+    calls.length = 0
+    cdnHealthy = true
+    const healthy = await hooks.fetchGeneData()
+    assert.equal(healthy.gene_count, 7)
+    assert.deepEqual(
+      calls.map((call) => new URL(call.url).host),
+      ["iconoplasmportraits.b-cdn.net"],
+    )
   } finally {
+    globalThis.fetch = originalFetch
+    storageState.clear()
+  }
+})
+
+test("install cleanup forgets the retired epoch keys and the old card-response database", async () => {
+  storageState.set("iconoplasm_published_gene_detail_cache_v1", { schema_version: 1 })
+  storageState.set("iconoplasm_published_portrait_locator_cache_v1", { schema_version: 1 })
+  storageState.set("iconoplasm_card_snapshot_version", "ccv2-retired")
+  storageState.set("iconoplasm_last_card_head", "ccv2-retired")
+  storageState.set("iconoplasm_genes", { TP53: { n: "keep me" } })
+  const deleted = []
+  const originalIndexedDb = globalThis.indexedDB
+  globalThis.indexedDB = {
+    deleteDatabase(name) {
+      deleted.push(name)
+      return {}
+    },
+  }
+  try {
+    await hooks.forgetRetiredCardCaches()
+    assert.equal(storageState.has("iconoplasm_published_gene_detail_cache_v1"), false)
+    assert.equal(storageState.has("iconoplasm_published_portrait_locator_cache_v1"), false)
+    assert.equal(storageState.has("iconoplasm_card_snapshot_version"), false)
+    assert.equal(storageState.has("iconoplasm_last_card_head"), false)
+    assert.deepEqual(storageState.get("iconoplasm_genes"), { TP53: { n: "keep me" } })
+    assert.deepEqual(deleted, ["iconoplasm-immutable:iconoplasm-card-responses-v1"])
+  } finally {
+    globalThis.indexedDB = originalIndexedDb
     storageState.clear()
   }
 })
@@ -736,7 +957,6 @@ test("the extension fetches the compact scanner artifact and never stores portra
     })
     assert.equal(storageState.get("iconoplasm_scanner_hash"), "schema-5-test")
     assert.equal(storageState.get("iconoplasm_scanner_index_storage_version"), 1)
-    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-schema-5-test")
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()
@@ -959,7 +1179,6 @@ test("alias-only manifest updates do not refetch the scanner artifact", async ()
     assert.equal(manifestFetches, 1)
     assert.equal(artifactFetches, 0)
     assert.equal(storageState.get("iconoplasm_alias_overlay_version"), "v1-test")
-    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-alias-only")
     assert.deepEqual(storedGenes.RELA.a, ["p65"])
     assert.deepEqual(storedGenes.IL1A.a, ["IL-1", "IL-1α"])
   } finally {
@@ -1039,7 +1258,6 @@ test("an overlay contract retry does not turn into a scanner artifact download",
   storageState.set("iconoplasm_schema_version", 5)
   storageState.set("iconoplasm_contract_revision", 1)
   storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
-  storageState.set("iconoplasm_card_snapshot_version", "ccv1-stale")
   storageState.set("iconoplasm_alias_overlay_version", "v1-test")
   storageState.set("iconoplasm_alias_overlay_applied", { RELA: ["p65"] })
   storageState.set("iconoplasm_contract_error", { code: "invalid_manifest" })
@@ -1075,7 +1293,6 @@ test("an overlay contract retry does not turn into a scanner artifact download",
     const result = await hooks.ensureFreshGeneData()
     assert.equal(artifactFetches, 0)
     assert.deepEqual(result.genes.RELA.a, ["p65"])
-    assert.equal(result.cardSnapshotVersion, "ccv1-stale")
     assert.equal(storageState.has("iconoplasm_contract_error"), false)
   } finally {
     globalThis.fetch = originalFetch
@@ -1119,107 +1336,6 @@ test("a fresh valid scanner returns immediately without an unnecessary manifest 
   }
 })
 
-test("saved cards do not await head revalidation; later articles adopt it without changing open epochs", async (t) => {
-  const originalFetch = globalThis.fetch
-  storageState.clear()
-  storageState.set("iconoplasm_genes", { TP53: { n: "tumor protein p53" } })
-  storageState.set("iconoplasm_hash", "catalog-current")
-  rememberScannerState("scanner-current")
-  storageState.set("iconoplasm_gene_count", 1)
-  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
-  storageState.set("iconoplasm_schema_version", 5)
-  storageState.set("iconoplasm_contract_revision", 1)
-  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
-  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
-  storageState.set("iconoplasm_alias_overlay_applied", {})
-  storageState.set("iconoplasm_card_snapshot_version", "ccv1-cached")
-  const send = (type, tab) =>
-    new Promise((resolve) => messageListener({ type }, { tab: { id: tab } }, resolve))
-  const storageReads = []
-  const getStored = chrome.storage.local.get
-  t.mock.method(chrome.storage.local, "get", (keys) => {
-    storageReads.push(keys)
-    return getStored(keys)
-  })
-  const calls = []
-  let current = "ccv2-" + "a".repeat(64)
-  let offline = false
-  let releaseFirstHead
-  globalThis.fetch = async (input) => {
-    const url = String(input)
-    calls.push(url)
-    assert.ok(url.endsWith("/api/public/v1/card-current"), "fresh scanner must not be redownloaded")
-    if (offline) throw new Error("offline")
-    if (!releaseFirstHead)
-      return new Promise((resolve) => {
-        releaseFirstHead = () => resolve(Response.json({ schema_version: 2, current }))
-      })
-    return Response.json({ schema_version: 2, current })
-  }
-  try {
-    const cached = await new Promise((resolve) =>
-      messageListener({ type: "GET_GENE_DATA", cacheOnly: true }, { tab: { id: 701 } }, resolve),
-    )
-    assert.equal(cached.cardSnapshotVersion, "ccv1-cached")
-    assert.equal(cached.cardFreshness, undefined)
-    assert.equal(calls.length, 0, "cached recognition must make zero network requests")
-    storageReads.length = 0
-    const first = await Promise.race([
-      send("GET_CARD_FRESHNESS", 701),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("saved card waited for network")), 50),
-      ),
-    ])
-    assert.equal(first.genes, undefined, "card selection must not clone the scanner again")
-    assert.deepEqual(
-      storageReads,
-      [["iconoplasm_last_card_head", "iconoplasm_card_snapshot_version"]],
-      "selecting a saved card reads only its tiny epoch, never the whole scanner or cache",
-    )
-    assert.equal(first.cardSnapshotVersion, "ccv1-cached")
-    const firstHead = current
-    releaseFirstHead()
-    await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(storageState.get("iconoplasm_last_card_head"), firstHead)
-    current = "ccv2-" + "b".repeat(64)
-    const second = await send("GET_GENE_DATA", 702)
-    assert.equal(second.cardSnapshotVersion, firstHead)
-    await new Promise((resolve) => setImmediate(resolve))
-    const beforeStatus = calls.length
-    assert.equal((await send("GET_STATUS", 701)).cardFreshness.version, first.cardSnapshotVersion)
-    assert.equal(calls.length, beforeStatus, "popup status must remain local")
-    assert.equal(
-      storageState.get("iconoplasm_card_snapshot_version"),
-      "ccv1-cached",
-      "new tabs must not broadcast epoch changes",
-    )
-    const reloaded = await send("GET_GENE_DATA", 701)
-    assert.equal(reloaded.cardSnapshotVersion, current)
-    offline = true
-    const failed = await send("GET_GENE_DATA", 703)
-    assert.equal(failed.cardSnapshotVersion, current)
-    await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(failed.cardFreshness.verified, false)
-    assert.equal((await send("GET_STATUS", 703)).cardFreshness.verified, false)
-    assert.equal(calls.length, 5, "three successful checks plus one bounded two-source failure")
-    const pendingHeads = []
-    globalThis.fetch = () => new Promise((resolve) => pendingHeads.push(resolve))
-    const olderArticle = await send("GET_CARD_FRESHNESS", 704)
-    const newerArticle = await send("GET_CARD_FRESHNESS", 705)
-    const newerHead = "ccv2-" + "d".repeat(64)
-    pendingHeads[1](Response.json({ schema_version: 2, current: newerHead }))
-    await new Promise((resolve) => setImmediate(resolve))
-    pendingHeads[0](Response.json({ schema_version: 2, current: "ccv2-" + "c".repeat(64) }))
-    await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(storageState.get("iconoplasm_last_card_head"), newerHead)
-    assert.equal(olderArticle.cardSnapshotVersion, current)
-    assert.equal(newerArticle.cardSnapshotVersion, current, "late checks do not replace open cards")
-  } finally {
-    globalThis.fetch = originalFetch
-    storageState.clear()
-  }
-})
-
 test("pre-load cache-only request never refreshes a stale index or downloads a missing one", async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = () => {
@@ -1241,65 +1357,6 @@ test("pre-load cache-only request never refreshes a stale index or downloads a m
     assert.ok((await send()).genes.TP53)
     storageState.set("iconoplasm_contract_error", { code: "invalid" })
     assert.equal(await send(), null)
-  } finally {
-    globalThis.fetch = originalFetch
-    storageState.clear()
-  }
-})
-
-test("a retired card snapshot cache-busts only the manifest and adopts the new revision", async () => {
-  const originalFetch = globalThis.fetch
-  storageState.clear()
-  storageState.set("iconoplasm_genes", { RIPOR1: { n: "RHO family interacting regulator 1" } })
-  storageState.set("iconoplasm_hash", "catalog-current")
-  rememberScannerState("scanner-current")
-  storageState.set("iconoplasm_gene_count", 1)
-  storageState.set("iconoplasm_last_fetch", new Date().toISOString())
-  storageState.set("iconoplasm_schema_version", 5)
-  storageState.set("iconoplasm_contract_revision", 1)
-  storageState.set("iconoplasm_portrait_delivery", portraitDeliveryPolicy)
-  storageState.set("iconoplasm_card_snapshot_version", "ccv1-retired")
-  storageState.set("iconoplasm_last_card_head", "ccv1-retired")
-  storageState.set("iconoplasm_alias_overlay_version", "v1-test")
-  storageState.set("iconoplasm_alias_overlay_applied", {})
-
-  let manifestUrl = ""
-  let artifactFetches = 0
-  globalThis.fetch = async (input) => {
-    const url = String(input || "")
-    if (url.includes("/api/public/v1/catalog/manifest")) {
-      manifestUrl = url
-      return Response.json({
-        build_version: "catalog-current",
-        card_snapshot_version: "ccv1-current",
-        catalog_hash: "catalog-current",
-        artifact_url: "https://example.test/catalog.json",
-        portrait_delivery: portraitDeliveryPolicy,
-        scanner_artifact: scannerManifest("scanner-current"),
-        artifact_schema_version: 5,
-        artifact_contract_revision: 1,
-        min_extension_version: "1.0.0",
-        gene_count: 1,
-        publication_aliases: requestedOverlay,
-      })
-    }
-    artifactFetches += 1
-    throw new Error(`Retired-card recovery must not fetch the scanner artifact: ${url}`)
-  }
-
-  try {
-    const response = await new Promise((resolve) =>
-      messageListener(
-        { type: "REFRESH_CARD_SNAPSHOT", retiredRevision: "ccv1-retired" },
-        { tab: { id: 706 } },
-        resolve,
-      ),
-    )
-    assert.equal(new URL(manifestUrl).searchParams.get("retired_snapshot"), "ccv1-retired")
-    assert.equal(storageState.get("iconoplasm_card_snapshot_version"), "ccv1-current")
-    assert.equal(storageState.get("iconoplasm_last_card_head"), "ccv1-current")
-    assert.equal(response.cardSnapshotVersion, "ccv1-current")
-    assert.equal(artifactFetches, 0)
   } finally {
     globalThis.fetch = originalFetch
     storageState.clear()

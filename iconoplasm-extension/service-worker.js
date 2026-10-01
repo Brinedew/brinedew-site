@@ -1,16 +1,16 @@
 // Iconoplasm service worker
 // Symbol-first contract: gene symbols are canonical keys.
-// Chesterton's fence: generated gene facts still come from the immutable catalog
+// Recognition (the portrait-free scanner index) comes from the published catalog
 // artifact. The small administrator-owned publication alias overlay is delivered
 // by the Website manifest so an alias edit does not force a 19k-gene workstation
 // sync or a multi-megabyte catalog refetch.
+// Hover detail (B-898 stage 1) is one stable, mutable object per gene on the free
+// CDN: genes/v3/<SYMBOL>.json. The Worker purges that exact URL on every rewrite,
+// so reading it costs zero metered Worker requests. A CDN 404 means "no card".
 
 if (typeof importScripts === "function") {
   if (!globalThis.IconoplasmImmutableResponseCache) importScripts("immutable-response-cache.js")
   if (!globalThis.IconoplasmContentPortraitCache) importScripts("content-portrait-cache.js")
-  if (!globalThis.IconoplasmMetadataDelivery) {
-    importScripts("metadata-delivery.js")
-  }
   if (!globalThis.IconoplasmCatalogContract) {
     importScripts("generated/catalog-contract.js")
   }
@@ -48,20 +48,23 @@ const portraitByteCache = globalThis.IconoplasmImmutableResponseCache.createImmu
   maxBytes: 64 * 1024 * 1024,
   maxEntryBytes: 512 * 1024,
 })
-const cardResponseCache = globalThis.IconoplasmImmutableResponseCache.createImmutableResponseCache({
-  name: "iconoplasm-card-responses-v1",
-  maxEntries: 32768,
-  maxBytes: 32 * 1024 * 1024,
-  maxEntryBytes: 64 * 1024,
-})
+const CDN = "https://iconoplasmportraits.b-cdn.net"
+const STABLE_GENE_CDN_PREFIX = "https://iconoplasmportraits.b-cdn.net/genes/v3/"
+const STABLE_GENE_SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
+const STABLE_GENE_TTL_MS = 5 * 60 * 1000
+const STABLE_GENE_ERROR_TTL_MS = 30 * 1000
+const STABLE_GENE_MAX_ENTRIES = 512
+const STABLE_GENE_FETCH_TIMEOUT_MS = 6 * 1000
+const STABLE_GENE_MAX_BYTES = 512 * 1024
+// symbol -> { status: "found" | "missing" | "error", gene, expiresAt }
+const stableGeneCache = new Map()
+const stableGenePending = new Map()
 const portraitRequests = new Map()
-const metadataDelivery = globalThis.IconoplasmMetadataDelivery.createMetadataDelivery({
-  fetchImpl: (...args) => fetch(...args),
-})
 const API_PUBLIC = `${HOST}/api/public/v1`
-const API_CATALOG_MANIFEST = `${API_PUBLIC}/catalog/manifest`
+const CATALOG_MANIFEST_PATH = "/api/public/v1/catalog/manifest"
 const DATA_REFRESH_TTL_MS = 5 * 60 * 1000
 const MANIFEST_FETCH_TIMEOUT_MS = 5 * 1000
+const MANIFEST_MAX_BYTES = 256 * 1024
 const ARTIFACT_FETCH_TIMEOUT_MS = 30 * 1000
 const PORTRAIT_DATA_URL_CACHE_LIMIT = 48
 const PORTRAIT_SOURCE_SESSION_KEY = "iconoplasm_portrait_source_by_tab"
@@ -96,8 +99,6 @@ const portraitSourceByTab = new Map()
 const portraitDeliverySessionByTab = new Map()
 const portraitDeliverySessionPromiseByTab = new Map()
 const apiFetchAbortControllers = new Map()
-const cardFreshnessByTab = new Map()
-let cardHeadRequestSerial = 0
 let portraitSourceStateLoaded = false
 let portraitDeliveryPolicy = IconoPortraitDelivery.normalizePortraitDeliveryPolicy()
 let geneDataRefreshState = null
@@ -160,72 +161,119 @@ function ownedPdfRecordForSender(sourceId, sender) {
   return record
 }
 
-// Upgrade once in the background, never from a page or hover. Retain the old
-// projection until every valid exact record is safely committed to IndexedDB.
-async function migrateLegacyCardCaches() {
-  const lanes = [
-    ["iconoplasm_published_gene_detail_cache_v1", "genes", "gene", 512],
-    ["iconoplasm_published_portrait_locator_cache_v1", "portraits", "portrait_locator", 1024],
-  ]
-  for (const [key, lane, field, limit] of lanes) {
-    try {
-      const stored = (await chrome.storage.local.get(key))[key]
-      if (!stored) continue
-      let complete = true
-      if (
-        stored.schema_version === 1 &&
-        /^ccv2-[a-f0-9]{64}$/.test(stored.revision) &&
-        Array.isArray(stored.entries)
-      ) {
-        for (const [symbol, record] of stored.entries.slice(-limit)) {
-          if (
-            !/^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(symbol) ||
-            record?.symbol !== symbol ||
-            (lane === "portraits" && record.snapshot_version !== stored.revision)
-          )
-            continue
-          const url = `${API_PUBLIC}/card-snapshots/${stored.revision}/${lane}/${symbol}`
-          const payload = {
-            snapshot_version: stored.revision,
-            canonical_key: "symbol",
-            [field]: record,
-            missing: [],
-          }
-          if (
-            !(await cardResponseCache.put(
-              url,
-              new TextEncoder().encode(JSON.stringify(payload)),
-              "application/json",
-            ))
-          ) {
-            complete = false
-            break
-          }
-        }
-      }
-      if (complete) await chrome.storage.local.remove(key)
-    } catch {
-      // Storage failures preserve the old bounded copy for the next startup.
-    }
+// B-898 stage 1: the retired immutable card tree left two bounded storage
+// projections and a 32 MiB IndexedDB of exact card responses on every install.
+// None of it is readable through the stable object, so forget it once.
+async function forgetRetiredCardCaches() {
+  try {
+    await chrome.storage.local.remove([
+      "iconoplasm_published_gene_detail_cache_v1",
+      "iconoplasm_published_portrait_locator_cache_v1",
+      "iconoplasm_card_snapshot_version",
+      "iconoplasm_last_card_head",
+    ])
+  } catch {
+    // Storage failures leave the dead keys for the next startup.
   }
+  try {
+    globalThis.indexedDB?.deleteDatabase?.("iconoplasm-immutable:iconoplasm-card-responses-v1")
+  } catch {
+    // A blocked delete retries on the next startup.
+  }
+}
+
+function validStableGene(value, symbol) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    value.stable_object_version === 3 &&
+    String(value.symbol || "")
+      .trim()
+      .toUpperCase() === symbol &&
+    Array.isArray(value.portrait_candidates) &&
+    "portrait" in value,
+  )
+}
+
+function rememberStableGene(symbol, entry) {
+  stableGeneCache.delete(symbol)
+  stableGeneCache.set(symbol, entry)
+  while (stableGeneCache.size > STABLE_GENE_MAX_ENTRIES) {
+    stableGeneCache.delete(stableGeneCache.keys().next().value)
+  }
+  return entry
+}
+
+async function readStableGene(symbol) {
+  try {
+    const response = await fetchWithTimeout(
+      `${STABLE_GENE_CDN_PREFIX}${symbol}.json`,
+      // No cookies and no client-version header: every reader must share one
+      // CDN cache entry per gene, or the free CDN stops being free. The pull
+      // zone stamps a 30-day max-age on the object while the Worker purges it
+      // on every rewrite, so revalidate instead of trusting the HTTP cache: a
+      // 304 when nothing changed, the new bytes otherwise.
+      { credentials: "omit", cache: "no-cache" },
+      STABLE_GENE_FETCH_TIMEOUT_MS,
+    )
+    if (response.status === 404) return { status: "missing", gene: null }
+    if (!response.ok) return { status: "error", gene: null, error: `HTTP ${response.status}` }
+    const text = await response.text()
+    if (new TextEncoder().encode(text).byteLength > STABLE_GENE_MAX_BYTES) {
+      return { status: "missing", gene: null }
+    }
+    let value
+    try {
+      value = JSON.parse(text)
+    } catch {
+      return { status: "missing", gene: null }
+    }
+    return validStableGene(value, symbol)
+      ? { status: "found", gene: value }
+      : { status: "missing", gene: null }
+  } catch (error) {
+    return { status: "error", gene: null, error: String(error?.message || error) }
+  }
+}
+
+async function fetchStableGene(rawSymbol) {
+  const symbol = String(rawSymbol || "")
+    .trim()
+    .toUpperCase()
+  if (!STABLE_GENE_SYMBOL.test(symbol)) return null
+  const cached = stableGeneCache.get(symbol)
+  if (cached && cached.expiresAt > Date.now()) return cached
+  if (cached) stableGeneCache.delete(symbol)
+  if (stableGenePending.has(symbol)) return stableGenePending.get(symbol)
+  const pending = readStableGene(symbol)
+    .then((result) =>
+      rememberStableGene(symbol, {
+        ...result,
+        expiresAt:
+          Date.now() + (result.status === "error" ? STABLE_GENE_ERROR_TTL_MS : STABLE_GENE_TTL_MS),
+      }),
+    )
+    .finally(() => {
+      if (stableGenePending.get(symbol) === pending) stableGenePending.delete(symbol)
+    })
+  stableGenePending.set(symbol, pending)
+  return pending
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   void initializePdfPreferences()
   void refreshGeneData()
-  void migrateLegacyCardCaches()
+  void forgetRetiredCardCaches()
 })
 
 chrome.runtime.onStartup.addListener(() => {
   void initializePdfPreferences()
   void refreshGeneData()
-  void migrateLegacyCardCaches()
+  void forgetRetiredCardCaches()
 })
 
 if (chrome.tabs?.onRemoved?.addListener) {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
-    metadataDelivery.forgetTab(tabId)
-    cardFreshnessByTab.delete(tabId)
     await loadPortraitSourceState()
     portraitSourceByTab.delete(portraitTabKey(tabId))
     portraitDeliverySessionByTab.delete(portraitTabKey(tabId))
@@ -302,38 +350,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       ensureFreshGeneData({ cacheOnly: true }).then(sendResponse)
       return true
     }
-    ensureFreshGeneData().then(async (data) => {
-      const cardFreshness = await selectArticleCards(sender?.tab?.id, data?.cardSnapshotVersion)
-      sendResponse({ ...data, cardSnapshotVersion: cardFreshness.version, cardFreshness })
-    })
+    ensureFreshGeneData().then(sendResponse)
     return true
   }
-  if (msg.type === "GET_CARD_FRESHNESS") {
-    selectArticleCards(sender?.tab?.id).then((cardFreshness) => {
-      sendResponse({ cardSnapshotVersion: cardFreshness.version, cardFreshness })
-    })
-    return true
-  }
-  if (msg.type === "REFRESH_CARD_SNAPSHOT") {
-    const retiredRevision = String(msg.retiredRevision || "").trim()
-    if (!/^[A-Za-z0-9._:-]+$/.test(retiredRevision)) {
-      sendResponse({ ok: false, error: "invalid_retired_revision" })
-      return false
-    }
-    refreshGeneData({ manifestCacheBustRevision: retiredRevision }).then(async (result) => {
-      const stored = await getStoredGeneData()
-      // Explicit retirement supersedes any cached head and any older pending
-      // background check. Never offer the retired epoch to the next article.
-      cardHeadRequestSerial++
-      if (stored.cardSnapshotVersion && stored.cardSnapshotVersion !== retiredRevision) {
-        await chrome.storage.local.set({ iconoplasm_last_card_head: stored.cardSnapshotVersion })
-      } else {
-        await chrome.storage.local.remove("iconoplasm_last_card_head")
+  if (msg.type === "ICONOPLASM_STABLE_GENE") {
+    fetchStableGene(msg.symbol).then((entry) => {
+      if (!entry) {
+        sendResponse({ ok: false, error: "invalid_symbol" })
+        return
       }
-      sendResponse({
-        ok: Boolean(result),
-        cardSnapshotVersion: stored.cardSnapshotVersion || null,
-      })
+      sendResponse({ ok: true, status: entry.status, gene: entry.gene || null })
     })
     return true
   }
@@ -431,7 +457,6 @@ async function getStatus(tabId) {
     "iconoplasm_scanner_contract_revision",
     "iconoplasm_scanner_index_storage_version",
     "iconoplasm_alias_overlay_version",
-    "iconoplasm_card_snapshot_version",
     SHARED_BLOCKLIST_STORAGE_KEY,
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
@@ -446,13 +471,11 @@ async function getStatus(tabId) {
     scannerSchemaVersion: result.iconoplasm_scanner_schema_version || null,
     scannerContractRevision: result.iconoplasm_scanner_contract_revision || null,
     aliasOverlayVersion: result.iconoplasm_alias_overlay_version || null,
-    cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
     sharedBlocklistRevision:
       IconoContentSettings.normalizeSharedBlocklistProjection(result[SHARED_BLOCKLIST_STORAGE_KEY])
         ?.revision || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
-    cardFreshness: cardFreshnessByTab.get(tabId ?? "extension") || null,
   }
 }
 
@@ -502,25 +525,8 @@ async function fetchIconoplasmApi(msg, sender = {}) {
       credentials: msg.credentials === "include" ? "include" : "same-origin",
       ...(controller ? { signal: controller.signal } : {}),
     }
-    const immutable =
-      init.method === "GET" &&
-      path.match(
-        /^\/api\/public\/v1\/card-snapshots\/(ccv2-[a-f0-9]{64})\/(genes|portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
-      )
-    const cacheKey = `${HOST}${path}`
-    const saved = immutable && (await cardResponseCache.get(cacheKey))
-    if (saved) return { ok: true, status: 200, text: await saved.text() }
-    const resp =
-      (await metadataDelivery.fetch(`${HOST}${path}`, init, sender?.tab?.id ?? "extension")) ||
-      (await fetch(`${HOST}${path}`, init))
+    const resp = await fetch(`${HOST}${path}`, init)
     const text = await resp.text()
-    if (immutable && resp.ok) {
-      const payload = JSON.parse(text)
-      const record = immutable[2] === "genes" ? payload.gene : payload.portrait_locator
-      if (payload.snapshot_version === immutable[1] && record?.symbol === immutable[3]) {
-        void cardResponseCache.put(cacheKey, new TextEncoder().encode(text), "application/json")
-      }
-    }
     return {
       ok: resp.ok,
       status: resp.status,
@@ -543,13 +549,11 @@ async function fetchIconoplasmApi(msg, sender = {}) {
 async function getStoredGeneData() {
   const result = await chrome.storage.local.get([
     "iconoplasm_genes",
-    "iconoplasm_card_snapshot_version",
     "iconoplasm_contract_error",
     "iconoplasm_min_extension_version",
   ])
   return {
     genes: result.iconoplasm_genes || null,
-    cardSnapshotVersion: result.iconoplasm_card_snapshot_version || null,
     contractError: result.iconoplasm_contract_error || null,
     minExtensionVersion: result.iconoplasm_min_extension_version || null,
   }
@@ -567,7 +571,6 @@ async function getStoredGeneSnapshot() {
     "iconoplasm_scanner_contract_revision",
     "iconoplasm_scanner_index_storage_version",
     "iconoplasm_portrait_delivery",
-    "iconoplasm_card_snapshot_version",
     "iconoplasm_alias_overlay_version",
     "iconoplasm_alias_overlay_applied",
     SHARED_BLOCKLIST_STORAGE_KEY,
@@ -665,7 +668,6 @@ function normalizePublishedManifest(rawManifest) {
     min_extension_version: minExtensionVersion || currentExtensionVersion(),
     publication_aliases: publicationAliases,
     extension_blocklist: extensionBlocklist,
-    card_snapshot_version: String(manifest.card_snapshot_version || "").trim() || null,
     scanner_artifact: {
       schema_version: scannerSchemaVersion,
       contract_revision: scannerContractRevision,
@@ -731,55 +733,6 @@ async function invalidateStoredPublishedSnapshot({ code, message, minExtensionVe
   await rememberContractError({ code, message, minExtensionVersion })
 }
 
-function rememberArticleFreshness(tabId, head, cachedVersion) {
-  const tab = tabId ?? "extension"
-  const cardFreshness = {
-    checkedAt: head ? new Date().toISOString() : null,
-    verified: Boolean(head),
-    version: head?.current || cachedVersion || null,
-  }
-  cardFreshnessByTab.delete(tab)
-  cardFreshnessByTab.set(tab, cardFreshness)
-  while (cardFreshnessByTab.size > 128)
-    cardFreshnessByTab.delete(cardFreshnessByTab.keys().next().value)
-  return cardFreshness
-}
-
-async function selectArticleCards(tabId, scannerVersion) {
-  // ARCHITECTURE FENCE [IPD-008]: pin a coherent last-known snapshot locally.
-  // Revalidate the tiny head for FUTURE articles; an online freshness check
-  // must not block a saved image or replace an open article's epoch mid-read.
-  const tab = tabId ?? "extension"
-  const stored = await chrome.storage.local.get([
-    "iconoplasm_last_card_head",
-    "iconoplasm_card_snapshot_version",
-  ])
-  const saved = stored.iconoplasm_last_card_head
-  const cachedVersion = /^ccv[12]-[A-Za-z0-9._:-]+$/.test(String(saved || ""))
-    ? saved
-    : scannerVersion || stored.iconoplasm_card_snapshot_version
-  const serial = ++cardHeadRequestSerial
-  const check = metadataDelivery.current(tab).then(async (head) => {
-    if (head?.current && serial === cardHeadRequestSerial) {
-      await chrome.storage.local.set({ iconoplasm_last_card_head: head.current }).catch(() => {})
-    }
-    return head
-  })
-  if (!cachedVersion) return rememberArticleFreshness(tabId, await check, null)
-  const selected = rememberArticleFreshness(tabId, null, cachedVersion)
-  void check
-    .then((head) => {
-      // Keep diagnostic status tied to the selected epoch, not another tab's
-      // newer result. Only the next article adopts the newly observed version.
-      if (cardFreshnessByTab.get(tab) !== selected) return
-      selected.checkedAt = new Date().toISOString()
-      selected.verified = head?.current === selected.version
-      selected.observedVersion = head?.current || null
-    })
-    .catch(() => {})
-  return selected
-}
-
 async function ensureFreshGeneData({ cacheOnly = false } = {}) {
   const snapshot = await getStoredGeneSnapshot()
   const stored = cacheOnly ? snapshot : await migrateLegacyStoredScannerIndex(snapshot)
@@ -809,7 +762,6 @@ async function ensureFreshGeneData({ cacheOnly = false } = {}) {
     if (needsRefresh && !cacheOnly) void refreshGeneData()
     return {
       genes: stored.iconoplasm_genes,
-      cardSnapshotVersion: stored.iconoplasm_card_snapshot_version || null,
       contractError: null,
       minExtensionVersion: stored.iconoplasm_min_extension_version || null,
     }
@@ -830,8 +782,8 @@ async function ensureFreshGeneData({ cacheOnly = false } = {}) {
 function broadcastRecognitionPolicyUpdate() {
   // B-765: recognition policy (curated aliases and the shared blocklist) can
   // advance while articles are open. Open pages adopt the new map and rescan in
-  // bounded slices; the card snapshot epoch and any visible hover are untouched,
-  // and no timer or polling is added.
+  // bounded slices; any visible hover is untouched, and no timer or polling is
+  // added.
   if (!chrome.tabs?.query || !chrome.tabs?.sendMessage) return
   chrome.tabs.query({}, (tabs) => {
     if (chrome.runtime?.lastError || !Array.isArray(tabs)) return
@@ -848,22 +800,13 @@ function broadcastRecognitionPolicyUpdate() {
   })
 }
 
-async function refreshGeneData({
-  forceArtifactRefresh = false,
-  manifestCacheBustRevision = "",
-} = {}) {
+async function refreshGeneData({ forceArtifactRefresh = false } = {}) {
   const wantsForcedArtifact = Boolean(forceArtifactRefresh)
-  const cacheBustRevision = String(manifestCacheBustRevision || "").trim()
   if (geneDataRefreshState) {
     const activeRefresh = geneDataRefreshState
     const result = await activeRefresh.promise
-    const stored = cacheBustRevision ? await getStoredGeneData() : null
-    const stillRetired = stored?.cardSnapshotVersion === cacheBustRevision
-    if ((!wantsForcedArtifact || activeRefresh.forceArtifactRefresh) && !stillRetired) return result
-    return refreshGeneData({
-      forceArtifactRefresh: wantsForcedArtifact && !activeRefresh.forceArtifactRefresh,
-      manifestCacheBustRevision: stillRetired ? cacheBustRevision : "",
-    })
+    if (!wantsForcedArtifact || activeRefresh.forceArtifactRefresh) return result
+    return refreshGeneData({ forceArtifactRefresh: true })
   }
 
   const refreshState = {
@@ -872,7 +815,6 @@ async function refreshGeneData({
   }
   refreshState.promise = fetchGeneData({
     forceArtifactRefresh: wantsForcedArtifact,
-    manifestCacheBustRevision: cacheBustRevision,
   }).finally(() => {
     if (geneDataRefreshState === refreshState) geneDataRefreshState = null
   })
@@ -1154,31 +1096,32 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-async function fetchManifest(cacheBustRevision = "") {
-  const manifestUrl = new URL(API_CATALOG_MANIFEST)
-  const normalizedCacheBust = String(cacheBustRevision || "").trim()
-  if (!normalizedCacheBust) {
-    return normalizePublishedManifest(
-      await metadataDelivery.scannerManifest(normalizePublishedManifest),
-    )
+async function readSharedJson(url, limitBytes) {
+  const response = await fetchWithTimeout(url, { credentials: "omit" }, MANIFEST_FETCH_TIMEOUT_MS)
+  if (!response.ok) throw new Error(`Manifest HTTP ${response.status}`)
+  const text = await response.text()
+  if (new TextEncoder().encode(text).byteLength > limitBytes) {
+    throw new Error("Manifest body exceeds limit")
   }
-  // Explicit retired-snapshot recovery bypasses the shared probe once; ordinary
-  // refreshes must not become per-reader origin requests or CDN cache busters.
-  if (normalizedCacheBust) manifestUrl.searchParams.set("retired_snapshot", normalizedCacheBust)
-  const manifestResp = await fetchWithTimeout(
-    manifestUrl.toString(),
-    {
-      headers: {
-        "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
-      },
-    },
-    MANIFEST_FETCH_TIMEOUT_MS,
-  )
+  return JSON.parse(text)
+}
 
-  if (!manifestResp.ok) {
-    return null
+async function fetchManifest() {
+  // Scanner freshness is a public, shared latest-contract read. Healthy readers
+  // must not each wake a Worker every five minutes, so the CDN copy is read
+  // first; only an unusable CDN response falls back to the canonical origin.
+  // No cookies and no client-version header may fragment the CDN cache.
+  for (const origin of [CDN, HOST]) {
+    try {
+      const manifest = normalizePublishedManifest(
+        await readSharedJson(`${origin}${CATALOG_MANIFEST_PATH}`, MANIFEST_MAX_BYTES),
+      )
+      if (manifest) return manifest
+    } catch (_error) {
+      // Try the next source.
+    }
   }
-  return normalizePublishedManifest(await manifestResp.json())
+  return null
 }
 
 function jsonByteLength(value) {
@@ -1306,12 +1249,9 @@ async function fetchPublishedScannerArtifact(manifest) {
   return { error: "", artifact: { ...artifact, genes } }
 }
 
-async function fetchGeneData({
-  forceArtifactRefresh = false,
-  manifestCacheBustRevision = "",
-} = {}) {
+async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
   try {
-    const manifest = await fetchManifest(manifestCacheBustRevision)
+    const manifest = await fetchManifest()
     if (!manifest) {
       console.error("[Iconoplasm] Manifest fetch failed")
       return null
@@ -1395,7 +1335,6 @@ async function fetchGeneData({
         iconoplasm_scanner_index_storage_version: SCANNER_INDEX_STORAGE_VERSION,
         iconoplasm_portrait_delivery: manifest.portrait_delivery,
         iconoplasm_min_extension_version: manifest.min_extension_version,
-        iconoplasm_card_snapshot_version: manifest.card_snapshot_version,
       })
       return {
         schema_version: manifest.schema_version,
@@ -1471,7 +1410,6 @@ async function fetchGeneData({
       iconoplasm_contract_revision: manifest.contract_revision,
       iconoplasm_portrait_delivery: manifest.portrait_delivery,
       iconoplasm_min_extension_version: manifest.min_extension_version,
-      iconoplasm_card_snapshot_version: manifest.card_snapshot_version,
       iconoplasm_alias_overlay_version: manifest.publication_aliases.version,
       iconoplasm_alias_overlay_applied: overlayResult.applied,
     })
@@ -1496,8 +1434,9 @@ if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
     setPdfOwnershipEnabled,
     fetchPortraitDataUrl,
     portraitByteCache,
-    cardResponseCache,
-    migrateLegacyCardCaches,
+    stableGeneCache,
+    fetchStableGene,
+    forgetRetiredCardCaches,
     portraitSourcePlan,
     reportPortraitSourceResult,
     warmPortraitDataUrls,

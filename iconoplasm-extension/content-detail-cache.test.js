@@ -3,52 +3,31 @@ import { readFile } from "node:fs/promises"
 import test from "node:test"
 import vm from "node:vm"
 
-// ARCHITECTURE FENCE [IPD-008]: hover detail is persistent, revision-keyed published data.
+// B-898 stage 1: hover detail is one stable, mutable object per gene on the
+// free CDN (genes/v3/<SYMBOL>.json). The page store is a small bounded
+// in-memory cache with a 5-minute TTL in front of the service worker's fetch.
+//
+// Failure modes this file pins down, written before the store was rewritten:
+// 1. Stable object served -> exactly one fetch; the record is returned as-is.
+// 2. Second request within the TTL -> no second fetch (cache hit).
+// 3. CDN 404 ("missing") -> null is cached for the TTL; repeated hovers do not
+//    turn into a retry storm.
+// 4. Malformed result (found without an object record) -> treated as missing.
+// 5. Transport error -> onError, nothing cached, the next request retries.
+// 6. Concurrent callers for the same symbol share one in-flight request.
+// 7. TTL expiry -> the next request refetches.
+// 8. Caller abort -> that caller resolves null without caching, while the
+//    shared request still lands in the cache for everyone else.
+// 9. The cache is bounded: the oldest entry is evicted past maxEntries.
+// 10. Symbols are normalized and de-duplicated before any fetch.
 
 const source = await readFile(new URL("./content-detail-cache.js", import.meta.url), "utf8")
 
 function loadFactory() {
-  const sandbox = {
-    AbortController,
-    console,
-    setTimeout,
-    clearTimeout,
-  }
+  const sandbox = { console, setTimeout, clearTimeout }
   sandbox.globalThis = sandbox
   vm.runInNewContext(source, sandbox)
   return sandbox.IconoplasmContentDetailCache.createGeneDetailStore
-}
-
-function createStorage(initial = {}) {
-  const values = structuredClone(initial)
-  return {
-    values,
-    async get(keys) {
-      const result = {}
-      for (const key of keys) {
-        if (Object.hasOwn(values, key)) result[key] = structuredClone(values[key])
-      }
-      return result
-    },
-    async set(entries) {
-      for (const [key, value] of Object.entries(entries)) {
-        values[key] = structuredClone(value)
-      }
-    },
-    async remove(keys) {
-      for (const key of keys) delete values[key]
-    },
-  }
-}
-
-function response(payload, { ok = true, status = 200 } = {}) {
-  return {
-    ok,
-    status,
-    async json() {
-      return structuredClone(payload)
-    },
-  }
 }
 
 function deferred() {
@@ -61,786 +40,178 @@ function deferred() {
   return { promise, resolve, reject }
 }
 
-test("published gene details survive navigation without another batch request", async () => {
-  const createGeneDetailStore = loadFactory()
-  const storage = createStorage()
-  let fetchCount = 0
-  const first = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () => {
-      fetchCount += 1
-      return response({
-        snapshot_version: "card-v1",
-        genes: [{ symbol: "TP53", full_name: "tumor protein p53" }],
-        missing: [],
-      })
-    },
-  })
-
-  assert.equal((await first.fetchBatch(["TP53"])).get("TP53")?.full_name, "tumor protein p53")
-  assert.equal(fetchCount, 1)
-  await first.flushPersistence()
-
-  const second = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () => {
-      fetchCount += 1
-      throw new Error("persistent cache was not reused")
-    },
-  })
-
-  assert.equal((await second.fetchBatch(["TP53"])).get("TP53")?.full_name, "tumor protein p53")
-  assert.equal(fetchCount, 1)
-})
-
-test("a new card snapshot invalidates persisted details before reuse", async () => {
-  const createGeneDetailStore = loadFactory()
-  const storage = createStorage({
-    iconoplasm_published_gene_detail_cache_v1: {
-      schema_version: 1,
-      revision: "card-v1",
-      entries: [["TP53", { symbol: "TP53", color: "#111111" }]],
-    },
-  })
-  let fetchCount = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v2",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () => {
-      fetchCount += 1
-      return response({
-        snapshot_version: "card-v2",
-        genes: [{ symbol: "TP53", color: "#abcdef" }],
-        missing: [],
-      })
-    },
-  })
-
-  assert.equal((await store.fetchBatch(["TP53"])).get("TP53")?.color, "#abcdef")
-  assert.equal(fetchCount, 1)
-  await store.flushPersistence()
-  assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
-})
-
-test("disk hydration cannot replace an article epoch with another tab's saved epoch", async () => {
-  const createGeneDetailStore = loadFactory()
-  for (const [article, saved] of [
-    ["card-v2", "card-v1"],
-    ["card-v1", "card-v2"],
-  ]) {
-    const storage = createStorage({
-      iconoplasm_published_gene_detail_cache_v1: {
-        schema_version: 1,
-        revision: saved,
-        entries: [["EZH2", { symbol: "EZH2", full_name: "other article" }]],
-      },
-    })
-    const calls = []
-    const store = createGeneDetailStore({
-      windowRef: globalThis,
-      storageApi: storage,
-      getRevision: async () => saved,
-      detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-      fetchImpl: async (url) => {
-        calls.push(url)
-        return response({ snapshot_version: article, gene: { symbol: "EZH2", full_name: article } })
-      },
-    })
-    store.setRevision(article)
-    await store.hydratePersistentCache()
-    assert.equal(store.get("EZH2"), null, "must not import another article's record")
-    assert.equal(
-      storage.values.iconoplasm_published_gene_detail_cache_v1.revision,
-      saved,
-      "a cache mismatch is not permission to delete another article's cache",
-    )
-    const result = await store.fetchBatch(["EZH2"], { priority: "foreground" })
-    assert.equal(result.get("EZH2")?.full_name, article)
-    assert.deepEqual(calls, [`/card-snapshots/${article}/genes/EZH2`])
-    await store.flushPersistence()
+function stableGene(symbol) {
+  return {
+    symbol,
+    canonical_symbol: symbol,
+    full_name: `${symbol} full name`,
+    color: "#35353c",
+    essence: { name: `${symbol} full name` },
+    stable_object_version: 3,
+    portrait: { asset_sha256: "e".repeat(64), medium_url: "https://x/medium.webp" },
+    portrait_candidates: [],
   }
-})
+}
 
-test("an article selected while initial revision lookup is pending wins over late disk state", async () => {
-  const lookup = deferred()
-  const storage = createStorage()
-  const store = loadFactory()({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: () => lookup.promise,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async () => response({ snapshot_version: "card-new", gene: { symbol: "EZH2" } }),
-  })
-  const hydration = store.hydratePersistentCache()
-  store.setRevision("card-new")
-  lookup.resolve("card-old")
-  await hydration
-  assert.equal(
-    (await store.fetchBatch(["EZH2"], { priority: "foreground" })).get("EZH2")?.symbol,
-    "EZH2",
-  )
-  await store.flushPersistence()
-})
-
-test("persistent detail storage obeys a byte budget as well as an entry count", async () => {
-  const createGeneDetailStore = loadFactory()
-  const storage = createStorage()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    persistentLimit: 512,
-    persistentByteLimit: 1400,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async (_url, options) => {
-      const symbols = JSON.parse(options.body).symbols
-      return response({
-        snapshot_version: "card-v1",
-        genes: symbols.map((symbol) => ({
-          symbol,
-          essence: "x".repeat(480),
-          portrait: { medium_url: `https://example.test/${symbol}.webp` },
-        })),
-        missing: [],
-      })
-    },
-  })
-
-  await store.fetchBatch(["TP53", "BRCA1", "EGFR", "KRAS"])
-  await store.flushPersistence()
-
-  const persisted = storage.values.iconoplasm_published_gene_detail_cache_v1
-  const persistedBytes = Buffer.byteLength(JSON.stringify(persisted), "utf8")
-  assert.ok(persistedBytes <= 1400)
-  assert.ok(persisted.entries.length < 4)
-  assert.ok(store.cache.size >= persisted.entries.length)
-})
-
-test("transient batch failures remain retryable instead of becoming missing genes", async () => {
-  const createGeneDetailStore = loadFactory()
-  let fetchCount = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () => {
-      fetchCount += 1
-      if (fetchCount === 1) throw new Error("temporary timeout")
-      return response({
-        snapshot_version: "card-v1",
-        genes: [{ symbol: "PRL", full_name: "prolactin" }],
-        missing: [],
-      })
-    },
-  })
-
-  assert.equal((await store.fetchBatch(["PRL"])).get("PRL"), null)
-  assert.equal((await store.fetchBatch(["PRL"])).get("PRL")?.full_name, "prolactin")
-  assert.equal(fetchCount, 2)
-})
-
-test("visible detail resolves before the bounded cache finishes persisting", async () => {
-  const createGeneDetailStore = loadFactory()
-  let releasePersistence
-  let persistenceStarted = false
-  const persistenceGate = new Promise((resolve) => {
-    releasePersistence = resolve
-  })
-  const storage = createStorage()
-  const originalSet = storage.set.bind(storage)
-  storage.set = async (entries) => {
-    persistenceStarted = true
-    await persistenceGate
-    return originalSet(entries)
-  }
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () =>
-      response({
-        snapshot_version: "card-v1",
-        genes: [{ symbol: "TP53", full_name: "tumor protein p53" }],
-        missing: [],
-      }),
-  })
-
-  const records = await store.fetchBatch(["TP53"])
-  assert.equal(records.get("TP53")?.full_name, "tumor protein p53")
-  assert.equal(persistenceStarted, false)
-
-  const flushPromise = store.flushPersistence()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(persistenceStarted, true)
-
-  releasePersistence()
-  await flushPromise
-  assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.entries[0][0], "TP53")
-})
-
-test("initial hover preload does not wait for whole-cache hydration", async () => {
-  const createGeneDetailStore = loadFactory()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: {
-      async get() {
-        throw new Error("initial preload must not read the multi-megabyte persistent cache first")
-      },
-    },
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async () =>
-      response({
-        snapshot_version: "card-v1",
-        genes: [{ symbol: "TP53", full_name: "tumor protein p53" }],
-        missing: [],
-      }),
-  })
-
-  const records = await store.fetchBatch(["TP53"], {
-    priority: "background",
-    awaitPersistentCache: false,
-  })
-
-  assert.equal(records.get("TP53")?.full_name, "tumor protein p53")
-})
-
-test("a delayed old-revision persistence write cannot roll current detail state backward", async () => {
-  const createGeneDetailStore = loadFactory()
-  const values = {}
-  let storageGetCount = 0
-  let releaseOldWrite
-  let markOldWriteStarted
-  const oldWriteGate = new Promise((resolve) => {
-    releaseOldWrite = resolve
-  })
-  const oldWriteStarted = new Promise((resolve) => {
-    markOldWriteStarted = resolve
-  })
-  const storage = {
-    async get(keys) {
-      storageGetCount += 1
-      if (storageGetCount === 2) {
-        markOldWriteStarted()
-        await oldWriteGate
-      }
-      return Object.fromEntries(
-        keys.filter((key) => Object.hasOwn(values, key)).map((key) => [key, values[key]]),
-      )
-    },
-    async set(entries) {
-      Object.assign(values, structuredClone(entries))
-    },
-  }
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async (_url, options) => {
-      const [symbol] = JSON.parse(options.body).symbols
-      const revision = symbol === "TP53" ? "card-v1" : "card-v2"
-      return response({
-        snapshot_version: revision,
-        genes: [{ symbol, full_name: symbol + " name" }],
-        missing: [],
-      })
-    },
-  })
-
-  await store.fetchBatch(["TP53"])
-  await oldWriteStarted
-  await store.fetchBatch(["BRCA1"])
-  assert.equal(store.cache.has("TP53"), false)
-  assert.equal(store.cache.get("BRCA1")?.full_name, "BRCA1 name")
-
-  releaseOldWrite()
-  await store.flushPersistence()
-  assert.equal(store.cache.get("BRCA1")?.full_name, "BRCA1 name")
-  assert.equal(values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
-  assert.deepEqual(
-    values.iconoplasm_published_gene_detail_cache_v1.entries.map((entry) => entry[0]),
-    ["BRCA1"],
-  )
-})
-
-test("an older-started response cannot roll back a newer adopted snapshot", async () => {
-  const createGeneDetailStore = loadFactory()
-  const storage = createStorage()
-  const oldResponse = deferred()
-  const newResponse = deferred()
-  const oldStarted = deferred()
-  const newStarted = deferred()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async (_url, options) => {
-      const [symbol] = JSON.parse(options.body).symbols
-      if (symbol === "TP53") {
-        oldStarted.resolve()
-        return oldResponse.promise
-      }
-      newStarted.resolve()
-      return newResponse.promise
-    },
-  })
-
-  const oldBatch = store.fetchBatch(["TP53"])
-  await oldStarted.promise
-  const newBatch = store.fetchBatch(["BRCA1"])
-  await newStarted.promise
-
-  newResponse.resolve(
-    response({
-      snapshot_version: "card-v2",
-      genes: [{ symbol: "BRCA1", full_name: "BRCA1 v2" }],
-      missing: [],
-    }),
-  )
-  assert.equal((await newBatch).get("BRCA1")?.full_name, "BRCA1 v2")
-
-  oldResponse.resolve(
-    response({
-      snapshot_version: "card-v1",
-      genes: [{ symbol: "TP53", full_name: "TP53 v1" }],
-      missing: [],
-    }),
-  )
-  assert.equal((await oldBatch).get("TP53"), null)
-  await store.flushPersistence()
-
-  assert.equal(store.has("TP53"), false, "stale detail remains retryable")
-  assert.equal(store.promiseCache.has("TP53"), false)
-  assert.equal(store.get("BRCA1")?.full_name, "BRCA1 v2")
-  assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
-  assert.deepEqual(
-    storage.values.iconoplasm_published_gene_detail_cache_v1.entries.map((entry) => entry[0]),
-    ["BRCA1"],
-  )
-})
-
-test("an older-started response may still merge into the same adopted snapshot", async () => {
-  const createGeneDetailStore = loadFactory()
-  const storage = createStorage()
-  const firstResponse = deferred()
-  const secondResponse = deferred()
-  const firstStarted = deferred()
-  const secondStarted = deferred()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v2",
-    batchUrl: "https://example.test/batch",
-    fetchImpl: async (_url, options) => {
-      const [symbol] = JSON.parse(options.body).symbols
-      if (symbol === "TP53") {
-        firstStarted.resolve()
-        return firstResponse.promise
-      }
-      secondStarted.resolve()
-      return secondResponse.promise
-    },
-  })
-
-  const firstBatch = store.fetchBatch(["TP53"])
-  await firstStarted.promise
-  const secondBatch = store.fetchBatch(["BRCA1"])
-  await secondStarted.promise
-  secondResponse.resolve(
-    response({
-      snapshot_version: "card-v2",
-      genes: [{ symbol: "BRCA1", full_name: "BRCA1 v2" }],
-      missing: [],
-    }),
-  )
-  await secondBatch
-  firstResponse.resolve(
-    response({
-      snapshot_version: "card-v2",
-      genes: [{ symbol: "TP53", full_name: "TP53 v2" }],
-      missing: [],
-    }),
-  )
-  await firstBatch
-  await store.flushPersistence()
-
-  assert.equal(store.get("BRCA1")?.full_name, "BRCA1 v2")
-  assert.equal(store.get("TP53")?.full_name, "TP53 v2")
-  assert.equal(storage.values.iconoplasm_published_gene_detail_cache_v1.revision, "card-v2")
-  assert.deepEqual(
-    new Set(
-      storage.values.iconoplasm_published_gene_detail_cache_v1.entries.map((entry) => entry[0]),
-    ),
-    new Set(["BRCA1", "TP53"]),
-  )
-})
-
-test("foreground immutable detail starts without waiting for multi-megabyte persistence hydration", async () => {
-  const createGeneDetailStore = loadFactory()
-  const hydrationGate = deferred()
-  let fetchStarted = false
-  const storage = {
-    async get() {
-      return hydrationGate.promise
-    },
-    async set() {},
-    async remove() {},
-  }
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    getRevision: async () => "card-v1",
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async () => {
-      fetchStarted = true
-      return response({
-        snapshot_version: "card-v1",
-        gene: { symbol: "TP53", full_name: "tumor protein p53" },
-        missing: [],
-      })
-    },
-  })
-  store.setRevision("card-v1")
-  void store.hydratePersistentCache()
-
-  const result = await store.fetchBatch(["TP53"], { priority: "foreground" })
-  assert.equal(fetchStarted, true)
-  assert.equal(result.get("TP53")?.full_name, "tumor protein p53")
-  hydrationGate.resolve({})
-  await store.hydratePersistentCache()
-})
-
-test("foreground immutable detail promotes and reuses matching speculative work", async () => {
+function harness(overrides = {}) {
   const createGeneDetailStore = loadFactory()
   const calls = []
-  const responseGate = deferred()
-  const backgroundController = new AbortController()
+  const errors = []
+  let now = 1_000_000
+  const results = overrides.results || {}
   const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async (_url, init) => {
-      const call = { signal: init.signal }
-      calls.push(call)
-      return responseGate.promise
+    now: () => now,
+    ttlMs: 300_000,
+    maxEntries: overrides.maxEntries || 512,
+    onError: (error) => errors.push(error),
+    fetchGene: async (symbol) => {
+      calls.push(symbol)
+      const result = results[symbol]
+      if (typeof result === "function") return result()
+      if (result === undefined) return { status: "missing" }
+      return result
+    },
+    ...overrides.options,
+  })
+  return { store, calls, errors, advance: (ms) => (now += ms) }
+}
+
+test("a served stable object is fetched once and returned as the gene record", async () => {
+  const { store, calls } = harness({
+    results: { TP53: { status: "found", gene: stableGene("TP53") } },
+  })
+  const resolved = await store.fetchBatch(["TP53"], { priority: "foreground" })
+  assert.deepEqual(calls, ["TP53"])
+  assert.equal(resolved.get("TP53").full_name, "TP53 full name")
+  assert.equal(store.has("TP53"), true)
+  assert.equal(store.get("TP53").portrait.asset_sha256, "e".repeat(64))
+})
+
+test("a cache hit within the TTL never fetches again", async () => {
+  const { store, calls } = harness({
+    results: { TP53: { status: "found", gene: stableGene("TP53") } },
+  })
+  await store.fetchBatch(["TP53"], { priority: "foreground" })
+  await store.fetchBatch(["TP53"], { priority: "background" })
+  await store.fetchBatch(["tp53 "], { priority: "foreground" })
+  assert.deepEqual(calls, ["TP53"])
+})
+
+test("a CDN 404 is a missing card for the TTL, not a retry storm", async () => {
+  const { store, calls, errors } = harness({ results: { NOTAGENE: { status: "missing" } } })
+  for (let hover = 0; hover < 25; hover += 1) {
+    const resolved = await store.fetchBatch(["NOTAGENE"], { priority: "foreground" })
+    assert.equal(resolved.get("NOTAGENE"), null)
+  }
+  assert.deepEqual(calls, ["NOTAGENE"])
+  assert.equal(store.has("NOTAGENE"), true, "a missing card is a cached answer")
+  assert.equal(store.get("NOTAGENE"), null)
+  assert.equal(errors.length, 0)
+})
+
+test("a malformed found result is treated as a missing card", async () => {
+  const { store, calls } = harness({
+    results: {
+      BAD1: { status: "found", gene: "not an object" },
+      BAD2: { status: "found" },
+      BAD3: { status: "found", gene: { symbol: "OTHER" } },
     },
   })
-  store.setRevision("card-v1")
+  const resolved = await store.fetchBatch(["BAD1", "BAD2", "BAD3"], { priority: "foreground" })
+  assert.equal(resolved.get("BAD1"), null)
+  assert.equal(resolved.get("BAD2"), null)
+  assert.equal(resolved.get("BAD3"), null)
+  assert.deepEqual(calls.sort(), ["BAD1", "BAD2", "BAD3"])
+  await store.fetchBatch(["BAD1", "BAD2", "BAD3"], { priority: "foreground" })
+  assert.equal(calls.length, 3, "malformed objects are cached as missing for the TTL")
+})
 
-  const background = store.fetchBatch(["TP53"], {
-    priority: "background",
-    signal: backgroundController.signal,
+test("a transport error reports, caches nothing, and the next request retries", async () => {
+  let attempts = 0
+  const { store, calls, errors } = harness({
+    results: {
+      TP53: () => {
+        attempts += 1
+        if (attempts === 1) throw new Error("network down")
+        if (attempts === 2) return { status: "error", error: "HTTP 503" }
+        return { status: "found", gene: stableGene("TP53") }
+      },
+    },
   })
-  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal((await store.fetchBatch(["TP53"], { priority: "foreground" })).get("TP53"), null)
+  assert.equal(store.has("TP53"), false, "an error is not a cached absence")
+  assert.equal((await store.fetchBatch(["TP53"], { priority: "foreground" })).get("TP53"), null)
+  assert.equal(store.has("TP53"), false)
+  const third = await store.fetchBatch(["TP53"], { priority: "foreground" })
+  assert.equal(third.get("TP53").symbol, "TP53")
+  assert.deepEqual(calls, ["TP53", "TP53", "TP53"])
+  assert.equal(errors.length, 2)
+})
+
+test("concurrent callers share one in-flight request per symbol", async () => {
+  const gate = deferred()
+  const { store, calls } = harness({ results: { TP53: () => gate.promise } })
+  const background = store.fetchBatch(["TP53"], { priority: "background" })
   const foreground = store.fetchBatch(["TP53"], { priority: "foreground" })
-  backgroundController.abort()
-  responseGate.resolve(
-    response({
-      snapshot_version: "card-v1",
-      gene: { symbol: "TP53", full_name: "promoted" },
-      missing: [],
-    }),
-  )
-  const result = await foreground
-  await background
-
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].signal.aborted, false)
-  assert.equal(result.get("TP53")?.full_name, "promoted")
+  assert.deepEqual(calls, ["TP53"])
+  gate.resolve({ status: "found", gene: stableGene("TP53") })
+  const [first, second] = await Promise.all([background, foreground])
+  assert.equal(first.get("TP53").symbol, "TP53")
+  assert.equal(second.get("TP53").symbol, "TP53")
+  assert.deepEqual(calls, ["TP53"])
 })
 
-test("revision changes abort retired requests and prevent late responses from poisoning the cache", async () => {
-  const createGeneDetailStore = loadFactory()
-  const oldResponse = deferred()
-  const newResponse = deferred()
-  const calls = []
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async (url, init) => {
-      calls.push({ url, signal: init.signal })
-      return url.includes("card-v1") ? oldResponse.promise : newResponse.promise
-    },
+test("an expired entry is refetched after the TTL", async () => {
+  const { store, calls, advance } = harness({
+    results: { TP53: { status: "found", gene: stableGene("TP53") } },
   })
-  store.setRevision("card-v1")
-  const retiredRequest = store.fetchBatch(["RIPOR1"], { priority: "foreground" })
-  await new Promise((resolve) => setImmediate(resolve))
-
-  store.setRevision("card-v2")
-  assert.equal(calls[0].signal.aborted, true)
-  const currentRequest = store.fetchBatch(["RIPOR1"], { priority: "foreground" })
-  await new Promise((resolve) => setImmediate(resolve))
-  newResponse.resolve(
-    response({
-      snapshot_version: "card-v2",
-      gene: { symbol: "RIPOR1", full_name: "current card" },
-      missing: [],
-    }),
-  )
-  oldResponse.resolve(
-    response({
-      snapshot_version: "card-v1",
-      gene: { symbol: "RIPOR1", full_name: "retired card" },
-      missing: [],
-    }),
-  )
-
-  await Promise.all([retiredRequest, currentRequest])
-  assert.equal(calls.length, 2)
-  assert.equal(store.get("RIPOR1")?.full_name, "current card")
+  await store.fetchBatch(["TP53"], { priority: "foreground" })
+  advance(299_000)
+  await store.fetchBatch(["TP53"], { priority: "foreground" })
+  assert.deepEqual(calls, ["TP53"])
+  assert.equal(store.has("TP53"), true)
+  advance(2_000)
+  assert.equal(store.has("TP53"), false, "an expired entry is not a cache hit")
+  await store.fetchBatch(["TP53"], { priority: "foreground" })
+  assert.deepEqual(calls, ["TP53", "TP53"])
 })
 
-test("promoted immutable detail follows foreground cancellation", async () => {
-  const createGeneDetailStore = loadFactory()
-  const calls = []
-  const backgroundController = new AbortController()
-  const foregroundController = new AbortController()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async (_url, init) => {
-      calls.push({ signal: init.signal })
-      return new Promise((_resolve, reject) => {
-        init.signal.addEventListener(
-          "abort",
-          () => {
-            const error = new Error("aborted")
-            error.name = "AbortError"
-            reject(error)
-          },
-          { once: true },
-        )
-      })
-    },
-  })
-  store.setRevision("card-v1")
+test("an aborted caller resolves null while the shared request still fills the cache", async () => {
+  const gate = deferred()
+  const { store, calls } = harness({ results: { TP53: () => gate.promise } })
+  const controller = new AbortController()
+  const aborted = store.fetchBatch(["TP53"], { priority: "foreground", signal: controller.signal })
+  const patient = store.fetchBatch(["TP53"], { priority: "background" })
+  controller.abort()
+  assert.equal((await aborted).get("TP53"), null)
+  assert.equal(store.has("TP53"), false)
+  gate.resolve({ status: "found", gene: stableGene("TP53") })
+  assert.equal((await patient).get("TP53").symbol, "TP53")
+  assert.equal(store.has("TP53"), true)
+  assert.deepEqual(calls, ["TP53"])
+})
 
-  const background = store.fetchBatch(["TP53"], {
-    priority: "background",
-    signal: backgroundController.signal,
+test("the cache is bounded and evicts the oldest entry", async () => {
+  const results = {}
+  for (const symbol of ["A", "B", "C", "D"])
+    results[symbol] = { status: "found", gene: stableGene(symbol) }
+  const { store } = harness({ results, maxEntries: 3 })
+  await store.fetchBatch(["A", "B", "C"], { priority: "background" })
+  assert.equal(store.has("A"), true)
+  await store.fetchBatch(["D"], { priority: "background" })
+  assert.equal(store.has("A"), false)
+  assert.equal(store.has("B"), true)
+  assert.equal(store.has("D"), true)
+})
+
+test("symbols are normalized and de-duplicated before any fetch", async () => {
+  const { store, calls } = harness({
+    results: { TP53: { status: "found", gene: stableGene("TP53") } },
   })
-  await new Promise((resolve) => setImmediate(resolve))
-  const foreground = store.fetchBatch(["TP53"], {
+  const resolved = await store.fetchBatch([" tp53", "TP53", "", null, "Tp53"], {
     priority: "foreground",
-    signal: foregroundController.signal,
   })
-
-  backgroundController.abort()
-  assert.equal(calls[0].signal.aborted, false)
-  foregroundController.abort()
-  await Promise.all([background, foreground])
-
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].signal.aborted, true)
-})
-
-test("active foreground hover retries one interrupted immutable transfer", async () => {
-  const createGeneDetailStore = loadFactory()
-  let calls = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async () => {
-      calls += 1
-      if (calls === 1) {
-        const error = new Error("interrupted speculative request")
-        error.name = "AbortError"
-        throw error
-      }
-      return response({
-        snapshot_version: "card-v1",
-        gene: { symbol: "BRCA2", full_name: "BRCA2 DNA repair associated" },
-        missing: [],
-      })
-    },
-  })
-  store.setRevision("card-v1")
-
-  const result = await store.fetchBatch(["BRCA2"], { priority: "foreground" })
-
-  assert.equal(calls, 2)
-  assert.equal(result.get("BRCA2")?.full_name, "BRCA2 DNA repair associated")
-})
-
-test("foreground hover does not retry an immutable missing record", async () => {
-  const createGeneDetailStore = loadFactory()
-  let calls = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async () => {
-      calls += 1
-      return response(
-        { snapshot_version: "card-v1", gene: null, missing: ["PRL"] },
-        { ok: false, status: 404 },
-      )
-    },
-  })
-  store.setRevision("card-v1")
-
-  const result = await store.fetchBatch(["PRL"], { priority: "foreground" })
-
-  assert.equal(calls, 1)
-  assert.equal(result.get("PRL"), null)
-})
-
-test("a retired immutable revision requests manifest recovery without negative-caching the gene", async () => {
-  const createGeneDetailStore = loadFactory()
-  const unavailable = []
-  let calls = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    onRevisionUnavailable: (event) => unavailable.push(event),
-    fetchImpl: async () => {
-      calls += 1
-      return response(
-        {
-          error: "Published card snapshot is retired",
-          code: "card_snapshot_retired",
-        },
-        { ok: false, status: 410 },
-      )
-    },
-  })
-  store.setRevision("card-v1")
-
-  const result = await store.fetchBatch(["RIPOR1"], { priority: "foreground" })
-
-  assert.equal(calls, 2, "foreground recovery may retry but must not cache a false absence")
-  assert.equal(result.get("RIPOR1"), null)
-  assert.equal(store.cache.has("RIPOR1"), false)
-  assert.deepEqual(
-    unavailable.map(({ revision, status }) => ({ revision, status })),
-    [
-      { revision: "card-v1", status: 410 },
-      { revision: "card-v1", status: 410 },
-    ],
-  )
-})
-
-test("the shared immutable store validates and persists portrait locator projections", async () => {
-  const createGeneDetailStore = loadFactory()
-  const sha = "ab".repeat(32)
-  const storage = createStorage()
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    storageApi: storage,
-    storageKey: "portrait_locator_test",
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
-    recordFromPayload: (payload) => payload.portrait_locator,
-    validateRecord: (record, symbol, revision) =>
-      record?.symbol === symbol &&
-      record?.snapshot_version === revision &&
-      record?.portrait?.asset_sha256 === sha,
-    fetchImpl: async () =>
-      response({
-        snapshot_version: "card-v1",
-        portrait_locator: {
-          snapshot_version: "card-v1",
-          symbol: "ATP2B4",
-          portrait: {
-            status: "published",
-            asset_sha256: sha,
-            medium_url: "https://iconoplasm.brinedew.bio/portrait.webp",
-          },
-        },
-        missing: [],
-      }),
-  })
-  store.setRevision("card-v1")
-
-  const result = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
-  await store.flushPersistence()
-
-  assert.equal(result.get("ATP2B4")?.portrait?.asset_sha256, sha)
-  assert.equal(storage.values.portrait_locator_test.revision, "card-v1")
-  assert.equal(storage.values.portrait_locator_test.entries[0][0], "ATP2B4")
-})
-
-test("an invalid portrait locator is not cached as an immutable absence", async () => {
-  const createGeneDetailStore = loadFactory()
-  let calls = 0
-  const store = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
-    recordFromPayload: (payload) => payload.portrait_locator,
-    validateRecord: (record, symbol, revision) =>
-      record?.symbol === symbol && record?.snapshot_version === revision,
-    fetchImpl: async () => {
-      calls += 1
-      return response({
-        snapshot_version: "card-v1",
-        portrait_locator: { snapshot_version: "wrong-card", symbol: "ATP2B4" },
-        missing: [],
-      })
-    },
-  })
-  store.setRevision("card-v1")
-
-  const first = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
-  const second = await store.fetchBatch(["ATP2B4"], { priority: "foreground" })
-
-  assert.equal(first.get("ATP2B4"), null)
-  assert.equal(second.get("ATP2B4"), null)
-  assert.equal(store.cache.has("ATP2B4"), false)
-  assert.equal(calls, 4)
-})
-
-test("portrait locator delivery survives complete rich-detail retry exhaustion", async () => {
-  const createGeneDetailStore = loadFactory()
-  let detailCalls = 0
-  let locatorCalls = 0
-  const detailStore = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/genes/${symbol}`,
-    fetchImpl: async () => {
-      detailCalls += 1
-      throw new Error("synthetic rich-detail transport stall")
-    },
-  })
-  const locatorStore = createGeneDetailStore({
-    windowRef: globalThis,
-    detailUrlForSymbol: (symbol, revision) => `/card-snapshots/${revision}/portraits/${symbol}`,
-    recordFromPayload: (payload) => payload.portrait_locator,
-    validateRecord: (record, symbol, revision) =>
-      record?.symbol === symbol && record?.snapshot_version === revision,
-    fetchImpl: async () => {
-      locatorCalls += 1
-      return response({
-        snapshot_version: "card-v1",
-        portrait_locator: {
-          snapshot_version: "card-v1",
-          symbol: "ATP2B4",
-          portrait: {
-            asset_sha256: "cd".repeat(32),
-            medium_url: "https://iconoplasm.brinedew.bio/atp2b4.webp",
-          },
-        },
-        missing: [],
-      })
-    },
-  })
-  detailStore.setRevision("card-v1")
-  locatorStore.setRevision("card-v1")
-
-  const [details, locators] = await Promise.all([
-    detailStore.fetchBatch(["ATP2B4"], { priority: "foreground" }),
-    locatorStore.fetchBatch(["ATP2B4"], { priority: "foreground" }),
-  ])
-
-  assert.equal(details.get("ATP2B4"), null)
-  assert.equal(detailCalls, 2)
-  assert.equal(locatorCalls, 1)
-  assert.equal(locators.get("ATP2B4")?.portrait?.asset_sha256, "cd".repeat(32))
+  assert.deepEqual(calls, ["TP53"])
+  assert.equal(resolved.size, 1)
+  assert.equal(resolved.get("TP53").symbol, "TP53")
 })
