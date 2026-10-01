@@ -837,7 +837,8 @@ test("search and gallery fetch compact indexes plus only result pages", async ()
 
   await reader.search("tumor", { limit: 12 })
   await reader.gallery({ order: "votes", offset: 0, limit: 24 })
-  const catalogReads = requested.filter((pathname) => pathname.includes("/catalog"))
+  // B-898: the one probe for the stable catalog object (a 404 here) is not a tree read.
+  const catalogReads = requested.filter((pathname) => pathname.includes("/immutable/catalog"))
   assert.equal(catalogReads.length, 2, "one compact index plus one selected rich page")
   assert.deepEqual(PUBLIC_READ_REQUEST_BOUNDS, {
     catalogIndexes: 96,
@@ -1101,5 +1102,140 @@ test("an unreachable CDN hedges the stable object to the canonical origin (B-898
       "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json",
       "https://iconoplasm.brinedew.bio/api/public/v1/stable-genes/TP53.json",
     ],
+  )
+})
+
+// B-898 Stage 1, catalog half: home, gallery and search read ONE stable object,
+// catalog/v3/index.json. Failure modes written before the code:
+// 1. index present on Bunny -> gallery, search and gene metrics are one CDN
+//    fetch of the index, no head, no manifest, no catalog pages;
+// 2. items carry CDN portrait URLs, full name, score and the sort fields;
+// 3. CDN 404 (not yet published) -> the immutable tree, with no origin request;
+// 4. a malformed index -> the immutable tree;
+// 5. metadata() names the stable catalog version.
+function stableCatalogFixture() {
+  return JSON.stringify({
+    schema: 3,
+    generated_at: "2026-10-01T15:00:00.000Z",
+    watermark_event_id: 320152,
+    genes: [
+      [
+        "A1BG",
+        "Alpha-1B-glycoprotein",
+        "b".repeat(64),
+        "#dd8c9d",
+        1,
+        14.6,
+        54.3,
+        34,
+        1986,
+        "2026-08-04 04:37:23",
+      ],
+      [
+        "TP53",
+        "tumor protein p53",
+        "a".repeat(64),
+        "#223344",
+        9,
+        2.1,
+        43.6,
+        48,
+        1979,
+        "2026-09-30 22:52:55",
+      ],
+      ["ZZZ3", "zinc finger ZZ-type containing 3", "", "", 0, null, 12.0, 7, 2001, ""],
+    ],
+  })
+}
+
+test("home, gallery and search read the one stable catalog object (B-898)", async () => {
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed.origin + parsed.pathname)
+      if (parsed.pathname === "/catalog/v3/index.json")
+        return new Response(stableCatalogFixture(), { status: 200 })
+      return new Response(null, { status: 404 })
+    },
+  })
+  const gallery = await reader.gallery({ order: "votes", offset: 0, limit: 24 })
+  assert.deepEqual(
+    gallery.items.map((item) => item.symbol),
+    ["TP53", "A1BG", "ZZZ3"],
+  )
+  assert.equal(gallery.total, 3)
+  assert.equal(gallery.published_total, 2)
+  assert.equal(gallery.items[0].full_name, "tumor protein p53")
+  assert.equal(gallery.items[0].image_score, 9)
+  assert.equal(gallery.items[0].color, "#223344")
+  assert.equal(
+    gallery.items[0].portrait.medium_url,
+    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
+  )
+  assert.equal(gallery.items[0].portrait.status, "published")
+  assert.equal(gallery.items[2].portrait, null)
+  assert.equal(gallery.snapshot_version, "catalog-v3:320152")
+  const heaviest = await reader.gallery({ order: "heaviest", offset: 0, limit: 2 })
+  assert.deepEqual(
+    heaviest.items.map((item) => item.symbol),
+    ["A1BG", "TP53"],
+  )
+  assert.equal(heaviest.has_more, true)
+  const search = await reader.search("tumor", { limit: 12 })
+  assert.deepEqual(
+    search.genes.map((gene) => gene.symbol),
+    ["TP53"],
+  )
+  const metrics = await reader.geneMetrics()
+  assert.equal(metrics.get("A1BG").weight_kg, 54.3)
+  assert.equal(metrics.get("A1BG").image_score, 1)
+  assert.equal((await reader.metadata()).card_snapshot_version, "catalog-v3:320152")
+  assert.deepEqual(requests, ["https://iconoplasmportraits.b-cdn.net/catalog/v3/index.json"])
+})
+
+test("without a stable catalog object the reader keeps the immutable tree and never hits the origin (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed)
+      if (parsed.pathname === "/catalog/v3/index.json") return new Response(null, { status: 404 })
+      if (parsed.pathname === "/api/public/v1/card-current") return new Response(fixture.head)
+      const body = fixture.objects.get(parsed.pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+  const gallery = await reader.gallery({ order: "votes", offset: 0, limit: 24 })
+  assert.deepEqual(
+    gallery.items.map((item) => item.symbol),
+    ["TP53"],
+  )
+  assert.equal(
+    requests.every((r) => r.origin === "https://iconoplasmportraits.b-cdn.net"),
+    true,
+  )
+})
+
+test("a malformed stable catalog object falls back to the immutable tree (B-898)", async () => {
+  const fixture = await immutableFixture()
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      if (parsed.pathname === "/catalog/v3/index.json")
+        return new Response(JSON.stringify({ schema: 2 }), { status: 200 })
+      if (parsed.pathname === "/api/public/v1/card-current") return new Response(fixture.head)
+      const body = fixture.objects.get(parsed.pathname)
+      return body ? new Response(body) : new Response(null, { status: 404 })
+    },
+  })
+  const search = await reader.search("tumor", { limit: 12 })
+  assert.deepEqual(
+    search.genes.map((gene) => gene.symbol),
+    ["TP53"],
   )
 })

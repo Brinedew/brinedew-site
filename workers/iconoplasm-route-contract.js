@@ -224,6 +224,17 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("card_object", 120),
   }),
   contract({
+    // B-898: the one stable catalog object, canonical-origin fallback only.
+    id: "public_stable_catalog_object",
+    match: exact("/api/public/v1/stable-catalog.json"),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_stable_catalog_object",
+    rateLimit: rateLimit("card_object", 120),
+  }),
+  contract({
     // B-898: the one stable object per gene, canonical-origin fallback only.
     id: "public_stable_gene_object",
     match: pattern(/^\/api\/public\/v1\/stable-genes\/([A-Z0-9][A-Z0-9._-]{0,63})\.json$/, [
@@ -1319,6 +1330,15 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
     budgetFamily: "admin_blots_upload",
     apiHandler: "admin_blots.upload",
+  }),
+  iconoplasmApiContract({
+    // B-898: the GitHub Actions publisher uploads the one catalog object here.
+    id: "admin_publication_catalog_object",
+    match: exact("/api/iconoplasm/admin/publication/catalog-object"),
+    methods: PUT,
+    auth: "administrator",
+    budgetFamily: "admin_publication_catalog_object",
+    apiHandler: "admin_publication.catalog_object_put",
   }),
   adminApiContract(
     "admin_gallery_publish_status",

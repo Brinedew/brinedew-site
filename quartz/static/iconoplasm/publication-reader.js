@@ -23,6 +23,16 @@ const STABLE_GENE_PATH_PREFIX = "/genes/v3/"
 // reach Bunny. Under /api/* so it needs no new static-first route entry.
 const STABLE_GENE_ORIGIN_PREFIX = "/api/public/v1/stable-genes/"
 const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
+// B-898: ONE stable catalog object for the home grid, the gallery orders, search
+// and gene metrics: every gene's name, portrait, score and sort fields in one
+// array, built by the Actions publisher. It replaces the head -> manifest ->
+// 74 catalog indexes -> catalog pages walk (76 fetches, about 1.8 MB) with one
+// fetch of about 1.4 MB compressed. Rows: [symbol, full_name, portrait_sha256,
+// color_hex, image_score, uniqueness_rank, weight_kg, age_years,
+// first_publication_year, published_at].
+const STABLE_CATALOG_PATH = "/catalog/v3/index.json"
+const STABLE_CATALOG_ORIGIN_PATH = "/api/public/v1/stable-catalog.json"
+const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
 export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   catalogIndexes: MAX_CATALOG_INDEXES,
   compactIndexBytes: 128 * 1024,
@@ -153,6 +163,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   let headPromise = null
   let catalogPromise = null
   let geneMetricsCache = null
+  let stableCatalogPromise = null
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
@@ -404,6 +415,81 @@ export function createIconoplasmPublicationReader(options = {}) {
     return fromCoherentPublication(`gene:${key}`, (head) => geneFromPublication(head, key))
   }
 
+  function stableCatalogEntry(row) {
+    const [
+      symbol,
+      fullName,
+      portraitSha,
+      color,
+      score,
+      uniqueness,
+      weight,
+      age,
+      firstPublicationYear,
+      publishedAt,
+    ] = row
+    const sha = String(portraitSha || "").toLowerCase()
+    const published = HASH.test(sha)
+    const prefix = `${CDN}/portraits/v1/${sha.slice(0, 2)}/${sha}`
+    return {
+      symbol: String(symbol),
+      canonical_symbol: String(symbol),
+      full_name: String(fullName || ""),
+      color: String(color || ""),
+      image_score: Number(score || 0),
+      uniqueness_rank: nullableNumber(uniqueness),
+      weight_kg: nullableNumber(weight),
+      age_years: nullableNumber(age),
+      first_publication_year: nullableNumber(firstPublicationYear),
+      published_at: String(publishedAt || ""),
+      // The published popularity column is 0 for every gene (B-886); the
+      // page-view table is the one source and gallery() applies it.
+      popularity_score: 0,
+      portrait: published
+        ? {
+            status: "published",
+            asset_sha256: sha,
+            thumb_url: `${prefix}/thumb.webp`,
+            medium_url: `${prefix}/medium.webp`,
+            hero_url: `${prefix}/full.webp`,
+          }
+        : null,
+    }
+  }
+
+  // Bunny first; a 404 (not yet published) or a malformed object means the
+  // immutable tree, with no origin request. Only an unreachable CDN hedges to
+  // the canonical origin's copy. One fetch per page: the parsed index stays in
+  // memory for every later gallery page, search and metrics read.
+  function stableCatalog() {
+    if (stableCatalogPromise) return stableCatalogPromise
+    stableCatalogPromise = (async () => {
+      let value
+      try {
+        value = (await fromCdn(STABLE_CATALOG_PATH, STABLE_CATALOG_OBJECT_LIMIT)).value
+      } catch (error) {
+        if (String(error?.message || "").startsWith("Publication HTTP")) return null
+        try {
+          value = (await fetchFrom(ORIGIN, STABLE_CATALOG_ORIGIN_PATH, STABLE_CATALOG_OBJECT_LIMIT))
+            .value
+        } catch {
+          return null
+        }
+      }
+      if (value?.schema !== 3 || !Array.isArray(value.genes)) return null
+      const entries = value.genes
+        .filter((row) => Array.isArray(row) && normalizedSymbol(row[0]))
+        .map(stableCatalogEntry)
+      return {
+        version: `catalog-v3:${Number(value.watermark_event_id || 0)}`,
+        generated_at: String(value.generated_at || ""),
+        entries,
+        bySymbol: new Map(entries.map((entry) => [entry.symbol, entry])),
+      }
+    })().catch(() => null)
+    return stableCatalogPromise
+  }
+
   // B-793: the gene record stays small; its complete candidate pool lives in
   // immutable gallery pages reached from `candidate_gallery`. A core gene
   // render never fetches a page — only a gallery that actually renders one
@@ -542,6 +628,17 @@ export function createIconoplasmPublicationReader(options = {}) {
     )
   }
 
+  function searchRank(needle, rawSymbol, rawName) {
+    const symbol = String(rawSymbol || "").toLowerCase()
+    const name = String(rawName || "").toLowerCase()
+    if (symbol === needle) return 1
+    if (symbol.startsWith(needle)) return 2
+    if (name.startsWith(needle)) return 3
+    if (symbol.includes(needle)) return 4
+    if (name.includes(needle)) return 5
+    return 0
+  }
+
   async function search(query, { limit = 12, symbols = null } = {}) {
     const needle = String(query || "")
       .trim()
@@ -551,20 +648,27 @@ export function createIconoplasmPublicationReader(options = {}) {
     const size = Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12))
     const allowedIdentity = allowed ? [...allowed].sort().join(",") : "*"
     const scope = `search:${encodeURIComponent(needle)}:${size}:${allowedIdentity}`
+    const stable = await stableCatalog()
+    if (stable) {
+      const ranked = []
+      for (const entry of stable.entries) {
+        if (allowed && !allowed.has(entry.symbol)) continue
+        const rank = searchRank(needle, entry.symbol, entry.full_name)
+        if (rank) ranked.push({ rank, entry })
+      }
+      ranked.sort(
+        (left, right) =>
+          left.rank - right.rank || left.entry.symbol.localeCompare(right.entry.symbol),
+      )
+      return { genes: ranked.slice(0, size).map((item) => item.entry), query: needle.toUpperCase() }
+    }
     return fromCoherentPublication(scope, async (head) => {
       const { indexes } = await catalogIndexes(head)
       const ranked = []
       indexes.forEach((index, indexNumber) => {
         index.search_entries.forEach(([rawSymbol, rawName, page, offset]) => {
           if (allowed && !allowed.has(rawSymbol)) return
-          const symbol = String(rawSymbol || "").toLowerCase()
-          const name = String(rawName || "").toLowerCase()
-          let rank = 0
-          if (symbol === needle) rank = 1
-          else if (symbol.startsWith(needle)) rank = 2
-          else if (name.startsWith(needle)) rank = 3
-          else if (symbol.includes(needle)) rank = 4
-          else if (name.includes(needle)) rank = 5
+          const rank = searchRank(needle, rawSymbol, rawName)
           if (rank) ranked.push({ symbol: rawSymbol, rank, index: indexNumber, page, offset })
         })
       })
@@ -585,6 +689,23 @@ export function createIconoplasmPublicationReader(options = {}) {
   // published cards carry 0 for every gene (measured 27 Sep), so the page
   // takes it from wiki-pageviews.js, the table the server enrichment used.
   async function geneMetrics() {
+    const stable = await stableCatalog()
+    if (stable) {
+      if (geneMetricsCache?.version === stable.version) return geneMetricsCache.value
+      const bySymbol = new Map()
+      for (const entry of stable.entries) {
+        bySymbol.set(entry.symbol.toUpperCase(), {
+          full_name: entry.full_name,
+          image_score: entry.image_score,
+          published_at: entry.published_at,
+          uniqueness_rank: entry.uniqueness_rank,
+          weight_kg: entry.weight_kg,
+          age_years: entry.age_years,
+        })
+      }
+      geneMetricsCache = { version: stable.version, value: bySymbol }
+      return bySymbol
+    }
     return fromCoherentPublication("gene-metrics", async (head) => {
       const { version, indexes } = await catalogIndexes(head)
       if (geneMetricsCache?.version === version) return geneMetricsCache.value
@@ -628,6 +749,33 @@ export function createIconoplasmPublicationReader(options = {}) {
     const pageviews = ["popular", "popularity"].includes(order)
       ? (await import("./wiki-pageviews.js?v=cb3a800cea17433a")).ICONOPLASM_WIKI_PAGEVIEWS
       : null
+    const stable = await stableCatalog()
+    if (stable) {
+      const rows = stable.entries.map((entry) => ({
+        symbol: entry.symbol,
+        entry,
+        popularity: Number(pageviews?.[entry.symbol.toUpperCase()] || 0),
+        votes: entry.image_score,
+        publishedAt: entry.published_at,
+        nameLength: entry.full_name.length || entry.symbol.length,
+        uniqueness: entry.uniqueness_rank,
+        weight: entry.weight_kg,
+        age: entry.age_years,
+        published: entry.portrait !== null,
+      }))
+      sortGalleryRows(rows, order, seed)
+      const selected = rows.slice(start, start + size)
+      return {
+        order,
+        total: rows.length,
+        published_total: rows.filter((row) => row.published).length,
+        offset: start,
+        limit: size,
+        has_more: start + size < rows.length,
+        snapshot_version: stable.version,
+        items: selected.map((row) => row.entry),
+      }
+    }
     return fromCoherentPublication(scope, async (head) => {
       const { version, indexes } = await catalogIndexes(head)
       const rows = indexes.flatMap((index, indexNumber) =>
@@ -660,52 +808,7 @@ export function createIconoplasmPublicationReader(options = {}) {
           }),
         ),
       )
-      if (["symbol", "alphabetical"].includes(order))
-        rows.sort((a, b) => a.symbol.localeCompare(b.symbol))
-      else if (order === "shortest")
-        rows.sort((a, b) => a.nameLength - b.nameLength || a.symbol.localeCompare(b.symbol))
-      else if (order === "newest")
-        rows.sort(
-          (a, b) =>
-            b.publishedAt.localeCompare(a.publishedAt) ||
-            b.popularity - a.popularity ||
-            a.symbol.localeCompare(b.symbol),
-        )
-      else if (order === "random")
-        rows.sort(
-          (a, b) =>
-            randomRank(seed, a.symbol) - randomRank(seed, b.symbol) ||
-            a.symbol.localeCompare(b.symbol),
-        )
-      else if (order === "uniqueness")
-        rows.sort(
-          (a, b) =>
-            (a.uniqueness == null) - (b.uniqueness == null) ||
-            (a.uniqueness ?? 0) - (b.uniqueness ?? 0) ||
-            b.popularity - a.popularity ||
-            a.symbol.localeCompare(b.symbol),
-        )
-      else if (["heaviest", "lightest"].includes(order))
-        rows.sort(
-          (a, b) =>
-            (a.weight == null) - (b.weight == null) ||
-            (order === "heaviest"
-              ? (b.weight ?? 0) - (a.weight ?? 0)
-              : (a.weight ?? 0) - (b.weight ?? 0)) ||
-            b.popularity - a.popularity ||
-            a.symbol.localeCompare(b.symbol),
-        )
-      else if (["oldest", "youngest"].includes(order))
-        rows.sort(
-          (a, b) =>
-            (a.age == null) - (b.age == null) ||
-            (order === "oldest" ? (b.age ?? 0) - (a.age ?? 0) : (a.age ?? 0) - (b.age ?? 0)) ||
-            b.popularity - a.popularity ||
-            a.symbol.localeCompare(b.symbol),
-        )
-      else if (["popular", "popularity"].includes(order))
-        rows.sort((a, b) => b.popularity - a.popularity || a.symbol.localeCompare(b.symbol))
-      else rows.sort((a, b) => b.votes - a.votes || a.symbol.localeCompare(b.symbol))
+      sortGalleryRows(rows, order, seed)
       const selected = rows.slice(start, start + size)
       const items = await catalogEntriesAt(indexes, selected)
       return {
@@ -721,7 +824,60 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
+  function sortGalleryRows(rows, order, seed) {
+    if (["symbol", "alphabetical"].includes(order))
+      rows.sort((a, b) => a.symbol.localeCompare(b.symbol))
+    else if (order === "shortest")
+      rows.sort((a, b) => a.nameLength - b.nameLength || a.symbol.localeCompare(b.symbol))
+    else if (order === "newest")
+      rows.sort(
+        (a, b) =>
+          b.publishedAt.localeCompare(a.publishedAt) ||
+          b.popularity - a.popularity ||
+          a.symbol.localeCompare(b.symbol),
+      )
+    else if (order === "random")
+      rows.sort(
+        (a, b) =>
+          randomRank(seed, a.symbol) - randomRank(seed, b.symbol) ||
+          a.symbol.localeCompare(b.symbol),
+      )
+    else if (order === "uniqueness")
+      rows.sort(
+        (a, b) =>
+          (a.uniqueness == null) - (b.uniqueness == null) ||
+          (a.uniqueness ?? 0) - (b.uniqueness ?? 0) ||
+          b.popularity - a.popularity ||
+          a.symbol.localeCompare(b.symbol),
+      )
+    else if (["heaviest", "lightest"].includes(order))
+      rows.sort(
+        (a, b) =>
+          (a.weight == null) - (b.weight == null) ||
+          (order === "heaviest"
+            ? (b.weight ?? 0) - (a.weight ?? 0)
+            : (a.weight ?? 0) - (b.weight ?? 0)) ||
+          b.popularity - a.popularity ||
+          a.symbol.localeCompare(b.symbol),
+      )
+    else if (["oldest", "youngest"].includes(order))
+      rows.sort(
+        (a, b) =>
+          (a.age == null) - (b.age == null) ||
+          (order === "oldest" ? (b.age ?? 0) - (a.age ?? 0) : (a.age ?? 0) - (b.age ?? 0)) ||
+          b.popularity - a.popularity ||
+          a.symbol.localeCompare(b.symbol),
+      )
+    else if (["popular", "popularity"].includes(order))
+      rows.sort((a, b) => b.popularity - a.popularity || a.symbol.localeCompare(b.symbol))
+    else rows.sort((a, b) => b.votes - a.votes || a.symbol.localeCompare(b.symbol))
+  }
+
   async function metadata() {
+    const stable = await stableCatalog()
+    if (stable) {
+      return { card_snapshot_version: stable.version, publication_source: "stable_v3" }
+    }
     return fromCoherentPublication("metadata", async (head) => {
       await publication(head)
       return {

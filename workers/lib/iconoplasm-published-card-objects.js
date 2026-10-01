@@ -72,7 +72,14 @@ export function stableGeneObjectKey(symbol) {
   return `${STABLE_GENE_OBJECT_PREFIX}/${clean}.json`
 }
 
+// B-898: the one stable catalog object (home, gallery, search). Built by
+// scripts/publish-iconoplasm-catalog.mjs in GitHub Actions and uploaded
+// through the Worker's admin route; readers fetch it from the CDN.
+export const STABLE_CATALOG_OBJECT_KEY = "catalog/v3/index.json"
+export const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
+
 function stableGeneObjectIdentity(key) {
+  if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
   const prefix = `${STABLE_GENE_OBJECT_PREFIX}/`
   if (typeof key !== "string" || !key.startsWith(prefix) || !key.endsWith(".json"))
     throw new Error("Invalid stable gene object key")
@@ -459,6 +466,12 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     )
   }
 
+  // Exact-URL purge for any stable (fixed-URL) object the Worker just rewrote
+  // or proxied, such as the catalog object uploaded by the Actions publisher.
+  async function purgeStableKey(key) {
+    return purgeCdnUrl(externalPortraitPublicUrl(env, key), key)
+  }
+
   return {
     read,
     verifyReaderResolvable,
@@ -466,6 +479,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     writeStable,
     readStable,
     purgeStablePrefix,
+    purgeStableKey,
     async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
         throw new Error("Unknown published object kind")

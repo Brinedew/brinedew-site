@@ -163,6 +163,7 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
+import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -1629,7 +1630,9 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_local_removals_ack" ||
     family === "admin_artist_styles_remove" ||
     family === "admin_artist_blacklist_pending" ||
-    family === "admin_artist_blacklist_ack"
+    family === "admin_artist_blacklist_ack" ||
+    // B-898: one Bunny PUT and one purge per catalog publication, no D1.
+    family === "admin_publication_catalog_object"
   ) {
     return "admin_operational"
   }
@@ -34205,6 +34208,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(args.request, await publishedCardDeliveryHandlers.object(args)),
   public_stable_gene_object: async (args) =>
     asHead(args.request, await publishedCardDeliveryHandlers.stableGene(args)),
+  public_stable_catalog_object: async (args) =>
+    asHead(args.request, await publishedCardDeliveryHandlers.stableCatalog(args)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_stats: ({ request, env }) => handlePublicStats(request, env),
@@ -35176,6 +35181,12 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     json,
     listBacklog: listIconoplasmGeneBlotBacklog,
     upload: uploadIconoplasmGeneBlot,
+  }),
+  ...createIconoplasmAdminCatalogObjectHandlers({
+    isAdmin: isIconoplasmAdmin,
+    json,
+    putObject: putPortraitStorageObject,
+    purgeObject: (env, key) => createPublishedCardObjectStore(env).purgeStableKey(key),
   }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,
