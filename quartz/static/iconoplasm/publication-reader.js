@@ -207,11 +207,15 @@ export function createIconoplasmPublicationReader(options = {}) {
         cache,
         ...(controller ? { signal: controller.signal } : {}),
       })
-      if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
-      text = await response.text()
     } finally {
+      // The timeout bounds the time to headers (a hung connection), not the
+      // body: the stable catalog object is about 1.4 MB compressed and must
+      // not be abandoned, and then hedged to the metered origin, on a slow
+      // link that is still delivering it.
       clearTimeout(timer)
     }
+    if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
+    text = await response.text()
     if (new TextEncoder().encode(text).byteLength > limit) {
       throw new Error("Publication object exceeds browser limit")
     }
