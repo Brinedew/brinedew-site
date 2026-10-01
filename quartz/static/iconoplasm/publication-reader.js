@@ -584,6 +584,11 @@ export function createIconoplasmPublicationReader(options = {}) {
       .filter(Boolean)
       .slice(0, MAX_GALLERY_PAGE_SIZE)
     if (!keys.length) return []
+    // B-898: a brick needs the name and the portrait, which the catalog row
+    // carries; the per-brick hydration fetches the full stable gene object
+    // afterwards. One catalog fetch per page instead of the tree walk.
+    const stable = await stableCatalog()
+    if (stable) return keys.map((key) => stable.bySymbol.get(key)).filter(Boolean)
     return fromCoherentPublication(`genes:${keys.join(",")}`, async (head) =>
       (await Promise.all(keys.map((key) => geneFromPublication(head, key)))).filter(Boolean),
     )

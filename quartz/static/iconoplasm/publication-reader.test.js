@@ -1244,3 +1244,34 @@ test("a malformed stable catalog object falls back to the immutable tree (B-898)
     ["TP53"],
   )
 })
+
+// B-898: the home page's first brick page asks genes(symbols) for the bricks'
+// name and portrait. Failure modes written before the code:
+// 1. with the stable catalog present, a batch is answered from its rows with
+//    the one catalog fetch and no head/manifest/gene-object walk;
+// 2. unknown symbols are simply absent (the caller reports them as missing);
+// 3. without the catalog object the immutable tree still answers.
+test("a brick batch is answered from the stable catalog rows (B-898)", async () => {
+  const requests = []
+  const reader = createIconoplasmPublicationReader({
+    storage: null,
+    fetchImpl: async (url) => {
+      const parsed = new URL(url)
+      requests.push(parsed.origin + parsed.pathname)
+      if (parsed.pathname === "/catalog/v3/index.json")
+        return new Response(stableCatalogFixture(), { status: 200 })
+      return new Response(null, { status: 404 })
+    },
+  })
+  const records = await reader.genes(["tp53", "A1BG", "NOPE", "TP53"])
+  assert.deepEqual(
+    records.map((r) => r.symbol),
+    ["TP53", "A1BG"],
+  )
+  assert.equal(records[0].full_name, "tumor protein p53")
+  assert.equal(
+    records[0].portrait.medium_url,
+    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
+  )
+  assert.deepEqual(requests, ["https://iconoplasmportraits.b-cdn.net/catalog/v3/index.json"])
+})
