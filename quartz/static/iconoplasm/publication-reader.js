@@ -23,6 +23,12 @@ const STABLE_GENE_PATH_PREFIX = "/genes/v3/"
 // reach Bunny. Under /api/* so it needs no new static-first route entry.
 const STABLE_GENE_ORIGIN_PREFIX = "/api/public/v1/stable-genes/"
 const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
+// Stable objects are rewritten in place and purged on the CDN, but the pull
+// zone stamps them `Cache-Control: max-age=2592000` (measured 2026-10-01), so a
+// browser's own cache would hold a stale gene for a month. "no-cache" makes
+// every read a conditional request: a 304 when nothing changed, the new bytes
+// otherwise. One CDN request per view either way; Bunny charges per byte.
+const STABLE_FETCH = Object.freeze({ cache: "no-cache" })
 export const PUBLIC_READ_REQUEST_BOUNDS = Object.freeze({
   catalogIndexes: MAX_CATALOG_INDEXES,
   compactIndexBytes: 128 * 1024,
@@ -173,7 +179,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     }
   }
 
-  async function fetchFrom(origin, path, limit, timeoutMs) {
+  async function fetchFrom(origin, path, limit, timeoutMs, { cache = "default" } = {}) {
     // A plain timer, cleared once the body has arrived. AbortSignal.timeout()
     // uses an unreferenced timer in Node, so a hung request let the test
     // process exit mid-read.
@@ -187,6 +193,7 @@ export function createIconoplasmPublicationReader(options = {}) {
       response = await fetchImpl(origin + path, {
         method: "GET",
         credentials: "omit",
+        cache,
         ...(controller ? { signal: controller.signal } : {}),
       })
       if (!response.ok) throw new Error(`Publication HTTP ${response.status}`)
@@ -212,10 +219,10 @@ export function createIconoplasmPublicationReader(options = {}) {
   // through to the origin for the head, so a Bunny head outage does not fan
   // returning readers into Worker requests.
   let cdnUnreachable = false
-  async function fromCdn(path, limit) {
+  async function fromCdn(path, limit, options) {
     if (cdnUnreachable) throw new Error("Publication CDN unreachable")
     try {
-      return await fetchFrom(CDN, path, limit, cdnTimeoutMs)
+      return await fetchFrom(CDN, path, limit, cdnTimeoutMs, options)
     } catch (error) {
       if (!String(error?.message || "").startsWith("Publication HTTP")) cdnUnreachable = true
       throw error
@@ -378,7 +385,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     const path = `${STABLE_GENE_PATH_PREFIX}${key}.json`
     let value
     try {
-      value = (await fromCdn(path, STABLE_GENE_OBJECT_LIMIT)).value
+      value = (await fromCdn(path, STABLE_GENE_OBJECT_LIMIT, STABLE_FETCH)).value
     } catch (error) {
       if (String(error?.message || "").startsWith("Publication HTTP")) return undefined
       try {
@@ -387,6 +394,8 @@ export function createIconoplasmPublicationReader(options = {}) {
             ORIGIN,
             `${STABLE_GENE_ORIGIN_PREFIX}${key}.json`,
             STABLE_GENE_OBJECT_LIMIT,
+            undefined,
+            STABLE_FETCH,
           )
         ).value
       } catch {

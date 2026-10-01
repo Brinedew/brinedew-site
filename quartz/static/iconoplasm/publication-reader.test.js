@@ -1006,10 +1006,12 @@ test("a gene with a stable object is one CDN fetch and never walks the immutable
   const fixture = await immutableFixture()
   const stable = JSON.stringify(stableGeneFixture(fixture.gene))
   const requests = []
+  const cacheModes = []
   const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, init) => {
       const parsed = new URL(url)
       requests.push(parsed)
+      cacheModes.push(init?.cache)
       if (parsed.pathname === "/genes/v3/TP53.json") return new Response(stable, { status: 200 })
       if (parsed.pathname === "/api/public/v1/card-current")
         return new Response(fixture.head, { status: 200 })
@@ -1028,6 +1030,9 @@ test("a gene with a stable object is one CDN fetch and never walks the immutable
     gene.portrait.medium_url,
     `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
   )
+  // 7. the CDN stamps stable objects with a 30-day max-age; the reader must
+  //    revalidate them on every read instead of trusting the browser cache.
+  assert.deepEqual(cacheModes, ["no-cache"])
   const before = requests.length
   const pool = await reader.candidateGallery(gene)
   assert.equal(pool.count, 2)
