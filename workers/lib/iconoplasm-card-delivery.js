@@ -2,6 +2,8 @@ import { PUBLIC_ORIGIN_OBJECT_KINDS } from "../iconoplasm-route-contract.js"
 import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
+  STABLE_GENE_OBJECT_CACHE_CONTROL,
+  stableGeneObjectKey,
 } from "./iconoplasm-published-card-objects.js"
 
 // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: public delivery performs only
@@ -75,6 +77,32 @@ export function createPublishedCardDeliveryHandlers({ barrier, readerView = null
       if (globalThis.caches?.default)
         ctx?.waitUntil?.(globalThis.caches.default.put(cacheKey, response.clone()))
       return response
+    },
+    // B-898: canonical-origin fallback for the one stable object per gene. The
+    // reader tries Bunny first and reaches this only when the CDN is
+    // unreachable, so this stays a rare metered request. The object is mutable:
+    // no Workers Cache, short shared TTL, same bytes as storage.
+    async stableGene({ env, match }) {
+      let key
+      try {
+        key = stableGeneObjectKey(match.params.symbol)
+      } catch {
+        return new Response(null, { status: 404 })
+      }
+      const object = await createPublishedCardObjectStore(env).readStable(key)
+      if (!object)
+        return new Response(null, {
+          status: 404,
+          headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
+        })
+      return new Response(object.bytes, {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+          "Access-Control-Allow-Origin": "*",
+          "X-Content-Type-Options": "nosniff",
+        },
+      })
     },
   }
 }

@@ -409,6 +409,31 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return { key, hash, size: bytes.byteLength, symbol: identity.symbol, purged }
   }
 
+  // First-party read of a stable gene object for the canonical-origin fallback
+  // route. Authenticated Storage only: the CDN is what the reader tried first.
+  async function readStable(key) {
+    const identity = stableGeneObjectIdentity(key)
+    const url = externalPortraitStorageUrl(env, key)
+    const password = externalPortraitStoragePassword(env)
+    if (!url || !password) {
+      const error = new Error("Bunny published-object storage is not configured")
+      error.code = PUBLISHED_OBJECT_STORAGE_UNAVAILABLE
+      throw error
+    }
+    const response = await send(
+      url,
+      { method: "GET", headers: { AccessKey: password, Accept: "application/json" } },
+      key,
+    )
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {})
+      if (response.status === 404) return null
+      throw new Error(`Stable gene object GET failed (${response.status})`)
+    }
+    const bytes = await boundedBytes(response, identity.limit, bodyTimeoutMs)
+    return { key, bytes, symbol: identity.symbol }
+  }
+
   // Exact-URL CDN purge. Returns false when no account key is configured (the
   // object is still correct on the origin; only edge freshness is unbounded),
   // and throws on a refused purge so the publication retries the gene.
@@ -439,6 +464,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     verifyReaderResolvable,
     verifyBlot,
     writeStable,
+    readStable,
     purgeStablePrefix,
     async write(kind, value, { reuseExisting = false } = {}) {
       if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))

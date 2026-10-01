@@ -19,6 +19,7 @@ import {
 
 const PATTERN_EXAMPLES = Object.freeze({
   public_card_object: `/published-cards/v2/immutable/genes/${"a".repeat(64)}.json`,
+  public_stable_gene_object: "/api/public/v1/stable-genes/TP53.json",
   public_card_delivery_index: "/api/public/v1/card-snapshots/card-v1/delivery-index",
   public_card_content_gene: `/api/public/v1/card-content/v1/${"a".repeat(64)}/genes/TP53`,
   public_card_content_portrait: `/api/public/v1/card-content/v1/${"a".repeat(64)}/portraits/TP53`,

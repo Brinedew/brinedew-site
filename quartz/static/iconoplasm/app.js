@@ -45,8 +45,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=e2af6121808a5899"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=5ccb211edf0b9cff"
+} from "./diagram-studio.js?v=f2127b13f2b5ddfc"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=9d89ab84e33a3246"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm

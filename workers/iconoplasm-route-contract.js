@@ -224,6 +224,19 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("card_object", 120),
   }),
   contract({
+    // B-898: the one stable object per gene, canonical-origin fallback only.
+    id: "public_stable_gene_object",
+    match: pattern(/^\/api\/public\/v1\/stable-genes\/([A-Z0-9][A-Z0-9._-]{0,63})\.json$/, [
+      "symbol",
+    ]),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    budgetFamily: "public_gene_detail",
+    gatewayHandler: "public_stable_gene_object",
+    rateLimit: rateLimit("card_object", 120),
+  }),
+  contract({
     id: "public_card_content_gene",
     match: pattern(
       /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(genes)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
