@@ -1,0 +1,72 @@
+name: Publish Iconoplasm catalog
+
+# B-898 Stage 1: the one stable catalog object, catalog/v3/index.json, that the
+# home, gallery and search pages read from the free CDN. Built here because a
+# free-plan Worker request has 10 ms of CPU and this needs all 19k genes.
+# The Worker dispatches this workflow (repository_dispatch) whenever a
+# canonical-affecting publish event lands; the hourly schedule is a backstop
+# only (B-893: GitHub schedules fire 4 to 11 times a day here). Each run is
+# incremental: it reads the previous object from the CDN, the publish events
+# since that object's watermark, and only the changed genes from D1.
+on:
+  repository_dispatch:
+    types: [iconoplasm-catalog]
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Rebuild every gene instead of the dirty set"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iconoplasm-catalog-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ] || [ -z "${ICONOPLASM_ADMIN_TOKEN:-}" ]; then
+            echo "Missing CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN, CLOUDFLARE_ACCOUNT_ID or ICONOPLASM_ADMIN_TOKEN repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Publish catalog/v3/index.json
+        run: node scripts/publish-iconoplasm-catalog.mjs ${{ (inputs.full == true) && '--full' || '' }}
+
+      - name: Upload publication receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconoplasm-catalog-${{ github.run_id }}
+          path: artifacts/iconoplasm-catalog
+          if-no-files-found: warn
+          retention-days: 7
