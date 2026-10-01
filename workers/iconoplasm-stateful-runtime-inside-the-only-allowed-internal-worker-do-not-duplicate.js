@@ -89,6 +89,7 @@ import {
 import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
+  STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
 import {
@@ -15833,34 +15834,25 @@ export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllo
     }
   }
   if (requestedSymbol) {
-    const versionInfo = await currentMobileCardSnapshotVersion(env)
-    const snapshotVersion = String(versionInfo?.current || "").trim()
-    if (!snapshotVersion || snapshotVersion === "0") {
+    // B-898: when the route table is unavailable, one stable gene object read
+    // answers canonical membership for this symbol. Storage failure is
+    // "unavailable"; a 404 falls through to alias resolution below.
+    let object
+    try {
+      object = await readStableGeneObject(env, requestedSymbol)
+    } catch {
       return { kind: "unavailable", record: null, canonicalSymbol: "" }
     }
-    const artifact = await readPublishedCardCatalogArtifact(
-      env,
-      snapshotVersion,
-      [requestedSymbol],
-      {
-        allowWholeArtifact: false,
-      },
-    )
-    if (!artifact) {
-      return { kind: "unavailable", record: null, canonicalSymbol: "" }
-    }
-    const card = artifact.bySymbol.get(requestedSymbol)
-    if (card) {
-      const payload = card.payload && typeof card.payload === "object" ? card.payload : card
+    if (object) {
       return {
         kind: "canonical",
         canonicalSymbol: requestedSymbol,
         record: {
           s: requestedSymbol,
-          n: String(payload.full_name || card.full_name || "").trim(),
+          n: String(object.full_name || "").trim(),
         },
-        version: snapshotVersion,
-        source: "published_card_catalog_shard",
+        version: stableGeneObjectVersion(object),
+        source: "stable_gene_object",
       }
     }
   }
@@ -31354,8 +31346,7 @@ async function handlePublicGeneBatch(request, env) {
       PUBLIC_DEFAULT_GENE_BATCH_LIMIT,
   ).slice(0, PUBLIC_MAX_GENE_BATCH_LIMIT)
   const fields = body.fields || null
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const snapshotVersion = String(versionInfo.current || "").trim()
+  const snapshotVersion = STABLE_GENE_OBJECT_SNAPSHOT_LABEL
   if (!symbols.length) {
     return json({
       api_version: PUBLIC_API_VERSION,
@@ -31365,10 +31356,16 @@ async function handlePublicGeneBatch(request, env) {
       missing: [],
     })
   }
-  // ARCHITECTURE FENCE [IPD-008]: extension hover reads use the published card
-  // artifact. D1 is the authoring source, not the public per-page read plane.
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, symbols)
-  if (!artifact) {
+  // ARCHITECTURE FENCE [IPD-008]: extension hover reads use the published
+  // stable gene objects (B-898). D1 is the authoring source, not the public
+  // per-page read plane. Cost: one storage read per accepted symbol, bounded
+  // by PUBLIC_MAX_GENE_BATCH_LIMIT above; a batch past the Worker's subrequest
+  // cap fails closed as 503 rather than composing anything from D1.
+  let objects
+  try {
+    objects = await readStableGeneObjects(env, symbols)
+  } catch (error) {
+    console.error("Iconoplasm public gene batch stable object read failed:", String(error))
     return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
       "Cache-Control": "no-store",
       "X-Iconoplasm-Data-Source": "artifact-unavailable",
@@ -31378,8 +31375,7 @@ async function handlePublicGeneBatch(request, env) {
   const records = []
   const missing = []
   for (const symbol of symbols) {
-    const card = artifact.bySymbol.get(symbol)
-    const record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+    const record = objects.get(symbol) || null
     if (!record) {
       missing.push(symbol)
       continue
@@ -31398,7 +31394,7 @@ async function handlePublicGeneBatch(request, env) {
     200,
     {
       "Cache-Control": "public, max-age=120",
-      "X-Iconoplasm-Data-Source": "published-card-catalog",
+      "X-Iconoplasm-Data-Source": "stable-gene-object",
       "X-Iconoplasm-VM-Version": snapshotVersion,
     },
   )
@@ -31421,6 +31417,11 @@ export const hoverDeliveryHandlers = createHoverDeliveryHandlers({
 })
 
 /**
+ * B-898: no reader in this file calls this any more (public_gene_batch, the
+ * card-snapshots routes, mobile cards and the account window all read the
+ * stable gene object). It is left for the deletion PR that removes the delta
+ * chain and its coordinator together.
+ *
  * B-762 exact resolution for a snapshot-addressed reader. The view id is an
  * exact immutable identity: base epoch plus the content hash of the chain
  * object that names the exact segment set. `committed` carries the verified
@@ -31459,36 +31460,31 @@ async function readPublishedViewRecord(env, view, kind, symbol) {
   return { status: "committed", record }
 }
 
+// B-898 Stage 1 (step B): `card-snapshots/<version>/genes|portraits/<SYM>`
+// stay registered for installed 0.5.8 extensions until the stores update
+// them. The `<version>` segment is now only a URL token: there is no KV head
+// to compare it against, so any syntactically valid token resolves to the one
+// stable gene object and the envelope keeps its keys. The body is mutable
+// under a constant URL, so the response and the Worker cache copy live 300 s
+// (STABLE_GENE_OBJECT_CACHE_CONTROL), never a year.
+//
+// Failure modes, written before the switch:
+//   1. Object present: 200, same envelope keys (api_version, schema_version,
+//      snapshot_version, canonical_key, gene, missing); snapshot_version is the
+//      object's published_at; one storage read, no KV.
+//   2. Object missing: 404 with gene null and missing [symbol], same keys.
+//   3. Storage error: 503 CARD_ARTIFACT_UNAVAILABLE, Cache-Control no-store.
+//   4. Second request for the same URL inside 300 s: served from the Worker
+//      cache with X-Iconoplasm-Detail-Cache HIT, no storage read.
 export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
-  const snapshotVersion = String(snapshotFromPath || "").trim()
+  const snapshotToken = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
-  if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
+  if (!snapshotToken || !/^[A-Za-z0-9._:-]+$/.test(snapshotToken) || !symbol) {
     return json({ error: "Invalid published card detail path" }, 400, {
       "Cache-Control": "no-store",
     })
   }
 
-  // ARCHITECTURE FENCE [IPD-008]: the version is part of the URL, so this read
-  // is immutable and can be cached by the browser and CDN. It reads only the
-  // published card artifact selected by that version; D1 is never a fallback.
-  const view = parsePublishedViewId(snapshotVersion)
-  const barrier = await currentMobileCardSnapshotVersion(env)
-  const publishedVersions = new Set(
-    [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
-  )
-  // A delta view names its exact base epoch. That base must still be published
-  // and the view never resolves against a newer epoch.
-  if (!publishedVersions.has(view.base)) {
-    return json(
-      {
-        error: "Published card snapshot is retired",
-        code: "card_snapshot_retired",
-        current_snapshot_version: String(barrier.current || "").trim() || null,
-      },
-      410,
-      { "Cache-Control": "no-store" },
-    )
-  }
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
   const cacheUrl = new URL(request.url)
   cacheUrl.search = ""
@@ -31505,56 +31501,18 @@ export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath
     })
   }
 
-  let deltaRecord = null
-  if (view.chainHash) {
-    const resolved = await readPublishedViewRecord(env, view, "gene", symbol)
-    if (resolved.status === "unavailable") {
-      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-        "Cache-Control": "no-store",
-        "X-Iconoplasm-Data-Source": "artifact-unavailable",
-        "X-Iconoplasm-VM-Version": snapshotVersion,
-      })
-    }
-    if (resolved.status === "withdrawn") {
-      const withdrawn = json(
-        {
-          api_version: PUBLIC_API_VERSION,
-          schema_version: API_SCHEMA_VERSION,
-          snapshot_version: snapshotVersion,
-          canonical_key: "symbol",
-          gene: null,
-          missing: [symbol],
-        },
-        404,
-        {
-          "Cache-Control": "public, max-age=31536000, immutable",
-          ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
-          "X-Iconoplasm-Data-Source": "published-card-catalog",
-          "X-Iconoplasm-Detail-Cache": "MISS",
-          "X-Iconoplasm-VM-Version": snapshotVersion,
-        },
-      )
-      if (cache) ctx?.waitUntil?.(cache.put(cacheKey, withdrawn.clone()))
-      return withdrawn
-    }
-    if (resolved.status === "committed") deltaRecord = resolved.record
-  }
-
   let record = null
-  if (deltaRecord) {
-    record = projectGeneRecord(deltaRecord, null)
-  } else {
-    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
-    if (!artifact) {
-      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-        "Cache-Control": "no-store",
-        "X-Iconoplasm-Data-Source": "artifact-unavailable",
-        "X-Iconoplasm-VM-Version": snapshotVersion,
-      })
-    }
-    const card = artifact.bySymbol.get(symbol)
-    record = card && card.payload && typeof card.payload === "object" ? card.payload : null
+  try {
+    record = await readStableGeneObject(env, symbol)
+  } catch (error) {
+    console.error("Iconoplasm public gene detail stable object read failed:", String(error))
+    return json(cardArtifactUnavailablePayload(snapshotToken), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-VM-Version": snapshotToken,
+    })
   }
+  const snapshotVersion = record ? stableGeneObjectVersion(record) : snapshotToken
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -31564,9 +31522,9 @@ export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath
     missing: record ? [] : [symbol],
   }
   const response = json(payload, record ? 200 : 404, {
-    "Cache-Control": "public, max-age=31536000, immutable",
-    ETag: `"card-detail-${snapshotVersion}-${symbol}"`,
-    "X-Iconoplasm-Data-Source": "published-card-catalog",
+    "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+    ETag: `"card-detail-${symbol}-${snapshotVersion}"`,
+    "X-Iconoplasm-Data-Source": "stable-gene-object",
     "X-Iconoplasm-Detail-Cache": "MISS",
     "X-Iconoplasm-VM-Version": snapshotVersion,
   })
@@ -31602,6 +31560,10 @@ function publishedPortraitLocatorFromCard(card, snapshotVersion) {
   }
 }
 
+// Same contract as handlePublicGeneDetail above, projected to the compact
+// portrait locator. Failure modes: object present with a published portrait
+// -> 200 locator; object missing, portrait null or unpublished -> 404 with
+// portrait_locator null and missing [symbol]; storage error -> 503 no-store.
 export async function handlePublicPortraitLocator(
   request,
   env,
@@ -31609,40 +31571,19 @@ export async function handlePublicPortraitLocator(
   snapshotFromPath,
   symbolFromPath,
 ) {
-  const snapshotVersion = String(snapshotFromPath || "").trim()
+  const snapshotToken = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
-  if (!snapshotVersion || !/^[A-Za-z0-9._:-]+$/.test(snapshotVersion) || !symbol) {
+  if (!snapshotToken || !/^[A-Za-z0-9._:-]+$/.test(snapshotToken) || !symbol) {
     return json({ error: "Invalid published portrait locator path" }, 400, {
       "Cache-Control": "no-store",
     })
   }
 
   // ARCHITECTURE FENCE [IPD-008] + [IPD-011]: this is a compact projection of
-  // the exact named card artifact, not a separately published portrait index.
-  // The independent immutable URL lets hover start portrait delivery without
-  // waiting for rich detail while retaining one snapshot and one canon.
-  // A byte-equivalent Bunny cache of this response is permitted. "One canon"
-  // forbids independent selection/pointers, not caching. Worker Cache API hits
-  // still consume a Worker invocation; do not mistake them for direct CDN hits.
-  const view = parsePublishedViewId(snapshotVersion)
-  const barrier = await currentMobileCardSnapshotVersion(env)
-  const publishedVersions = new Set(
-    [barrier.current, barrier.previous].map((value) => String(value || "").trim()).filter(Boolean),
-  )
-  // A delta view names its exact base epoch. That base must still be published
-  // and the view never resolves against a newer epoch.
-  if (!publishedVersions.has(view.base)) {
-    return json(
-      {
-        error: "Published card snapshot is retired",
-        code: "card_snapshot_retired",
-        current_snapshot_version: String(barrier.current || "").trim() || null,
-      },
-      410,
-      { "Cache-Control": "no-store" },
-    )
-  }
-
+  // the one stable gene object, not a separately published portrait index.
+  // "One canon" forbids independent selection/pointers, not caching. Worker
+  // Cache API hits still consume a Worker invocation; do not mistake them for
+  // direct CDN hits.
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
   const cacheUrl = new URL(request.url)
   cacheUrl.search = ""
@@ -31659,49 +31600,21 @@ export async function handlePublicPortraitLocator(
     })
   }
 
-  let locator = null
-  if (view.chainHash) {
-    const resolved = await readPublishedViewRecord(env, view, "portrait", symbol)
-    if (resolved.status === "unavailable") {
-      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-        "Cache-Control": "no-store",
-        "X-Iconoplasm-Data-Source": "artifact-unavailable",
-        "X-Iconoplasm-VM-Version": snapshotVersion,
-      })
-    }
-    if (resolved.status === "committed") {
-      locator = publishedPortraitLocatorFromCard({ payload: resolved.record }, snapshotVersion)
-      // A committed tombstone is a real missing result; an unprojectable
-      // committed record is a broken publication invariant and fails closed.
-      if (!locator) {
-        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-          "Cache-Control": "no-store",
-          "X-Iconoplasm-Data-Source": "artifact-unavailable",
-          "X-Iconoplasm-VM-Version": snapshotVersion,
-        })
-      }
-    } else if (resolved.status === "absent") {
-      const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
-      if (!artifact) {
-        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-          "Cache-Control": "no-store",
-          "X-Iconoplasm-Data-Source": "artifact-unavailable",
-          "X-Iconoplasm-VM-Version": snapshotVersion,
-        })
-      }
-      locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
-    }
-  } else {
-    const artifact = await readPublishedCardCatalogArtifact(env, view.base, [symbol])
-    if (!artifact) {
-      return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-        "Cache-Control": "no-store",
-        "X-Iconoplasm-Data-Source": "artifact-unavailable",
-        "X-Iconoplasm-VM-Version": snapshotVersion,
-      })
-    }
-    locator = publishedPortraitLocatorFromCard(artifact.bySymbol.get(symbol), snapshotVersion)
+  let record = null
+  try {
+    record = await readStableGeneObject(env, symbol)
+  } catch (error) {
+    console.error("Iconoplasm portrait locator stable object read failed:", String(error))
+    return json(cardArtifactUnavailablePayload(snapshotToken), 503, {
+      "Cache-Control": "no-store",
+      "X-Iconoplasm-Data-Source": "artifact-unavailable",
+      "X-Iconoplasm-VM-Version": snapshotToken,
+    })
   }
+  const snapshotVersion = record ? stableGeneObjectVersion(record) : snapshotToken
+  const locator = record
+    ? publishedPortraitLocatorFromCard({ payload: record }, snapshotVersion)
+    : null
   const payload = {
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -31711,9 +31624,9 @@ export async function handlePublicPortraitLocator(
     missing: locator ? [] : [symbol],
   }
   const response = json(payload, locator ? 200 : 404, {
-    "Cache-Control": "public, max-age=31536000, immutable",
-    ETag: `"card-portrait-locator-${snapshotVersion}-${symbol}"`,
-    "X-Iconoplasm-Data-Source": "published-card-catalog",
+    "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+    ETag: `"card-portrait-locator-${symbol}-${snapshotVersion}"`,
+    "X-Iconoplasm-Data-Source": "stable-gene-object",
     "X-Iconoplasm-Locator-Cache": "MISS",
     "X-Iconoplasm-VM-Version": snapshotVersion,
   })
@@ -32392,6 +32305,20 @@ export async function readIconoplasmPublishedCardCatalogArtifactForTest(
 // a gate on the underlying gene URL. These reads never query votes, compose D1
 // cards, or trigger rendering. A range normally overlaps one 750-card immutable
 // shard.
+//
+// B-898 Stage 1 (step B) deliberately LEFT this reader on the head/manifest/
+// shard path. Every caller is a per-request reader in
+// workers/iconoplasm-gene-discovery-worker.js: a range page or range sitemap
+// asks for its whole frozen range (measured 2026-10-02 against the live
+// catalog object: 58 ranges of 16 to 500 genes, median 351, 54 of them above
+// 50), which is past the free-plan Worker's ~50-subrequest cap for
+// one-object-per-gene reads, and the sitemap index asks for the publication
+// timestamp of the whole catalog.
+// Neither may parse the 3.4 MB catalog/v3/index.json inside a reader request
+// (CLAUDE.md, "Iconoplasm cost barriers"). The root fix is a build-time one:
+// render the range pages and sitemaps from the catalog object in the GitHub
+// Actions publisher and serve them as static files. Until that lands, this
+// function and its five callers are the last readers of the old tree.
 export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols, options = {}) {
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(symbols) ? symbols : [],
@@ -32494,10 +32421,106 @@ function cardArtifactUnavailablePayload(version, detail = "") {
   }
 }
 
+// B-898 Stage 1 (step B): THE ONLY per-gene reader for first-party card
+// routes. One stable object per gene, genes/v3/<SYMBOL>.json on Bunny Storage,
+// is the whole published card: projected record, winning portrait, the full
+// candidate pool, published_at. There is no KV head pointer, no manifest, no
+// shard, no delta chain and no D1 on this path, so a handler's cost is exactly
+// one authenticated storage read per requested symbol, bounded by that
+// handler's own symbol limit. A free-plan Worker request has about 50
+// subrequests; readers above that bound (range pages, sitemaps, anything
+// catalog-wide) must not use this reader and must not parse the 3.4 MB catalog
+// object per request either. Keep those on a build-time path.
+//
+// Failure modes, written before the handlers were switched:
+//   1. Object present: parsed and returned under its symbol; the VM built from
+//      it passes assertCompleteMobileCardVM (portrait decision agrees between
+//      the top-level projection and the payload).
+//   2. Object missing (storage 404): the symbol is simply absent from the map;
+//      handlers keep their existing not-found / `missing` behaviour.
+//   3. Object present but its symbol disagrees with the key, or the body is not
+//      JSON: a broken publication, treated as missing rather than served.
+//   4. Storage error (5xx after the store's bounded retries, timeout, or the
+//      Worker subrequest cap): the reader throws and handlers answer with the
+//      existing CARD_ARTIFACT_UNAVAILABLE 503, Cache-Control no-store.
+//   5. Storage not configured: same as 4 (the store throws
+//      PUBLISHED_OBJECT_STORAGE_UNAVAILABLE).
+// Envelope-level `snapshot_version` is the constant label below so browser
+// caches keyed by it (the frontend IndexedDB card cache keys rows by
+// `version:symbol`) stay bounded; each card's own `snapshot_version` carries
+// the object's `published_at`, which is what changes when a gene changes.
+const STABLE_GENE_OBJECT_SNAPSHOT_LABEL = "stable-v3"
+const STABLE_GENE_OBJECT_READ_CONCURRENCY = 8
+
+async function readStableGeneObjects(env, symbols) {
+  const requested = normalizeRequestedSymbols(
+    Array.isArray(symbols) ? symbols : [],
+    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
+  )
+  const bySymbol = new Map()
+  if (!requested.length) return bySymbol
+  const store = createPublishedCardObjectStore(env)
+  const queue = [...requested]
+  async function drain() {
+    for (;;) {
+      const symbol = queue.shift()
+      if (!symbol) return
+      let key
+      try {
+        key = stableGeneObjectKey(symbol)
+      } catch {
+        continue
+      }
+      const object = await store.readStable(key)
+      if (!object) continue
+      const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(object.bytes))
+      if (!parsed || typeof parsed !== "object") continue
+      if (normalizeSymbol(parsed.symbol || parsed.canonical_symbol || "") !== symbol) continue
+      bySymbol.set(symbol, parsed)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(STABLE_GENE_OBJECT_READ_CONCURRENCY, requested.length) }, drain),
+  )
+  return bySymbol
+}
+
+async function readStableGeneObject(env, symbol) {
+  const normalized = normalizeSymbol(symbol)
+  if (!normalized) return null
+  return (await readStableGeneObjects(env, [normalized])).get(normalized) || null
+}
+
+function stableGeneObjectVersion(object) {
+  return String(object?.published_at || "").trim() || STABLE_GENE_OBJECT_SNAPSHOT_LABEL
+}
+
+// The mobile card VM is a cache-friendly projection of the record; the stable
+// object IS that record (projectGeneRecord output plus the candidate pool), so
+// buildMobileCardVMFromGeneRecord takes it unchanged.
+function stableGeneObjectCardVM(object) {
+  const vm = buildMobileCardVMFromGeneRecord(object, {
+    snapshotVersion: stableGeneObjectVersion(object),
+    source: "stable_gene_object",
+  })
+  return vm && assertCompleteMobileCardVM(vm) ? vm : null
+}
+
+function stableGeneObjectDiagnostics(cardCount, extra = {}) {
+  return {
+    artifact_version: STABLE_GENE_OBJECT_SNAPSHOT_LABEL,
+    artifact_gene_count: cardCount,
+    catalog_gene_count: 0,
+    artifact_validated_at: null,
+    source: "stable_gene_object",
+    ...extra,
+  }
+}
+
 async function handleMobileCardManifest(request, env) {
-  // Card payloads have one runtime path: the published card-catalog artifact.
-  // No per-gene KV probing and no previous-version fallback belongs here. The
-  // release gate keeps the old live artifact active until the new one validates.
+  // Card payloads have one runtime path: one stable object per gene on Bunny
+  // Storage (readStableGeneObjects). No KV head, no manifest, no per-gene KV
+  // probing, no previous-version fallback and no D1 composition belongs here.
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
   const body = await parseJsonBody(request)
   const symbols = normalizeRequestedSymbols(body.symbols || [], 100)
@@ -32507,36 +32530,30 @@ async function handleMobileCardManifest(request, env) {
       "Cache-Control": "no-store",
     })
   }
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const requestedVersion = sanitizeText(body.version || "", 128)
-  const snapshotVersion =
-    requestedVersion && requestedVersion === versionInfo.current
-      ? requestedVersion
-      : versionInfo.current
+  // The client may echo the version it last saw; stable objects have one
+  // label, so any echoed value resolves to it. Freshness lives in each card's
+  // own snapshot_version (the object's published_at), never in this label.
+  const snapshotVersion = STABLE_GENE_OBJECT_SNAPSHOT_LABEL
   if (!symbols.length) {
     return json(
       {
         schema: MOBILE_CARD_MANIFEST_SCHEMA,
         snapshot_version: snapshotVersion,
-        data_source: "published_card_catalog",
+        data_source: "stable_gene_object",
         cards: [],
         missing: [],
-        diagnostics: {
-          artifact_version: snapshotVersion,
-          artifact_gene_count: 0,
-          catalog_gene_count: 0,
-          artifact_validated_at: null,
-          source: "published_card_catalog",
-          layout,
-        },
+        diagnostics: stableGeneObjectDiagnostics(0, { layout }),
       },
       200,
       { "Cache-Control": "no-store" },
     )
   }
 
-  const artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, symbols)
-  if (!artifact) {
+  let objects
+  try {
+    objects = await readStableGeneObjects(env, symbols)
+  } catch (error) {
+    console.error("Iconoplasm mobile card manifest stable object read failed:", String(error))
     return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
       "Cache-Control": "no-store",
       "X-Iconoplasm-Data-Source": "artifact-unavailable",
@@ -32547,7 +32564,7 @@ async function handleMobileCardManifest(request, env) {
   const cards = []
   const missing = []
   for (const symbol of symbols) {
-    const card = artifact.bySymbol.get(symbol)
+    const card = stableGeneObjectCardVM(objects.get(symbol))
     if (card) {
       cards.push({
         ...card,
@@ -32563,27 +32580,19 @@ async function handleMobileCardManifest(request, env) {
     {
       schema: MOBILE_CARD_MANIFEST_SCHEMA,
       snapshot_version: snapshotVersion,
-      data_source: "published_card_catalog",
+      data_source: "stable_gene_object",
       cards: cards.sort(
         (left, right) => symbols.indexOf(left.symbol) - symbols.indexOf(right.symbol),
       ),
       missing,
-      diagnostics: {
-        artifact_version: artifact.artifact_version,
-        artifact_gene_count: artifact.card_count,
-        catalog_gene_count: artifact.catalog_gene_count,
-        artifact_validated_at: artifact.artifact_validated_at,
-        source: "published_card_catalog",
-        d1_composed: 0,
-        layout,
-      },
+      diagnostics: stableGeneObjectDiagnostics(cards.length, { d1_composed: 0, layout }),
     },
     200,
     {
       "Cache-Control": "no-store",
       "X-Iconoplasm-VM-Version": snapshotVersion,
-      "X-Iconoplasm-Data-Source": "published-card-catalog",
-      "X-Iconoplasm-Snapshot-State": "published-card-catalog",
+      "X-Iconoplasm-Data-Source": "stable-gene-object",
+      "X-Iconoplasm-Snapshot-State": "stable-gene-object",
     },
   )
 }
@@ -32599,17 +32608,20 @@ function mobileCardSymbolClientHeaders(snapshotVersion, extra = {}) {
     Pragma: "no-cache",
     Expires: "0",
     "X-Iconoplasm-VM-Version": snapshotVersion,
-    "X-Iconoplasm-Data-Source": "published-card-catalog",
-    "X-Iconoplasm-Snapshot-State": "published-card-catalog",
+    "X-Iconoplasm-Data-Source": "stable-gene-object",
+    "X-Iconoplasm-Snapshot-State": "stable-gene-object",
   }
 }
 
+// The Worker-side copy lives 300 s: the same bound the stable object's own
+// CDN Cache-Control (STABLE_GENE_OBJECT_CACHE_CONTROL) already accepts, so a
+// republished gene is never staler here than on the extension's path.
 function mobileCardSymbolCacheHeaders(snapshotVersion) {
   return {
     "Cache-Control": "public, max-age=300",
     "X-Iconoplasm-VM-Version": snapshotVersion,
-    "X-Iconoplasm-Data-Source": "published-card-catalog",
-    "X-Iconoplasm-Snapshot-State": "published-card-catalog",
+    "X-Iconoplasm-Data-Source": "stable-gene-object",
+    "X-Iconoplasm-Snapshot-State": "stable-gene-object",
   }
 }
 
@@ -32632,11 +32644,12 @@ async function mobileCardSymbolEdgeCacheKey(request, snapshotVersion, symbol) {
 
 async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
   // `/api/iconoplasm/cards/:symbol` is the most visible logged-out read path.
-  // It must always resolve through the current KV_GALLERY_VERSION and then read
-  // the matching published card-catalog artifact. The cache key inside this
-  // stateful worker includes `snapshotVersion`; the public edge proxy must not
-  // add another symbol-only cache in front of this or a canonical vote promotion
-  // can remain stale for logged-out users after D1 and KV have already advanced.
+  // It resolves exactly one stable gene object (readStableGeneObject) and
+  // nothing else: no KV head, no manifest, no D1 composition. The cache key
+  // inside this stateful worker is bounded to 300 s (mobileCardSymbolCacheHeaders);
+  // the public edge proxy must not add another symbol-only cache in front of
+  // this or a canonical vote promotion can remain stale for logged-out users
+  // beyond the stable object's own TTL.
   if (request.method !== "GET" && request.method !== "HEAD") {
     return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
   }
@@ -32644,16 +32657,15 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
   if (!symbol) {
     return json({ error: "Missing gene symbol" }, 400, { "Cache-Control": "no-store" })
   }
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const snapshotVersion = versionInfo.current
+  const snapshotVersion = STABLE_GENE_OBJECT_SNAPSHOT_LABEL
   const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
   let resolvedSymbol = symbol
   let cacheKey = await mobileCardSymbolEdgeCacheKey(request, snapshotVersion, resolvedSymbol)
   let cached = cache ? await cache.match(cacheKey) : null
   if (cached) return mobileCardSymbolClientResponseFromCached(cached, snapshotVersion)
 
-  let artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [symbol])
-  if (!artifact) {
+  const unavailable = (error) => {
+    console.error("Iconoplasm mobile card symbol stable object read failed:", String(error))
     return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
       "Cache-Control": "no-store",
       "X-Iconoplasm-Data-Source": "artifact-unavailable",
@@ -32661,7 +32673,12 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
       "X-Iconoplasm-VM-Version": snapshotVersion,
     })
   }
-  let card = artifact.bySymbol.get(symbol) || null
+  let card = null
+  try {
+    card = stableGeneObjectCardVM(await readStableGeneObject(env, symbol))
+  } catch (error) {
+    return unavailable(error)
+  }
   if (!card) {
     const resolved = await resolvePublicIdentifier(env, symbolFromPath)
     const canonicalSymbol = normalizeSymbol(resolved?.canonical_symbol || "")
@@ -32670,16 +32687,11 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
       cacheKey = await mobileCardSymbolEdgeCacheKey(request, snapshotVersion, resolvedSymbol)
       cached = cache ? await cache.match(cacheKey) : null
       if (cached) return mobileCardSymbolClientResponseFromCached(cached, snapshotVersion)
-      artifact = await readPublishedCardCatalogArtifact(env, snapshotVersion, [resolvedSymbol])
-      if (!artifact) {
-        return json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
-          "Cache-Control": "no-store",
-          "X-Iconoplasm-Data-Source": "artifact-unavailable",
-          "X-Iconoplasm-Snapshot-State": "card-artifact-unavailable",
-          "X-Iconoplasm-VM-Version": snapshotVersion,
-        })
+      try {
+        card = stableGeneObjectCardVM(await readStableGeneObject(env, resolvedSymbol))
+      } catch (error) {
+        return unavailable(error)
       }
-      card = artifact.bySymbol.get(resolvedSymbol) || null
     }
   }
   if (!card) {
@@ -32687,7 +32699,7 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
       {
         schema: MOBILE_CARD_MANIFEST_SCHEMA,
         snapshot_version: snapshotVersion,
-        data_source: "published_card_catalog",
+        data_source: "stable_gene_object",
         card: null,
         missing: [resolvedSymbol],
       },
@@ -32699,18 +32711,10 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
   const payload = {
     schema: MOBILE_CARD_MANIFEST_SCHEMA,
     snapshot_version: snapshotVersion,
-    data_source: "published_card_catalog",
+    data_source: "stable_gene_object",
     card,
     missing: [],
-    diagnostics: {
-      artifact_version: artifact.artifact_version,
-      artifact_gene_count: artifact.card_count,
-      catalog_gene_count: artifact.catalog_gene_count,
-      artifact_validated_at: artifact.artifact_validated_at,
-      source: "published_card_catalog",
-      d1_composed: 0,
-      layout: MOBILE_CARD_LAYOUT,
-    },
+    diagnostics: stableGeneObjectDiagnostics(1, { d1_composed: 0, layout: MOBILE_CARD_LAYOUT }),
   }
   const response = json(payload, 200, mobileCardSymbolClientHeaders(snapshotVersion))
   if (cache) {
@@ -35941,9 +35945,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requestedScope === "shared"
           ? accountWindowStage("acct_shared_count", () => countSharedGeneDiscoveries(env))
           : accountWindowStage("acct_count", () => countUserGeneDiscoveries(env, { userId }))
-      const versionInfoPromise = accountWindowStage("acct_version", () =>
-        currentMobileCardSnapshotVersion(env),
-      )
+      // B-898: there is no KV head to resolve; the stable-object label is the
+      // window's vm_version and each card carries its own published_at.
+      const versionInfoPromise = accountWindowStage("acct_version", async () => ({
+        current: STABLE_GENE_OBJECT_SNAPSHOT_LABEL,
+      }))
       const [windowData, discoveredCount, versionInfo] = await Promise.all([
         windowPromise,
         discoveredCountPromise,
@@ -35958,15 +35964,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       // ARCHITECTURE FENCE [IPD-011]
       // Rich and image-only account windows intentionally converge here. One
-      // KV_GALLERY_VERSION selects one published artifact; only the projection
-      // shape differs below. Do not add an early image-only return backed by
-      // publishedPortraitRefs, discovery rows, D1 composition, IndexedDB, or a
-      // separate cache. Those paths can be internally consistent yet disagree
-      // with the gene page after an exact-card image publication.
-      const artifact = await accountWindowStage("acct_catalog", () =>
-        readPublishedCardCatalogArtifact(env, snapshotVersion, symbols),
-      )
-      if (!artifact) {
+      // stable gene object per symbol (at most ACCOUNT_GALLERY_WINDOW_LIMIT_MAX
+      // storage reads) is the card; only the projection shape differs below.
+      // Do not add an early image-only return backed by publishedPortraitRefs,
+      // discovery rows, D1 composition, IndexedDB, or a separate cache. Those
+      // paths can be internally consistent yet disagree with the gene page
+      // after a portrait republication.
+      let objects
+      try {
+        objects = await accountWindowStage("acct_catalog", () =>
+          readStableGeneObjects(env, symbols),
+        )
+      } catch (error) {
+        console.error("Iconoplasm account gallery stable object read failed:", String(error))
         return done(
           "account_gallery_window_card_artifact_unavailable",
           json(cardArtifactUnavailablePayload(snapshotVersion), 503, {
@@ -35981,7 +35991,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const vmBySymbol = new Map()
       const missing = []
       for (const symbol of symbols) {
-        const vm = artifact.bySymbol.get(symbol)
+        const vm = stableGeneObjectCardVM(objects.get(symbol))
         if (vm) {
           vmBySymbol.set(symbol, vm)
         } else {
@@ -36036,13 +36046,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               d1_window_rows: windowData.rows.length,
               requested_limit: cleanedLimit,
               scope: requestedScope,
-              artifact_version: artifact.artifact_version,
-              artifact_gene_count: artifact.card_count,
-              catalog_gene_count: artifact.catalog_gene_count,
-              artifact_validated_at: artifact.artifact_validated_at,
-              source: imageOnlyView
-                ? "published_card_catalog_image_only"
-                : "published_card_catalog",
+              ...stableGeneObjectDiagnostics(vmBySymbol.size, {
+                source: imageOnlyView ? "stable_gene_object_image_only" : "stable_gene_object",
+              }),
               supported_orders: Array.from(ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS),
             },
           },
@@ -36054,8 +36060,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             "X-Iconoplasm-Data-Source": missing.length
               ? "mixed-or-missing"
               : imageOnlyView
-                ? "published-card-catalog-image-only"
-                : "kv-snapshot",
+                ? "stable-gene-object-image-only"
+                : "stable-gene-object",
           },
         ),
       )
