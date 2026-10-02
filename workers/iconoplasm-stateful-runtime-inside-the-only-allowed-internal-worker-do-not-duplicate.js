@@ -19352,13 +19352,11 @@ export async function compareIconoplasmVoteCoordinatorWithD1(
     authority_epoch: String(exported?.authority_epoch || ""),
     votes_in_coordinator: Array.isArray(exported?.votes) ? exported.votes.length : 0,
   }
-  if (!base.bootstrapped || base.authority_epoch !== "v2" || !symbol) {
-    return {
-      ...base,
-      compared: false,
-      differs: false,
-      reason: !base.bootstrapped ? "not_bootstrapped" : "legacy_epoch",
-    }
+  // Every bootstrapped coordinator is compared, whatever its authority epoch:
+  // a coordinator from before the v2 epoch still holds votes, and only the
+  // compare can show one D1 never received.
+  if (!base.bootstrapped || !symbol) {
+    return { ...base, compared: false, differs: false, reason: "not_bootstrapped" }
   }
   const db = env.ICONOPLASM_DB
   const [voteRead, summaryRead, caretakerRead, stateRead] = await db.batch([
