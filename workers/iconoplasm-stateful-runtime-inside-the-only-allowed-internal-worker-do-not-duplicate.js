@@ -37,6 +37,10 @@ import {
 } from "./iconoplasm/discovery-compact-read.js"
 import { readSyncFinalizationSummary } from "./iconoplasm/sync-finalization-summary.js"
 import {
+  parseAdminVisionScorecardQuery,
+  readAdminVisionScorecardPage,
+} from "./iconoplasm/admin-vision-scorecard.js"
+import {
   fetchMaintainedAssetSummary,
   fetchStorageAuditRecheckDue,
 } from "./iconoplasm/asset-summary-counts.js"
@@ -22522,6 +22526,8 @@ function groupAdminVisionPreviewRows(summaryRows, assetRows) {
   }))
 }
 
+// Groups the requested visions' assets. It always needs ids: a read without a
+// filter groups every portrait asset (59,346 on 2 Oct 2026), and nothing needs that.
 async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
   if (!env.ICONOPLASM_DB) return []
   const cleanedVisionIds = Array.from(
@@ -22531,11 +22537,7 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
         .filter(Boolean),
     ),
   )
-  // A bound `? = 0 OR vision_id IN (...)` hides idx_icono_portrait_assets_vision_id
-  // from the planner and scans every asset (59,346 on 2 Oct 2026), so the
-  // filtered read gets its own predicate.
-  const visionFilter =
-    cleanedVisionIds.length > 0 ? "AND pa.vision_id IN (SELECT value FROM json_each(?))" : ""
+  if (!cleanedVisionIds.length) return []
   const statsResp = await env.ICONOPLASM_DB.prepare(
     `SELECT
        pa.vision_id,
@@ -22572,85 +22574,52 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
      WHERE COALESCE(pa.vision_id, '') <> ''
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
-       ${visionFilter}
+       AND pa.vision_id IN (SELECT value FROM json_each(?))
      GROUP BY pa.vision_id
      ORDER BY live_count DESC, score DESC, image_count DESC, pa.vision_id ASC`,
   )
-    .bind(...(visionFilter ? [JSON.stringify(cleanedVisionIds)] : []))
+    .bind(JSON.stringify(cleanedVisionIds))
     .all()
   return mapAdminVisionStatsRows(statsResp?.results)
 }
 
-// `visionIds` reads those rollup rows by primary key. `scopeAll` is the admin
-// Styles scorecard, the one caller that reads every rollup row (19,193 on
-// 2 Oct 2026, growing with generation); the route refuses any other unfiltered call.
-async function fetchAdminVisionStats(env, { visionIds = [], scopeAll = false } = {}) {
-  if (!env.ICONOPLASM_DB) return { rows: [], blacklisted: [] }
+// The admin Styles scorecard: one keyset page of the vision rollup, read through
+// an index (see iconoplasm/admin-vision-scorecard.js). The blocklist is read for
+// a fresh view only, not on every page flip. While the rollup is still being
+// built the scorecard refuses; grouping every portrait asset instead would read
+// the whole asset table (59,346 rows on 2 Oct 2026) on each open.
+async function fetchAdminVisionScorecard(env, query) {
+  if (!env.ICONOPLASM_DB) return { rows: [], nextCursor: null, prevCursor: null, blacklisted: null }
 
-  const cleanedVisionIds = Array.from(
-    new Set(
-      (Array.isArray(visionIds) ? visionIds : [])
-        .map((value) => validAdminRollupVisionId(value))
-        .filter(Boolean),
-    ),
-  )
-  const [bootstrapState, blacklistResp] = await Promise.all([
-    fetchAdminReadModelBootstrapState(env),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
+  const bootstrapState = await fetchAdminReadModelBootstrapState(env)
+  if (bootstrapState && bootstrapState.status !== ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE)
+    return { building: true }
+
+  const [page, blacklistResp] = await Promise.all([
+    readAdminVisionScorecardPage(env.ICONOPLASM_DB, query),
+    query.cursor
+      ? null
+      : env.ICONOPLASM_DB.prepare(
+          `SELECT artist_tag, artist_name, reason, created_by, created_at, updated_at
      FROM icono_artist_style_blacklist
      ORDER BY updated_at DESC, artist_tag ASC`,
-    ).all(),
+        ).all(),
   ])
 
-  const bootstrapRunning =
-    bootstrapState && bootstrapState.status !== ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
-
-  const filtered = cleanedVisionIds.length > 0
-  let rows = []
-  if (!bootstrapRunning && (filtered || scopeAll)) {
-    // The filtered read drives from the requested ids through the primary key.
-    // A bound `? = 0 OR vision_id IN (...)` makes the planner walk the whole
-    // rollup in index order instead (19,194 rows for one id on 2 Oct 2026).
-    const statsResp = filtered
-      ? await env.ICONOPLASM_DB.prepare(
-          `SELECT avr.*
-           FROM json_each(?) incoming
-           JOIN icono_admin_vision_rollup avr
-             ON avr.vision_id = incoming.value
-           ORDER BY avr.live_count DESC, avr.score DESC, avr.image_count DESC, avr.vision_id ASC`,
-        )
-          .bind(JSON.stringify(cleanedVisionIds))
-          .all()
-      : await env.ICONOPLASM_DB.prepare(
-          `SELECT *
-           FROM icono_admin_vision_rollup
-           ORDER BY live_count DESC, score DESC, image_count DESC, vision_id ASC`,
-        ).all()
-    rows = mapAdminVisionStatsRows(statsResp?.results)
-  }
-
-  // When the big gene-centric bootstrap is still running, the vision rollup is only
-  // partially populated. In that state we would rather do one direct grouped read
-  // over the indexed raw asset table than serve a silently incomplete scorecard.
-  // An empty full scorecard also means the rollup was never built. An empty
-  // filtered answer from a built rollup is the answer: those visions have no assets.
-  if (bootstrapRunning || (scopeAll && !filtered && rows.length === 0)) {
-    rows = await fetchAdminVisionStatsDirect(env, { visionIds: cleanedVisionIds })
-  }
-
   return {
-    rows,
-    blacklisted: (Array.isArray(blacklistResp?.results) ? blacklistResp.results : []).map(
-      (row) => ({
-        artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
-        artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-        reason: sanitizeText(row?.reason || "", 2000) || "",
-        created_by: sanitizeText(row?.created_by || "", 255) || "",
-        created_at: sanitizeText(row?.created_at || "", 64) || "",
-        updated_at: sanitizeText(row?.updated_at || "", 64) || "",
-      }),
-    ),
+    rows: mapAdminVisionStatsRows(page.rows),
+    nextCursor: page.nextCursor,
+    prevCursor: page.prevCursor,
+    blacklisted: blacklistResp
+      ? (Array.isArray(blacklistResp.results) ? blacklistResp.results : []).map((row) => ({
+          artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
+          artist_name: sanitizeText(row?.artist_name || "", 255) || "",
+          reason: sanitizeText(row?.reason || "", 2000) || "",
+          created_by: sanitizeText(row?.created_by || "", 255) || "",
+          created_at: sanitizeText(row?.created_at || "", 64) || "",
+          updated_at: sanitizeText(row?.updated_at || "", 64) || "",
+        }))
+      : null,
   }
 }
 
@@ -32257,10 +32226,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (
-      path === "/api/iconoplasm/admin/votes/vision-stats" &&
-      (request.method === "POST" || request.method === "GET")
-    ) {
+    if (path === "/api/iconoplasm/admin/votes/vision-stats" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_votes_vision_stats_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
@@ -32268,57 +32234,36 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "admin_votes_vision_stats_500",
           json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
-      let p = {}
-      if (request.method === "POST") {
-        try {
-          p = await request.json()
-        } catch {
-          return done("admin_votes_vision_stats_400", json({ error: "Invalid JSON" }, 400))
-        }
-      }
-      const visionIdsRaw = Array.isArray(p?.vision_ids)
-        ? p.vision_ids
-        : String(url.searchParams.get("vision_ids") || "")
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean)
-      const visionIds = []
-      const seenVision = new Set()
-      for (const raw of visionIdsRaw) {
-        const visionId = sanitizeVoteVisionId(raw)
-        if (!visionId || seenVision.has(visionId)) continue
-        seenVision.add(visionId)
-        visionIds.push(visionId)
-      }
-      if (visionIds.length > 2000) {
+      const query = parseAdminVisionScorecardQuery(url.searchParams)
+      if (query.error)
+        return done("admin_votes_vision_stats_400", json({ error: query.error }, 400))
+      const scorecard = await fetchAdminVisionScorecard(env, query)
+      if (scorecard.building) {
         return done(
-          "admin_votes_vision_stats_400",
-          json({ error: "Too many vision_ids (max 2000)" }, 400),
-        )
-      }
-      const scopeAll = String(p?.scope || url.searchParams.get("scope") || "") === "all"
-      if (visionIds.length === 0 && !scopeAll) {
-        return done(
-          "admin_votes_vision_stats_400",
+          "admin_votes_vision_stats_503",
           json(
             {
               error:
-                "vision_ids is required; scope=all reads every vision rollup row and is reserved for the admin Styles scorecard",
+                "The vision rollup is still being built; the scorecard opens when it finishes.",
             },
-            400,
+            503,
+            { "Cache-Control": "no-store", "Retry-After": "60" },
           ),
         )
       }
-      const visionStats = await fetchAdminVisionStats(env, { visionIds, scopeAll })
-      const rows = visionStats.rows
       return done(
         "admin_votes_vision_stats",
         json(
           {
             ok: true,
-            count: rows.length,
-            rows,
-            blacklisted: visionStats.blacklisted,
+            count: scorecard.rows.length,
+            sort: query.sort,
+            dir: query.dir,
+            limit: query.limit,
+            rows: scorecard.rows,
+            next_cursor: scorecard.nextCursor,
+            prev_cursor: scorecard.prevCursor,
+            ...(scorecard.blacklisted ? { blacklisted: scorecard.blacklisted } : {}),
           },
           200,
           { "Cache-Control": "no-store" },
