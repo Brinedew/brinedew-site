@@ -1954,7 +1954,7 @@ function retiredTreeKv(kv) {
   return kv
 }
 
-function stableReaderEnv(overrides = {}) {
+function stableBatchReaderEnv(overrides = {}) {
   return buildEnv({
     KV: retiredTreeKv(buildPublishedCardReadKv()),
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
@@ -1965,7 +1965,7 @@ function stableReaderEnv(overrides = {}) {
   })
 }
 
-function stableA1bgObjects(overrides = {}) {
+function stableA1bgObjectsBatch(overrides = {}) {
   return new Map([
     [
       STABLE_A1BG_PATH,
@@ -1975,7 +1975,7 @@ function stableA1bgObjects(overrides = {}) {
 }
 
 test("public gene batch serves the stable gene objects with one storage read per symbol", async (t) => {
-  const reads = installStableGeneStorage(t, stableA1bgObjects())
+  const reads = installStableGeneStorage(t, stableA1bgObjectsBatch())
   const extensionResponse = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
@@ -1985,7 +1985,7 @@ test("public gene batch serves the stable gene objects with one storage read per
       },
       body: JSON.stringify({ symbols: ["A1BG", "NOPE1"] }),
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const extensionPayload = await extensionResponse.json()
@@ -2011,7 +2011,7 @@ test("public gene batch fails loud with 503 no-store when stable object storage 
       },
       body: JSON.stringify({ symbols: ["A1BG"] }),
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   assert.equal(response.status, 503)
@@ -2077,14 +2077,14 @@ test("content-addressed hover delivery reuses unchanged shards across publicatio
 })
 
 test("versioned public gene detail resolves the stable gene object for any snapshot token with the same envelope", async (t) => {
-  const reads = installStableGeneStorage(t, stableA1bgObjects())
+  const reads = installStableGeneStorage(t, stableA1bgObjectsBatch())
   const requestUrl =
     "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
   const response = await viaStatefulWorker(
     new Request(requestUrl, {
       headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const payload = await response.json()
@@ -2118,7 +2118,7 @@ test("versioned public gene detail resolves the stable gene object for any snaps
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/genes/A1BG", {
       headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   assert.equal(retiredResponse.status, 200)
@@ -2131,7 +2131,7 @@ test("versioned public gene detail resolves the stable gene object for any snaps
         headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
       },
     ),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const missingPayload = await missingResponse.json()
@@ -2150,7 +2150,7 @@ test("versioned public gene detail fails loud with 503 no-store when stable obje
         headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
       },
     ),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   assert.equal(response.status, 503)
@@ -2160,14 +2160,14 @@ test("versioned public gene detail fails loud with 503 no-store when stable obje
 
 test("versioned portrait locator is a projection of the same stable gene object", async (t) => {
   const portraitSha = "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212"
-  const reads = installStableGeneStorage(t, stableA1bgObjects())
+  const reads = installStableGeneStorage(t, stableA1bgObjectsBatch())
   const requestUrl =
     "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/portraits/A1BG"
   const response = await viaStatefulWorker(
     new Request(requestUrl, {
       headers: { "X-Iconoplasm-Extension-Version": "0.4.15" },
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const payload = await response.json()
@@ -2199,17 +2199,17 @@ test("versioned portrait locator is a projection of the same stable gene object"
       "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/retired/portraits/A1BG",
       { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } },
     ),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   assert.equal(retiredResponse.status, 200)
   assert.equal((await retiredResponse.json())?.portrait_locator?.symbol, "A1BG")
 
   // An object whose portrait is withdrawn projects to no locator, not an error.
-  const withdrawn = installStableGeneStorage(t, stableA1bgObjects({ portrait: null }))
+  const withdrawn = installStableGeneStorage(t, stableA1bgObjectsBatch({ portrait: null }))
   const withdrawnResponse = await viaStatefulWorker(
     new Request(requestUrl, { headers: { "X-Iconoplasm-Extension-Version": "0.4.15" } }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const withdrawnPayload = await withdrawnResponse.json()
@@ -2220,7 +2220,7 @@ test("versioned portrait locator is a projection of the same stable gene object"
 })
 
 test("versioned public gene detail reuses the Worker edge cache and serves HEAD", async (t) => {
-  const reads = installStableGeneStorage(t, stableA1bgObjects())
+  const reads = installStableGeneStorage(t, stableA1bgObjectsBatch())
   const previousCaches = globalThis.caches
   const entries = new Map()
   let matches = 0
@@ -2238,7 +2238,7 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
     },
   }
   try {
-    const env = stableReaderEnv()
+    const env = stableBatchReaderEnv()
     const url =
       "https://iconoplasm.brinedew.bio/api/public/v1/card-snapshots/test-card-v1/genes/A1BG"
     const headers = { "X-Iconoplasm-Extension-Version": "0.4.15" }
@@ -2271,7 +2271,7 @@ test("versioned public gene detail reuses the Worker edge cache and serves HEAD"
 })
 
 test("public gene batch honors lean field projection for extension traffic", async (t) => {
-  installStableGeneStorage(t, stableA1bgObjects())
+  installStableGeneStorage(t, stableA1bgObjectsBatch())
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/batch", {
       method: "POST",
@@ -2284,7 +2284,7 @@ test("public gene batch honors lean field projection for extension traffic", asy
         fields: ["symbol", "full_name", "color", "essence", "portrait"],
       }),
     }),
-    stableReaderEnv(),
+    stableBatchReaderEnv(),
     {},
   )
   const payload = await response.json()
@@ -2319,7 +2319,7 @@ test("concurrent public gene batches each read one stable object per symbol and 
     ]),
   )
   const reads = installStableGeneStorage(t, objects)
-  const env = stableReaderEnv()
+  const env = stableBatchReaderEnv()
 
   const [firstResponse, secondResponse] = await Promise.all([
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
