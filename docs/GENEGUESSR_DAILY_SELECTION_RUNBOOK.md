@@ -23,7 +23,8 @@ not repeat. On later bag cycles, the representative advances inside each family.
 
 `gene_surname` keeps large gene families such as SLC, OR, ZNF, and KRTAP from
 dominating selection. Hashing across the flat protein table instead picks
-members of one large family days apart. Practice mode also picks by surname.
+members of one large family days apart. Practice mode also picks by surname,
+from its own pool (see "Practice pool").
 
 ## Selection contract
 
@@ -86,14 +87,52 @@ is, and does not depend on which isolate asks. Building it scans `proteins` once
   does not parse is rebuilt, never thrown. When D1 cannot be read, selection
   returns no pick and the existing "target unavailable" handling applies; when
   the rebuilt pool cannot be stored, the caller still gets it.
-- To force a rebuild by hand: `UPDATE daily_selection_pool SET families_json = NULL
-WHERE id = 1`.
+- To force a rebuild by hand, of this pool and of the practice pool that counts
+  the same version, run the statement the triggers run: `UPDATE
+daily_selection_pool SET catalog_version = catalog_version + 1, fingerprint =
+NULL, families_json = NULL, built_at = NULL WHERE id = 1`.
 - A bulk catalog write costs one extra row written per changed row for the
   trigger. On a local D1 built from the real migrations, a 1,000-row update
   writes 4,000 rows with the search triggers alone and 5,000 with this one.
 - Dropping and recreating `proteins` also drops its triggers. Afterwards drop
-  `daily_selection_pool` too, so the next reader recreates the table and the
-  triggers together.
+  `daily_selection_pool` and `practice_selection_pool` too, so the next reader
+  recreates the tables and the triggers together.
+
+## Practice pool
+
+Practice plays every protein that has a structure and a summary, AlphaFold-only
+proteins included: 17,513 proteins in 6,049 surname families on 2026-10-02, of
+which 7,201 proteins and 2,149 families are AlphaFold-only. The daily pool leaves
+AlphaFold out, so practice has its own pool, in the same shape, in one row of the
+GeneGuessr D1 table `practice_selection_pool`. A practice start never scans
+`proteins`.
+
+- The row records the `catalog_version` of `daily_selection_pool` it was built at
+  and counts only while that version is current. The daily pool's triggers are
+  therefore the only invalidation path; the practice pool has no trigger of its
+  own. The statement that builds it reads `uniprot`, `gene_surname`,
+  `structure_source` and `gene_summary`, all of which the triggers watch, and a
+  test fails if it ever reads another column.
+- Building it scans `proteins` once (19,110 rows read on 2026-10-02) and runs
+  after a write to `proteins` has bumped the version, or on first use. A rebuild
+  stores its result only while the version it started from is still current, and
+  requests in one isolate share a rebuild, as for the daily pool. The stored row
+  is about 240 KB.
+- `workers/lib/protein-store.js` creates the table on first use. A database that
+  has the daily pool but not this table gets the table without the daily pool
+  being touched; a database with neither gets both, with the daily row and
+  triggers, in one batch.
+- The stored pool does not depend on `structure_failures`, a table that changes at
+  runtime, so a failure write never rebuilds it. A practice start draws up to ten
+  candidates from ten different families (uniform over families, then over the
+  members of the family, so a 400-member family weighs what a one-member family
+  does), asks `structure_failures` about those ten ids in one batch of point
+  lookups, and drops the failed ones. A lookup that finds nothing reads no row.
+  When every candidate in a round has failed, another round is drawn, up to three.
+- The availability check walks the surviving candidates in order, so a fallback is
+  another family and never the next row of the protein table.
+- A start therefore reads two rows for the pool, one row per failed candidate and
+  one row per protein it loads. Nothing about it grows with the catalog.
 
 ## Schedule and release behavior
 
