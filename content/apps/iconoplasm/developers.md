@@ -1,5 +1,5 @@
 ---
-title: "For developers — Iconoplasm"
+title: "For developers"
 description: "Put Iconoplasm gene cards in your own tools: one image URL per gene, a free resolver for aliases and UniProt accessions, a one-file bulk download, and the limits and good practice for each."
 date: 2026-09-25
 draft: false

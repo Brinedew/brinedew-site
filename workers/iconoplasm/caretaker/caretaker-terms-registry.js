@@ -6,7 +6,9 @@ import { authorityError } from "./manifestation-authority-contract.js"
 //      (its "Version:" line names the id);
 //   2. point CURRENT_CARETAKER_TERMS at it; the hash must be that file's
 //      SHA-256 (workers/iconoplasm-static-first-routing.test.js checks it);
-//   3. update content/apps/iconoplasm/caretaker-terms.md.
+//   3. update content/apps/iconoplasm/caretaker-terms.md; its frontmatter `date`
+//      is the Effective date the page shows and must equal effective_at
+//      (scripts/iconoplasm-page-dates.test.js checks it).
 // Versions seeded by migrations 0004 and 0008-0011 stay in D1 as history;
 // assignments keep the version and hash they accepted.
 export const CURRENT_CARETAKER_TERMS = Object.freeze({

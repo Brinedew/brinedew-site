@@ -1,4 +1,5 @@
 import { iconoplasmPublishedGeneRecordIsDiscoveryCandidate } from "./iconoplasm-gene-discovery.js"
+import { iconoplasmPageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import { resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function rawGeneIdentifierFromPath(path) {
@@ -40,7 +41,7 @@ export function iconoplasmGeneCanonicalRedirect(requestUrl, canonicalSymbol) {
 }
 
 export function iconoplasmGeneUnavailableResponse(method) {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>Gene profile temporarily unavailable | Iconoplasm</title></head><body><main><h1>Gene profile temporarily unavailable</h1><p>The published profile could not be rendered safely. Please retry shortly.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>${iconoplasmPageTitle("Gene profile temporarily unavailable")}</title></head><body><main><h1>Gene profile temporarily unavailable</h1><p>The published profile could not be rendered safely. Please retry shortly.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
   return new Response(method === "HEAD" ? null : html, {
     status: 503,
     headers: {
@@ -53,7 +54,7 @@ export function iconoplasmGeneUnavailableResponse(method) {
 }
 
 export function iconoplasmGeneNotFoundResponse(method) {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>Gene not found | Iconoplasm</title></head><body><main><h1>Gene not found</h1><p>This symbol is not in the published Iconoplasm catalog.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>${iconoplasmPageTitle("Gene not found")}</title></head><body><main><h1>Gene not found</h1><p>This symbol is not in the published Iconoplasm catalog.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
   return new Response(method === "HEAD" ? null : html, {
     status: 404,
     headers: {

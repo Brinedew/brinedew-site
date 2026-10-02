@@ -29,7 +29,7 @@ PRIVACY-FIRST
 - Page text is read locally and never transmitted
 - Only gene symbols are sent to our server for color/portrait lookup
 - No analytics, no tracking, no third-party requests
-- Full privacy policy: https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy
+- Full privacy policy: https://iconoplasm.brinedew.bio/privacy
 
 SIGN IN (OPTIONAL)
 Connect with Discord to sync across devices and access the full Iconoplasm catalog at iconoplasm.brinedew.bio.

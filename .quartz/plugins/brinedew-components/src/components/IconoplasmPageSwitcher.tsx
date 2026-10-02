@@ -53,7 +53,7 @@ const IconoplasmPageSwitcher: QuartzComponent = ({
         Studio
       </a>
       <a
-        href="/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm"
+        href="https://brinedew.bio/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm"
         class={classNames("icono-page-tab", activeTab === "tutorial" && "is-active")}
         data-icono-nav
         data-icono-switch="tutorial"

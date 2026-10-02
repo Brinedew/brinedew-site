@@ -54,7 +54,7 @@ Privacy:
 - Page text is processed locally in the browser.
 - Only gene-symbol lookup requests are sent to Iconoplasm services.
 - No analytics or ad tracking.
-- Privacy policy: https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy
+- Privacy policy: https://iconoplasm.brinedew.bio/privacy
 
 Optional account sync:
 
@@ -94,5 +94,5 @@ Suggested tags:
 ## Support links
 
 - Support site: https://brinedew.bio/wiki/iconoplasm-faq
-- Privacy policy: https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy
+- Privacy policy: https://iconoplasm.brinedew.bio/privacy
 - Homepage: https://iconoplasm.brinedew.bio/
