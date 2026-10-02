@@ -29,10 +29,10 @@ The protected controller contract is `quartz/static/iconoplasm/collection-feed.t
 **ARCHITECTURE FENCE [IPD-011] — every public surface has one portrait authority.**
 
 D1 owns live authoring, vote projection, rich detail, and candidates. The stable
-gene object `genes/v3/<SYMBOL>.json` (B-898) is the sole public portrait
-authority. A D1 leader may legitimately be newer for the minutes until the
-per-gene publisher or the Actions republish pass rewrites that object; no public
-surface may reveal that SHA early.
+gene object `genes/v3/<SYMBOL>.json` is the sole public portrait authority. A D1
+leader may legitimately be newer for the minutes until the per-gene publisher or
+the Actions republish pass rewrites that object; no public surface may reveal
+that SHA early.
 
 The account window combines two kinds of data with deliberately different
 jobs:
@@ -52,51 +52,37 @@ The same rule covers anonymous galleries, site-gene detail, the server-rendered
 gene-page lead and metadata, public media, extension cards, archive ranges,
 image sitemaps, and print-copy inputs. Site-gene detail may overlay fresh D1
 facts and candidates around the card portrait, but it has no signed-in or
-gene-detail portrait fallback. Missing or incomplete exact-card state fails
+gene-detail portrait fallback. A missing or incomplete stable object fails
 closed and uncached instead of selecting a D1 or catalog SHA.
 
-### Why this fence exists: B-700 / ZNF25, 2026-08-02
+### Why this fence exists
 
-The removed design let the image-only branch return early from
-`publishedPortraitRefs(...)`. That snapshot looked efficient because it held
-only symbol-to-SHA pairs, but it was an independently published and cached
-portrait timeline. Routine publication advanced the canonical card
-artifact without guaranteeing the legacy portrait-reference snapshot advanced
-in the same atomic operation.
-
-The user-visible result was a split that code-only checks initially missed:
-
-1. In the user's logged-in Edge session, the homepage showed ZNF25 with the old
-   light-purple skin.
-2. In the same browser session, `/gene/ZNF25` showed the current dark-gray
-   canonical portrait.
-3. A fresh cache-busting homepage URL still showed light purple, rejecting an
-   ordinary browser-cache explanation.
-4. Guest/substitute-browser checks could show the correct portrait because they
-   did not exercise the signed-in account-window image-only branch.
-
-The durable repair in `afd6f6eb` removed the early parallel-snapshot branch.
-Both account response variants now read the same published artifact version;
-the image-only variant merely projects fewer fields. The regression test makes
-the discovery-row SHA and legacy portrait-reference snapshot stale while the
-card artifact is current, and requires the response to use the artifact.
+A symbol-to-SHA snapshot is its own portrait timeline. Used for the image-only
+account view, it shows an outvoted portrait on the signed-in homepage while
+`/gene/<SYMBOL>` shows the current one, and guest or substitute-browser checks
+never exercise that branch. The regression test "image-only account gallery
+ignores stale discovery and legacy portrait-ref identities"
+(`workers/iconoplasm.account-gallery-window.test.js`) makes the discovery-row
+SHA and the portrait-reference snapshot stale while the stable object is
+current, and requires the response to use the stable object.
 
 ### Forbidden “optimizations”
 
 Do not:
 
-- restore `publishedPortraitRefs(...)` as the image-only account source;
+- use `publishedPortraitRefs(...)` or any other symbol-to-SHA snapshot as the
+  image-only account source;
 - use `row.asset_sha256` from the discovery window for a displayed portrait;
-- treat an image-only response as permission to bypass the card artifact;
+- treat an image-only response as permission to bypass the stable gene object;
 - let site-gene detail, public media, metadata, a sitemap, or print-copy select
   the D1 authoring leader;
-- add a cache whose key is not the live card artifact version; or
+- add a cache that is not keyed by the stable object's version; or
 - accept API/hash equality alone as proof when the bug report is visual.
 
-If the artifact lookup is too expensive, optimize shard indexing or compact
-projection inside the single artifact path. Do not create another portrait
-timeline. A proposed replacement is acceptable only if one publication event
-selects one canonical image for every public surface, adversarial tests prove a
+If the stable-object read is too expensive, optimize the compact projection
+inside that single read path. Do not create another portrait timeline. A
+proposed replacement is acceptable only if one publication event selects one
+canonical image for every public surface, adversarial tests prove a
 D1-only change cannot move it, and a same-session Computer Use check confirms
 the homepage and gene page show the same character skin color.
 

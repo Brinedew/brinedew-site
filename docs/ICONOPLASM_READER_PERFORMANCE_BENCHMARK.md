@@ -1,7 +1,7 @@
 # Reader performance acceptance
 
-ARCHITECTURE FENCE [IPD-008]. Owner correction, B-716, 2026-08-27:
-"eventually shows one card" is a smoke test, not a performance benchmark.
+ARCHITECTURE FENCE [IPD-008]. "Eventually shows one card" is a smoke test, not
+a performance benchmark (B-716).
 
 Use `scripts/lib/iconoplasm-reader-benchmark.mjs` with **Playwright MCP's
 existing Page**, with the actual packaged extension. The MCP VM does not support
@@ -40,21 +40,18 @@ a title, placeholder or previous gene's image is not success. Frame measurements
 must be gated by the visible parent tooltip. Timing measures browser paint
 opportunities, not physical display scanout.
 
-A cold foreground hover may create the renderer iframe and select the article's
-snapshot only after pointer entry. The observer follows newly created renderer
-frames without restarting the pointer clock or deadline. Image-source validation
-uses that selected snapshot while preserving the empty pre-hover revision in the
-readiness record. Otherwise the observer can incorrectly report a loaded card as
+A cold foreground hover may create the renderer iframe only after pointer
+entry. The observer follows newly created renderer frames without restarting the
+pointer clock or deadline. Otherwise it can incorrectly report a loaded card as
 an eight-second timeout.
 
 Read-only `IconoplasmReaderDiagnostics.inspect(symbol)` is available in the
-extension's isolated world and its own PDF page. It exposes public epoch and
-readiness booleans only; it must never fetch, promote requests, update LRU order,
-read private storage or start background work. `prepared` is scheduler state,
+extension's isolated world and its own PDF page. It exposes the stable-object
+revision and readiness booleans only; it must never fetch, promote requests,
+update LRU order, read private storage or start background work. `prepared` is scheduler state,
 **not** proof of a decoded portrait; inspect `portraitReady` independently.
 
-Prepared-image paint must be <=50 ms; 200 ms is not an acceptable saved-image
-success threshold (owner correction, 2026-08-28). Other engineering budgets:
+Prepared-image paint must be <=50 ms. Other engineering budgets:
 foreground recovery <=1,000 ms (cold first-hover delays remain failures);
 highlight arrival <=1,500 ms after host load; examine prediction readiness after
 a fixed 2,000 ms near-viewport lead. Do not wait for readiness and then start the
@@ -135,43 +132,17 @@ as failed prediction readiness, not a canonically absent portrait.
 
 ## Diagnostic interpretation
 
-### Retained-install cache verification - 2026-08-28
-
-DEV runtime fingerprint `f4ed0831338aa0e363392fbc64594ce1971b7c1caf4cf5d6c5b82a5118f17826`,
-normal HTTP caching, no route interception, the reader's chosen `simple` layout:
-
-| Population                                                                                                                |                                Samples | Measured result                                                           |
-| ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------: | ------------------------------------------------------------------------- |
-| Saved BRCA1, alternating Wikipedia and PMC395646                                                                          |                        20 first hovers | p50 15.4 ms, p95 19.6 ms, maximum 23.4 ms                                 |
-| Same-page BRCA1 repeats, kept separate                                                                                    |                                     20 | p50 3.4 ms, p95 5.9 ms, maximum 7 ms                                      |
-| After an actual extension-runtime restart                                                                                 |                         2 first hovers | 21 / 14 ms, no BRCA1 image or metadata requests                           |
-| Exactly ten seconds after host load: interleukin-1 family, matrix metalloproteinase, integrin, cadherin, nuclear receptor | 25 hovers, 22 previously unsaved genes | all decoded before pointer entry; 8–18.9 ms                               |
-| Freshly loaded, previously unseen connexin article                                                                        |                     2 successive genes | first 1,000.3 ms, next 8.4 ms; cold startup remains a separate population |
-
-Across the twenty saved first hovers and twenty repeats there were zero BRCA1
-portrait or card-metadata requests. A native Chrome IndexedDB test retained the
-first of 160 forty-KiB records across a new cache instance; this is a storage
-test, not a claim that 160 real cards were visually inspected. The actual reader
-store held 97 portraits (4.55 MB) and 623 metadata records (0.82 MB), including
-BRCA1. Upgrade removed the old whole-cache metadata keys only after migration.
-The 50 ms prepared-image criterion passed; the earlier 200 ms criterion is retired.
-
-Raw observations, including earlier failed iterations, remain in
-`artifacts/hover-recovery-audit-20260828/`. This verifies the reported HTML hover
-regression in this browser/network; it does not certify Vietnam ISP reachability,
-the full PDF/low-bandwidth matrix, store propagation, or site-wide capacity.
-
 - No highlight: separate host-load gate, scanner response, matching and scan work.
 - Highlighted but not ready after lead: inspect speculation policy/gate, queue,
-  in-flight state and individual detail/locator/image readiness.
+  in-flight state and individual detail/image readiness.
 - Ready image but slow hover: inspect frame startup, decode, fonts and rendering.
 - Fast repeats but slow first hover after **each** reload: suspect page-scoped
   initialization/hydration, not only first-ever cold cache.
 
 Keep the deterministic first-ten/near-viewport windows, host idle gate, Data Saver
-policy, bounded concurrency and canonical epoch fences. Do not improve scores by
-preloading the entire article, stealing host rendering turns, restoring pointer
-trajectory prediction, or bypassing Bunny with unlimited Worker reads.
+policy and bounded concurrency. Do not improve scores by preloading the entire
+article, stealing host rendering turns, adding pointer-trajectory prediction, or
+bypassing Bunny with unlimited Worker reads.
 
 Record findings in B-716. Passing local latency tests does not establish
 site-wide capacity, global CDN freshness, Firefox store propagation or debt-free

@@ -29,13 +29,13 @@ therefore treats ten as a hard preview-attachment ceiling and also applies a
 
 ## Durable ownership
 
-Drain already owns a durable `publication_id` tied one-to-one to a completed
+Drain owns a durable `publication_id` tied one-to-one to a completed
 generation session. The fulfillment API requires that ID, persists it with the
 recipient-and-gene group size while moving requests to `delivery_pending`, and
 the D1 trigger copies both values into the notification outbox. Request-time
-`request_batch_id` remains provenance only. Historical rows are deliberately
-migrated to unique `legacy-request:{id}` delivery groups; never guess old
-grouping from row order or completion time.
+`request_batch_id` is provenance only. Rows created before publication grouping
+carry unique `legacy-request:{id}` delivery groups; never guess their grouping
+from row order or completion time.
 
 `workers/iconoplasm-request-notifications.js` selects only complete
 publication-recipient-and-gene group leaders, claims every outbox row in the
@@ -66,5 +66,5 @@ The sender must not deliver rows whose publication group is incomplete.
 Run the notification tests and the architecture-fence suite. The behavioral
 coverage must prove two-gene partitioning, the ten-attachment ceiling after one
 hundred completions, incomplete-batch deferral, group-wide retries, and
-idempotent Discord nonces. After deployment, confirm the D1 migration applied
-before the Worker started serving requests.
+idempotent Discord nonces. After a deployment that changes the notification
+schema, confirm the D1 migration applied before the Worker serves requests.
