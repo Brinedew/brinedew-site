@@ -12,6 +12,12 @@ import {
   iconoplasmGeneBlotFingerprint,
   iconoplasmGeneBlotObjectKey,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import {
+  installStableGeneStorage,
+  stableGeneObjectFromRecord,
+  stableGeneObjectPath,
+  stableGeneStorageEnv,
+} from "./test-helpers/stable-gene-objects.js"
 
 const WATERMARK_KEY = "iconoplasm:card-catalog-publish-watermark:v1"
 const PUBLICATION_KEY = "iconoplasm:card-catalog-dirty-shard-publication:v1"
@@ -395,7 +401,13 @@ test("a mapper revision mismatch fails closed and never starts routine publicati
   assert.equal(kvStore.has(PUBLICATION_KEY), false)
 })
 
-test("public mobile-card reads resolve the atomically published dirty-shard manifest", async () => {
+// B-898 Stage 1 (step B): public mobile-card reads no longer resolve the
+// dirty-shard manifest at all. The test used to prove the manifest flip was
+// atomic for readers; it now proves the opposite boundary: after a dirty-shard
+// publication the reader still answers from the stable gene object alone
+// (one storage read, no KV head read), so the shard tree cannot leak into
+// card payloads even while it is still being written by the coordinator.
+test("public mobile-card reads resolve the stable gene object, never the dirty-shard manifest", async (t) => {
   const symbols = ["GENA", "GENB"]
   const db = new FakeDb(symbols)
   const kvStore = new Map()
@@ -404,6 +416,30 @@ test("public mobile-card reads resolve the atomically published dirty-shard mani
   db.shaBySymbol.set("GENB", "ab".repeat(32))
   const published = await publishIconoplasmGalleryDirtyShardsForTest(buildEnv(db, kvStore))
   kvStore.set("iconoplasm:gallery-version", JSON.stringify({ current: published.version }))
+  const storage = installStableGeneStorage(
+    new Map([
+      [
+        "GENB",
+        stableGeneObjectFromRecord({
+          symbol: "GENB",
+          full_name: "GENB full name",
+          portrait: {
+            status: "published",
+            asset_sha256: "ab".repeat(32),
+            medium_url: "https://iconoplasmportraits.b-cdn.net/GENB/medium.webp",
+          },
+        }),
+      ],
+    ]),
+  )
+  t.after(storage.restore)
+  const kvGets = []
+  const env = { ...buildEnv(db, kvStore), ...stableGeneStorageEnv() }
+  const kvGet = env.KV.get
+  env.KV.get = async (key) => {
+    kvGets.push(key)
+    return kvGet(key)
+  }
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -412,10 +448,15 @@ test("public mobile-card reads resolve the atomically published dirty-shard mani
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbols: ["GENB"] }),
       }),
-      buildEnv(db, kvStore),
+      env,
       { waitUntil() {} },
     )
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.cards[0].portrait.asset_sha256, "ab".repeat(32))
+  assert.deepEqual(storage.reads, [stableGeneObjectPath("GENB")])
+  assert.deepEqual(
+    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
+    [],
+  )
 })
