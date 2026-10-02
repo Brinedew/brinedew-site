@@ -74,6 +74,16 @@ test("every moved path is redirected once and rewritten in the pages", () => {
     assert.match(line, /^\/[A-Za-z0-9._/-]*\*? (?:https:\/\/\S+|\/\S*) 301$/)
 })
 
+// B-906: the footer the Quartz pages share with the main site links /about. This host has
+// no About page of its own, so the build points that link at the main site (the build
+// refuses an unserved local link), and a visitor who lands on /about here is sent there.
+test("the main site's /about footer link goes straight to the main site", () => {
+  const html = standaloneIconoplasmHtml('<footer><a href="/about">About</a></footer>')
+  assert.match(html, /href="https:\/\/brinedew\.bio\/about"/)
+  assert.deepEqual(unservedIconoplasmLinks(html, ["index.html"]), [])
+  assert.ok(ICONOPLASM_REDIRECTS.split("\n").includes("/about https://brinedew.bio/about 301"))
+})
+
 test("a local link this host cannot serve is reported", () => {
   const html = '<a href="/">Home</a><a href="/gene/TP53">TP53</a><a href="/About.html">About</a>'
   assert.deepEqual(unservedIconoplasmLinks(html, ["index.html"]), ["/About.html"])
