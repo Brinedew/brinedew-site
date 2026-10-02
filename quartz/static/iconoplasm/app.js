@@ -39,7 +39,7 @@ import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=c919d8078bda6d9d"
+} from "./candidate-delete-dialog.js?v=2e163b70b081599b"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
@@ -4521,6 +4521,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (typeof opts.onError === "function") {
           opts.onError(phase, err)
         }
+      },
+      // The runtime hands over a finished sentence: the server's own for a refusal, a short
+      // generic line otherwise. Seven seconds, because a sentence of that length needs more
+      // than the notice's default 4.2.
+      onVoteFailed: function (message) {
+        showCandidateDeleteNotice({ document: document, message: message, durationMs: 7000 })
       },
     })
   }

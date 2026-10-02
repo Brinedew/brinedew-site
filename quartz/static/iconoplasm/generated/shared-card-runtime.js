@@ -10635,6 +10635,13 @@
       } catch (_error) {
       }
     }
+    var VOTE_FAILURE_FALLBACK = "Couldn't save your vote. Please try again.";
+    function voteFailureMessage(err) {
+      var status = Number(err && err.status || 0);
+      var payload = err && err.payload;
+      var sentence = payload && typeof payload.error === "string" ? payload.error.trim() : "";
+      return status >= 400 && sentence ? sentence : VOTE_FAILURE_FALLBACK;
+    }
     function wireVoteBox(box, config) {
       if (!box) return null;
       var cfg = config || {};
@@ -10798,7 +10805,8 @@
               }
             }
           }).catch(function(err) {
-            if (Number(err && err.status || 0) === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
+            var failureStatus = Number(err && err.status || 0);
+            if (failureStatus === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
               state.snapshot = previousSnapshot;
               writeStoredVoteSnapshot(candidateRef, state.snapshot);
               state.authenticated = false;
@@ -10808,8 +10816,21 @@
               }
               return;
             }
+            var refused = failureStatus >= 400 && failureStatus < 500;
+            if (refused) {
+              state.snapshot = previousSnapshot;
+              writeStoredVoteSnapshot(candidateRef, state.snapshot);
+            }
             notifySnapshot();
             if (typeof cfg.onError === "function") cfg.onError("set", err);
+            if (typeof cfg.onVoteFailed === "function") {
+              try {
+                cfg.onVoteFailed(voteFailureMessage(err), err);
+              } catch (callbackError) {
+                if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError);
+              }
+            }
+            if (refused) return;
             return refreshSnapshot();
           }).finally(function() {
             state.pending = false;

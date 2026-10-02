@@ -2240,6 +2240,18 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     } catch (_error) {}
   }
 
+  var VOTE_FAILURE_FALLBACK = "Couldn't save your vote. Please try again."
+
+  // What the reader is told when the vote request fails: the server's own sentence for an
+  // HTTP refusal that carries one, and a short generic line for everything else (a lost
+  // connection, an error page with no JSON).
+  function voteFailureMessage(err) {
+    var status = Number((err && err.status) || 0)
+    var payload = err && err.payload
+    var sentence = payload && typeof payload.error === "string" ? payload.error.trim() : ""
+    return status >= 400 && sentence ? sentence : VOTE_FAILURE_FALLBACK
+  }
+
   function wireVoteBox(box, config) {
     if (!box) return null
     var cfg = config || {}
@@ -2427,8 +2439,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
             }
           })
           .catch(function (err) {
+            var failureStatus = Number((err && err.status) || 0)
             if (
-              Number((err && err.status) || 0) === 401 ||
+              failureStatus === 401 ||
               (err && err.payload && err.payload.code === "AUTH_REQUIRED")
             ) {
               state.snapshot = previousSnapshot
@@ -2440,11 +2453,27 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
               }
               return
             }
-            // A lost response is ambiguous: the coordinator may already have
-            // committed the desired state. Keep the optimistic state visible and
-            // reconcile with authority instead of falsely rolling the vote back.
+            // A 4xx is the server saying it did not take this vote (voting paused until
+            // 00:00 UTC, an invalid request), so the previous state goes back at once and
+            // no second request is spent confirming it.
+            var refused = failureStatus >= 400 && failureStatus < 500
+            if (refused) {
+              state.snapshot = previousSnapshot
+              writeStoredVoteSnapshot(candidateRef, state.snapshot)
+            }
             notifySnapshot()
             if (typeof cfg.onError === "function") cfg.onError("set", err)
+            if (typeof cfg.onVoteFailed === "function") {
+              try {
+                cfg.onVoteFailed(voteFailureMessage(err), err)
+              } catch (callbackError) {
+                if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError)
+              }
+            }
+            if (refused) return
+            // A 5xx or a lost response is ambiguous: the coordinator may already have
+            // committed the desired state. Keep the optimistic state visible and
+            // reconcile with authority instead of falsely rolling the vote back.
             return refreshSnapshot()
           })
           .finally(function () {
