@@ -111,8 +111,16 @@ test("DO NOT DELETE: per-symbol card endpoint stays KV-backed and version-barrie
   )
   assert.match(cardEndpoint, /caches\.default/)
   assert.match(cardEndpoint, /const symbol = normalizeSymbol\(symbolFromPath\)/)
-  assert.match(cardEndpoint, /currentMobileCardSnapshotVersion\(env\)/)
-  assert.match(cardEndpoint, /readPublishedCardCatalogArtifact\(env, snapshotVersion, \[symbol\]\)/)
+  // B-898 Stage 1 (step B): the endpoint reads ONE stable gene object per
+  // symbol from Bunny Storage. The guard no longer looks for the KV head or
+  // the card-catalog artifact reader; it now fails if either comes back, and
+  // still fails on any D1 composition below.
+  assert.match(cardEndpoint, /readStableGeneObject\(env, symbol\)/)
+  assert.doesNotMatch(
+    cardEndpoint,
+    /currentMobileCardSnapshotVersion\(|readPublishedCardCatalogArtifact\(/,
+    "the per-symbol card endpoint must not walk the retired KV head / manifest tree",
+  )
   assert.doesNotMatch(
     cardEndpoint,
     /s-maxage=86400|stale-while-revalidate=604800/,
