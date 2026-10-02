@@ -131,8 +131,12 @@ jobs:
       - name: Build Quartz site
         run: pnpm run build
 
+      # The proof imports the Worker runtime, which needs the generated
+      # operation-cost identities (not committed, B-863).
       - name: Prove exact built static route ownership
-        run: node --test workers/iconoplasm-static-assets.workerd.test.js
+        run: |
+          node scripts/generate-operation-cost-identities.mjs
+          node --test workers/iconoplasm-static-assets.workerd.test.js
 
       - name: Verify Geneguessr assets bundled
         run: |
