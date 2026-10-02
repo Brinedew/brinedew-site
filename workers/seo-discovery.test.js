@@ -8,6 +8,7 @@ import worker, {
   rewriteIconoplasmGeneDiscoveryMetadata,
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { resolvePostAuthAppUrl } from "./auth.js"
+import { isIconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import {
   buildPortraitAwareManifestHash,
   resetIconoplasmRuntimeCachesForTest,
@@ -555,14 +556,6 @@ test("subdomain privacy pages use the short canonical privacy URL", async () => 
 
   assert.equal(response.status, 200)
   assert.match(html, /https:\/\/iconoplasm\.brinedew\.bio\/privacy/)
-
-  const legacy = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/apps/iconoplasm/privacy"),
-    {},
-    {},
-  )
-  assert.equal(legacy.status, 301)
-  assert.equal(legacy.headers.get("location"), "https://iconoplasm.brinedew.bio/privacy")
 })
 
 test("GeneGuessr exposes short privacy canonical and host sitemap", async () => {
@@ -650,10 +643,7 @@ test("complete gene metadata is indexable while incomplete records retain noinde
     },
   )
 
-  assert.match(
-    completeHtml,
-    /<title>TP53 — tumor protein p53 \| Iconoplasm character profile<\/title>/,
-  )
+  assert.match(completeHtml, /<title>TP53 — tumor protein p53 \| Iconoplasm<\/title>/)
   assert.doesNotMatch(completeHtml, /name="robots"/)
   assert.match(completeHtml, /female, age 44, 44 kg, Kingcore aesthetic, pro-control alignment/)
   assert.match(
@@ -989,7 +979,16 @@ test("gene hydration preserves and refreshes the canonical profile title", async
   assert.doesNotMatch(source, /route\.symbol \+ " - Iconoplasm"/)
   assert.match(source, /function geneProfileDocumentTitle\(gene, fallbackSymbol\)/)
   assert.match(source, /document\.title = geneProfileDocumentTitle\(g, symbol\)/)
-  assert.match(source, /!document\.title\.endsWith\(" \| Iconoplasm character profile"\)/)
+  assert.match(
+    source,
+    /!isIconoplasmGenePageTitle\(document\.title, normalizedSymbol\(route\.symbol\)\)/,
+  )
+  // B-818: every Iconoplasm title now ends in " | Iconoplasm", so only this
+  // gene's own title may survive a route change; "Clans | Iconoplasm" may not.
+  assert.equal(isIconoplasmGenePageTitle("TP53 — tumor protein p53 | Iconoplasm", "TP53"), true)
+  assert.equal(isIconoplasmGenePageTitle("TP53 | Iconoplasm", "TP53"), true)
+  assert.equal(isIconoplasmGenePageTitle("Clans | Iconoplasm", "TP53"), false)
+  assert.equal(isIconoplasmGenePageTitle("TP531 — other | Iconoplasm", "TP53"), false)
 })
 
 test("gene lead keeps the portrait subordinate and renders the canonical blot", async () => {

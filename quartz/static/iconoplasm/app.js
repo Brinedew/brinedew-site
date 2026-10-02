@@ -47,6 +47,12 @@ import {
   unmountDiagramStudio,
 } from "./diagram-studio.js?v=830ba55ffe7168b2"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=ec90b0e844aa4ac5"
+import {
+  ICONOPLASM_HOME_TITLE,
+  iconoplasmGenePageTitle,
+  iconoplasmPageTitle,
+  isIconoplasmGenePageTitle,
+} from "./page-title.js?v=f698161fd92b8205"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -9382,10 +9388,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function geneProfileDocumentTitle(gene, fallbackSymbol) {
     var symbol = normalizedSymbol(gene && gene.symbol ? gene.symbol : fallbackSymbol)
-    var fullName = String((gene && gene.full_name) || "").trim()
-    return fullName
-      ? symbol + " — " + fullName + " | Iconoplasm character profile"
-      : symbol + " | Iconoplasm character profile"
+    return iconoplasmGenePageTitle(symbol, (gene && gene.full_name) || "")
   }
 
   function renderGene(root, symbol, options) {
@@ -9526,7 +9529,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var renderGeneFailure = function (err) {
       if (renderId !== activeGeneRenderId) return
       if (loadingEl) loadingEl.style.display = "none"
-      if (err && err.status === 404) markDocumentNotFound("Gene not found | Iconoplasm")
+      if (err && err.status === 404) markDocumentNotFound(iconoplasmPageTitle("Gene not found"))
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(symbol),
         error: true,
@@ -9591,9 +9594,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // A missing page must not look indexable. The single-page fallback answers
-  // every unknown path with 200, and the shell had set "SYMBOL | Iconoplasm
-  // character profile", a canonical /gene/SYMBOL and index,follow for any
-  // mistyped gene.
+  // every unknown path with 200, and the shell had set "SYMBOL | Iconoplasm",
+  // a canonical /gene/SYMBOL and index,follow for any mistyped gene.
   function markDocumentNotFound(title) {
     try {
       document.title = title
@@ -10817,24 +10819,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     lastRenderedPath = window.location.pathname + window.location.search
     // Update page title
     if (route.page === "home") {
-      document.title = "Iconoplasm - Gene character cards"
+      document.title = ICONOPLASM_HOME_TITLE
       syncDocumentCanonical("/")
     } else if (route.page === "gene") {
       syncDocumentCanonical("/gene/" + encodeURIComponent(normalizedSymbol(route.symbol)))
       // A direct gene response already owns the full canonical title. Preserve
       // it through hydration; SPA navigation upgrades this temporary title as
       // soon as the same shared card payload resolves below.
-      if (!document.title.endsWith(" | Iconoplasm character profile")) {
+      if (!isIconoplasmGenePageTitle(document.title, normalizedSymbol(route.symbol))) {
         document.title = geneProfileDocumentTitle(null, route.symbol)
       }
     } else if (route.page === "clans") {
-      document.title = "Clans - Iconoplasm"
+      document.title = iconoplasmPageTitle("Clans")
       syncDocumentCanonical("/clans")
     } else if (route.page === "studio") {
-      document.title = "Diagram Studio - Iconoplasm"
+      document.title = iconoplasmPageTitle("Diagram Studio")
       syncDocumentCanonical("/studio")
     } else {
-      markDocumentNotFound("Not found - Iconoplasm")
+      markDocumentNotFound(iconoplasmPageTitle("Not found"))
     }
     // Render the appropriate page
     if (route.page === "home") {

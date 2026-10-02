@@ -372,6 +372,133 @@ test(
   },
 )
 
+// B-818: iconoplasm.brinedew.bio has one URL convention, clean lowercase paths.
+// Every older shape that something once linked answers a 301 to where it lives
+// now. Ways this can fail:
+//  1. An old shape answers 200 with the SPA homepage instead of a 301: the store
+//     listings' privacy link (/apps/iconoplasm/privacy) shows a reviewer the
+//     archive, and crawlers index another copy of "/".
+//  2. /About.html is deleted or 404s instead of redirecting; an older extension
+//     build or shared link that still points at it breaks.
+//  3. A redirect lands on a URL that redirects again or loops with the asset
+//     layer's own .html handling.
+//  4. A redirect captures a page this host serves (/privacy, /gene/TP53) or a
+//     path the Worker owns (/api, /blot), changing what readers get there.
+//  5. A redirect is answered by the Worker, spending a metered request, or
+//     disappears in the containment deploy.
+//  6. The query string is dropped, so a store or campaign link loses its tag.
+test(
+  "old URL shapes answer a static 301 to the one clean convention",
+  { timeout: 60_000 },
+  async () => {
+    const { temporaryRoot, outputRoot } = await makeAssetFixture()
+    const canonicalToml = await readFile(
+      path.join(
+        repoRoot,
+        "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+      ),
+      "utf8",
+    )
+    const moved = [
+      ["/About.html", "https://brinedew.bio/about"],
+      ["/apps/iconoplasm", "/"],
+      ["/apps/iconoplasm/", "/"],
+      ["/apps/iconoplasm/privacy", "/privacy"],
+      [
+        "/apps/iconoplasm/privacy?utm_source=chrome-web-store",
+        "/privacy?utm_source=chrome-web-store",
+      ],
+      ["/apps/iconoplasm/license", "/license"],
+      ["/apps/iconoplasm/caretaker-terms", "/caretaker-terms"],
+      ["/apps/iconoplasm/developers", "/developers"],
+      ["/apps/iconoplasm/clans", "/clans"],
+      ["/Iconoplasm", "/"],
+      ["/Iconoplasm.html", "/"],
+      [
+        "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
+        "https://brinedew.bio/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm",
+      ],
+      ["/wiki/cellular-senescence", "https://brinedew.bio/wiki/cellular-senescence"],
+      ["/posts", "https://brinedew.bio/posts"],
+      ["/posts/support-me", "https://brinedew.bio/posts/support-me"],
+    ]
+    const served = ["/", "/privacy", "/license", "/caretaker-terms", "/developers", "/gene/TP53"]
+    const receipt = { generated_at: new Date().toISOString(), dispatches: [] }
+    try {
+      for (const [topology, assets] of [
+        ["production", parseToml(canonicalToml).assets],
+        [
+          "containment",
+          parseToml(prepareRetainedAssetsConfig(canonicalToml)).unsafe.metadata.assets.config,
+        ],
+      ]) {
+        const runtime = new Miniflare(
+          convertV4MiniflareOptions({
+            name: `iconoplasm-moved-paths-${topology}`,
+            modules: true,
+            script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+            compatibilityDate: "2026-08-01",
+            assets: {
+              directory: outputRoot,
+              run_worker_first: assets.run_worker_first,
+              routerConfig: { has_user_worker: true },
+              assetConfig: { not_found_handling: assets.not_found_handling },
+            },
+          }),
+        )
+        try {
+          for (const [pathname, target] of moved) {
+            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+            await response.text()
+            const location = response.headers.get("location")
+            receipt.dispatches.push({ topology, pathname, status: response.status, location })
+            // 1, 2, 5 and 6
+            assert.equal(response.status, 301, `${topology} ${pathname}`)
+            assert.equal(location, target, `${topology} ${pathname}`)
+            // 3: a same-host target is a page, not another redirect
+            if (target.startsWith("/")) {
+              const landed = await runtime.dispatchFetch(`https://iconoplasm.test${target}`, {
+                redirect: "manual",
+              })
+              await landed.text()
+              assert.ok(landed.status < 300 || landed.status > 399, `${topology} ${target}`)
+              if (topology === "production") assert.equal(landed.status, 200, target)
+            }
+          }
+          // 4
+          for (const pathname of served) {
+            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+            await response.text()
+            if (topology === "production" || pathname !== "/gene/TP53")
+              assert.equal(response.status, 200, `${topology} ${pathname}`)
+          }
+          for (const pathname of ["/api/auth/me", "/blot/TP53.webp"]) {
+            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+            await response.text()
+            assert.equal(response.status, 599, `${topology} ${pathname} stays Worker-owned`)
+          }
+        } finally {
+          await runtime.dispose()
+        }
+      }
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
+    const receiptDirectory = path.join(repoRoot, "artifacts", "b818")
+    await mkdir(receiptDirectory, { recursive: true })
+    await writeFile(
+      path.join(receiptDirectory, "moved-paths-receipt.json"),
+      `${JSON.stringify(receipt, null, 2)}\n`,
+    )
+  },
+)
+
 test(
   "the exact production build and Wrangler config sample anonymous route ownership",
   { timeout: 120_000 },
