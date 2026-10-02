@@ -156,7 +156,7 @@ function output() {
     [
       "GENE_VOTE_VERSION",
       "0113_gene_vote_version.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0113_gene_vote_version.sql", 0, 1),
+      reviewedMigrationStatements("migrations-iconoplasm", "0113_gene_vote_version.sql", 0, 2),
     ],
     [
       "GENE_BLOT_BACKLOG_WATERMARK",

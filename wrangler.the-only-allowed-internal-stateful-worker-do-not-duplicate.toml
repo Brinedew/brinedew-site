@@ -251,7 +251,6 @@ ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
 # generic service token:
 #   ICONOPLASM_AUTHORITY_REPLICA_TOKEN      events, snapshots, exact material, Tags
 #   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
-#   ICONOPLASM_AUTHORITY_CUTOVER_TOKEN      discovery candidate/activate handover
 ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
@@ -273,10 +272,13 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # One Iconoplasm job per invocation; workers/iconoplasm-background-schedule.js
 # owns the minute map and its test checks this expression. Five jobs retain
 # quarter-hour recovery; account and manifestation recovery run every 12 minutes,
-# as does supervote delivery with five 16-message batches/hour.
+# as does supervote delivery with five 16-message batches/hour. Minutes 4, 13,
+# 24, 34, 45 and 52 are idle (ICONOPLASM_IDLE_MINUTES): a normal push never
+# changes the installed trigger, so this line stays what is installed; only a
+# release that runs `wrangler deploy` may trim it, together with that list.
 # Nightly archive, canon repair and gallery run at 23:56/58/59
 # in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,5,6,7,8,10,11,14,15,16,17,18,19,20,23,26,27,28,29,30,31,32,33,35,38,39,41,42,43,44,46,47,48,50,51,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,6,7,8,10,11,13,14,15,16,17,18,19,20,23,24,26,27,28,29,30,31,32,33,34,35,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"

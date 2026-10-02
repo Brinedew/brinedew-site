@@ -150,11 +150,16 @@ const electionSource = readFileSync(
 )
 
 test("DO NOT DELETE: a vote elects in the request under its gene's vote version and publishes after the response", () => {
+  const elect = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function electGeneAfterVote",
+    "async function settleGeneAfterVote",
+  )
+  assert.match(elect, /electAndProjectGeneWinner\(env\.ICONOPLASM_DB, symbol/)
   const settle = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function settleGeneAfterVote",
     "async function setIconoplasmVote",
   )
-  assert.match(settle, /electAndProjectGeneWinner\(env\.ICONOPLASM_DB, symbol/)
+  assert.match(settle, /await electGeneAfterVote\(env, symbol/)
   assert.match(settle, /republishGeneAfterResponse\(env, ctx, symbol\)/)
   const afterResponse = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "function republishGeneAfterResponse",
@@ -204,20 +209,12 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
     /syncAdminReadModels|rebuildVoteAssetSummaryForSymbols|SELECT[\s\S]*FROM icono_image_votes/,
     "single-vote writes must not rebuild read models or read the raw vote ledger",
   )
-  for (const route of [
-    [
-      'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
-      'if (path === "/api/iconoplasm/votes/snapshots" && request.method === "POST")',
-    ],
-    [
-      'if (path === "/api/iconoplasm/votes/snapshots" && request.method === "POST")',
-      'if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST")',
-    ],
-  ]) {
-    const body = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(...route)
-    assert.match(body, /iconoVoteSnapshots\(env, \{/)
-    assert.doesNotMatch(body, /ICONOPLASM_DB\.prepare/)
-  }
+  const snapshotRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
+    'if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST")',
+  )
+  assert.match(snapshotRoute, /iconoVoteSnapshots\(env, \{/)
+  assert.doesNotMatch(snapshotRoute, /ICONOPLASM_DB\.prepare/)
   assert.match(
     geneVotesSource,
     /FROM json_each\(\?1\) AS wanted\s+CROSS JOIN icono_image_votes AS v/,

@@ -1,6 +1,8 @@
 // B-898 Stage 2: D1 is the only store for votes. A vote is one D1 batch inside
-// the request (the user's row in icono_image_votes, an exact delta on the
-// asset's icono_vote_asset_summary row, the gene's vote version), then one
+// the request (the daily vote budget, the user's row in icono_image_votes, an
+// exact delta on the asset's icono_vote_asset_summary row, one
+// icono_vote_events row for the workstation's vote mirror, the gene's vote
+// version), then one
 // election over the gene's D1 rows with the same pure function every caller
 // uses (electGeneAuthorityWinner), then a version-conditioned projection of
 // the winner into icono_publish_state with one `publish` event. The caller
@@ -13,14 +15,36 @@
 // the vote history of a gene: the summary row moves by the exact delta between
 // the user's old and new vote, read inside the same transaction, so a vote on
 // a gene with ten thousand votes costs what a vote on an empty gene costs.
+//
+// Admission: every write batch a reader causes starts with the daily vote
+// budget statement (vote-guards.js), which refuses the whole batch once the
+// UTC day's vote allowance is spent, so a refusal writes nothing. The
+// administrator's vote and import routes pass `admit: false`.
 import { electGeneAuthorityWinner } from "../vote-authority/gene-authority-election.js"
 import { CARETAKER_SUPERVOTE_WEIGHT } from "../caretaker/caretaker-supervote.js"
-import { GENE_VOTE_VERSION_SQL, geneVoteVersionBumpStatement } from "./gene-vote-version.js"
+import {
+  GENE_VOTE_VERSION_SQL,
+  VOTE_DAILY_LIMIT,
+  geneVoteVersionBumpStatement,
+  isVoteDailyBudgetRefusal,
+  voteDailyBudgetRefusal,
+  voteDailyBudgetStatement,
+} from "./vote-guards.js"
 
-// The election reads every candidate of one gene. Real genes hold a handful;
-// the bound only stops a pathological gene from turning one vote into an
-// unbounded read. Past it nothing is projected and the caller is told why.
+// The election reads every eligible candidate of one gene and nothing else.
+// Eligible is the one rule projectGeneAuthorityRows, the caretaker
+// eligibility projection (migration 0088) and the pipeline doc share: not
+// rejected, auto-pick eligible, not stale. Legacy candidates stay eligible and
+// lose ties (every path that marks a candidate legacy also marks it stale, and
+// every path that clears stale clears legacy). The filter runs in SQL, so a
+// gene's rejected and stale history never counts toward the bound. Real genes
+// hold a handful of eligible candidates; the bound only stops a pathological
+// gene from turning one vote into an unbounded read. Past it nothing is
+// projected and the caller is told why.
 export const GENE_ELECTION_CANDIDATE_LIMIT = 256
+const ELIGIBLE_CANDIDATE_SQL =
+  "lower(status) <> 'rejected' AND autopick_eligible = 1 AND is_stale = 0"
+// The actor recorded on the publish event an automatic election writes.
 export const GENE_VOTE_ELECTION_ACTOR = "vote_authority"
 
 const SHA256 = /^[a-f0-9]{64}$/
@@ -60,27 +84,25 @@ function caretakerElectionInput(row) {
 }
 
 /**
- * One D1 batch, one consistent snapshot: the gene's candidates, its vote
- * summaries, the caretaker supervote, the published state and the vote
+ * One D1 batch, one consistent snapshot: the gene's eligible candidates with
+ * their vote summaries (one pass over the gene's candidate rows, one summary
+ * probe each), the caretaker supervote, the published state and the vote
  * version, then the pure election over them.
  */
 export async function readGeneElection(db, symbol) {
-  const [candidates, summaries, caretaker, state, version] = await db.batch([
+  const [candidates, caretaker, state, version] = await db.batch([
     db
       .prepare(
-        `SELECT asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at,
-                vision_id, candidate_image_id
-           FROM icono_portrait_assets
-          WHERE gene_symbol = ?1
-          ORDER BY asset_sha256 ASC
-          LIMIT ?2`,
-      )
-      .bind(symbol, GENE_ELECTION_CANDIDATE_LIMIT + 1),
-    db
-      .prepare(
-        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-           FROM icono_vote_asset_summary
-          WHERE gene_symbol = ?1
+        `SELECT pa.asset_sha256, pa.status, pa.autopick_eligible, pa.is_stale, pa.is_legacy,
+                pa.created_at, pa.vision_id, pa.candidate_image_id,
+                vs.asset_sha256 AS summary_asset_sha256, vs.vision_id AS summary_vision_id,
+                vs.candidate_image_id AS summary_candidate_image_id,
+                vs.upvotes, vs.downvotes, vs.score, vs.vote_count
+           FROM icono_portrait_assets AS pa
+           LEFT JOIN icono_vote_asset_summary AS vs
+             ON vs.gene_symbol = pa.gene_symbol AND vs.asset_sha256 = pa.asset_sha256
+          WHERE pa.gene_symbol = ?1 AND ${ELIGIBLE_CANDIDATE_SQL}
+          ORDER BY pa.asset_sha256 ASC
           LIMIT ?2`,
       )
       .bind(symbol, GENE_ELECTION_CANDIDATE_LIMIT + 1),
@@ -104,14 +126,22 @@ export async function readGeneElection(db, symbol) {
     db.prepare(`SELECT ${GENE_VOTE_VERSION_SQL} AS version`).bind(symbol),
   ])
   const candidateRows = candidates?.results || []
-  const summaryRows = summaries?.results || []
+  const summaryRows = candidateRows
+    .filter((row) => row.summary_asset_sha256)
+    .map((row) => ({
+      asset_sha256: row.summary_asset_sha256,
+      vision_id: row.summary_vision_id,
+      candidate_image_id: row.summary_candidate_image_id,
+      upvotes: row.upvotes,
+      downvotes: row.downvotes,
+      score: row.score,
+      vote_count: row.vote_count,
+    }))
   const stateRow = state?.results?.[0] || null
   const currentAssetSha = sha(stateRow?.current_asset_sha256) || null
   const adminOverride = Number(stateRow?.admin_override || 0) > 0
   const caretakerInput = caretakerElectionInput(caretaker?.results?.[0])
-  const overflow =
-    candidateRows.length > GENE_ELECTION_CANDIDATE_LIMIT ||
-    summaryRows.length > GENE_ELECTION_CANDIDATE_LIMIT
+  const overflow = candidateRows.length > GENE_ELECTION_CANDIDATE_LIMIT
   const election = overflow
     ? { winner: null, rows: [] }
     : electGeneAuthorityWinner({
@@ -166,8 +196,7 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
   const guard = `${GENE_VOTE_VERSION_SQL} = ?3
     AND EXISTS (
       SELECT 1 FROM icono_portrait_assets
-       WHERE gene_symbol = ?1 AND asset_sha256 = ?2
-         AND lower(status) <> 'rejected' AND autopick_eligible = 1 AND is_stale = 0
+       WHERE gene_symbol = ?1 AND asset_sha256 = ?2 AND ${ELIGIBLE_CANDIDATE_SQL}
     )`
   const results = await db.batch([
     db
@@ -262,7 +291,7 @@ function voteDelta(value) {
 }
 
 /**
- * The coordinator's vote rule, as a pure plan: a desired-state command (an
+ * The vote rule, as a pure plan: a desired-state command (an
  * identical retry changes nothing), values -1, 0 and 1, and a vision /
  * candidate-image identity that falls back to the user's previous row and
  * then to the asset. The asset must belong to the gene; clearing a vote (0)
@@ -385,7 +414,42 @@ function geneVoteWriteStatements(db, request, plan) {
             plan.final_vote_value,
           ),
   )
+  // One feed row per accepted vote change, in the same transaction: the
+  // workstation's incremental vote mirror follows this table by id.
+  statements.push(
+    db
+      .prepare(
+        `INSERT INTO icono_vote_events (
+           gene_symbol, asset_sha256, vision_id, candidate_ref, candidate_image_id,
+           user_id, vote_value, created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        symbol,
+        asset,
+        plan.resolved_vision_id,
+        geneVoteCandidateRef(symbol, asset),
+        plan.candidate_image_id,
+        userId,
+        plan.final_vote_value,
+      ),
+  )
   return statements
+}
+
+// Runs one vote write batch, with the daily budget statement first when the
+// write is admitted. A spent budget rolls the batch back whole and returns the
+// refusal; any other failure is thrown.
+async function runVoteWriteBatch(db, statements, { admit, units, dailyVoteLimit }) {
+  try {
+    await db.batch(
+      admit ? [voteDailyBudgetStatement(db, units, dailyVoteLimit), ...statements] : statements,
+    )
+    return null
+  } catch (error) {
+    if (admit && isVoteDailyBudgetRefusal(error)) return voteDailyBudgetRefusal()
+    throw error
+  }
 }
 
 function normalizedVoteRequest(raw, sanitizeVisionId) {
@@ -405,8 +469,8 @@ function normalizedVoteRequest(raw, sanitizeVisionId) {
 
 /**
  * Writes one user's vote on one asset of one gene: one read batch, then one
- * write batch (summary delta, vote row, gene vote version). An unchanged vote
- * writes nothing.
+ * write batch (daily budget, summary delta, vote row, vote event, gene vote
+ * version). An unchanged vote writes nothing and spends no budget.
  *
  * `sanitizeVisionId` is the runtime's vote vision-id rule (it drops artist
  * metavision ids); stored rows pass through it like request values do.
@@ -442,24 +506,44 @@ export async function setGeneVote(db, raw = {}) {
     sanitizeVisionId,
   )
   if (!plan.ok || !plan.changed) return plan
-  await db.batch([
-    ...geneVoteWriteStatements(db, request, plan),
-    geneVoteVersionBumpStatement(db, request.symbol),
-  ])
-  return plan
+  const refused = await runVoteWriteBatch(
+    db,
+    [
+      ...geneVoteWriteStatements(db, request, plan),
+      geneVoteVersionBumpStatement(db, request.symbol),
+    ],
+    {
+      admit: raw.admit !== false,
+      units: 1,
+      dailyVoteLimit: raw.dailyVoteLimit ?? VOTE_DAILY_LIMIT,
+    },
+  )
+  return refused || plan
 }
 
-// Fifty votes per D1 round trip: two set-based reads and at most four
+// Fifty votes per D1 round trip: two set-based reads and at most five
 // statements per vote, so a 500-vote import is twenty D1 calls.
 export const GENE_VOTE_IMPORT_CHUNK = 50
 
 /**
  * Applies many votes (the workstation's baseline import, an image edit's
- * inherited upvotes). Same rule and statements as setGeneVote; a later item
- * for the same user and asset wins, like replaying the commands in order.
- * Returns per-item outcomes and the genes whose votes changed.
+ * inherited upvotes, a generated candidate's first upvote). Same rule and
+ * statements as setGeneVote; a later item for the same user and asset wins,
+ * like replaying the commands in order.
+ *
+ * An admitted import spends one budget unit per changed vote, chunk by chunk.
+ * The first refused chunk writes nothing, and it and every later item are
+ * reported refused (429), so a caller can retry the same import after the
+ * reset: items that already landed are unchanged and cost nothing.
+ *
+ * Returns per-item outcomes, every gene the valid items name (`symbols`) and
+ * the genes whose votes changed (`changed_symbols`).
  */
-export async function importGeneVotes(db, items = [], { sanitizeVisionId } = {}) {
+export async function importGeneVotes(
+  db,
+  items = [],
+  { sanitizeVisionId, admit = true, dailyVoteLimit = VOTE_DAILY_LIMIT } = {},
+) {
   const sanitize = sanitizeVisionId || ((value) => String(value || ""))
   const byIdentity = new Map()
   let invalid = 0
@@ -476,8 +560,14 @@ export async function importGeneVotes(db, items = [], { sanitizeVisionId } = {})
   const requests = [...byIdentity.values()]
   const results = []
   const changedSymbols = new Set()
+  let refused = null
   for (let index = 0; index < requests.length; index += GENE_VOTE_IMPORT_CHUNK) {
     const chunk = requests.slice(index, index + GENE_VOTE_IMPORT_CHUNK)
+    if (refused) {
+      for (const request of chunk)
+        results.push({ symbol: request.symbol, asset_sha256: request.asset, ...refused })
+      continue
+    }
     const pairs = JSON.stringify(chunk.map((item) => [item.symbol, item.asset, item.userId]))
     const [assetRead, voteRead] = await db.batch([
       db
@@ -511,6 +601,7 @@ export async function importGeneVotes(db, items = [], { sanitizeVisionId } = {})
       ]),
     )
     const statements = []
+    const chunkResults = []
     const chunkSymbols = new Set()
     for (const request of chunk) {
       const plan = planGeneVote(
@@ -519,18 +610,35 @@ export async function importGeneVotes(db, items = [], { sanitizeVisionId } = {})
         votes.get(`${request.symbol}|${request.asset}|${request.userId}`) || null,
         sanitize,
       )
-      results.push({ symbol: request.symbol, asset_sha256: request.asset, ...plan })
+      chunkResults.push({ symbol: request.symbol, asset_sha256: request.asset, ...plan })
       if (!plan.ok || !plan.changed) continue
       statements.push(...geneVoteWriteStatements(db, request, plan))
       chunkSymbols.add(request.symbol)
     }
-    for (const symbol of chunkSymbols) {
-      statements.push(geneVoteVersionBumpStatement(db, symbol))
-      changedSymbols.add(symbol)
+    for (const symbol of chunkSymbols) statements.push(geneVoteVersionBumpStatement(db, symbol))
+    const units = chunkResults.filter((row) => row.ok && row.changed).length
+    refused = units
+      ? await runVoteWriteBatch(db, statements, { admit, units, dailyVoteLimit })
+      : null
+    if (refused) {
+      for (const row of chunkResults)
+        results.push(
+          row.ok && row.changed
+            ? { symbol: row.symbol, asset_sha256: row.asset_sha256, ...refused }
+            : row,
+        )
+      continue
     }
-    if (statements.length) await db.batch(statements)
+    results.push(...chunkResults)
+    for (const symbol of chunkSymbols) changedSymbols.add(symbol)
   }
-  return { invalid, results, changed_symbols: [...changedSymbols] }
+  return {
+    invalid,
+    results,
+    refused: Boolean(refused),
+    symbols: [...new Set(requests.map((request) => request.symbol))],
+    changed_symbols: [...changedSymbols],
+  }
 }
 
 function zeroSnapshot(symbol, asset, visionId) {
@@ -552,8 +660,8 @@ function zeroSnapshot(symbol, asset, visionId) {
 }
 
 /**
- * Vote snapshots for an explicit item list, in the coordinator's snapshot
- * shape: per-asset counts, the caller's own vote, the per-gene vision totals
+ * Vote snapshots for an explicit item list, in the shape the gene page's vote
+ * widget reads: per-asset counts, the caller's own vote, the per-gene vision totals
  * and the caretaker decoration. Three statements in one batch whatever the
  * list size: the summaries of the named genes (a primary-key prefix each), the
  * caller's votes on exactly the named assets (the unique vote identity, one

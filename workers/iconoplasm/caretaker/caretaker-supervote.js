@@ -1,4 +1,11 @@
-import { geneVoteVersionBumpStatement } from "../votes/gene-vote-version.js"
+import {
+  VOTE_DAILY_BUDGET_EXHAUSTED,
+  VOTE_DAILY_BUDGET_MESSAGE,
+  VOTE_DAILY_LIMIT,
+  geneVoteVersionBumpStatement,
+  isVoteDailyBudgetRefusal,
+  voteDailyBudgetStatement,
+} from "../votes/vote-guards.js"
 
 export const CARETAKER_SUPERVOTE_WEIGHT = 10
 export const CARETAKER_SUPERVOTE_DIRECTIONS = Object.freeze([-1, 1])
@@ -218,9 +225,9 @@ export function compareCaretakerWeightedCandidates(left, right, fallback = () =>
 // projection (one row per gene), the supervote head (one row per gene, with
 // its compare-and-set version), the audit events and the idempotency receipts
 // are the D1 tables migration 0085 created; candidate eligibility is the
-// trigger-maintained projection from migration 0088. Every rule below is the
-// one the per-gene coordinator applied; each write batch is guarded so a
-// concurrent command can only make it a no-op, never a torn write.
+// trigger-maintained projection from migration 0088. Each write batch is
+// guarded so a concurrent command can only make it a no-op, never a torn
+// write.
 
 const STATE_SQL = `SELECT a.gene_id, a.gene_symbol, a.caretaker_assignment_id, a.caretaker_account_id,
        a.status, a.assignment_version, a.authority_event_id, a.authority_event_sequence,
@@ -354,6 +361,10 @@ function appliedMutationGuard(db, symbol, mutationId) {
  * so an identical retry replays the receipt and a reused command id with a
  * different request is refused. A target must be an eligible candidate of
  * this gene in the trigger-maintained eligibility projection.
+ *
+ * A supervote spends one unit of the daily vote budget it shares with reader
+ * votes (vote-guards.js). Once the day is spent the write batch is refused
+ * whole, nothing is written, and the caller gets a 429.
  */
 export async function setCaretakerSupervoteInD1(
   db,
@@ -367,7 +378,7 @@ export async function setCaretakerSupervoteInD1(
     expectedAssignmentVersion,
     expectedSupervoteVersion,
   } = {},
-  { attempt = 1 } = {},
+  { attempt = 1, dailyVoteLimit = VOTE_DAILY_LIMIT } = {},
 ) {
   const geneSymbol = normalizeSymbol(symbol)
   const account = normalizeId(accountId, "caretaker_account_id")
@@ -461,17 +472,20 @@ export async function setCaretakerSupervoteInD1(
     accepted_event_sequence: Number(assignment.authority_event_sequence),
     supervote: supervoteSnapshot(assignment, nextHead, account),
   }
-  const results = await db.batch([
-    supervoteProjectionUpsert(db, {
-      symbol: geneSymbol,
-      geneId: assignment.gene_id,
-      assignmentId: assignment.caretaker_assignment_id,
-      accountId: account,
-      asset: targetAsset,
-      direction: targetDirection,
-      version: nextVersion,
-      mutationId,
-      guardSql: `EXISTS (
+  let results
+  try {
+    results = await db.batch([
+      voteDailyBudgetStatement(db, 1, dailyVoteLimit),
+      supervoteProjectionUpsert(db, {
+        symbol: geneSymbol,
+        geneId: assignment.gene_id,
+        assignmentId: assignment.caretaker_assignment_id,
+        accountId: account,
+        asset: targetAsset,
+        direction: targetDirection,
+        version: nextVersion,
+        mutationId,
+        guardSql: `EXISTS (
           SELECT 1 FROM icono_caretaker_vote_assignment_projection
            WHERE gene_symbol = ?1 AND caretaker_assignment_id = ?3 AND caretaker_account_id = ?4
              AND status = 'active' AND assignment_version = ?10
@@ -481,24 +495,24 @@ export async function setCaretakerSupervoteInD1(
         AND NOT EXISTS (
           SELECT 1 FROM icono_caretaker_supervote_command_receipts WHERE command_id = ?12
         )`,
-      guardArgs: [expectedAssignment, expectedSupervote, command],
-    }),
-    supervoteEventInsert(db, {
-      mutationId,
-      eventType,
-      commandId: command,
-      requestSha256: requestHash,
-      symbol: geneSymbol,
-      assignment,
-      fromAsset: previousAsset,
-      toAsset: targetAsset,
-      fromDirection: previousDirection,
-      toDirection: targetDirection,
-      version: nextVersion,
-    }),
-    db
-      .prepare(
-        `INSERT INTO icono_caretaker_supervote_command_receipts (
+        guardArgs: [expectedAssignment, expectedSupervote, command],
+      }),
+      supervoteEventInsert(db, {
+        mutationId,
+        eventType,
+        commandId: command,
+        requestSha256: requestHash,
+        symbol: geneSymbol,
+        assignment,
+        fromAsset: previousAsset,
+        toAsset: targetAsset,
+        fromDirection: previousDirection,
+        toDirection: targetDirection,
+        version: nextVersion,
+      }),
+      db
+        .prepare(
+          `INSERT INTO icono_caretaker_supervote_command_receipts (
            command_id, request_sha256, mutation_id, response_json,
            accepted_event_sequence, created_at
          )
@@ -507,18 +521,23 @@ export async function setCaretakerSupervoteInD1(
             SELECT 1 FROM icono_caretaker_supervote_projection
              WHERE gene_symbol = ?6 AND last_mutation_id = ?3
           )`,
-      )
-      .bind(
-        command,
-        requestHash,
-        mutationId,
-        JSON.stringify(response),
-        Number(assignment.authority_event_sequence),
-        geneSymbol,
-      ),
-    appliedMutationGuard(db, geneSymbol, mutationId),
-  ])
-  if (Number(results?.[0]?.meta?.changes || 0) > 0) return response
+        )
+        .bind(
+          command,
+          requestHash,
+          mutationId,
+          JSON.stringify(response),
+          Number(assignment.authority_event_sequence),
+          geneSymbol,
+        ),
+      appliedMutationGuard(db, geneSymbol, mutationId),
+    ])
+  } catch (error) {
+    if (isVoteDailyBudgetRefusal(error))
+      fail(VOTE_DAILY_BUDGET_EXHAUSTED, VOTE_DAILY_BUDGET_MESSAGE, 429)
+    throw error
+  }
+  if (Number(results?.[1]?.meta?.changes || 0) > 0) return response
   // A concurrent command won the compare-and-set between the read and the
   // write. Re-read once: an identical command replays its receipt, anything
   // else reports the state that changed.
@@ -535,7 +554,7 @@ export async function setCaretakerSupervoteInD1(
         expectedAssignmentVersion: expectedAssignment,
         expectedSupervoteVersion: expectedSupervote,
       },
-      { attempt: attempt + 1 },
+      { attempt: attempt + 1, dailyVoteLimit },
     )
   }
   fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
@@ -694,7 +713,7 @@ export async function projectCaretakerAssignmentInD1(db, rawEvent) {
 
 /**
  * A candidate stopped being eligible (rejected, marked legacy, purged): a
- * supervote that names it is cleared, as the coordinator did. The eligibility
+ * supervote that names it is cleared. The eligibility
  * projection is maintained by D1 triggers on every candidate write; if the
  * supervote names this asset and the projection does not say ineligible, the
  * trigger chain is broken and the call fails loudly instead of guessing.

@@ -104,12 +104,17 @@ D1 is the only store for votes. A vote (`/api/iconoplasm/votes/set`, the
 admin and import routes, a copied, edited or generated candidate's first
 upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
 
-1. One write batch upserts the user's row in `icono_image_votes`, moves that
-   asset's `icono_vote_asset_summary` row by the exact delta between the old
-   and the new vote (read inside the same transaction), and bumps the gene's
-   version in `icono_gene_vote_version`. An identical retry writes nothing.
-2. One read batch takes the gene's candidates, summaries, caretaker supervote,
-   published state and vote version, and elects with
+1. One write batch starts with the daily vote budget
+   (`workers/iconoplasm/votes/vote-guards.js`), then upserts the user's row in
+   `icono_image_votes`, moves that asset's `icono_vote_asset_summary` row by
+   the exact delta between the old and the new vote (read inside the same
+   transaction), writes one `icono_vote_events` row for the workstation's
+   incremental vote mirror, and bumps the gene's version in
+   `icono_gene_vote_version`. An identical retry writes nothing and spends no
+   budget.
+2. One read batch takes the gene's eligible candidates with their summaries
+   (not rejected, auto-pick eligible, not stale; at most 256), the caretaker
+   supervote, the published state and the vote version, and elects with
    `electGeneAuthorityWinner`.
 3. If the winner differs from `icono_publish_state.current_asset_sha256`, one
    batch projects it (the state row and one `publish` event), but only while
@@ -117,27 +122,47 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
    version is still the one step 2 read. A newer vote makes an older election a
    no-op, so two near-simultaneous votes can never leave the older winner.
 4. After the response (`ctx.waitUntil`) the gene's stable object is
-   republished with no selection, so its shared counts stay current. A failed
-   publish never fails the vote.
+   republished with no selection, so its shared counts stay current. The object
+   carries the `vote_version` its publisher read before materializing; the
+   publisher reads the version again after its write and, if a vote landed in
+   between, republishes once more. A failed publish never fails the vote.
+
+**Daily vote budget.** Reader votes, the votes a reader's image edit or
+generated candidate brings with it, and caretaker supervotes share one
+allowance of 1,750 admitted vote changes per UTC day
+(`icono_vote_daily_budget`, migration 0113). Past it the write batch is
+refused whole (nothing is written) and the reader gets a 429: "Voting is
+paused until 00:00 UTC to protect the site's daily database allowance." The
+administrator's vote and import routes are not admitted and never refused.
+Measured on the full migrated schema
+(`workers/iconoplasm/vote-asset-summary-cost.test.js`): a first vote on an
+asset nobody voted on writes 21 D1 rows, a first vote on a voted asset 17, a
+flip 15, a supervote 13; a winner change adds 18. A full day at the cap is at
+most 39,900 rows, 40% of the free 100,000.
 
 A caretaker supervote (`/api/iconoplasm/caretaker/genes/:symbol/supervote`)
 is the same shape over the caretaker projection tables: compare-and-set on the
 assignment and supervote versions, a receipt per command id, weight exactly 10
 (+ or -), eligible candidates only. Admin paths that change a gene's candidates
 (reject, unstale, reconcile, remove, clear-override) elect through the same
-function after advancing the gene's vote version. Measured on the full
-migrated schema (`workers/iconoplasm/vote-asset-summary-cost.test.js`): a new
-vote writes 15 D1 rows and reads 2, an election reads about 2 rows per
-candidate, a snapshot reads 7.
+function after advancing the gene's vote version. A vote import elects every
+gene it names, so re-running one repairs a gene whose election failed. An
+election reads about 2 rows per eligible candidate, a snapshot about 9.
 
-Snapshots (`/votes/snapshot(s)`) read D1: the named genes' summaries, the
-caller's own votes on exactly the named assets and the caretaker rows, three
-statements whatever the item count.
+The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
+the caller's own vote on exactly the named asset and the caretaker row.
+
+The print-copy fingerprint leaves out vote counts and the stable object's
+envelope (candidate pool, `published_at`, `vote_version`), so a vote that only
+moves counts never queues a browser render; a winner change still does.
 
 The `IconoplasmVoteCoordinator` Durable Objects hold a historical copy only.
 `POST /api/iconoplasm/admin/votes/compare-coordinators` (driven by
 `scripts/export-iconoplasm-votes-to-d1.mjs --compare`) reports each
-coordinator's differences from D1 and writes nothing.
+coordinator's differences from D1 (votes, summaries, the published winner, the
+caretaker assignment and supervote, with each side's `vision_id` and
+`updated_at`) and writes nothing. `--write` refuses once
+`icono_gene_vote_version` has a row.
 
 The workstation drain polls the authenticated `blots/backlog` route, which
 answers from D1 and the stable objects, renders the missing blots for the

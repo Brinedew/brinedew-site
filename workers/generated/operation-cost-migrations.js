@@ -47,7 +47,8 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
 })
 export const GENE_VOTE_VERSION_MIGRATION_NAME = "0113_gene_vote_version.sql"
 export const GENE_VOTE_VERSION_MIGRATION_STATEMENTS = Object.freeze([
-  "CREATE TABLE IF NOT EXISTS icono_gene_vote_version (\n  gene_symbol TEXT PRIMARY KEY,\n  version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;"
+  "CREATE TABLE IF NOT EXISTS icono_gene_vote_version (\n  gene_symbol TEXT PRIMARY KEY,\n  version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;",
+  "CREATE TABLE IF NOT EXISTS icono_vote_daily_budget (\n  day TEXT PRIMARY KEY,\n  votes INTEGER NOT NULL DEFAULT 0 CHECK (votes >= 0)\n) WITHOUT ROWID;"
 ])
 export const GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME = "0112_gene_blot_backlog_watermark.sql"
 export const GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS = Object.freeze([

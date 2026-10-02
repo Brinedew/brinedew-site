@@ -15,7 +15,7 @@
       "online": true,
       "guards": [
         {
-          "sql": "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name = 'icono_gene_vote_version'",
+          "sql": "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name IN ('icono_gene_vote_version', 'icono_vote_daily_budget')",
           "max": 0
         }
       ],

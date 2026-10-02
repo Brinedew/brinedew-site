@@ -37,20 +37,43 @@ function normalizeSha256(value) {
   return /^[a-f0-9]{64}$/.test(sha) ? sha : ""
 }
 
+// Keys that never enter the print-copy fingerprint, at any depth. The print
+// copy is a picture of the image-only card label (name, colour, essence,
+// portrait); it shows no votes and no candidate pool. Three groups move
+// without changing that picture and must not queue a browser render (the
+// budget is eight launches a day):
+//   - publication wrappers;
+//   - the stable gene object's envelope: its candidate pool, which every
+//     vote reorders and recounts, its count, its version stamps and its
+//     published_at, which every republish changes. The publisher fingerprints
+//     the object it writes and the queue consumer fingerprints the object it
+//     reads back, so both must drop the same envelope;
+//   - vote counts anywhere.
+// A vote that moves the winner changes the portrait, which stays in.
+const FINGERPRINT_EXCLUDED_KEYS = new Set([
+  "snapshot_version",
+  "artifact_version",
+  "artifact_validated_at",
+  "data_source",
+  "print_copy",
+  "portrait_candidates",
+  "candidate_count",
+  "stable_object_version",
+  "vote_version",
+  "published_at",
+  "resolved_from",
+  "image_upvotes",
+  "image_downvotes",
+  "image_score",
+  "weighted_score",
+])
+
 function stableMaterial(value) {
   if (Array.isArray(value)) return value.map(stableMaterial)
   if (!value || typeof value !== "object") return value === undefined ? null : value
   const out = {}
   for (const key of Object.keys(value).sort()) {
-    if (
-      key === "snapshot_version" ||
-      key === "artifact_version" ||
-      key === "artifact_validated_at" ||
-      key === "data_source" ||
-      key === "print_copy"
-    ) {
-      continue
-    }
+    if (FINGERPRINT_EXCLUDED_KEYS.has(key)) continue
     out[key] = stableMaterial(value[key])
   }
   return out

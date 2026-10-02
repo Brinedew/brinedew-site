@@ -9,3 +9,11 @@ CREATE TABLE IF NOT EXISTS icono_gene_vote_version (
   version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) WITHOUT ROWID;
+
+-- The daily vote budget: one row per UTC day counting admitted vote and
+-- supervote batches. Each vote batch adds to it first and is refused whole
+-- once the day's limit (workers/iconoplasm/votes/vote-guards.js) is reached.
+CREATE TABLE IF NOT EXISTS icono_vote_daily_budget (
+  day TEXT PRIMARY KEY,
+  votes INTEGER NOT NULL DEFAULT 0 CHECK (votes >= 0)
+) WITHOUT ROWID;

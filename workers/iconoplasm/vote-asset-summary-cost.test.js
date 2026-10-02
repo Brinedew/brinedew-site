@@ -8,7 +8,16 @@ import {
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./votes/gene-votes.js"
+import {
+  caretakerSupervoteRequestSha256,
+  projectCaretakerAssignmentInD1,
+  setCaretakerSupervoteInD1,
+} from "./caretaker/caretaker-supervote.js"
+import { VOTE_DAILY_LIMIT } from "./votes/vote-guards.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+
+// The most rows one admitted vote-budget unit writes, measured below.
+const VOTE_WORST_CASE_ROWS_WRITTEN = 21
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -19,6 +28,12 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
 // receipts on the complete migrated schema (every index and trigger). The gene
 // already holds 1000 votes and sits beside 20,000 other genes: a vote must cost
 // what a vote on an empty gene costs, because nothing reads the vote history.
+// Failure modes:
+// 1. A vote's rows written grow with the gene's vote history.
+// 2. An admitted write (vote, first vote on a fresh asset, flip, supervote)
+//    writes more rows than the daily vote budget in vote-guards.js was sized
+//    for, so the budget's 40% share of D1's daily writes is a fiction.
+// 3. An identical retry writes anything or spends budget.
 test(
   "one vote on a gene with 1000 votes costs a fixed handful of D1 rows",
   { timeout: 120000 },
@@ -93,10 +108,29 @@ test(
         }),
       )
       assert.equal(first.result.changed, true)
-      // Measured 2026-10-02: 2 read, 15 written (the vote row and its five
-      // index entries, a new summary row and its indexes, the version row).
-      assert.ok(first.actual.rows_read <= 4, JSON.stringify(first.actual))
-      assert.ok(first.actual.rows_written <= 16, JSON.stringify(first.actual))
+      // The budget statement, the vote row and its index entries, a new
+      // summary row and its index entries, the vote event with its index
+      // entries and AUTOINCREMENT counter, the version row. The worst case of
+      // VOTE_WORST_CASE_ROWS_WRITTEN below.
+      assert.ok(first.actual.rows_read <= 6, JSON.stringify(first.actual))
+      assert.ok(
+        first.actual.rows_written <= VOTE_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(first.actual),
+      )
+
+      const onVotedAsset = await measure("new vote on an asset with votes", (metered) =>
+        setGeneVote(metered, {
+          symbol: "TP53",
+          assetSha256: asset(1),
+          userId: "reader",
+          voteValue: 1,
+        }),
+      )
+      assert.equal(onVotedAsset.result.changed, true)
+      assert.ok(
+        onVotedAsset.actual.rows_written <= VOTE_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(onVotedAsset.actual),
+      )
 
       const flip = await measure("flipped vote", (metered) =>
         setGeneVote(metered, {
@@ -106,8 +140,11 @@ test(
           voteValue: -1,
         }),
       )
-      assert.ok(flip.actual.rows_read <= 10, JSON.stringify(flip.actual))
-      assert.ok(flip.actual.rows_written <= 10, JSON.stringify(flip.actual))
+      assert.ok(flip.actual.rows_read <= 12, JSON.stringify(flip.actual))
+      assert.ok(
+        flip.actual.rows_written <= VOTE_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(flip.actual),
+      )
 
       const retry = await measure("identical retry", (metered) =>
         setGeneVote(metered, {
@@ -121,6 +158,45 @@ test(
       assert.equal(retry.actual.rows_written, 0)
       assert.ok(retry.actual.rows_read <= 2, JSON.stringify(retry.actual))
 
+      await projectCaretakerAssignmentInD1(db, {
+        event_id: "evt-TP53-1",
+        event_sequence: 1,
+        gene: { gene_id: "gene-TP53", canonical_symbol: "TP53" },
+        assignment: {
+          caretaker_assignment_id: "assign-TP53",
+          account_id: "acct_owner",
+          status: "active",
+          assignment_version: 1,
+        },
+      })
+      const command = {
+        command_id: "cmd_cost",
+        gene_symbol: "TP53",
+        caretaker_account_id: "acct_owner",
+        asset_sha256: asset(3),
+        direction: 1,
+        expected_assignment_version: 1,
+        expected_supervote_version: 0,
+      }
+      const requestSha256 = await caretakerSupervoteRequestSha256(command)
+      const supervote = await measure("caretaker supervote", (metered) =>
+        setCaretakerSupervoteInD1(metered, {
+          symbol: "TP53",
+          accountId: "acct_owner",
+          assetSha256: asset(3),
+          direction: 1,
+          commandId: "cmd_cost",
+          requestSha256,
+          expectedAssignmentVersion: 1,
+          expectedSupervoteVersion: 0,
+        }),
+      )
+      assert.equal(supervote.result.ok, true)
+      assert.ok(
+        supervote.actual.rows_written <= VOTE_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(supervote.actual),
+      )
+
       const election = await measure("election and projection", (metered) =>
         electAndProjectGeneWinner(metered, "TP53", { actor: "vote_authority" }),
       )
@@ -130,6 +206,15 @@ test(
       // their triggers (measured 2026-10-02: 40 read, 18 written).
       assert.ok(election.actual.rows_read <= 48, JSON.stringify(election.actual))
       assert.ok(election.actual.rows_written <= 20, JSON.stringify(election.actual))
+      // The daily vote budget (vote-guards.js) holds a full day of admitted
+      // votes at the worst case measured above, plus a winner change for one
+      // vote in ten, to 40% of D1's free 100,000 rows written.
+      assert.ok(
+        VOTE_DAILY_LIMIT * VOTE_WORST_CASE_ROWS_WRITTEN +
+          Math.ceil(VOTE_DAILY_LIMIT / 10) * election.actual.rows_written <=
+          40_000,
+        `${VOTE_DAILY_LIMIT} votes`,
+      )
 
       const steady = await measure("election without a winner change", (metered) =>
         electAndProjectGeneWinner(metered, "TP53", { actor: "vote_authority" }),
@@ -155,7 +240,8 @@ test(
         )
         .bind(asset(1))
         .first()
-      assert.deepEqual({ ...summary }, { upvotes: 1000, score: 1000, vote_count: 1000 })
+      // The 1000 seeded votes plus the reader's, moved by its exact delta.
+      assert.deepEqual({ ...summary }, { upvotes: 1001, score: 1001, vote_count: 1001 })
       assert.equal(
         (await db.prepare("SELECT COUNT(*) AS n FROM icono_vote_asset_summary").first()).n,
         20002,

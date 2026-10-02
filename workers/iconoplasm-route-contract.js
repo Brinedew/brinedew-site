@@ -925,13 +925,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "votes_snapshot",
   }),
   iconoplasmApiContract({
-    id: "votes_snapshots",
-    match: exact("/api/iconoplasm/votes/snapshots"),
-    methods: POST,
-    auth: "first-party-or-extension",
-    budgetFamily: "votes_snapshot",
-  }),
-  iconoplasmApiContract({
     id: "admin_votes_import",
     match: exact("/api/iconoplasm/admin/votes/import"),
     methods: POST,
