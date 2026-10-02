@@ -140,7 +140,7 @@ test(
         }),
       )
 
-      for (const pathname of ["/"])
+      for (const pathname of ["/", "/genes", "/robots.txt"])
         assert.notEqual(
           (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
           599,
@@ -153,13 +153,7 @@ test(
         })
         assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
       }
-      for (const pathname of [
-        "/search?q=TP53",
-        "/gene/TP53",
-        "/genes",
-        "/robots.txt",
-        "/api/auth/me",
-      ])
+      for (const pathname of ["/search?q=TP53", "/gene/TP53", "/api/auth/me"])
         assert.equal(
           (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
           599,
@@ -169,6 +163,212 @@ test(
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
     }
+  },
+)
+
+// ARCHITECTURE FENCE [IPD-003]
+// The crawler documents are static files built from catalog/v3/index.json; the
+// Worker owns none of them, in production or during a containment deploy.
+// Ways this can fail:
+//  1. A stateful Worker entry (the runtime or the containment quarantine shell)
+//     still imports something that no longer exists, so the Worker fails to
+//     load and every /api route goes down with it.
+//  2. robots.txt -> sitemap.xml no longer lists every catalog gene, or lists a
+//     URL this host does not serve (/genes, /sitemaps/...), so a crawler either
+//     misses genes or keeps fetching dead URLs.
+//  3. An old /genes or /genes/<range> link (a search result, a backlink) lands
+//     on a 404 or the bare app shell instead of a 301 to the Archive.
+//  4. A request for /genes*, /robots.txt, /sitemap.xml or /llms.txt reaches the
+//     Worker (or /sitemaps/* does, in production). That spends a metered
+//     request per crawler fetch and answers with whatever the Worker does for
+//     unknown paths. During containment every unknown path reaches the
+//     quarantine shell by design; there a retired range sitemap must not read
+//     D1, KV or storage.
+//  5. During a containment deploy, robots.txt, sitemap.xml or llms.txt differ
+//     from what production serves, so a crawler that visits mid-maintenance
+//     indexes a sitemap or obeys a policy that disappears when the window closes.
+//  6. A retired range-sitemap URL still answers 200 with XML, so a crawler
+//     keeps polling a shard nobody maintains.
+// The receipt lands in artifacts/b-898-discovery-static/ for the PR.
+test(
+  "crawler documents are static in production and in the containment deploy",
+  { timeout: 60_000 },
+  async () => {
+    // 1
+    for (const entry of [
+      "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
+      "./b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
+    ]) {
+      const module = await import(entry)
+      assert.equal(typeof module.default?.fetch, "function", `${entry} must export a fetch handler`)
+    }
+
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-crawler-"))
+    const sourceRoot = path.join(temporaryRoot, "public")
+    const outputRoot = path.join(temporaryRoot, "public-iconoplasm-edge")
+    await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
+    await mkdir(path.join(sourceRoot, "static"), { recursive: true })
+    for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
+      await writeFile(
+        path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`),
+        "<!doctype html>",
+      )
+    await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
+    const catalogRows = [
+      ["TP53", "tumor protein p53", "", "", 0],
+      ["A1BG", "alpha-1-B glycoprotein", "", "", 0],
+      ["ZNF25", "zinc finger protein 25", "", "", 0],
+    ]
+    await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot, publishedGenes: catalogRows })
+
+    // 2
+    const staticSitemap = await readFile(path.join(outputRoot, "sitemap.xml"), "utf8")
+    const staticLlms = await readFile(path.join(outputRoot, "llms.txt"), "utf8")
+    for (const [symbol] of catalogRows)
+      assert.ok(
+        staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio/gene/${symbol}</loc>`),
+        `sitemap.xml must list ${symbol}`,
+      )
+    assert.doesNotMatch(staticSitemap, /\/sitemaps\/|\/genes\b/)
+    const robots = await readFile(path.join(outputRoot, "robots.txt"), "utf8")
+    assert.match(robots, /^Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml$/m)
+    assert.match(robots, /User-agent: GPTBot\nDisallow: \//)
+    assert.match(robots, /User-agent: ClaudeBot\nDisallow: \//)
+
+    const canonicalToml = await readFile(
+      path.join(
+        repoRoot,
+        "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+      ),
+      "utf8",
+    )
+    const canonicalAssets = parseToml(canonicalToml).assets
+    const containmentAssets = parseToml(prepareRetainedAssetsConfig(canonicalToml)).unsafe.metadata
+      .assets.config
+    const receipt = { generated_at: new Date().toISOString(), catalog_rows: 3, dispatches: [] }
+    try {
+      for (const [topology, assets] of [
+        ["production", canonicalAssets],
+        ["containment", containmentAssets],
+      ]) {
+        const runtime = new Miniflare(
+          convertV4MiniflareOptions({
+            name: `iconoplasm-crawler-documents-${topology}`,
+            modules: true,
+            script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+            compatibilityDate: "2026-08-01",
+            assets: {
+              directory: outputRoot,
+              run_worker_first: assets.run_worker_first,
+              routerConfig: { has_user_worker: true },
+              assetConfig: { not_found_handling: assets.not_found_handling },
+            },
+          }),
+        )
+        try {
+          for (const pathname of [
+            "/genes",
+            "/genes/",
+            "/genes/TO-TR",
+            "/sitemap.xml",
+            "/sitemaps/pages.xml",
+            "/sitemaps/genes/TO-TR.xml",
+            "/llms.txt",
+            "/robots.txt",
+          ]) {
+            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+            const body = await response.text()
+            const contentType = response.headers.get("content-type") || ""
+            receipt.dispatches.push({
+              topology,
+              pathname,
+              status: response.status,
+              location: response.headers.get("location"),
+              content_type: contentType,
+              worker_invoked: response.status === 599,
+            })
+            // 4
+            if (topology === "production" || !pathname.startsWith("/sitemaps/"))
+              assert.notEqual(response.status, 599, `${topology} ${pathname} invoked the Worker`)
+            // 3
+            if (pathname.startsWith("/genes")) {
+              assert.equal(response.status, 301, `${topology} ${pathname}`)
+              assert.equal(
+                new URL(response.headers.get("location"), "https://x.test").pathname,
+                "/",
+              )
+            }
+            // 2 and 5
+            if (pathname === "/sitemap.xml") assert.equal(body, staticSitemap, topology)
+            if (pathname === "/llms.txt") assert.equal(body, staticLlms, topology)
+            if (pathname === "/robots.txt") assert.equal(body, robots, topology)
+            // 6
+            if (pathname.startsWith("/sitemaps/"))
+              assert.doesNotMatch(contentType, /xml/, `${topology} ${pathname} answered XML`)
+          }
+        } finally {
+          await runtime.dispose()
+        }
+      }
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
+
+    // 4 and 6 for the containment deploy: its not_found_handling is "none", so
+    // every unknown path (the retired range sitemaps included) reaches the
+    // quarantine shell. There they must read no D1, KV or storage binding and
+    // must not answer XML.
+    const { default: quarantineShell } =
+      await import("./b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js")
+    const touchedBindings = new Set()
+    const env = new Proxy(
+      { ICONOPLASM_SCHEMA_TRANSITION: "1", ICONOPLASM_SCHEMA_TRANSITION_MODE: "reader-recovery" },
+      {
+        get(target, key) {
+          if (typeof key === "string" && /DB$|^KV$|PORTRAITS|STORAGE_PASSWORD/.test(key))
+            touchedBindings.add(key)
+          return target[key]
+        },
+      },
+    )
+    const upstream = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (input) => {
+      upstream.push(String(input?.url || input))
+      return new Response("Not Found", { status: 404, headers: { "Content-Type": "text/html" } })
+    }
+    try {
+      for (const pathname of ["/sitemaps/pages.xml", "/sitemaps/genes/TO-TR.xml"]) {
+        const response = await quarantineShell.fetch(
+          new Request(`https://iconoplasm.brinedew.bio${pathname}`),
+          env,
+          { waitUntil() {} },
+        )
+        const contentType = response.headers.get("content-type") || ""
+        await response.body?.cancel()
+        receipt.dispatches.push({
+          topology: "containment-worker",
+          pathname,
+          status: response.status,
+          content_type: contentType,
+        })
+        assert.equal(response.status, 404, pathname)
+        assert.doesNotMatch(contentType, /xml/, pathname)
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+    assert.deepEqual([...touchedBindings], [])
+    receipt.containment_worker_upstream = upstream
+
+    const receiptDirectory = path.join(repoRoot, "artifacts", "b-898-discovery-static")
+    await mkdir(receiptDirectory, { recursive: true })
+    await writeFile(
+      path.join(receiptDirectory, "crawler-documents-receipt.json"),
+      `${JSON.stringify(receipt, null, 2)}\n`,
+    )
   },
 )
 

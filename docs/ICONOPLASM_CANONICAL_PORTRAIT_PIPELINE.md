@@ -27,11 +27,6 @@ Iconoplasm publishes two objects on Bunny:
   cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
   `repository_dispatch` when the newest canonical publish event moved.
 
-One reader is not on these objects yet: the gene-discovery worker's range pages
-and sitemaps (`readIconoplasmPublishedGeneDiscoveryProjections`) read a frozen
-snapshot. Moving them to build-time rendering from the catalog object is the
-next B-898 step.
-
 ## Stable gene object
 
 `writeStable` in `workers/lib/iconoplasm-published-card-objects.js`, called

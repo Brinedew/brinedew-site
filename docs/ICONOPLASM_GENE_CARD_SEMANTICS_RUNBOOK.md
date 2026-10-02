@@ -1,9 +1,10 @@
 # Iconoplasm gene semantics and discovery runbook
 
-**ARCHITECTURE FENCE [IPD-003]** — Complete canonical gene profiles are
-discoverable through one immutable-catalog eligibility contract and frozen,
-self-locating prefix ranges. The labelled semantic profile remains a one-to-one
-non-visual equivalent of the existing card, never an extra visible SEO product.
+**ARCHITECTURE FENCE [IPD-003]** — The catalog object `catalog/v3/index.json`
+defines the discoverable set: every gene in it gets one static document and one
+sitemap URL, built at deploy time. The labelled semantic profile remains a
+one-to-one non-visual equivalent of the existing card, never an extra visible
+SEO product.
 
 ## Why this exists
 
@@ -44,8 +45,8 @@ profile. Eligible pages omit both robots directives. Aliases redirect
 permanently, known incomplete records remain noindex, and unknown symbols return
 a real 404 instead of the application shell.
 
-The same predicate owns response headers, HTML metadata, `/genes` membership,
-gene sitemap shards, and tests. Never update just one of those surfaces.
+The same predicate owns response headers, HTML metadata, and tests. Never
+update just one of those surfaces.
 
 ## Canonical blot discovery contract
 
@@ -84,20 +85,18 @@ present consistently in all of these projections:
   description fields;
 - one linked JSON-LD graph in which `WebPage.primaryImageOfPage` and
   `Gene.image` reference the same `ImageObject`, whose `contentUrl` is that
-  first-party semantic blot URL; and
-- the gene's only image-sitemap entry.
+  first-party semantic blot URL.
 
 Use the same exact card payload for blot readiness, interactive page, metadata, and
 structured data. JSON-LD must be escaped for an HTML script context and omitted
 for incomplete/noindex pages. Route/catalog records establish identity and
 membership only. If the requested card projection is unavailable or malformed,
 the whole document fails closed as uncached `503`. A valid complete card with no
-matching ready blot stays indexable, linked from its frozen archive range, and
-listed in its gene-sitemap shard; only its blot image metadata, `ImageObject`,
-and image-sitemap child are absent. The raw portrait may
-remain visible in the interactive dossier as subordinate source material, but
-it is never `primaryImageOfPage`, `Gene.image`, the social image, or an
-image-sitemap entry. Visible source-portrait and candidate-blot `<img>` elements
+matching ready blot stays indexable and listed in the sitemap; only its blot
+image metadata and `ImageObject` are absent. The raw portrait may remain
+visible in the interactive dossier as subordinate source material, but it is
+never `primaryImageOfPage`, `Gene.image`, or the social image. Visible
+source-portrait and candidate-blot `<img>` elements
 carry `data-iconoplasm-role="source-portrait"` or `"candidate-blot"` plus the
 same normalized `data-gene-symbol`, so machine readers do not have to infer the
 page's image hierarchy from layout or alt text alone.
@@ -126,12 +125,10 @@ and blot responses expose standard HTTP `rel="license"` plus the usage page.
 Do not broaden that dedication to catalog data, metadata, prose, software,
 prompts, unpublished images, services, or any other Brinedew asset.
 
-The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. The temporary
-singular `/portrait/{SYMBOL}.webp` alias and resolver portrait field were
-retired only after the complete-corpus and regional-delivery gate below passed.
-Immutable `/portraits/v1/...` assets remain available to the gallery and other
-portrait-native product surfaces; retirement removes source portraits only
-from the agent gene-image workflow. The blot route derives the current renderer
+The stable `/blot/{SYMBOL}.webp` URL is the canonical gene image. Immutable
+`/portraits/v1/...` assets remain available to the gallery and other
+portrait-native product surfaces; the agent gene-image workflow returns blots
+only. The blot route derives the current renderer
 fingerprint and immutable object key from the gene's stable object; it does
 not require blot metadata to be copied back into
 KV. A vote changes public output after the normal canonical-card publication.
@@ -141,27 +138,9 @@ route before the resolver. The resolver remains the advanced interface for
 identifier normalization and batches of up to 50 values; it is not the first
 abstraction for someone who already knows the HGNC symbol.
 
-The massive `/genes/{range}` pages remain text-only so they support discovery
-without replacing the gallery collection experience; image-sitemap children
-continue to expose ready blots.
-
-Run that audit from the website repository without downloading image bytes:
-
-```sh
-node scripts/audit-iconoplasm-live-blot-coverage.mjs --require-complete
-```
-
-The command counts published gene URLs and singular `/blot/{SYMBOL}.webp`
-projections across every live gene-sitemap shard. Exit code `2` means coverage
-is incomplete and therefore forbids portrait removal. Portrait retirement on
-2026-08-25 followed a successful zero exit with `complete: true`, plus decoded
-768x1024 first-party bytes in Vietnam and byte-identical Bunny responses from a
-healthy German probe.
-
 The resolver is the free HTTP foundation for any future MCP transport. Do not
 create a separate MCP authority, require users to configure MCP for ordinary
-image retrieval, publish a 19,023-image manifest, or add source-portrait links
-to every archive row. Bunny may be returned as a byte-equivalent alternate for
+image retrieval, or publish a 19,023-image manifest. Bunny may be returned as a byte-equivalent alternate for
 any healthy network, including working Vietnamese providers and VPNs, but the
 first-party URL remains the stable identity and regional fallback.
 
@@ -176,15 +155,10 @@ API: cold-agent retrieval is a separate release test. Do not publish a fake
 `/.well-known/ai` or agent card; unimplemented experimental well-known routes
 must return an explicit 404 rather than the application shell.
 
-Crawler GET and HEAD paths remain static projections, not workflows. After the
-single publisher completes, the activation gate hashes every compact catalog
-index and proves its unique symbol count equals the manifest card count. Those
-verified symbols produce one static sitemap containing every canonical
-`/gene/{SYMBOL}` URL. Cloudflare stores that sitemap plus one SPA shell; it does
-not store 19,023 gene documents and no crawler request reads KV, D1, a Durable
-Object, a Queue, a session, or Browser Rendering.
+Crawler GET and HEAD paths are static files, not workflows; see "Static
+discovery documents" below.
 
-Blot readiness does not control text-gene sitemap membership. GET and HEAD for
+Blot readiness does not control sitemap membership. GET and HEAD for
 the stable blot route read the published card through the existing Worker and
 serve its verified immutable WebP bytes. Missing blots return 404. This route
 does not read mutable D1 or create an alternate image selection timeline.
@@ -214,7 +188,7 @@ Cloudflare's blanket "block all AI crawlers" setting: it would also remove the
 search and assistant agents this discovery contract exists to serve.
 
 The homepage link frontier must not become visible application chrome. Its
-ordinary `/genes` anchor lives inside the homepage's existing `sr-only`
+ordinary archive anchor lives inside the homepage's existing `sr-only`
 description, where it is useful to accessibility-tree and crawler readers
 without adding a discovery destination to the immersive Archive/Clans/Studio
 switcher. Studio may resolve bounded canonical blots into a visible editable
@@ -224,24 +198,38 @@ Likewise, the feed's before/after links are keyboard affordances: keep them
 clipped at rest and reveal the full 44px control only while focused. Moving
 either surface into the default visual composition is an immersion regression.
 
-## Frozen range contract
+## Static discovery documents
 
-`workers/iconoplasm-gene-discovery.js` contains the deliberate range table for
-the stable 19,023-gene inventory. `/genes` links every leaf directly under its
-initial letter, and each range page contains ordinary server-rendered links to
-canonical profiles. For example, TP53 is always `/genes` → `TO–TR` → TP53.
+The crawler documents on `iconoplasm.brinedew.bio` are files in the static
+asset bundle, written by `scripts/prepare-iconoplasm-edge-assets.mjs` during
+every production deploy:
 
-The range table is not generated at request or publication time. Numeric pages
-and automatic count rebalancing are prohibited because an agent with a known
-symbol must determine the correct link without guessing a page number. Routine
-catalog or portrait publications update range contents but not boundaries. An
-unmatched or multiply matched eligible symbol is a failed inventory migration
-and must stop release work until a deliberate rebaseline updates the table,
-documentation, sitemap expectations, and tests together.
+- `robots.txt`, which names `/sitemap.xml` and mirrors the crawler policy below;
+- `sitemap.xml`, one flat urlset with the homepage, every gene in
+  `catalog/v3/index.json` as `/gene/{SYMBOL}`, and the privacy, license and
+  developers pages (19,023 gene URLs on 2026-10-02, about 1.3 MB, well under the
+  protocol's 50,000-URL and 50 MB limits);
+- `llms.txt`, a short pointer to the archive, the sitemap, the gene and blot
+  URL patterns and the developers page;
+- `gene/{SYMBOL}.html`, one small document per catalog gene with its own title,
+  description, canonical URL, `og:image` and licence, which boots the shared
+  app shell in place;
+- `_redirects`, which sends `/genes` and `/genes/*` to the Archive (`/`) with
+  a 301, so old links and search results land on the one public catalog.
 
-Archive browsing and sitemap generation use the immutable compact catalog
-projection. The browser requests bounded ranges; final activation writes the
-complete static sitemap once. Neither path performs an on-request catalog scan.
+These files are as fresh as the last deploy: a gene added to the catalog object
+appears in `sitemap.xml` and gets its document on the next push to `main`,
+not when the catalog object is republished. The asset layer answers every one
+of them before the Worker runs, so a crawler request costs no Worker request
+and reads no KV, D1, Durable Object, Queue or storage object. The containment
+deploy (`scripts/prepare-iconoplasm-schema-transition-config.mjs`) keeps the
+same asset bytes and routes only gene pages into the Worker, so robots,
+sitemap and llms.txt stay identical during a maintenance window.
+
+The bundle counts toward Cloudflare's 20,000-file limit per Worker version. The
+2026-10-02 production deploy shipped 19,585 files, 415 under the limit, and the
+build refuses a bundle above 20,000. Anything that adds a file per gene or per
+range must show its count against that headroom first.
 
 ## Workstation-materialized gene blots
 
@@ -302,8 +290,8 @@ a site-gene-detail fallback, even during the expected D1-to-artifact publication
 window.
 
 High-resolution print copies remain an explicit user-requested PNG workflow.
-They are not the canonical search image and never appear in image sitemaps.
-Archive, sitemap, semantic blot, and gene-page GET/HEAD paths are immutable
+They are not the canonical search image. Sitemap, semantic blot, and gene-page
+GET/HEAD paths are immutable
 published reads: no enrollment, vote query, D1 repair, Queue send, or Browser
 Rendering is allowed. Crawling therefore cannot manufacture the 19,023-image
 corpus.
@@ -323,13 +311,13 @@ controls on decorative label stock.
 
 The hidden interactive blot is not the sole crawler signal. Its ordinary
 server-rendered `src` remains in the initial HTML, while the same canonical URL
-is also exposed through Open Graph, Twitter metadata, linked `ImageObject`
-structured data, and the gene image sitemap. Removing redundant visible copy
+is also exposed through Open Graph, Twitter metadata, and linked
+`ImageObject` structured data. Removing redundant visible copy
 therefore does not remove the canonical image from the crawl graph.
 
 Indexability changes are atomic discovery migrations: revise this fence, the
-range contract, canonical blot sitemap
-projections, `llms.txt`, robots headers, lead-image accessibility text,
+static sitemap and gene documents, `llms.txt`, robots headers, lead-image
+accessibility text,
 Open Graph and Twitter metadata, JSON-LD, tests, and release verification
 together. Do not add visible derivation prose to gene pages; the visual card
 already serves human readers and the semantic definition list serves non-visual

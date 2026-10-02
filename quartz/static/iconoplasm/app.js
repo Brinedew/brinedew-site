@@ -10771,7 +10771,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   // ARCHITECTURE FENCE [IPD-003]: Desktop and mobile switchers are part of the
   // immersive application, not the crawler frontier. Keep them Archive/Clans/Studio;
-  // the existing non-visual homepage description owns the ordinary /genes link.
+  // the existing non-visual homepage description owns the ordinary archive link.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
     if (!root || !root.parentNode) return

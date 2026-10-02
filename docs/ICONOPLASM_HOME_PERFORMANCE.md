@@ -49,8 +49,8 @@ compact image cards from those published card VMs. The ordinary and image-only
 views therefore differ in response shape, not authority.
 
 The same rule covers anonymous galleries, site-gene detail, the server-rendered
-gene-page lead and metadata, public media, extension cards, archive ranges,
-image sitemaps, and print-copy inputs. Site-gene detail may overlay fresh D1
+gene-page lead and metadata, public media, extension cards, and print-copy
+inputs. Site-gene detail may overlay fresh D1
 facts and candidates around the card portrait, but it has no signed-in or
 gene-detail portrait fallback. A missing or incomplete stable object fails
 closed and uncached instead of selecting a D1 or catalog SHA.
