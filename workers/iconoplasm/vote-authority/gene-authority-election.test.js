@@ -3,10 +3,8 @@ import test from "node:test"
 
 import {
   compareGeneAuthorityRows,
-  composeGeneSelectionReference,
   electGeneAuthorityWinner,
   projectGeneAuthorityRows,
-  winnerAssetShaFromSelectionReference,
 } from "./gene-authority-election.js"
 
 const sha = (char) => char.repeat(64)
@@ -17,7 +15,6 @@ const candidate = (char, overrides = {}) => ({
   is_stale: false,
   is_legacy: false,
   created_at: "2026-01-01T00:00:00Z",
-  revision: 1,
   ...overrides,
 })
 const summary = (char, overrides = {}) => ({
@@ -29,13 +26,14 @@ const summary = (char, overrides = {}) => ({
   ...overrides,
 })
 
-test("ineligible, rejected and withdrawn candidates never win", () => {
+test("ineligible, rejected, stale and withdrawn candidates never win", () => {
   const { winner } = electGeneAuthorityWinner({
     candidates: [
       candidate("a", { autopick_eligible: false }),
       candidate("b", { status: "rejected" }),
+      candidate("c", { is_stale: true }),
     ],
-    summaries: [summary("a", { score: 50 })],
+    summaries: [summary("a", { score: 50 }), summary("c", { score: 90 })],
   })
   assert.equal(winner, null)
 })
@@ -108,36 +106,4 @@ test("compareGeneAuthorityRows matches the shipped ordering on equal weighted sc
   })
   const sorted = [...rows].sort(compareGeneAuthorityRows)
   assert.equal(sorted[0].asset_sha256, sha("b"))
-})
-
-test("selection reference changes only when the rendered outcome can change", () => {
-  const winnerBase = candidate("a")
-  const base = composeGeneSelectionReference({
-    symbol: "TP53",
-    winner: winnerBase,
-    caretakerSupervoteVersion: 2,
-    caretakerDirection: 0,
-  })
-  const sameOutcome = composeGeneSelectionReference({
-    symbol: "TP53",
-    winner: { ...winnerBase },
-    caretakerSupervoteVersion: 2,
-    caretakerDirection: 0,
-  })
-  assert.equal(base, sameOutcome)
-  assert.notEqual(
-    base,
-    composeGeneSelectionReference({
-      symbol: "TP53",
-      winner: { ...winnerBase, revision: 2 },
-      caretakerSupervoteVersion: 2,
-      caretakerDirection: 0,
-    }),
-  )
-  assert.notEqual(
-    base,
-    composeGeneSelectionReference({ symbol: "TP53", winner: null, caretakerSupervoteVersion: 2 }),
-  )
-  assert.equal(winnerAssetShaFromSelectionReference(base), sha("a"))
-  assert.equal(winnerAssetShaFromSelectionReference(base.replace(sha("a"), "none")), null)
 })

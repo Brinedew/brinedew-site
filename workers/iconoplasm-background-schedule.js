@@ -15,8 +15,17 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   recognition: quarterHours(14),
   accounts: Object.freeze([6, 18, 30, 42, 54]),
   manifestations: Object.freeze([7, 19, 31, 43, 55]),
-  voteProjection: Object.freeze([4, 13, 24, 34, 45, 52]),
 })
+
+// Minutes the installed recurring trigger fires at that run no job. A normal
+// push uploads a Worker version with `wrangler versions upload`, which never
+// changes cron triggers, so the recurring cron string below must stay
+// byte-identical to the one installed, or every job stops matching it. These
+// minutes dispatch nothing. A release that runs
+// `wrangler deploy` with the config (a Durable Object migration or a
+// data-maintenance release) installs the toml's trigger, and only such a
+// release may trim this list and the toml line together.
+export const ICONOPLASM_IDLE_MINUTES = Object.freeze([4, 13, 24, 34, 45, 52])
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({
   archive: Object.freeze([56]),
@@ -39,9 +48,20 @@ function jobsByMinute(schedule) {
 
 const recurringJobs = jobsByMinute(ICONOPLASM_BACKGROUND_MINUTES)
 const nightlyJobs = jobsByMinute(ICONOPLASM_NIGHTLY_MINUTES)
-export const ICONOPLASM_RECURRING_CRON = `${[...recurringJobs.keys()].sort((a, b) => a - b).join(",")} * * * *`
+const triggerMinutes = jobsByMinute({
+  ...ICONOPLASM_BACKGROUND_MINUTES,
+  idle: ICONOPLASM_IDLE_MINUTES,
+})
+export const ICONOPLASM_RECURRING_CRON = `${[...triggerMinutes.keys()].sort((a, b) => a - b).join(",")} * * * *`
 export const ICONOPLASM_NIGHTLY_CRON = "56,58,59 23 * * *"
 export const ICONOPLASM_BACKGROUND_INVOCATIONS_PER_DAY = recurringJobs.size * 24 + nightlyJobs.size
+
+// True for every event of the recurring trigger, including its idle minutes:
+// the scheduled handler treats the trigger as owned here and never logs an
+// idle minute as an unknown cron.
+export function isIconoplasmRecurringTrigger(event) {
+  return event?.cron === ICONOPLASM_RECURRING_CRON
+}
 
 export function iconoplasmBackgroundJob(event) {
   const cron = event?.cron

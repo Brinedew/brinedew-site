@@ -133,120 +133,92 @@ test("DO NOT DELETE: per-symbol card endpoint stays KV-backed and version-barrie
   )
 })
 
-test("DO NOT DELETE: vote projection promotion is Queue-backed, not request waitUntil-backed", () => {
-  const scheduler = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function scheduleVoteProjectionRefresh",
-    "async function listAutopromoteCandidateAssetsForSymbol",
+// B-898 Stage 2: D1 is the only vote store. These guards replace the ones
+// that pinned the per-gene coordinator, its outbox and the projection Queue;
+// they are stricter where the cost now lives: every vote statement is keyed,
+// nothing aggregates a gene's vote history in a request, and the winner is
+// projected only under the gene's vote version. The executable proof against
+// the migrated schema (EXPLAIN QUERY PLAN on every statement) is
+// workers/iconoplasm.d1-votes.test.js.
+const geneVotesSource = readFileSync(
+  new URL("./iconoplasm/votes/gene-votes.js", import.meta.url),
+  "utf8",
+)
+const electionSource = readFileSync(
+  new URL("./iconoplasm/vote-authority/gene-authority-election.js", import.meta.url),
+  "utf8",
+)
+
+test("DO NOT DELETE: a vote elects in the request under its gene's vote version and publishes after the response", () => {
+  const elect = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function electGeneAfterVote",
+    "async function settleGeneAfterVote",
+  )
+  assert.match(elect, /electAndProjectGeneWinner\(env\.ICONOPLASM_DB, symbol/)
+  const settle = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "async function settleGeneAfterVote",
+    "async function setIconoplasmVote",
+  )
+  assert.match(settle, /await electGeneAfterVote\(env, symbol/)
+  assert.match(settle, /republishGeneAfterResponse\(env, ctx, symbol\)/)
+  const afterResponse = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    "function republishGeneAfterResponse",
+    "function republishTouchedGenesAfterResponse",
   )
   assert.match(
-    scheduler,
-    /sendVoteProjectionRefreshQueueMessage\(/,
-    "public votes must enqueue a real Cloudflare Queue drain for canonical promotion",
+    afterResponse,
+    /ctx\.waitUntil\(work\)/,
+    "the stable-object publish must never hold or fail the vote response",
   )
-  assert.doesNotMatch(
-    scheduler,
-    /processVoteProjectionRefreshJobBatch\(|applyVoteProjectionRefreshWithoutPublicArtifact\(/,
-    "public votes must not start canonical promotion directly from the request path",
+  const projection = geneVotesSource.slice(
+    geneVotesSource.indexOf("export async function projectGeneElection"),
+    geneVotesSource.indexOf("export async function electAndProjectGeneWinner"),
   )
-  assert.doesNotMatch(
-    scheduler,
-    /ctx\?\.waitUntil|ctx\.waitUntil/,
-    "waitUntil can be interrupted after D1 promotion and before rich-detail read models settle",
+  assert.match(
+    projection,
+    /\$\{GENE_VOTE_VERSION_SQL\} = \?3/,
+    "a projection applies only while the gene's vote version is the one its election read",
   )
-
-  const voteProjectionBatch = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function processVoteProjectionRefreshJobBatch",
-    "export async function processPendingVoteProjectionRefreshJobs",
-  )
-  assert.doesNotMatch(
-    voteProjectionBatch,
-    /publishIconoplasmGalleryDirtyShards\(|publishCardCatalogArtifact\(/,
-    "vote projection must not republish the broad KV card catalog",
-  )
-
-  const wrapper = source.includes("handleIconoplasmQueue")
-  assert.equal(wrapper, true, "the Worker queue handler must dispatch Iconoplasm Queue messages")
+  assert.match(projection, /COALESCE\(icono_publish_state\.admin_override, 0\) = 0/)
+  assert.doesNotMatch(source, /ICONOPLASM_VOTE_COORDINATORS\b[^\n]*idFromName/)
 })
 
 test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () => {
-  const voteSnapshotFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function iconoVoteSnapshot",
-    "async function iconoVoteSnapshotsBatch",
-  )
-  assert.match(
-    voteSnapshotFn,
-    /iconoplasmVoteCoordinatorSnapshot\(/,
-    "vote snapshot should ask the per-gene coordinator first",
-  )
+  for (const [name, text] of [
+    ["gene-votes.js", geneVotesSource],
+    ["vote routes", source],
+  ]) {
+    assert.doesNotMatch(
+      text,
+      /(upper|lower)\((v\.|vs\.|pa\.)?(gene_symbol|asset_sha256)\)\s*=\s*\?/i,
+      `${name}: vote keys must stay raw so the vote indexes apply`,
+    )
+  }
   assert.doesNotMatch(
-    voteSnapshotFn,
-    /SUM\(CASE WHEN vote_value/,
-    "vote snapshot must not aggregate the raw vote ledger on the hot path",
+    geneVotesSource,
+    /SUM\(|COUNT\(\*\)|GROUP BY/i,
+    "a vote or snapshot must never aggregate the vote ledger; summaries move by exact deltas",
   )
-
-  const coordinatorClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "export class IconoplasmVoteCoordinator",
-    "function voteDeltaFromTransition",
-  )
-  assert.match(
-    coordinatorClass,
-    /CREATE TABLE IF NOT EXISTS vote_by_user_asset/,
-    "vote coordinator should own the per-user vote state",
-  )
-  assert.match(
-    coordinatorClass,
-    /CREATE TABLE IF NOT EXISTS asset_summary/,
-    "vote coordinator should own the per-asset summary state",
-  )
-  assert.match(
-    coordinatorClass,
-    /CREATE TABLE IF NOT EXISTS vision_summary/,
-    "vote coordinator should own the per-vision summary state",
-  )
-
   const voteSetRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/votes/set" && request.method === "POST")',
     'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
   )
+  assert.match(voteSetRoute, /setIconoplasmVote\(env, ctx, \{/)
+  assert.doesNotMatch(
+    voteSetRoute,
+    /syncAdminReadModels|rebuildVoteAssetSummaryForSymbols|SELECT[\s\S]*FROM icono_image_votes/,
+    "single-vote writes must not rebuild read models or read the raw vote ledger",
+  )
+  const snapshotRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
+    'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
+    'if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST")',
+  )
+  assert.match(snapshotRoute, /iconoVoteSnapshots\(env, \{/)
+  assert.doesNotMatch(snapshotRoute, /ICONOPLASM_DB\.prepare/)
   assert.match(
-    voteSetRoute,
-    /iconoplasmVoteCoordinatorSetVote\(/,
-    "single-vote writes should go through the per-gene coordinator",
-  )
-  assert.match(
-    coordinatorClass,
-    /CREATE TABLE IF NOT EXISTS vote_outbox/,
-    "the coordinator transaction should persist projection intent beside the vote",
-  )
-  assert.match(
-    coordinatorClass,
-    /deliverOutboxRow[\s\S]*projectVoteCoordinatorLedgerRow\([\s\S]*appendVoteEvent\([\s\S]*scheduleVoteProjectionRefresh\(/,
-    "the durable outbox drain should own compatibility, audit, and read-model handoff",
-  )
-  assert.doesNotMatch(
-    voteSetRoute,
-    /projectVoteCoordinatorLedgerRow\(|appendVoteEvent\(|scheduleVoteProjectionRefresh\(/,
-    "a successful coordinator commit must not be turned into a request failure by downstream projection",
-  )
-  assert.doesNotMatch(
-    voteSetRoute,
-    /refreshProjectedVoteReadModelsFromCoordinatorState\(/,
-    "single-vote writes must not block on symbol-wide read-model refresh",
-  )
-  assert.doesNotMatch(
-    voteSetRoute,
-    /autoPromoteTopVotedPortraitFromCoordinatorState\(/,
-    "single-vote writes must not block on canon auto-promotion",
-  )
-  assert.doesNotMatch(
-    voteSetRoute,
-    /SELECT vote_value[\s\S]*FROM icono_image_votes/,
-    "single-vote writes must not read the raw D1 vote ledger on the hot path",
-  )
-  assert.doesNotMatch(
-    voteSetRoute,
-    /syncVoteReadModelsAndPublishIconoplasmGalleryDirtyShards\(|syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards\(/,
-    "single-vote writes must not call the bulk summary rebuild paths",
+    geneVotesSource,
+    /FROM json_each\(\?1\) AS wanted\s+CROSS JOIN icono_image_votes AS v/,
+    "the caller's votes are probed per named (gene, asset, user), never by scanning the user's history",
   )
 })
 
@@ -255,11 +227,16 @@ test("DO NOT DELETE: canon auto-promotion must not select stale portrait assets"
     "async function autoPromoteTopVotedPortrait",
     "async function iconoExistingAssetsBatch",
   )
-
+  assert.match(autoPromoteFn, /electAndProjectGeneWinner\(env\.ICONOPLASM_DB, symbolNorm/)
   assert.match(
-    autoPromoteFn,
-    /AND COALESCE\(pa\.is_stale, 0\) = 0/,
+    electionSource,
+    /row\.autopick_eligible && !row\.is_stale && row\.status !== "rejected"/,
     "automatic canon repair should ignore stale assets instead of republishing images a human already marked invalid",
+  )
+  assert.match(
+    geneVotesSource,
+    /lower\(status\) <> 'rejected' AND autopick_eligible = 1 AND is_stale = 0/,
+    "a projection re-checks the winner's eligibility inside its own batch",
   )
 })
 
@@ -274,17 +251,11 @@ test("DO NOT DELETE: automatic canon tie-break ranks newer assets before current
     'Number(normalizeSha256(right?.asset_sha256 || "") === normalizeSha256(currentAssetSha || ""))',
     "the shared canon comparator must rank newer tied assets before preserving the existing current asset",
   )
-
-  const autoPromoteFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function autoPromoteTopVotedPortrait",
-    "async function iconoExistingAssetsBatch",
-  )
-  const autoPromoteOrderBy = autoPromoteFn.slice(autoPromoteFn.indexOf("ORDER BY"))
   DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(
-    autoPromoteOrderBy,
-    "COALESCE(pa.created_at, '') DESC",
-    "WHEN pa.asset_sha256 = ?",
-    "direct D1 auto-promotion SQL must rank newer tied assets before preserving the existing current asset",
+    electionSource,
+    'compareNullableTextDesc(left?.created_at || "", right?.created_at || "")',
+    "Number(normalizedSha(right?.asset_sha256) === normalizedSha(currentAssetSha))",
+    "the one election must rank newer tied assets before preserving the existing current asset",
   )
 
   const readModelCurrentNeedle =

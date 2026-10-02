@@ -10,9 +10,17 @@ const HASH = /^[a-f0-9]{64}$/
 
 export const STABLE_GENE_OBJECT_VERSION = 3
 
+// `voteVersion` is the gene's icono_gene_vote_version read before the
+// record was materialized: the object reflects at least every vote up to it,
+// and the publisher compares it with the version after its write to catch a
+// vote that landed in between. A publisher without D1 passes null.
 export function composeStableGeneObject(
   projected,
-  { selectedAssetSha256 = undefined, now = () => new Date().toISOString() } = {},
+  {
+    selectedAssetSha256 = undefined,
+    voteVersion = null,
+    now = () => new Date().toISOString(),
+  } = {},
 ) {
   const pool = Array.isArray(projected?.portrait_candidates) ? projected.portrait_candidates : []
   const selected =
@@ -36,6 +44,7 @@ export function composeStableGeneObject(
     portrait_candidates: candidates,
     candidate_count: candidates.length,
     stable_object_version: STABLE_GENE_OBJECT_VERSION,
+    vote_version: Number.isSafeInteger(voteVersion) && voteVersion >= 0 ? voteVersion : null,
     published_at: now(),
   }
 }

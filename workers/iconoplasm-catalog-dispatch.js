@@ -8,9 +8,15 @@
 export const CATALOG_DISPATCH_WATERMARK_KEY = "iconoplasm:catalog-dispatch-watermark"
 export const CATALOG_DISPATCH_EVENT_TYPE = "iconoplasm-catalog"
 const DISPATCH_URL = "https://api.github.com/repos/Brinedew/brinedew-site/dispatches"
-// Mirrors CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS in the stateful runtime and
-// CANONICAL_ACTIONS in scripts/publish-iconoplasm-catalog.mjs.
-export const CATALOG_CANONICAL_ACTIONS = Object.freeze([
+// THE ONE LIST of icono_publish_events actions that change what readers see in
+// a gene's stable object or in the catalog object: its winner or its candidate
+// gallery. Every path that adds, removes or changes a gene's candidates or
+// winner writes one of these, and the Actions publisher republishes every gene
+// with one after its watermark (scripts/publish-iconoplasm-catalog.mjs imports
+// this list, as do the runtime's blot backlog and gallery version). Bookkeeping
+// actions such as gene_card_materialized stay out, so one publish never
+// schedules a second no-op publish.
+export const PUBLICATION_AFFECTING_ACTIONS = Object.freeze([
   "publish",
   "auto_promote",
   "vote_auto_promote",
@@ -22,6 +28,12 @@ export const CATALOG_CANONICAL_ACTIONS = Object.freeze([
   "unpublish",
   "purge_legacy",
   "manifestation_canonical_changed",
+  "candidate_added",
+  "candidate_changed",
+  "copy_candidate",
+  "edit_candidate",
+  "generate_candidate",
+  "unstale",
 ])
 
 export async function dispatchIconoplasmCatalogPublication(env, { fetchImpl = fetch } = {}) {
@@ -29,9 +41,9 @@ export async function dispatchIconoplasmCatalogPublication(env, { fetchImpl = fe
   if (!token) return { dispatched: false, reason: "no_token" }
   if (!env?.ICONOPLASM_DB || !env?.KV) return { dispatched: false, reason: "bindings_missing" }
   const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COALESCE(MAX(id), 0) AS id FROM icono_publish_events WHERE action IN (${CATALOG_CANONICAL_ACTIONS.map(() => "?").join(",")})`,
+    `SELECT COALESCE(MAX(id), 0) AS id FROM icono_publish_events WHERE action IN (${PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")})`,
   )
-    .bind(...CATALOG_CANONICAL_ACTIONS)
+    .bind(...PUBLICATION_AFFECTING_ACTIONS)
     .first()
   const highWater = Number(row?.id || 0)
   const stored = Number((await env.KV.get(CATALOG_DISPATCH_WATERMARK_KEY)) || 0)

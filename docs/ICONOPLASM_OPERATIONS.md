@@ -58,7 +58,7 @@ If you skip `--remote`, you are not looking at the live data.
 - `icono_gene_discoveries`
   - retained legacy per-user discovery rows (the shelf reads compact V2 state)
 - `icono_publish_state`
-  - retained legacy authoring/vote projection; check the gene's authority epoch before interpreting it; never public image authority
+  - each gene's elected winner and its `admin_override` pin; the stable gene object, not this row, is the public image authority
 - `icono_portrait_assets`
   - portrait candidates and their asset metadata
 
@@ -245,23 +245,17 @@ All three public responses must name the same stable-object version and portrait
 An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
 publication failure, not permission to query D1 for substitute public bytes.
 
-After current provider and operation admission, and only for a gene still using
-the legacy projection, an exact-key D1 read can show whether that projection is
-ahead. These remote queries consume shared D1 capacity:
+After current provider and operation admission, an exact-key D1 read shows
+whether D1's winner is ahead of the published object. This remote query
+consumes shared D1 capacity:
 
 ```powershell
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
 ```
 
-A different D1 SHA is expected only until the vote authority's per-gene
-publication or the next Actions republish pass rewrites the gene's stable
+A different D1 SHA is expected only until the republish after the vote that
+changed it, or the next Actions publisher run, rewrites the gene's stable
 object; every public surface reads that one object.
-
-Check whether a vote projection job is already queued:
-
-```powershell
-pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, substr(last_error,1,200) AS last_error FROM icono_vote_projection_refresh_jobs WHERE gene_symbol = 'PRL' LIMIT 1"
-```
 
 ### recover exact publication without reviving global sync
 
@@ -270,11 +264,10 @@ revision, logical operation ID, publication obligations and uncertain receipts.
 Do not regenerate saved images, clear a pending job manually, edit
 `icono_publish_state`, or advance a public pointer by hand.
 
-Identify the failing stage from that operation's own receipts. For a migrated
-gene, recovery must remain on its V2 authority epoch and per-gene publication
-attempt. Verify the exact immutable object bytes and advertised view from a
-fresh reader. An unrelated gene's backlog must not become its completion gate.
-An absent object is not a successful publication and does not authorize a V1
+Identify the failing stage from that operation's own receipts. Recovery
+republishes that gene through its one per-gene publisher. Verify the exact
+object bytes and advertised view from a fresh reader. An unrelated gene's backlog must not become its completion gate.
+An absent object is not a successful publication and does not authorize a D1
 fallback. Check the original scope and repeat/restart receipts for the same
 logical operation.
 

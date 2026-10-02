@@ -26,9 +26,7 @@ secrets enforce least privilege, and a token is valid only for its named routes:
 - `ICONOPLASM_AUTHORITY_REPLICA_TOKEN`: events, snapshots, exact material reads,
   and Tags enrichment submission/selection;
 - `ICONOPLASM_AUTHORITY_GENERATION_TOKEN`: generation lease claim, renew, fail,
-  and complete;
-- `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
-  handover only.
+  and complete.
 
 Command receipts are kept in full and not compacted; real use adds about three a
 day (B-859 has the 100x sizing). Recovery for `iconoplasm-authoring` is D1 Time

@@ -29,31 +29,6 @@ function fixture() {
       settings: { delivery_delay: 0, message_retention_period: 60 },
       consumers: [],
     },
-    {
-      queue_id: "d".repeat(32),
-      queue_name: "iconoplasm-vote-projection",
-      settings: { delivery_delay: 0, delivery_paused: false, message_retention_period: 86400 },
-      consumers: [
-        {
-          type: "worker",
-          script: "geneguessr-api",
-          dead_letter_queue: "iconoplasm-vote-projection-dlq",
-          settings: {
-            batch_size: 2,
-            max_concurrency: 1,
-            max_retries: 5,
-            max_wait_time_ms: 1000,
-            retry_delay: 30,
-          },
-        },
-      ],
-    },
-    {
-      queue_id: "e".repeat(32),
-      queue_name: "iconoplasm-vote-projection-dlq",
-      settings: { delivery_delay: 0, message_retention_period: 86400 },
-      consumers: [],
-    },
   ]
   const calls = []
   const options = {
@@ -84,22 +59,21 @@ test("finalization release corrects retention once and verifies the existing con
   const { queues, calls, options } = fixture()
   const first = await reconcileFinalizationQueue(options)
   assert.equal(first.ok, true)
-  assert.equal(calls.length, 5, "one inventory and one PATCH/readback per existing queue")
+  assert.equal(calls.length, 5, "one inventory and one PATCH and readback per queue")
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
   assert.deepEqual(
     queues.map((q) => q.settings.message_retention_period),
-    [86400, 86400, 86400, 86400],
+    [86400, 86400],
   )
   assert.equal(queues[0].settings.delivery_paused, false)
   assert.equal(first.consumers[0].delivery_paused, false)
   assert.equal(queues[0].consumers[0].settings.batch_size, 1)
-  assert.equal(first.consumers[1].batch_size, 2)
-  assert.equal(first.consumers[1].max_concurrency, 1)
+  assert.equal(first.consumers[0].max_concurrency, 1)
   calls.length = 0
   const again = await reconcileFinalizationQueue(options)
   assert.deepEqual(
     again.queues.map((q) => q.changed),
-    [false, false, false, false],
+    [false, false],
   )
   assert.equal(calls.length, 1, "a repeated release makes no configuration writes")
 })
@@ -107,13 +81,10 @@ test("finalization release corrects retention once and verifies the existing con
 test("a canonical release accepts and preserves provider quarantine", async () => {
   const { queues, calls, options } = fixture()
   queues[0].settings.delivery_paused = true
-  queues[2].settings.delivery_paused = true
   const result = await reconcileFinalizationQueue(options)
   assert.equal(result.ok, true)
   assert.equal(result.consumers[0].delivery_paused, true)
-  assert.equal(result.consumers[1].delivery_paused, true)
   assert.equal(queues[0].settings.delivery_paused, true)
-  assert.equal(queues[2].settings.delivery_paused, true)
   assert.equal(calls.filter((c) => c.method === "PATCH").length, 2)
   for (const call of calls.filter((c) => c.method === "PATCH")) {
     const settings = JSON.parse(call.body).settings
@@ -134,16 +105,13 @@ test("old consumer batches, invalid pause shape and missing inventory fail befor
       q.pop()
     },
     (q) => {
-      delete q[2].consumers[0].settings.max_concurrency
+      delete q[0].consumers[0].settings.max_concurrency
     },
     (q) => {
-      q[2].consumers[0].settings.max_concurrency = 2
+      q[0].consumers[0].settings.max_concurrency = 2
     },
     (q) => {
-      q[2].consumers[0].settings.batch_size = 25
-    },
-    (q) => {
-      delete q[2].settings.delivery_paused
+      delete q[0].settings.delivery_paused
     },
   ]) {
     const { queues, calls, options } = fixture()
