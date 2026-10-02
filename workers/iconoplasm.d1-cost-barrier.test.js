@@ -349,10 +349,11 @@ function completeMobileCard(symbol, version) {
   }
 }
 
-function buildEnv(sharedKv, db) {
+function buildEnv(sharedKv, db, extra = {}) {
   const env = {
     ICONOPLASM_DB: db,
     KV: sharedKv,
+    ...extra,
   }
   env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
     fetch(request) {
@@ -595,10 +596,57 @@ test("DO NOT DELETE: corrupt portrait publication fails retryably instead of rep
   assert.match(secondPayload.error, /temporarily unavailable/)
 })
 
-test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version barrier", async () => {
+// B-898 Stage 1 (step B): the two guards below used to prove the manifest
+// walked the KV tree cheaply (one head read per isolate, only exact shards).
+// The manifest no longer walks that tree at all, so the guards were replaced in
+// the same change by the stricter property: ZERO reads of the KV head and of
+// any card-catalog manifest/shard key, exactly one Bunny Storage read per
+// requested symbol, and zero D1 statements. A regression back onto the retired
+// tree, or onto D1 composition, fails these loudly.
+function stableGeneObjectStorage(objects) {
+  const reads = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(url instanceof Request ? url.url : String(url))
+    if (parsed.hostname !== "storage.test") return originalFetch(url, init)
+    reads.push(parsed.pathname)
+    const match = /\/genes\/v3\/([^/]+)\.json$/.exec(parsed.pathname)
+    const value = match ? objects.get(match[1]) : undefined
+    return value
+      ? new Response(JSON.stringify(value), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      : new Response(null, { status: 404 })
+  }
+  return { reads, restore: () => (globalThis.fetch = originalFetch) }
+}
+
+function stableGeneObjectEnv(kv, db) {
+  return buildEnv(kv, db, {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  })
+}
+
+test("DO NOT DELETE: mobile card manifest never reads the KV gallery head across requests", async (t) => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
-  const env = buildEnv(kv, db)
+  const storage = stableGeneObjectStorage(
+    new Map([
+      [
+        "TP53",
+        {
+          ...completeMobileCard("TP53", kv.version).payload,
+          published_at: "2026-10-01T13:53:49.742Z",
+        },
+      ],
+    ]),
+  )
+  t.after(storage.restore)
+  const env = stableGeneObjectEnv(kv, db)
   const requestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -619,21 +667,47 @@ test("DO NOT DELETE: mobile card manifest reuses the in-isolate gallery version 
   )
   assert.equal(second.status, 200)
 
-  assert.equal(kv.getCounts.get("iconoplasm:gallery-version"), 1)
+  assert.equal(kv.getCounts.get("iconoplasm:gallery-version") || 0, 0)
+  assert.deepEqual(
+    [...kv.getCounts.keys()].filter((key) => key.includes("card-catalog")),
+    [],
+  )
+  assert.deepEqual(storage.reads, [
+    "/test-zone/genes/v3/TP53.json",
+    "/test-zone/genes/v3/TP53.json",
+  ])
 })
 
-test("DO NOT DELETE: symbol-scoped card manifest reads only exact indexed shards", async () => {
+test("DO NOT DELETE: symbol-scoped card manifest reads exactly one stable object per symbol and no shard or D1", async (t) => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
+  const d1Statements = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    d1Statements.push(String(sql))
+    return prepare(sql)
+  }
+  const storage = stableGeneObjectStorage(
+    new Map([
+      [
+        "TP53",
+        {
+          ...completeMobileCard("TP53", kv.version).payload,
+          published_at: "2026-10-01T13:53:49.742Z",
+        },
+      ],
+    ]),
+  )
+  t.after(storage.restore)
 
   resetIconoplasmRuntimeCachesForTest()
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbols: ["TP53"] }),
+      body: JSON.stringify({ symbols: ["TP53", "A1BG"] }),
     }),
-    buildEnv(kv, db),
+    stableGeneObjectEnv(kv, db),
     { waitUntil() {} },
   )
   const payload = await response.json()
@@ -643,6 +717,21 @@ test("DO NOT DELETE: symbol-scoped card manifest reads only exact indexed shards
     payload.cards.map((card) => card.symbol),
     ["TP53"],
   )
-  assert.equal(kv.getCounts.get(`iconoplasm:card-catalog:${kv.version}:shard:1`), 1)
-  assert.equal(kv.getCounts.get(`iconoplasm:card-catalog:${kv.version}:shard:0`) || 0, 0)
+  assert.deepEqual(payload.missing, ["A1BG"])
+  assert.deepEqual([...storage.reads].sort(), [
+    "/test-zone/genes/v3/A1BG.json",
+    "/test-zone/genes/v3/TP53.json",
+  ])
+  assert.deepEqual(
+    [...kv.getCounts.keys()].filter((key) => key.includes("card-catalog")),
+    [],
+  )
+  // Caretaker identity is a bounded first-party read; card composition is not.
+  assert.deepEqual(
+    d1Statements.filter((sql) =>
+      /icono_gene_catalog|icono_publish_state|icono_portrait_assets|icono_gene_essence/.test(sql),
+    ),
+    [],
+    "the manifest must not compose from D1 when a stable object is missing",
+  )
 })

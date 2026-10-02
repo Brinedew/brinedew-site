@@ -9,6 +9,12 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
+import {
+  installStableGeneStorage,
+  stableGeneObjectFromRecord,
+  stableGeneObjectPath,
+  stableGeneStorageEnv,
+} from "./test-helpers/stable-gene-objects.js"
 
 const source = readFileSync(
   new URL(
@@ -392,38 +398,57 @@ function completeMobileCardVM(symbol, version = "test-vm-version") {
         hero_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
         medium_url: `https://iconoplasmportraits.b-cdn.net/${normalized}.jpg`,
         asset_sha256: "7b".repeat(32),
+        // The runtime derives the VM from this payload (B-898); the fixture
+        // must carry the dimensions it claims at the top level.
+        width: 768,
+        height: 1024,
       },
     },
   }
 }
 
-function completeCardCatalogArtifact(symbols, version = "test-vm-version") {
-  const cards = symbols.map((symbol) => completeMobileCardVM(symbol, version))
-  return {
-    schema: "iconoplasm.cardCatalog.v1",
-    artifact_version: version,
-    snapshot_version: version,
-    artifact_validated_at: "2026-05-09T00:00:00.000Z",
-    source: "published_card_catalog",
-    catalog_gene_count: cards.length,
-    card_count: cards.length,
-    cards,
+// B-898 Stage 1 (step B): the account gallery window reads ONE stable gene
+// object per returned row (at most ACCOUNT_GALLERY_WINDOW_LIMIT_MAX = 12 per
+// request) from Bunny Storage. Failure modes these tests cover, written before
+// the handler changed:
+//   1. Objects present: 200, complete VMs built from the objects, exactly one
+//      storage read per returned row, no read of the KV head or any
+//      card-catalog key; the image-only projection takes its portrait identity
+//      from the same object.
+//   2. Object missing: the symbol is listed in `missing` and the row keeps its
+//      discovery item; the window never falls back to discovery-row SHAs or
+//      legacy portrait refs.
+//   3. Storage error: 503 CARD_ARTIFACT_UNAVAILABLE, no-store, with the
+//      acct_catalog stage still reported.
+let stableStorage = null
+
+function seedStableGeneObjects(symbols, { assetSha256 = "7b".repeat(32) } = {}) {
+  for (const symbol of symbols) {
+    const vm = completeMobileCardVM(symbol)
+    vm.payload.portrait.asset_sha256 = assetSha256
+    stableStorage.objects.set(vm.symbol, stableGeneObjectFromRecord(vm.payload))
   }
 }
+
+test.beforeEach(() => {
+  stableStorage = installStableGeneStorage(new Map())
+})
+
+test.afterEach(() => {
+  stableStorage?.restore()
+  stableStorage = null
+})
 
 function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
   resetIconoplasmRuntimeCachesForTest()
   const symbols = ["INS", "PRL", "RHO", "TP53", "BRCA1"]
+  seedStableGeneObjects(symbols)
   const portraitAssetSha = "7b".repeat(32)
   const portraitFingerprint = {
     published_count: symbols.length,
     latest: portraitAssetSha,
   }
   const kvStore = new Map([
-    [
-      `iconoplasm:card-catalog:${version}`,
-      JSON.stringify(completeCardCatalogArtifact(symbols, version)),
-    ],
     [
       "iconoplasm:published-portrait-fingerprint:v3",
       JSON.stringify({ cached_at: Date.now(), fingerprint: portraitFingerprint }),
@@ -439,6 +464,7 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
     ],
   ])
   return {
+    ...stableGeneStorageEnv(),
     ICONOPLASM_DB: db,
     ADMIN_DISCORD_USER_ID: "founder-admin",
     GAME_SESSIONS: new FakeGameSessions({
@@ -446,7 +472,10 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
     }),
     KV: {
       async get(key) {
-        if (key === "iconoplasm:gallery-version") return version
+        // The retired tree: a reader that comes back to it fails loudly.
+        if (key === "iconoplasm:gallery-version" || key.includes("card-catalog")) {
+          throw new Error(`account gallery window must not read the retired KV tree: ${key}`)
+        }
         return kvStore.get(key) || null
       },
       async put(key, value) {
@@ -456,7 +485,7 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
   }
 }
 
-test("account gallery window returns strict rich cards for newest without full shelf sort", async () => {
+test("account gallery window returns strict rich cards from one stable object per row without full shelf sort", async () => {
   const db = new FakeDb()
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -482,10 +511,17 @@ test("account gallery window returns strict rich cards for newest without full s
   assert.ok(payload.next_cursor)
   assert.equal(payload.diagnostics.d1_composed, 0)
   assert.equal(payload.diagnostics.d1_window_rows, 2)
-  assert.equal(payload.diagnostics.source, "published_card_catalog")
-  assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
+  assert.equal(payload.diagnostics.source, "stable_gene_object")
+  assert.equal(payload.diagnostics.artifact_version, "stable-v3")
+  assert.equal(payload.vm_version, "stable-v3")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "stable-gene-object")
   assert.equal(payload.missing.length, 0)
   assert.equal(payload.items[0]?.card, undefined)
+  assert.equal(payload.cards[0]?.snapshot_version, "2026-10-01T13:53:49.742Z")
+  assert.deepEqual([...stableStorage.reads].sort(), [
+    stableGeneObjectPath("BRCA1"),
+    stableGeneObjectPath("TP53"),
+  ])
   const serverTiming = response.headers.get("Server-Timing") || ""
   for (const stage of [
     "acct_session",
@@ -516,16 +552,8 @@ test("account gallery newest window orders by first discovery, not repeat encoun
     db.row("user-123", "MIDDISC", "2026-04-15T00:00:00Z", 3, "2026-04-15T00:00:00Z"),
   ]
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-first-discovery" })
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-first-discovery",
-    JSON.stringify(
-      completeCardCatalogArtifact(
-        db.rows.map((row) => row.gene_symbol),
-        "test-vm-version-first-discovery",
-      ),
-    ),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(db.rows.map((row) => row.gene_symbol))
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -561,12 +589,8 @@ test("account gallery newest window puts the newly discovered 101st gene first",
   )
   db.rows = db.rows.concat(db.row("user-123", "NEW101", "2026-04-30T00:00:00Z", 0))
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-101" })
-  const allSymbols = db.rows.map((row) => row.gene_symbol)
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-101",
-    JSON.stringify(completeCardCatalogArtifact(allSymbols, "test-vm-version-101")),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(db.rows.map((row) => row.gene_symbol))
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -596,11 +620,8 @@ test("shared account gallery window pages non-admin discoveries from the shared 
     db.row("user-456", "PRL", "2026-05-01T00:00:00Z", 5),
   ]
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-shared" })
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-shared",
-    JSON.stringify(completeCardCatalogArtifact(["INS", "GCK", "PRL"], "test-vm-version-shared")),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(["INS", "GCK", "PRL"])
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -639,11 +660,8 @@ test("guest shared account gallery window is public read-only discovery browsing
     db.row("founder-admin", "ADMINONLY", "2026-05-01T00:00:00Z", 5),
   ]
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-guest-shared" })
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-guest-shared",
-    JSON.stringify(completeCardCatalogArtifact(["INS", "GCK"], "test-vm-version-guest-shared")),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(["INS", "GCK"])
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -703,7 +721,7 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
   )
 })
 
-test("image-only account gallery window projects compact cards from the canonical card artifact", async () => {
+test("image-only account gallery window projects compact cards from the stable gene objects", async () => {
   const db = new FakeDb()
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -719,7 +737,8 @@ test("image-only account gallery window projects compact cards from the canonica
 
   assert.equal(response.status, 200)
   assert.equal(payload.view, "image-only")
-  assert.equal(payload.diagnostics.source, "published_card_catalog_image_only")
+  assert.equal(payload.diagnostics.source, "stable_gene_object_image_only")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "stable-gene-object-image-only")
   assert.deepEqual(
     payload.cards.map((card) => card.symbol),
     ["TP53", "BRCA1"],
@@ -752,19 +771,8 @@ test("image-only account gallery ignores stale discovery and legacy portrait-ref
     image_width: 384,
     image_height: 512,
   })
-  const env = buildEnv({ db, version: "test-published-identity" })
-  const canonicalArtifact = completeCardCatalogArtifact(
-    ["INS", "PRL", "RHO", "TP53", "BRCA1"],
-    "test-published-identity",
-  )
-  for (const card of canonicalArtifact.cards) {
-    card.portrait.asset_sha256 = publishedSha
-    card.payload.portrait.asset_sha256 = publishedSha
-  }
-  await env.KV.put(
-    "iconoplasm:card-catalog:test-published-identity",
-    JSON.stringify(canonicalArtifact),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(["INS", "PRL", "RHO", "TP53", "BRCA1"], { assetSha256: publishedSha })
   await env.KV.put(
     `iconoplasm:published-portrait-fingerprint:v3`,
     JSON.stringify({
@@ -978,16 +986,59 @@ test("account gallery endpoint block does not sort a bounded discovery slice for
   assert.match(block, /ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS/)
 })
 
-test("account gallery endpoint block reads cards from the published artifact, not per-gene KV", () => {
+test("account gallery endpoint block reads cards from the stable gene objects, not the KV tree", () => {
   const start = source.lastIndexOf('if (path === "/api/iconoplasm/account-gallery-window"')
   const end = source.indexOf('if (path === "/api/iconoplasm/discoveries/merge"', start)
   assert.notEqual(start, -1)
   assert.notEqual(end, -1)
   const block = source.slice(start, end)
 
-  assert.match(block, /readPublishedCardCatalogArtifact/)
+  assert.match(block, /readStableGeneObjects\(env, symbols\)/)
+  assert.doesNotMatch(block, /readPublishedCardCatalogArtifact|currentMobileCardSnapshotVersion/)
   assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
   assert.doesNotMatch(block, /versionInfo\.previous/)
+})
+
+test("account gallery window lists a missing stable object and fails loud on storage errors", async () => {
+  const db = new FakeDb()
+  const env = buildEnv({ db })
+  stableStorage.objects.delete("TP53")
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
+        { headers: { Cookie: "session=abc" } },
+      ),
+      env,
+    )
+  const payload = await response.json()
+  assert.equal(response.status, 200)
+  assert.deepEqual(payload.missing, ["TP53"])
+  assert.deepEqual(
+    payload.cards.map((card) => card.symbol),
+    ["BRCA1"],
+  )
+  assert.deepEqual(
+    payload.items.map((item) => item.symbol),
+    ["TP53", "BRCA1"],
+  )
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "mixed-or-missing")
+
+  stableStorage.restore()
+  stableStorage = installStableGeneStorage(new Map(), { status: 500 })
+  const outage =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
+        { headers: { Cookie: "session=abc" } },
+      ),
+      buildEnv({ db: new FakeDb() }),
+    )
+  assert.equal(outage.status, 503)
+  assert.equal(outage.headers.get("Cache-Control"), "no-store")
+  assert.equal(outage.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
+  assert.equal((await outage.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+  assert.match(outage.headers.get("Server-Timing") || "", /acct_catalog;dur=/)
 })
 
 test("account gallery endpoint has an explicit budget class", () => {
@@ -1028,16 +1079,8 @@ for (const scope of ["personal", "shared"]) {
   test(`${scope} account gallery window enriches only the rows it returns (B-885)`, async () => {
     const db = manyGeneDb()
     resetIconoplasmRuntimeCachesForTest()
-    const env = buildEnv({ db, version: `test-vm-version-page-first-${scope}` })
-    env.KV.put(
-      `iconoplasm:card-catalog:test-vm-version-page-first-${scope}`,
-      JSON.stringify(
-        completeCardCatalogArtifact(
-          db.rows.map((row) => row.gene_symbol),
-          `test-vm-version-page-first-${scope}`,
-        ),
-      ),
-    )
+    const env = buildEnv({ db })
+    seedStableGeneObjects(db.rows.map((row) => row.gene_symbol))
     const query = scope === "shared" ? "&scope=shared" : ""
     const first =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -1104,16 +1147,8 @@ test("shared newest window names only the page and pages ties exactly (B-885)", 
     )
   })
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-shared-ties" })
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-shared-ties",
-    JSON.stringify(
-      completeCardCatalogArtifact(
-        db.rows.map((row) => row.gene_symbol),
-        "test-vm-version-shared-ties",
-      ),
-    ),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(db.rows.map((row) => row.gene_symbol))
   const expected = [...db.rows]
     .sort(
       (a, b) =>
@@ -1229,16 +1264,8 @@ test("home reads use a current shelf and ignore a stale one (B-887)", async () =
     ),
   )
   resetIconoplasmRuntimeCachesForTest()
-  const env = buildEnv({ db, version: "test-vm-version-shelf" })
-  env.KV.put(
-    "iconoplasm:card-catalog:test-vm-version-shelf",
-    JSON.stringify(
-      completeCardCatalogArtifact(
-        db.rows.map((row) => row.gene_symbol),
-        "test-vm-version-shelf",
-      ),
-    ),
-  )
+  const env = buildEnv({ db })
+  seedStableGeneObjects(db.rows.map((row) => row.gene_symbol))
   const call = async (path) => {
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(

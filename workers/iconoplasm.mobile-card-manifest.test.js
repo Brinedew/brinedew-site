@@ -17,6 +17,12 @@ import {
   listIconoplasmTestKv,
   seedIconoplasmTestRecognitionPair,
 } from "./iconoplasm-recognition-policy-test-fixture.js"
+import {
+  installStableGeneStorage,
+  stableGeneObjectFromRecord,
+  stableGeneObjectPath,
+  stableGeneStorageEnv,
+} from "./test-helpers/stable-gene-objects.js"
 
 const source = readFileSync(
   new URL(
@@ -514,6 +520,45 @@ function putCatalogResolveArtifact(
   )
 }
 
+// B-898 Stage 1 (step B): mobile card manifest, the per-symbol card endpoint
+// and the print-copy path read ONE stable gene object per symbol from Bunny
+// Storage. Failure modes these tests cover, written before the handlers
+// changed:
+//   1. Objects present: 200, complete VMs built from the objects, exactly one
+//      storage read per requested symbol, zero reads of the KV head
+//      (iconoplasm:gallery-version) or any card-catalog manifest/shard key.
+//   2. Object missing (storage 404): the symbol lands in `missing`; the
+//      per-symbol endpoint answers 404 after trying alias resolution.
+//   3. Storage error (5xx): 503 CARD_ARTIFACT_UNAVAILABLE, no-store, with the
+//      stable label as artifact_version.
+//   4. Symbol limit (100 per manifest request) unchanged: a request past it
+//      reads only the first 100 objects.
+//   5. Print copy reads the same object and keeps its asset-mismatch 409
+//      without any D1 fallback.
+let stableStorage = null
+
+function stableObjectForSymbol(symbol, version = "test-vm-version") {
+  return stableGeneObjectFromRecord(
+    completeMobileCardVM(symbol, version, "published_card_catalog").payload,
+  )
+}
+
+function seedStableGeneObjects(symbols, version = "test-vm-version") {
+  for (const symbol of symbols) {
+    stableStorage.objects.set(String(symbol).toUpperCase(), stableObjectForSymbol(symbol, version))
+  }
+}
+
+test.beforeEach(() => {
+  stableStorage = installStableGeneStorage(new Map())
+  seedStableGeneObjects(["ERBB2", "INS"])
+})
+
+test.afterEach(() => {
+  stableStorage?.restore()
+  stableStorage = null
+})
+
 function buildEnv({
   kvStore = new Map(),
   db = new FakeIconoplasmDb(),
@@ -526,6 +571,7 @@ function buildEnv({
   resetIconoplasmRuntimeCachesForTest()
   const recognitionPairReady = seedIconoplasmTestRecognitionPair(kvStore)
   return {
+    ...stableGeneStorageEnv(),
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     KV: {
@@ -668,6 +714,9 @@ function completeMobileCardVM(
         weight_kg: normalized === "INS" ? 12 : 137.9,
         tissue_tau: normalized === "INS" ? 0.87 : 0.26,
         faction: normalized === "INS" ? "" : "pro-growth",
+        // field_status is derived from the payload by the runtime; the
+        // fixture must carry what it claims is present.
+        family_surname: normalized === "INS" ? "insulin family" : "ErbB receptor family",
       },
     },
   }
@@ -762,7 +811,7 @@ test("dirty-shard publication fails closed before KV puts when the shared write 
   assert.equal(putKeys.length, 0)
 })
 
-test("print-copy accepts only the exact published artifact portrait and never falls back to D1", async () => {
+test("print-copy accepts only the stable gene object's portrait and never falls back to D1", async () => {
   const db = new FakeIconoplasmDb()
   const d1OnlyAssetSha = "8d".repeat(32)
   const artifactAssetSha = "7b".repeat(32)
@@ -776,11 +825,7 @@ test("print-copy accepts only the exact published artifact portrait and never fa
     d1PrepareCalls += 1
     return prepare(sql)
   }
-  const env = buildEnv({
-    db,
-    version: "old-card-artifact",
-    cardArtifact: completeCardCatalogArtifact(["ERBB2"], "old-card-artifact"),
-  })
+  const env = buildEnv({ db, cardArtifact: null })
 
   const mismatchResponse =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -796,7 +841,8 @@ test("print-copy accepts only the exact published artifact portrait and never fa
   assert.equal(mismatchPayload.code, "PRINT_COPY_ASSET_MISMATCH")
   assert.equal(mismatchPayload.requested_asset_sha256, d1OnlyAssetSha)
   assert.equal(mismatchPayload.published_asset_sha256, artifactAssetSha)
-  assert.equal(mismatchPayload.snapshot_version, "old-card-artifact")
+  assert.equal(mismatchPayload.snapshot_version, "stable-v3")
+  assert.deepEqual(stableStorage.reads, [stableGeneObjectPath("ERBB2")])
   assert.equal(d1PrepareCalls, 0, "a mismatched asset must not trigger the removed D1 fallback")
 
   const invalidResponse =
@@ -823,7 +869,8 @@ test("print-copy accepts only the exact published artifact portrait and never fa
   assert.equal(exactArtifactResponse.headers.get("X-Iconoplasm-Print-Copy-Renderer"), null)
 })
 
-test("mobile card manifest returns complete VMs from the published card catalog artifact", async () => {
+test("mobile card manifest returns complete VMs from the stable gene objects", async () => {
+  const kvGets = []
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
@@ -831,22 +878,30 @@ test("mobile card manifest returns complete VMs from the published card catalog 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["ERBB2"] }),
       }),
-      buildEnv({ db: null }),
+      buildEnv({ db: null, cardArtifact: null, onKvGet: (key) => kvGets.push(key) }),
     )
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "published-card-catalog")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "stable-gene-object")
   const payload = await response.json()
   assert.equal(payload.schema, "iconoplasm.mobileCardManifest.v1")
-  assert.equal(payload.snapshot_version, "test-vm-version")
-  assert.equal(payload.data_source, "published_card_catalog")
+  assert.equal(payload.snapshot_version, "stable-v3")
+  assert.equal(payload.data_source, "stable_gene_object")
   assert.deepEqual(payload.missing, [])
-  assert.equal(payload.diagnostics.artifact_version, "test-vm-version")
-  assert.equal(payload.diagnostics.source, "published_card_catalog")
+  assert.equal(payload.diagnostics.artifact_version, "stable-v3")
+  assert.equal(payload.diagnostics.source, "stable_gene_object")
   assert.equal(payload.cards.length, 1)
+  assert.deepEqual(stableStorage.reads, [stableGeneObjectPath("ERBB2")])
+  assert.deepEqual(
+    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
+    [],
+    "the manifest must not read the KV head or any card-catalog key",
+  )
   const card = payload.cards[0]
   assert.equal(card.__complete, true)
   assert.equal(card.schema_version, "iconoplasm.mobileCard.v1")
+  assert.equal(card.snapshot_version, "2026-10-01T13:53:49.742Z")
+  assert.equal(card.data_source, "stable_gene_object")
   assert.equal(card.symbol, "ERBB2")
   assert.equal(card.full_name, "erb-b2 receptor tyrosine kinase 2")
   assert.equal(card.portrait.status, "published")
@@ -859,32 +914,67 @@ test("mobile card manifest returns complete VMs from the published card catalog 
   assert.equal(card.payload.essence.faction, "pro-growth")
 })
 
-test("mobile card symbol endpoint resolves aliases before reading the published card artifact", async () => {
+test("mobile card symbol endpoint resolves aliases when the requested symbol has no stable object", async () => {
   const kvStore = new Map()
   putCatalogResolveArtifact(kvStore)
+  seedStableGeneObjects(["SOSTDC1"])
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/USAG1"),
-      buildEnv({
-        kvStore,
-        db: null,
-        cardArtifact: completeCardCatalogArtifact(["SOSTDC1"], "test-vm-version"),
-      }),
+      buildEnv({ kvStore, db: null, cardArtifact: null }),
     )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "stable-gene-object")
   assert.equal(payload?.card?.symbol, "SOSTDC1")
   assert.equal(payload?.card?.payload?.symbol, "SOSTDC1")
+  assert.equal(payload?.snapshot_version, "stable-v3")
   assert.equal(Object.hasOwn(payload, "payload"), false)
   assert.deepEqual(payload?.missing, [])
+  // The alias miss costs one 404 read, the canonical hit one more; nothing else.
+  assert.deepEqual(stableStorage.reads, [
+    stableGeneObjectPath("USAG1"),
+    stableGeneObjectPath("SOSTDC1"),
+  ])
 })
 
-test("mobile card manifest reads only needed shards from the one published card catalog artifact path", async () => {
+test("mobile card symbol endpoint answers 404 when neither the symbol nor an alias has a stable object", async () => {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/NOPE1"),
+      buildEnv({ db: null, cardArtifact: null }),
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 404)
+  assert.equal(payload.card, null)
+  assert.deepEqual(payload.missing, ["NOPE1"])
+  assert.deepEqual(stableStorage.reads, [stableGeneObjectPath("NOPE1")])
+})
+
+test("mobile card symbol endpoint fails loud with 503 no-store when storage errors", async () => {
+  stableStorage.restore()
+  stableStorage = installStableGeneStorage(new Map(), { status: 500 })
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/ERBB2"),
+      buildEnv({ db: null, cardArtifact: null }),
+    )
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
+  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+})
+
+test("mobile card manifest reads exactly one stable object per requested symbol and no KV head, manifest or shard", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
   const kvGets = []
+  // The old sharded tree is still seeded in KV so a regression that walks it
+  // shows up as a KV read below.
   putShardedCardCatalogArtifact(kvStore, ["BRCA1", "ERBB2", "INS", "TP53"], "test-vm-version")
+  seedStableGeneObjects(["BRCA1", "TP53"])
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
@@ -897,20 +987,46 @@ test("mobile card manifest reads only needed shards from the one published card 
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.data_source, "published_card_catalog")
-  assert.equal(payload.diagnostics.artifact_gene_count, 4)
+  assert.equal(payload.data_source, "stable_gene_object")
+  assert.equal(payload.diagnostics.artifact_gene_count, 2)
   assert.deepEqual(
     payload.cards.map((card) => card.symbol),
     ["INS", "ERBB2"],
   )
-  assert.deepEqual(kvGets.filter((key) => key.includes(":shard:")).sort(), [
-    "iconoplasm:card-catalog:test-vm-version:shard:1",
-    "iconoplasm:card-catalog:test-vm-version:shard:2",
+  assert.deepEqual([...stableStorage.reads].sort(), [
+    stableGeneObjectPath("ERBB2"),
+    stableGeneObjectPath("INS"),
   ])
+  assert.deepEqual(
+    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
+    [],
+  )
 })
 
-test("mobile card manifest fails loud when the published card catalog artifact is unavailable", async () => {
+test("mobile card manifest keeps its 100-symbol limit and reads at most one object per accepted symbol", async () => {
+  const symbols = Array.from({ length: 120 }, (_, index) => `G${String(index).padStart(4, "0")}`)
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols }),
+      }),
+      buildEnv({ db: null, cardArtifact: null }),
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload.cards.length, 0)
+  assert.equal(payload.missing.length, 100)
+  assert.equal(stableStorage.reads.length, 100)
+  assert.equal(new Set(stableStorage.reads).size, 100)
+})
+
+test("mobile card manifest fails loud when stable object storage errors", async () => {
   resetIconoplasmRuntimeCachesForTest()
+  stableStorage.restore()
+  stableStorage = installStableGeneStorage(new Map(), { status: 500 })
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
@@ -921,37 +1037,42 @@ test("mobile card manifest fails loud when the published card catalog artifact i
       buildEnv({ kvStore: new Map(), db: new FakeIconoplasmDb(), cardArtifact: null }),
     )
   assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
   assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
   assert.equal(response.headers.get("X-Iconoplasm-Snapshot-State"), "card-artifact-unavailable")
   const payload = await response.json()
   assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
-  assert.equal(payload.artifact_version, "test-vm-version")
+  assert.equal(payload.artifact_version, "stable-v3")
 })
 
-test("mobile card manifest does not fall back to a previous card catalog version", async () => {
-  const barrier = JSON.stringify({
-    current: "current-vm-version",
-    previous: "previous-vm-version",
-    schema: "iconoplasm.mobileCard.v1",
-    status: "active",
-  })
+test("mobile card manifest reports a missing stable object without any KV head or previous-version fallback", async () => {
+  const kvGets = []
+  stableStorage.objects.delete("INS")
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS"] }),
+        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
       }),
       buildEnv({
         db: null,
-        version: barrier,
+        version: JSON.stringify({ current: "current-vm-version", previous: "previous-vm-version" }),
         cardArtifact: completeCardCatalogArtifact(["INS"], "previous-vm-version"),
+        onKvGet: (key) => kvGets.push(key),
       }),
     )
-  assert.equal(response.status, 503)
+  assert.equal(response.status, 200)
   const payload = await response.json()
-  assert.equal(payload.code, "CARD_ARTIFACT_UNAVAILABLE")
-  assert.equal(payload.artifact_version, "current-vm-version")
+  assert.deepEqual(payload.missing, ["INS"])
+  assert.deepEqual(
+    payload.cards.map((card) => card.symbol),
+    ["ERBB2"],
+  )
+  assert.deepEqual(
+    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
+    [],
+  )
 })
 
 test("legacy full-catalog card VM warming route is not declared", () => {
@@ -1045,18 +1166,16 @@ test("published cards and print-copy payloads keep the HGNC gene name when UniPr
     /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/,
   )
 
-  kvStore.set("iconoplasm:gallery-version", payload.card_catalog.artifact_version)
+  // The print-copy renderer reads the stable gene object, which the per-gene
+  // publisher composes from the same projected payload the shard carried.
+  stableStorage.objects.set("PTEN", stableGeneObjectFromRecord(pten.payload))
   resetIconoplasmRuntimeCachesForTest()
   const printCopyRender =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-render/PTEN?v=${payload.card_catalog.artifact_version}&asset=${"c8".repeat(32)}`,
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-render/PTEN?v=stable-v3&asset=${"c8".repeat(32)}`,
       ),
-      buildEnv({
-        kvStore,
-        version: payload.card_catalog.artifact_version,
-        cardArtifact: null,
-      }),
+      buildEnv({ kvStore, cardArtifact: null }),
     )
   const printCopyHtml = await printCopyRender.text()
 
@@ -1187,7 +1306,8 @@ test("mobile manifest runtime block does not call per-gene KV or D1 composition"
   assert.doesNotMatch(block, /writeMobileCardVMToSharedSnapshot/)
   assert.doesNotMatch(block, /composeAndCacheMobileCardVMs/)
   assert.doesNotMatch(block, /geneRecord\(/)
-  assert.match(block, /readPublishedCardCatalogArtifact/)
+  assert.doesNotMatch(block, /readPublishedCardCatalogArtifact|currentMobileCardSnapshotVersion/)
+  assert.match(block, /readStableGeneObjects\(env, symbols\)/)
 })
 
 test("frontend mobile path uses the card catalog manifest and rejects fallback records", () => {
