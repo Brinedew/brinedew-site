@@ -69,12 +69,11 @@ administration token merely to read that admin-only setting.
 Tests cover source/tag mismatch, changed bytes under one version, interrupted
 drafts, failed upload digests, corrupt downloads, missing assets, development
 packages, public-file replacement/deletion, and exact reviewer reproduction.
-Local mocked GitHub tests do not certify live store submission. Record the first
-human-authorized run's immutable release and installed-store checks in B-707.
+Local mocked GitHub tests do not certify live store submission.
 
-The existing 0.5.3 public ZIP remains unchanged. Enabling immutable releases does
-not retroactively invent or certify historical GitHub releases. No historical
-version may be republished from current development source.
+Published ZIPs are never replaced. Immutable releases certify only the releases
+made through this path. No earlier version may be republished from current
+development source.
 
 References: [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 and [SemVer's released-package rule](https://semver.org/#spec-item-3).

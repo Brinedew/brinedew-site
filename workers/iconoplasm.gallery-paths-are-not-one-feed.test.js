@@ -34,7 +34,7 @@ test("Iconoplasm gallery onboarding says there is no single feed order", () => {
   assert.match(onboardingSource, /client-side ordering/)
   assert.match(onboardingSource, /classic public gallery orders/)
   assert.match(onboardingSource, /A catalog gene must remain reachable/)
-  assert.match(onboardingSource, /published card-catalog artifact/)
+  assert.match(onboardingSource, /Card data comes from each gene's stable object/)
 
   assert.match(operationsSource, /## card\/gallery path warning/)
   assert.match(operationsSource, /\/api\/public\/v1\/gallery/)

@@ -4,7 +4,7 @@ Use `pnpm` instead of `npm` or `yarn` for JavaScript dependency management where
 
 Configure pnpm with `minimumReleaseAge: 1440` so newly published package versions cannot be installed until they are at least 24 hours old.
 
-# brinedew.com setup notes
+# brinedew.bio setup notes
 
 _For Claude Code and anyone else working on this site_
 
@@ -12,9 +12,9 @@ _For Claude Code and anyone else working on this site_
 
 ## what this thing is
 
-Personal longevity research blog built with Quartz 4. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
+Personal longevity research blog built with Quartz 5. This is a modern static site generator optimized for Obsidian integration, with features like graph view, backlinks, full-text search, and proper digital garden functionality.
 
-The basic flow: write markdown in `content/`, push to `main`, and `.github/workflows/deploy-quartz.yml` builds the site with Quartz and ships it to Cloudflare Pages, which serves `brinedew.bio` and `geneguessr.brinedew.bio` directly as free static requests. Only `/api/*` and GeneGuessr `/admin*` run the public-edge Worker (B-834; the zone rules live in `cloudflare/the-only-brinedew-static-edge-policy.json`, reconciled by `scripts/reconcile-brinedew-static-edge-policy.mjs`). Never put a Worker route back on `brinedew.bio/*` or `geneguessr.brinedew.bio/*`: Workers run before the cache, so every file would become a metered request. A deploy takes about 7-9 minutes. See "the deployment pipeline" below for the current shape; the older "GitHub Pages + brinedew.com" mental model is obsolete.
+The basic flow: write markdown in `content/`, push to `main`, and `.github/workflows/deploy-quartz.yml` builds the site with Quartz and ships it to Cloudflare Pages, which serves `brinedew.bio` and `geneguessr.brinedew.bio` directly as free static requests. Only `/api/*` and GeneGuessr `/admin*` run the public-edge Worker (B-834; the zone rules live in `cloudflare/the-only-brinedew-static-edge-policy.json`, reconciled by `scripts/reconcile-brinedew-static-edge-policy.mjs`). Never put a Worker route back on `brinedew.bio/*` or `geneguessr.brinedew.bio/*`: Workers run before the cache, so every file would become a metered request. A deploy takes about 7-9 minutes. See "the deployment pipeline" below.
 
 ## Design Context
 
@@ -84,7 +84,7 @@ Don't overthink it. Edit anywhere, publish from PC, CI does the rest.
 - `content/wiki/` - **flat structure** with tag-based organization
 - `content/Attachments/` - images and Excalidraw drawings
 - `content/Templates/` - QuickAdd templates for posts, wiki pages, proteins
-- `quartz.config.ts` - site config (theme, plugins, nav)
+- `quartz.config.yaml` - site config (theme, plugins, nav)
 - `public/` - build output (ignored by git and Syncthing)
 
 ## navigation works automatically
@@ -106,9 +106,7 @@ Using Quartz's default theme with custom CSS in `quartz/static/custom.css`. Dark
 
 **Don't append CSS to .scss files** - it breaks the Sass compiler. Use static CSS files only.
 
-**Custom CSS is included via Head component** - check `quartz/components/Head.tsx` line 88.
-
-Use `content/posts/dark-mode-test-page.md` to test that all content types render properly.
+**Custom CSS is included via Head component** - see the `custom.css` link in `quartz/components/Head.tsx`.
 
 ### Site Color System (CSS Custom Properties)
 
@@ -145,7 +143,7 @@ Use `content/posts/dark-mode-test-page.md` to test that all content types render
 
 **Where colors are defined:**
 
-- Values: `quartz.config.ts` lines 36-57 (lightMode and darkMode objects) - NEEDS UPDATE
+- Values: `quartz.config.yaml` (`colors.lightMode` and `colors.darkMode`)
 - Variables: `quartz/util/theme.ts`; `--accent` (teal) is set in `quartz/static/custom.css`
 - Style guide: `BrinedewStyle/Visual/BrinedewVisualStyleGuide.md` - authoritative source
 
@@ -203,11 +201,11 @@ git reset --hard origin/main
 
 ## the deployment pipeline
 
-Production is **Cloudflare Pages + Cloudflare Workers**. There is no GitHub Pages and no `brinedew.com`.
+Production is **Cloudflare Pages + Cloudflare Workers**.
 
 - **A push to `main` deploys.** `.github/workflows/deploy-quartz.yml` runs on every push (`paths-ignore: docs/**, plans/**`). It builds Quartz, deploys the stateful Worker, the public edge Worker and Pages, then runs post-deploy acceptance. It takes about 7-9 minutes.
 - **Back-to-back merges are safe.** Runs share the `production-deploy` concurrency group (`cancel-in-progress: false`). A run whose commit is no longer `main`'s head cancels itself and ends grey. Grey is not a failure (B-857).
-- **Merging needs a green `build-and-test`, not an up-to-date branch.** Branch protection on `main` requires the `build-and-test` check with `strict=false` (owner decision, 26 Sep 2026). The old strict rule forced one extra CI run per PR, in series: five PRs cost about 25 minutes of waiting. `Build and Test` runs again on `main` after every merge, and the deploy's post-deploy acceptance is the second net. To change the rule: `gh api -X PATCH repos/Brinedew/brinedew-site/branches/main/protection/required_status_checks -F strict=<bool>`.
+- **Merging needs a green `build-and-test`, not an up-to-date branch.** Branch protection on `main` requires the `build-and-test` check with `strict=false` (owner decision), because a strict rule forces one extra CI run per PR, in series. `Build and Test` runs again on `main` after every merge, and the deploy's post-deploy acceptance is the second net. To change the rule: `gh api -X PATCH repos/Brinedew/brinedew-site/branches/main/protection/required_status_checks -F strict=<bool>`.
 - **Online D1 migrations apply on a normal push (B-847).** Mark a reviewed migration `"online": true` in `cloudflare/operation-cost-migration-plan.json`, with its `prediction` and any size `guards`. The push then applies it with `wrangler d1 migrations apply` before the Worker deploy, with the app live (`scripts/apply-online-d1-migrations.mjs`). "Online" means both the installed code and the new code work against the migrated schema: dropping objects nothing reads, adding defaulted columns, backfilling a version-checked accelerator, `CREATE INDEX IF NOT EXISTS`. The step refuses before touching anything if a pending migration is unreviewed, not online, out of order, over its guard, or if twice its prediction doesn't fit today's live headroom. Other migrations still fail the push with `CODE_RELEASE_REQUIRES_MAINTENANCE` and run only in a `workflow_dispatch` with `data_maintenance=true`, which pauses the app.
 - **Durable Object class changes** (create, delete or rename) are applied by `wrangler deploy` automatically when the config's migration tag is ahead of the deployed one (`scripts/stateful-worker-do-migration.mjs`).
 - **Cloudflare zone settings** (Pages domains, redirect rules, Web Analytics injection) are owned by `cloudflare/the-only-brinedew-static-edge-policy.json` and its reconciler. Never change them in the dashboard.
@@ -265,7 +263,7 @@ This survives Quartz's dynamic navigation and won't get nuked by migration scrip
 
 ## things to not touch
 
-- `quartz.config.ts` core configuration (themes, plugins)
+- `quartz.config.yaml` core configuration (themes, plugins)
 - Don't append CSS to .scss files (breaks Sass compilation)
 
 ## current wiki folder structure (flattened)
@@ -381,14 +379,14 @@ This site's audience includes LessWrong veterans, researchers, and people who re
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
-## current workflow (updated for single vault)
+## current workflow (single vault)
 
 **Working publishing workflow:**
 
 1. Write/edit content in shared Obsidian vault (`content/`) on any device
 2. Syncthing syncs vault automatically across all devices
 3. Git operations happen from PC only (git plugin ignored on mobile)
-4. Push commits → GitHub Actions builds and deploys via Quartz 4
+4. Push commits → GitHub Actions builds and deploys via Quartz 5
 
 **Device synchronization:**
 
@@ -408,14 +406,14 @@ Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
 ```bash
 npx quartz build    # local build to public/
-npm run docs        # build + serve locally at localhost:8080
+npx quartz build --serve   # build + serve locally at localhost:8080
 ```
 
 ## Quartz Component Architecture Patterns
 
 **CRITICAL: Don't reinvent Quartz components with inline hacks**
 
-When creating or modifying Quartz components, ALWAYS follow the established patterns. The TagExplorer disaster showed what happens when you ignore these:
+When creating or modifying Quartz components, ALWAYS follow the established patterns:
 
 ### How Quartz components actually work
 
@@ -514,15 +512,11 @@ Build-time transformations (renderPage.tsx HAST tree modification) are more reli
 
 ## deploy-quartz.yml: public edge worker route wiring
 
-The public edge worker deploys alongside its routes from `wrangler.toml` (step "Upload public edge worker script with routes"). This is intentional. The old approach used a separate `upload-only` TOML config with the `routes` key stripped out, then a separate Node script to reassign routes. That caused two problems:
+A normal push uploads and activates a new public edge Worker version ("Deploy the compatible public edge Worker"); a version upload leaves the installed routes alone. A `data_maintenance` release deploys the script together with its routes from `wrangler.toml` ("Upload public edge worker script with routes (production)"), so script and routes change atomically. Keep the `routes` key in that config: `wrangler deploy` with a config that has no `routes` key can clear the existing routes.
 
-1. **Route clearing**: `wrangler deploy` with a config that has no `routes` key can cause Cloudflare to clear existing routes (behavior varies by wrangler version). Between the upload and reassign steps, all routes were gone — site down. If the reassign step failed, routes stayed gone.
+The following "Reassign production routes to the public edge worker" step is final-state verification. It checks each pattern and logs "Route already points at..." when the routes are already correct.
 
-2. **Race condition**: The reassign script made 6 sequential Cloudflare API calls (one zone lookup + one PUT/POST per route pattern). Each could fail independently.
-
-The current approach (`wrangler deploy` without `--config`) deploys routes from `wrangler.toml` atomically with the script. The subsequent `Reassign production routes` step is a safety-net no-op: it checks each pattern and logs "Route already points at..." when routes are already correct.
-
-The guard test at `workers/iconoplasm.do-not-delete-cost-guards.test.js:317` enforces the deploy order: internal stateful worker first, public edge worker second, routes reassigned third. If you change the workflow, update all four assertions together, not just one.
+The guard test "production deploy wiring must use the internal stateful worker config before the public edge deploy" in `workers/iconoplasm.do-not-delete-cost-guards.test.js` enforces the maintenance deploy order: internal stateful worker first, public edge worker second, routes reassigned third. If you change the workflow, update that test's assertions together, not just one.
 
 ## Iconoplasm cost barriers and budget guards
 
@@ -538,7 +532,3 @@ The guard test at `workers/iconoplasm.do-not-delete-cost-guards.test.js:317` enf
 - Do not delete or neuter the Iconoplasm D1 guard tests just because they fail. They are one part of the larger cost-barrier system: the D1 tests guard catastrophic full-inventory row reads, and the operation-cost ledger tests guard mutation and publication admission.
 - If one of those tests fails, your default assumption should be "the code or guardrail drifted," not "the test is annoying." Fix the code, or replace the guard in the same change with something stricter and leave a comment explaining why.
 - If a change makes you wonder whether a public route is doing an O(N) read, stop and audit before shipping. Guessing wrong here is not acceptable because this exact failure mode can take down the whole project financially.
-
----
-
-_Last updated: August 2025 (post-QuickAdd/Draft system implementation)_

@@ -87,21 +87,21 @@ The `iconoplasm-admin` token must be able to:
 
 - deploy Workers scripts for `geneguessr-api` and `the-only-allowed-public-edge-worker-that-must-not-touch-state`
 - deploy Cloudflare Pages project `brinedew-bio`
-- apply D1 migrations for `geneguessr` and `iconoplasm`
-- update Worker routes for `brinedew.bio`; the shared public Worker owns the apex, www, and GeneGuessr routes, while `geneguessr-api` owns the asset-first `iconoplasm.brinedew.bio/*` route
+- apply D1 migrations for the databases bound in `wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`
+- update Worker routes for `brinedew.bio`; the public edge Worker owns `brinedew.bio/api/*`, `geneguessr.brinedew.bio/api/*` and `geneguessr.brinedew.bio/admin*`, while `geneguessr-api` owns the asset-first `iconoplasm.brinedew.bio/*` route
 - read Cloudflare GraphQL analytics, D1 usage, Workers usage, Durable Objects usage, Queues state, and observability data used by B-507 budget gates
 
 If the token needs replacement, replace `iconoplasm-admin`, update `CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN`, update local `CLOUDFLARE_API_TOKEN`, then rerun the production workflow. Do not create a parallel token and do not commit raw Cloudflare tokens.
 
-## Current Sync Credential Lesson
+## Credential Failure Recovery
 
-The local shell token on 2026-05-02 could read the `geneguessr-api` worker settings but failed worker deploy/settings writes with Cloudflare auth code `10000`. The Cloudflare API connector also produced `Error: Cloudflare API error: 10000: Authentication error` for the Brinedew account. That is a broken `iconoplasm-admin` credential path, not a sync code problem.
+A token that can read the `geneguessr-api` worker settings but fails deploy or settings writes with Cloudflare auth code `10000` (`Authentication error`) is a broken `iconoplasm-admin` credential path, not a code problem.
 
 The correct deploy recovery is:
 
 1. Commit the worker/config change.
 2. Push `main` so `Deploy Production (Cloudflare Pages + Worker)` runs with repository secrets.
-3. Confirm the workflow reaches `Deploy the only allowed internal stateful worker (production)`.
+3. Confirm the workflow reaches `Deploy the compatible stateful Worker`.
 4. Verify live Website Ops from the GUI.
 
 The correct Cloudflare account-admin recovery is different: use the Cloudflare dashboard GUI, replace `iconoplasm-admin` if needed, update the two secret locations, and verify the one token can read the account, D1, Queues, and analytics without falling back to anything else.

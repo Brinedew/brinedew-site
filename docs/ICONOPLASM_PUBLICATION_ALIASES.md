@@ -11,7 +11,7 @@ Iconoplasm has two complementary alias sources:
 | ------------------------------------------------ | -------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
 | Broad biological synonyms                        | Workstation publication pipeline | Generated catalog field `a`                    | Website Ops catalog publication                 |
 | Small, observed labels from papers and web pages | Administrator                    | `icono_publication_alias_policy` desired state | Save in `/admin#extension`; Worker publishes KV |
-| First-deploy/offline seed                        | Website source                   | `workers/iconoplasm-publication-aliases.js`    | Normal Website deployment                       |
+| Bootstrap/offline seed                           | Website source                   | `workers/iconoplasm-publication-aliases.js`    | Normal Website deployment                       |
 
 The generated catalog owns broad biological synonym coverage. The curated
 policy is for useful page labels that the published scanner does not already
@@ -22,11 +22,11 @@ The extension consumes both sources and owns neither.
 
 ## Desired state and public projection
 
-Migration `0066_publication_alias_policy.sql` seeds the exact existing 45
-additions and one ownership-scoped removal. D1 stores one current desired row
-plus the newest 100 audit revisions. Every successful save uses
-`expected_revision` compare-and-swap and records the exact desired blocklist
-revision against which it was validated.
+Migration `0066_publication_alias_policy.sql` creates the desired-state table
+and its revision-1 seed. D1 stores one current desired row plus the newest 100
+audit revisions. Every successful save uses `expected_revision`
+compare-and-swap and records the exact desired blocklist revision against which
+it was validated.
 
 Migration `0067_recognition_policy_validation.sql` adds one singleton
 recognition-validation receipt. It records `valid`, `invalid`, or `unvalidated`
@@ -48,14 +48,14 @@ private dependency revisions. One KV value is therefore the cross-region
 consistency boundary: a colo can observe the old bundle or the new bundle, but
 never a mixed alias/blocklist pair. The normal cold read is one current-pointer
 GET and one immutable bundle GET, then a five-second isolate cache. It never
-queries D1 or lists history. A missing pointer uses the bounded legacy discovery
-path; a malformed pointer or unavailable target fails closed.
+queries D1 or lists history. A missing pointer falls back to a bounded list of
+the retained pair keys; a malformed pointer or unavailable target fails closed.
 
 The source alias seed is used only while the pair namespace is genuinely
-empty. During the first deployment, it is combined with the newest retained
-legacy blocklist that has no alias dependency. Once any pair key exists,
-missing, malformed, or corrupt values fail closed (or retain the isolate's
-last-known-good pair); they never reactivate bootstrap state.
+empty. It is then combined with the newest retained blocklist revision that has
+no alias dependency. Once any pair key exists, missing, malformed, or corrupt
+values fail closed (or retain the isolate's last-known-good pair); they never
+reactivate bootstrap state.
 
 The existing public protocol is unchanged:
 
@@ -156,8 +156,6 @@ exists, or make all aliases case-insensitive to hide the mismatch. The regressio
 matrix in `iconoplasm-recognition-validation-index.test.js` compares full and
 incremental validation, then runs accepted policies through the actual extension
 overlay and matcher. It also preserves genuine exact-case collision rejection.
-This correction does not change projection schemas, require a scanner rebuild,
-or require an extension release.
 
 The server enforces all of the following before the D1 CAS:
 
@@ -195,8 +193,7 @@ catalog download.
 4. Confirm that the response is in sync. If it is saved but pending, leave the
    desired policy intact; reconciliation will publish it after its persisted
    dependency becomes visible.
-5. Verify a fresh public catalog manifest and public search/resolution after the
-   Website deployment containing migration 0066 is live.
+5. Verify a fresh public catalog manifest and public search/resolution.
 
 Routine mapping changes require no source edit, catalog publication, extension
 version bump, package build, or store submission. The installed extension

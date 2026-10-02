@@ -21,16 +21,9 @@ not repeat. On later bag cycles, the representative advances inside each family.
 
 ## Why this exists
 
-`gene_surname` was added to stop large gene families such as SLC, OR, ZNF, and
-KRTAP from dominating selection. The original implementation applied the
-two-stage lottery only to practice mode. Daily mode continued hashing across
-the flat protein table, which produced three computed SLC targets in July 2026:
-
-- `SLC22A5` on July 3;
-- `SLC6A8` on July 25;
-- `SLC12A2` on July 26.
-
-All three were automatic picks, not admin overrides.
+`gene_surname` keeps large gene families such as SLC, OR, ZNF, and KRTAP from
+dominating selection. Hashing across the flat protein table instead picks
+members of one large family days apart. Practice mode also picks by surname.
 
 ## Selection contract
 
@@ -69,10 +62,9 @@ balanced candidate sequence.
 
 An annual admin request computes its primary identities from one in-memory
 shuffle-bag plan and bulk-loads only the protein summary projection. It must not
-perform one `SELECT *` per day. The latter exhausted the live 2026-08-04 annual
-request after 340 future identities and returned the remaining 25 as null rows
-under HTTP 200. If any planned summary is unavailable, the entire schedule
-response is HTTP 503 with the missing dates.
+perform one `SELECT *` per day: per-day reads can exhaust the request and come
+back as null rows under HTTP 200. If any planned summary is unavailable, the entire
+schedule response is HTTP 503 with the missing dates.
 
 Automatic availability pins use the same salt and pool fingerprint. Stale pins
 do not survive a picker or pool change. They are lower priority than manual
@@ -83,10 +75,12 @@ Pins live in D1, not KV: they must remain writable after unrelated traffic has
 exhausted Cloudflare's daily KV write allowance.
 
 Successful browser rendering alone is not enough for a future replacement.
-The canonical curated structure is cached in R2, its `pinnedUntil` metadata is
-extended through the play date (including rewriting metadata on an existing
-cached object), and the metadata is read back before reconciliation accepts the
-replacement.
+When the `STRUCTURES_BUCKET` R2 binding is configured, the canonical curated
+structure is cached in R2, its `pinnedUntil` metadata is extended through the
+play date (including rewriting metadata on an existing cached object), and the
+metadata is read back before reconciliation accepts the replacement. The binding
+is commented out in the Wrangler configs; without it, pinning is skipped and the
+replacement needs an upstream structure URL.
 
 Recap images are not date-only schedule state. Their immutable storage identity
 contains the day, selected UniProt ID, and `DISCORD_RECAP_RENDER_CONTRACT`.

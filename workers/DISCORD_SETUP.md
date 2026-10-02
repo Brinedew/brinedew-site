@@ -10,10 +10,6 @@
 - Live server (guild): **`1289484665966563438`** (`brinedew.bio`, invite
   `discord.gg/danZruPf`).
 
-> Historical note: earlier versions of this doc listed guild
-> `1306796644046180372` and a `geneguessr-api.decap.workers.dev` callback. Both
-> are stale. The live callback host is `geneguessr.brinedew.bio`.
-
 ## OAuth2 config
 
 **Redirect URIs:**

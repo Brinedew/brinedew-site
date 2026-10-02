@@ -3,7 +3,8 @@
 How brinedew.bio talks to the Discord server `brinedew.bio` (guild ID
 `1289484665966563438`, invite `discord.gg/danZruPf`). There is no separate bot
 process — everything runs inside the one stateful Cloudflare Worker
-`geneguessr-api`. The public edge worker just proxies to it.
+`geneguessr-api`. The public edge Worker forwards `brinedew.bio/api/*` and
+GeneGuessr `/api/*` and `/admin*` to it through a service binding.
 
 Two features live here:
 
@@ -18,8 +19,8 @@ Two features live here:
 has observed stable molecule pixels and storage returns the exact bytes that were
 uploaded under the immutable day + UniProt + renderer identity. An attachment
 node, a non-empty PNG, object metadata, or a generic 2xx response is not proof of
-a visible protein. The July 2026 path admitted a uniform RGB `17,12,10` canvas;
-the August 3 cutover then reported an unverified Bunny upload as successful.
+a visible protein: a uniform dark canvas and an unverified Bunny upload both
+pass those weaker checks.
 
 Once a day the worker posts yesterday's puzzle result to `#geneguessr`: the gene,
 how many people solved it, the top guesses, and a link to play. When a
@@ -44,30 +45,18 @@ text-only.
 
 ### Where the recap image comes from
 
-History (see Linear B-356):
+The daily post works with the owner's machine powered off: images are pre-rendered
+in the `/admin` panel and stored, never rendered at post time.
 
-- Originally a GitHub Actions Playwright job rendered the structure and posted
-  it. That broke on 2026-02-25 (Actions billing lock).
-- It was cut over to **cloud-only**: pre-render the PNG and store it, so the
-  daily post works with the owner's machine powered off. Live WebGL rendering at
-  post time was tried and **deliberately abandoned** (Mol*/WebGL is unreliable
-  headless).
-- Images were stored in the R2 bucket `STRUCTURES_BUCKET`. **R2 was later
-  disabled on the account** (see `wrangler.*.toml` — buckets commented out),
-  which broke recap posting at stage `load_cached_image` with
-  `STRUCTURES_BUCKET binding is not configured`.
-
-Current design (2026-08-03):
-
-- The recap image now uses the **same Bunny CDN object storage the Iconoplasm
-  portrait pipeline already uses** — no R2 required. Shared helpers live in
+- The recap image uses the **same Bunny CDN object storage as the Iconoplasm
+  portrait pipeline**. Shared helpers live in
   [`workers/lib/discord-recap-images.js`](../workers/lib/discord-recap-images.js):
   `putDiscordRecapImage` / `loadDiscordRecapImageBytes` / `headDiscordRecapImage`.
-  They prefer `STRUCTURES_BUCKET` automatically if
-  R2 is ever rebound, otherwise read/write Bunny.
+  They prefer the `STRUCTURES_BUCKET` R2 binding when it is configured
+  (it is commented out in the Wrangler configs) and otherwise read and write Bunny.
 - Uploading images: the `/admin` panel ("Upload Selected Day Image" /
   "Upload Next 365 Days") posts to `POST /api/admin/discord-recap-image`, which
-  now writes to Bunny. Pre-render the catalog there and the daily cron attaches
+  writes to Bunny. Pre-render the catalog there and the daily cron attaches
   images automatically.
 - **"Upload Next 365 Days" is a resumable reconciliation, not a blind loop.** It
   fails closed unless the authoritative response contains exactly 365
@@ -82,18 +71,16 @@ Current design (2026-08-03):
 - The authoritative schedule endpoint constructs the whole horizon from one
   deterministic in-memory bag plan and bulk-loads minimal protein summaries. It
   returns HTTP 503 rather than HTTP 200 if even one day lacks an identity, and
-  writes no per-day KV cache. This protects the browser preflight from the
-  2026-08-04 failures where per-day D1 reads produced 340 valid future rows plus
-  25 silent nulls and the cache exhausted Cloudflare's daily KV write budget.
+  writes no per-day KV cache: per-day D1 reads can return silent null rows, and a
+  per-day cache spends Cloudflare's daily KV write budget.
 - Stored objects are immutable and keyed by day + authoritative UniProt ID +
   `DISCORD_RECAP_RENDER_CONTRACT`. A schedule override or renderer revision is
-  therefore an automatic cache miss; legacy date-only objects are never read.
+  therefore an automatic cache miss; date-only object keys are never read.
 - The admin renderer samples the actual Mol* canvas until molecule pixels are
   present for three consecutive frames. It retries a fresh viewer once and
   refuses the upload if the molecular viewport remains empty. The fixed
   bottom-left orientation axes are explicitly outside the measured molecule
-  region; axes-only frames were the reason for the `molstar-recap-v3` contract
-  cutover and cannot satisfy v3 coverage.
+  region, so an axes-only frame cannot satisfy coverage.
 - Bulk reconciliation probes the selected structure URL with `HEAD` before
   starting Mol*. A known 4xx/5xx structure failure is retained as a hole
   immediately instead of consuming two viewer load timeouts; ordinary
@@ -104,24 +91,23 @@ Current design (2026-08-03):
   uploads that target-bound image. Manual overrides remain authoritative and
   are never replaced automatically.
 - A successful replacement is accepted only after its curated structure is
-  cached and R2 confirms `pinnedUntil` through the play date. Availability pins
+  pinned through the play date: with the `STRUCTURES_BUCKET` R2 binding
+  configured, R2 must confirm `pinnedUntil`; without it, pinning is skipped and
+  the structure needs an upstream URL. Availability pins
   are selector-salt and pool-fingerprint bound D1 records, and are shared by the
   admin schedule, cards, pre-warm, and request-time paths. D1 ownership is a
   capacity fence: replacement decisions must remain writable after unrelated KV
   traffic reaches Cloudflare's daily write ceiling.
 - Bunny upload success is the documented HTTP `201`, followed by bounded
-  exact-byte read-back from the same authenticated storage identity. Production
-  measurement on 2026-08-04 required longer than 5 seconds, so the shared retry
-  envelope probes for up to 15 seconds. The admin UI must not mark a day covered
-  before that verification succeeds. An authenticated round-trip probe rejected
-  a regional-endpoint mismatch: the configured Falkenstein endpoint returned
-  exact bytes and every other official region returned `401`. Bunny nevertheless
-  acknowledged larger RHOC/PYROXD1 PUTs that never became readable; PYROXD1
-  required the fourth identical PUT. Storage therefore retries the same
-  immutable key and exact bytes up to six times without another browser render.
-- **If no image is uploaded, the recap still posts text-only.** This is the
-  cloud-only fallback B-356 asked for: the daily post can never be blocked by the
-  image pipeline.
+  exact-byte read-back from the same authenticated storage identity. Read-back
+  can take longer than 5 seconds, so the shared retry envelope
+  (`workers/lib/bunny-storage-consistency.js`) probes for up to 15 seconds. The
+  admin UI must not mark a day covered before that verification succeeds. Bunny
+  can acknowledge a PUT whose bytes never become readable, so storage retries
+  the same immutable key and exact bytes up to six times without another
+  browser render.
+- **If no image is uploaded, the recap still posts text-only.** The daily post
+  can never be blocked by the image pipeline.
 - A posted text-only recap is repaired in place using its durable message ID;
   repair never creates a second daily message.
 - Repair first checks the immutable day + UniProt + renderer object and reuses
@@ -134,13 +120,6 @@ Current design (2026-08-03):
   rewrite would add no authority. This is also a capacity fence: an exhausted
   daily KV write allowance must not turn a successful Discord edit into a false
   repair failure.
-
-The first production preflight on 2026-08-04 found 365 scheduled identities
-through 2027-08-03, only 347 unique proteins, and 1 ready object. That historical
-incident is B-702; it is the regression fixture for resumability, bounded
-provider work, and exact final coverage. After the picker and availability-pin
-repairs, the same live horizon resolved to 365 unique UniProt IDs and 365 unique
-normalized surnames with 365/365 exact images.
 
 ### Manual trigger / backfill
 
@@ -201,9 +180,7 @@ Set with `wrangler secret put <NAME> --config wrangler.the-only-allowed-internal
 Plain vars for Bunny storage: `ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL`,
 `ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST`, `ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE`.
 
-> Note: the old `workers/DISCORD_SETUP.md` referenced guild `1306796644046180372`
-> and a `geneguessr-api.decap.workers.dev` callback. The live server is
-> `1289484665966563438` and the OAuth callback is on `geneguessr.brinedew.bio`.
+The OAuth callback is on `geneguessr.brinedew.bio`; see `workers/DISCORD_SETUP.md`.
 
 ---
 
@@ -215,7 +192,7 @@ Since the Boosty bot assigns/removes the "Subscriber" role asynchronously (user 
 
 The re-check uses the stored OAuth access token (7-day lifetime) and is best-effort: if Discord is unreachable, the cached tier is served and the next page load retries. It only fires when `DISCORD_SUPPORTER_ROLE_ID` is configured.
 
-Cost: ~1 Discord API call per 5 minutes per active user. At current scale (28 members, 5 online) this is ~1,440 calls/day. Worst-case with 100 active users, ~28,800 calls/day — well under the 50 req/s global limit.
+Cost: ~1 Discord API call per 5 minutes per active user, so 100 active users make ~28,800 calls/day — well under the 50 req/s global limit.
 
 The frontend's `formatTierLabel()` in `sidebar-shell.js` already renders tiers other than "registered"; it will display "Supporter" for users with that tier.
 
@@ -223,14 +200,8 @@ The frontend's `formatTierLabel()` in `sidebar-shell.js` already renders tiers o
 
 ## Cost and limits
 
-The former table here mixed a June 2026 paid-plan snapshot with changing
-architecture and later account conditions. It is historical incident evidence,
-not planning authority, and has been removed so it cannot be mistaken for a
-current recommendation.
-
 Use current provider telemetry and the actual user action when investigating
-capacity. Historical usage may reveal an unmodeled path, but it may not forecast
-a changed runtime or justify paid capacity.
+capacity.
 
 The configured stateful Worker uses Cloudflare's five cron slots:
 
@@ -241,29 +212,19 @@ The configured stateful Worker uses Cloudflare's five cron slots:
   `workers/iconoplasm-background-schedule.js`, gives each Iconoplasm job its own
   invocation. Comment delivery uses four batches of 20/hour; supervote delivery
   uses five batches of 16/hour. Both retain 80 messages/hour;
-- `56-59 23 * * *`: nightly archive, vote projection, canon repair and gallery,
-  each in a separate invocation.
-| Queues ops | 1M/mo | untouched by Discord features | n/a |
-| Browser Rendering | ~10 hr/mo (paid) | gene-card render: 1 per (gene, canonical version), cached | far under |
-| Bunny CDN | usage-billed | recap = ~1 MB/day storage + ~1 MB/day egress | ~$0.01/GB |
-| Discord API | 50 req/s global; ~5 msg/5s per channel | ~0/day | 4+ orders under |
-
-**Tightest resource: D1 rows written** (proj 25.6% of self-budget; a viral day
-touched 85% of the per-day fair share once).
+- `56,58,59 23 * * *`: nightly archive, canon repair and gallery, each in a
+  separate invocation.
 
 ### What each feature costs per day
 
-- **Comment → #iconoplasm:** +0 D1 writes, +1 Discord POST per new comment
-  (capped 20/user/hr). The gene-card image adds **one Browser Rendering pass per
-  (gene, canonical version)** — gated by comment events and cached in KV
-  thereafter, so a gene that isn't re-voted is rendered once ever. At real
-  comment volumes this is a tiny fraction of the ~10 browser-hours/month
-  allowance. Worst case (render fails) it posts text-only.
-- **Daily recap:** the cron already exists. Per run: ~2 KV reads + ~2 KV writes
-  (posted marker + the `puzzle_actual` write upstream), one set of D1 reads for
-  winners/top-guesses (≤~100k rows once = ≤0.0125% of the daily fair share), and
-  1–2 subrequests (Bunny image GET if present + Discord POST). 0 D1 writes.
+- **Comment → #iconoplasm:** the mirror adds +0 D1 writes and +1 Discord POST
+  per new comment (capped 20/user/hr). The gene-card image adds **one Browser
+  Rendering pass per (gene, canonical version)**, gated by comment events and
+  cached in KV thereafter, so a gene that isn't re-voted is rendered once. If
+  the render fails it posts text-only.
+- **Daily recap:** per run, ~2 KV reads + ~2 KV writes (posted marker + the
+  `puzzle_actual` write upstream), one set of D1 reads for winners/top guesses,
+  and 1–2 subrequests (Bunny image GET if present + Discord POST). 0 D1 writes.
   Text-only mode drops the Bunny GET.
 
-Neither feature moves the needle on the tight resource (D1 writes); both add
-zero D1 writes.
+Neither feature adds D1 writes.

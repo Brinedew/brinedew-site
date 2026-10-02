@@ -2,7 +2,6 @@
 
 This runbook is for operating the current system safely. Product requirements
 live in [ICONOPLASM_PRODUCT_OPERATING_MODEL.md](ICONOPLASM_PRODUCT_OPERATING_MODEL.md).
-Historical incidents belong in Git and closed Linear issues, not here.
 
 ## Operating objective
 
@@ -29,9 +28,9 @@ retention design.
 <!-- ARCHITECTURE FENCE [IPD-007] -->
 
 Anonymous reading is static/CDN-first. Workers Cache is not a quota workaround.
-The stable `/blot/{symbol}.webp` route uses the existing Worker to resolve the
-exact published card after a vote changes the winner. Healthy portrait images
-load directly from Bunny; their canonical first-party `/portraits/*` URLs use
+The stable `/blot/{symbol}.webp` route uses the existing Worker to read the
+gene's stable object, so it follows the winner after a vote. Healthy portrait
+images load directly from Bunny; their canonical first-party `/portraits/*` URLs use
 the existing Worker only for a real byte fallback. The site shell and crawler
 files remain static. Dynamic Worker paths also exist for explicit private
 actions, mutations, and administration.
@@ -59,22 +58,24 @@ belong in code and tests.
 
 The one production workflow is `.github/workflows/deploy-quartz.yml`. A push to
 `main` releases compatible code and static assets: it checks the installed
-revision, runs the exact-commit CI gate, builds, uploads and activates Worker
-versions, then deploys Pages. Worker versions preserve the installed routes,
-Cron triggers, and Queue consumers. The push does not stage a schema transition,
-run D1 migrations, rebuild the publication catalog, or reconcile provider
-topology. It refuses if the changes since the installed revision include a
-migration, Worker binding, route, or named provider policy change, or if an
-active schema transition makes the code release incompatible.
+revision, runs the exact-commit CI gate, builds, applies reviewed online D1
+migrations (`scripts/apply-online-d1-migrations.mjs`, B-847), uploads and
+activates Worker versions (a pending Durable Object migration uses
+`wrangler deploy` instead), reconciles the Bunny pull zone policy, then deploys
+Pages. Worker versions preserve the installed routes, Cron triggers, and Queue
+consumers. `scripts/verify-code-release.mjs` refuses the push with
+`CODE_RELEASE_REQUIRES_MAINTENANCE` when the changes since the installed
+revision include an unapplied migration that is not reviewed as online, or a
+change to `cloudflare/deployment-topology.json` or
+`cloudflare/iconoplasm-crawler-policy.json`. It also refuses while a schema
+transition or reader recovery is active.
 
-For a reviewed data or topology change, dispatch that same workflow with
-`data_maintenance=true`. This is the only path that runs provider capacity
-admission, schema migration, catalog publication, and topology reconciliation.
-It is intentionally explicit because those operations consume the shared
-account allowance and can pause application work. It is not a routine
-code-release fallback. (The separate `reader_recovery_only` dispatch was deleted
-on 2026-09-25, B-820: anonymous pages are static since B-834/B-809, so there is
-nothing left for it to protect.)
+For any other reviewed data or topology change, dispatch that same workflow
+with `data_maintenance=true`. This is the only path that runs provider capacity
+admission, non-online schema migration, catalog preparation, and topology
+reconciliation. It is intentionally explicit because those operations consume
+the shared account allowance and can pause application work. It is not a
+routine code-release fallback.
 
 Record source revision, exact CI result, provider deployment, activated
 revision, and a fresh user-visible operation separately. If a push refuses,
@@ -95,15 +96,15 @@ Exhausted evidence refuses new mutation work. Missing or late telemetry does
 not refuse it: D1 write admission then counts every worst-case receipt since the
 last same-day provider sample (or since midnight, when the meter is exactly
 zero). A telemetry outage never becomes invented capacity, a refunded uncertain
-reservation, or a whole-day stall (B-897, 30 Sep 2026).
+reservation, or a whole-day stall (B-897).
 
 ## Current inspection commands
 
 For explicit data or topology maintenance, dispatch the production workflow
 with `data_maintenance=true`. That workflow refreshes account capacity and
 admits each operation before it runs. Read actual D1 query and row counts from
-the provider when diagnosing exhaustion; the retired synthetic capacity model
-cannot establish current visitor demand or release readiness.
+the provider when diagnosing exhaustion; a synthetic capacity model cannot
+establish current visitor demand or release readiness.
 
 Validate architecture ownership:
 
@@ -152,7 +153,7 @@ published plane. A public request must not:
 - elect canon from D1;
 - trigger publication;
 - create a personal discovery record;
-- rebuild a catalog or shard;
+- rebuild a catalog object;
 - depend on an administrator session.
 
 If published bytes are temporarily unavailable, retain a coherent prior
