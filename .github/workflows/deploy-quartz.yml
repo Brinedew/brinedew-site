@@ -403,7 +403,7 @@ jobs:
             geneguessr-api \
             "iconoplasm.brinedew.bio/*"
 
-      # B-898: the Bunny pull zone's CORS extensions are owned by
+      # B-898: the Bunny pull zone's CORS extensions and edge rules are owned by
       # bunny/the-only-iconoplasm-pull-zone-policy.json and applied through the
       # live Worker, which holds the account key. Never edit the zone by hand.
       - name: Reconcile the Iconoplasm Bunny pull zone policy
