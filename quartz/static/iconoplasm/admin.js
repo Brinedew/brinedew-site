@@ -32,6 +32,10 @@
     overviewAttention: [],
     recentEvents: [],
     visionStats: [],
+    visionStatsPaging: { next: null, prev: null },
+    visionStatsView: {},
+    visionStatsStale: false,
+    visionStatsRequestId: 0,
     visionPreviewMap: {},
     loadingVisionPreviewIds: {},
     blacklistedStyles: [],
@@ -92,7 +96,6 @@
     publicationAliasPublicationRetry: null,
     publicationAliasPublicationRetryTimer: null,
     publicationAliasPublicationRetryRunId: 0,
-    visionPage: 1,
     visionPageSize: defaultVisionPageSize(),
     selectedVisionId: "",
     selectedVisionDetail: null,
@@ -417,7 +420,7 @@
     if (tab === "styles") {
       renderVisionCleanupPanel()
       renderVisionQuickActions()
-      if (state.visionStats.length) renderVisionStats()
+      if (state.visionStats.length && !state.visionStatsStale) renderVisionStats()
       else refreshVisionStats()
       return
     }
@@ -4587,27 +4590,11 @@
 
   async function refreshDerivedAdminViews() {
     await Promise.all([refreshOverviewSummary(), refreshOverviewCoverage()])
-    if (state.visionStats.length) {
-      await refreshVisionStats()
-    }
-  }
-
-  function clampVisionPage(page, totalPages) {
-    var cleaned = Number.parseInt(String(page || "1"), 10) || 1
-    var maxPage = Math.max(1, Number(totalPages || 1))
-    if (cleaned < 1) return 1
-    if (cleaned > maxPage) return maxPage
-    return cleaned
-  }
-
-  function setVisionPage(page) {
-    var pageSize = Math.max(
-      1,
-      Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) ||
-        defaultVisionPageSize(),
-    )
-    var totalPages = Math.max(1, Math.ceil((state.visionStats || []).length / pageSize))
-    state.visionPage = clampVisionPage(page, totalPages)
+    if (!state.visionStats.length) return
+    // A tab nobody is looking at is not read; the scorecard reloads when the
+    // Styles tab is next opened.
+    if (state.activeTab === "styles") await refreshVisionStats({ view: state.visionStatsView })
+    else state.visionStatsStale = true
   }
 
   function updateVisionSortButtons() {
@@ -8448,39 +8435,6 @@
     return Math.max(1, Math.min(boundedLimit, Math.round(imageCount)))
   }
 
-  function sortedVisionRows() {
-    var sortKey = state.visionSort.key
-    var sortDir = state.visionSort.dir === "asc" ? 1 : -1
-    return (state.visionStats || []).slice().sort(function (left, right) {
-      function label(row) {
-        return String(row.artist_name || row.artist_tag || row.vision_id || "")
-      }
-      if (sortKey === "vision") return label(left).localeCompare(label(right)) * sortDir
-      if (sortKey === "images")
-        return (Number(left.image_count || 0) - Number(right.image_count || 0)) * sortDir
-      if (sortKey === "score")
-        return (Number(left.avg_vote || 0) - Number(right.avg_vote || 0)) * sortDir
-      if (sortKey === "rejection")
-        return (Number(left.rejection_rate || 0) - Number(right.rejection_rate || 0)) * sortDir
-      var byLive = (Number(left.live_count || 0) - Number(right.live_count || 0)) * sortDir
-      if (byLive) return byLive
-      return label(left).localeCompare(label(right)) * sortDir
-    })
-  }
-
-  function visibleVisionRows() {
-    var rows = sortedVisionRows()
-    var pageSize = Math.max(
-      1,
-      Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) ||
-        defaultVisionPageSize(),
-    )
-    var totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-    state.visionPage = clampVisionPage(state.visionPage, totalPages)
-    var start = (state.visionPage - 1) * pageSize
-    return rows.slice(start, start + pageSize)
-  }
-
   function findSelectedVisionAsset(detail) {
     var assets = Array.isArray(detail && detail.assets) ? detail.assets : []
     if (!assets.length) return null
@@ -8597,7 +8551,7 @@
   }
 
   function selectRelativeVision(delta) {
-    var rows = visibleVisionRows()
+    var rows = state.visionStats || []
     if (!rows.length) return
     var currentId = String(state.selectedVisionId || "")
     var currentIndex = rows.findIndex(function (row) {
@@ -8628,16 +8582,6 @@
     var vision = detail && detail.vision ? detail.vision : null
     var asset = findSelectedVisionAsset(detail)
     return { vision: vision, asset: asset }
-  }
-
-  function visionRowById(visionId) {
-    var cleanedVisionId = String(visionId || "").trim()
-    if (!cleanedVisionId) return null
-    return (
-      (state.visionStats || []).find(function (row) {
-        return String((row && row.vision_id) || "") === cleanedVisionId
-      }) || null
-    )
   }
 
   function renderVisionQuickActions() {
@@ -8973,6 +8917,15 @@
       : '<article class="list-row"><div><strong>No artist tags are blocklisted yet.</strong><div class="small">Once workstation sync applies a request from /blocklist, the site blocklist entry will show up here.</div></div><div></div></article>'
   }
 
+  // A vision the server returned no examples for (or a failed request) is
+  // settled as having none. Every render asks for the visions it lacks, so
+  // without this each answer would trigger the next request, forever.
+  function settleVisionPreviews(visionIds) {
+    visionIds.forEach(function (visionId) {
+      if (!state.visionPreviewMap[visionId]) state.visionPreviewMap[visionId] = []
+    })
+  }
+
   async function ensureVisibleVisionPreviews(rows) {
     var pageRows = Array.isArray(rows) ? rows : []
     var missingVisionIds = pageRows
@@ -9003,8 +8956,10 @@
         if (!visionId) return
         state.visionPreviewMap[visionId] = Array.isArray(row.assets) ? row.assets : []
       })
+      settleVisionPreviews(missingVisionIds)
     } catch (err) {
       if (isRequestCanceled(err)) return
+      settleVisionPreviews(missingVisionIds)
       setLog({
         error: "Vision preview load failed",
         details: err.response || requestErrorMessage(err, "Preview load failed."),
@@ -9080,44 +9035,55 @@
     }
   }
 
-  function renderVisionStats() {
-    if (state.activeTab !== "styles") return
-    var sortKey = state.visionSort.key
-    var rows = sortedVisionRows()
-    var pageSize = Math.max(
+  var VISION_SORT_LABELS = {
+    "live:desc": "currently canonical, most first",
+    "live:asc": "currently canonical, fewest first",
+    "vision:asc": "vision id, A to Z",
+    "vision:desc": "vision id, Z to A",
+  }
+
+  function visionStatsPageSize() {
+    return Math.max(
       1,
       Number.parseInt(String(state.visionPageSize || defaultVisionPageSize()), 10) ||
         defaultVisionPageSize(),
     )
-    var totalRows = rows.length
-    var totalPages = Math.max(1, Math.ceil(totalRows / pageSize))
-    state.visionPage = clampVisionPage(state.visionPage, totalPages)
-    var start = (state.visionPage - 1) * pageSize
-    var end = Math.min(totalRows, start + pageSize)
-    var pageRows = rows.slice(start, end)
+  }
+
+  function renderVisionStats() {
+    if (state.activeTab !== "styles") return
+    var pageRows = state.visionStats || []
+    var hasPrev = Boolean(state.visionStatsPaging && state.visionStatsPaging.prev)
+    var hasNext = Boolean(state.visionStatsPaging && state.visionStatsPaging.next)
 
     updateVisionSortButtons()
     if (els.visionStatsMeta) {
-      els.visionStatsMeta.innerHTML = totalRows
+      els.visionStatsMeta.innerHTML = pageRows.length
         ? [
-            "<span>showing " + esc(String(start + 1)) + "-" + esc(String(end)) + "</span>",
-            "<span>of " + esc(String(totalRows)) + " visions</span>",
+            "<span>" + esc(String(pageRows.length)) + " visions on this page</span>",
             "<span>sorted by " +
-              esc(String(sortKey)) +
-              " " +
-              esc(String(state.visionSort.dir)) +
+              esc(
+                VISION_SORT_LABELS[state.visionSort.key + ":" + state.visionSort.dir] ||
+                  state.visionSort.key,
+              ) +
               "</span>",
           ].join(" &middot; ")
         : "No vision stats yet."
     }
     if (els.visionPageLabel) {
-      els.visionPageLabel.textContent = "Page " + state.visionPage + " of " + totalPages
+      els.visionPageLabel.textContent = hasPrev
+        ? hasNext
+          ? "Middle of the list"
+          : "Last page"
+        : hasNext
+          ? "First page"
+          : "Only page"
     }
-    if (els.visionPageSize) els.visionPageSize.value = String(pageSize)
-    if (els.visionPageFirst) els.visionPageFirst.disabled = state.visionPage <= 1
-    if (els.visionPagePrev) els.visionPagePrev.disabled = state.visionPage <= 1
-    if (els.visionPageNext) els.visionPageNext.disabled = state.visionPage >= totalPages
-    if (els.visionPageLast) els.visionPageLast.disabled = state.visionPage >= totalPages
+    if (els.visionPageSize) els.visionPageSize.value = String(visionStatsPageSize())
+    if (els.visionPageFirst) els.visionPageFirst.disabled = !hasPrev
+    if (els.visionPagePrev) els.visionPagePrev.disabled = !hasPrev
+    if (els.visionPageNext) els.visionPageNext.disabled = !hasNext
+    if (els.visionPageLast) els.visionPageLast.disabled = !hasNext
 
     els.visionStatsList.innerHTML = pageRows.length
       ? pageRows
@@ -9164,32 +9130,83 @@
     renderStylesNotesList()
   }
 
-  async function refreshVisionStats() {
+  // One page of the scorecard, read server-side through an index: it costs its
+  // own rows, at any depth. `view` is {} for the first page, {after: cursor} or
+  // {before: cursor} for a neighbour, {fromEnd: true} for the last page. A view
+  // without a cursor also brings the blocklist; a page flip does not.
+  async function loadVisionStatsPage(view) {
+    var requestId = ++state.visionStatsRequestId
+    state.visionStatsView = view || {}
+    if (els.visionStatsList) {
+      els.visionStatsList.innerHTML = tableFailureMarkup(
+        "Loading vision scorecard…",
+        "Waiting for the admin read-model endpoints to answer.",
+        8,
+      )
+    }
+    var query = [
+      "sort=" + encodeURIComponent(state.visionSort.key),
+      "dir=" + encodeURIComponent(state.visionSort.dir),
+      "limit=" + visionStatsPageSize(),
+    ]
+    if (view && view.after) query.push("after=" + encodeURIComponent(view.after))
+    else if (view && view.before) query.push("before=" + encodeURIComponent(view.before))
+    else if (view && view.fromEnd) query.push("from=end")
+    var data
     try {
+      data = await apiJson("/votes/vision-stats?" + query.join("&"), { method: "GET" })
+    } catch (err) {
+      // A slower, older request must not paint its failure over a newer page.
+      if (requestId !== state.visionStatsRequestId) return false
+      throw err
+    }
+    if (requestId !== state.visionStatsRequestId) return false
+    state.visionStats = Array.isArray(data && data.rows) ? data.rows : []
+    state.visionStatsPaging = {
+      next: (data && data.next_cursor) || null,
+      prev: (data && data.prev_cursor) || null,
+    }
+    if (data && Array.isArray(data.blacklisted)) state.blacklistedStyles = data.blacklisted
+    state.visionStatsStale = false
+    renderVisionStats()
+    return true
+  }
+
+  function flipVisionStats(view) {
+    loadVisionStatsPage(view).catch(function (err) {
+      if (isRequestCanceled(err)) return
+      var message = requestErrorMessage(err, "Vision stats failed.")
       if (els.visionStatsList) {
         els.visionStatsList.innerHTML = tableFailureMarkup(
-          "Loading vision scorecard…",
-          "Waiting for the admin read-model endpoints to answer.",
+          "Vision scorecard failed fast",
+          message,
           8,
         )
       }
-      var results = await Promise.all([
-        apiJson("/votes/vision-stats?scope=all", { method: "GET" }),
-        apiJson("/artist-blacklist-submissions/pending?limit=100", { method: "GET" }),
-      ])
-      var data = results[0] || {}
-      var pendingData = results[1] || {}
-      state.visionStats = Array.isArray(data.rows) ? data.rows : []
+      if (els.visionStatsMeta) {
+        els.visionStatsMeta.innerHTML = '<span class="text-danger">Vision stats unavailable.</span>'
+      }
+      setLog({ error: "Vision stats failed", details: err.response || message })
+    })
+  }
+
+  // A fresh look at the Styles tab: one page, the blocklist and the artist-tag queue.
+  async function refreshVisionStats(options) {
+    try {
       state.visionPreviewMap = {}
       state.visionDetailCache = {}
       state.preloadedImageUrls = {}
       state.loadingVisionPreviewIds = {}
-      state.blacklistedStyles = Array.isArray(data.blacklisted) ? data.blacklisted : []
+      var results = await Promise.all([
+        loadVisionStatsPage((options && options.view) || {}),
+        apiJson("/artist-blacklist-submissions/pending?limit=100", { method: "GET" }),
+      ])
+      if (!results[0]) return
+      var pendingData = results[1] || {}
       state.pendingBlacklistSubmissions = Array.isArray(pendingData.requests)
         ? pendingData.requests
         : []
-      state.visionPage = 1
-      renderVisionStats()
+      renderStylesPendingList()
     } catch (err) {
       if (isRequestCanceled(err)) return
       var message = requestErrorMessage(err, "Vision stats failed.")
@@ -10338,40 +10355,27 @@
         } else {
           state.visionSort = { key: key, dir: key === "vision" ? "asc" : "desc" }
         }
-        state.visionPage = 1
-        renderVisionStats()
+        flipVisionStats({})
         return
       }
 
       if (ev.target.closest("#vision-page-first")) {
-        setVisionPage(1)
-        renderVisionStats()
+        flipVisionStats({})
         return
       }
 
       if (ev.target.closest("#vision-page-prev")) {
-        setVisionPage(state.visionPage - 1)
-        renderVisionStats()
+        if (state.visionStatsPaging.prev) flipVisionStats({ before: state.visionStatsPaging.prev })
         return
       }
 
       if (ev.target.closest("#vision-page-next")) {
-        setVisionPage(state.visionPage + 1)
-        renderVisionStats()
+        if (state.visionStatsPaging.next) flipVisionStats({ after: state.visionStatsPaging.next })
         return
       }
 
       if (ev.target.closest("#vision-page-last")) {
-        setVisionPage(
-          Math.max(
-            1,
-            Math.ceil(
-              (state.visionStats || []).length /
-                Math.max(1, state.visionPageSize || defaultVisionPageSize()),
-            ),
-          ),
-        )
-        renderVisionStats()
+        flipVisionStats({ fromEnd: true })
         return
       }
 
@@ -10627,8 +10631,7 @@
           Number.parseInt(String(els.visionPageSize.value || defaultVisionPageSize()), 10) ||
             defaultVisionPageSize(),
         )
-        state.visionPage = 1
-        renderVisionStats()
+        flipVisionStats({})
       })
     }
     if (els.activityFilter) {
