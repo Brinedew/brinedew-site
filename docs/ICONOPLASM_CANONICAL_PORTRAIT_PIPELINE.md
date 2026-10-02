@@ -124,8 +124,9 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
 4. After the response (`ctx.waitUntil`) the gene's stable object is
    republished with no selection, so its shared counts stay current. The object
    carries the `vote_version` its publisher read before materializing; the
-   publisher reads the version again after its write and, if a vote landed in
-   between, republishes once more. A failed publish never fails the vote.
+   publisher reads the version again after each write and, if a vote landed in
+   between, materializes and writes again from the fresh rows, at most three
+   passes. A failed publish never fails the vote.
 
 **Daily vote budget.** Reader votes, the votes a reader's image edit or
 generated candidate brings with it, and caretaker supervotes share one
@@ -140,6 +141,12 @@ asset nobody voted on writes 21 D1 rows, a first vote on a voted asset 17, a
 flip 15, a supervote 13; a winner change adds 18. A full day at the cap is at
 most 39,900 rows, 40% of the free 100,000.
 
+Publishing an image edit imports the edit's inherited upvotes and the
+publisher's own vote in one import. The edit inherits 90% of its source's
+upvotes, at most 25 (`IMAGE_EDIT_INHERITED_UPVOTE_LIMIT`), however many the
+source holds, so one click spends at most 26 units and writes 396 rows (1.5% of
+the day's 1,750 units, 0.4% of the free rows).
+
 A caretaker supervote (`/api/iconoplasm/caretaker/genes/:symbol/supervote`)
 is the same shape over the caretaker projection tables: compare-and-set on the
 assignment and supervote versions, a receipt per command id, weight exactly 10
@@ -149,12 +156,28 @@ function after advancing the gene's vote version. A vote import elects every
 gene it names, so re-running one repairs a gene whose election failed. An
 election reads about 2 rows per eligible candidate, a snapshot about 9.
 
+The administrator's import route (`/api/iconoplasm/admin/votes/import`) is one
+Worker invocation, and the free plan allows 50 D1 queries per invocation. An
+import makes two queries per chunk of 50 votes and two per gene it names, so
+the route takes at most 12 genes and 200 votes per request (32 queries at the
+bounds, `VOTE_IMPORT_MAX_GENES` and `VOTE_IMPORT_MAX_ITEMS` in `vote-guards.js`)
+and refuses a larger one with a 400 that names the limits, before writing
+anything. When any named gene's election fails it answers 502 with the
+`failed_symbols` (the votes are committed); running the same import again
+elects every named gene afresh. Callers split their imports by the same
+bounds: `scripts/export-iconoplasm-votes-to-d1.mjs --replay-since` writes
+`replay_requests`, each a body the route accepts, and the workstation's vote
+baseline import sends requests of the same size.
+
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
 
 The print-copy fingerprint leaves out vote counts and the stable object's
 envelope (candidate pool, `published_at`, `vote_version`), so a vote that only
-moves counts never queues a browser render; a winner change still does.
+moves counts never queues a browser render; a winner change still does. The
+publisher fingerprints the object as storage holds it
+(`publishedObjectAsRead`), which is what the queue consumer reads back through
+the card route.
 
 The `IconoplasmVoteCoordinator` Durable Objects hold a historical copy only.
 `POST /api/iconoplasm/admin/votes/compare-coordinators` (driven by

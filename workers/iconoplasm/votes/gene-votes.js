@@ -522,7 +522,8 @@ export async function setGeneVote(db, raw = {}) {
 }
 
 // Fifty votes per D1 round trip: two set-based reads and at most five
-// statements per vote, so a 500-vote import is twenty D1 calls.
+// statements per vote, so a 200-vote import (the most the import route takes,
+// VOTE_IMPORT_MAX_ITEMS) is eight D1 calls.
 export const GENE_VOTE_IMPORT_CHUNK = 50
 
 /**

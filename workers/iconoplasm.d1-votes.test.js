@@ -41,6 +41,20 @@
 //     election reads, so every gene not yet rebuilt elects from zero votes.
 // 17. A leftover vote-projection Queue message throws, retries, reaches the
 //     dead-letter queue or reports a failure to the sync governor.
+// 18. A vote import names more genes, or carries more votes, than one Worker
+//     invocation can handle on the free plan's 50 D1 queries: it is accepted,
+//     writes some votes and dies before electing every gene, instead of being
+//     refused up front (400, naming the limit) with nothing written. The
+//     largest import the limits allow makes more than 40 D1 queries.
+// 19. An election fails inside an import and the route still answers 200, so a
+//     caller that reads only `upserted` believes the import finished; or a
+//     re-run does not repair the gene whose election failed.
+// 20. An image edit's publish imports (and spends budget on) more than the
+//     inherited-upvote limit plus the publisher's own vote, however many
+//     upvotes its source holds or its stored job row claims.
+// 21. The publisher's print-copy fingerprint is not the fingerprint of what
+//     the queue consumer reads back from storage, so the consumer finds its
+//     own card superseded and the gene never materializes (or renders twice).
 import assert from "node:assert/strict"
 import { readdirSync, readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
@@ -70,10 +84,19 @@ import {
   setCaretakerSupervoteInD1,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
 import {
+  IMAGE_EDIT_INHERITED_UPVOTE_LIMIT,
   VOTE_DAILY_BUDGET_EXHAUSTED,
   VOTE_DAILY_BUDGET_MESSAGE,
   VOTE_DAILY_LIMIT,
+  VOTE_IMPORT_MAX_GENES,
+  VOTE_IMPORT_MAX_ITEMS,
 } from "./iconoplasm/votes/vote-guards.js"
+import {
+  ICONOPLASM_GENE_CARD_QUEUE_KIND,
+  enrollIconoplasmGeneCardMaterialization,
+  iconoplasmGeneCardFingerprint,
+  readIconoplasmGeneCardMaterialization,
+} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
@@ -103,6 +126,10 @@ class SqliteD1 {
     }
     this.log = []
     this.batches = 0
+    // Every round trip to D1 the Worker makes: one per first/all/run/raw call
+    // and one per batch(), however many statements the batch carries. The free
+    // plan allows 50 of them per invocation.
+    this.calls = 0
     this.failOn = null
   }
   prepare(sql) {
@@ -116,7 +143,8 @@ class SqliteD1 {
       },
       execute(mode) {
         db.log.push({ sql: statement.sql, args: statement.args })
-        if (db.failOn && db.failOn.test(statement.sql)) throw new Error("injected D1 failure")
+        if (db.failOn && db.failOn.test(statement.sql, statement.args))
+          throw new Error("injected D1 failure")
         const prepared = db.sqlite.prepare(statement.sql)
         if (mode === "run") {
           const info = prepared.run(...statement.args)
@@ -126,16 +154,20 @@ class SqliteD1 {
         return { success: true, results: rows, meta: { changes: 0, rows_read: rows.length } }
       },
       async first(column) {
+        db.calls += 1
         const row = statement.execute("all").results[0] ?? null
         return row && column ? (row[column] ?? null) : row
       },
       async all() {
+        db.calls += 1
         return statement.execute("all")
       },
       async run() {
+        db.calls += 1
         return statement.execute("run")
       },
       async raw() {
+        db.calls += 1
         return statement.execute("all").results.map((row) => Object.values(row))
       },
     }
@@ -143,6 +175,7 @@ class SqliteD1 {
   }
   async batch(statements) {
     this.batches += 1
+    this.calls += 1
     this.sqlite.exec("BEGIN")
     try {
       const results = statements.map((statement) =>
@@ -1121,6 +1154,89 @@ test("11: a vote that lands while its gene's object is written is republished on
   assert.equal(result.vote_version, 3)
 })
 
+test("11: the republish rechecks after every write, at most three passes", async () => {
+  const db = new SqliteD1()
+  seedAsset(db, "TP53", sha("a"))
+  const env = { ICONOPLASM_DB: db }
+  const source = {
+    async materialize(symbols) {
+      const row = db.rows(
+        "SELECT upvotes FROM icono_vote_asset_summary WHERE gene_symbol = 'TP53' AND asset_sha256 = ?",
+        sha("a"),
+      )[0]
+      return symbols.map((symbol) => ({
+        symbol,
+        payload: { symbol, upvotes: Number(row?.upvotes || 0), portrait_candidates: [] },
+      }))
+    },
+    complete: () => true,
+    stable: (card) => card,
+    project: (payload) => payload,
+  }
+  // Each queued interleave is one vote that commits while the publisher's PUT
+  // is in flight and finishes its own republish first, so the publisher's
+  // older object then lands on top of it. Nested publishes never trigger the
+  // next interleave.
+  const interleaves = []
+  const written = []
+  let nested = false
+  let ownWrites = 0
+  const objects = {
+    async writeStable(key, value) {
+      if (!nested) {
+        ownWrites += 1
+        const run = interleaves.shift()
+        if (run) {
+          nested = true
+          try {
+            await run()
+          } finally {
+            nested = false
+          }
+        }
+      }
+      written.push([value.upvotes, value.vote_version])
+      return { key, hash: "e".repeat(64), size: 1, purged: true }
+    },
+  }
+  const landVote = (userId) => async () => {
+    await vote(db, "TP53", sha("a"), userId, 1)
+    await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  }
+
+  // Two votes land in two different PUT windows: the second one is only seen
+  // by the pass that the first one's recheck started, so that pass must
+  // recheck as well.
+  await vote(db, "TP53", sha("a"), "u1", 1)
+  await vote(db, "TP53", sha("a"), "u2", 1)
+  interleaves.push(landVote("u3"), landVote("u4"))
+  const result = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  assert.deepEqual(
+    written,
+    [
+      [3, 3],
+      [2, 2],
+      [4, 4],
+      [3, 3],
+      [4, 4],
+    ],
+    "u3's object, the stale pass-1 object on top, u4's object, the stale pass-2 object on top, then the pass-3 object from fresh rows",
+  )
+  assert.equal(ownWrites, 3)
+  assert.equal(result.republished_after_vote, true)
+  assert.equal(result.vote_version, 4)
+  assert.deepEqual(written.at(-1), [4, 4], "the last object written holds every vote")
+
+  // A vote lands in every window: the publisher stops after three passes and
+  // leaves the newest vote to its own republish.
+  written.length = 0
+  ownWrites = 0
+  for (const userId of ["u5", "u6", "u7", "u8", "u9"]) interleaves.push(landVote(userId))
+  const stormy = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  assert.equal(ownWrites, 3, "three passes, never a fourth")
+  assert.equal(stormy.republished_after_vote, true)
+})
+
 // --- 12 -----------------------------------------------------------------
 
 const BUDGETED_TABLES = [
@@ -1382,4 +1498,326 @@ test("17: leftover vote-projection Queue messages are acknowledged and dropped",
   assert.deepEqual(retried, [])
   assert.equal(result.ok, true)
   assert.equal(result.dropped, 2)
+})
+
+// --- 18 -----------------------------------------------------------------
+
+function seedPromotableGene(db, symbol) {
+  seedAsset(db, symbol, sha("a"), { createdAt: "2026-01-02 00:00:00" })
+  seedAsset(db, symbol, sha("b"), { createdAt: "2026-01-01 00:00:00" })
+  seedPublished(db, symbol, sha("a"))
+}
+
+// `count` upvotes for asset b spread over `genes` genes, each from its own
+// voter: every gene's winner moves to b, the most an election can cost.
+function importItems(genes, count) {
+  return Array.from({ length: count }, (_, index) => ({
+    symbol: `GENE${(index % genes) + 1}`,
+    asset_sha256: sha("b"),
+    user_id: `voter-${index}`,
+    vote_value: 1,
+  }))
+}
+
+const importRoute = (db, items) =>
+  callApi(db, "/api/iconoplasm/admin/votes/import", { items }, { env: { admin: true } })
+
+test("18: an import past the free plan's D1 query limit is refused up front; the largest one allowed stays under 40 queries", async (t) => {
+  const db = new SqliteD1()
+  for (let gene = 1; gene <= VOTE_IMPORT_MAX_GENES + 1; gene += 1)
+    seedPromotableGene(db, `GENE${gene}`)
+  const before = budgetedRows(db)
+
+  db.calls = 0
+  const tooManyGenes = await importRoute(
+    db,
+    importItems(VOTE_IMPORT_MAX_GENES + 1, VOTE_IMPORT_MAX_GENES + 1),
+  )
+  assert.equal(tooManyGenes.status, 400)
+  assert.match(
+    tooManyGenes.payload.error,
+    new RegExp(`at most ${VOTE_IMPORT_MAX_GENES} genes and ${VOTE_IMPORT_MAX_ITEMS} votes`),
+  )
+  const tooManyVotes = await importRoute(db, importItems(1, VOTE_IMPORT_MAX_ITEMS + 1))
+  assert.equal(tooManyVotes.status, 400)
+  assert.match(tooManyVotes.payload.error, new RegExp(`${VOTE_IMPORT_MAX_ITEMS} votes`))
+  assert.equal(db.calls, 0, "refused before a single D1 call")
+  assert.equal(budgetedRows(db), before, "refused before anything was written")
+
+  // The largest import the limits allow: every vote count and every gene at
+  // its bound, every election moving its winner.
+  const largest = await importRoute(db, importItems(VOTE_IMPORT_MAX_GENES, VOTE_IMPORT_MAX_ITEMS))
+  assert.equal(largest.status, 200, JSON.stringify(largest.payload))
+  assert.equal(largest.payload.upserted, VOTE_IMPORT_MAX_ITEMS)
+  assert.equal(largest.payload.elected, VOTE_IMPORT_MAX_GENES)
+  assert.equal(largest.payload.elections_failed, 0)
+  assert.equal(largest.payload.auto_promoted, VOTE_IMPORT_MAX_GENES)
+  // Two D1 calls per chunk of votes (a read batch, a write batch) and two per
+  // gene (the election read, the projection); the Worker makes no others.
+  const expected =
+    2 * Math.ceil(VOTE_IMPORT_MAX_ITEMS / GENE_VOTE_IMPORT_CHUNK) + 2 * VOTE_IMPORT_MAX_GENES
+  t.diagnostic(
+    `largest import: ${db.calls} D1 calls for ${VOTE_IMPORT_MAX_ITEMS} votes over ${VOTE_IMPORT_MAX_GENES} genes`,
+  )
+  assert.equal(db.calls, expected)
+  assert.ok(db.calls <= 40, `${db.calls} D1 calls`)
+})
+
+// --- 19 -----------------------------------------------------------------
+
+test("19: an import whose election fails answers non-2xx with the failed symbols, and re-running it repairs them", async () => {
+  const db = new SqliteD1()
+  seedPromotableGene(db, "TP53")
+  seedPromotableGene(db, "KRAS")
+  const items = ["TP53", "KRAS"].map((symbol) => ({
+    symbol,
+    asset_sha256: sha("b"),
+    user_id: "u1",
+    vote_value: 1,
+  }))
+  // KRAS's election read fails; the vote writes and TP53's election do not.
+  db.failOn = {
+    test: (sql, args) => /icono_caretaker_supervote_projection/.test(sql) && args[0] === "KRAS",
+  }
+  const failed = await importRoute(db, items)
+  assert.equal(failed.status, 502, JSON.stringify(failed.payload))
+  assert.equal(failed.payload.ok, false)
+  assert.equal(failed.payload.code, "VOTE_IMPORT_ELECTION_FAILED")
+  assert.deepEqual(failed.payload.failed_symbols, ["KRAS"])
+  assert.match(failed.payload.error, /KRAS/)
+  assert.match(failed.payload.error, /run the import again/i)
+  assert.equal(failed.payload.upserted, 2, "the votes themselves committed")
+  assert.equal(current(db, "TP53"), sha("b"), "the other gene was elected")
+  assert.equal(current(db, "KRAS"), sha("a"), "the failed gene was not")
+
+  db.failOn = null
+  const retry = await importRoute(db, items)
+  assert.equal(retry.status, 200, JSON.stringify(retry.payload))
+  assert.equal(retry.payload.elections_failed, 0)
+  assert.equal(retry.payload.elected, 2)
+  assert.equal(current(db, "KRAS"), sha("b"), "re-running the same import repaired it")
+  assert.equal(
+    db.rows("SELECT COUNT(*) AS n FROM icono_vote_events WHERE user_id = 'u1'")[0].n,
+    2,
+    "the identical re-import wrote no vote",
+  )
+})
+
+// --- 20 -----------------------------------------------------------------
+
+function seedImageEditJob(db, { id, symbol, source, result, inherited }) {
+  db.exec(
+    `INSERT INTO icono_image_edit_jobs (
+       id, user_id, provider_id, source_gene_symbol, source_asset_sha256,
+       status, result_asset_sha256, result_r2_key_full, result_r2_key_medium,
+       result_r2_key_thumb, result_mime, inherited_upvotes
+     ) VALUES (?, 'reader-1', 'openai', ?, ?, 'succeeded', ?, 'f', 'm', 't', 'image/webp', ?)`,
+    id,
+    symbol,
+    source,
+    result,
+    inherited,
+  )
+}
+
+async function publishImageEdit(db, id) {
+  const ctx = waitUntilRecorder()
+  const response = await handleApi(
+    new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${id}/publish`, {
+      method: "POST",
+      headers: { Cookie: "session=s1" },
+    }),
+    withTestMutationAuthority({
+      ICONOPLASM_DB: db,
+      GAME_SESSIONS: sessions({ user_id: "reader-1" }),
+    }),
+    ctx,
+  )
+  const payload = await response.json()
+  await Promise.all(ctx.promises)
+  return { status: response.status, payload }
+}
+
+test("20: an image edit's publish imports at most 25 inherited votes and the publisher's own, and spends exactly that many budget units", async () => {
+  assert.equal(IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, 25)
+  const db = new SqliteD1()
+  seedAsset(db, "A1BG", sha("a"))
+  seedPublished(db, "A1BG", sha("a"))
+  // The source holds 1,000 upvotes. A job row stored with 900 inherited votes
+  // (90% of them) must still import only the limit.
+  db.exec(
+    `INSERT INTO icono_vote_asset_summary (gene_symbol, asset_sha256, candidate_ref, upvotes, score, vote_count)
+     VALUES ('A1BG', ?, ?, 1000, 1000, 1000)`,
+    sha("a"),
+    `a:A1BG|${sha("a")}`,
+  )
+  seedImageEditJob(db, {
+    id: "job-big",
+    symbol: "A1BG",
+    source: sha("a"),
+    result: sha("c"),
+    inherited: 900,
+  })
+
+  const published = await publishImageEdit(db, "job-big")
+  assert.equal(published.status, 200, JSON.stringify(published.payload))
+  assert.equal(published.payload.vote_inheritance.inherited_upvotes, 25)
+  assert.equal(published.payload.vote_inheritance.imported_votes, 26)
+  assert.equal(published.payload.job.inherited_upvotes, 25, "the job reports what it imported")
+  assert.equal(
+    db.rows(
+      "SELECT COUNT(*) AS n FROM icono_image_votes WHERE gene_symbol = 'A1BG' AND asset_sha256 = ?",
+      sha("c"),
+    )[0].n,
+    26,
+    "25 inherited votes plus the publisher's own",
+  )
+  assert.equal(
+    db.rows(
+      "SELECT COUNT(*) AS n FROM icono_image_votes WHERE gene_symbol = 'A1BG' AND asset_sha256 = ? AND user_id = 'reader-1'",
+      sha("c"),
+    )[0].n,
+    1,
+  )
+  assert.equal(db.rows("SELECT votes FROM icono_vote_daily_budget")[0].votes, 26)
+  assert.equal(summary(db, "A1BG", sha("c")).upvotes, 26)
+
+  // A smaller source inherits its 90% in full: 10 upvotes, 9 inherited votes.
+  seedAsset(db, "B1BG", sha("d"))
+  seedPublished(db, "B1BG", sha("d"))
+  seedImageEditJob(db, {
+    id: "job-small",
+    symbol: "B1BG",
+    source: sha("d"),
+    result: sha("e"),
+    inherited: 9,
+  })
+  const small = await publishImageEdit(db, "job-small")
+  assert.equal(small.status, 200, JSON.stringify(small.payload))
+  assert.equal(small.payload.vote_inheritance.inherited_upvotes, 9)
+  assert.equal(small.payload.vote_inheritance.imported_votes, 10)
+  assert.equal(db.rows("SELECT votes FROM icono_vote_daily_budget")[0].votes, 36)
+})
+
+// --- 21 -----------------------------------------------------------------
+
+test("21: the publisher fingerprints what the print-copy queue consumer reads back", async (t) => {
+  const db = new SqliteD1()
+  const stored = new Map()
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  // An in-memory Bunny Storage zone: the publisher's PUT and read-back, the
+  // consumer's read through the card route.
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    const method = String(init.method || "GET").toUpperCase()
+    if (!url.startsWith("https://storage.test/zone/"))
+      throw new Error(`unexpected ${method} ${url}`)
+    if (method === "PUT") {
+      stored.set(url, new Uint8Array(init.body))
+      return new Response(null, { status: 201 })
+    }
+    const bytes = stored.get(url)
+    if (!bytes) return new Response(null, { status: 404 })
+    return new Response(method === "HEAD" ? null : bytes, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+  const env = {
+    ICONOPLASM_DB: db,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-key",
+    ICONOPLASM_PORTRAITS: { head: async () => ({ size: 1 }) },
+  }
+  let upvotes = 1
+  const source = {
+    async materialize(symbols) {
+      return symbols.map((symbol) => ({
+        symbol,
+        payload: {
+          symbol,
+          full_name: "tumor protein p53",
+          color: "#336699",
+          image_upvotes: upvotes,
+          // The stored JSON holds this key as null; a JSON.stringify round
+          // trip would drop it.
+          note: undefined,
+          portrait: {
+            status: "published",
+            asset_sha256: sha("a"),
+            medium_url: "https://cdn.test/a/medium.webp",
+            hero_url: "https://cdn.test/a/full.webp",
+            thumb_url: "https://cdn.test/a/thumb.webp",
+          },
+          portrait_candidates: [{ asset_sha256: sha("a"), image_upvotes: upvotes }],
+        },
+      }))
+    },
+    complete: () => true,
+    stable: (card) => card,
+    project: (payload) => payload,
+  }
+
+  db.exec(
+    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
+  )
+  await enrollIconoplasmGeneCardMaterialization(env, {
+    symbol: "TP53",
+    cardFingerprint: "0".repeat(32),
+    assetSha256: sha("a"),
+  })
+  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  const queued = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(queued.state, "queued")
+  assert.notEqual(queued.desired_card_fingerprint, "0".repeat(32))
+
+  // The consumer: claim, read the card back through the card route, compare.
+  const acked = []
+  const outcome = await handleIconoplasmQueue(
+    {
+      queue: "iconoplasm-gene-card-materialization",
+      messages: [
+        {
+          body: { kind: ICONOPLASM_GENE_CARD_QUEUE_KIND, symbol: "TP53" },
+          ack: () => acked.push("TP53"),
+          retry: () => acked.push("retry"),
+        },
+      ],
+    },
+    env,
+    waitUntilRecorder(),
+  )
+  assert.deepEqual(acked, ["TP53"])
+  assert.equal(outcome.results[0].superseded, undefined, JSON.stringify(outcome.results[0]))
+  assert.equal(outcome.results[0].ok, true, JSON.stringify(outcome.results[0]))
+  const ready = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(ready.state, "ready")
+  assert.equal(ready.ready_card_fingerprint, queued.desired_card_fingerprint)
+
+  // The same object read back and fingerprinted independently agrees. A
+  // JSON.stringify round trip of the in-memory object would not: it drops the
+  // undefined key that storage holds as null, which is why the publisher
+  // fingerprints the object through the store's own serialization.
+  const readBack = JSON.parse(
+    new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
+  )
+  assert.equal(iconoplasmGeneCardFingerprint(readBack), queued.desired_card_fingerprint)
+  const [{ payload: inMemory }] = await source.materialize(["TP53"])
+  assert.equal(iconoplasmGeneCardFingerprint(inMemory), queued.desired_card_fingerprint)
+  assert.notEqual(
+    iconoplasmGeneCardFingerprint(JSON.parse(JSON.stringify(inMemory))),
+    queued.desired_card_fingerprint,
+  )
+
+  // A vote that only moves counts republishes the object and queues nothing.
+  upvotes = 7
+  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  const after = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(after.state, "ready")
+  assert.equal(after.desired_card_fingerprint, queued.desired_card_fingerprint)
+  assert.equal(after.wakeup_generation, ready.wakeup_generation)
 })

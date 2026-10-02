@@ -81,6 +81,7 @@ import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   createPublishedCardObjectStore,
+  publishedObjectAsRead,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
@@ -147,7 +148,13 @@ import {
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
-import { VOTE_DAILY_BUDGET_EXHAUSTED, readGeneVoteVersion } from "./iconoplasm/votes/vote-guards.js"
+import {
+  VOTE_DAILY_BUDGET_EXHAUSTED,
+  capImageEditInheritedUpvotes,
+  imageEditInheritedUpvotes,
+  readGeneVoteVersion,
+  voteImportBoundsError,
+} from "./iconoplasm/votes/vote-guards.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
@@ -6518,7 +6525,7 @@ function mapImageEditJobRow(row, baseUrl = "") {
       downvotes: Math.max(0, Number(row?.source_downvotes || 0) || 0),
       score: Number(row?.source_score || 0) || 0,
     },
-    inherited_upvotes: Math.max(0, Number(row?.inherited_upvotes || 0) || 0),
+    inherited_upvotes: capImageEditInheritedUpvotes(row?.inherited_upvotes),
     adjustments: (() => {
       try {
         const parsed = JSON.parse(String(row?.adjustments_json || "[]"))
@@ -8341,7 +8348,7 @@ function imageEditInheritedVoteItems(job, userId) {
   const symbol = normalizeSymbol(job?.source_gene_symbol || "")
   const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
   if (!symbol || !assetSha) return []
-  const inherited = Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0))
+  const inherited = capImageEditInheritedUpvotes(job?.inherited_upvotes)
   const visionId = sanitizeVoteVisionId(`image-edit:${job.id}`)
   const items = []
   for (let index = 0; index < inherited; index += 1) {
@@ -8379,7 +8386,7 @@ async function applyImageEditInheritedVotes(env, ctx, job, userId) {
   if (imported.invalid) return { ok: false, error: "Inherited votes were refused" }
   return {
     ok: true,
-    inherited_upvotes: Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0)),
+    inherited_upvotes: items.length - 1,
     imported_votes: items.length,
     user_upvote: true,
   }
@@ -17377,13 +17384,16 @@ async function setIconoplasmVote(
   return { ...vote, snapshot: entry?.snapshot || null }
 }
 
-// Many votes at once (the workstation's baseline import, an image edit's
+// Many votes at once (the administrator's import route, an image edit's
 // inherited upvotes, a generated candidate's first upvote). Every gene the
 // request names is elected, also when its votes did not change, so re-running
 // an import repairs a gene whose election failed or was refused the first
-// time. `republish` also rewrites, after the response, the stable object of
-// every gene whose votes or winner changed; callers enable it only for one
-// gene. `admit: false` only for the administrator's import route.
+// time; `failed_symbols` lists the genes whose election failed. The route
+// bounds the genes and votes of one request (voteImportBoundsError); the
+// reader callers import one gene. `republish` also rewrites, after the
+// response, the stable object of every gene whose votes or winner changed;
+// callers enable it only for one gene. `admit: false` only for the
+// administrator's import route.
 async function importIconoplasmVotes(
   env,
   ctx,
@@ -17396,10 +17406,10 @@ async function importIconoplasmVotes(
   })
   const changed = new Set(imported.changed_symbols)
   let promoted = 0
-  let electionsFailed = 0
+  const failedSymbols = []
   for (const symbol of imported.symbols) {
     const projection = await electGeneAfterVote(env, symbol, { reason })
-    if (!projection) electionsFailed += 1
+    if (!projection) failedSymbols.push(symbol)
     if (projection?.changed) promoted += 1
     if (republish && (changed.has(symbol) || projection?.changed))
       republishGeneAfterResponse(env, ctx, symbol)
@@ -17418,8 +17428,9 @@ async function importIconoplasmVotes(
       : null,
     changed: applied.filter((row) => row.changed).length,
     promoted,
-    elected: imported.symbols.length - electionsFailed,
-    elections_failed: electionsFailed,
+    elected: imported.symbols.length - failedSymbols.length,
+    elections_failed: failedSymbols.length,
+    failed_symbols: failedSymbols,
     results: imported.results,
   }
 }
@@ -23177,13 +23188,16 @@ function cardPublicationSourceForEnv(env) {
   }
 }
 
+// The most times one publish writes a gene's object while votes keep landing.
+const STABLE_GENE_OBJECT_MAX_PASSES = 3
+
 /**
  * ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
  * B-898: THE ONLY per-gene publisher. Rewrites the gene's stable object
  * genes/v3/<SYMBOL>.json from D1 and the authoring store, purges its CDN URL,
  * keeps the gene's route membership, and advances its print-copy
- * materialization. About five subrequests and three D1 point reads besides
- * the materialization, no index tree. Called after every changed vote or
+ * materialization. About five subrequests and three D1 point reads per pass
+ * besides the materialization, no index tree. Called after every changed vote or
  * supervote, after uploads and admin changes that touch a few genes, and by
  * the republish admin route the Actions publisher drives for every other
  * canonical change.
@@ -23194,14 +23208,16 @@ function cardPublicationSourceForEnv(env) {
  *
  * Votes race with this write. The object is stamped with the gene's vote
  * version read before the materialization, and the version is read again
- * after the write: a vote that committed in between may have finished its own
- * republish before this older object landed on top of it, so a moved version
- * republishes the gene once more from the fresh rows.
+ * after every write: a vote that committed in between may have finished its
+ * own republish before this older object landed on top of it, so a moved
+ * version materializes and writes the gene again from the fresh rows, at most
+ * STABLE_GENE_OBJECT_MAX_PASSES passes in all. After the last pass the vote
+ * that moved the version is left to its own republish.
  */
 export async function publishIconoplasmGeneStableObject(
   env,
   symbolValue,
-  { portraitAssetSha256 = null, source = null, objects = null, recheckVoteVersion = true } = {},
+  { portraitAssetSha256 = null, source = null, objects = null } = {},
 ) {
   const symbol = normalizeSymbol(symbolValue)
   if (!symbol) throw new Error("A symbol is required to publish a gene")
@@ -23209,20 +23225,29 @@ export async function publishIconoplasmGeneStableObject(
   const adapter = source || cardPublicationSourceForEnv(env)
   const store = objects || createPublishedCardObjectStore(env)
   const db = env?.ICONOPLASM_DB || null
-  const voteVersion = db ? await readGeneVoteVersion(db, symbol) : null
-  const cards = await adapter.materialize([symbol], {
-    portraitOverrides: selected ? { [symbol]: selected } : null,
-  })
-  const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
-  if (!card) return { symbol, withdrawn: true, stable: null }
-  if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
-  const stableCard = adapter.stable(card)
-  const projected = adapter.project(stableCard.payload)
-  const object = composeStableGeneObject(projected, {
-    ...(selected ? { selectedAssetSha256: selected } : {}),
-    voteVersion,
-  })
-  const stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
+  let republishedAfterVote = false
+  let stableCard
+  let object
+  let stable
+  for (let pass = 1; ; pass += 1) {
+    const voteVersion = db ? await readGeneVoteVersion(db, symbol) : null
+    const cards = await adapter.materialize([symbol], {
+      portraitOverrides: selected ? { [symbol]: selected } : null,
+    })
+    const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
+    if (!card) return { symbol, withdrawn: true, stable: null }
+    if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
+    stableCard = adapter.stable(card)
+    const projected = adapter.project(stableCard.payload)
+    object = composeStableGeneObject(projected, {
+      ...(selected ? { selectedAssetSha256: selected } : {}),
+      voteVersion,
+    })
+    stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
+    if (!db || pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
+    if ((await readGeneVoteVersion(db, symbol)) === voteVersion) break
+    republishedAfterVote = true
+  }
   if (db) {
     await db
       .prepare(
@@ -23231,23 +23256,14 @@ export async function publishIconoplasmGeneStableObject(
       )
       .bind(symbol)
       .run()
-    // The fingerprint of the object just written: the queue consumer reads
-    // this same object back through the card route and must arrive at the
+    // The fingerprint of the object as storage holds it: the queue consumer
+    // reads that object back through the card route and must arrive at the
     // same value, or it would advance and render again.
     await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
       symbol,
-      cardFingerprint: iconoplasmGeneCardFingerprint(object),
+      cardFingerprint: iconoplasmGeneCardFingerprint(publishedObjectAsRead(object)),
       assetSha256: iconoplasmPrintCopyAssetSha(stableCard.payload),
     })
-    if (recheckVoteVersion && (await readGeneVoteVersion(db, symbol)) !== voteVersion) {
-      const again = await publishIconoplasmGeneStableObject(env, symbol, {
-        portraitAssetSha256: selected,
-        source,
-        objects,
-        recheckVoteVersion: false,
-      })
-      return { ...again, republished_after_vote: true }
-    }
   }
   return {
     symbol,
@@ -23256,6 +23272,7 @@ export async function publishIconoplasmGeneStableObject(
     vote_version: object.vote_version,
     stable: { key: stable.key, hash: stable.hash, size: stable.size, purged: stable.purged },
     published_at: object.published_at,
+    ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
 }
 
@@ -30540,9 +30557,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const jobId = crypto.randomUUID()
-      const inheritedUpvotes = Math.floor(
-        Math.max(0, Number(sourceRow.image_upvotes || 0) || 0) * 0.9,
-      )
+      const inheritedUpvotes = imageEditInheritedUpvotes(sourceRow.image_upvotes)
       const promptTemplatesByKind = await getImageEditPromptTemplatesByKind(env)
       const materializedAdjustments = materializeImageEditAdjustments(
         adjustmentsResult.items,
@@ -31767,8 +31782,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const items = Array.isArray(p?.items) ? p.items : []
       if (!items.length)
         return done("admin_votes_import_400", json({ error: "No items provided" }, 400))
-      if (items.length > 20000)
-        return done("admin_votes_import_400", json({ error: "Too many items (max 20000)" }, 400))
 
       let invalid = 0
       const valid = []
@@ -31801,27 +31814,48 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           vote_value: voteValue,
         })
       }
+      // One Worker invocation allows 50 D1 queries on the free plan; a request
+      // past the bounds is refused before anything is written.
+      const boundsError = voteImportBoundsError({
+        items: items.length,
+        genes: new Set(valid.map((item) => item.symbol)).size,
+      })
+      if (boundsError) return done("admin_votes_import_400", json({ error: boundsError }, 400))
       const imported = await importIconoplasmVotes(env, ctx, valid, {
         reason: "vote_import_auto_promote",
         republish: false,
         admit: false,
       })
+      const summary = {
+        total: items.length,
+        upserted: imported.upserted,
+        deleted: imported.deleted,
+        invalid: invalid + imported.invalid,
+        auto_promoted: imported.promoted,
+        elected: imported.elected,
+        elections_failed: imported.elections_failed,
+      }
+      // The votes are committed either way. A gene whose election failed is
+      // not settled, so the import is not done: the caller runs the same import
+      // again, which elects every named gene afresh.
+      if (imported.failed_symbols.length)
+        return done(
+          "admin_votes_import_502",
+          json(
+            {
+              ok: false,
+              code: "VOTE_IMPORT_ELECTION_FAILED",
+              error: `The votes were written but the election failed for ${imported.failed_symbols.join(", ")}; run the import again to settle ${imported.failed_symbols.length === 1 ? "it" : "them"}.`,
+              failed_symbols: imported.failed_symbols,
+              ...summary,
+            },
+            502,
+            { "Cache-Control": "no-store" },
+          ),
+        )
       return done(
         "admin_votes_import",
-        json(
-          {
-            ok: true,
-            total: items.length,
-            upserted: imported.upserted,
-            deleted: imported.deleted,
-            invalid: invalid + imported.invalid,
-            auto_promoted: imported.promoted,
-            elected: imported.elected,
-            elections_failed: imported.elections_failed,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
+        json({ ok: true, ...summary }, 200, { "Cache-Control": "no-store" }),
       )
     }
 

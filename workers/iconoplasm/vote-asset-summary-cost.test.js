@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import {
   electAndProjectGeneWinner,
+  importGeneVotes,
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./votes/gene-votes.js"
@@ -13,11 +14,14 @@ import {
   projectCaretakerAssignmentInD1,
   setCaretakerSupervoteInD1,
 } from "./caretaker/caretaker-supervote.js"
-import { VOTE_DAILY_LIMIT } from "./votes/vote-guards.js"
+import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, VOTE_DAILY_LIMIT } from "./votes/vote-guards.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
 // The most rows one admitted vote-budget unit writes, measured below.
 const VOTE_WORST_CASE_ROWS_WRITTEN = 21
+// The most rows one image-edit publish writes (25 inherited votes and the
+// publisher's own, one import), measured below.
+const IMAGE_EDIT_PUBLISH_WORST_CASE_ROWS_WRITTEN = 400
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -197,6 +201,47 @@ test(
         JSON.stringify(supervote.actual),
       )
 
+      // One image-edit publish: the inherited upvotes of synthetic voters and
+      // the publisher's own, all on a fresh asset, in one admitted import.
+      const editVotes = Array.from(
+        { length: IMAGE_EDIT_INHERITED_UPVOTE_LIMIT + 1 },
+        (_, index) => ({
+          symbol: "TP53",
+          asset_sha256: asset(10),
+          user_id: `__system_image_edit_inherit__:job:${index + 1}`,
+          vote_value: 1,
+        }),
+      )
+      const budgetBefore = (
+        await db
+          .prepare("SELECT votes FROM icono_vote_daily_budget WHERE day = date('now')")
+          .first()
+      ).votes
+      const editPublish = await measure("image edit publish, 26 votes", (metered) =>
+        importGeneVotes(metered, editVotes),
+      )
+      assert.equal(editPublish.result.results.filter((row) => row.changed).length, 26)
+      assert.equal(
+        (
+          await db
+            .prepare("SELECT votes FROM icono_vote_daily_budget WHERE day = date('now')")
+            .first()
+        ).votes - budgetBefore,
+        26,
+        "26 votes spend exactly 26 budget units",
+      )
+      // 396 rows measured: one budget row and one version row for the whole
+      // import, then about 15 rows per vote, inside the 21 per unit the daily
+      // budget is sized on.
+      assert.ok(
+        editPublish.actual.rows_written <= IMAGE_EDIT_PUBLISH_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(editPublish.actual),
+      )
+      assert.ok(
+        editPublish.actual.rows_written <= 26 * VOTE_WORST_CASE_ROWS_WRITTEN,
+        JSON.stringify(editPublish.actual),
+      )
+
       const election = await measure("election and projection", (metered) =>
         electAndProjectGeneWinner(metered, "TP53", { actor: "vote_authority" }),
       )
@@ -244,7 +289,7 @@ test(
       assert.deepEqual({ ...summary }, { upvotes: 1001, score: 1001, vote_count: 1001 })
       assert.equal(
         (await db.prepare("SELECT COUNT(*) AS n FROM icono_vote_asset_summary").first()).n,
-        20002,
+        20003,
       )
     } finally {
       schema.close()

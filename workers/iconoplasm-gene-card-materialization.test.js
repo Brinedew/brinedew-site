@@ -92,8 +92,9 @@ test("gene-card identity ignores publication wrappers but changes with visible c
 // 2. A republish changes the fingerprint through its own envelope
 //    (published_at, vote_version, candidate_count, stable_object_version).
 // 3. The publisher fingerprints a different shape than the queue consumer
-//    reads back through the card route (the stable object after a JSON round
-//    trip), so every publish ping-pongs a superseded advance and a render.
+//    reads back through the card route, so every publish ping-pongs a
+//    superseded advance and a render. That is proven end to end, through the
+//    real queue consumer, in iconoplasm.d1-votes.test.js (failure mode 21).
 // 4. A change the picture does show (portrait, name) keeps the fingerprint.
 test("gene-card identity ignores votes and the stable object envelope", async () => {
   const { composeStableGeneObject } = await import("./lib/iconoplasm-stable-gene-object.js")
@@ -122,21 +123,11 @@ test("gene-card identity ignores votes and the stable object envelope", async ()
     baseline,
     "counts, pool order, vote version and published_at do not enter the fingerprint",
   )
-  assert.equal(
-    iconoplasmGeneCardFingerprint(JSON.parse(JSON.stringify(object(1)))),
-    baseline,
-    "the consumer's read-back object fingerprints like the publisher's",
-  )
   assert.notEqual(
     iconoplasmGeneCardFingerprint({ ...object(1), portrait: { asset_sha256: "ef".repeat(32) } }),
     baseline,
   )
   assert.notEqual(iconoplasmGeneCardFingerprint({ ...object(1), full_name: "renamed" }), baseline)
-  assert.match(
-    runtimeSource,
-    /cardFingerprint: iconoplasmGeneCardFingerprint\(object\)/,
-    "the publisher fingerprints the object it writes",
-  )
 })
 
 test("materialized objects and downloads carry the canonical gene symbol", () => {

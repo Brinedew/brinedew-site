@@ -31,13 +31,16 @@
 // sample cap.
 //
 // --replay-since=<ISO time> (with --compare; implies --all-samples) writes the
-// votes the cutover missed into the receipt as `replay_items`, ready for
-// POST /api/iconoplasm/admin/votes/import. Pass the --write receipt's
-// started_at. An item is a coordinator vote changed after that time where D1
-// holds an older row, or holds none and recorded no later change for it; or a
-// clear (vote_value 0) for a row only D1 holds whose last D1 write is older
-// than that time, which the coordinator deleted after the export. Anything
-// else is left alone and listed as skipped.
+// votes the cutover missed into the receipt as `replay_requests`: a list of
+// bodies, each one POST /api/iconoplasm/admin/votes/import accepts (at most
+// VOTE_IMPORT_MAX_GENES genes and VOTE_IMPORT_MAX_ITEMS votes, the free
+// plan's per-invocation D1 query limit). Post them one after another; a
+// non-2xx answer means the request is not settled, so post the same one
+// again. Pass the --write receipt's started_at. An item is a coordinator vote
+// changed after that time where D1 holds an older row, or holds none and
+// recorded no later change for it; or a clear (vote_value 0) for a row only
+// D1 holds whose last D1 write is older than that time, which the coordinator
+// deleted after the export. Anything else is left alone and listed as skipped.
 //
 // Writes the receipt to artifacts/b-898-stage2/vote-<mode>-<timestamp>.json.
 // Cost, measured 2026-10-02: 2,683 objects, so about 2,700 Durable Object
@@ -48,6 +51,11 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath, pathToFileURL } from "node:url"
+
+import {
+  VOTE_IMPORT_MAX_GENES,
+  VOTE_IMPORT_MAX_ITEMS,
+} from "../workers/iconoplasm/votes/vote-guards.js"
 
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const CLASS = "IconoplasmVoteCoordinator"
@@ -150,6 +158,40 @@ export function replayItems(results, since) {
     }
   }
   return { items, skipped }
+}
+
+/**
+ * Groups replay items into import requests the Worker accepts: each holds at
+ * most VOTE_IMPORT_MAX_GENES genes and VOTE_IMPORT_MAX_ITEMS votes. Items are
+ * grouped by gene in first-seen order and keep their order within a gene, so
+ * a later vote for the same user and asset still wins; a gene with more votes
+ * than a request holds is split across consecutive requests. Every item is in
+ * exactly one request.
+ */
+export function replayImportRequests(items) {
+  const byGene = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!byGene.has(item.symbol)) byGene.set(item.symbol, [])
+    byGene.get(item.symbol).push(item)
+  }
+  const requests = []
+  let current = []
+  let genes = 0
+  for (const group of byGene.values()) {
+    for (let index = 0; index < group.length;) {
+      if (genes >= VOTE_IMPORT_MAX_GENES || current.length >= VOTE_IMPORT_MAX_ITEMS) {
+        requests.push({ items: current })
+        current = []
+        genes = 0
+      }
+      const piece = group.slice(index, index + VOTE_IMPORT_MAX_ITEMS - current.length)
+      current.push(...piece)
+      genes += 1
+      index += piece.length
+    }
+  }
+  if (current.length) requests.push({ items: current })
+  return requests
 }
 
 function need(name) {
@@ -287,12 +329,14 @@ async function main(argv) {
         }
   if (replaySince) {
     const replay = replayItems(results, replaySince)
+    const requests = replayImportRequests(replay.items)
     Object.assign(summary, {
       replay_since: replaySince,
       replay_items: replay.items.length,
+      replay_requests: requests.length,
       replay_skipped: replay.skipped.length,
     })
-    Object.assign(receipt, { replay_items: replay.items, replay_skipped: replay.skipped })
+    Object.assign(receipt, { replay_requests: requests, replay_skipped: replay.skipped })
   }
   Object.assign(receipt, { ...summary, finished_at: new Date().toISOString(), results })
   const dir = path.join(

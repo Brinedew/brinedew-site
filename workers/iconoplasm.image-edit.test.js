@@ -7,6 +7,7 @@ import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotD
 import { encryptManifestationProse, sha256Hex } from "./lib/iconoplasm-manifestation-body-crypto.js"
 import { encryptManifestationTags } from "./lib/iconoplasm-manifestation-tags-crypto.js"
 import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT } from "./iconoplasm/votes/vote-guards.js"
 
 const SOURCE_SHA = "a".repeat(64)
 const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
@@ -394,7 +395,7 @@ class FakeStatement {
         sample_label: "A1BG-7",
         sample_number: 7,
         sample_text_hash: "d".repeat(64),
-        image_upvotes: 7,
+        image_upvotes: this.db.sourceUpvotes ?? 7,
         image_downvotes: 1,
         image_score: 6,
       }
@@ -3764,6 +3765,114 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+// An image edit inherits 90% of its source's upvotes, never more than 25. Each
+// inherited vote is one synthetic voter (about 17 D1 rows written, one unit of
+// the daily vote budget), so the cap bounds what one click can spend.
+// Failure modes:
+// 1. A source with 1,000 upvotes creates a job that claims 900, and the
+//    publish imports 900 votes.
+// 2. A small source loses votes it should have inherited: 10 upvotes -> 9.
+// 3. A job stored with a larger number (900) imports it anyway at publish.
+async function createImageEditJobFromSource(db, env, sourceUpvotes) {
+  db.sourceUpvotes = sourceUpvotes
+  const fetchImpl = async (input, init = {}) => {
+    const url = String(input)
+    if (url === "https://api.openai.com/v1/images/edits") {
+      return new Response(JSON.stringify({ data: [{ b64_json: base64(EDITED_BYTES) }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (init?.cf?.image?.width === 512 || init?.cf?.image?.width === 256) {
+      return new Response("webp-bytes", { status: 200, headers: { "Content-Type": "image/webp" } })
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = fetchImpl
+  try {
+    const call = (path, body) =>
+      handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/${path}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            ...(body ? { body: JSON.stringify(body) } : {}),
+          },
+        ),
+        env,
+        { waitUntil() {} },
+      )
+    await call("providers", {
+      provider_id: "openai",
+      api_key: "sk-test-secret",
+      endpoint_url: "https://api.openai.com/v1",
+      model: "gpt-image-2",
+    })
+    const response = await call("jobs", {
+      provider_id: "openai",
+      source_gene_symbol: "A1BG",
+      source_asset_sha256: SOURCE_SHA,
+      adjustments: { remove_ai_generation_errors: true },
+    })
+    assert.equal(response.status, 200)
+    return (await response.json()).job
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+async function publishImageEditJob(env, id) {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs/${id}/publish`,
+        { method: "POST", headers: { Cookie: "session=abc123" } },
+      ),
+      env,
+      { waitUntil() {} },
+    )
+  return { status: response.status, payload: await response.json() }
+}
+
+test("an image edit inherits 90% of its source's upvotes, capped at 25", async () => {
+  const big = new FakeDb()
+  const bigEnv = buildEnv(big)
+  const bigJob = await createImageEditJobFromSource(big, bigEnv, 1000)
+  assert.equal(bigJob.inherited_upvotes, IMAGE_EDIT_INHERITED_UPVOTE_LIMIT)
+  assert.equal(IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, 25)
+  const bigPublished = await publishImageEditJob(bigEnv, bigJob.id)
+  assert.equal(bigPublished.status, 200)
+  assert.equal(bigPublished.payload.vote_inheritance.inherited_upvotes, 25)
+  assert.equal(bigPublished.payload.vote_inheritance.imported_votes, 26)
+  assert.equal(big.voteImportPayload.items.length, 26)
+  assert.equal(
+    big.voteImportPayload.items.filter((item) => item.user_id === "user-1").length,
+    1,
+    "the publisher's own upvote",
+  )
+
+  const small = new FakeDb()
+  const smallEnv = buildEnv(small)
+  const smallJob = await createImageEditJobFromSource(small, smallEnv, 10)
+  assert.equal(smallJob.inherited_upvotes, 9)
+  const smallPublished = await publishImageEditJob(smallEnv, smallJob.id)
+  assert.equal(smallPublished.payload.vote_inheritance.inherited_upvotes, 9)
+  assert.equal(smallPublished.payload.vote_inheritance.imported_votes, 10)
+
+  // A job row that already claims 900 inherited votes imports the limit.
+  const stored = new FakeDb()
+  const storedEnv = buildEnv(stored)
+  const job = seedSucceededImageEditJob(stored, "image-edit-stored-big")
+  job.inherited_upvotes = 900
+  const storedPublished = await publishImageEditJob(storedEnv, job.id)
+  assert.equal(storedPublished.status, 200)
+  assert.equal(stored.voteImportPayload.items.length, 26)
+  assert.equal(storedPublished.payload.vote_inheritance.inherited_upvotes, 25)
+  assert.equal(storedPublished.payload.job.inherited_upvotes, 25)
 })
 
 test("admin can save one image edit prompt template without changing the other checkmark prompts", async () => {

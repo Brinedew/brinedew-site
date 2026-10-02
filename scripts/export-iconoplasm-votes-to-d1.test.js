@@ -2,8 +2,13 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  VOTE_IMPORT_MAX_GENES,
+  VOTE_IMPORT_MAX_ITEMS,
+} from "../workers/iconoplasm/votes/vote-guards.js"
+import {
   CUTOVER_VOTES_SQL,
   assertNoVotesSinceCutover,
+  replayImportRequests,
   replayItems,
   timestampMs,
 } from "./export-iconoplasm-votes-to-d1.mjs"
@@ -22,6 +27,11 @@ import {
 //    cutover, or a vote the coordinator cleared in that window.
 // 6. The two timestamp formats on the two sides (SQLite CURRENT_TIMESTAMP and
 //    ISO) compare wrongly.
+// 7. The receipt holds the replay as one flat list, and a caller posts it as
+//    one import that names more genes or votes than the import route accepts
+//    (400) or than one Worker invocation can finish.
+// 8. Grouping the replay into requests drops an item, repeats one, or reorders
+//    one user's votes on an asset so the older vote lands last and wins.
 
 test("--write refuses once D1 holds a vote version, and when D1 cannot answer", async () => {
   const asked = []
@@ -141,4 +151,45 @@ test("the replay takes only what the cutover missed", () => {
     ["early", "cleared-later", "revoted"],
   )
   assert.throws(() => replayItems(results, "yesterday"), /needs an ISO time/)
+})
+
+test("the replay groups into requests within the import route's gene and vote limits", () => {
+  const vote = (symbol, user, value = 1) => ({
+    symbol,
+    asset_sha256: "a".repeat(64),
+    user_id: user,
+    vote_value: value,
+  })
+  // 30 genes, gene n holds n votes: 465 votes, far past both limits.
+  const items = []
+  for (let gene = 1; gene <= 30; gene += 1)
+    for (let user = 0; user < gene; user += 1) items.push(vote(`G${gene}`, `u${user}`))
+  const requests = replayImportRequests(items)
+  assert.ok(requests.length > 1)
+  for (const request of requests) {
+    assert.ok(request.items.length <= VOTE_IMPORT_MAX_ITEMS, `${request.items.length} votes`)
+    assert.ok(new Set(request.items.map((item) => item.symbol)).size <= VOTE_IMPORT_MAX_GENES)
+  }
+  const key = (item) => `${item.symbol}|${item.user_id}`
+  assert.deepEqual(
+    requests.flatMap((request) => request.items.map(key)).sort(),
+    items.map(key).sort(),
+  )
+
+  // One gene with more votes than a request holds splits in order, and a
+  // user's later vote on the same asset stays behind the earlier one.
+  const heavy = [vote("TP53", "flipper", 1)]
+  for (let user = 0; user < VOTE_IMPORT_MAX_ITEMS * 2; user += 1)
+    heavy.push(vote("TP53", `u${user}`))
+  heavy.push(vote("TP53", "flipper", -1))
+  const split = replayImportRequests(heavy)
+  assert.equal(split.length, 3)
+  assert.deepEqual(
+    split.flatMap((request) => request.items),
+    heavy,
+    "one gene keeps its items in their original order across requests",
+  )
+
+  assert.deepEqual(replayImportRequests([]), [])
+  assert.deepEqual(replayImportRequests(undefined), [])
 })
