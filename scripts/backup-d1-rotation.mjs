@@ -6,12 +6,17 @@
 // into a local SQLite file, so readers never wait behind one long statement.
 //
 // Why a rotation: an export reads every row, and D1 Free allows 5M row reads a
-// day for the whole account. Measured 2026-09-25 (max(rowid) probes): about
-// 874k rows in iconoplasm, 431k authoring, 298k audit, 700k geneguessr plus
-// its FTS index. One database per night costs at most ~20% of the day's
-// allowance. It runs only in the second half of the UTC budget day (from
-// 12:00 UTC), spending reads that would otherwise expire, and refuses to
-// start when readers already used 50% of the day.
+// day for the whole account. Measured reads per export (backup-log.jsonl,
+// 2026-09-25 to 2026-10-02): iconoplasm 572k, iconoplasm-authoring 394k,
+// iconoplasm-audit 302k, geneguessr 204k including its FTS table, the event
+// archive 58k. One database per night stays within 20% of the day's allowance
+// (1M reads). The hourly capacity observer
+// (scripts/check-iconoplasm-d1-statement-burns.mjs) recognises the paging
+// statements below by their exact text and fails when they read more than
+// that; change the SQL and its matcher together, and its test runs this
+// exporter to prove they agree. The export runs only in the second half of
+// the UTC budget day (from 12:00 UTC), spending reads that would otherwise
+// expire, and refuses to start when readers already used 50% of the day.
 // D1 Time Travel (7 days on Free) covers point-in-time recovery between dumps.
 //
 // Not a point-in-time snapshot: tables are copied one after another over a few
