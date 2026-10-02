@@ -978,7 +978,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   iconoplasmApiContract({
     id: "admin_votes_vision_stats",
     match: exact("/api/iconoplasm/admin/votes/vision-stats"),
-    methods: GET_POST,
+    methods: GET,
     auth: "administrator",
     budgetFamily: "admin_votes",
   }),

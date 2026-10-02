@@ -723,13 +723,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
                   <option value="25">25</option>
                   <option value="50">50</option>
                   <option value="100">100</option>
-                  <option value="250">250</option>
+                  <option value="200">200</option>
                 </select>
               </label>
               <div class="pager-group">
                 <button type="button" id="vision-page-first">First</button>
                 <button type="button" id="vision-page-prev">Prev</button>
-                <span class="pager-status mono" id="vision-page-label">Page 1 of 1</span>
+                <span class="pager-status mono" id="vision-page-label">First page</span>
                 <button type="button" id="vision-page-next">Next</button>
                 <button type="button" id="vision-page-last">Last</button>
               </div>
@@ -739,12 +739,12 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <table>
               <thead>
                 <tr>
-                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="vision">Vision</button></th>
+                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="vision" title="Sort by vision id">Vision</button></th>
                   <th>Examples</th>
                   <th>Emulsion ID</th>
-                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="images">Images</button></th>
-                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="score">Avg vote</button></th>
-                  <th><button class="btn-flat sort-btn" type="button" data-vision-sort="rejection">Rejection rate</button></th>
+                  <th>Images</th>
+                  <th>Avg vote</th>
+                  <th>Rejection rate</th>
                   <th><button class="btn-flat sort-btn" type="button" data-vision-sort="live">Currently canonical</button></th>
                   <th>Actions</th>
                 </tr>

@@ -1519,6 +1519,11 @@ test("admin tab lifecycle unmounts inactive render roots and aborts their reads"
 
 test("visions load a bounded summary page and reserve detail hydration for selection", () => {
   assert.match(ICONOPLASM_ADMIN_HTML, /visionPageSize: defaultVisionPageSize\(\)/)
+  // B-903: the scorecard asks the server for one keyset page; it never asks for the whole rollup.
+  assert.match(ICONOPLASM_ADMIN_HTML, /\/votes\/vision-stats\?" \+ query\.join\("&"\)/)
+  assert.match(ICONOPLASM_ADMIN_HTML, /"limit=" \+ visionStatsPageSize\(\)/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /scope=all/)
+  assert.doesNotMatch(ICONOPLASM_ADMIN_HTML, /data-vision-sort="(?:images|score|rejection)"/)
   assert.match(ICONOPLASM_ADMIN_HTML, /<option value="8">8<\/option>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /<option value="12" selected>12<\/option>/)
   assert.match(ICONOPLASM_ADMIN_HTML, /vision-previews\?vision_ids=[\s\S]*&limit=3/)
