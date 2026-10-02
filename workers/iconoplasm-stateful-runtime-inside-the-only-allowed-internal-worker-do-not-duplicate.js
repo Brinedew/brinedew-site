@@ -24552,46 +24552,9 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(
   return drainCompletedFinalization(env.ICONOPLASM_DB, {
     symbols: scopedSymbols,
     rows,
-    notifyPublisher: async ({ jobs }) => {
-      for (const job of jobs) {
-        const symbol = job.gene_symbol
-        const stub = iconoplasmVoteCoordinatorStub(env, symbol)
-        const response = await iconoplasmVoteCoordinatorJson(
-          stub,
-          "/publication/finalization-handoff",
-          { symbol, job_version: job.job_version },
-        )
-        if (response?.accepted !== true) {
-          console.warn("Iconoplasm finalization publisher handoff deferred", {
-            symbol,
-            job_version: Number(job.job_version),
-            code: sanitizeText(String(response?.code || "PUBLISHER_HANDOFF_DEFERRED"), 100),
-            error: sanitizeText(String(response?.error || ""), 300),
-          })
-          const retryAfterMs = Math.max(
-            1000,
-            Math.min(900000, Number(response?.retry_after_ms || 300000) || 300000),
-          )
-          return {
-            accepted: false,
-            nextAttemptAt: new Date(Date.now() + retryAfterMs).toISOString(),
-          }
-        }
-        if (
-          response.ok !== true ||
-          response.symbol !== symbol ||
-          response.authority_epoch !== "v2" ||
-          Number(response.job_version) !== Number(job.job_version)
-        ) {
-          const error = new Error(
-            "Per-gene finalization receipt does not match the requested V2 authority",
-          )
-          error.code = "FINALIZATION_RECEIPT_MISMATCH"
-          throw error
-        }
-      }
-      return { accepted: true }
-    },
+    // Finalization hands nothing to a publisher: the gene's stable object is
+    // rewritten by publishIconoplasmGeneStableObject on its own triggers.
+    notifyPublisher: async () => ({ accepted: true }),
   })
 }
 async function processSyncFinalizationQueueMessage(env, ctx, rawMessage) {
