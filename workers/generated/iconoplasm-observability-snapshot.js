@@ -839,7 +839,6 @@ export const ICONOPLASM_OBSERVABILITY_SNAPSHOT = {
   "durableObjects": {
     "scriptName": "geneguessr-api",
     "classNames": [
-      "IconoplasmVoteCoordinator",
       "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
     ],
     "dailyLimitRowsWritten": 100000,

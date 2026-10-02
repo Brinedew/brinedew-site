@@ -234,10 +234,7 @@ const PLATFORM_USAGE_QUERY = `query IconoplasmPlatformUsage($accountTag: string,
   }
 }`
 
-const DURABLE_OBJECT_CLASS_NAMES = [
-  "IconoplasmVoteCoordinator",
-  "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
-]
+const DURABLE_OBJECT_CLASS_NAMES = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
 const WORKERS_OBSERVABILITY_DAILY_LIMIT_EVENTS = 200000
 
 function parseArgs(argv) {

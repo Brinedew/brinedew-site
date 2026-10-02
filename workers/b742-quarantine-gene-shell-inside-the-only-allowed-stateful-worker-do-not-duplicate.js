@@ -1,6 +1,5 @@
 import baseRuntime, {
   GameSession,
-  IconoplasmVoteCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   serveIconoplasmReaderRecoveryGenePage,
@@ -15,12 +14,7 @@ import {
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
 
-export {
-  GameSession,
-  IconoplasmVoteCoordinator,
-  IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
-  IconoplasmSyncGovernor,
-}
+export { GameSession, IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate, IconoplasmSyncGovernor }
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const READER_RECOVERY_MODE = "reader-recovery"

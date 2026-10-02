@@ -101,9 +101,8 @@ export function imageEditInheritedUpvotes(sourceUpvotes) {
 // 2 x 4 + 2 x 12 = 32 queries, measured in
 // workers/iconoplasm.d1-votes.test.js, which leaves 18 for everything else
 // the invocation does. A request past either bound is refused up front, before
-// anything is written; callers split their imports by these numbers
-// (scripts/export-iconoplasm-votes-to-d1.mjs, the workstation's
-// REMOTE_VOTE_IMPORT_MAX_*).
+// anything is written; callers split their imports by these numbers (the
+// workstation's REMOTE_VOTE_IMPORT_MAX_*).
 export const VOTE_IMPORT_MAX_ITEMS = 200
 export const VOTE_IMPORT_MAX_GENES = 12
 

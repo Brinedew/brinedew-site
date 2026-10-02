@@ -180,7 +180,6 @@ test("DO NOT DELETE: a vote elects in the request under its gene's vote version 
     "a projection applies only while the gene's vote version is the one its election read",
   )
   assert.match(projection, /COALESCE\(icono_publish_state\.admin_override, 0\) = 0/)
-  assert.doesNotMatch(source, /ICONOPLASM_VOTE_COORDINATORS\b[^\n]*idFromName/)
 })
 
 test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () => {

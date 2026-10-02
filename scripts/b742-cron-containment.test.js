@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
 
+import { ICONOPLASM_RECURRING_CRON } from "../workers/iconoplasm-background-schedule.js"
+
 const readWorkflow = (name) =>
   readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")
 
@@ -54,8 +56,8 @@ test("maintenance containment uploads retain cron work and activation restores t
     ),
     "utf8",
   )
-  assert.match(
-    statefulConfig,
-    /0,1,2,3,4,5,6,7,8,10,11,13,14,15,16,17,18,19,20,23,24,26,27,28,29,30,31,32,33,34,35,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,59 \* \* \* \*/,
+  assert.ok(
+    statefulConfig.includes(ICONOPLASM_RECURRING_CRON),
+    "the checked-in config carries the owned recurring trigger",
   )
 })
