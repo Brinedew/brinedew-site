@@ -30007,7 +30007,7 @@ async function automaticCandidateGeneBlotBacklog(env, { after, limit }) {
 // symbol over route membership joined to the winner and the blot row; storage
 // reads only for genes whose row is not current, at most 25 per page, and the
 // page ends at the last examined symbol so the drain resumes exactly there.
-async function publishedGeneBlotBacklogPage(env, { after, limit }) {
+async function publishedGeneBlotBacklogPage(env, { after, limit, snapshotVersion = "" }) {
   const pageLimit = Math.max(1, Math.min(GENE_BLOT_BACKLOG_PAGE_CAP, limit))
   const result = await env.ICONOPLASM_DB.prepare(
     `${GENE_BLOT_READINESS_SELECT.replace("s.gene_symbol,", "r.gene_symbol,")}
@@ -30055,7 +30055,12 @@ async function publishedGeneBlotBacklogPage(env, { after, limit }) {
     symbols: examined,
     scanned: examined.length,
     skipped,
-    snapshot_version: GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
+    // The drain pins the version it started a backfill with and aborts the
+    // walk when a page names another one (measured 2026-10-02 01:09 local:
+    // "changed snapshots during a pinned backfill" after the rewrite returned
+    // the constant). There is no snapshot generation any more, so the pin is
+    // echoed; an unpinned walk names the stable object generation.
+    snapshot_version: snapshotVersion || GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
     done,
     next_after: examined.length ? examined.at(-1) : after || null,
   }
@@ -30149,7 +30154,13 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   if (scope === "candidate") {
     return automaticCandidateGeneBlotBacklog(env, { after, limit: readLimit })
   }
-  return publishedGeneBlotBacklogPage(env, { after: normalizeSymbol(after) || "", limit })
+  return publishedGeneBlotBacklogPage(env, {
+    after: normalizeSymbol(after) || "",
+    limit,
+    snapshotVersion: String(
+      payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
+    ).trim(),
+  })
 }
 
 async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {

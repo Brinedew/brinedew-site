@@ -234,3 +234,29 @@ test("an unknown scope is rejected and an oversized limit is clamped", async (t)
   const rowsQuery = db.queries.find((sql) => /icono_published_gene_routes/.test(sql))
   assert.ok(rowsQuery, "the walk still ran one bounded routes query")
 })
+
+// 7. The drain pins the version it started a backfill with and aborts the walk
+//    when a page names another one. An automatic (paged) walk must echo the pin
+//    exactly like the explicit-symbol path does; measured 2026-10-02 01:09
+//    local, the drain raised "changed snapshots during a pinned backfill".
+test("an automatic published walk echoes the pinned snapshot version page after page", async (t) => {
+  const db = new SqliteD1()
+  for (let index = 0; index < 3; index += 1) {
+    db.seedGene(symbolAt(index), {
+      winner: SHA_A,
+      blot: currentBlot(stableGeneObject(symbolAt(index), { portraitSha: SHA_A })),
+    })
+  }
+  installStableObjectStorage(t, new Map())
+  const first = await published(backlogEnv(db), { limit: 2, snapshot: "ccv2-pinned-by-the-drain" })
+  assert.equal(first.automatic, true)
+  assert.equal(first.snapshot_version, "ccv2-pinned-by-the-drain")
+  assert.equal(first.done, false)
+  const second = await published(backlogEnv(db), {
+    after: first.next_after,
+    limit: 2,
+    snapshot: "ccv2-pinned-by-the-drain",
+  })
+  assert.equal(second.snapshot_version, "ccv2-pinned-by-the-drain")
+  assert.equal(second.done, true)
+})
