@@ -49,8 +49,8 @@ symbol. Blots use versioned immutable keys derived from the gene's stable
 object and the renderer revision. The stable first-party `/blot/<SYMBOL>.webp`
 route recomputes that key from the stable object, so blot uploads require zero
 KV writes. When the renderer-v2 object is absent, it serves only a ready v1 blot
-whose portrait SHA matches that same object. Public media, page metadata,
-structured data and image sitemaps expose the blot, while the raw portrait is
+whose portrait SHA matches that same object. Public media, page metadata and
+structured data expose the blot, while the raw portrait is
 explicitly subordinate.
 
 For both portraits and blots, Bunny is the accelerator on any working network,
@@ -64,8 +64,7 @@ Their fingerprint comes from the gene's stable-object card payload and the
 renderer revision, including the selected portrait identity. They never choose
 or reconstruct a portrait independently. Public downloads go through the
 first-party print-copy route and set the same gene-specific filename in
-`Content-Disposition`. Image sitemaps publish the canonical first-party URL,
-not a storage-provider hostname; massive gene-range pages remain text-only.
+`Content-Disposition`.
 The renderer verifies the PNG IHDR is exactly 1536×2048 before upload and the
 ledger publishes those dimensions only after that check; portrait-source
 dimensions must not silently redefine the print artifact size.

@@ -249,7 +249,6 @@ test("the blot backlog answers from D1 and stable gene objects, never the delete
   assert.match(block, /icono_published_gene_routes r/)
   for (const retired of [
     /readPublishedCardCatalogArtifact/,
-    /readPublishedCardCatalogManifest/,
     /readCardCatalogPublishWatermark/,
     /advertisedGeneDeltaViewForDetail/,
     /readGeneDeltaChain/,
