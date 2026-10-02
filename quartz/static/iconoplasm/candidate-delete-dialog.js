@@ -1,5 +1,6 @@
 const CANDIDATE_DELETE_DIALOG_SELECTOR = "[data-icono-candidate-delete-dialog]"
 const CANDIDATE_DELETE_NOTICE_SELECTOR = "[data-icono-candidate-delete-notice]"
+const ANALYTICS_CONSENT_SELECTOR = ".brinedew-analytics-consent"
 
 function focusWithoutScrolling(element) {
   if (element && typeof element.focus === "function") {
@@ -54,6 +55,14 @@ export function showCandidateDeleteNotice(options = {}) {
   notice.setAttribute("aria-live", "polite")
   notice.textContent = String(options.message || "Candidate deleted.")
   ownerDocument.body.appendChild(notice)
+
+  // The analytics consent prompt owns the same corner at the top z-index, so a notice that
+  // reached the corner first would sit under it, unseen. Stack above the prompt instead.
+  const consent = ownerDocument.querySelector(ANALYTICS_CONSENT_SELECTOR)
+  if (consent && typeof consent.getBoundingClientRect === "function") {
+    const viewportHeight = (ownerDocument.defaultView || globalThis).innerHeight
+    notice.style.insetBlockEnd = `${Math.round(viewportHeight - consent.getBoundingClientRect().top + 8)}px`
+  }
 
   const timer = (ownerDocument.defaultView || globalThis).setTimeout(
     function () {
