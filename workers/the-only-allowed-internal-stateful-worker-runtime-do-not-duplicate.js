@@ -5,7 +5,6 @@ import {
   normalizeIconoplasmPublishedGeneRecord,
 } from "./iconoplasm-gene-discovery.js"
 import {
-  handleIconoplasmGeneDiscoveryDocument,
   iconoplasmGeneCanonicalRedirect,
   iconoplasmGeneDiscoveryStateForPath,
   iconoplasmGeneUnavailableResponse,
@@ -112,9 +111,9 @@ function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}
   const next = new Headers(headers)
   appendIconoplasmServiceDiscoveryLinks(next)
   if (!String(path || "").startsWith("/gene/")) return next
-  // ARCHITECTURE FENCE [IPD-003]: response headers, HTML metadata, archive
-  // membership, and sitemap membership must use the same published-catalog
-  // eligibility decision. Never change only one discovery surface.
+  // ARCHITECTURE FENCE [IPD-003]: response headers and HTML metadata must use
+  // the same published-catalog eligibility decision. Never change only one
+  // discovery surface.
   for (const link of ICONOPLASM_GENE_FONT_PRELOAD_LINKS) next.append("Link", link)
   next.set("No-Vary-Search", ICONOPLASM_PUBLIC_NO_VARY_SEARCH)
   if (indexable) next.delete("X-Robots-Tag")
@@ -934,10 +933,6 @@ Sitemap: https://${host}/sitemap.xml
 
 function buildGeneguessrSubdomainRobotsTxt() {
   return buildPublicSubdomainRobotsTxt(GENEGUESSR_HOST)
-}
-
-function buildIconoplasmSubdomainRobotsTxt() {
-  return buildPublicSubdomainRobotsTxt(ICONOPLASM_HOST)
 }
 
 async function runScheduledIconoplasmMaintenanceStep(env, ctx, path, body) {
@@ -2177,44 +2172,21 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         )
       }
 
-      // Host-scoped crawler documents and the server-rendered gene reference.
-      // These all consume one immutable-catalog snapshot so eligibility cannot
-      // drift between archive HTML, sitemap XML, and llms.txt.
-      if (request.method === "GET" || request.method === "HEAD") {
-        // No standard AI well-known document exists here. Fail explicitly so
-        // a missing experimental convention cannot masquerade as the app shell.
-        if (url.pathname === "/.well-known/ai") {
-          return new Response(null, {
-            status: 404,
-            headers: {
-              "Cache-Control": "public, max-age=300",
-              "X-Robots-Tag": "noindex, nofollow, noarchive",
-            },
-          })
-        }
-        if (url.pathname === "/robots.txt") {
-          return new Response(
-            request.method === "HEAD" ? null : buildIconoplasmSubdomainRobotsTxt(),
-            {
-              headers: {
-                "Content-Type": "text/plain; charset=utf-8",
-                "Cache-Control": "max-age=600",
-              },
-            },
-          )
-        }
-
-        if (
-          url.pathname === "/sitemap.xml" ||
-          url.pathname === "/llms.txt" ||
-          url.pathname === "/genes" ||
-          url.pathname === "/genes/" ||
-          url.pathname.startsWith("/genes/") ||
-          url.pathname === "/sitemaps/pages.xml" ||
-          url.pathname.startsWith("/sitemaps/genes/")
-        ) {
-          return handleIconoplasmGeneDiscoveryDocument(request, env, url.pathname)
-        }
+      // The crawler documents (robots.txt, sitemap.xml, llms.txt, the /genes
+      // redirects) are static files in the asset bundle and never reach here.
+      // No standard AI well-known document exists. Fail explicitly so a missing
+      // experimental convention cannot masquerade as the app shell.
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname === "/.well-known/ai"
+      ) {
+        return new Response(null, {
+          status: 404,
+          headers: {
+            "Cache-Control": "public, max-age=300",
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+          },
+        })
       }
 
       let geneDiscovery = null

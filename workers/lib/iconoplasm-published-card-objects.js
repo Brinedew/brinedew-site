@@ -1,51 +1,23 @@
 import {
   externalPortraitPublicUrl,
-  externalPortraitReadCandidates,
   externalPortraitStoragePassword,
   externalPortraitStorageUrl,
   fetchPortraitStorage,
 } from "./iconoplasm-portrait-storage.js"
 
-// THE ONLY published-card object writer: add reuse and verification here, not
-// in a second upload path. This is immutable storage, not canon selection.
-// ARCHITECTURE FENCE [IPD-011].
-// The publisher commits its head only after all referenced bytes are verified.
-// Never overwrite a stable URL with different bytes or repair a miss from D1.
-// Healthy CDN misses end at paid Bunny Storage, not a per-reader Worker build.
-export const PUBLISHED_CARD_OBJECT_PREFIX = "published-cards/v2/immutable"
-// A deployment without immutable object storage cannot hold any published
-// object. Distinguish that definitive absence from a transient read failure so
+// THE ONLY writer and first-party reader of the two published Iconoplasm
+// objects on Bunny Storage: one stable object per gene (genes/v3/<SYMBOL>.json)
+// and the catalog object (catalog/v3/index.json). Readers outside the Worker
+// fetch both from the CDN. ARCHITECTURE FENCE [IPD-011].
+// A deployment without object storage cannot hold any published object.
+// Distinguish that definitive absence from a transient read failure so
 // readers can report an unknown identity instead of a retryable outage.
 export const PUBLISHED_OBJECT_STORAGE_UNAVAILABLE = "PUBLISHED_OBJECT_STORAGE_UNAVAILABLE"
-// Publication objects are content-addressed and immutable, so a transient Bunny
-// Storage timeout (the request aborts at portraitStorageRequestTimeout) or a
-// retryable 408/425/429/5xx is safe to retry inside the fetch. The card
-// publication coordinator's own bounded backoff remains the outer retry bound.
-// Linear B-753.
+// A stable-object PUT always carries the complete object and is verified by
+// read-back, so a transient Bunny Storage timeout (the request aborts at
+// portraitStorageRequestTimeout) or a retryable 408/425/429/5xx is safe to
+// retry inside the fetch. Linear B-753.
 export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
-// B-792: cards and genes carry the complete published candidate pool, so
-// their bound is sized for the largest supported pool rather than the
-// pre-candidate record. 256 KiB is a proposed application setting with
-// headroom, not a provider requirement; unrelated kinds keep their bound.
-export const PUBLISHED_CARD_OBJECT_LIMITS = Object.freeze({
-  cards: 256 * 1024,
-  genes: 256 * 1024,
-  // B-793: immutable candidate gallery pages. A page is capped at 128
-  // candidates or this bound, whichever is reached first; a single candidate
-  // that cannot fit a page is a permanent validation error, never a truncation.
-  galleries: 256 * 1024,
-  portraits: 8192,
-  indexes: 65536,
-  catalogindexes: 128 * 1024,
-  catalogs: 512 * 1024,
-  // B-892 hot fix: the root manifest refs every shard and each shard's
-  // delivery indexes, so it grows with the catalog's shard count. The live
-  // manifest reached 65,029 of the original 64 KiB bound and the next commit
-  // measured 65,690. Sized like the B-792 sibling kinds; this is a reader
-  // budget, not a provider requirement.
-  manifests: 256 * 1024,
-  shards: 4 * 1024 * 1024,
-})
 // B-898 (Stage 1): ONE stable, mutable object per gene. Readers fetch this
 // single URL instead of walking head -> manifest -> indexes -> gene -> delta.
 // It is rewritten in place whenever the gene changes and carries the complete
@@ -58,10 +30,8 @@ export const STABLE_GENE_OBJECT_CACHE_CONTROL = "public, max-age=300, stale-whil
 // `Cache-Control: public, max-age=2592000` and CDN-Cache: HIT, i.e. the zone
 // applies its own 30-day expiration and ignores the header above. A rewritten
 // gene would therefore sit stale on the edge for a month. Every rewrite purges
-// its exact CDN URL through the Bunny API (free, no request fees); a full
-// rematerialization purges the prefix once at commit instead of 19k times.
+// its exact CDN URL through the Bunny API (free, no request fees).
 export const BUNNY_PURGE_ENDPOINT = "https://api.bunny.net/purge"
-const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
 
 export function stableGeneObjectKey(symbol) {
@@ -87,9 +57,7 @@ function stableGeneObjectIdentity(key) {
   if (!SYMBOL.test(symbol)) throw new Error("Invalid stable gene object key")
   return { symbol, limit: STABLE_GENE_OBJECT_LIMIT }
 }
-const BLOT_FINGERPRINT = /^[a-f0-9]{32,64}$/
 const encoder = new TextEncoder()
-const BLOT_BYTE_LIMIT = 5 * 1024 * 1024
 
 export function canonicalPublishedJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalPublishedJson).join(",")}]`
@@ -103,49 +71,6 @@ export function canonicalPublishedJson(value) {
 export async function publishedObjectHash(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes)
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("")
-}
-
-export function publishedCardObjectKey(kind, hash) {
-  if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind) || !HASH.test(hash)) {
-    throw new Error("Invalid published card object identity")
-  }
-  return `${PUBLISHED_CARD_OBJECT_PREFIX}/${kind}/${hash}.json`
-}
-
-// The frozen card snapshot's manifest identity. Its only reader is
-// readIconoplasmPublishedGeneDiscoveryProjections in the stateful runtime, which the gene-discovery worker's range pages and sitemaps still
-// walk per request because a frozen range holds up to 500 genes (past the
-// free-plan Worker's ~50 subrequests for one-object-per-gene reads). The root
-// fix is build-time range pages from catalog/v3/index.json; until then this
-// stays.
-export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
-
-export function cardPublicationManifestKey(version) {
-  const match = /^ccv2-([a-f0-9]{64})$/.exec(String(version || ""))
-  return match ? publishedCardObjectKey("manifests", match[1]) : null
-}
-
-function immutableBlotIdentity(symbol, blot) {
-  if (!blot || blot.status !== "ready") return null
-  const fingerprint = String(blot.blot_fingerprint || "").toLowerCase()
-  const hash = String(blot.asset_sha256 || blot.blot_asset_sha256 || "").toLowerCase()
-  if (!BLOT_FINGERPRINT.test(fingerprint) || !HASH.test(hash)) {
-    throw new Error("Invalid published blot identity")
-  }
-  const key = `blots/v1/${symbol.slice(0, 1)}/${symbol}/${fingerprint}/${symbol}-iconoplasm-gene-blot.webp`
-  if (blot.object_key !== key) throw new Error("Invalid published blot object key")
-  return { key, hash }
-}
-
-function objectIdentity(key) {
-  const prefix = `${PUBLISHED_CARD_OBJECT_PREFIX}/`
-  if (typeof key !== "string" || !key.startsWith(prefix))
-    throw new Error("Invalid published object namespace")
-  const match = key.slice(prefix.length).match(/^([a-z]+)\/([a-f0-9]{64})\.json$/)
-  if (!match || !Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, match[1])) {
-    throw new Error("Invalid published object key")
-  }
-  return { kind: match[1], hash: match[2], limit: PUBLISHED_CARD_OBJECT_LIMITS[match[1]] }
 }
 
 async function boundedBytes(response, limit, timeoutMs) {
@@ -195,193 +120,10 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
         maxAttempts: PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS,
       }))
 
-  async function read(key, { verifyStorageOnly = false } = {}) {
-    const identity = objectIdentity(key)
-    let candidates = externalPortraitReadCandidates(env, key, { accept: "application/json" })
-    if (verifyStorageOnly)
-      candidates = candidates.filter((c) => c.source === "authenticated_storage")
-    if (!candidates.length) {
-      const error = new Error("Bunny published-object storage is not configured")
-      error.code = PUBLISHED_OBJECT_STORAGE_UNAVAILABLE
-      throw error
-    }
-    let failure
-    let allMissing = true
-    for (const candidate of candidates) {
-      try {
-        const response = await send(
-          candidate.url,
-          { method: "GET", headers: candidate.headers },
-          key,
-        )
-        if (!response.ok) {
-          await response.body?.cancel().catch(() => {})
-          if (response.status === 404) continue
-          throw new Error(`Published object GET failed (${response.status})`)
-        }
-        allMissing = false
-        const bytes = await boundedBytes(response, identity.limit, bodyTimeoutMs)
-        if ((await publishedObjectHash(bytes)) !== identity.hash)
-          throw new Error("Published object hash mismatch")
-        const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-        return { key, hash: identity.hash, value, bytes, source: candidate.source }
-      } catch (error) {
-        allMissing = false
-        failure = error
-      }
-    }
-    if (allMissing) return null
-    throw failure || new Error("Published object unavailable")
-  }
-
-  /**
-   * B-762 reader-readiness probe: an object is only reader-resolvable when
-   * every configured read source (authenticated Storage and the public CDN)
-   * returns bytes matching the exact content hash. A single authenticated
-   * Storage success is not sufficient evidence for advertising a view.
-   */
-  async function verifyReaderResolvable(key) {
-    const identity = objectIdentity(key)
-    const candidates = externalPortraitReadCandidates(env, key, { accept: "application/json" })
-    const sources = {}
-    for (const candidate of candidates) {
-      if (Object.hasOwn(sources, candidate.source)) continue
-      let ok = false
-      try {
-        const response = await send(
-          candidate.url,
-          { method: "GET", headers: candidate.headers },
-          key,
-        )
-        if (response.ok) {
-          const bytes = await boundedBytes(response, identity.limit, bodyTimeoutMs)
-          ok = (await publishedObjectHash(bytes)) === identity.hash
-        } else {
-          await response.body?.cancel().catch(() => {})
-        }
-      } catch {
-        ok = false
-      }
-      sources[candidate.source] = ok
-    }
-    return {
-      ready: Object.keys(sources).length > 0 && Object.values(sources).every(Boolean),
-      sources,
-    }
-  }
-
-  async function readImageBytes(
-    key,
-    expectedHash,
-    { storageOnly = false, repairStorageFromCdn = false } = {},
-  ) {
-    let candidates = externalPortraitReadCandidates(env, key, { accept: "image/*" })
-    if (storageOnly)
-      candidates = candidates.filter((candidate) => candidate.source === "authenticated_storage")
-    if (!candidates.length) throw new Error("Bunny blot storage is not configured")
-    const verifiedSources = {}
-    let bytes = null
-    let storageFailure = null
-    for (const candidate of candidates) {
-      try {
-        const response = await send(
-          candidate.url,
-          { method: "GET", headers: candidate.headers },
-          key,
-        )
-        if (!response.ok) {
-          await response.body?.cancel().catch(() => {})
-          const error = new Error(`Published blot GET failed (${response.status}) for ${key}`)
-          error.code =
-            response.status === 404 ? "PUBLISHED_BLOT_NOT_FOUND" : "PUBLISHED_BLOT_READ_FAILED"
-          error.status = response.status
-          throw error
-        }
-        const candidateBytes = await boundedBytes(response, BLOT_BYTE_LIMIT, bodyTimeoutMs)
-        if ((await publishedObjectHash(candidateBytes)) !== expectedHash) {
-          throw new Error(`Published blot hash mismatch for ${key} from ${candidate.source}`)
-        }
-        if (repairStorageFromCdn && storageFailure && candidate.source === "public_cdn") {
-          const storageUrl = externalPortraitStorageUrl(env, key)
-          const password = externalPortraitStoragePassword(env)
-          if (!storageUrl || !password) throw storageFailure
-          const repaired = await send(
-            storageUrl,
-            {
-              method: "PUT",
-              headers: { AccessKey: password, "Content-Type": "image/webp" },
-              body: candidateBytes,
-            },
-            key,
-          )
-          if (!repaired.ok) {
-            await repaired.body?.cancel().catch(() => {})
-            throw new Error(`Published blot origin repair failed (${repaired.status}) for ${key}`)
-          }
-          await repaired.body?.cancel().catch(() => {})
-          const verified = await send(
-            storageUrl,
-            { method: "GET", headers: { AccessKey: password, Accept: "image/*" } },
-            key,
-          )
-          if (!verified.ok) {
-            await verified.body?.cancel().catch(() => {})
-            throw new Error(
-              `Published blot origin repair verification failed (${verified.status}) for ${key}`,
-            )
-          }
-          const verifiedBytes = await boundedBytes(verified, BLOT_BYTE_LIMIT, bodyTimeoutMs)
-          if ((await publishedObjectHash(verifiedBytes)) !== expectedHash) {
-            throw new Error(`Published blot origin repair hash mismatch for ${key}`)
-          }
-          verifiedSources.authenticated_storage = true
-        }
-        bytes ||= candidateBytes
-        verifiedSources[candidate.source] = true
-        if (repairStorageFromCdn && candidate.source === "authenticated_storage") {
-          return { bytes, verifiedSources }
-        }
-      } catch (error) {
-        if (repairStorageFromCdn && candidate.source === "authenticated_storage") {
-          storageFailure = error
-          continue
-        }
-        throw error
-      }
-    }
-    if (!bytes && storageFailure) throw storageFailure
-    return { bytes, verifiedSources }
-  }
-
-  /**
-   * The exact bytes are verified through any configured read source. Bunny
-   * Storage reads and the public pull zone can each lag the other after a
-   * write (both directions observed live), so requiring one named source
-   * couples a catalog-wide pass to whichever cache happens to be behind.
-   */
-  async function verifyBlot(symbol, blot) {
-    const normalized = String(symbol || "")
-      .trim()
-      .toUpperCase()
-    if (!SYMBOL.test(normalized)) throw new Error("Invalid published blot symbol")
-    const immutable = immutableBlotIdentity(normalized, blot)
-    if (!immutable) return { skipped: true }
-    // The first-party /blot/{symbol}.webp reader resolves this exact key from
-    // the committed card. Verify those bytes before advancing the head.
-    const { bytes, verifiedSources } = await readImageBytes(immutable.key, immutable.hash, {
-      repairStorageFromCdn: true,
-    })
-    return {
-      key: immutable.key,
-      hash: immutable.hash,
-      size: bytes.byteLength,
-      sources: verifiedSources,
-    }
-  }
-  // Stable (mutable, fixed-URL) gene object. Same PUT-then-verify discipline as
-  // the immutable objects: the bytes are read back through authenticated
-  // Storage and hash-compared before this returns, so a caller that sees
-  // success knows the exact bytes are on the origin.
+  // Stable (mutable, fixed-URL) gene object. PUT, then verify: the bytes are
+  // read back through authenticated Storage and hash-compared before this
+  // returns, so a caller that sees success knows the exact bytes are on the
+  // origin.
   async function writeStable(key, value, { purge = true } = {}) {
     const identity = stableGeneObjectIdentity(key)
     const bytes = encoder.encode(canonicalPublishedJson(value))
@@ -470,83 +212,11 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return true
   }
 
-  // One wildcard purge for the whole stable-object prefix, used after a full
-  // rematerialization has rewritten every gene.
-  async function purgeStablePrefix() {
-    return purgeCdnUrl(
-      externalPortraitPublicUrl(env, `${STABLE_GENE_OBJECT_PREFIX}/*`),
-      `${STABLE_GENE_OBJECT_PREFIX}/*`,
-    )
-  }
-
   // Exact-URL purge for any stable (fixed-URL) object the Worker just rewrote
   // or proxied, such as the catalog object uploaded by the Actions publisher.
   async function purgeStableKey(key) {
     return purgeCdnUrl(externalPortraitPublicUrl(env, key), key)
   }
 
-  return {
-    read,
-    verifyReaderResolvable,
-    verifyBlot,
-    writeStable,
-    readStable,
-    purgeStablePrefix,
-    purgeStableKey,
-    async write(kind, value, { reuseExisting = false } = {}) {
-      if (!Object.hasOwn(PUBLISHED_CARD_OBJECT_LIMITS, kind))
-        throw new Error("Unknown published object kind")
-      const bytes = encoder.encode(canonicalPublishedJson(value))
-      if (bytes.byteLength > PUBLISHED_CARD_OBJECT_LIMITS[kind]) {
-        // B-792: an oversized serialized document is not a transient failure.
-        // The exact input cannot succeed on a later attempt, so the coordinator
-        // records it durably as permanent instead of re-uploading and retrying
-        // the same bytes. The caller attaches the gene and run identity.
-        const error = new Error(
-          `Published object exceeds its byte limit: kind=${kind}, bytes=${bytes.byteLength}, limit=${PUBLISHED_CARD_OBJECT_LIMITS[kind]}`,
-        )
-        error.code = "PUBLISHED_OBJECT_OVERSIZED"
-        error.permanent = true
-        error.details = {
-          object_kind: kind,
-          bytes: bytes.byteLength,
-          limit: PUBLISHED_CARD_OBJECT_LIMITS[kind],
-        }
-        throw error
-      }
-      const hash = await publishedObjectHash(bytes)
-      const key = publishedCardObjectKey(kind, hash)
-      if (reuseExisting) {
-        // A full rematerialization commonly reaches bytes that the committed
-        // catalog already published. The authenticated origin GET verifies the
-        // exact hash; a miss follows the normal PUT and read-back path.
-        const existing = await read(key, { verifyStorageOnly: true })
-        if (existing) return { key, hash, size: bytes.byteLength, skipped: true }
-      }
-      const url = externalPortraitStorageUrl(env, key)
-      const password = externalPortraitStoragePassword(env)
-      if (!url || !password) throw new Error("Bunny published-object writes are not configured")
-      const response = await send(
-        url,
-        {
-          method: "PUT",
-          headers: {
-            AccessKey: password,
-            "Content-Type": "application/json",
-            "Cache-Control": "public, max-age=31536000, immutable",
-          },
-          body: bytes,
-        },
-        key,
-      )
-      await response.body?.cancel().catch(() => {})
-      if (!response.ok) throw new Error(`Published object PUT failed (${response.status})`)
-      // A successful PUT or HEAD is insufficient: Bunny has acknowledged bytes
-      // before they were readable. Verify the hash through authenticated Storage.
-      // Failure leaves durable publisher work pending; it never advances canon.
-      const verified = await read(key, { verifyStorageOnly: true })
-      if (!verified) throw new Error("Published object PUT is not yet readable")
-      return { key, hash, size: bytes.byteLength }
-    },
-  }
+  return { writeStable, readStable, purgeStableKey }
 }

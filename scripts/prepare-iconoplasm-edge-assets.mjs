@@ -8,8 +8,9 @@ import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-servic
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
 // validation coupled to direct route ownership; do not replace it with a
 // Worker-side cache that still consumes one invocation per file.
-// ARCHITECTURE FENCE [IPD-003]: final activation derives complete gene sitemap
-// membership from the verified immutable compact catalog, never a runtime scan.
+// ARCHITECTURE FENCE [IPD-003]: sitemap membership and the per-gene documents
+// come from catalog/v3/index.json at build time, never a runtime scan. They are
+// as fresh as the last deploy.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const publicRoot = path.join(repoRoot, "public")
 const targetRoot = path.join(repoRoot, "public-iconoplasm-edge")

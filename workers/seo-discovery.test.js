@@ -15,10 +15,6 @@ import {
 import { iconoplasmPublicationAliasManifest } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
 import {
-  iconoplasmGeneBlotFingerprint,
-  iconoplasmGeneBlotObjectKey,
-} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
-import {
   STABLE_GENE_STORAGE_HOST,
   stableGeneStorageEnv,
 } from "./test-helpers/stable-gene-objects.js"
@@ -187,15 +183,7 @@ function buildGenePageD1(genes) {
 
 async function buildPublishedCatalogEnv(
   genes,
-  {
-    cardPortraitShaBySymbol = {},
-    cardPortraitStatusBySymbol = {},
-    cardBlotSemanticUrlBySymbol = {},
-    omitCardSymbols = [],
-    omitBlotSymbols = [],
-    materializedBlotRowsBySymbol = {},
-    withGenePageD1 = false,
-  } = {},
+  { cardPortraitShaBySymbol = {}, cardBlotSemanticUrlBySymbol = {}, withGenePageD1 = false } = {},
 ) {
   catalogFixtureSequence += 1
   resetIconoplasmRuntimeCachesForTest()
@@ -222,92 +210,48 @@ async function buildPublishedCatalogEnv(
     term_count: blocklistTerms.length,
     terms: blocklistTerms,
   }
-  const omittedCards = new Set(omitCardSymbols)
-  const omittedBlots = new Set(omitBlotSymbols)
-  const cards = genes
-    .filter((gene) => !omittedCards.has(gene.s))
-    .map((gene) => {
-      const cardPortraitSha = cardPortraitShaBySymbol[gene.s] || gene.p?.asset_sha256
-      const cardPortraitStatus =
-        cardPortraitStatusBySymbol[gene.s] || (cardPortraitSha ? "published" : "missing")
-      const portrait = cardPortraitSha
-        ? { status: cardPortraitStatus, asset_sha256: cardPortraitSha }
-        : { status: "missing", asset_sha256: null }
-      const blotFingerprint = "b".repeat(32)
-      const blot =
-        omittedBlots.has(gene.s) || cardPortraitStatus !== "published" || !cardPortraitSha
-          ? null
-          : {
-              status: "ready",
-              blot_fingerprint: blotFingerprint,
-              portrait_asset_sha256: cardPortraitSha,
-              asset_sha256: "c".repeat(64),
-              object_key: `blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
-              image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
-              canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
-              semantic_url:
-                cardBlotSemanticUrlBySymbol[gene.s] ||
-                `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
-              width: 768,
-              height: 1024,
-            }
-      return {
-        __complete: true,
-        schema_version: "iconoplasm.mobileCard.v1",
-        snapshot_version: cardVersion,
-        data_source: "published_card_catalog",
+  const cards = genes.map((gene) => {
+    const cardPortraitSha = cardPortraitShaBySymbol[gene.s] || gene.p?.asset_sha256
+    const cardPortraitStatus = cardPortraitSha ? "published" : "missing"
+    const portrait = cardPortraitSha
+      ? { status: cardPortraitStatus, asset_sha256: cardPortraitSha }
+      : { status: "missing", asset_sha256: null }
+    const blotFingerprint = "b".repeat(32)
+    const blot =
+      cardPortraitStatus !== "published" || !cardPortraitSha
+        ? null
+        : {
+            status: "ready",
+            blot_fingerprint: blotFingerprint,
+            portrait_asset_sha256: cardPortraitSha,
+            asset_sha256: "c".repeat(64),
+            object_key: `blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
+            image_url: `https://iconoplasmportraits.b-cdn.net/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
+            canonical_url: `https://iconoplasm.brinedew.bio/blots/v1/${gene.s[0]}/${gene.s}/${blotFingerprint}/${gene.s}-iconoplasm-gene-blot.webp`,
+            semantic_url:
+              cardBlotSemanticUrlBySymbol[gene.s] ||
+              `https://iconoplasm.brinedew.bio/blot/${gene.s}.webp`,
+            width: 768,
+            height: 1024,
+          }
+    return {
+      __complete: true,
+      schema_version: "iconoplasm.mobileCard.v1",
+      snapshot_version: cardVersion,
+      data_source: "published_card_catalog",
+      symbol: gene.s,
+      full_name: gene.n,
+      portrait,
+      field_status: {},
+      payload: {
         symbol: gene.s,
         full_name: gene.n,
         portrait,
-        field_status: {},
-        payload: {
-          symbol: gene.s,
-          full_name: gene.n,
-          portrait,
-          ...(blot ? { blot } : {}),
-        },
-      }
-    })
-  stableGeneObjects.clear()
-  // The range pages and sitemaps read the frozen card snapshot, which lives on Bunny Storage as a ccv2 manifest,
-  // one delivery index per shard and one exact card object per gene (every
-  // object content-addressed and hash-verified by the store). Seed that tree
-  // and its frozen KV head.
-  const frozenTreeObject = (kind, value) => {
-    const body = JSON.stringify(value)
-    const digest = createHash("sha256").update(body).digest("hex")
-    const key = `published-cards/v2/immutable/${kind}/${digest}.json`
-    stableGeneObjects.set(`/${STABLE_STORAGE_ZONE}/${key}`, body)
-    return { key, hash: digest }
-  }
-  const cardRefs = cards.map((card) => frozenTreeObject("cards", card))
-  const deliveryIndex = frozenTreeObject("indexes", {
-    schema_version: 2,
-    entries: cards.map((card, index) => [card.symbol, cardRefs[index].hash]),
-  })
-  const frozenManifest = frozenTreeObject("manifests", {
-    schema: "iconoplasm.cardCatalog.v1",
-    storage: "bunny_card_catalog_v2",
-    card_count: cards.length,
-    catalog_gene_count: cards.length,
-    shards: [
-      {
-        index: 0,
-        key: "unused-packed-shard",
-        card_count: cards.length,
-        first_symbol: cards[0]?.symbol || "",
-        last_symbol: cards[cards.length - 1]?.symbol || "",
-        delivery_indexes: [
-          {
-            first_symbol: cards[0]?.symbol || "",
-            last_symbol: cards[cards.length - 1]?.symbol || "",
-            key: deliveryIndex.key,
-          },
-        ],
+        ...(blot ? { blot } : {}),
       },
-    ],
+    }
   })
-  const frozenHead = `ccv2-${frozenManifest.hash}`
+  stableGeneObjects.clear()
   for (const card of cards) {
     stableGeneObjects.set(
       `/${STABLE_STORAGE_ZONE}/genes/v3/${card.symbol}.json`,
@@ -338,10 +282,6 @@ async function buildPublishedCatalogEnv(
       JSON.stringify({ cached_at: Date.now(), fingerprint }),
     ],
     [`iconoplasm:hydrated-catalog-artifact:a5c1:${buildHash}`, JSON.stringify(artifact)],
-    [
-      "iconoplasm:gallery-version",
-      JSON.stringify({ current: frozenHead, published_at: "2026-08-23T00:00:00.000Z" }),
-    ],
     [
       iconoplasmRecognitionPairKvKey(1, 1),
       JSON.stringify({
@@ -391,7 +331,7 @@ async function buildPublishedCatalogEnv(
               }
             }
             if (!text.includes("FROM icono_gene_blot_materializations")) {
-              throw new Error(`Discovery documents may query only exact blot rows: ${sql}`)
+              throw new Error(`Unexpected catalog-fixture D1 query: ${sql}`)
             }
             return {
               args: [],
@@ -400,12 +340,7 @@ async function buildPublishedCatalogEnv(
                 return this
               },
               async all() {
-                return {
-                  results: this.args.flatMap((symbol) => {
-                    const row = materializedBlotRowsBySymbol[String(symbol || "").toUpperCase()]
-                    return row ? [{ gene_symbol: symbol, ...row }] : []
-                  }),
-                }
+                return { results: [] }
               },
             }
           },
@@ -519,266 +454,7 @@ test("apps index delegates descriptions to the canonical folder listing", async 
   assert.doesNotMatch(body, /\bData:|\bGameplay:|\bStatus:|6 guesses|Fully static/)
 })
 
-test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent contract", async () => {
-  const env = await buildPublishedCatalogEnv([
-    publishedGene("TP53", "tumor protein p53"),
-    publishedGene("TRIM1", "tripartite motif containing 1", { published: false }),
-  ])
-  const robots = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/robots.txt"),
-    env,
-    {},
-  )
-  const robotsText = await robots.text()
-
-  assert.equal(robots.status, 200)
-  assert.match(robots.headers.get("content-type") || "", /text\/plain/)
-  assert.match(robotsText, /Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml/)
-  assert.match(robotsText, /User-agent: GPTBot\s+Disallow: \//)
-  assert.match(robotsText, /User-agent: ClaudeBot\s+Disallow: \//)
-  for (const searchAgent of [
-    "OAI-SearchBot",
-    "ChatGPT-User",
-    "Claude-SearchBot",
-    "Claude-User",
-    "PerplexityBot",
-    "Perplexity-User",
-  ]) {
-    assert.match(
-      robotsText,
-      new RegExp(`User-agent: ${searchAgent}\\s+Allow: /\\s+Disallow: /api/`),
-      searchAgent,
-    )
-  }
-  assert.doesNotMatch(robotsText, /\bsearch:\s*yes\b/)
-  assert.doesNotMatch(robotsText, /\bCrawl-delay\b/i)
-
-  const sitemap = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/sitemap.xml"),
-    env,
-    {},
-  )
-  const sitemapText = await sitemap.text()
-
-  assert.equal(sitemap.status, 200)
-  assert.match(sitemap.headers.get("content-type") || "", /application\/xml/)
-  assert.match(sitemapText, /<sitemapindex/)
-  assert.match(sitemapText, /\/sitemaps\/pages\.xml/)
-  assert.match(sitemapText, /\/sitemaps\/genes\/TO-TR\.xml/)
-
-  const pagesSitemap = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/sitemaps/pages.xml"),
-    env,
-    {},
-  )
-  const pagesSitemapText = await pagesSitemap.text()
-  assert.equal(pagesSitemap.status, 200)
-  assert.match(pagesSitemapText, /<loc>https:\/\/iconoplasm\.brinedew\.bio\/license<\/loc>/)
-
-  const archive = await worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes"), env, {})
-  const archiveHtml = await archive.text()
-  assert.equal(archive.status, 200)
-  assert.match(archiveHtml, /href="\/genes\/TO-TR"/)
-
-  const range = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"),
-    env,
-    {},
-  )
-  const rangeHtml = await range.text()
-  assert.equal(range.status, 200)
-  assert.match(range.headers.get("etag") || "", /ccv2-[a-f0-9]{64}/)
-  assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^ccv2-[a-f0-9]{64}$/)
-  assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
-  assert.match(rangeHtml, /href="\/gene\/TP53"/)
-  assert.doesNotMatch(rangeHtml, /TRIM1/)
-
-  const shard = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
-    env,
-    {},
-  )
-  const shardText = await shard.text()
-  assert.equal(shard.status, 200)
-  assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^ccv2-[a-f0-9]{64}$/)
-  assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
-  assert.match(shard.headers.get("etag") || "", /2026-08-24-v4/)
-  assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
-  assert.match(shardText, /\/gene\/TP53/)
-  assert.match(shardText, /\/blot\/TP53\.webp/)
-  assert.doesNotMatch(shardText, /TRIM1/)
-  assert.doesNotMatch(shardText, /<image:(?:title|caption)>/)
-
-  const llms = await worker.fetch(new Request("https://iconoplasm.brinedew.bio/llms.txt"), env, {})
-  const llmsText = await llms.text()
-
-  assert.equal(llms.status, 200)
-  assert.match(llms.headers.get("content-type") || "", /text\/plain/)
-  assert.match(llmsText, /^# Iconoplasm/m)
-  assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/privacy/)
-  assert.match(llmsText, /https:\/\/iconoplasm\.brinedew\.bio\/license/)
-  assert.match(llmsText, /CC0 1\.0/)
-  assert.match(llmsText, /\/gene\/\{HGNC_SYMBOL\}/)
-  assert.match(llmsText, /PFAM clan → character fashion aesthetic/)
-})
-
-test("gene archive stays text-only while sitemap uses the exact card blot when portrait metadata drifts", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    cardPortraitShaBySymbol: { TP53: "b".repeat(64) },
-  })
-
-  const [range, sitemap] = await Promise.all([
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"), env, {}),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {}),
-  ])
-  const [rangeHtml, sitemapXml] = await Promise.all([range.text(), sitemap.text()])
-  assert.equal(range.status, 200)
-  assert.equal(sitemap.status, 200)
-  assert.match(rangeHtml, /href="\/gene\/TP53"/)
-  assert.doesNotMatch(rangeHtml, /<img\b/)
-  assert.doesNotMatch(rangeHtml, /\/blots\/v1\//)
-  assert.match(
-    sitemapXml,
-    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
-  )
-  assert.doesNotMatch(rangeHtml, new RegExp(`/portraits/v1/aa/${"a".repeat(64)}/`))
-  assert.doesNotMatch(sitemapXml, new RegExp(`/portraits/v1/aa/${"a".repeat(64)}/`))
-})
-
-test("published genes remain discoverable when their exact card has no ready blot", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    cardPortraitShaBySymbol: { TP53: "b".repeat(64) },
-    omitBlotSymbols: ["TP53"],
-  })
-  const [range, sitemap] = await Promise.all([
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"), env, {}),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {}),
-  ])
-  const [rangeHtml, sitemapXml] = await Promise.all([range.text(), sitemap.text()])
-
-  assert.equal(range.status, 200)
-  assert.equal(sitemap.status, 200)
-  assert.match(rangeHtml, /\/gene\/TP53/)
-  assert.match(sitemapXml, /\/gene\/TP53/)
-  assert.doesNotMatch(rangeHtml, /<img class="gene-card-thumb"/)
-  assert.doesNotMatch(sitemapXml, /<image:image>/)
-  assert.doesNotMatch(sitemapXml, /\/portraits\/v1\/bb\//)
-})
-
-test("zero-KV exact blot rows enter the gene sitemap without republishing card shards", async () => {
-  const portraitSha = "b".repeat(64)
-  const cardPayload = {
-    symbol: "TP53",
-    full_name: "tumor protein p53",
-    portrait: { status: "published", asset_sha256: portraitSha },
-  }
-  const blotFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
-  const objectKey = iconoplasmGeneBlotObjectKey("TP53", blotFingerprint)
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    cardPortraitShaBySymbol: { TP53: portraitSha },
-    omitBlotSymbols: ["TP53"],
-    materializedBlotRowsBySymbol: {
-      TP53: {
-        gene_blot_fingerprint: blotFingerprint,
-        gene_blot_portrait_asset_sha256: portraitSha,
-        gene_blot_asset_sha256: "c".repeat(64),
-        gene_blot_object_key: objectKey,
-        gene_blot_width: 768,
-        gene_blot_height: 1024,
-      },
-    },
-  })
-
-  const sitemap = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
-    env,
-    {},
-  )
-  const sitemapXml = await sitemap.text()
-
-  assert.equal(sitemap.status, 200)
-  assert.match(
-    sitemapXml,
-    /<image:loc>https:\/\/iconoplasm\.brinedew\.bio\/blot\/TP53\.webp<\/image:loc>/,
-  )
-})
-
-test("a stale zero-KV blot row cannot enter the gene sitemap", async () => {
-  const portraitSha = "b".repeat(64)
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    cardPortraitShaBySymbol: { TP53: portraitSha },
-    omitBlotSymbols: ["TP53"],
-    materializedBlotRowsBySymbol: {
-      TP53: {
-        gene_blot_fingerprint: "0".repeat(32),
-        gene_blot_portrait_asset_sha256: portraitSha,
-        gene_blot_asset_sha256: "c".repeat(64),
-        gene_blot_object_key: iconoplasmGeneBlotObjectKey("TP53", "0".repeat(32)),
-        gene_blot_width: 768,
-        gene_blot_height: 1024,
-      },
-    },
-  })
-
-  const sitemap = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"),
-    env,
-    {},
-  )
-  const sitemapXml = await sitemap.text()
-
-  assert.equal(sitemap.status, 200)
-  assert.doesNotMatch(sitemapXml, /<image:image>/)
-})
-
-test("a missing requested card fails the whole range and sitemap shard closed", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    omitCardSymbols: ["TP53"],
-  })
-  const [range, sitemap] = await Promise.all([
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"), env, {}),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {}),
-  ])
-
-  assert.equal(range.status, 503)
-  assert.equal(range.headers.get("cache-control"), "no-store")
-  assert.equal(sitemap.status, 503)
-  assert.equal(sitemap.headers.get("cache-control"), "no-store")
-})
-
-test("a malformed published-card portrait fails discovery documents closed", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
-    cardPortraitShaBySymbol: { TP53: "not-a-sha-256" },
-  })
-  const [range, sitemap] = await Promise.all([
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/genes/TO-TR"), env, {}),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {}),
-  ])
-
-  assert.equal(range.status, 503)
-  assert.equal(range.headers.get("cache-control"), "no-store")
-  assert.equal(sitemap.status, 503)
-  assert.equal(sitemap.headers.get("cache-control"), "no-store")
-})
-
-test("sitemap roots fail closed when the selected card manifest is unavailable", async () => {
-  const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])
-  // The frozen head names a manifest Bunny no longer serves.
-  for (const key of [...stableGeneObjects.keys()])
-    if (key.includes("/published-cards/v2/immutable/manifests/")) stableGeneObjects.delete(key)
-
-  const [index, pages] = await Promise.all([
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemap.xml"), env, {}),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/pages.xml"), env, {}),
-  ])
-
-  assert.equal(index.status, 503)
-  assert.equal(index.headers.get("cache-control"), "no-store")
-  assert.equal(pages.status, 503)
-  assert.equal(pages.headers.get("cache-control"), "no-store")
-})
-
-test("gene document GET and HEAD use the same exact card blot as the sitemap", async () => {
+test("gene document GET and HEAD use the exact published card blot", async () => {
   const staleD1PortraitSha = "a".repeat(64)
   const publishedCardPortraitSha = "b".repeat(64)
   const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")], {
@@ -795,7 +471,7 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
 <html><head><title>Iconoplasm</title><meta name="description" content="Iconoplasm"><meta name="robots" content="index,follow"></head><body><div id="iconoplasm-root"></div></body></html>`)
   }
 
-  const [page, head, sitemap] = await Promise.all([
+  const [page, head] = await Promise.all([
     worker.fetch(new Request("https://iconoplasm.brinedew.bio/gene/TP53"), env, {
       waitUntil() {},
     }),
@@ -806,21 +482,13 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
         waitUntil() {},
       },
     ),
-    worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemaps/genes/TO-TR.xml"), env, {
-      waitUntil() {},
-    }),
   ])
-  const [pageHtml, headBody, sitemapXml] = await Promise.all([
-    page.text(),
-    head.text(),
-    sitemap.text(),
-  ])
+  const [pageHtml, headBody] = await Promise.all([page.text(), head.text()])
   const blotUrl = "https://iconoplasm.brinedew.bio/blot/TP53.webp"
 
   assert.equal(page.status, 200)
   assert.equal(head.status, 200)
   assert.equal(headBody, "")
-  assert.equal(sitemap.status, 200)
   assert.equal(page.headers.get("x-robots-tag"), null)
   assert.equal(head.headers.get("x-robots-tag"), null)
   assert.match(pageHtml, new RegExp(`property="og:image" content="${blotUrl}"`))
@@ -850,9 +518,7 @@ test("gene document GET and HEAD use the same exact card blot as the sitemap", a
   )
   assert.match(pageHtml, /reuse permitted without attribution/)
   assert.match(pageHtml, /rel="license"/)
-  assert.match(sitemapXml, new RegExp(`<image:loc>${blotUrl}</image:loc>`))
   assert.doesNotMatch(pageHtml, new RegExp(`/portraits/v1/aa/${staleD1PortraitSha}/`))
-  assert.doesNotMatch(sitemapXml, new RegExp(`/portraits/v1/aa/${staleD1PortraitSha}/`))
 
   const bootstrapMatch = pageHtml.match(
     /<script type="application\/json" id="iconoplasm-card-bootstrap">([^<]+)<\/script>/,

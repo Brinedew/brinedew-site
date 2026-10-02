@@ -43,7 +43,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait accelerator; direct delivery avoids charging each image to the Worker budget, and a failed probe changes only that tab. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract with frozen archive ranges; eligibility follows the one stable gene object and the one catalog object. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract: every deploy builds the static sitemap and one document per gene from the catalog object, and eligibility follows the one stable gene object and the one catalog object. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time wakeups for durable ledgers, never polling tokens; unfinished work waits for its ledger due time. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 

@@ -80,10 +80,7 @@ import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js
 import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
-  CARD_PUBLICATION_STORAGE,
-  cardPublicationManifestKey,
   createPublishedCardObjectStore,
-  publishedCardObjectKey,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
@@ -1044,11 +1041,6 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // The D1 rows icono_publish_state and icono_portrait_assets stay the authoring
 // source; what readers see is whatever those two objects hold, and every
 // surface reads the same object per gene.
-// The head of the frozen card snapshot. Nothing writes it; its one reader is
-// the gene-discovery worker's range pages and sitemaps through
-// readIconoplasmPublishedGeneDiscoveryProjections, until those documents are
-// rendered at build time from catalog/v3/index.json.
-const KV_FROZEN_CARD_TREE_HEAD = "iconoplasm:gallery-version"
 const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
@@ -1076,22 +1068,6 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "purge_legacy",
   "manifestation_canonical_changed",
 ]
-const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
-// The frozen tree's manifest and shards stay in a small isolate-local LRU so
-// overlapping range-page reads do not repeatedly pay storage transfer +
-// JSON.parse. This is only a speed layer; entries are keyed by immutable
-// object identity and malformed/missing values are never cached.
-const CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT = 3
-// The earlier count-only cache could retain 16 * 750 rich cards with no memory
-// ceiling. A prior capacity trace measured about 6.3 MiB of serialized data for
-// 2,250 cards (three normal shards). We deliberately estimate a parsed object at
-// six times its raw UTF-8 JSON bytes to cover strings, arrays, property slots,
-// and allocator overhead without claiming an exact V8 heap measurement. The
-// 16 MiB estimate ceiling reserves only about one eighth of a 128 MiB Workers
-// isolate for this optional cache; an oversized shard is served but not kept.
-const CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT = 4
-const CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT = 16 * 1024 * 1024
-const CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER = 6
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
@@ -1216,10 +1192,6 @@ const hydratedCatalogArtifactCache = {
   key: null,
   value: null,
 }
-const cardCatalogParsedManifestCache = new Map()
-const cardCatalogParsedManifestReadPromises = new Map()
-const cardCatalogParsedShardCache = new Map()
-const cardCatalogParsedShardReadPromises = new Map()
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
 const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
@@ -13704,21 +13676,6 @@ async function warmCatalogCache(env) {
   catalogCache.bySymbol = bySymbol
   catalogCache.symbolByUniprot = symbolByUniprot
   catalogCache.symbolByAlias = symbolByAlias
-}
-
-// ARCHITECTURE FENCE [IPD-003]
-// Public gene discovery is a read model over the same immutable, versioned KV
-// artifact used by the extension and gallery. Archive and sitemap routes import
-// this seam so they can never grow an accidental whole-inventory D1 query.
-export async function readIconoplasmPublishedGeneDiscoveryCatalog(env) {
-  await warmCatalogCache(env)
-  if (!catalogCache.hash || catalogCache.bySymbol.size === 0) return null
-  return {
-    version: catalogCache.hash,
-    catalogHash: catalogCache.catalogHash,
-    generatedAt: catalogCache.generatedAt,
-    genes: catalogCache.genes,
-  }
 }
 
 export async function resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier) {
@@ -27451,14 +27408,8 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.loadedAt = 0
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  cardCatalogParsedManifestCache.clear()
-  cardCatalogParsedManifestReadPromises.clear()
-  cardCatalogParsedShardCache.clear()
-  cardCatalogParsedShardReadPromises.clear()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
-  frozenCardTreeHeadCache.value = null
-  frozenCardTreeHeadCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
 }
@@ -27680,35 +27631,6 @@ export async function publishIconoplasmGeneStableObject(
   }
 }
 
-// B-898: the head of the frozen immutable card tree, read for the gene-discovery
-// worker only (see KV_FROZEN_CARD_TREE_HEAD). One KV read per isolate per five
-// seconds; a missing or unparsable head reads as "0" and the discovery
-// documents fail closed (503) instead of guessing.
-const frozenCardTreeHeadCache = { value: null, loadedAt: 0 }
-async function frozenCardTreeHead(env) {
-  const now = Date.now()
-  if (
-    frozenCardTreeHeadCache.loadedAt > 0 &&
-    now - frozenCardTreeHeadCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
-    frozenCardTreeHeadCache.value
-  ) {
-    return frozenCardTreeHeadCache.value
-  }
-  let head = { current: "0", published_at: "" }
-  if (env?.KV) {
-    try {
-      const parsed = JSON.parse((await env.KV.get(KV_FROZEN_CARD_TREE_HEAD)) || "null")
-      const current = String(parsed?.current || "").trim()
-      if (current) head = { current, published_at: String(parsed?.published_at || "") }
-    } catch {
-      head = frozenCardTreeHeadCache.value || head
-    }
-  }
-  frozenCardTreeHeadCache.value = head
-  frozenCardTreeHeadCache.loadedAt = now
-  return head
-}
-
 function cardCatalogCanonicalActionPlaceholders() {
   return CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.map(() => "?").join(",")
 }
@@ -27893,44 +27815,6 @@ async function exactReadyGeneBlotForPublishedCard(env, symbolValue, cardPayload,
     .bind(symbol)
     .first()
   return exactReadyGeneBlotProjection(cardPayload, row, { env, origin })
-}
-
-async function exactReadyGeneBlotsForPublishedCards(env, cardsBySymbol) {
-  if (!(cardsBySymbol instanceof Map) || !cardsBySymbol.size || !env?.ICONOPLASM_DB) {
-    return new Map()
-  }
-  const symbols = [...cardsBySymbol.keys()]
-  const rowsBySymbol = new Map()
-  // D1 accepts at most 100 bound parameters. Gene discovery ranges are bounded,
-  // but several ranges contain more than 100 symbols, so read only their exact
-  // materialization rows in stable chunks instead of scanning the blot ledger.
-  const D1_MAX_BOUND_PARAMS = 90
-  for (let index = 0; index < symbols.length; index += D1_MAX_BOUND_PARAMS) {
-    const batch = symbols.slice(index, index + D1_MAX_BOUND_PARAMS)
-    const result = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol,
-              blot_fingerprint AS gene_blot_fingerprint,
-              portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
-              blot_asset_sha256 AS gene_blot_asset_sha256,
-              object_key AS gene_blot_object_key,
-              width AS gene_blot_width,
-              height AS gene_blot_height
-         FROM icono_gene_blot_materializations
-        WHERE gene_symbol IN (${batch.map(() => "?").join(",")})`,
-    )
-      .bind(...batch)
-      .all()
-    for (const row of Array.isArray(result?.results) ? result.results : []) {
-      const symbol = normalizeSymbol(row?.gene_symbol || "")
-      if (symbol && cardsBySymbol.has(symbol)) rowsBySymbol.set(symbol, row)
-    }
-  }
-  return new Map(
-    symbols.map((symbol) => [
-      symbol,
-      exactReadyGeneBlotProjection(cardsBySymbol.get(symbol), rowsBySymbol.get(symbol)),
-    ]),
-  )
 }
 
 async function cardCatalogRecordsForArtifact(
@@ -30091,369 +29975,6 @@ function stableCardCatalogMaterialValue(value) {
   return out
 }
 
-function readCardCatalogLru(cache, key) {
-  if (!cache.has(key)) return null
-  const entry = cache.get(key)
-  cache.delete(key)
-  cache.set(key, entry)
-  return entry.value
-}
-
-function writeCardCatalogLru(
-  cache,
-  key,
-  value,
-  { entryLimit, estimatedByteLimit = Number.POSITIVE_INFINITY, estimatedBytes = 0 },
-) {
-  const boundedEstimatedBytes = Math.max(0, Number(estimatedBytes) || 0)
-  if (boundedEstimatedBytes > estimatedByteLimit) return value
-
-  cache.delete(key)
-  cache.set(key, { value, estimatedBytes: boundedEstimatedBytes })
-  let retainedEstimatedBytes = 0
-  for (const entry of cache.values()) {
-    retainedEstimatedBytes += Math.max(0, Number(entry?.estimatedBytes) || 0)
-  }
-  while (cache.size > entryLimit || retainedEstimatedBytes > estimatedByteLimit) {
-    const oldestKey = cache.keys().next().value
-    const oldestEntry = cache.get(oldestKey)
-    cache.delete(oldestKey)
-    retainedEstimatedBytes -= Math.max(0, Number(oldestEntry?.estimatedBytes) || 0)
-  }
-  return value
-}
-
-async function readParsedCardCatalogJson(
-  env,
-  storageKey,
-  {
-    cache,
-    readPromises,
-    cacheKey,
-    cacheEntryLimit,
-    cacheEstimatedByteLimit = Number.POSITIVE_INFINITY,
-    cacheParsedHeapMultiplier = 1,
-    validate,
-    shouldCache = () => true,
-  },
-) {
-  if (!storageKey || !cacheKey || !storageKey.startsWith("published-cards/v2/immutable/"))
-    return null
-  const cached = readCardCatalogLru(cache, cacheKey)
-  if (cached) return cached
-
-  const pending = readPromises.get(cacheKey)
-  if (pending) return pending
-
-  const readPromise = (async () => {
-    const raw = await createPublishedCardObjectStore(env)
-      .read(storageKey)
-      .then((object) => (object ? new TextDecoder().decode(object.bytes) : null))
-    if (!raw) return null
-    const serialized = typeof raw === "string" ? raw : String(raw)
-    const rawUtf8Bytes = new TextEncoder().encode(serialized).byteLength
-    let parsed = null
-    try {
-      parsed = JSON.parse(serialized)
-    } catch {
-      return null
-    }
-    if (!validate(parsed)) return null
-    return shouldCache(parsed)
-      ? writeCardCatalogLru(cache, cacheKey, parsed, {
-          entryLimit: cacheEntryLimit,
-          estimatedByteLimit: cacheEstimatedByteLimit,
-          estimatedBytes: rawUtf8Bytes * Math.max(1, Number(cacheParsedHeapMultiplier) || 1),
-        })
-      : parsed
-  })()
-  readPromises.set(cacheKey, readPromise)
-  try {
-    return await readPromise
-  } finally {
-    if (readPromises.get(cacheKey) === readPromise) readPromises.delete(cacheKey)
-  }
-}
-
-async function readPublishedCardCatalogManifest(env, artifactVersion) {
-  const version = String(artifactVersion || "").trim()
-  const bunnyKey = cardPublicationManifestKey(version)
-  if (!bunnyKey) return null
-  const result = await readParsedCardCatalogJson(env, bunnyKey, {
-    cache: cardCatalogParsedManifestCache,
-    readPromises: cardCatalogParsedManifestReadPromises,
-    cacheKey: version,
-    cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
-    validate: (parsed) =>
-      parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
-      parsed.storage === CARD_PUBLICATION_STORAGE &&
-      Array.isArray(parsed.shards),
-    shouldCache: (parsed) => Array.isArray(parsed?.shards),
-  })
-  return result
-    ? { ...result, artifact_version: version, snapshot_version: version, content_hash: version }
-    : null
-}
-
-function cardCatalogShardMayContainSymbol(shard, symbol) {
-  const normalized = normalizeSymbol(symbol || "")
-  if (!normalized) return false
-  const first = normalizeSymbol(shard?.first_symbol || "")
-  const last = normalizeSymbol(shard?.last_symbol || "")
-  if (!first || !last) return true
-  return normalized >= first && normalized <= last
-}
-
-function normalizePartialCardCatalogArtifact(raw, cards) {
-  if (!raw || typeof raw !== "object") return null
-  const artifactVersion = String(raw.artifact_version || raw.snapshot_version || "").trim()
-  if (!artifactVersion || raw.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return null
-  const bySymbol = new Map()
-  for (const card of Array.isArray(cards) ? cards : []) {
-    if (!assertCompleteMobileCardVM(card)) return null
-    const symbol = normalizeSymbol(card.symbol || "")
-    if (!symbol || bySymbol.has(symbol)) return null
-    bySymbol.set(symbol, card)
-  }
-  return {
-    ...raw,
-    artifact_version: artifactVersion,
-    snapshot_version: artifactVersion,
-    catalog_gene_count: Math.max(0, Number(raw.catalog_gene_count || 0) || 0),
-    card_count: Math.max(0, Number(raw.card_count || 0) || 0),
-    cards,
-    bySymbol,
-  }
-}
-
-function cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) {
-  // Exact shard lookup is optional metadata, not a new public contract. Return
-  // null unless every requested symbol can be mapped safely; the caller then
-  // falls back to the older range check. Do not fall back to D1 on public card
-  // traffic here. D1 is the write/source-of-truth layer, KV is the shared read
-  // barrier, and memory is only an isolate-local speed cache.
-  const shards = Array.isArray(manifest?.shards) ? manifest.shards : []
-  const indexPayload =
-    manifest?.symbol_shard_index && typeof manifest.symbol_shard_index === "object"
-      ? manifest.symbol_shard_index
-      : manifest?.symbolShardIndex && typeof manifest.symbolShardIndex === "object"
-        ? manifest.symbolShardIndex
-        : null
-  if (!indexPayload || !requestedSymbols.length) return null
-  const byIndex = new Map()
-  for (const shard of shards) {
-    const index = Number(shard?.index)
-    if (Number.isFinite(index)) byIndex.set(index, shard)
-  }
-  const selected = new Map()
-  for (const symbol of requestedSymbols) {
-    const normalized = normalizeSymbol(symbol || "")
-    const rawEntry = indexPayload[normalized]
-    const rawIndex =
-      rawEntry && typeof rawEntry === "object"
-        ? (rawEntry.index ?? rawEntry.shard_index ?? rawEntry.shard)
-        : rawEntry
-    const index = Number(rawIndex)
-    const shard = byIndex.get(index)
-    if (!normalized || !Number.isFinite(index) || !shard) return null
-    selected.set(index, shard)
-  }
-  return shards.filter((shard) => selected.has(Number(shard?.index)))
-}
-
-function parsedCardCatalogShardMatchesManifest(parsed, shard) {
-  return (
-    parsed?.schema_version === 2 &&
-    Array.isArray(parsed.cards) &&
-    parsed.cards.length === Number(shard?.card_count || 0)
-  )
-}
-
-async function readPublishedCardCatalogShard(env, shard) {
-  const storageKey = String(shard?.key || "")
-  if (!storageKey) return null
-  return readParsedCardCatalogJson(env, storageKey, {
-    cache: cardCatalogParsedShardCache,
-    readPromises: cardCatalogParsedShardReadPromises,
-    cacheKey: `content-addressed:${storageKey}`,
-    cacheEntryLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT,
-    cacheEstimatedByteLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT,
-    cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
-    validate: (parsed) => parsedCardCatalogShardMatchesManifest(parsed, shard),
-  })
-}
-
-async function readPublishedBunnyCardObject(env, key, validate) {
-  return readParsedCardCatalogJson(env, key, {
-    cache: cardCatalogParsedShardCache,
-    readPromises: cardCatalogParsedShardReadPromises,
-    cacheKey: key,
-    cacheEntryLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT,
-    cacheEstimatedByteLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT,
-    cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
-    validate,
-  })
-}
-
-async function readPublishedBunnyCards(env, manifest, symbols) {
-  const cards = await Promise.all(
-    symbols.map(async (symbol) => {
-      const shard = manifest.shards.find((ref) => cardCatalogShardMayContainSymbol(ref, symbol))
-      const ref = shard?.delivery_indexes?.find((index) =>
-        cardCatalogShardMayContainSymbol(index, symbol),
-      )
-      if (!ref) return null
-      const index = await readPublishedBunnyCardObject(
-        env,
-        ref.key,
-        (value) =>
-          value.schema_version === 2 && Array.isArray(value.entries) && value.entries.length <= 128,
-      )
-      if (!index) throw new Error("Published card directory unavailable")
-      const entry = index.entries.find((entry) => entry[0] === symbol)
-      if (!entry) return null
-      const card = await readPublishedBunnyCardObject(
-        env,
-        publishedCardObjectKey("cards", entry[1]),
-        (value) => value.symbol === symbol && assertCompleteMobileCardVM(value),
-      )
-      if (!card) throw new Error("Published card object unavailable")
-      return {
-        ...card,
-        snapshot_version: manifest.artifact_version,
-        data_source: "published_card_catalog",
-      }
-    }),
-  )
-  return normalizePartialCardCatalogArtifact(manifest, cards.filter(Boolean))
-}
-
-// B-898: the frozen tree's partial card reader, for the gene-discovery worker
-// only. Reads the head's manifest, then either one exact object per gene (up
-// to PUBLISHED_EXACT_CARD_READ_LIMIT symbols) or the packed 750-card shards
-// whose ranges cover the requested symbols. Never the whole artifact.
-async function readFrozenCardTreeCards(env, version, symbols) {
-  const artifactVersion = String(version || "").trim()
-  if (!artifactVersion) return null
-  const requestedSymbols = normalizeRequestedSymbols(
-    Array.isArray(symbols) ? symbols : [],
-    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
-  )
-  const manifest = await readPublishedCardCatalogManifest(env, artifactVersion)
-  if (!manifest) return null
-  if (requestedSymbols.length <= PUBLISHED_EXACT_CARD_READ_LIMIT) {
-    return readPublishedBunnyCards(env, manifest, requestedSymbols)
-  }
-  const shards =
-    cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) ||
-    manifest.shards.filter((shard) =>
-      requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
-    )
-  const cards = []
-  for (const { shard, shardParsed } of await Promise.all(
-    shards.map(async (shard) => ({
-      shard,
-      shardParsed: await readPublishedCardCatalogShard(env, shard),
-    })),
-  )) {
-    if (!parsedCardCatalogShardMatchesManifest(shardParsed, shard)) return null
-    cards.push(...shardParsed.cards)
-  }
-  const requestedSet = new Set(requestedSymbols)
-  return normalizePartialCardCatalogArtifact(
-    manifest,
-    cards.filter((card) => requestedSet.has(normalizeSymbol(card?.symbol || ""))),
-  )
-}
-
-// ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and gene sitemaps
-// retain every complete card of their frozen range. A ready matching blot adds
-// image projections; it is never a gate on the underlying gene URL. These reads
-// never query votes, compose D1 cards, or trigger rendering.
-//
-// This reader, and only this reader, reads the frozen card snapshot. Every
-// caller is a per-request reader in workers/iconoplasm-gene-discovery-
-// worker.js: a range page or range sitemap asks for its whole frozen range
-// (measured 2026-10-02 against the live catalog object: 58 ranges of 16 to 500
-// genes, median 351, 54 of them above 50), past the free-plan Worker's
-// ~50-subrequest cap for one-object-per-gene reads, and neither may parse the
-// 3.4 MB catalog/v3/index.json inside a reader request (CLAUDE.md, "Iconoplasm
-// cost barriers"). The root fix is build time: render the range pages and
-// sitemaps from the catalog object in the GitHub Actions publisher and serve
-// them as static files; that change deletes this function, the frozen head,
-// and the manifest/shard readers above it. Until then the range pages show
-// the portraits of the frozen snapshot, and the stable gene object is the
-// truth every other reader sees.
-export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols, options = {}) {
-  const requestedSymbols = normalizeRequestedSymbols(
-    Array.isArray(symbols) ? symbols : [],
-    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
-  )
-  const head = await frozenCardTreeHead(env)
-  const version = String(head?.current || "").trim()
-  if (!version || version === "0") return null
-  const publishedAt = String(head?.published_at || "").trim()
-  // A missing, unreadable or incomplete object anywhere in the walk is "no
-  // coherent snapshot": the discovery documents answer 503 and never guess.
-  let artifact
-  try {
-    artifact = await readFrozenCardTreeCards(env, version, requestedSymbols)
-  } catch (error) {
-    console.error("Frozen card tree read failed:", String(error?.message || error))
-    return null
-  }
-  if (!artifact) return null
-  if (!requestedSymbols.length) {
-    // Root/static sitemap documents do not need a shard body, but they still
-    // validate that the selected card manifest exists and is structurally
-    // readable before advertising its version.
-    return { version, publishedAt, bySymbol: new Map(), cardSymbols: new Set() }
-  }
-  const publishedCardsBySymbol = new Map()
-  const cardSymbols = new Set()
-  for (const symbol of requestedSymbols) {
-    const card = artifact.bySymbol.get(symbol)
-    if (!card) continue
-    cardSymbols.add(symbol)
-    const portrait = card?.payload?.portrait
-    if (portrait?.status !== "published" || !normalizeSha256(portrait.asset_sha256 || "")) {
-      continue
-    }
-    publishedCardsBySymbol.set(symbol, card.payload)
-  }
-  // Corpus backfill deliberately performs zero KV writes. The exact published
-  // card still owns image identity; these bounded exact-row reads only prove
-  // that the matching immutable bytes are ready for sitemap projection.
-  const readyBlotsBySymbol = options.includeBlotReadiness
-    ? await exactReadyGeneBlotsForPublishedCards(env, publishedCardsBySymbol)
-    : new Map()
-  const bySymbol = new Map()
-  for (const [symbol, cardPayload] of publishedCardsBySymbol.entries()) {
-    const exactReadyBlot = readyBlotsBySymbol.get(symbol)
-    const blot = cardPayload?.blot
-    const projection = { blot: null }
-    if (exactReadyBlot) {
-      projection.blot = exactReadyBlot
-    } else if (
-      blot?.status === "ready" &&
-      blot.image_url &&
-      blot.canonical_url &&
-      blot.semantic_url &&
-      blot.blot_fingerprint
-    ) {
-      projection.blot = {
-        ...blot,
-        // Preserve the immutable asset URL while projecting the current
-        // singular semantic endpoint for cards published before the route
-        // migration.
-        semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
-      }
-    }
-    bySymbol.set(symbol, projection)
-  }
-  return { version, publishedAt, bySymbol, cardSymbols }
-}
-
 function cardArtifactUnavailablePayload(version, detail = "") {
   return {
     ok: false,
@@ -30472,9 +29993,9 @@ function cardArtifactUnavailablePayload(version, detail = "") {
 // shard, no delta chain and no D1 on this path, so a handler's cost is exactly
 // one authenticated storage read per requested symbol, bounded by that
 // handler's own symbol limit. A free-plan Worker request has about 50
-// subrequests; readers above that bound (range pages, sitemaps, anything
-// catalog-wide) must not use this reader and must not parse the 3.4 MB catalog
-// object per request either. Keep those on a build-time path.
+// subrequests; catalog-wide readers must not use this reader and must not
+// parse the 3.4 MB catalog object per request either. They run at build time,
+// like the static gene documents and sitemap.
 //
 // Failure modes, written before the handlers were switched:
 //   1. Object present: parsed and returned under its symbol; the VM built from
@@ -31786,8 +31307,8 @@ async function handleSiteGeneDetail(request, env, path) {
   // ARCHITECTURE FENCE [IPD-011]: D1 remains the live authoring/vote source
   // for rich detail and candidates, but the one stable published gene object
   // (genes/v3/<SYMBOL>.json, B-898) is the sole public portrait authority.
-  // This single one-symbol storage read keeps the visible page, metadata,
-  // archive, and sitemap on one image epoch.
+  // This single one-symbol storage read keeps the visible page and its
+  // metadata on one image epoch.
   // Only an alias request (requested symbol != canonical) reads a second
   // object; a canonical request that found no object is a 503 below.
   const publishedCard =

@@ -46,7 +46,7 @@
     },
     {
       "id": "IPD-003",
-      "title": "Gene discovery is eligibility-gated and range-stable",
+      "title": "Gene discovery is eligibility-gated and built from the catalog object",
       "decision": "One stable gene object defines each gene's public identity and canonical blot, and one catalog object defines the discoverable set. Complete profiles are discoverable; incomplete or inconsistent publication fails closed and never repairs itself on a reader request.",
       "reason": "Search, archives, metadata, and images must agree without making public readers perform authoring work.",
       "change_control": "A replacement must keep one eligibility rule and one public image identity across every surface. Rendering, indexing, storage, and sitemap mechanics may change.",
@@ -71,7 +71,7 @@
         },
         {
           "category": "test",
-          "file": "workers/iconoplasm-gene-discovery.test.js",
+          "file": "workers/iconoplasm-static-assets.workerd.test.js",
           "token": "ARCHITECTURE FENCE [IPD-003]"
         },
         {
