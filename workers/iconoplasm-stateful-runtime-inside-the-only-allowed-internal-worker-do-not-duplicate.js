@@ -152,6 +152,7 @@ import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-route
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
 import { createIconoplasmAdminRepublishHandlers } from "./iconoplasm-admin-republish-route.js"
+import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-removal.js"
 import {
   composeStableGeneObject,
   enrichPublishedGeneCandidates,
@@ -27046,6 +27047,22 @@ async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
   }
 }
 
+// True when an earlier delete removed this exact candidate from this gene
+// (idx_icono_publish_events_gene bounds the read to the gene's own events).
+async function iconoplasmCandidateWasRemoved(env, symbol, assetSha256) {
+  const symbolNorm = normalizeSymbol(symbol)
+  const assetShaNorm = normalizeSha256(assetSha256 || "")
+  if (!env?.ICONOPLASM_DB || !symbolNorm || !assetShaNorm) return false
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT 1 AS removed FROM icono_publish_events
+     WHERE gene_symbol = ? AND action = 'remove_candidate' AND from_asset_sha256 = ?
+     LIMIT 1`,
+  )
+    .bind(symbolNorm, assetShaNorm)
+    .first()
+  return !!row
+}
+
 async function removePortraitAssetAndQueueLocalRemoval(
   env,
   {
@@ -39853,40 +39870,30 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       if (path.endsWith("/remove-candidate")) {
-        const asset = String(p?.asset_sha256 || "").trim()
-        if (!asset)
-          return done("remove_candidate_400", json({ error: "Missing asset_sha256" }, 400))
-        const removal = await removePortraitAssetAndQueueLocalRemoval(env, {
+        const removeCandidate = createIconoplasmCandidateRemoval({
+          remove: (input) =>
+            removePortraitAssetAndQueueLocalRemoval(env, { ...input, source: "admin_remove" }),
+          wasRemoved: (geneSymbol, assetSha256) =>
+            iconoplasmCandidateWasRemoved(env, geneSymbol, assetSha256),
+          republish: (geneSymbol) => publishIconoplasmGeneStableObject(env, geneSymbol),
+          // Candidate removal deletes the source asset; rebuild the affected examples.
+          afterRemoval: (geneSymbol) =>
+            rebuildUserEmulsionOptionRollupsForSymbols(env, [geneSymbol]),
+        })
+        const result = await removeCandidate({
           symbol,
-          assetSha256: asset,
+          assetSha256: String(p?.asset_sha256 || "").trim(),
           candidateImageId: optionalInt(p?.candidate_image_id ?? p?.emulsion_id),
           actorId,
           reason: String(p?.reason || "").slice(0, 2000) || "",
-          source: "admin_remove",
         })
-        if (!removal?.ok || removal?.code === "NOT_FOUND") {
-          return done("remove_candidate_404", json({ error: "Asset not found" }, 404))
-        }
-        // Candidate removal deletes the source asset; rebuild the affected examples.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        return done(
-          "remove_candidate",
-          json(
-            {
-              ok: true,
-              action: "remove_candidate",
-              symbol,
-              asset_sha256: asset,
-              candidate_image_id: optionalInt(p?.candidate_image_id ?? p?.emulsion_id),
-              unpublished_current: !!removal.unpublished_current,
-              deleted_r2_keys: Number(removal.deleted_r2_keys || 0),
-              queued_local_removal: removal.queued_local_removal || null,
-              auto_promote: removal.auto_promote || null,
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
+        const outcome =
+          result.status === 200
+            ? "remove_candidate"
+            : result.status === 400
+              ? "remove_candidate_400"
+              : "remove_candidate_404"
+        return done(outcome, json(result.body, result.status, { "Cache-Control": "no-store" }))
       }
 
       const current = await env.ICONOPLASM_DB.prepare(
