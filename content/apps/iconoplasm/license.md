@@ -1,14 +1,13 @@
 ---
-title: "License — Iconoplasm"
+title: "License"
 description: "Iconoplasm releases its published images, catalogue data and manifestations under the Creative Commons Public Domain (CC0) License"
 date: 2026-09-25
+dateLabel: "Last updated"
 draft: false
 schemaType: WebPage
 ---
 
-# License — Iconoplasm
-
-**Last updated:** September 25, 2026
+# License
 
 Iconoplasm wants to ensure that its information is accessible to the public and free to use. For this reason, all published gene portraits, gene blots, catalogue data and manifestations are released under the <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">Creative Commons Public Domain (CC0) License</a>. This means that any form of reuse of the content is permitted.
 

@@ -22,7 +22,16 @@ const rows = [
 
 test("gene documents carry their own title, canonical, description, image and licence", () => {
   const html = iconoplasmGenePageHtml({ symbol: "TP53", fullName: "tumor protein p53" })
-  assert.match(html, /<title>TP53 — tumor protein p53 \| Iconoplasm character profile<\/title>/)
+  // B-818: the one Iconoplasm title template, in <title>, og:title and JSON-LD.
+  const title = "TP53 — tumor protein p53 | Iconoplasm"
+  assert.ok(html.includes(`<title>${title}</title>`))
+  assert.ok(html.includes(`<meta property="og:title" content="${title}">`))
+  assert.equal(JSON.parse(html.match(/ld\+json">([^<]+)</)[1]).name, title)
+  assert.ok(
+    iconoplasmGenePageHtml({ symbol: "X1", fullName: "" }).includes(
+      "<title>X1 | Iconoplasm</title>",
+    ),
+  )
   assert.match(
     html,
     /<link rel="canonical" href="https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53">/,
