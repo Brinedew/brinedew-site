@@ -379,7 +379,8 @@ test(
 //     listings' privacy link (/apps/iconoplasm/privacy) shows a reviewer the
 //     archive, and crawlers index another copy of "/".
 //  2. /About.html is deleted or 404s instead of redirecting; an older extension
-//     build or shared link that still points at it breaks.
+//     build or shared link that still points at it breaks. The same for /about, the
+//     path the footer shared with the main site links to.
 //  3. A redirect lands on a URL that redirects again or loops with the asset
 //     layer's own .html handling.
 //  4. A redirect captures a page this host serves (/privacy, /gene/TP53) or a
@@ -401,6 +402,8 @@ test(
     )
     const moved = [
       ["/About.html", "https://brinedew.bio/about"],
+      // B-906: the footer shared with the main site links /about.
+      ["/about", "https://brinedew.bio/about"],
       ["/apps/iconoplasm", "/"],
       ["/apps/iconoplasm/", "/"],
       ["/apps/iconoplasm/privacy", "/privacy"],

@@ -17,7 +17,7 @@ import { checkAnonymousRateLimit, RATE_LIMIT_OUTCOME } from "./anonymous-rate-li
 const CONTACT_BODY_MAX = 5000
 const CONTACT_EMAIL_MAX = 254
 const CONTACT_REQUEST_MAX_BYTES = 64 * 1024
-const CONTACT_FORM_RETURN_PATH = "/About.html"
+const CONTACT_FORM_RETURN_PATH = "/about"
 const CONTACT_RATE_LIMIT_POLICY = Object.freeze({
   id: "contact",
   binding: "PUBLIC_RATE_LIMIT_5",

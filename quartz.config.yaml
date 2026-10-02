@@ -306,7 +306,7 @@ plugins:
     options:
       credit: Brinedew
       links:
-        About: /About.html
+        About: /about
         Support me: /posts/support-me
   # Contact form for the brinedew.bio About page. Opt-in via the
   # `contact: true` frontmatter on content/About.md. The form posts to
