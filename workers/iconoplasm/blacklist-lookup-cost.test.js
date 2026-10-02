@@ -88,7 +88,10 @@ test(
         const meter = createOperationCostD1Meter(db)
         await rebuildVisionRollupsBatch({ ICONOPLASM_DB: meter.db }, ["anima-v1-1"])
         const cost = meter.finish()
-        assert.ok(cost.rows_read < 250000, JSON.stringify(cost))
+        // The cross product this guards against would read about 50M rows.
+        // 40,000 of the bound is the picker rollup's per-gene example ranking
+        // (4 rows per selected portrait, B-896).
+        assert.ok(cost.rows_read < 290000, JSON.stringify(cost))
         assert.ok(cost.rows_written < 30, JSON.stringify(cost))
         const row = await db
           .prepare(

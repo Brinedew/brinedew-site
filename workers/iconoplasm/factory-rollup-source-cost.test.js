@@ -105,8 +105,11 @@ test(
         )
         // Both bounds reject the former three-source query. The materialization
         // hint alone regressed sparse data; both populations must stay covered.
+        // The per-gene example ranking (B-896) is one sort of the selected
+        // portraits, measured at exactly 4 rows each: 40,000 here, in both
+        // populations and on the repeat.
         assert.ok(
-          receipt.meta.rows_read < (density === "dense" ? 95000 : 82000),
+          receipt.meta.rows_read < (density === "dense" ? 135000 : 122000),
           JSON.stringify(receipt.meta),
         )
         assert.equal(receipt.meta.rows_written, 3)
@@ -130,7 +133,7 @@ test(
         ])
         const repeated = meter.finish()
         assert.equal(repeated.rows_written, 0, JSON.stringify(repeated))
-        assert.ok(repeated.rows_read < 160000, JSON.stringify(repeated))
+        assert.ok(repeated.rows_read < 200000, JSON.stringify(repeated))
         assert.equal(
           (
             await db

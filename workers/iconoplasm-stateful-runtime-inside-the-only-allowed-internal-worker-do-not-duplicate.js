@@ -9817,7 +9817,16 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
          CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END AS is_current,
          COALESCE(vs.upvotes, 0) AS upvotes,
          COALESCE(vs.score, 0) AS score,
-         COALESCE(pa.created_at, '') AS created_at
+         COALESCE(pa.created_at, '') AS created_at,
+         ROW_NUMBER() OVER (
+           PARTITION BY upper(trim(pa.emulsion_id)), upper(pa.gene_symbol)
+           ORDER BY
+             CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END DESC,
+             COALESCE(vs.upvotes, 0) DESC,
+             COALESCE(vs.score, 0) DESC,
+             COALESCE(pa.created_at, '') DESC,
+             lower(pa.asset_sha256) ASC
+         ) AS gene_rank
        FROM icono_portrait_assets pa
        JOIN incoming
          ON pa.emulsion_id = incoming.public_emulsion_code COLLATE NOCASE
@@ -9832,7 +9841,7 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
          *,
          ROW_NUMBER() OVER (
            PARTITION BY public_emulsion_code
-           ORDER BY is_current DESC, upvotes DESC, score DESC, created_at DESC, asset_sha256 ASC
+           ORDER BY gene_rank ASC, is_current DESC, upvotes DESC, score DESC, created_at DESC, asset_sha256 ASC
          ) AS preview_rank,
          ROW_NUMBER() OVER (
            PARTITION BY public_emulsion_code
@@ -9879,7 +9888,11 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
   return affectedCodes.length
 }
 
-async function rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds = []) {
+export async function rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds = []) {
+  // Examples follow the picker rule shared with the factory rollup: each gene's
+  // best portrait (its winner, then upvotes, score, approval, newest) ranks
+  // ahead of any gene's second best, so one gene's fresh batch of drafts can
+  // fill at most one slot while the style has other genes (B-896).
   // Invariant: icono_user_emulsion_option_rollup is only a cheap request-picker
   // read model. The source of truth stays in icono_portrait_assets. Rebuild the
   // affected emulsion IDs from source rows whenever source assets/currentness
@@ -9929,12 +9942,27 @@ async function rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds = []) {
          CASE
            WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
            ELSE 0
-         END AS is_current
+         END AS is_current,
+         COALESCE(vs.upvotes, 0) AS upvotes,
+         COALESCE(vs.score, 0) AS score,
+         ROW_NUMBER() OVER (
+           PARTITION BY pa.emulsion_id, pa.gene_symbol
+           ORDER BY
+             CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END DESC,
+             COALESCE(vs.upvotes, 0) DESC,
+             COALESCE(vs.score, 0) DESC,
+             CASE WHEN lower(COALESCE(pa.status, '')) = 'approved' THEN 1 ELSE 0 END DESC,
+             COALESCE(pa.created_at, '') DESC,
+             pa.asset_sha256 ASC
+         ) AS gene_rank
        FROM icono_portrait_assets pa
        JOIN incoming i
          ON i.emulsion_id = pa.emulsion_id
        LEFT JOIN icono_publish_state ps
          ON ps.gene_symbol = pa.gene_symbol
+       LEFT JOIN icono_vote_asset_summary vs
+         ON vs.gene_symbol = pa.gene_symbol
+        AND vs.asset_sha256 = pa.asset_sha256
        WHERE COALESCE(pa.emulsion_id, '') <> ''
          AND COALESCE(pa.asset_sha256, '') <> ''
          AND lower(COALESCE(pa.status, '')) <> 'rejected'
@@ -9956,7 +9984,10 @@ async function rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds = []) {
          ROW_NUMBER() OVER (
            PARTITION BY emulsion_id
            ORDER BY
+             gene_rank ASC,
              is_current DESC,
+             upvotes DESC,
+             score DESC,
              CASE WHEN status = 'approved' THEN 1 ELSE 0 END DESC,
              COALESCE(created_at, '') DESC,
              asset_sha256 ASC
