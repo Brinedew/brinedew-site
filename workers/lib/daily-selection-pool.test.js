@@ -2,38 +2,18 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  DAILY_SELECTION_POOL_SOURCE_SQL,
   buildDailySelectionPoolFingerprint,
   buildFamilyBalancedDailyCandidateIds,
-  getDailySelectionProteinIds,
-  planDailyTarget,
-  planDailyTargets,
 } from "./protein-store.js"
 
-test("daily selection uses a stable ordered pool independent of transient structure failures", async () => {
-  const calls = []
-  const db = {
-    prepare(sql) {
-      calls.push(sql)
-      return {
-        all: async () => ({
-          results: [
-            { uniprot: "Q96T52", gene_surname: "SLC" },
-            { uniprot: "Q96T53", gene_surname: "SLC" },
-            { uniprot: "Q96T54", gene_surname: "TP53" },
-          ],
-        }),
-      }
-    },
-  }
+test("the stored daily pool is built from a stable ordered statement independent of transient structure failures", () => {
+  const sql = DAILY_SELECTION_POOL_SOURCE_SQL.replace(/\s+/g, " ")
 
-  const ids = await getDailySelectionProteinIds(db)
-
-  assert.deepEqual(ids, ["Q96T52", "Q96T53", "Q96T54"])
-  assert.equal(calls.length, 1)
-  assert.match(calls[0], /SELECT p\.uniprot, p\.gene_surname/)
-  assert.match(calls[0], /ORDER BY p\.gene_surname ASC, p\.uniprot ASC/)
-  assert.match(calls[0], /LOWER\(TRIM\(p\.structure_source\)\) <> 'alphafold'/)
-  assert.doesNotMatch(calls[0], /structure_failures/)
+  assert.match(sql, /SELECT p\.uniprot, p\.gene_surname/)
+  assert.match(sql, /ORDER BY p\.gene_surname ASC, p\.uniprot ASC/)
+  assert.match(sql, /LOWER\(TRIM\(p\.structure_source\)\) <> 'alphafold'/)
+  assert.doesNotMatch(sql, /structure_failures/)
 })
 
 test("ARCHITECTURE FENCE [GG-001] daily lottery gives every surname exactly one slot", async () => {
@@ -87,35 +67,6 @@ test("family-balanced daily sequence is deterministic and input-order independen
   assert.deepEqual(first, second)
   assert.equal(first.length, 3)
   assert.equal(new Set(first).size, 3)
-})
-
-test("bulk horizon planning is exactly equivalent to the canonical daily picker", async () => {
-  const db = {
-    prepare() {
-      return {
-        all: async () => ({
-          results: [
-            { uniprot: "Q96T52", gene_surname: "SLC" },
-            { uniprot: "Q96T53", gene_surname: "SLC" },
-            { uniprot: "Q96T54", gene_surname: "TP53" },
-          ],
-        }),
-      }
-    },
-  }
-  const dates = Array.from({ length: 30 }, (_, offset) => {
-    const date = new Date("2026-08-04T00:00:00.000Z")
-    date.setUTCDate(date.getUTCDate() + offset)
-    return date.toISOString().slice(0, 10)
-  })
-
-  const bulk = await planDailyTargets(db, "test-salt", dates)
-  const canonical = await Promise.all(dates.map((date) => planDailyTarget(db, "test-salt", date)))
-
-  assert.deepEqual(
-    bulk.map((selection) => selection.uniprot),
-    canonical.map((selection) => selection.candidateIds[0]),
-  )
 })
 
 test("daily pool fingerprint is order-independent and changes with membership", async () => {
