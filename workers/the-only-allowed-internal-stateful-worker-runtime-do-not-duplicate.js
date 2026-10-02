@@ -1403,7 +1403,6 @@ import {
   fetchProteinByUniprot,
   searchProteins,
   getEligibleProteinIds,
-  getDailySelectionProteinIds,
   pickDailyTarget,
   pickRandomProteinBalanced,
   getBlendedSimilarity,
@@ -3334,7 +3333,6 @@ export default {
       if (!overrideId && env.PROD_KV?.get) {
         overrideId = await env.PROD_KV.get(overrideKey)
       }
-      const eligibleIds = await getDailySelectionProteinIds(env.DB)
       const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
       const computedSelection = await pickDailyTarget(env.DB, salt, tomorrowStr)
       let targetProtein
@@ -3383,7 +3381,7 @@ export default {
       // incident had a perfectly formed SWISS-MODEL URL that returned 404.
       const balancedCandidateIds = Array.isArray(computedSelection?.candidateIds)
         ? computedSelection.candidateIds
-        : eligibleIds
+        : []
       const availabilityIds = [
         targetProtein.uniprot,
         ...balancedCandidateIds.filter((uniprot) => uniprot !== targetProtein.uniprot),
@@ -5778,8 +5776,9 @@ async function getDailyTargetProtein(env, options = {}) {
     }
   } else {
     // THE ONLY DAILY TARGET SELECTION PATH — DO NOT DUPLICATE. Read the
-    // recorded server-side pick before loading the full eligible protein pool.
-    // The pool is needed only to choose a new pick or replace an unplayable one.
+    // recorded server-side pick before loading the stored selection pool. The
+    // pool (one D1 row) is needed only to choose a new pick or replace an
+    // unplayable one.
     const today = new Date().toISOString().slice(0, 10)
     const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
     if (audit) {
@@ -5837,8 +5836,8 @@ async function getDailyTargetProtein(env, options = {}) {
     }
 
     // Staging uses the same recorded production answer when it has no local
-    // pick. Check that server-side record before considering a fresh full-pool
-    // selection; otherwise a staging cache miss burns the shared D1 allowance.
+    // pick. Check that server-side record before computing a fresh selection,
+    // so staging and production name the same target.
     if (!protein && env.PROD_KV?.get) {
       try {
         const prodActualRaw = await env.PROD_KV.get(`puzzle_actual:${today}`)

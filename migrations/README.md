@@ -14,6 +14,10 @@ that historical table by assuming the first migration is the current schema.
 - **Daily answer:** The existing stateful Worker owns the server-side
   `puzzle_actual:YYYY-MM-DD` KV record. D1 `daily_target_availability_pins`
   records structure replacements.
+- **Daily selection pool:** D1 `daily_selection_pool` holds the playable surname
+  families as one row, kept fresh by triggers on `proteins`. `workers/lib/protein-store.js`
+  creates it on first use; no migration here creates or changes it
+  (`docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`, "Pool storage").
 - **Game attempt and completed result:** The existing `GameSession` Durable
   Object in `workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js`
   owns game state. `workers/lib/the-only-geneguessr-completed-result-ledger-do-not-duplicate.js`

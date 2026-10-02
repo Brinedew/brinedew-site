@@ -2,8 +2,22 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleAdminSchedule } from "./admin.js"
+import { buildDailySelectionPoolFingerprint } from "./lib/protein-store.js"
 
 const isoToday = () => new Date().toISOString().slice(0, 10)
+
+// The stored daily pool row: one family per protein, as the pool code stores it.
+async function storedPoolRow(proteins) {
+  const families = proteins.map(({ uniprot, gene_surname }) => ({
+    surname: gene_surname,
+    members: [uniprot],
+  }))
+  return {
+    catalog_version: 0,
+    fingerprint: await buildDailySelectionPoolFingerprint(families),
+    families_json: JSON.stringify(families.map((family) => [family.surname, family.members])),
+  }
+}
 
 test("year schedule bulk-loads summaries and never returns a partial 200 response", async () => {
   const proteins = Array.from({ length: 500 }, (_, index) => {
@@ -17,6 +31,7 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
     }
   })
   const proteinsById = new Map(proteins.map((protein) => [protein.uniprot, protein]))
+  const poolRow = await storedPoolRow(proteins)
   const statements = []
   const db = {
     prepare(sql) {
@@ -27,17 +42,15 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
           bound = values
           return this
         },
+        async first() {
+          if (sql.includes("FROM daily_selection_pool")) {
+            return poolRow
+          }
+          throw new Error(`Unexpected D1 first(): ${sql}`)
+        },
         async all() {
           if (sql.includes("FROM daily_target_availability_pins")) {
             return { results: [] }
-          }
-          if (sql.includes("SELECT p.uniprot, p.gene_surname")) {
-            return {
-              results: proteins.map(({ uniprot, gene_surname }) => ({
-                uniprot,
-                gene_surname,
-              })),
-            }
           }
           if (sql.includes("FROM proteins") && sql.includes("json_each(?)")) {
             const ids = JSON.parse(bound[0])
@@ -108,10 +121,14 @@ test("year schedule bulk-loads summaries and never returns a partial 200 respons
   assert.equal(new Set(body.upcoming.map((row) => row.computed.gene_surname)).size, 365)
   assert.equal(
     statements.length,
-    4,
-    "pins, history, selection pool, and future summaries are each bulk queries",
+    5,
+    "pins, history, two reads of the one stored pool row, and future summaries are each one statement",
   )
   assert.ok(statements.every((sql) => !sql.includes("SELECT * FROM proteins")))
+  assert.ok(
+    statements.every((sql) => !sql.includes("LOWER(TRIM(")),
+    "the schedule reads the stored pool and never scans the protein table",
+  )
   assert.equal(kvWriteCount, 0, "annual schedule reads must not spend the KV daily write budget")
 })
 
@@ -126,6 +143,7 @@ test("year schedule fails closed when planned protein summaries are unavailable"
       length: 100 + index,
     }
   })
+  const poolRow = await storedPoolRow(proteins)
   const db = {
     prepare(sql) {
       let bound = []
@@ -134,17 +152,15 @@ test("year schedule fails closed when planned protein summaries are unavailable"
           bound = values
           return this
         },
+        async first() {
+          if (sql.includes("FROM daily_selection_pool")) {
+            return poolRow
+          }
+          throw new Error(`Unexpected D1 first(): ${sql}`)
+        },
         async all() {
           if (sql.includes("FROM daily_target_availability_pins")) {
             return { results: [] }
-          }
-          if (sql.includes("SELECT p.uniprot, p.gene_surname")) {
-            return {
-              results: proteins.map(({ uniprot, gene_surname }) => ({
-                uniprot,
-                gene_surname,
-              })),
-            }
           }
           if (sql.includes("FROM proteins") && sql.includes("json_each(?)")) {
             const ids = JSON.parse(bound[0])

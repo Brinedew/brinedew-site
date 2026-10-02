@@ -10,14 +10,6 @@ const eligibleCache = {
   fetchedAt: 0,
   ttl: 5 * 60 * 1000,
 }
-const dailySelectionCache = {
-  ids: null,
-  rows: null,
-  families: null,
-  fingerprint: null,
-  fetchedAt: 0,
-  ttl: 5 * 60 * 1000,
-}
 let structureFailureTableEnsured = false
 
 export class ProteinReadUnavailableError extends Error {
@@ -567,57 +559,209 @@ export async function getEligibleProteinIds(db) {
   return ids.slice()
 }
 
-async function ensureDailySelectionCache(db) {
-  const now = Date.now()
-  if (
-    dailySelectionCache.ids &&
-    dailySelectionCache.rows &&
-    dailySelectionCache.families &&
-    now - dailySelectionCache.fetchedAt < dailySelectionCache.ttl
-  ) {
-    return true
-  }
-
-  try {
-    const { results } = await db
-      .prepare(
-        `SELECT p.uniprot, p.gene_surname
+// THE ONLY DAILY SELECTION POOL — DO NOT DUPLICATE.
+//
+// The playable pool is the set of proteins the daily lottery may pick from,
+// grouped into surname families (ARCHITECTURE FENCE [GG-001]). Computing it
+// scans the whole `proteins` table and sorts the result (about 1.5 rows read per
+// protein), so it is computed once and stored as one row of
+// `daily_selection_pool`. Every reader (the nightly pre-warm, the player path
+// when no recorded pick exists, the admin schedule and cards views) reads that
+// row: one row, whatever the table size, whichever isolate asks.
+//
+// `daily_selection_pool` is created by this code on first use, like the other
+// tables the GeneGuessr worker owns. A normal deploy applies no migration to this
+// database, and the maintenance release refuses a migration file that has no
+// reviewed cost-plan entry, so a file here would block it. One batch creates
+// the table, its single row and the three triggers.
+//
+// Freshness: any write to `proteins` that can change eligibility (an insert, a
+// delete, or an update that changes one of DAILY_SELECTION_POOL_SOURCE_COLUMNS)
+// fires a trigger that clears the stored pool and bumps `catalog_version`. The
+// next reader rebuilds it. A rebuild reads `catalog_version` before it scans and
+// stores its result only if the version is unchanged, so a write that lands
+// during the scan can never leave a stale pool behind.
+//
+// To force a rebuild by hand: UPDATE daily_selection_pool SET families_json = NULL.
+// A table rebuild that drops `proteins` also drops these triggers; run any
+// reader (or delete the `daily_selection_pool` table and its triggers) afterwards.
+export const DAILY_SELECTION_POOL_SOURCE_SQL = `SELECT p.uniprot, p.gene_surname
          FROM proteins p
          WHERE p.structure_source IS NOT NULL
            AND LOWER(TRIM(p.structure_source)) <> 'alphafold'
            AND p.gene_summary IS NOT NULL
-         ORDER BY p.gene_surname ASC, p.uniprot ASC`,
+         ORDER BY p.gene_surname ASC, p.uniprot ASC`
+
+// Every `proteins` column the statement above reads. The triggers watch exactly
+// these; a test fails if the statement and this list disagree.
+export const DAILY_SELECTION_POOL_SOURCE_COLUMNS = Object.freeze([
+  "uniprot",
+  "gene_surname",
+  "structure_source",
+  "gene_summary",
+])
+
+const DAILY_SELECTION_POOL_STATE_SQL =
+  "SELECT catalog_version, fingerprint, families_json FROM daily_selection_pool WHERE id = 1"
+const DAILY_SELECTION_POOL_ROW_SQL = "INSERT OR IGNORE INTO daily_selection_pool (id) VALUES (1)"
+const DAILY_SELECTION_POOL_INVALIDATE_SQL =
+  "UPDATE daily_selection_pool SET catalog_version = catalog_version + 1, fingerprint = NULL, families_json = NULL, built_at = NULL WHERE id = 1;"
+const DAILY_SELECTION_POOL_CHANGED_SQL = DAILY_SELECTION_POOL_SOURCE_COLUMNS.map(
+  (column) => `OLD.${column} IS NOT NEW.${column}`,
+).join(" OR ")
+
+const DAILY_SELECTION_POOL_SCHEMA_SQL = [
+  `CREATE TABLE IF NOT EXISTS daily_selection_pool (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     catalog_version INTEGER NOT NULL DEFAULT 0,
+     fingerprint TEXT,
+     families_json TEXT,
+     built_at INTEGER
+   )`,
+  DAILY_SELECTION_POOL_ROW_SQL,
+  `CREATE TRIGGER IF NOT EXISTS daily_selection_pool_proteins_ai
+   AFTER INSERT ON proteins
+   BEGIN ${DAILY_SELECTION_POOL_INVALIDATE_SQL} END`,
+  `CREATE TRIGGER IF NOT EXISTS daily_selection_pool_proteins_ad
+   AFTER DELETE ON proteins
+   BEGIN ${DAILY_SELECTION_POOL_INVALIDATE_SQL} END`,
+  `CREATE TRIGGER IF NOT EXISTS daily_selection_pool_proteins_au
+   AFTER UPDATE OF ${DAILY_SELECTION_POOL_SOURCE_COLUMNS.join(", ")} ON proteins
+   WHEN ${DAILY_SELECTION_POOL_CHANGED_SQL}
+   BEGIN ${DAILY_SELECTION_POOL_INVALIDATE_SQL} END`,
+]
+
+async function readDailySelectionPoolState(db) {
+  try {
+    return await db.prepare(DAILY_SELECTION_POOL_STATE_SQL).first()
+  } catch (error) {
+    if (!/no such table/i.test(String(error?.message || error))) {
+      throw error
+    }
+    await db.batch(DAILY_SELECTION_POOL_SCHEMA_SQL.map((sql) => db.prepare(sql)))
+    return db.prepare(DAILY_SELECTION_POOL_STATE_SQL).first()
+  }
+}
+
+// A stored row that does not parse into a non-empty list of named families with
+// text members is as good as no row: it is rebuilt, never thrown.
+function parseStoredDailySelectionPool(state) {
+  if (!state?.families_json || !state?.fingerprint) {
+    return null
+  }
+  try {
+    const stored = JSON.parse(state.families_json)
+    if (!Array.isArray(stored) || !stored.length) {
+      return null
+    }
+    const families = stored.map((entry) => {
+      const [surname, members] = Array.isArray(entry) ? entry : []
+      if (
+        typeof surname !== "string" ||
+        !surname ||
+        !Array.isArray(members) ||
+        !members.length ||
+        members.some((member) => typeof member !== "string" || !member)
+      ) {
+        throw new Error("invalid stored family")
+      }
+      return { surname, members }
+    })
+    return { families, fingerprint: state.fingerprint }
+  } catch {
+    return null
+  }
+}
+
+async function storeDailySelectionPool(db, pool, catalogVersion) {
+  try {
+    const stored = await db
+      .prepare(
+        `UPDATE daily_selection_pool
+         SET fingerprint = ?, families_json = ?, built_at = ?
+         WHERE id = 1 AND catalog_version = ?`,
       )
-      .all()
+      .bind(
+        pool.fingerprint,
+        JSON.stringify(pool.families.map((family) => [family.surname, family.members])),
+        Date.now(),
+        catalogVersion,
+      )
+      .run()
+    if (!stored?.meta?.changes) {
+      console.warn("GeneGuessr: the catalog changed during a pool rebuild; the pool was not stored")
+    }
+  } catch (err) {
+    console.warn("GeneGuessr: D1 could not store the daily selection pool", err)
+  }
+}
+
+// Requests that arrive while a load is in flight share it, so a rebuild costs one
+// scan per isolate however many requests ask at once. Nothing is kept afterwards.
+const dailySelectionPoolLoads = new WeakMap()
+
+// The pool as { families, fingerprint }, or null when D1 cannot be read.
+function loadDailySelectionPool(db) {
+  if (!db) {
+    console.warn("GeneGuessr: the daily selection pool needs a D1 binding")
+    return Promise.resolve(null)
+  }
+  let load = dailySelectionPoolLoads.get(db)
+  if (!load) {
+    load = readOrBuildDailySelectionPool(db).finally(() => dailySelectionPoolLoads.delete(db))
+    dailySelectionPoolLoads.set(db, load)
+  }
+  return load
+}
+
+async function readOrBuildDailySelectionPool(db) {
+  try {
+    // When the stored pool cannot be read or created (D1 refuses its schema),
+    // the pool is still built from the catalog and returned, just not stored:
+    // selection keeps working and the warning names the cost.
+    let catalogVersion = null
+    try {
+      let state = await readDailySelectionPoolState(db)
+      const stored = parseStoredDailySelectionPool(state)
+      if (stored) {
+        return stored
+      }
+      if (!state) {
+        await db.prepare(DAILY_SELECTION_POOL_ROW_SQL).run()
+        state = await db.prepare(DAILY_SELECTION_POOL_STATE_SQL).first()
+      }
+      catalogVersion = Number(state?.catalog_version ?? 0)
+    } catch (err) {
+      console.warn(
+        "GeneGuessr: the stored daily selection pool is unavailable; building it from the catalog",
+        err,
+      )
+    }
+    const { results } = await db.prepare(DAILY_SELECTION_POOL_SOURCE_SQL).all()
     const rows = (results || []).map((row) => ({
       uniprot: normalizeKey(row.uniprot),
       gene_surname: String(row.gene_surname || "")
         .trim()
         .toUpperCase(),
     }))
-    const ids = rows.map((row) => row.uniprot)
-    dailySelectionCache.rows = rows
-    dailySelectionCache.ids = ids
-    dailySelectionCache.families = buildDailySelectionFamilies(rows, ids)
-    dailySelectionCache.fingerprint = await buildDailySelectionPoolFingerprint(
-      dailySelectionCache.families,
+    const families = buildDailySelectionFamilies(
+      rows,
+      rows.map((row) => row.uniprot),
     )
-    dailySelectionCache.fetchedAt = now
-    return true
+    const pool = { families, fingerprint: await buildDailySelectionPoolFingerprint(families) }
+    if (families.length && catalogVersion !== null) {
+      await storeDailySelectionPool(db, pool, catalogVersion)
+    }
+    return pool
   } catch (err) {
-    console.warn("GeneGuessr: D1 getDailySelectionProteinIds failed", err)
-    return false
+    console.warn("GeneGuessr: D1 daily selection pool failed", err)
+    return null
   }
 }
 
-export async function getDailySelectionProteinIds(db) {
-  const loaded = await ensureDailySelectionCache(db)
-  return loaded && Array.isArray(dailySelectionCache.ids) ? dailySelectionCache.ids.slice() : []
-}
-
 export async function getDailySelectionPoolFingerprint(db) {
-  const loaded = await ensureDailySelectionCache(db)
-  return loaded ? dailySelectionCache.fingerprint : null
+  const pool = await loadDailySelectionPool(db)
+  return pool ? pool.fingerprint : null
 }
 
 export async function buildDailySelectionPoolFingerprint(families) {
@@ -893,12 +1037,11 @@ export async function pickRandomProteinBalanced(db) {
 }
 
 export async function planDailyTarget(db, salt, date = new Date()) {
-  const loaded = await ensureDailySelectionCache(db)
-  if (!loaded || !Array.isArray(dailySelectionCache.families)) {
+  const pool = await loadDailySelectionPool(db)
+  if (!pool) {
     return null
   }
-  const families = dailySelectionCache.families
-  const ids = await buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
+  const ids = await buildFamilyBalancedCandidateIdsFromFamilies(pool.families, salt, date)
   if (!ids.length) {
     return null
   }
@@ -908,7 +1051,7 @@ export async function planDailyTarget(db, salt, date = new Date()) {
     skippedAlphaFold: 0,
     date: today,
     candidateIds: ids,
-    poolFingerprint: dailySelectionCache.fingerprint,
+    poolFingerprint: pool.fingerprint,
   }
 }
 
@@ -919,14 +1062,11 @@ export async function planDailyTarget(db, salt, date = new Date()) {
  * hundreds of times in one Worker invocation.
  */
 export async function planDailyTargets(db, salt, dates) {
-  const loaded = await ensureDailySelectionCache(db)
-  if (!loaded || !Array.isArray(dailySelectionCache.families)) {
+  const pool = await loadDailySelectionPool(db)
+  if (!pool?.families.length) {
     return []
   }
-  const families = dailySelectionCache.families
-  if (!families.length) {
-    return []
-  }
+  const families = pool.families
   const { familyOrder, memberSeed } = await buildFamilyBalancedBag(families, salt)
   const familyCount = families.length
 
@@ -944,7 +1084,7 @@ export async function planDailyTargets(db, salt, dates) {
       uniprot: selectFamilyMember(families, familyIndex, familyCycle, memberSeed),
       skippedAlphaFold: 0,
       date,
-      poolFingerprint: dailySelectionCache.fingerprint,
+      poolFingerprint: pool.fingerprint,
     }
   })
 }
