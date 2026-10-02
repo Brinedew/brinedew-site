@@ -11,7 +11,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=15ba819c5d4b4ad1"
 import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=16af02f0a0f9b9a0"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=bfcc5edd4822ccae"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=ec90b0e844aa4ac5"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.

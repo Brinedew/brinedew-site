@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
-import { preparePublicReadCutoverConfig } from "./prepare-iconoplasm-public-read-cutover.mjs"
 
 export const CANONICAL_CONFIG =
   "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
@@ -12,6 +11,24 @@ const canonicalMain =
 const transitionMain =
   'main = "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"'
 
+// A containment deploy keeps the exact asset bytes already serving production
+// and routes the reader documents (gene pages, archives, sitemaps) into the
+// Worker so the quarantine shell can answer them. This explicit list is the
+// pre-cutover topology, not a broad `run_worker_first = true`. The
+// reader-recovery containment deploy is its one user.
+export function prepareRetainedAssetsConfig(source) {
+  let output = String(source)
+  if (!/^routes = \[\{ pattern = "iconoplasm\.brinedew\.bio\/\*"/m.test(output))
+    throw new Error("Canonical Iconoplasm production route is missing")
+  const assets = output.match(/\n\[assets\]\n[\s\S]*?\n(?=\[observability\])/u)
+  if (!assets) throw new Error("Canonical Iconoplasm asset routing is missing")
+  output = output.replace(
+    assets[0],
+    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/admin*", "/blocklist*", "/artist-styles*", "/health", "/gene/*", "/genes*", "/sitemap*", "/robots.txt", "/llms.txt"] } }\n\n`,
+  )
+  return output
+}
+
 export function prepareSchemaTransitionConfig(source, { mode = SCHEMA_TRANSITION_MODE } = {}) {
   if (source.split(canonicalMain).length !== 2)
     throw new Error("Expected exactly one canonical stateful Worker entrypoint")
@@ -20,7 +37,7 @@ export function prepareSchemaTransitionConfig(source, { mode = SCHEMA_TRANSITION
   // B-742: the migration stage is a live deployment. If admission subsequently
   // fails, the already-tested published-card reader must survive that failed stage.
   // Preserve every route, secret binding, Durable Object identity and budget.
-  return preparePublicReadCutoverConfig(source.replace(canonicalMain, transitionMain))
+  return prepareRetainedAssetsConfig(source.replace(canonicalMain, transitionMain))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

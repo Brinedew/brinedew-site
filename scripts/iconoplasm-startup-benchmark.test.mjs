@@ -9,7 +9,7 @@ test("startup benchmark fails missing evidence, late highlights, early network a
   const result = {
     first: { at: 900, fcp: 70, load: 0, highlights: 3, nested: 0 },
     beforeRelease: { state: "interactive", requests: [] },
-    afterReleaseRequests: [{ url: "https://iconoplasm.brinedew.bio/api/public/v1/card-current" }],
+    afterReleaseRequests: [{ url: "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json" }],
   }
   assert.equal(assessBlockedHostStartup(result).verdict, "pass")
   for (const change of [

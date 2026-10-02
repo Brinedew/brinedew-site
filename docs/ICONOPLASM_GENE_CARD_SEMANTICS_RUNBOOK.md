@@ -64,9 +64,8 @@ Its visible-material fingerprint includes the renderer revision, normalized
 symbol, full gene name, and selected portrait SHA. The immutable object lives at
 `/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
 The stable first-party `/blot/{SYMBOL}.webp` route enters the existing Worker.
-It selects the exact published card and reads its immutable WebP object from
-Bunny. Before the publication head advances, the one publication coordinator
-verifies that object's hash. A card without a blot returns an honest 404 at
+It reads the gene's stable object and then its immutable WebP object from
+Bunny (B-898: no head, no coordinator). A card without a blot returns an honest 404 at
 the image route. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
 to overwrite or wait for; its long-lived CDN cache stalled real publication on
 2026-09-24 while the first-party route already worked.
@@ -133,8 +132,8 @@ retired only after the complete-corpus and regional-delivery gate below passed.
 Immutable `/portraits/v1/...` assets remain available to the gallery and other
 portrait-native product surfaces; retirement removes source portraits only
 from the agent gene-image workflow. The blot route derives the current renderer
-fingerprint and immutable object key from the exact published card selected by
-`KV_GALLERY_VERSION`; it does not require blot metadata to be copied back into
+fingerprint and immutable object key from the gene's stable object; it does
+not require blot metadata to be copied back into
 KV. A vote changes public output after the normal canonical-card publication.
 
 For ordinary exact-symbol retrieval, teach the stable `/blot/{SYMBOL}.webp`
@@ -259,7 +258,7 @@ The server ledger contains one bounded audit row per gene. Before upload, the
 workstation persists the exact WebP in a durable local content-addressed store
 with a SQLite manifest, so restarts retry the same bytes instead of rerendering.
 A portrait or full-name change produces a new fingerprint; unrelated essence
-changes do not. Dirty-shard publication does not wait for materialization: the
+changes do not. Per-gene publication does not wait for materialization: the
 newly published card immediately defines the expected immutable key, and the
 stable route begins serving it as soon as Bunny contains it. Corpus backfill
 therefore performs zero KV writes. GET and HEAD routes never render, enroll,
@@ -295,8 +294,8 @@ the ledger remains due for the new card. Downloads use a useful per-gene name,
 for example `SOX12-iconoplasm-gene-card.png`.
 
 Every print-copy enrollment, status, render, and download resolves its identity
-through `/api/iconoplasm/cards/:symbol` and the artifact selected by
-`KV_GALLERY_VERSION`. An `asset=` query value can only assert the artifact's
+through `/api/iconoplasm/cards/:symbol` and the gene's stable object. An
+`asset=` query value can only assert that object's
 exact portrait SHA: malformed values return `400`, and a different valid SHA
 returns `409`. It must never select the current D1 authoring portrait or trigger
 a site-gene-detail fallback, even during the expected D1-to-artifact publication

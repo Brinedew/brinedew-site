@@ -67,9 +67,6 @@ for (const pagePath of pages) {
   const cdn = requests.filter((r) => !r.url.startsWith(ORIGIN))
   const stableGene = cdn.filter((r) => r.url.includes("/genes/v3/"))
   const stableCatalog = cdn.filter((r) => r.url.includes("/catalog/v3/"))
-  const tree = cdn.filter(
-    (r) => r.url.includes("/published-cards/") || r.url.endsWith("/card-current"),
-  )
   const isGene = pagePath.startsWith("/gene/")
   const checks = {
     zero_worker_requests: worker.length === 0,
@@ -87,7 +84,6 @@ for (const pagePath of pages) {
     worker,
     stable_gene: stableGene,
     stable_catalog: stableCatalog,
-    tree_reads: tree.length,
     cdn_total: cdn.length,
     errors,
   })

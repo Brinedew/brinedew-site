@@ -6,10 +6,7 @@ import path from "node:path"
 import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../../../scripts/prepare-iconoplasm-edge-assets.mjs"
-import {
-  createIconoplasmPublicationReader,
-  PUBLIC_READ_REQUEST_BOUNDS,
-} from "./publication-reader.js"
+import { createIconoplasmPublicationReader } from "./publication-reader.js"
 import {
   createThrowingStateBindings,
   serveStaticFirstRequest,
@@ -165,7 +162,7 @@ test("gene documents are one static SPA shell and never enter Worker execution",
   // the extension and for a website reader whose Bunny request failed.
   assert.deepEqual(
     config.assets.run_worker_first.filter((pattern) => pattern.startsWith("/published-cards")),
-    ["/published-cards/v2/immutable/*"],
+    [],
   )
   assert.equal(config.assets.run_worker_first.includes("/api/*"), true)
   assert.equal(
@@ -205,650 +202,6 @@ test("the emitted static asset policy permits immutable Bunny JSON reads", async
   assert.match(redirects, /\/genes \/ 301/)
   assert.match(redirects, /\/genes\/\* \/ 301/)
   assert.doesNotMatch(sitemap, /<main>Iconoplasm<\/main>/)
-})
-
-async function immutableFixtureObject(kind, value) {
-  const body = JSON.stringify(value)
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
-  const hash = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("")
-  return {
-    hash,
-    path: `/published-cards/v2/immutable/${kind}/${hash}.json`,
-    body,
-  }
-}
-
-async function immutableFixture({ symbol = "TP53", fullName = "tumor protein p53" } = {}) {
-  const object = immutableFixtureObject
-  const gene = {
-    symbol,
-    full_name: fullName,
-    color: "#223344",
-    essence: { summary: "Guardian of the genome" },
-    portrait: { status: "published", asset_sha256: "a".repeat(64) },
-    portrait_candidates: [],
-  }
-  const geneObject = await object("genes", gene)
-  const portraitObject = await object("portraits", {
-    symbol,
-    portrait: gene.portrait,
-  })
-  const cardObject = await object("cards", { symbol, payload: gene })
-  const indexObject = await object("indexes", {
-    schema_version: 2,
-    entries: [[symbol, cardObject.hash, geneObject.hash, portraitObject.hash]],
-  })
-  const catalogObject = await object("catalogs", {
-    schema_version: 1,
-    entries: [
-      {
-        symbol,
-        full_name: fullName,
-        color: "#223344",
-        popularity_score: 100,
-        image_upvotes: 7,
-        image_downvotes: 2,
-        image_score: 5,
-        portrait: gene.portrait,
-        candidate_summaries: [],
-      },
-    ],
-  })
-  const catalogIndexObject = await object("catalogindexes", {
-    schema_version: 2,
-    pages: [{ first_symbol: symbol, last_symbol: symbol, key: catalogObject.path.slice(1) }],
-    search_entries: [[symbol, fullName, 0, 0]],
-    gallery_entries: [[symbol, 0, 0, 100, 5]],
-  })
-  const manifestObject = await object("manifests", {
-    storage: "bunny_card_catalog_v2",
-    card_count: 1,
-    shards: [
-      {
-        first_symbol: symbol,
-        last_symbol: symbol,
-        delivery_indexes: [
-          { first_symbol: symbol, last_symbol: symbol, key: indexObject.path.slice(1) },
-        ],
-        catalog_index: { key: catalogIndexObject.path.slice(1), page_count: 1 },
-      },
-    ],
-  })
-  const head = JSON.stringify({ schema_version: 2, current: `ccv2-${manifestObject.hash}` })
-  const objects = new Map(
-    [
-      geneObject,
-      portraitObject,
-      cardObject,
-      indexObject,
-      catalogObject,
-      catalogIndexObject,
-      manifestObject,
-    ].map((entry) => [entry.path, entry.body]),
-  )
-  return { gene, head, objects, geneObject, catalogObject, manifestObject }
-}
-
-test("the browser resolves gene, search, and gallery from one immutable publication", async () => {
-  const fixture = await immutableFixture()
-  const requests = []
-  const throwingBindings = createThrowingStateBindings()
-  const reader = createIconoplasmPublicationReader({
-    hedgeMs: 50,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.origin !== "https://iconoplasmportraits.b-cdn.net") {
-        throwingBindings.ICONOPLASM_DB.prepare("anonymous immutable read entered state")
-      }
-      if (parsed.pathname === "/api/public/v1/card-current") {
-        return new Response(fixture.head, { status: 200 })
-      }
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-
-  const gene = await reader.gene("TP53")
-  assert.equal(gene.symbol, fixture.gene.symbol)
-  assert.deepEqual(
-    (await reader.genes(["TP53", "TP53", "not valid!"])).map((record) => record.symbol),
-    ["TP53"],
-  )
-  assert.equal(
-    gene.portrait.medium_url,
-    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
-  )
-  assert.deepEqual(
-    (await reader.search("tumor", { limit: 12 })).genes.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-  const gallery = await reader.gallery({ order: "votes", offset: 0, limit: 24 })
-  assert.deepEqual(
-    gallery.items.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-  assert.equal(gallery.items[0].image_score, 5, "passive vote display comes from the artifact")
-  assert.deepEqual(gallery.items[0].candidate_summaries, [])
-  assert.equal(
-    requests.every((request) => request.origin === "https://iconoplasmportraits.b-cdn.net"),
-    true,
-    "healthy immutable reads must never enter the throwing stateful origin",
-  )
-  assert.equal(
-    requests.some(
-      (request) =>
-        request.pathname.startsWith("/api/iconoplasm/") ||
-        request.pathname === "/api/public/v1/gallery" ||
-        request.pathname === "/api/public/v1/genes/search",
-    ),
-    false,
-  )
-})
-
-test("the archive reads a 67-shard publication without entering the stateful origin", async () => {
-  const objects = new Map()
-  const shards = []
-  for (let index = 0; index < 67; index += 1) {
-    const symbol = `GENE${String(index).padStart(3, "0")}`
-    const page = await immutableFixtureObject("catalogs", {
-      schema_version: 1,
-      entries: [{ symbol, full_name: symbol, image_score: index + 1 }],
-    })
-    const catalogIndex = await immutableFixtureObject("catalogindexes", {
-      schema_version: 2,
-      pages: [{ first_symbol: symbol, last_symbol: symbol, key: page.path.slice(1) }],
-      search_entries: [[symbol, symbol, 0, 0]],
-      gallery_entries: [[symbol, 0, 0, index + 1, index + 1]],
-    })
-    objects.set(page.path, page.body)
-    objects.set(catalogIndex.path, catalogIndex.body)
-    shards.push({
-      first_symbol: symbol,
-      last_symbol: symbol,
-      catalog_index: { key: catalogIndex.path.slice(1), page_count: 1 },
-    })
-  }
-  const manifest = await immutableFixtureObject("manifests", {
-    storage: "bunny_card_catalog_v2",
-    card_count: 67,
-    shards,
-  })
-  objects.set(manifest.path, manifest.body)
-  const requested = []
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requested.push(parsed)
-      assert.equal(parsed.origin, "https://iconoplasmportraits.b-cdn.net")
-      if (parsed.pathname === "/api/public/v1/card-current") {
-        return new Response(JSON.stringify({ schema_version: 2, current: `ccv2-${manifest.hash}` }))
-      }
-      const body = objects.get(parsed.pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  const gallery = await reader.gallery({ order: "votes", limit: 4 })
-  assert.equal(gallery.total, 67)
-  assert.deepEqual(
-    gallery.items.map((item) => item.symbol),
-    ["GENE066", "GENE065", "GENE064", "GENE063"],
-  )
-  assert.deepEqual(
-    (await reader.search("GENE066")).genes.map((item) => item.symbol),
-    ["GENE066"],
-  )
-  assert.equal(requested.filter((url) => url.pathname.includes("/catalogindexes/")).length, 67)
-})
-
-// B-886: the published catalog carries popularity 0 for every gene (the card
-// never sets it). The page-view table the site already ships is the one
-// source; the guest "Most popular" order joins it instead of trusting the
-// column, exactly like the signed-in shelf (B-885).
-test("the guest Most popular order ranks by Wikipedia page views, not the catalog's zero column", async () => {
-  const objects = new Map()
-  const shards = []
-  for (const symbol of ["ACTB", "INS", "ZZZ-UNKNOWN"]) {
-    const page = await immutableFixtureObject("catalogs", {
-      schema_version: 1,
-      entries: [{ symbol, full_name: symbol, image_score: 0 }],
-    })
-    const catalogIndex = await immutableFixtureObject("catalogindexes", {
-      schema_version: 2,
-      pages: [{ first_symbol: symbol, last_symbol: symbol, key: page.path.slice(1) }],
-      search_entries: [[symbol, symbol, 0, 0]],
-      gallery_entries: [[symbol, 0, 0, 0, 0]],
-    })
-    objects.set(page.path, page.body)
-    objects.set(catalogIndex.path, catalogIndex.body)
-    shards.push({
-      first_symbol: symbol,
-      last_symbol: symbol,
-      catalog_index: { key: catalogIndex.path.slice(1), page_count: 1 },
-    })
-  }
-  const manifest = await immutableFixtureObject("manifests", {
-    storage: "bunny_card_catalog_v2",
-    card_count: 3,
-    shards,
-  })
-  objects.set(manifest.path, manifest.body)
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      if (parsed.pathname === "/api/public/v1/card-current") {
-        return new Response(JSON.stringify({ schema_version: 2, current: `ccv2-${manifest.hash}` }))
-      }
-      const body = objects.get(parsed.pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  const popular = await reader.gallery({ order: "popular", limit: 3 })
-  assert.deepEqual(
-    popular.items.map((item) => item.symbol),
-    ["INS", "ACTB", "ZZZ-UNKNOWN"],
-  )
-})
-
-test("a legacy immutable gene without candidates remains a complete static dossier", async () => {
-  const fixture = await immutableFixture()
-  const legacyGene = { ...fixture.gene }
-  delete legacyGene.portrait_candidates
-  const geneObject = await immutableFixtureObject("genes", legacyGene)
-  const oldEntry = JSON.parse(
-    fixture.objects.get([...fixture.objects.keys()].find((key) => key.includes("/indexes/"))),
-  )
-  oldEntry.entries[0][2] = geneObject.hash
-  const indexObject = await immutableFixtureObject("indexes", oldEntry)
-  const manifest = JSON.parse(fixture.manifestObject.body)
-  manifest.shards[0].delivery_indexes[0].key = indexObject.path.slice(1)
-  const manifestObject = await immutableFixtureObject("manifests", manifest)
-  const objects = new Map(fixture.objects)
-  objects.set(geneObject.path, geneObject.body)
-  objects.set(indexObject.path, indexObject.body)
-  objects.set(manifestObject.path, manifestObject.body)
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") {
-        return new Response(
-          JSON.stringify({ schema_version: 2, current: `ccv2-${manifestObject.hash}` }),
-        )
-      }
-      const body = objects.get(pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  const gene = await reader.gene("TP53")
-  assert.deepEqual(gene.portrait_candidates, [])
-})
-
-test("a healthy Bunny response never starts a browser-side canonical-origin hedge", async () => {
-  const fixture = await immutableFixture()
-  let originRequests = 0
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      if (parsed.origin === "https://iconoplasm.brinedew.bio") originRequests += 1
-      if (parsed.pathname === "/api/public/v1/card-current") {
-        return new Response(fixture.head, { status: 200 })
-      }
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal((await reader.gene("TP53")).symbol, "TP53")
-  await new Promise((resolve) => setTimeout(resolve, 40))
-  assert.equal(originRequests, 0)
-})
-
-// IPD-001: Bunny accelerates; the first-party origin stays canonical, and a
-// failed accelerator affects only the requesting context. Seen live on
-// 27 Sep 2026: a Vietnamese ISP resolver briefly failed to resolve
-// iconoplasmportraits.b-cdn.net (ERR_NAME_NOT_RESOLVED), and a first-time
-// reader got "Gene page temporarily unavailable" for STAT5A. Ways this breaks:
-// 1. a DNS or network failure on Bunny leaves the page with nothing;
-// 2. every later object waits on Bunny again (one timeout per object);
-// 3. a Bunny 5xx on one object sinks the whole page;
-// 4. a hung Bunny connection never gives up;
-// 5. the canonical origin is trusted blindly (bytes not checked by hash);
-// 6. the fallback reaches anything but the two public immutable routes.
-const CANONICAL = "https://iconoplasm.brinedew.bio"
-const BUNNY = "https://iconoplasmportraits.b-cdn.net"
-
-function serveFixture(fixture, parsed) {
-  if (parsed.pathname === "/api/public/v1/card-current") {
-    return new Response(fixture.head, { status: 200 })
-  }
-  const body = fixture.objects.get(parsed.pathname)
-  return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-}
-
-function publicImmutableRoute(pathname) {
-  return (
-    pathname === "/api/public/v1/card-current" ||
-    pathname.startsWith("/published-cards/v2/immutable/") ||
-    // B-898: the canonical-origin copy of the stable gene object.
-    pathname.startsWith("/api/public/v1/stable-genes/")
-  )
-}
-
-test("a reader whose resolver cannot find Bunny still gets the gene from the canonical origin", async () => {
-  const fixture = await immutableFixture()
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.origin === BUNNY) throw new TypeError("Failed to fetch")
-      return serveFixture(fixture, parsed)
-    },
-  })
-  assert.equal((await reader.gene("TP53")).symbol, "TP53", "1: the page gets its gene")
-  assert.equal(
-    requests.filter((request) => request.origin === BUNNY).length,
-    1,
-    "2: after one network failure the rest of the page skips Bunny",
-  )
-  assert.equal(
-    requests.every(
-      (request) =>
-        request.origin === BUNNY ||
-        (request.origin === CANONICAL && publicImmutableRoute(request.pathname)),
-    ),
-    true,
-    "6: only the public immutable routes are used as fallback",
-  )
-})
-
-test("a Bunny 5xx on one object falls back for that object only", async () => {
-  const fixture = await immutableFixture()
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.origin === BUNNY && parsed.pathname === fixture.manifestObject.path) {
-        return new Response(null, { status: 503 })
-      }
-      return serveFixture(fixture, parsed)
-    },
-  })
-  assert.equal((await reader.gene("TP53")).symbol, "TP53", "3: one bad object is recovered")
-  const canonical = requests.filter((request) => request.origin === CANONICAL)
-  assert.deepEqual(
-    canonical.map((request) => request.pathname),
-    [fixture.manifestObject.path],
-    "3: only the failed object came from the canonical origin",
-  )
-})
-
-test("a hung Bunny connection gives up after the timeout and uses the canonical origin", async () => {
-  const fixture = await immutableFixture()
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    cdnTimeoutMs: 30,
-    fetchImpl: (url, init) => {
-      const parsed = new URL(url)
-      if (parsed.origin === BUNNY) {
-        return new Promise((_, reject) =>
-          init?.signal?.addEventListener("abort", () => reject(init.signal.reason)),
-        )
-      }
-      return Promise.resolve(serveFixture(fixture, parsed))
-    },
-  })
-  assert.equal((await reader.gene("TP53")).symbol, "TP53", "4: the hang ends in a gene")
-})
-
-test("bytes from the canonical origin are still checked against their hash", async () => {
-  const fixture = await immutableFixture()
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      if (parsed.origin === BUNNY) throw new TypeError("Failed to fetch")
-      if (parsed.pathname === fixture.geneObject.path) {
-        return new Response(fixture.geneObject.body.replace("Guardian", "Tampered"))
-      }
-      return serveFixture(fixture, parsed)
-    },
-  })
-  await assert.rejects(reader.gene("TP53"), "5: a tampered object is refused")
-})
-
-test("a failed Bunny head keeps the coherent prior publication without stateful reconstruction", async () => {
-  const fixture = await immutableFixture()
-  const storage = new Map([["iconoplasm.publication-head.v1", fixture.head]])
-  const requested = []
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem(key) {
-        return storage.get(key) || null
-      },
-      setItem(key, value) {
-        storage.set(key, value)
-      },
-    },
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requested.push(parsed)
-      if (parsed.pathname === "/api/public/v1/card-current") {
-        return new Response(null, { status: 503 })
-      }
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal((await reader.gene("TP53")).symbol, "TP53")
-  assert.equal(
-    requested.some((request) => request.pathname.startsWith("/api/iconoplasm/")),
-    false,
-  )
-  assert.equal(
-    requested.every((request) => request.origin === "https://iconoplasmportraits.b-cdn.net"),
-    true,
-    "a Bunny failure must not fan readers into the Worker/KV origin",
-  )
-})
-
-test("a valid new head with a missing child retains the last fully coherent publication", async () => {
-  const prior = await immutableFixture()
-  const brokenManifest = await immutableFixtureObject("manifests", {
-    storage: "bunny_card_catalog_v2",
-    card_count: 1,
-    shards: [
-      {
-        first_symbol: "TP53",
-        last_symbol: "TP53",
-        delivery_indexes: [
-          {
-            first_symbol: "TP53",
-            last_symbol: "TP53",
-            key: `published-cards/v2/immutable/indexes/${"f".repeat(64)}.json`,
-          },
-        ],
-      },
-    ],
-  })
-  const nextHead = JSON.stringify({ schema_version: 2, current: `ccv2-${brokenManifest.hash}` })
-  const stored = new Map([["iconoplasm.publication-head.v1", prior.head]])
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem: (key) => stored.get(key) || null,
-      setItem: (key, value) => stored.set(key, value),
-    },
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") return new Response(nextHead)
-      if (pathname === brokenManifest.path) return new Response(brokenManifest.body)
-      const body = prior.objects.get(pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal((await reader.gene("TP53")).symbol, "TP53")
-  assert.equal(stored.get("iconoplasm.publication-head.v1"), prior.head)
-})
-
-test("a search on a partially propagated head cannot erase the prior coherent gene fallback", async () => {
-  const prior = await immutableFixture({ fullName: "prior tumor protein p53" })
-  const next = await immutableFixture({ fullName: "next tumor protein p53" })
-  const stored = new Map([["iconoplasm.publication-head.v1", prior.head]])
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem: (key) => stored.get(key) || null,
-      setItem: (key, value) => stored.set(key, value),
-    },
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") return new Response(next.head)
-      if (pathname === next.geneObject.path) return new Response(null, { status: 404 })
-      const body = next.objects.get(pathname) || prior.objects.get(pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  assert.deepEqual(
-    (await reader.search("next", { limit: 12 })).genes.map((gene) => gene.full_name),
-    ["next tumor protein p53"],
-  )
-  assert.equal((await reader.gene("TP53")).full_name, "prior tumor protein p53")
-})
-
-test("a successful gene cannot evict another symbol's coherent fallback", async () => {
-  const priorTp53 = await immutableFixture({ symbol: "TP53", fullName: "prior TP53" })
-  const priorRb1 = await immutableFixture({ symbol: "RB1", fullName: "prior RB1" })
-  const brokenTp53 = await immutableFixture({ symbol: "TP53", fullName: "broken TP53" })
-  let head = priorTp53.head
-  const stored = new Map()
-  const fixtures = [priorTp53, priorRb1, brokenTp53]
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem: (key) => stored.get(key) || null,
-      setItem: (key, value) => stored.set(key, value),
-    },
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") return new Response(head)
-      if (pathname === brokenTp53.geneObject.path) return new Response(null, { status: 404 })
-      for (const fixture of fixtures) {
-        const body = fixture.objects.get(pathname)
-        if (body) return new Response(body)
-      }
-      return new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal((await reader.gene("TP53")).full_name, "prior TP53")
-  head = priorRb1.head
-  assert.equal((await reader.gene("RB1")).full_name, "prior RB1")
-  head = brokenTp53.head
-  assert.equal((await reader.gene("TP53")).full_name, "prior TP53")
-})
-
-test("a successful search query cannot evict another query's coherent fallback", async () => {
-  const priorBeta = await immutableFixture({ fullName: "prior beta protein" })
-  const nextAlpha = await immutableFixture({ fullName: "next alpha protein" })
-  const brokenBeta = await immutableFixture({ fullName: "next beta protein" })
-  let head = priorBeta.head
-  const stored = new Map()
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem: (key) => stored.get(key) || null,
-      setItem: (key, value) => stored.set(key, value),
-    },
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") return new Response(head)
-      if (head === brokenBeta.head && pathname === brokenBeta.catalogObject.path)
-        return new Response(null, { status: 404 })
-      for (const fixture of [brokenBeta, nextAlpha, priorBeta]) {
-        const body = fixture.objects.get(pathname)
-        if (body) return new Response(body)
-      }
-      return new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal((await reader.search("beta")).genes[0].full_name, "prior beta protein")
-  head = nextAlpha.head
-  assert.equal((await reader.search("alpha")).genes[0].full_name, "next alpha protein")
-  head = brokenBeta.head
-  assert.equal((await reader.search("beta")).genes[0].full_name, "prior beta protein")
-})
-
-test("a successful gallery page cannot evict another page's coherent fallback", async () => {
-  const prior = await immutableFixture({ fullName: "prior gallery item" })
-  const next = await immutableFixture({ fullName: "next gallery item" })
-  let head = prior.head
-  const stored = new Map()
-  const reader = createIconoplasmPublicationReader({
-    storage: {
-      getItem: (key) => stored.get(key) || null,
-      setItem: (key, value) => stored.set(key, value),
-    },
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      if (pathname === "/api/public/v1/card-current") return new Response(head)
-      if (head === next.head && pathname === next.catalogObject.path)
-        return new Response(null, { status: 404 })
-      for (const fixture of [next, prior]) {
-        const body = fixture.objects.get(pathname)
-        if (body) return new Response(body)
-      }
-      return new Response(null, { status: 404 })
-    },
-  })
-
-  assert.equal(
-    (await reader.gallery({ offset: 0, limit: 1 })).items[0].full_name,
-    "prior gallery item",
-  )
-  head = next.head
-  await reader.gallery({ offset: 1, limit: 1 })
-  assert.equal(
-    (await reader.gallery({ offset: 0, limit: 1 })).items[0].full_name,
-    "prior gallery item",
-  )
-})
-
-test("search and gallery fetch compact indexes plus only result pages", async () => {
-  const fixture = await immutableFixture()
-  const requested = []
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const pathname = new URL(url).pathname
-      requested.push(pathname)
-      if (pathname === "/api/public/v1/card-current") return new Response(fixture.head)
-      const body = fixture.objects.get(pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-
-  await reader.search("tumor", { limit: 12 })
-  await reader.gallery({ order: "votes", offset: 0, limit: 24 })
-  // B-898: the one probe for the stable catalog object (a 404 here) is not a tree read.
-  const catalogReads = requested.filter((pathname) => pathname.includes("/immutable/catalog"))
-  assert.equal(catalogReads.length, 2, "one compact index plus one selected rich page")
-  assert.deepEqual(PUBLIC_READ_REQUEST_BOUNDS, {
-    catalogIndexes: 96,
-    compactIndexBytes: 131072,
-    resultPageBytes: 524288,
-    searchRequests: 110,
-    searchBytes: 19_138_560,
-    galleryRequests: 122,
-    galleryBytes: 25_430_016,
-  })
 })
 
 test("homepage and crawler-facing reads short-circuit before every throwing state binding", async () => {
@@ -982,17 +335,31 @@ test("a failed gallery page rejects the dossier load instead of rendering an emp
   await assert.rejects(load.fetchCompleteGeneDetailFromEndpoint("TP53"), /HTTP 404/)
 })
 
-// B-898 Stage 1, step 2: the gene page reads the one stable object per gene.
-// Failure modes written before the code:
-// 1. stable object present on Bunny -> exactly one fetch, no head/manifest walk;
-// 2. CDN 404 (gene not yet backfilled) -> immutable tree, and no origin request;
-// 3. malformed stable object -> immutable tree;
-// 4. CDN unreachable -> canonical-origin copy of the same stable object;
-// 5. the inline pool feeds candidateGallery() without any further fetch;
-// 6. portrait media on the stable record are rewritten to the CDN.
-function stableGeneFixture(gene) {
+// The page reads the one stable object per gene and the one stable catalog
+// object. Failure modes written before the code:
+// 1. stable object present on Bunny -> exactly one CDN fetch, revalidated
+//    (cache: "no-cache"), portrait media rewritten to the CDN, pool inline;
+// 2. CDN 404 -> null ("no card for this gene"), and no origin request;
+// 3. a malformed stable object -> a reader error, never older state, and no
+//    origin request;
+// 4. CDN unreachable -> the canonical origin's copy of the same object;
+// 5. both unreachable -> a reader error;
+// 6. the catalog object answers home, gallery, search, metrics and metadata
+//    from one CDN fetch;
+// 7. a catalog 404 or malformed catalog is a reader error, with no origin
+//    request for the 404;
+// 8. a brick batch is answered from the catalog rows; unknown symbols are
+//    simply absent.
+const CANONICAL = "https://iconoplasm.brinedew.bio"
+const BUNNY = "https://iconoplasmportraits.b-cdn.net"
+
+function stableGeneFixture() {
   return {
-    ...gene,
+    symbol: "TP53",
+    full_name: "tumor protein p53",
+    color: "#223344",
+    essence: { summary: "Guardian of the genome" },
+    portrait: { status: "published", asset_sha256: "a".repeat(64) },
     portrait_candidates: [
       { asset_sha256: "a".repeat(64), is_current: true, image_score: 4 },
       { asset_sha256: "b".repeat(64), is_current: false, image_score: 1 },
@@ -1003,121 +370,6 @@ function stableGeneFixture(gene) {
   }
 }
 
-test("a gene with a stable object is one CDN fetch and never walks the immutable tree (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const stable = JSON.stringify(stableGeneFixture(fixture.gene))
-  const requests = []
-  const cacheModes = []
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url, init) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      cacheModes.push(init?.cache)
-      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(stable, { status: 200 })
-      if (parsed.pathname === "/api/public/v1/card-current")
-        return new Response(fixture.head, { status: 200 })
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-  const gene = await reader.gene("tp53")
-  assert.equal(gene.symbol, "TP53")
-  assert.equal(gene.stable_object_version, 3)
-  assert.deepEqual(
-    requests.map((r) => r.origin + r.pathname),
-    ["https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json"],
-  )
-  assert.equal(
-    gene.portrait.medium_url,
-    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
-  )
-  // 7. the CDN stamps stable objects with a 30-day max-age; the reader must
-  //    revalidate them on every read instead of trusting the browser cache.
-  assert.deepEqual(cacheModes, ["no-cache"])
-  const before = requests.length
-  const pool = await reader.candidateGallery(gene)
-  assert.equal(pool.count, 2)
-  assert.equal(pool.candidates[0].is_current, true)
-  assert.equal(requests.length, before, "the inline pool needs no gallery page fetch")
-})
-
-test("a gene without a stable object yet falls back to the immutable tree without touching the origin (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(null, { status: 404 })
-      if (parsed.pathname === "/api/public/v1/card-current")
-        return new Response(fixture.head, { status: 200 })
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-  const gene = await reader.gene("TP53")
-  assert.equal(gene.symbol, "TP53")
-  assert.equal(gene.stable_object_version, undefined)
-  assert.equal(
-    requests.every((r) => r.origin === "https://iconoplasmportraits.b-cdn.net"),
-    true,
-    "a CDN 404 must not become a Worker request",
-  )
-  assert.equal(requests[0].pathname, "/genes/v3/TP53.json")
-})
-
-test("a malformed stable object falls back to the immutable tree (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const wrong = JSON.stringify({ ...stableGeneFixture(fixture.gene), symbol: "BRCA1" })
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      if (parsed.pathname === "/genes/v3/TP53.json") return new Response(wrong, { status: 200 })
-      if (parsed.pathname === "/api/public/v1/card-current")
-        return new Response(fixture.head, { status: 200 })
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
-    },
-  })
-  const gene = await reader.gene("TP53")
-  assert.equal(gene.symbol, "TP53")
-  assert.equal(gene.stable_object_version, undefined)
-})
-
-test("an unreachable CDN hedges the stable object to the canonical origin (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const stable = JSON.stringify(stableGeneFixture(fixture.gene))
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.origin === "https://iconoplasmportraits.b-cdn.net")
-        throw new TypeError("Failed to fetch")
-      if (parsed.pathname === "/api/public/v1/stable-genes/TP53.json")
-        return new Response(stable, { status: 200 })
-      return new Response(null, { status: 404 })
-    },
-  })
-  const gene = await reader.gene("TP53")
-  assert.equal(gene.stable_object_version, 3)
-  assert.deepEqual(
-    requests.map((r) => r.origin + r.pathname),
-    [
-      "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json",
-      "https://iconoplasm.brinedew.bio/api/public/v1/stable-genes/TP53.json",
-    ],
-  )
-})
-
-// B-898 Stage 1, catalog half: home, gallery and search read ONE stable object,
-// catalog/v3/index.json. Failure modes written before the code:
-// 1. index present on Bunny -> gallery, search and gene metrics are one CDN
-//    fetch of the index, no head, no manifest, no catalog pages;
-// 2. items carry CDN portrait URLs, full name, score and the sort fields;
-// 3. CDN 404 (not yet published) -> the immutable tree, with no origin request;
-// 4. a malformed index -> the immutable tree;
-// 5. metadata() names the stable catalog version.
 function stableCatalogFixture() {
   return JSON.stringify({
     schema: 3,
@@ -1153,18 +405,84 @@ function stableCatalogFixture() {
   })
 }
 
-test("home, gallery and search read the one stable catalog object (B-898)", async () => {
+function recordingReader(answer) {
   const requests = []
+  const cacheModes = []
   const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, init) => {
       const parsed = new URL(url)
       requests.push(parsed.origin + parsed.pathname)
-      if (parsed.pathname === "/catalog/v3/index.json")
-        return new Response(stableCatalogFixture(), { status: 200 })
-      return new Response(null, { status: 404 })
+      cacheModes.push(init?.cache)
+      return answer(parsed)
     },
   })
+  return { reader, requests, cacheModes }
+}
+
+test("a gene with a stable object is one revalidated CDN fetch with its pool inline (B-898)", async () => {
+  const { reader, requests, cacheModes } = recordingReader((parsed) =>
+    parsed.pathname === "/genes/v3/TP53.json"
+      ? new Response(JSON.stringify(stableGeneFixture()), { status: 200 })
+      : new Response(null, { status: 404 }),
+  )
+  const gene = await reader.gene("tp53")
+  assert.equal(gene.symbol, "TP53")
+  assert.equal(gene.stable_object_version, 3)
+  assert.deepEqual(requests, [`${BUNNY}/genes/v3/TP53.json`])
+  assert.deepEqual(cacheModes, ["no-cache"])
+  assert.equal(gene.portrait.medium_url, `${BUNNY}/portraits/v1/aa/${"a".repeat(64)}/medium.webp`)
+  const pool = await reader.candidateGallery(gene)
+  assert.equal(pool.count, 2)
+  assert.equal(pool.candidates[0].is_current, true)
+  assert.equal(requests.length, 1, "the inline pool needs no further fetch")
+})
+
+test("a CDN 404 means no card for the gene and never becomes a Worker request (B-898)", async () => {
+  const { reader, requests } = recordingReader(() => new Response(null, { status: 404 }))
+  assert.equal(await reader.gene("TP53"), null)
+  assert.deepEqual(requests, [`${BUNNY}/genes/v3/TP53.json`])
+})
+
+test("a malformed stable object is a reader error, not older state (B-898)", async () => {
+  const { reader, requests } = recordingReader(
+    () =>
+      new Response(JSON.stringify({ ...stableGeneFixture(), symbol: "BRCA1" }), { status: 200 }),
+  )
+  await assert.rejects(reader.gene("TP53"), /Invalid published gene object: TP53/)
+  assert.deepEqual(requests, [`${BUNNY}/genes/v3/TP53.json`])
+})
+
+test("an unreachable CDN hedges the stable object to the canonical origin (B-898)", async () => {
+  const { reader, requests } = recordingReader((parsed) => {
+    if (parsed.origin === BUNNY) throw new TypeError("Failed to fetch")
+    return parsed.pathname === "/api/public/v1/stable-genes/TP53.json"
+      ? new Response(JSON.stringify(stableGeneFixture()), { status: 200 })
+      : new Response(null, { status: 404 })
+  })
+  const gene = await reader.gene("TP53")
+  assert.equal(gene.stable_object_version, 3)
+  assert.deepEqual(requests, [
+    `${BUNNY}/genes/v3/TP53.json`,
+    `${CANONICAL}/api/public/v1/stable-genes/TP53.json`,
+  ])
+  // After one network failure the rest of the page skips Bunny.
+  await reader.gene("RB1")
+  assert.equal(requests.at(-1), `${CANONICAL}/api/public/v1/stable-genes/RB1.json`)
+})
+
+test("a reader that reaches neither source gets an error, never a fabricated gene (B-898)", async () => {
+  const { reader } = recordingReader(() => {
+    throw new TypeError("Failed to fetch")
+  })
+  await assert.rejects(reader.gene("TP53"), /published gene object is unavailable/)
+})
+
+test("home, gallery and search read the one stable catalog object (B-898)", async () => {
+  const { reader, requests } = recordingReader((parsed) =>
+    parsed.pathname === "/catalog/v3/index.json"
+      ? new Response(stableCatalogFixture(), { status: 200 })
+      : new Response(null, { status: 404 }),
+  )
   const gallery = await reader.gallery({ order: "votes", offset: 0, limit: 24 })
   assert.deepEqual(
     gallery.items.map((item) => item.symbol),
@@ -1177,7 +495,7 @@ test("home, gallery and search read the one stable catalog object (B-898)", asyn
   assert.equal(gallery.items[0].color, "#223344")
   assert.equal(
     gallery.items[0].portrait.medium_url,
-    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
+    `${BUNNY}/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
   )
   assert.equal(gallery.items[0].portrait.status, "published")
   assert.equal(gallery.items[2].portrait, null)
@@ -1197,72 +515,33 @@ test("home, gallery and search read the one stable catalog object (B-898)", asyn
   assert.equal(metrics.get("A1BG").weight_kg, 54.3)
   assert.equal(metrics.get("A1BG").image_score, 1)
   assert.equal((await reader.metadata()).card_snapshot_version, "catalog-v3:320152")
-  assert.deepEqual(requests, ["https://iconoplasmportraits.b-cdn.net/catalog/v3/index.json"])
+  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`])
 })
 
-test("without a stable catalog object the reader keeps the immutable tree and never hits the origin (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed)
-      if (parsed.pathname === "/catalog/v3/index.json") return new Response(null, { status: 404 })
-      if (parsed.pathname === "/api/public/v1/card-current") return new Response(fixture.head)
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-  const gallery = await reader.gallery({ order: "votes", offset: 0, limit: 24 })
-  assert.deepEqual(
-    gallery.items.map((item) => item.symbol),
-    ["TP53"],
+test("a missing or malformed stable catalog is a reader error and the next call retries (B-898)", async () => {
+  let status = 404
+  let body = null
+  const { reader, requests } = recordingReader((parsed) =>
+    parsed.pathname === "/catalog/v3/index.json"
+      ? new Response(body, { status })
+      : new Response(null, { status: 404 }),
   )
-  assert.equal(
-    requests.every((r) => r.origin === "https://iconoplasmportraits.b-cdn.net"),
-    true,
-  )
+  await assert.rejects(reader.gallery({ order: "votes" }), /No published Iconoplasm catalog/)
+  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`], "a 404 never hits the origin")
+  status = 200
+  body = JSON.stringify({ schema: 2 })
+  await assert.rejects(reader.search("tumor"), /Invalid published Iconoplasm catalog/)
+  body = stableCatalogFixture()
+  assert.equal((await reader.search("tumor")).genes[0].symbol, "TP53")
+  assert.equal(requests.length, 3, "a failed read is not remembered; the next call retries")
 })
 
-test("a malformed stable catalog object falls back to the immutable tree (B-898)", async () => {
-  const fixture = await immutableFixture()
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      if (parsed.pathname === "/catalog/v3/index.json")
-        return new Response(JSON.stringify({ schema: 2 }), { status: 200 })
-      if (parsed.pathname === "/api/public/v1/card-current") return new Response(fixture.head)
-      const body = fixture.objects.get(parsed.pathname)
-      return body ? new Response(body) : new Response(null, { status: 404 })
-    },
-  })
-  const search = await reader.search("tumor", { limit: 12 })
-  assert.deepEqual(
-    search.genes.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-})
-
-// B-898: the home page's first brick page asks genes(symbols) for the bricks'
-// name and portrait. Failure modes written before the code:
-// 1. with the stable catalog present, a batch is answered from its rows with
-//    the one catalog fetch and no head/manifest/gene-object walk;
-// 2. unknown symbols are simply absent (the caller reports them as missing);
-// 3. without the catalog object the immutable tree still answers.
 test("a brick batch is answered from the stable catalog rows (B-898)", async () => {
-  const requests = []
-  const reader = createIconoplasmPublicationReader({
-    storage: null,
-    fetchImpl: async (url) => {
-      const parsed = new URL(url)
-      requests.push(parsed.origin + parsed.pathname)
-      if (parsed.pathname === "/catalog/v3/index.json")
-        return new Response(stableCatalogFixture(), { status: 200 })
-      return new Response(null, { status: 404 })
-    },
-  })
+  const { reader, requests } = recordingReader((parsed) =>
+    parsed.pathname === "/catalog/v3/index.json"
+      ? new Response(stableCatalogFixture(), { status: 200 })
+      : new Response(null, { status: 404 }),
+  )
   const records = await reader.genes(["tp53", "A1BG", "NOPE", "TP53"])
   assert.deepEqual(
     records.map((r) => r.symbol),
@@ -1271,7 +550,7 @@ test("a brick batch is answered from the stable catalog rows (B-898)", async () 
   assert.equal(records[0].full_name, "tumor protein p53")
   assert.equal(
     records[0].portrait.medium_url,
-    `https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
+    `${BUNNY}/portraits/v1/aa/${"a".repeat(64)}/medium.webp`,
   )
-  assert.deepEqual(requests, ["https://iconoplasmportraits.b-cdn.net/catalog/v3/index.json"])
+  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`])
 })

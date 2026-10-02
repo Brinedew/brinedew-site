@@ -43,7 +43,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait accelerator; direct delivery avoids charging each image to the Worker budget, and a failed probe changes only that tab. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract with frozen archive ranges; eligibility follows the exact published card. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract with frozen archive ranges; eligibility follows the one stable gene object and the one catalog object. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time wakeups for durable ledgers, never polling tokens; unfinished work waits for its ledger due time. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
@@ -59,15 +59,15 @@ The caretaker authority cutover is finished. Its per-package backup was abandone
 
 **ARCHITECTURE FENCE [IPD-007]** — Iconoplasm anonymous documents use one Static Assets SPA shell; healthy portrait reads go directly to Bunny. The stable first-party `/blot/{symbol}.webp` route enters the existing Worker to resolve the exact published card. Canonical first-party `/portraits/*` URLs enter that Worker only as the Bunny-backed fallback; never restore a static placeholder redirect for them. Explicit mutation/admin APIs use the same Worker. Never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-008]** — Anonymous startup and extension hover read the published plane; a guest page never probes identity or D1. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`, `docs/ICONOPLASM_CARD_PUBLICATION_V2.md`.
+**ARCHITECTURE FENCE [IPD-008]** — Anonymous startup and extension hover read the two published objects (the stable gene object `genes/v3/<SYMBOL>.json` from the CDN and the catalog object `catalog/v3/index.json`); a guest page never probes identity or D1. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
 
-**ARCHITECTURE FENCE [IPD-009]** — Anonymous gene, search, gallery, crawler, and passive-vote reads use Static Assets plus immutable Sysop V2 Bunny artifacts. Healthy portraits load from Bunny; first-party portrait fallback uses the existing Worker and its single storage adapter. The stable blot route uses the same published-card authority through that Worker, never D1, a session, or a second mutable truth. Authenticated mutations remain inside the Worker. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`.
+**ARCHITECTURE FENCE [IPD-009]** — Anonymous gene, search, gallery, crawler, and passive-vote reads use Static Assets plus the two published Bunny objects. Healthy portraits load from Bunny; first-party portrait fallback uses the existing Worker and its single storage adapter. The stable blot route and every card reader resolve the one stable gene object through that Worker, never D1, a session, or a second mutable truth. Authenticated mutations remain inside the Worker. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_REQUEST_LIFECYCLE.md`.
 
-**ARCHITECTURE FENCE [IPD-010]** — Routine gallery publication is dirty-shard-only; a scheduled step is bounded and never rebuilds the corpus. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-010]** — Routine publication is per gene and bounded: `publishIconoplasmGeneStableObject` rewrites one stable object per changed gene, and the catalog object is rebuilt in GitHub Actions, never inside a Worker request or cron tick. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-011]** — The canonical public machine image is the Iconoplasm gene blot. Every public canonical blot, gene record, compact catalog page, passive candidate summary, and shared vote total comes from the one exact published card artifact. The source portrait remains available as subordinate source material. On any healthy network, website readers use Bunny's content-addressed bytes; failure retains a coherent prior artifact or static placeholder and never reconstructs from state. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_HOME_PERFORMANCE.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-011]** — The canonical public machine image is the Iconoplasm gene blot. Every public canonical blot, gene record, catalog row, passive candidate summary, and shared vote total comes from the one stable gene object (`genes/v3/<SYMBOL>.json`) or the one catalog object (`catalog/v3/index.json`). The source portrait remains available as subordinate source material. On any healthy network, website readers use Bunny; failure is a visible reader error and never reconstructs from state. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_HOME_PERFORMANCE.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
-The **only canonical blot publication path** verifies immutable `blots/v1/...` bytes in `workers/lib/iconoplasm-card-publication.js`, then advances the published card head. Its final manifest must be readable from both Bunny Storage and the public CDN before that head changes; an origin-only check let a vote put every `/blot/*` route at 503 for minutes on 2026-09-24. The existing Worker resolves the stable first-party `/blot/{symbol}.webp` route from that card. Do not recreate the old mutable Bunny `/blot/{symbol}.webp` writer or its admin backfill: its cached placeholder blocked a real candidate while the first-party route already served the correct image (2026-09-24).
+The **only canonical blot publication path** is `publishIconoplasmGeneStableObject` in the stateful runtime (B-898): it materializes the gene from D1 and the authoring store, composes the stable object (`workers/lib/iconoplasm-stable-gene-object.js`), writes it with a verified read-back and purges its CDN URL. The existing Worker resolves the stable first-party `/blot/{symbol}.webp` route from that object; no other writer of gene or blot objects exists.
 
 **ARCHITECTURE FENCE [GG-001]** — Automatic GeneGuessr daily selection gives each normalized surname exactly one lottery slot. Registry: `architecture-fences.json`; runbook: `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`.
 
@@ -96,27 +96,20 @@ Concrete rules:
 7. **Use the requested desktop session.** If the owner has Edge/Firefox and a VPN/provider dashboard open, read the installed Computer Use skill and inspect that actual window before declaring browser access blocked. A missing Chrome bridge add-on says nothing about desktop Computer Use availability. Refresh window identity after tab detachment and refresh observed state after user input. Never install an unrequested bridge or change providers to bypass this check.
 
 **ARCHITECTURE FENCE [IPD-008] metadata transport:** read
-`docs/ICONOPLASM_CARD_PUBLICATION_V2.md` before changing publication or reloads.
-The on-demand hash directories map a named snapshot to per-gene content hashes. Immutable per-symbol
-detail and portrait projections may use Bunny; they are not another publisher.
-Unchanged hashes retain their URLs across votes; changed hashes get new URLs.
-No whole-card shards enter the extension, no reader writes occur, no D1 fallback
-elects canon, and private/mutation traffic never enters the CDN. Keep separate
-hover lanes, deadlines, bounded caches and per-tab network decisions. Test cold
-CDN fills, blocked networks, concurrent lanes and publication changes together.
-Storage migrations must also keep the released client's delivery-index and v1
-content envelope working. A validation package can retain the released version
-number while containing newer code: compare package/runtime hashes, not only the
-displayed version. V2 compatibility reads one directory plus the exact lane
-object; never load its packed shard or make portraits wait on rich-card bytes.
-Persist exact card responses and immutable portrait bytes in extension-origin
-background IndexedDB with byte-bounded LRU retention. Foreground requests look up one exact record, never
-wait for a multi-megabyte content-store hydration or bypass local reuse. The
-background applies the shared source plan only on a byte-cache miss; it keeps
-Bunny primary with the same bounded hedge. Decode the returned data URL in the
-persistent card frame or simple host renderer. No second HTTPS image transfer.
-Verify Wikipedia-to-paper navigation and background restart without reinstalling
-the extension, clearing storage, or disabling browser caching.
+`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md` ("Current publication contract")
+before changing publication or reloads. Hover detail is one stable object per
+gene on the CDN (`genes/v3/<SYMBOL>.json`), rewritten in place and purged on
+every publication; the catalog manifest and scanner artifact stay the
+extension's release contract. No whole-card shards enter the extension, no
+reader writes occur, no D1 fallback elects canon, and private/mutation traffic
+never enters the CDN. The 0.5.8 compatibility window still reads
+`GET /api/public/v1/card-snapshots/:snapshot/{genes|portraits}/:symbol`, which
+resolve the same stable object for any snapshot token; those routes and the
+manifest's `card_snapshot_version` field stay until that window closes. A
+validation package can retain the released version number while containing
+newer code: compare package/runtime hashes, not only the displayed version.
+Verify Wikipedia-to-paper navigation and background restart without
+reinstalling the extension, clearing storage, or disabling browser caching.
 
 ## Local development overrides
 

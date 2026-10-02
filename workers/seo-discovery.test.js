@@ -269,6 +269,45 @@ async function buildPublishedCatalogEnv(
       }
     })
   stableGeneObjects.clear()
+  // The range pages and sitemaps read the frozen card snapshot, which lives on Bunny Storage as a ccv2 manifest,
+  // one delivery index per shard and one exact card object per gene (every
+  // object content-addressed and hash-verified by the store). Seed that tree
+  // and its frozen KV head.
+  const frozenTreeObject = (kind, value) => {
+    const body = JSON.stringify(value)
+    const digest = createHash("sha256").update(body).digest("hex")
+    const key = `published-cards/v2/immutable/${kind}/${digest}.json`
+    stableGeneObjects.set(`/${STABLE_STORAGE_ZONE}/${key}`, body)
+    return { key, hash: digest }
+  }
+  const cardRefs = cards.map((card) => frozenTreeObject("cards", card))
+  const deliveryIndex = frozenTreeObject("indexes", {
+    schema_version: 2,
+    entries: cards.map((card, index) => [card.symbol, cardRefs[index].hash]),
+  })
+  const frozenManifest = frozenTreeObject("manifests", {
+    schema: "iconoplasm.cardCatalog.v1",
+    storage: "bunny_card_catalog_v2",
+    card_count: cards.length,
+    catalog_gene_count: cards.length,
+    shards: [
+      {
+        index: 0,
+        key: "unused-packed-shard",
+        card_count: cards.length,
+        first_symbol: cards[0]?.symbol || "",
+        last_symbol: cards[cards.length - 1]?.symbol || "",
+        delivery_indexes: [
+          {
+            first_symbol: cards[0]?.symbol || "",
+            last_symbol: cards[cards.length - 1]?.symbol || "",
+            key: deliveryIndex.key,
+          },
+        ],
+      },
+    ],
+  })
+  const frozenHead = `ccv2-${frozenManifest.hash}`
   for (const card of cards) {
     stableGeneObjects.set(
       `/${STABLE_STORAGE_ZONE}/genes/v3/${card.symbol}.json`,
@@ -301,38 +340,7 @@ async function buildPublishedCatalogEnv(
     [`iconoplasm:hydrated-catalog-artifact:a5c1:${buildHash}`, JSON.stringify(artifact)],
     [
       "iconoplasm:gallery-version",
-      JSON.stringify({ current: cardVersion, published_at: "2026-08-23T00:00:00.000Z" }),
-    ],
-    [
-      `iconoplasm:card-catalog:${cardVersion}`,
-      JSON.stringify({
-        schema: "iconoplasm.cardCatalog.v1",
-        artifact_version: cardVersion,
-        storage: "kv_sharded",
-        catalog_gene_count: cards.length,
-        card_count: cards.length,
-        shard_count: 1,
-        shards: [
-          {
-            index: 0,
-            key: `iconoplasm:card-catalog-shard:${cardVersion}:0`,
-            artifact_version: cardVersion,
-            shard_index: 0,
-            first_symbol: cards[0]?.symbol || "",
-            last_symbol: cards[cards.length - 1]?.symbol || "",
-            card_count: cards.length,
-          },
-        ],
-      }),
-    ],
-    [
-      `iconoplasm:card-catalog-shard:${cardVersion}:0`,
-      JSON.stringify({
-        schema: "iconoplasm.cardCatalog.v1",
-        artifact_version: cardVersion,
-        shard_index: 0,
-        cards,
-      }),
+      JSON.stringify({ current: frozenHead, published_at: "2026-08-23T00:00:00.000Z" }),
     ],
     [
       iconoplasmRecognitionPairKvKey(1, 1),
@@ -579,8 +587,8 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   )
   const rangeHtml = await range.text()
   assert.equal(range.status, 200)
-  assert.match(range.headers.get("etag") || "", /card-seofixture/)
-  assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
+  assert.match(range.headers.get("etag") || "", /ccv2-[a-f0-9]{64}/)
+  assert.match(range.headers.get("x-iconoplasm-card-version") || "", /^ccv2-[a-f0-9]{64}$/)
   assert.equal(range.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
   assert.match(rangeHtml, /href="\/gene\/TP53"/)
   assert.doesNotMatch(rangeHtml, /TRIM1/)
@@ -592,7 +600,7 @@ test("Iconoplasm exposes the crawlable range archive, sitemap index, and agent c
   )
   const shardText = await shard.text()
   assert.equal(shard.status, 200)
-  assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^card-seofixture/)
+  assert.match(shard.headers.get("x-iconoplasm-card-version") || "", /^ccv2-[a-f0-9]{64}$/)
   assert.equal(shard.headers.get("x-iconoplasm-portrait-discovery-version"), "2026-08-24-v4")
   assert.match(shard.headers.get("etag") || "", /2026-08-24-v4/)
   assert.match(shard.headers.get("etag") || "", /TO-TR\.xml/)
@@ -755,9 +763,9 @@ test("a malformed published-card portrait fails discovery documents closed", asy
 
 test("sitemap roots fail closed when the selected card manifest is unavailable", async () => {
   const env = await buildPublishedCatalogEnv([publishedGene("TP53", "tumor protein p53")])
-  const readKv = env.KV.get.bind(env.KV)
-  env.KV.get = async (key) =>
-    String(key).startsWith("iconoplasm:card-catalog:") ? null : readKv(key)
+  // The frozen head names a manifest Bunny no longer serves.
+  for (const key of [...stableGeneObjects.keys()])
+    if (key.includes("/published-cards/v2/immutable/manifests/")) stableGeneObjects.delete(key)
 
   const [index, pages] = await Promise.all([
     worker.fetch(new Request("https://iconoplasm.brinedew.bio/sitemap.xml"), env, {}),

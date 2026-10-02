@@ -67,8 +67,8 @@ canonical transition deployment may set
 `ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`. That mode permits only
 GET/HEAD reads for `/gene/:symbol`,
 `/api/iconoplasm/site/genes/:symbol`, and exact content-addressed portrait
-renditions. Gene routes use the exact published-card
-catalog selected by `KV_GALLERY_VERSION`; they do not resolve live D1 rows.
+renditions. Gene routes read the one stable gene object
+`genes/v3/<SYMBOL>.json` (B-898); they do not resolve live D1 rows.
 Portrait bytes use the existing storage adapter so first-party delivery remains
 available when Bunny is unreachable from the reader's network. No image
 selection, publication repair or D1 lookup is introduced.
