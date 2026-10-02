@@ -17,15 +17,19 @@ Iconoplasm publishes two objects on Bunny:
   projected record, the winning portrait, the complete candidate pool and
   `published_at`. `publishIconoplasmGeneStableObject` in the stateful runtime
   rewrites it in place and purges its CDN URL (about five subrequests, no
-  Durable Object). The vote authority calls it in process when a winner
-  changes; the admin republish route (`admin_publication.republish`) calls it
-  for every other canonical change.
+  Durable Object). Every vote and supervote calls it after the response; an
+  upload or reconcile that touches at most eight genes, `/admin/publish` and
+  `/admin/reject` call it in process; the admin republish route
+  (`admin_publication.republish`) calls it for everything else.
 - `catalog/v3/index.json` is the one catalog object. GitHub Actions
   (`scripts/publish-iconoplasm-catalog.mjs`) builds it from D1 and uploads it
   through `admin_publication.catalog_object_put`; the same run republishes the
   dirty genes through the republish route. The Worker's quarter-hour `gallery`
   cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
-  `repository_dispatch` when the newest canonical publish event moved.
+  `repository_dispatch` when the newest publication-affecting event moved.
+  `PUBLICATION_AFFECTING_ACTIONS` in that file is the one list of event actions
+  that change a stable object (a winner or a candidate change); the publisher
+  republishes every gene with one of them after its watermark.
 
 ## Stable gene object
 
@@ -43,11 +47,12 @@ the write still succeeds and reports `purged: false`; a refused purge throws so
 the caller retries the gene. Readers fetch with `cache: "no-cache"`, so a
 browser revalidates instead of keeping a rewritten gene for the CDN's 30 days.
 
-Bounded race: two publications of one gene can overlap (a vote that changes
-the winner while the Actions publisher republishes the same gene). Both read
-the same D1 state, so either write is correct; a stalled older PUT that lands
-after a newer one leaves the older content until the next publication of that
-gene, or a `republish` of it (see the repair below).
+Bounded race: two publications of one gene can overlap (two votes a second
+apart, or a vote while the Actions publisher republishes the same gene). Each
+reads D1 when it runs; a stalled older PUT that lands after a newer one leaves
+the older content until the next publication of that gene, or a `republish` of
+it (see the repair below). A winner change always has its publish event, so the
+next Actions run repairs it; a count-only lag lasts until the gene's next vote.
 
 ## Image ontology
 
@@ -95,13 +100,44 @@ not add a public D1 fallback.
 
 ## Votes and the workstation blot lane
 
-A vote goes to `/api/iconoplasm/votes/set`, which the gene's
-`IconoplasmVoteCoordinator` Durable Object records. When the vote changes the
-gene's winner (`electGeneAuthorityWinner`), the coordinator calls
-`publishIconoplasmGeneStableObject` for that gene, which rewrites the object
-and projects the winner into D1 (`icono_publish_state` plus an
-`icono_publish_events` row). Count changes that leave the winner alone are not
-republished.
+D1 is the only store for votes. A vote (`/api/iconoplasm/votes/set`, the
+admin and import routes, a copied, edited or generated candidate's first
+upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
+
+1. One write batch upserts the user's row in `icono_image_votes`, moves that
+   asset's `icono_vote_asset_summary` row by the exact delta between the old
+   and the new vote (read inside the same transaction), and bumps the gene's
+   version in `icono_gene_vote_version`. An identical retry writes nothing.
+2. One read batch takes the gene's candidates, summaries, caretaker supervote,
+   published state and vote version, and elects with
+   `electGeneAuthorityWinner`.
+3. If the winner differs from `icono_publish_state.current_asset_sha256`, one
+   batch projects it (the state row and one `publish` event), but only while
+   `admin_override` is 0, the winner is still eligible and the gene's vote
+   version is still the one step 2 read. A newer vote makes an older election a
+   no-op, so two near-simultaneous votes can never leave the older winner.
+4. After the response (`ctx.waitUntil`) the gene's stable object is
+   republished with no selection, so its shared counts stay current. A failed
+   publish never fails the vote.
+
+A caretaker supervote (`/api/iconoplasm/caretaker/genes/:symbol/supervote`)
+is the same shape over the caretaker projection tables: compare-and-set on the
+assignment and supervote versions, a receipt per command id, weight exactly 10
+(+ or -), eligible candidates only. Admin paths that change a gene's candidates
+(reject, unstale, reconcile, remove, clear-override) elect through the same
+function after advancing the gene's vote version. Measured on the full
+migrated schema (`workers/iconoplasm/vote-asset-summary-cost.test.js`): a new
+vote writes 15 D1 rows and reads 2, an election reads about 2 rows per
+candidate, a snapshot reads 7.
+
+Snapshots (`/votes/snapshot(s)`) read D1: the named genes' summaries, the
+caller's own votes on exactly the named assets and the caretaker rows, three
+statements whatever the item count.
+
+The `IconoplasmVoteCoordinator` Durable Objects hold a historical copy only.
+`POST /api/iconoplasm/admin/votes/compare-coordinators` (driven by
+`scripts/export-iconoplasm-votes-to-d1.mjs --compare`) reports each
+coordinator's differences from D1 and writes nothing.
 
 The workstation drain polls the authenticated `blots/backlog` route, which
 answers from D1 and the stable objects, renders the missing blots for the
@@ -123,7 +159,7 @@ Automatic promotion uses one ranking rule everywhere it chooses a leader:
 
 The existing current asset is not protected from an equally voted newer asset. If a newer portrait has the same score and upvote count, it becomes canonical. The only durable "do not move this automatically" protection is `admin_override = 1` in `icono_publish_state`.
 
-Keep `electGeneAuthorityWinner`, the D1 auto-promotion SQL and the admin read-model leader SQL in the same order. If they drift, the admin view names one leader while the vote authority publishes another.
+Stale, rejected and auto-pick-ineligible candidates never win. Keep `electGeneAuthorityWinner` and the admin read-model leader SQL in the same order. If they drift, the admin view names one leader while the election publishes another.
 
 ## Publication diagnosis and safe repair
 

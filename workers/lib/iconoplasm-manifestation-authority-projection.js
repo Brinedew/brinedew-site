@@ -694,7 +694,7 @@ export async function drainManifestationAuthorityProjectionOutbox(
         if (typeof projectAssignmentEvent !== "function") {
           projectionError(
             "ASSIGNMENT_PROJECTOR_REQUIRED",
-            "Caretaker assignment projection requires its durable-object projector",
+            "Caretaker assignment projection requires its projector",
           )
         }
         await projectAssignmentEvent({

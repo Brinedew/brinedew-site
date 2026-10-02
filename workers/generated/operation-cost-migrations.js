@@ -45,6 +45,10 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const GENE_VOTE_VERSION_MIGRATION_NAME = "0113_gene_vote_version.sql"
+export const GENE_VOTE_VERSION_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE TABLE IF NOT EXISTS icono_gene_vote_version (\n  gene_symbol TEXT PRIMARY KEY,\n  version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;"
+])
 export const GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME = "0112_gene_blot_backlog_watermark.sql"
 export const GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE IF NOT EXISTS icono_gene_blot_backlog_watermark (\n  watermark_key TEXT PRIMARY KEY CHECK (watermark_key = 'candidate'),\n  through_event_id INTEGER NOT NULL DEFAULT 0 CHECK (through_event_id >= 0),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;"

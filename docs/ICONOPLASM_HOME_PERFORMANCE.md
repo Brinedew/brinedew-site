@@ -28,7 +28,7 @@ The protected controller contract is `quartz/static/iconoplasm/collection-feed.t
 
 **ARCHITECTURE FENCE [IPD-011] — every public surface has one portrait authority.**
 
-D1 owns live authoring, vote projection, rich detail, and candidates. The stable
+D1 owns live authoring, votes, rich detail, and candidates. The stable
 gene object `genes/v3/<SYMBOL>.json` is the sole public portrait authority. A D1
 leader may legitimately be newer for the minutes until the per-gene publisher or
 the Actions republish pass rewrites that object; no public surface may reveal

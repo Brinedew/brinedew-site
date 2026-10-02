@@ -3253,10 +3253,6 @@ export default {
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
         caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),
         archive: () => archiveColdIconoplasmPublishEvents(env),
-        voteProjection: () =>
-          runScheduledIconoplasmMaintenanceStep(env, ctx, "process-vote-projection-refresh", {
-            limit: 2,
-          }),
         canonRepair: () =>
           runScheduledIconoplasmMaintenanceStep(env, ctx, "repair-canon-invariants", {
             limit: 250,

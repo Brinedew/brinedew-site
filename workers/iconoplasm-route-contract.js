@@ -911,22 +911,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "authority_workstation_write",
   }),
   iconoplasmApiContract({
-    apiHandler: "discovery_authority_cutover",
-    id: "authority_discovery_candidates",
-    match: exact("/api/iconoplasm/authority/discovery/candidates"),
-    methods: POST,
-    auth: "authority-cutover-bearer",
-    budgetFamily: "authority_cutover",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "discovery_authority_cutover",
-    id: "authority_discovery_activate",
-    match: exact("/api/iconoplasm/authority/discovery/activate"),
-    methods: POST,
-    auth: "authority-cutover-bearer",
-    budgetFamily: "authority_cutover",
-  }),
-  iconoplasmApiContract({
     id: "votes_set",
     match: exact("/api/iconoplasm/votes/set"),
     methods: POST,
@@ -962,9 +946,10 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_votes",
   }),
   iconoplasmApiContract({
-    // B-898 Stage 2: copy vote coordinators (by Durable Object id) into D1.
-    id: "admin_votes_export_to_d1",
-    match: exact("/api/iconoplasm/admin/votes/export-to-d1"),
+    // B-898 Stage 2: compare each vote coordinator (by Durable Object id) with
+    // D1; reads only.
+    id: "admin_votes_compare_coordinators",
+    match: exact("/api/iconoplasm/admin/votes/compare-coordinators"),
     methods: POST,
     auth: "administrator",
     budgetFamily: "admin_votes",
@@ -1015,27 +1000,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     id: "admin_votes_vision_detail",
     match: exact("/api/iconoplasm/admin/votes/vision-detail"),
     methods: GET,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_projection_refresh_reconcile",
-    match: exact("/api/iconoplasm/admin/votes/projection-refresh/reconcile"),
-    methods: POST,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_projection_refresh_pending",
-    match: exact("/api/iconoplasm/admin/votes/projection-refresh/pending"),
-    methods: GET,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_projection_refresh_process",
-    match: exact("/api/iconoplasm/admin/votes/projection-refresh/process"),
-    methods: POST,
     auth: "administrator",
     budgetFamily: "admin_votes",
   }),
@@ -1429,13 +1393,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     methods: POST,
     auth: "internal-stateful-worker",
     budgetFamily: "internal_repair",
-  }),
-  iconoplasmApiContract({
-    id: "internal_vote_projection_refresh",
-    match: exact("/__internal/iconoplasm/process-vote-projection-refresh"),
-    methods: POST,
-    auth: "internal-stateful-worker",
-    budgetFamily: "internal_vote_projection_refresh",
   }),
   iconoplasmApiContract({
     id: "internal_sync_finalization",

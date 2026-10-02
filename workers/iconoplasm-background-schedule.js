@@ -15,7 +15,6 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   recognition: quarterHours(14),
   accounts: Object.freeze([6, 18, 30, 42, 54]),
   manifestations: Object.freeze([7, 19, 31, 43, 55]),
-  voteProjection: Object.freeze([4, 13, 24, 34, 45, 52]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({

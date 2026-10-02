@@ -471,6 +471,24 @@ class FakeStatement {
   }
 
   async all() {
+    if (this.sql.includes("CROSS JOIN icono_portrait_assets AS pa")) {
+      const pairs = JSON.parse(String(this.args[0] || "[]"))
+      this.db.voteImportPayload = {
+        items: pairs.map(([symbol, asset, user]) => ({
+          symbol,
+          asset_sha256: asset,
+          user_id: user,
+        })),
+      }
+      return {
+        results: pairs.map(([symbol, asset]) => ({
+          gene_symbol: symbol,
+          asset_sha256: asset,
+          vision_id: "",
+          candidate_image_id: null,
+        })),
+      }
+    }
     if (
       this.sql.includes("FROM iconoplasm_user_emulsion_versions") &&
       this.sql.includes("user_id = ?")
@@ -974,6 +992,20 @@ class FakeDb {
   prepare(sql) {
     return new FakeStatement(this, sql)
   }
+
+  async batch(statements) {
+    if (
+      this.voteImportFailure &&
+      statements.some((statement) => statement.sql.includes("INSERT INTO icono_image_votes"))
+    )
+      throw new Error(this.voteImportFailure)
+    const results = []
+    for (const statement of statements)
+      results.push(
+        /^\s*SELECT\b/i.test(statement.sql) ? await statement.all() : await statement.run(),
+      )
+    return results
+  }
 }
 
 function buildSessionBinding(session) {
@@ -988,58 +1020,6 @@ function buildSessionBinding(session) {
             status: 200,
             headers: { "Content-Type": "application/json" },
           })
-        },
-      }
-    },
-  }
-}
-
-function buildVoteCoordinatorBinding(db) {
-  return {
-    idFromName(name) {
-      return name
-    },
-    get() {
-      return {
-        async fetch(request) {
-          if (new URL(request.url).pathname === "/state") {
-            return new Response(JSON.stringify({ ok: true, asset_summaries: [] }), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            })
-          }
-          const payload = await request.json()
-          if (new URL(request.url).pathname === "/vote/import") {
-            if (db.voteImportFailure) {
-              return new Response(JSON.stringify({ error: db.voteImportFailure }), {
-                status: 503,
-                headers: { "Content-Type": "application/json" },
-              })
-            }
-            db.voteImportPayload = payload
-            return new Response(
-              JSON.stringify({
-                ok: true,
-                upserted: payload.items.length,
-                deleted: 0,
-                invalid: 0,
-                results: payload.items.map((item) => ({
-                  candidate_ref: `a:${payload.symbol}|${item.asset_sha256}`,
-                  symbol: payload.symbol,
-                  asset_sha256: item.asset_sha256,
-                  vision_id: item.vision_id || "",
-                  candidate_image_id: item.candidate_image_id || null,
-                  user_id: item.user_id,
-                  current_vote_value: 0,
-                  final_vote_value: item.vote_value,
-                  changed: true,
-                  mutation_id: `${payload.symbol}:${item.user_id}`,
-                })),
-              }),
-              { status: 200, headers: { "Content-Type": "application/json" } },
-            )
-          }
-          throw new Error("Unexpected vote coordinator call")
         },
       }
     },
@@ -1094,7 +1074,6 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
       async delete() {},
     },
     GAME_SESSIONS: buildSessionBinding(session),
-    ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
     // Provider polling defaults to 10s initial wait + 10s interval.
     // Tests override to 0 so polling doesn't block the test suite.
@@ -1227,7 +1206,7 @@ async function createKreaImageEditJobAndAwait({ env, ctx, body, cookie = "sessio
 test("candidate publish explains a vote-service failure and preserves the generated image", async () => {
   const db = new FakeDb()
   const job = seedSucceededCandidateGenerationJob(db)
-  db.voteImportFailure = "Synthetic vote coordinator outage"
+  db.voteImportFailure = "Synthetic D1 vote write outage"
   const env = buildEnv(db)
 
   const response =
@@ -3779,8 +3758,8 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
       ).length,
       6,
     )
-    assert.equal(published.vote_inheritance.projection_outbox_pending, 7)
-    assert.equal(db.voteProjectionRows.length, 0)
+    // The inherited votes and the publisher's upvote are D1 vote rows.
+    assert.equal(db.voteProjectionRows.length, 7)
     assert.notEqual(db.voteRefreshTouched, true)
   } finally {
     globalThis.fetch = originalFetch
