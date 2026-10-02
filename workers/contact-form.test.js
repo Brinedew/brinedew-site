@@ -96,7 +96,7 @@ test("the no-JavaScript form posts privately and redirects to an on-page success
   const response = await handleContactSubmission(contactFormRequest(), env, {}, corsHeaders)
 
   assert.equal(response.status, 303)
-  assert.equal(response.headers.get("Location"), "/About.html#contact-sent")
+  assert.equal(response.headers.get("Location"), "/about#contact-sent")
   assert.equal(response.headers.get("Content-Type"), null)
   assert.equal(response.headers.get("RateLimit-Policy"), '"contact";q=5;w=60')
   assert.equal(messages.length, 1)
@@ -115,7 +115,7 @@ test("the no-JavaScript form redirects validation and rate-limit failures withou
     corsHeaders,
   )
   assert.equal(invalid.status, 303)
-  assert.equal(invalid.headers.get("Location"), "/About.html#contact-invalid")
+  assert.equal(invalid.headers.get("Location"), "/about#contact-invalid")
   assert.equal(invalidEnv.messages.length, 0)
 
   const limitedEnv = contactEnv({ success: false })
@@ -126,7 +126,7 @@ test("the no-JavaScript form redirects validation and rate-limit failures withou
     corsHeaders,
   )
   assert.equal(limited.status, 303)
-  assert.equal(limited.headers.get("Location"), "/About.html#contact-limited")
+  assert.equal(limited.headers.get("Location"), "/about#contact-limited")
   assert.equal(limited.headers.get("Retry-After"), "60")
   assert.equal(limitedEnv.messages.length, 0)
 })
