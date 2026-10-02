@@ -8,10 +8,6 @@ const readWorkflow = (name) =>
 
 test("maintenance containment uploads retain cron work and activation restores the owned schedule", () => {
   const workflow = parse(readWorkflow("deploy-quartz.yml"))
-  const cutover = readFileSync(
-    new URL("./prepare-iconoplasm-public-read-cutover.mjs", import.meta.url),
-    "utf8",
-  )
   // A normal release applies a pending Durable Object migration with
   // `wrangler deploy` and the config's own triggers; it is not containment.
   const migrationDeploy = workflow.jobs["deploy-production"].steps.find(
@@ -28,30 +24,27 @@ test("maintenance containment uploads retain cron work and activation restores t
       (step.run.includes("--config wrangler.the-only-allowed-internal-stateful-worker") ||
         step.run.includes("--config wrangler.iconoplasm-schema-transition.generated.toml")),
   )
-  assert.equal(uploads.length, 3)
+  // The maintenance path uploads the stateful Worker twice with
+  // the checked-in schedule (once before Pages with the "-backend" cache
+  // identity, once after with the final one); the two containment uploads keep
+  // the three-cron reader-recovery schedule.
+  assert.equal(uploads.length, 4)
   const conditional = uploads.filter((step) => step.if)
   assert.deepEqual(conditional.map((step) => step.if).sort(), [
+    "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
     "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
     "inputs.data_maintenance == true && steps.release-state.outputs.schema_transition != 'true'",
     "inputs.data_maintenance == true && steps.release-state.outputs.schema_transition == 'true'",
   ])
-  assert.equal(
-    uploads.filter(
-      (step) =>
-        step.if ===
-        "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
-    ).length,
-    1,
-  )
   const containment = '--triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"'
-  const normalActivation = uploads.find(
+  const normalActivations = uploads.filter(
     (step) =>
       step.if ===
       "inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'",
   )
-  assert.ok(normalActivation, "normal activation upload")
-  assert.doesNotMatch(normalActivation.run, /--triggers\b/)
-  for (const step of uploads.filter((step) => step !== normalActivation)) {
+  assert.equal(normalActivations.length, 2, "pre-Pages and post-Pages stateful uploads")
+  for (const step of normalActivations) assert.doesNotMatch(step.run, /--triggers\b/)
+  for (const step of uploads.filter((step) => !normalActivations.includes(step))) {
     assert.ok(step.run.includes(containment), step.name)
   }
   const statefulConfig = readFileSync(
@@ -64,11 +57,5 @@ test("maintenance containment uploads retain cron work and activation restores t
   assert.match(
     statefulConfig,
     /0,1,2,3,4,5,6,7,8,10,11,13,14,15,16,17,18,19,20,23,24,26,27,28,29,30,31,32,33,34,35,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,59 \* \* \* \*/,
-  )
-  assert.equal(
-    (cutover.match(/"--triggers",\s*"55 23 \* \* \*",\s*"3 0 \* \* \*",\s*"6 12 \* \* \*"/g) || [])
-      .length,
-    0,
-    "public-read cutover deploys must retain the checked-in full production schedule",
   )
 })

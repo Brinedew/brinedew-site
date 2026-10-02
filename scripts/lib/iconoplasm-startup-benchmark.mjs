@@ -13,8 +13,10 @@ export function assessBlockedHostStartup(result) {
     failures.push("wrong-highlight-inventory")
   if (!Array.isArray(result?.beforeRelease?.requests) || result.beforeRelease.requests.length)
     failures.push("pre-load-network")
-  if (!result?.afterReleaseRequests?.some((request) => request.url.endsWith("/card-current")))
-    failures.push("post-load-freshness-not-observed")
+  // B-898: after the host releases, the extension reads one stable gene object
+  // per recognised symbol from the CDN; that is the post-load work to observe.
+  if (!result?.afterReleaseRequests?.some((request) => request.url.includes("/genes/v3/")))
+    failures.push("post-load-stable-gene-read-not-observed")
   return { verdict: failures.length ? "fail" : "pass", failures }
 }
 

@@ -972,14 +972,6 @@ async function runScheduledIconoplasmFulfillment(env) {
   const recovery = await reconcileDeliveredRequestFulfillments(env)
   return { ...delivery, finalized: finalized + recovery.finalized }
 }
-async function runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx) {
-  // ARCHITECTURE FENCE [IPD-010]: one cron delivery prepares at most one
-  // bounded dirty-shard step. Never add a caller-controlled drain count or a
-  // complete-catalog fallback here. Failed HTTP responses must fail the job.
-  return runScheduledIconoplasmMaintenanceStep(env, ctx, "publish-gallery-dirty-shards", {
-    reason: "scheduled_gallery_dirty_shard_publication_frequent",
-  })
-}
 function stableSitemapDate() {
   // Keep `lastmod` stable within a day to avoid thrashing crawlers with a constantly-changing sitemap.
   return new Date().toISOString().slice(0, 10)
@@ -1322,7 +1314,6 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmReaderRecoverySiteGeneDetail,
   IconoplasmVoteCoordinator,
-  IconoplasmCardPublicationCoordinator,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   drainIconoplasmAuthorityAccountProjection,
@@ -1351,7 +1342,6 @@ import {
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
 export { IconoplasmVoteCoordinator }
-export { IconoplasmCardPublicationCoordinator }
 export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
 export { IconoplasmSyncGovernor }
 // Import Discord bot handlers
@@ -3277,16 +3267,16 @@ export default {
     if (iconoplasmBackgroundJob(backgroundEvent)) {
       if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") return
       const background = await runIconoplasmBackgroundJob(backgroundEvent, {
-        // B-898: the quarter-hour catalog tick also tells GitHub Actions to
-        // rebuild the stable catalog object when the publish high water moved.
-        gallery: async () => {
-          const publication = await runScheduledIconoplasmGalleryDirtyShardPublication(env, ctx)
-          const dispatch = await dispatchIconoplasmCatalogPublication(env).catch((error) => ({
+        // B-898: the quarter-hour catalog tick. One D1 row read and one KV read;
+        // when the newest canonical publish event moved past the last dispatch
+        // it sends one repository_dispatch so GitHub Actions rebuilds the
+        // stable catalog object and republishes the dirty genes.
+        gallery: async () => ({
+          catalog_dispatch: await dispatchIconoplasmCatalogPublication(env).catch((error) => ({
             dispatched: false,
             reason: String(error?.message || error),
-          }))
-          return { publication, catalog_dispatch: dispatch }
-        },
+          })),
+        }),
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
         discoveryMigration: () => migrateIconoplasmCompactDiscoveryForScheduled(env),

@@ -37,8 +37,8 @@ candidate, edit-job, or catalog payloads.
 
 Portrait selection happens before delivery policy. D1 owns authoring, vote,
 rich-detail, and candidate state and may legitimately name a newer leader while
-publication is pending. The exact card artifact selected by
-`KV_GALLERY_VERSION` is the sole published source-portrait selection used by
+publication is pending. The stable gene object `genes/v3/<SYMBOL>.json`
+(B-898) is the sole published source-portrait selection used by
 signed-in and anonymous cards, gene detail, extension cards, and print-copy
 inputs. Missing exact-card state fails closed; there is no D1 or gene-detail
 portrait fallback.
@@ -146,8 +146,8 @@ Acceptance is evidence, not another provider ban:
 - Cache only anonymous immutable detail/locator responses. Never proxy private,
   auth, vote, admin, mutable manifest, or mutation routes through a public cache.
 - Preserve the exact snapshot, symbol, and portrait SHA. A vote that leaves the
-  winner unchanged creates no publication; a changed winner uses the existing
-  dirty-shard publisher and single barrier. Cached old URLs remain old snapshots,
+  winner unchanged creates no publication; a changed winner rewrites the gene's
+  stable object in place through the per-gene publisher. Cached old URLs remain old snapshots,
   not aliases for the current winner. Never require corpus purges on voting.
 - Prove actual CDN HITs and origin-request savings. Account separately for cold
   misses, eviction, regional fallback, CDN traffic, and publication work. A warm

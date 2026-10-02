@@ -122,9 +122,8 @@ test("publication wake emits one ordinary dirty-card event and replays idempoten
   }
 })
 
-test("publication wake re-notifies the card publisher after a committed wake replay", async () => {
+test("a replayed wake publishes its authority event exactly once", async () => {
   const db = new D1()
-  const calls = []
   try {
     db.raw
       .prepare(
@@ -134,23 +133,15 @@ test("publication wake re-notifies the card publisher after a committed wake rep
       )
       .run()
 
-    await assert.rejects(
-      drainManifestationPublicCardPublicationWakes(db, {
-        authorityEventId: "event_0002",
-        wakeCardPublication: async (payload) => {
-          calls.push(payload.authority_event_id)
-          throw new Error("publisher temporarily unavailable")
-        },
-      }),
-      /publisher temporarily unavailable/,
-    )
+    const first = await drainManifestationPublicCardPublicationWakes(db, {
+      authorityEventId: "event_0002",
+    })
     const replay = await drainManifestationPublicCardPublicationWakes(db, {
       authorityEventId: "event_0002",
-      wakeCardPublication: async (payload) => calls.push(payload.authority_event_id),
     })
 
+    assert.equal(first.published_count, 1)
     assert.equal(replay.published_count, 0)
-    assert.deepEqual(calls, ["event_0002", "event_0002"])
     assert.deepEqual(
       {
         ...db.raw

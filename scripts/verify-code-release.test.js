@@ -293,7 +293,7 @@ test("default production path builds and ships both Worker owners and Pages with
     "Stage migration admission in the existing state owner",
     "Apply reviewed D1 migrations through prediction admission",
     "Prepare the published catalog through shared KV admission",
-    "Publish, verify, and activate immutable public reads",
+    "Deploy the stateful Worker after data maintenance",
     "Ensure Iconoplasm finalization Queue consumer is bound",
   ]) {
     const step = steps.find((candidate) => candidate.name === name)

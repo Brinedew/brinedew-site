@@ -78,10 +78,10 @@ test("architecture fence registry distributes every decision across independent 
 test("IPD-011 keeps one exact-card blot authority across every public surface", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-011")
   assert.ok(fence, "IPD-011 must remain registered")
-  assert.equal(fence.title, "Every public canonical blot uses one published card artifact")
+  assert.equal(fence.title, "Every public canonical blot uses the one stable gene object")
   assert.equal(fence.runbook, "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md")
 
-  assert.match(fence.decision, /published card owns the public character/i)
+  assert.match(fence.decision, /stable gene object owns the public character/i)
   assert.match(fence.decision, /canonical blot/i)
   assert.match(fence.decision, /Every public surface resolves that same identity/i)
 
@@ -132,7 +132,7 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
 test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-003")
   assert.ok(fence, "IPD-003 must remain registered")
-  assert.match(fence.decision, /One published card defines each gene's public identity/i)
+  assert.match(fence.decision, /One stable gene object defines each gene's public identity/i)
   assert.match(fence.decision, /canonical blot/i)
   assert.match(fence.decision, /fails closed/i)
 })
@@ -300,7 +300,7 @@ test("IPD-008 keeps foreground hover on the stable CDN gene object and cross-sit
 test("IPD-008 forbids public KV discovery scans and preserves one bounded portrait lane", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-008")
   assert.ok(fence, "IPD-008 must remain registered")
-  assert.match(fence.decision, /immutable published data/i)
+  assert.match(fence.decision, /read the two published objects/i)
   assert.match(fence.decision, /do not probe private identity/i)
   assert.match(fence.change_control, /one published authority/i)
 
@@ -318,9 +318,9 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
   const delivery = registry.fences.find((entry) => entry.id === "IPD-001")
   const readPlane = registry.fences.find((entry) => entry.id === "IPD-008")
   const canon = registry.fences.find((entry) => entry.id === "IPD-011")
-  assert.match(delivery.decision, /Bunny accelerates public immutable/i)
+  assert.match(delivery.decision, /Bunny accelerates the two published Iconoplasm objects/i)
   assert.match(delivery.decision, /First-party identity remains canonical/i)
-  assert.match(readPlane.decision, /immutable published data/i)
+  assert.match(readPlane.decision, /read the two published objects/i)
   assert.match(canon.decision, /same identity/i)
   const instructions = readRepositoryFile("AGENTS.md")
   assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
@@ -474,7 +474,7 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
   assert.match(lifecycle, /application shell and published Iconoplasm\s+artifacts/i)
   assert.match(lifecycle, /Sign-in adds explicit private or mutation requests/i)
-  assert.match(lifecycle, /publication system owns one coherent head/i)
+  assert.match(lifecycle, /publication system owns two objects/i)
 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
@@ -482,13 +482,8 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
   assert.match(runtime, /FROM icono_published_gene_routes/)
   assert.match(runtime, /source: "published_gene_route_d1"/)
-  assert.match(runtime, /shared version barrier is the sole published source-portrait authority/)
-  assert.match(runtime, /matching workstation-rendered blot reference/)
-  assert.match(runtime, /D1 route index and discovery\/catalog rows are identity and membership/)
-  assert.match(runtime, /old exact card artifact remains coherently live/)
-  assert.doesNotMatch(runtime, /versioned KV card catalog is a coarse browsing snapshot/)
-  assert.doesNotMatch(runtime, /roll the D1 canonical portrait back/)
-  assert.doesNotMatch(runtime, /iconoplasm-web/)
+  assert.match(runtime, /ICONOPLASM PUBLICATION \(B-898\)\. Two published objects/)
+  assert.match(runtime, /export async function publishIconoplasmGeneStableObject\(/)
 
   const routeMigration = readRepositoryFile("migrations-iconoplasm/0059_published_gene_routes.sql")
   assert.match(routeMigration, /gene_symbol TEXT PRIMARY KEY NOT NULL/)

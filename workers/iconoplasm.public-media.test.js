@@ -23,7 +23,6 @@ import {
   buildPublishedScannerArtifact,
   buildPortraitAwareManifestHash,
   mergePublishedPortraitRefsIntoArtifact,
-  readIconoplasmPublishedCardCatalogArtifactForTest,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -2020,62 +2019,6 @@ test("public gene batch fails loud with 503 no-store when stable object storage 
   assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
 })
 
-test("content-addressed hover delivery reuses unchanged shards across publication without writes", async () => {
-  const version = "test-card-v1"
-  const kv = buildPublishedCardReadKv({ version })
-  const manifestKey = `iconoplasm:card-catalog:${version}`
-  const manifest = JSON.parse(kv.entries.get(manifestKey))
-  const oldShard = JSON.parse(kv.entries.get(manifest.shards[0].key))
-  const hash = "a".repeat(64)
-  const key = `iconoplasm:card-catalog-shard:${hash}`
-  manifest.storage = "kv_card_catalog_content_addressed_shards"
-  manifest.shards[0] = { ...manifest.shards[0], key, content_hash: hash }
-  kv.entries.set(key, JSON.stringify({ ...oldShard, content_hash: hash }))
-  kv.entries.set(manifestKey, JSON.stringify(manifest))
-  kv.put = async () => {
-    throw new Error("reader write forbidden")
-  }
-  kv.list = async () => {
-    throw new Error("reader list forbidden")
-  }
-  const env = buildEnv({ KV: kv, ICONOPLASM_DB: null })
-  const read = (path, headers = { "X-Iconoplasm-Extension-Version": "0.5.2" }) =>
-    viaStatefulWorker(
-      new Request(`https://iconoplasm.brinedew.bio/api/public/v1/${path}`, { headers }),
-      env,
-      {},
-    )
-  const index = await read(`card-snapshots/${version}/delivery-index`)
-  assert.equal(index.status, 200)
-  assert.deepEqual((await index.json()).ranges, [["A1BG", "A1BG", hash]])
-  const detailPath = `card-content/v1/${hash}/genes/A1BG`
-  const before = await read(detailPath)
-  assert.equal(before.status, 200)
-  const beforeText = await before.text()
-  assert.equal(beforeText.includes("snapshot_version"), false)
-  const detail = JSON.parse(beforeText)
-  const portrait = await (await read(`card-content/v1/${hash}/portraits/A1BG`)).json()
-  assert.equal(portrait.record.portrait.asset_sha256, detail.record.portrait.asset_sha256)
-  assert.equal((await read(`card-content/v1/${"b".repeat(64)}/genes/A1BG`)).status, 410)
-  kv.entries.set(
-    "iconoplasm:gallery-version",
-    JSON.stringify({ current: "next", previous: version }),
-  )
-  kv.entries.set(
-    "iconoplasm:card-catalog:next",
-    JSON.stringify({ ...manifest, artifact_version: "next", snapshot_version: "next" }),
-  )
-  resetIconoplasmRuntimeCachesForTest()
-  const nextIndex = await (await read("card-snapshots/next/delivery-index")).json()
-  assert.equal(nextIndex.ranges[0][2], hash)
-  assert.equal(await (await read(detailPath)).text(), beforeText)
-  kv.entries.set(key, JSON.stringify({ ...oldShard, content_hash: "wrong" }))
-  resetIconoplasmRuntimeCachesForTest()
-  const malformed = await read(detailPath)
-  assert.equal(malformed.status, 503)
-  assert.equal(malformed.headers.get("cache-control"), "no-store")
-})
-
 test("versioned public gene detail resolves the stable gene object for any snapshot token with the same envelope", async (t) => {
   const reads = installStableGeneStorage(t, stableA1bgObjectsBatch())
   const requestUrl =
@@ -2311,7 +2254,7 @@ test("public gene batch honors lean field projection for extension traffic", asy
   assert.equal("page_url" in (gene || {}), false)
 })
 
-test("concurrent public gene batches each read one stable object per symbol and keep the 250-symbol cap", async (t) => {
+test("concurrent public gene batches each read one stable object per symbol and keep the 40-symbol cap", async (t) => {
   const objects = new Map(
     ["G000", "G001", "G002"].map((symbol) => [
       `/test-zone/genes/v3/${symbol}.json`,
@@ -2353,9 +2296,10 @@ test("concurrent public gene batches each read one stable object per symbol and 
     "/test-zone/genes/v3/G002.json",
   ])
 
-  // Limits unchanged: 100 symbols without an explicit limit
-  // (PUBLIC_DEFAULT_GENE_BATCH_LIMIT), 250 at most with one
-  // (PUBLIC_MAX_GENE_BATCH_LIMIT); never more than one read per accepted symbol.
+  // One storage read per symbol against a ~50-subrequest Worker
+  // request, so 40 symbols with or without an explicit limit
+  // (PUBLIC_DEFAULT_GENE_BATCH_LIMIT = PUBLIC_MAX_GENE_BATCH_LIMIT = 40); never
+  // more than one read per accepted symbol.
   const symbols = Array.from({ length: 300 }, (_, index) => `X${String(index).padStart(4, "0")}`)
   reads.length = 0
   const defaulted =
@@ -2365,8 +2309,8 @@ test("concurrent public gene batches each read one stable object per symbol and 
     )
   const defaultedPayload = await defaulted.json()
   assert.equal(defaulted.status, 200)
-  assert.equal(defaultedPayload.missing.length, 100)
-  assert.equal(reads.length, 100)
+  assert.equal(defaultedPayload.missing.length, 40)
+  assert.equal(reads.length, 40)
 
   reads.length = 0
   const capped =
@@ -2384,129 +2328,12 @@ test("concurrent public gene batches each read one stable object per symbol and 
   const cappedPayload = await capped.json()
   assert.equal(capped.status, 200)
   assert.equal(cappedPayload.genes.length, 0)
-  assert.equal(cappedPayload.missing.length, 250)
-  assert.equal(reads.length, 250)
-  assert.equal(new Set(reads).size, 250)
+  assert.equal(cappedPayload.missing.length, 40)
+  assert.equal(reads.length, 40)
+  assert.equal(new Set(reads).size, 40)
 })
 
-test("parsed content-addressed shard cache retains no more than four entries", async () => {
-  const kv = new CountingCardCatalogKv()
-  const version = "shard-lru-v1"
-  const cards = Array.from({ length: 5 }, (_, index) =>
-    completeCardCatalogCacheVm(`G${String(index).padStart(3, "0")}`),
-  )
-  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
-    version,
-    shardCards: cards.map((card) => [card]),
-  })
-  const env = { KV: kv }
-
-  for (const card of cards) {
-    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
-      card.symbol,
-    ])
-    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
-  }
-  assert.equal(kv.reads(manifestKey), 1)
-  assert.equal(kv.parses(manifestKey), 1)
-  assert.equal(kv.reads(shards[0].key), 1)
-  assert.equal(kv.reads(shards.at(-1).key), 1)
-
-  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards.at(-1).symbol])
-  assert.equal(kv.reads(shards.at(-1).key), 1, "newest shard remains hot")
-
-  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[0].symbol])
-  assert.equal(kv.reads(shards[0].key), 2, "oldest shard is reread after the four-entry bound")
-  assert.equal(kv.parses(shards[0].key), 2)
-})
-
-test("an oversized parsed shard is served but never retained", async () => {
-  const kv = new CountingCardCatalogKv()
-  const version = "shard-oversized-v1"
-  const card = completeCardCatalogCacheVm("G000")
-  card.payload.cache_padding = "x".repeat(3 * 1024 * 1024)
-  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
-    version,
-    shardCards: [[card]],
-  })
-  const env = { KV: kv }
-
-  for (let read = 0; read < 2; read += 1) {
-    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
-      card.symbol,
-    ])
-    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
-  }
-
-  assert.equal(kv.reads(manifestKey), 1, "the small manifest remains cached")
-  assert.equal(kv.parses(manifestKey), 1)
-  assert.equal(kv.reads(shards[0].key), 2, "the shard exceeds the estimated 16 MiB ceiling")
-  assert.equal(kv.parses(shards[0].key), 2)
-})
-
-test("parsed shard cache evicts the least-recent entry before aggregate weight exceeds its ceiling", async () => {
-  const kv = new CountingCardCatalogKv()
-  const version = "shard-weight-lru-v1"
-  const cards = [completeCardCatalogCacheVm("G000"), completeCardCatalogCacheVm("G001")]
-  for (const card of cards) card.payload.cache_padding = "x".repeat(1536 * 1024)
-  const { manifestKey, shards } = putContentAddressedCardCatalog(kv, {
-    version,
-    shardCards: cards.map((card) => [card]),
-  })
-  const env = { KV: kv }
-
-  for (const card of cards) {
-    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [
-      card.symbol,
-    ])
-    assert.equal(artifact?.bySymbol.get(card.symbol)?.symbol, card.symbol)
-  }
-  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[1].symbol])
-  assert.equal(kv.reads(shards[1].key), 1, "newest weighted shard remains cached")
-
-  await readIconoplasmPublishedCardCatalogArtifactForTest(env, version, [cards[0].symbol])
-  assert.equal(kv.reads(manifestKey), 1)
-  assert.equal(kv.parses(manifestKey), 1)
-  assert.equal(kv.reads(shards[0].key), 2, "aggregate weight evicts the oldest shard")
-  assert.equal(kv.parses(shards[0].key), 2)
-})
-
-test("manifest cache is bounded and cannot cross published artifact versions", async () => {
-  const kv = new CountingCardCatalogKv()
-  const manifests = []
-  for (let index = 1; index <= 4; index += 1) {
-    const version = `manifest-lru-v${index}`
-    manifests.push(
-      putContentAddressedCardCatalog(kv, {
-        version,
-        shardCards: [[completeCardCatalogCacheVm("G000", `version ${index}`)]],
-      }),
-    )
-    const artifact = await readIconoplasmPublishedCardCatalogArtifactForTest({ KV: kv }, version, [
-      "G000",
-    ])
-    assert.equal(artifact?.bySymbol.get("G000")?.payload?.full_name, `version ${index}`)
-  }
-
-  const newest = await readIconoplasmPublishedCardCatalogArtifactForTest(
-    { KV: kv },
-    "manifest-lru-v4",
-    ["G000"],
-  )
-  assert.equal(newest?.bySymbol.get("G000")?.payload?.full_name, "version 4")
-  assert.equal(kv.reads(manifests[3].manifestKey), 1, "newest version remains cached")
-
-  const oldest = await readIconoplasmPublishedCardCatalogArtifactForTest(
-    { KV: kv },
-    "manifest-lru-v1",
-    ["G000"],
-  )
-  assert.equal(oldest?.bySymbol.get("G000")?.payload?.full_name, "version 1")
-  assert.equal(kv.reads(manifests[0].manifestKey), 2, "oldest manifest is reread after the bound")
-  assert.equal(kv.parses(manifests[0].manifestKey), 2)
-})
-
-test("site gene detail reads the stable gene object while the blot backlog still resolves the advertised v2 delta view", async (t) => {
+test("site gene detail reads the stable gene object the vote publisher rewrote in place", async (t) => {
   const objects = new Map()
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init = {}) => {
@@ -2539,9 +2366,8 @@ test("site gene detail reads the stable gene object while the blot backlog still
   })
   const store = createPublishedCardObjectStore(env)
 
-  // Advertised v2 view: A1BG committed with a distinct portrait. The base
-  // epoch KV fixture keeps its own portrait, so a base-only resolution fails
-  // this assertion.
+  // The stable object names a portrait the stale KV fixture never had, so a
+  // reader that walked any older state would fail this assertion.
   const deltaPortrait = "b".repeat(64)
   const baseShard = JSON.parse(await kv.get("iconoplasm:card-catalog-shard:test-card-v1:0"))
   const baseCard = baseShard.cards.find((card) => card.symbol === "A1BG")
@@ -2556,40 +2382,6 @@ test("site gene detail reads the stable gene object while the blot backlog still
       candidate_image_id: 4242,
     },
   }
-  deltaCard.portrait = deltaCard.payload.portrait
-  deltaCard.field_status = { ...(deltaCard.field_status || {}), portrait: "present" }
-  const cardRef = await store.write("cards", deltaCard)
-  const geneRef = await store.write("genes", deltaCard.payload)
-  const portraitRef = await store.write("portraits", {
-    symbol: "A1BG",
-    portrait: deltaCard.payload.portrait,
-  })
-  const segmentRef = await store.write("indexes", {
-    schema_version: 1,
-    seq: 1,
-    entries: {
-      A1BG: {
-        symbol: "A1BG",
-        version: 2,
-        seq: 0,
-        status: "committed",
-        selection_key: "e".repeat(64),
-        card: { key: cardRef.key, hash: cardRef.hash },
-        gene: { key: geneRef.key, hash: geneRef.hash },
-        portrait: { key: portraitRef.key, hash: portraitRef.hash },
-      },
-    },
-  })
-  const chainRef = await store.write("indexes", {
-    base: "test-card-v1",
-    kind: "gene_delta_chain",
-    schema_version: 1,
-    segments: [{ seq: 1, key: segmentRef.key, hash: segmentRef.hash, count: 1 }],
-  })
-  await kv.put(
-    "iconoplasm:gene-delta",
-    JSON.stringify({ view: `test-card-v1.c${chainRef.hash}`, base: "test-card-v1" }),
-  )
   // The vote publisher rewrote the stable object with the same winner.
   objects.set(
     stableObjectPath("A1BG"),

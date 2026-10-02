@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { composeStableGeneObject } from "./iconoplasm-stable-gene-object.js"
 
+// ARCHITECTURE FENCE [IPD-011]: one stable gene object per gene.
 // B-898 deletion stage, step A: the one stable object per gene is composed by
 // a plain function, not inside the publication coordinator. Failure modes
 // written before the code:

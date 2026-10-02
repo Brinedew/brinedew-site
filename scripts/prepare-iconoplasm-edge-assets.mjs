@@ -94,20 +94,26 @@ Sitemap: https://iconoplasm.brinedew.bio/sitemap.xml
 
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 
-function publicationSymbols(publicationIndexes = []) {
+// B-898: the build reads the one stable catalog object, catalog/v3/index.json
+// (schema 3, one row per gene: [symbol, full_name, ...]). publishedGenes is that
+// rows array.
+function publishedGeneRows(publishedGenes = []) {
+  if (!Array.isArray(publishedGenes)) throw new Error("Invalid published catalog rows")
+  return publishedGenes.map((row) => {
+    if (!Array.isArray(row)) throw new Error("Invalid published catalog row")
+    const symbol = String(row[0] || "")
+      .trim()
+      .toUpperCase()
+    if (!SYMBOL.test(symbol)) throw new Error("Invalid published gene symbol")
+    return [symbol, String(row[1] || "").trim()]
+  })
+}
+
+function publicationSymbols(publishedGenes = []) {
   const symbols = new Set()
-  for (const index of publicationIndexes) {
-    if (index?.schema_version !== 2 || !Array.isArray(index.search_entries)) {
-      throw new Error("Invalid immutable compact catalog index")
-    }
-    for (const entry of index.search_entries) {
-      const symbol = String(entry?.[0] || "")
-        .trim()
-        .toUpperCase()
-      if (!SYMBOL.test(symbol)) throw new Error("Invalid published gene symbol")
-      if (symbols.has(symbol)) throw new Error(`Duplicate published gene symbol: ${symbol}`)
-      symbols.add(symbol)
-    }
+  for (const [symbol] of publishedGeneRows(publishedGenes)) {
+    if (symbols.has(symbol)) throw new Error(`Duplicate published gene symbol: ${symbol}`)
+    symbols.add(symbol)
   }
   return [...symbols].sort((left, right) => left.localeCompare(right))
 }
@@ -220,25 +226,16 @@ ${GENE_PAGE_BOOT}
 `
 }
 
-export function publishedGeneEntries(publicationIndexes = []) {
+export function publishedGeneEntries(publishedGenes = []) {
   const entries = new Map()
-  for (const index of publicationIndexes) {
-    if (index?.schema_version !== 2 || !Array.isArray(index.search_entries)) {
-      throw new Error("Invalid immutable compact catalog index")
-    }
-    for (const entry of index.search_entries) {
-      const symbol = String(entry?.[0] || "")
-        .trim()
-        .toUpperCase()
-      if (!SYMBOL.test(symbol)) throw new Error("Invalid published gene symbol")
-      if (!entries.has(symbol)) entries.set(symbol, String(entry?.[1] || "").trim())
-    }
+  for (const [symbol, fullName] of publishedGeneRows(publishedGenes)) {
+    if (!entries.has(symbol)) entries.set(symbol, fullName)
   }
   return [...entries].sort(([left], [right]) => left.localeCompare(right))
 }
 
-export async function writeIconoplasmGenePages({ outputRoot, publicationIndexes = [] }) {
-  const genes = publishedGeneEntries(publicationIndexes)
+export async function writeIconoplasmGenePages({ outputRoot, publishedGenes = [] }) {
+  const genes = publishedGeneEntries(publishedGenes)
   if (!genes.length) return { genePages: 0 }
   const directory = path.join(outputRoot, "gene")
   await mkdir(directory, { recursive: true })
@@ -271,27 +268,16 @@ async function fetchVerifiedJson(url, expectedSha256 = "") {
   throw lastError
 }
 
-// Reads the current immutable publication from Bunny (the one publisher's
-// output; no Worker, no D1). Returns [] when the CDN is unreachable so a CDN
-// hiccup cannot block an unrelated deploy; the build log says so.
-export async function loadPublishedCatalogIndexes({ cdn = PUBLICATION_CDN, log = console } = {}) {
+// Reads the one stable catalog object from Bunny (the GitHub Actions
+// publisher's output; no Worker, no D1): one fetch, no head, no manifest walk.
+// Returns [] when the CDN is unreachable so a CDN hiccup cannot block an
+// unrelated deploy; the build log says so.
+export async function loadPublishedCatalogGenes({ cdn = PUBLICATION_CDN, log = console } = {}) {
   try {
-    const head = await fetchVerifiedJson(`${cdn}/api/public/v1/card-current`)
-    const base = String(head?.current || "")
-    const manifestHash = /^ccv2-([a-f0-9]{64})$/.exec(base)?.[1]
-    if (!manifestHash) throw new Error("Publication head has no current manifest")
-    const manifest = await fetchVerifiedJson(
-      `${cdn}/published-cards/v2/immutable/manifests/${manifestHash}.json`,
-      manifestHash,
-    )
-    const indexes = []
-    for (const shard of manifest?.shards || []) {
-      const key = String(shard?.catalog_index?.key || "")
-      const hash = /\/([a-f0-9]{64})\.json$/.exec(key)?.[1]
-      if (!hash) throw new Error("Manifest shard has no catalog index")
-      indexes.push(await fetchVerifiedJson(`${cdn}/${key}`, hash))
-    }
-    return indexes
+    const catalog = await fetchVerifiedJson(`${cdn}/catalog/v3/index.json`)
+    if (catalog?.schema !== 3 || !Array.isArray(catalog.genes))
+      throw new Error("Stable catalog object has an unexpected shape")
+    return catalog.genes
   } catch (error) {
     log.warn(`Iconoplasm gene pages skipped: published catalog unavailable (${error.message})`)
     return []
@@ -300,7 +286,7 @@ export async function loadPublishedCatalogIndexes({ cdn = PUBLICATION_CDN, log =
 
 export async function writeIconoplasmCompatibilityArtifacts({
   outputRoot = targetRoot,
-  publicationIndexes = null,
+  publishedGenes = null,
   symbols = null,
 } = {}) {
   const resolvedOutput = path.resolve(outputRoot)
@@ -310,7 +296,7 @@ export async function writeIconoplasmCompatibilityArtifacts({
           .trim()
           .toUpperCase(),
       )
-    : publicationSymbols(publicationIndexes || [])
+    : publicationSymbols(publishedGenes || [])
   if (
     publishedSymbols.some((symbol) => !SYMBOL.test(symbol)) ||
     new Set(publishedSymbols).size !== publishedSymbols.length
@@ -419,7 +405,7 @@ export function unservedIconoplasmLinks(html, bundleFiles) {
 export async function prepareIconoplasmEdgeAssets({
   sourceRoot = publicRoot,
   outputRoot = targetRoot,
-  publicationIndexes = [],
+  publishedGenes = [],
 } = {}) {
   const resolvedSource = path.resolve(sourceRoot)
   const resolvedOutput = path.resolve(outputRoot)
@@ -477,9 +463,9 @@ export async function prepareIconoplasmEdgeAssets({
   await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
   await writeIconoplasmCompatibilityArtifacts({
     outputRoot: resolvedOutput,
-    publicationIndexes,
+    publishedGenes,
   })
-  await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publicationIndexes })
+  await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publishedGenes })
   const sourceSha = String(
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
   ).trim()
@@ -516,7 +502,7 @@ export async function prepareIconoplasmEdgeAssets({
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const report = await prepareIconoplasmEdgeAssets({
-    publicationIndexes: await loadPublishedCatalogIndexes(),
+    publishedGenes: await loadPublishedCatalogGenes(),
   })
   console.log(
     JSON.stringify({

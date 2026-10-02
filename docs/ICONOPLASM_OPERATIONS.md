@@ -8,8 +8,7 @@ If you are new to Iconoplasm, read `docs/ICONOPLASM_ONBOARDING.md` first. This f
 
 Read the [current capacity and background-work runbook](ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
 and [D1 exhaustion guide](D1_READ_EXHAUSTION_PREVENTION.md) before a live
-capacity-consuming operation. The September 17 D1 hold and B-742 recovery
-countdown are historical evidence, not current instructions. Check the installed
+capacity-consuming operation. Check the installed
 Worker mode, fresh account-wide provider meter and the operation's own durable
 state before acting. Source tests alone do not prove activation.
 
@@ -18,17 +17,14 @@ the same logical operation identity and authority. Missing state requires its
 bounded handover or a visible refusal. Global `run-sync`, a catalog rebuild or
 an unrelated finalization backlog is not an ordinary per-gene repair path.
 
-Choose the authority before interpreting data. Retained D1 vote/publication rows
-are historical/projection input for migrated genes. Public image identity comes
-from the exact advertised immutable card view. A V2 view names its baseline and
-immutable delta chain; a plain baseline remains valid historical input. Neither
-D1 nor a cache may elect substitute public bytes. The workstation is an exact
+Choose the authority before interpreting data. Public image identity comes
+from the one stable gene object `genes/v3/<SYMBOL>.json`; D1's
+`icono_publish_state` is the projection the publisher writes alongside it.
+Neither D1 nor a cache may elect substitute public bytes. The workstation is an exact
 replica and draft/generation surface, never a second overwrite authority.
 
-For historical portrait incidents, read
-`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. Historical global-repair examples
-are not authorization to restore a retired writer. Inspect the current
-callable source and live operation state for a concrete repair.
+For a gene whose published portrait disagrees with D1, follow the repair in
+`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
 
 For gene-label recognition, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md`.
 Curated page labels are administrator-owned desired state in the primary D1 and
@@ -165,7 +161,7 @@ The common paths are:
 - `/api/public/v1/gallery` for classic public gallery mode
 - `/api/iconoplasm/discoveries/me` for the signed-in personal shelf state
 - `/api/iconoplasm/account-gallery-window` for supported signed-in order windows
-- client-side discovery slicing plus `/api/iconoplasm/mobile-card-manifest`, which must read the live published card-catalog artifact rather than per-gene KV objects or D1-composed fallback cards
+- client-side discovery slicing plus `/api/iconoplasm/mobile-card-manifest`, which reads one stable gene object per symbol rather than D1-composed fallback cards
 
 There is no universal "next genes the user will see" order across these paths. Do not design cache warming, preloading, or pagination as if one global gallery sequence exists.
 
@@ -182,15 +178,13 @@ The authority relationship is:
 - The gene's active authority owns its desired selection. D1
   `icono_publish_state` is the retained legacy projection and may differ after
   a per-gene authority transfer.
-- The exact advertised immutable card view owns the public portrait. V2 reader
-  code resolves `<base>.c<chainHash>` through immutable chain/segment objects;
-  `KV_GALLERY_VERSION` alone names only the baseline. Read the installed head
-  contract before selecting a version.
+- The stable gene object `genes/v3/<SYMBOL>.json` owns the public portrait
+  (B-898). Read it from Bunny; there is no head, baseline or version to select.
 - `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
   metadata, public media, signed-in and anonymous galleries, archive ranges,
   image sitemaps, extension cards, and print-copy inputs must all project that
   artifact portrait.
-- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname now routes directly to the asset-first stateful worker; shared-host requests can still cross the proxy, which has no KV binding and cannot key by `KV_GALLERY_VERSION`. The stateful worker owns the version-aware card cache in both cases.
+- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname now routes directly to the asset-first stateful worker; shared-host requests can still cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 
 Site-gene detail still reads bounded D1 rich detail and candidates, but it
 overrides the portrait and candidate `is_current` state with the published-card
@@ -255,8 +249,9 @@ ahead. These remote queries consume shared D1 capacity:
 pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
 ```
 
-A different D1 SHA is expected while its dirty shard awaits publication, as
-long as every public surface remains coherent on the selected card artifact.
+A different D1 SHA is expected only until the vote authority's per-gene
+publication or the next Actions republish pass rewrites the gene's stable
+object; every public surface reads that one object.
 
 Check whether a vote projection job is already queued:
 

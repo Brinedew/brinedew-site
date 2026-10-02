@@ -539,7 +539,6 @@ test(
         }
         await authoring.batch(statements)
       }
-      let publicationWakes = 0
       const writer = createReplicaOperationCostAdapter({
         env: {
           ...bodyEnv,
@@ -559,9 +558,6 @@ test(
             projectPublicMaterialEvent: (accepted) =>
               drainManifestationPublicCardPublicationWakes(scopedEnv.ICONOPLASM_DB, {
                 authorityEventId: accepted.event_id,
-                wakeCardPublication: async () => {
-                  publicationWakes++
-                },
               }),
           })
           assert.equal(result.published, 1, JSON.stringify(result))
@@ -579,7 +575,6 @@ test(
       })
       const selected = await writer.dispatch(selection)
       assert.equal(selected.result.status, 200, JSON.stringify(selected.result))
-      assert.equal(publicationWakes, 1)
       assert.equal(
         (
           await authoring
@@ -615,7 +610,6 @@ test(
       const replayed = await writer.dispatch(selection)
       assert.equal(replayed.result.status, 200)
       assert.equal(replayed.result.body.replayed, true)
-      assert.equal(publicationWakes, 1)
       const candidateMeter = createOperationCostD1Meter(authoring)
       const scheduled = await drainManifestationAuthorityProjectionOutbox({
         authoringDb: {

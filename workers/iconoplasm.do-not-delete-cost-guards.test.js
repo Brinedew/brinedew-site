@@ -282,19 +282,6 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     /"\/(?:gene|genes|sitemap|robots\.txt|llms\.txt)/,
     "static reader routes must never re-enter the Worker-first list",
   )
-  // B-807: the one exception is the released extension's origin fallback for
-  // immutable, content-addressed publication objects (hedged after 350 ms, or
-  // origin-only on tabs where Bunny failed). Measured 4 requests/24 h on
-  // 24 Sep 2026. Only the exact immutable prefix may enter, and its handler
-  // must stay a pure Bunny read with no D1 access.
-  const publishedCardPatterns = [...workerFirstBlock.matchAll(/"(\/published-cards[^"]*)"/gu)].map(
-    (match) => match[1],
-  )
-  assert.deepEqual(
-    publishedCardPatterns,
-    ["/published-cards/v2/immutable/*"],
-    "only the immutable publication-object prefix may reach the Worker",
-  )
   const cardDeliverySource = readFileSync(
     new URL("./lib/iconoplasm-card-delivery.js", import.meta.url),
     "utf8",
@@ -385,15 +372,11 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "../.github/workflows/deploy-quartz.yml",
     )
-  const cutover =
-    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
-      "../scripts/prepare-iconoplasm-public-read-cutover.mjs",
-    )
   const productionJob = workflow.slice(workflow.indexOf("  deploy-production:"))
 
   assert.match(
     workflow,
-    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Publish, verify, and activate immutable public reads/,
+    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Deploy the stateful Worker after data maintenance/,
     "admission must be staged in the existing state owner, then schema receipts must succeed before application activation",
   )
   assert.doesNotMatch(
@@ -411,13 +394,13 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
     "normal backend activation must clear the transition gate",
   )
   assert.match(
-    cutover,
-    /preparePublicReadCutoverConfig[\s\S]*"wrangler",\s*"deploy"[\s\S]*"wrangler",\s*"deploy"[\s\S]*fileURLToPath\(MANIFEST\)/,
-    "the owned cutover must prepare the publisher and then activate the canonical static-first config",
+    workflow,
+    /Deploy the stateful Worker after data maintenance[\s\S]*?pnpm exec wrangler deploy --env="" --config wrangler\.the-only-allowed-internal-stateful-worker-do-not-duplicate\.toml[\s\S]*?ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST-backend/,
+    "a maintenance release deploys the canonical static-first stateful config directly (B-898: no publisher preparation, no Durable Object migration wait)",
   )
   assert.match(
     workflow,
-    /Hand off Iconoplasm route to the prepared stateful worker[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*[\s\S]*?Publish, verify, and activate immutable public reads/,
+    /Hand off Iconoplasm route to the prepared stateful worker[\s\S]*?geneguessr-api[\s\S]*?iconoplasm\.brinedew\.bio\/\*[\s\S]*?Deploy the stateful Worker after data maintenance/,
     "Cloudflare route ownership must move to the prepared stateful target before Wrangler reconciles the route declared by that script",
   )
   assert.match(

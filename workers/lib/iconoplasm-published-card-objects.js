@@ -112,6 +112,19 @@ export function publishedCardObjectKey(kind, hash) {
   return `${PUBLISHED_CARD_OBJECT_PREFIX}/${kind}/${hash}.json`
 }
 
+// The frozen card snapshot's manifest identity. Its only reader is
+// readIconoplasmPublishedGeneDiscoveryProjections in the stateful runtime, which the gene-discovery worker's range pages and sitemaps still
+// walk per request because a frozen range holds up to 500 genes (past the
+// free-plan Worker's ~50 subrequests for one-object-per-gene reads). The root
+// fix is build-time range pages from catalog/v3/index.json; until then this
+// stays.
+export const CARD_PUBLICATION_STORAGE = "bunny_card_catalog_v2"
+
+export function cardPublicationManifestKey(version) {
+  const match = /^ccv2-([a-f0-9]{64})$/.exec(String(version || ""))
+  return match ? publishedCardObjectKey("manifests", match[1]) : null
+}
+
 function immutableBlotIdentity(symbol, blot) {
   if (!blot || blot.status !== "ready") return null
   const fingerprint = String(blot.blot_fingerprint || "").toLowerCase()

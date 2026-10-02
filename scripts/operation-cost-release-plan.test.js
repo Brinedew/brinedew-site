@@ -21,7 +21,7 @@ test("migration checkpoint proof names follow the current deployment workflow", 
       "steps.migrations.outputs.continuation_required == 'true'",
     ],
     [
-      "Publish, verify, and activate immutable public reads",
+      "Deploy the stateful Worker after data maintenance",
       "steps.migrations.outputs.continuation_required != 'true'",
     ],
     [
@@ -170,7 +170,7 @@ test("a successful staged migration origin requires exact-attempt checkpoint pro
     conclusion: "success",
     steps: [
       ...[
-        "Publish, verify, and activate immutable public reads",
+        "Deploy the stateful Worker after data maintenance",
         "Deploy production static site to Cloudflare Pages",
       ].map((name) => ({ name, status: "completed", conclusion: "skipped" })),
       ...[
