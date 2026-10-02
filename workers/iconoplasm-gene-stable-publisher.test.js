@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { publishIconoplasmGeneStableObject } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
+// ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
 // B-898: the per-gene publisher. Failure modes written after a live republish
 // of ADO on 2026-10-01 17:37Z published a portrait-less object and nulled its
 // D1 winner, because "no selection given" was treated as "withdraw":

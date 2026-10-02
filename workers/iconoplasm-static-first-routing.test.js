@@ -75,9 +75,6 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.ok(statefulConfig.assets.run_worker_first.includes("/blot/*"))
   assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)
   assert.ok(statefulConfig.assets.run_worker_first.includes("/portraits/*"))
-  // B-807: extension origin fallback for immutable publication objects must reach
-  // the Worker; the SPA fallback would answer these JSON URLs with the HTML shell.
-  assert.ok(statefulConfig.assets.run_worker_first.includes("/published-cards/v2/immutable/*"))
 })
 
 test("the deterministic asset bundle is complete, secure, and within Free-plan limits", async (t) => {
@@ -116,14 +113,9 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const report = await prepareIconoplasmEdgeAssets({
     sourceRoot: source,
     outputRoot: target,
-    publicationIndexes: [
-      {
-        schema_version: 2,
-        search_entries: [
-          ["RB1", "RB transcriptional corepressor 1", 0, 0],
-          ["TP53", "tumor protein p53", 0, 1],
-        ],
-      },
+    publishedGenes: [
+      ["RB1", "RB transcriptional corepressor 1", "", "", 0],
+      ["TP53", "tumor protein p53", "", "", 0],
     ],
   })
   const home = readFileSync(path.join(target, "index.html"), "utf8")
@@ -195,9 +187,7 @@ test("production hands off the existing route before Wrangler reconciles statefu
     "utf8",
   )
   const handoffIndex = workflow.indexOf("Hand off Iconoplasm route to the prepared stateful worker")
-  const statefulDeployIndex = workflow.indexOf(
-    "Publish, verify, and activate immutable public reads",
-  )
+  const statefulDeployIndex = workflow.indexOf("Deploy the stateful Worker after data maintenance")
 
   assert.ok(handoffIndex > 0)
   assert.ok(statefulDeployIndex > handoffIndex)

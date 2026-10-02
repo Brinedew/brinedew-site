@@ -2,8 +2,6 @@ const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 
 const REQUIRED_FUNCTIONS = Object.freeze([
   "fetchGallery",
-  "fetchPublishStatus",
-  "publishIconoplasmGalleryDirtyShards",
   "isAdmin",
   "json",
   "normalizeFilter",
@@ -26,8 +24,6 @@ export function createIconoplasmAdminGalleryHandlers(services) {
   assertGalleryServices(services)
   const {
     fetchGallery,
-    fetchPublishStatus,
-    publishIconoplasmGalleryDirtyShards,
     isAdmin,
     json,
     normalizeFilter,
@@ -37,67 +33,6 @@ export function createIconoplasmAdminGalleryHandlers(services) {
     normalizeSort,
     sanitizeText,
   } = services
-
-  async function publishStatus({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_gallery_publish_status_403", json({ error: "Unauthorized" }, 403))
-    return done("admin_gallery_publish_status", json(await fetchPublishStatus(env), 200, NO_STORE))
-  }
-
-  async function publishDirtyShards({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_gallery_dirty_shard_publication_403", json({ error: "Unauthorized" }, 403))
-    if (!env.KV)
-      return done(
-        "admin_gallery_dirty_shard_publication_500",
-        json({ error: "KV binding missing" }, 500),
-      )
-    if (!env.ICONOPLASM_DB)
-      return done(
-        "admin_gallery_dirty_shard_publication_500",
-        json({ error: "ICONOPLASM_DB binding missing" }, 500),
-      )
-    let result
-    try {
-      const payload = await request.json().catch(() => ({}))
-      result = {
-        ok: true,
-        ...(await publishIconoplasmGalleryDirtyShards(env, {
-          triggerReason:
-            sanitizeText(String(payload?.reason || ""), 255) ||
-            "admin_gallery_dirty_shard_publication",
-        })),
-      }
-    } catch (error) {
-      const budgetPayload =
-        error?.payload && typeof error.payload === "object"
-          ? {
-              day_key: sanitizeText(String(error.payload.day_key || ""), 32) || null,
-              daily_limit: Math.max(0, Number(error.payload.daily_limit || 0) || 0),
-              estimated_writes: Math.max(0, Number(error.payload.estimated_writes || 0) || 0),
-              requested_writes: Math.max(0, Number(error.payload.requested_writes || 0) || 0),
-              projected_writes: Math.max(0, Number(error.payload.projected_writes || 0) || 0),
-              estimated_writes_remaining: Math.max(
-                0,
-                Number(error.payload.estimated_writes_remaining || 0) || 0,
-              ),
-            }
-          : null
-      result = {
-        ok: false,
-        skipped: true,
-        code:
-          sanitizeText(String(error?.code || ""), 128) || "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED",
-        error: sanitizeText(String(error?.message || error), 500),
-        ...(budgetPayload ? { budget: budgetPayload } : {}),
-      }
-    }
-    const status = await fetchPublishStatus(env)
-    return done(
-      "admin_gallery_dirty_shard_publication",
-      json({ ...result, publish_status: status }, 200, NO_STORE),
-    )
-  }
 
   async function list({ request, env, done }) {
     if (!(await isAdmin(request, env)))
@@ -134,7 +69,5 @@ export function createIconoplasmAdminGalleryHandlers(services) {
 
   return Object.freeze({
     "admin_gallery.list": list,
-    "admin_gallery.publish_status": publishStatus,
-    "admin_gallery.publish_dirty_shards": publishDirtyShards,
   })
 }

@@ -12,7 +12,6 @@ const REQUIRED_FUNCTIONS = Object.freeze([
   "runBootstrapStep",
   "sanitizeText",
   "syncReadModels",
-  "syncReadModelsAndPublishGalleryDirtyShards",
   "validVisionId",
   "writeBootstrapState",
 ])
@@ -47,7 +46,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     sanitizeText,
     symbolRequestMax,
     syncReadModels,
-    syncReadModelsAndPublishGalleryDirtyShards,
     validVisionId,
     visionRequestMax,
     writeBootstrapState,
@@ -117,10 +115,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       false,
     )
     const skipDashboard = coerceBoolean(payload?.skip_dashboard ?? payload?.skipDashboard, false)
-    const shouldPublishGalleryDirtyShards = coerceBoolean(
-      payload?.publish_gallery_dirty_shards ?? payload?.publishGalleryDirtyShards,
-      true,
-    )
     const options = {
       symbols,
       visionIds,
@@ -131,11 +125,10 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       skipVisionRollups,
       skipDashboard,
     }
-    // This guard prevents caller-requested widening. B-749 still owns replacing
-    // the legacy publication service below with an exact-scope V2 handoff.
-    const result = shouldPublishGalleryDirtyShards
-      ? await syncReadModelsAndPublishGalleryDirtyShards(env, options)
-      : await syncReadModels(env, options)
+    // A read-model sync is only that. The gene's stable object and the catalog
+    // object are published by the per-gene publisher and the Actions catalog
+    // publisher.
+    const result = await syncReadModels(env, options)
     return done(
       "admin_read_models_sync",
       json(
@@ -161,45 +154,12 @@ export function createIconoplasmAdminReadModelHandlers(services) {
             result?.target_daily_percent === null || result?.target_daily_percent === undefined
               ? null
               : Number(result.target_daily_percent || 0) || null,
-          publish_gallery_dirty_shards: shouldPublishGalleryDirtyShards,
           full_vision: fullVision,
           full_rebuild: fullRebuild,
           skip_vote_summaries: skipVoteSummaries,
           skip_gene_rollups: skipGeneRollups,
           skip_vision_rollups: skipVisionRollups,
           skip_dashboard: skipDashboard,
-          // The durable finalization consumer uses this response as the only
-          // acknowledgement that the card publisher accepted its one global
-          // wakeup. Do not drop these outcomes: doing so makes a successful
-          // handoff look rejected and leaves the completion ledger retrying.
-          publication_queued: result?.publication_queued === true,
-          migration_pending: result?.migration_pending === true,
-          card_catalog_publication:
-            result?.card_catalog_publication && typeof result.card_catalog_publication === "object"
-              ? {
-                  deferred: result.card_catalog_publication.deferred === true,
-                  resume_after:
-                    sanitizeText(result.card_catalog_publication.resume_after || "", 64) || null,
-                }
-              : null,
-          card_catalog:
-            result?.card_catalog && typeof result.card_catalog === "object"
-              ? {
-                  artifact_version:
-                    sanitizeText(result.card_catalog.artifact_version || "", 128) || null,
-                  artifact_gene_count: Math.max(
-                    0,
-                    Number(result.card_catalog.artifact_gene_count || 0) || 0,
-                  ),
-                  catalog_gene_count: Math.max(
-                    0,
-                    Number(result.card_catalog.catalog_gene_count || 0) || 0,
-                  ),
-                  artifact_validated_at:
-                    sanitizeText(result.card_catalog.artifact_validated_at || "", 64) || null,
-                  source: "published_card_catalog",
-                }
-              : null,
         },
         200,
         NO_STORE,

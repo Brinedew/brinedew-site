@@ -9,7 +9,6 @@ import {
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  publishIconoplasmGalleryDirtyShardsForTest,
   resetIconoplasmRuntimeCachesForTest,
   mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -722,95 +721,6 @@ function completeMobileCardVM(
   }
 }
 
-test("dirty-shard publication reuses the artifact when public card material is unchanged", async () => {
-  const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const putKeys = []
-  const db = new FakeIconoplasmDb()
-  db.maxEventAt = "2026-05-09 00:00:00"
-  const env = buildEnv({
-    kvStore,
-    db,
-    onKvPut(key) {
-      putKeys.push(key)
-    },
-  })
-
-  const first = await publishIconoplasmGalleryDirtyShardsForTest(env)
-
-  assert.equal(first.version, "test-vm-version")
-  assert.equal(first.card_catalog.reused_existing, true)
-  assert.equal(putKeys.length, 0)
-
-  const firstPutCount = putKeys.length
-  const second = await publishIconoplasmGalleryDirtyShardsForTest(env)
-
-  assert.equal(second.version, first.version)
-  assert.equal(second.card_catalog.reused_existing, true)
-  assert.equal(second.card_catalog.reused_gallery_version, true)
-  assert.equal(putKeys.length, firstPutCount)
-})
-
-test("dirty-shard publication reserves the shared KV write budget before publishing", async () => {
-  const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const events = []
-  const budget = fakeCardCatalogKvWriteBudgetBinding()
-  const db = new FakeIconoplasmDb()
-  db.changedSymbols = ["ERBB2"]
-  db.published.set("ERBB2", { ...db.published.get("ERBB2"), asset_sha256: "ad".repeat(32) })
-  db.materializeBlot("ERBB2")
-  const env = buildEnv({
-    kvStore,
-    db,
-    onKvPut(key) {
-      events.push(`put:${key}`)
-    },
-    extraEnv: {
-      ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_DO_NOT_SET_CASUALLY: "1",
-      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget.binding,
-    },
-  })
-
-  const first = await publishIconoplasmGalleryDirtyShardsForTest(env)
-
-  // One reservation covers the bounded dirty shard, manifest, release pointer,
-  // and watermark before any write occurs.
-  const ops = budget.reservations.map((r) => r.operation)
-  assert.deepEqual(ops, ["card_catalog_dirty_shard_publication"])
-  // First KV write is a content-addressed shard, and it came after a reservation.
-  assert.match(events[0], /^put:iconoplasm:card-catalog-shard:/)
-  assert.equal(first.card_catalog.dirty_shard_publication, true)
-})
-
-test("dirty-shard publication fails closed before KV puts when the shared write budget is exhausted", async () => {
-  const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const putKeys = []
-  // dailyLimit 1 is below the first chunk's shard-publish reservation, so the
-  // budget gate trips before any KV write happens.
-  const budget = fakeCardCatalogKvWriteBudgetBinding({ dailyLimit: 1 })
-  const db = new FakeIconoplasmDb()
-  db.changedSymbols = ["ERBB2"]
-  const env = buildEnv({
-    kvStore,
-    db,
-    onKvPut(key) {
-      putKeys.push(key)
-    },
-    extraEnv: {
-      ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_DO_NOT_SET_CASUALLY: "1",
-      ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget.binding,
-    },
-  })
-
-  await assert.rejects(
-    () => publishIconoplasmGalleryDirtyShardsForTest(env),
-    /CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED/,
-  )
-  assert.equal(putKeys.length, 0)
-})
-
 test("print-copy accepts only the stable gene object's portrait and never falls back to D1", async () => {
   const db = new FakeIconoplasmDb()
   const d1OnlyAssetSha = "8d".repeat(32)
@@ -1075,105 +985,25 @@ test("mobile card manifest reports a missing stable object without any KV head o
   )
 })
 
-test("legacy full-catalog card VM warming route is not declared", () => {
-  assert.equal(matchIconoplasmRouteContract("/api/iconoplasm/admin/card-vms/warm", "POST"), null)
-})
-
-test("admin dirty-shard publication preserves molecular companion fields used by card renderers", async () => {
+// The card mapper keeps the HGNC name when UniProt differs (the
+// source-level mapper tests below pin that), and the print-copy renderer reads
+// the stable gene object the per-gene publisher composes from that payload.
+test("print-copy renders the HGNC gene name from the stable gene object", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const db = new FakeIconoplasmDb()
-  db.changedSymbols = ["ERBB2", "INS", "PTEN"]
-  const env = buildEnv({ kvStore, db })
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-dirty-shards",
-        {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer secret-admin-token",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-      ),
-      env,
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload.ok, true)
-
-  const artifactVersion = payload.card_catalog.artifact_version
-  assert.match(artifactVersion, /^ccv1-[a-f0-9]{32}$/)
-  const manifest = JSON.parse(kvStore.get(`iconoplasm:card-catalog:${artifactVersion}`))
-  const shard = JSON.parse(kvStore.get(manifest.shards[0].key))
-  const erbb2 = shard.cards.find((card) => card.symbol === "ERBB2")
-  const ins = shard.cards.find((card) => card.symbol === "INS")
-
-  assert.ok(erbb2, "published artifact should contain ERBB2")
-  assert.equal(erbb2.payload.molecular_weight_kda, 137.9)
-  assert.equal(erbb2.payload.first_publication_year, 1985)
-  assert.equal(erbb2.payload.primary_tissue, "ubiquitous")
-  assert.equal(erbb2.field_status.category, "present")
-  assert.equal(erbb2.field_status.age, "present")
-  assert.equal(erbb2.field_status.weight, "present")
-
-  assert.ok(ins, "published artifact should contain INS")
-  assert.equal(ins.payload.molecular_weight_kda, 12)
-  assert.equal(ins.payload.first_publication_year, 1959)
-  assert.equal(ins.payload.primary_tissue, "tissue-specific")
-})
-
-test("published cards and print-copy payloads keep the HGNC gene name when UniProt differs", async () => {
-  resetIconoplasmRuntimeCachesForTest()
-  const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const db = new FakeIconoplasmDb()
-  db.changedSymbols = ["PTEN"]
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-dirty-shards",
-        {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer secret-admin-token",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-      ),
-      buildEnv({ kvStore, db }),
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  const manifest = JSON.parse(
-    kvStore.get(`iconoplasm:card-catalog:${payload.card_catalog.artifact_version}`),
-  )
-  const cards = manifest.shards.flatMap((metadata) => JSON.parse(kvStore.get(metadata.key)).cards)
-  const pten = cards.find((card) => card.symbol === "PTEN")
-
-  assert.ok(pten, "published artifact should contain PTEN")
-  assert.equal(pten.full_name, "phosphatase and tensin homolog")
-  assert.equal(pten.payload.full_name, "phosphatase and tensin homolog")
-  assert.equal(pten.payload.essence.name, "phosphatase and tensin homolog")
-  assert.doesNotMatch(
-    JSON.stringify(pten),
-    /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/,
-  )
-
-  // The print-copy renderer reads the stable gene object, which the per-gene
-  // publisher composes from the same projected payload the shard carried.
+  const pten = completeMobileCardVM("PTEN", "stable-v3")
+  pten.full_name = "phosphatase and tensin homolog"
+  pten.payload = {
+    ...pten.payload,
+    full_name: "phosphatase and tensin homolog",
+    essence: { ...(pten.payload.essence || {}), name: "phosphatase and tensin homolog" },
+  }
   stableStorage.objects.set("PTEN", stableGeneObjectFromRecord(pten.payload))
   resetIconoplasmRuntimeCachesForTest()
   const printCopyRender =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
-        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-render/PTEN?v=stable-v3&asset=${"c8".repeat(32)}`,
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-render/PTEN?v=stable-v3&asset=${"7b".repeat(32)}`,
       ),
       buildEnv({ kvStore, cardArtifact: null }),
     )
@@ -1182,44 +1012,6 @@ test("published cards and print-copy payloads keep the HGNC gene name when UniPr
   assert.equal(printCopyRender.status, 200)
   assert.match(printCopyHtml, /phosphatase and tensin homolog/)
   assert.doesNotMatch(printCopyHtml, /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/)
-})
-
-test("admin dirty-shard publication does not count failed KV writes as published cards", async () => {
-  resetIconoplasmRuntimeCachesForTest()
-  const kvStore = new Map()
-  putContentAddressedCardCatalogBaseline(kvStore)
-  const db = new FakeIconoplasmDb()
-  db.changedSymbols = ["ERBB2"]
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-dirty-shards",
-        {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer secret-admin-token",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-      ),
-      {
-        ...buildEnv({ kvStore, db }),
-        KV: {
-          async get(key) {
-            return kvStore.has(key) ? kvStore.get(key) : null
-          },
-          async put() {
-            throw new Error("KV write failed")
-          },
-        },
-      },
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload.ok, false)
-  assert.equal(payload.code, "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED")
 })
 
 test("card catalog records do not copy raw sample prose into public card payloads", () => {
@@ -1271,22 +1063,6 @@ test("card catalog artifact query carries public portrait sample provenance", ()
   assert.match(block, /pa\.sample_text_hash/)
 })
 
-test("admin dirty-shard publication endpoint stays behind admin auth", async () => {
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/gallery/publish-dirty-shards",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
-      ),
-      buildEnv(),
-    )
-  assert.equal(response.status, 403)
-})
-
 test("mobile manifest route is owned by the declared gateway contract", () => {
   const post = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "POST")
   const get = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "GET")
@@ -1314,8 +1090,10 @@ test("frontend mobile path uses the card catalog manifest and rejects fallback r
   assert.match(appSource, /function assertCompleteMobileCardVM\(card\)/)
   assert.match(appSource, /\/api\/iconoplasm\/mobile-card-manifest/)
   assert.match(appSource, /card\.__complete !== true/)
-  assert.match(source, /KV_CARD_CATALOG_ARTIFACT_PREFIX/)
-  assert.match(source, /readPublishedCardCatalogArtifact/)
+  // B-898: the manifest reads one stable gene object per symbol.
+  assert.match(source, /readStableGeneObjects\(env, symbols\)/)
+  assert.match(source, /STABLE_GENE_OBJECT_SNAPSHOT_LABEL/)
+  assert.doesNotMatch(source, /KV_CARD_CATALOG_ARTIFACT_PREFIX|readPublishedCardCatalogArtifact\(/)
   assert.doesNotMatch(source, /KV_MOBILE_CARD_VM_PREFIX/)
   assert.doesNotMatch(source, /composeAndCacheMobileCardVMs/)
   assert.doesNotMatch(source, /readMobileCardVMFromSharedSnapshot/)
@@ -1334,43 +1112,6 @@ test("frontend mobile path uses the card catalog manifest and rejects fallback r
   )
 })
 
-test("dirty-shard publication validates replacements before flipping the live version", () => {
-  assert.match(source, /async function publishNextCardCatalogDirtyShardStep/)
-  assert.match(source, /CARD_CATALOG_ARTIFACT_SCHEMA/)
-  assert.match(source, /ICONOPLASM_STARTER_GENE_SYMBOLS/)
-  assert.equal(
-    matchIconoplasmRouteContract("/api/iconoplasm/admin/gallery/publish-dirty-shards", "POST")
-      ?.route?.apiHandler,
-    "admin_gallery.publish_dirty_shards",
-  )
-  // Build-before-flip invariant: all dirty shards and the manifest are produced
-  // before KV_GALLERY_VERSION is moved.
-  assert.match(
-    source,
-    /const cardCatalog = await publishCardCatalogArtifactSmart\(env,[\s\S]*publishGalleryVersionBarrier\(env, barrier\)/,
-  )
-  // ONE routine publish path: bounded dirty shards only. Cold or mismatched
-  // baselines fail explicitly and never enter a whole-catalog fallback.
-  assert.match(source, /async function publishCardCatalogArtifactSmart/)
-  assert.match(source, /return publishNextCardCatalogDirtyShardStepWithAudit\(env, \{/)
-  assert.match(source, /CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED/)
-  assert.doesNotMatch(source, /runCardCatalogStagingRebuildChunk/)
-  assert.doesNotMatch(source, /KV_CARD_CATALOG_REBUILD_CURSOR/)
-  assert.match(source, /CARD_CATALOG_CONTENT_ADDRESSED_STORAGE/)
-  assert.doesNotMatch(source, /CARD_ARTIFACT_REQUIRES_FULL_CATALOG/)
-  // The legacy version-keyed full publisher and its writer are gone — assert they
-  // can't creep back as a parallel path.
-  assert.doesNotMatch(source, /async function publishCardCatalogArtifact\(/)
-  assert.doesNotMatch(source, /async function writeCardCatalogArtifactToKV/)
-  assert.doesNotMatch(source, /:shard:\$\{index\}/)
-  assert.doesNotMatch(
-    source,
-    /const warmedSymbols = await mobileCardSnapshotWarmSymbolsForInvalidation/,
-    "dirty-shard publication must not write per-gene mobile-card KV",
-  )
-  assert.doesNotMatch(
-    source,
-    /readMobileCardVMFromSharedSnapshot\(env, versionInfo\.previous/,
-    "runtime card loading must not probe a previous version fallback",
-  )
+test("the runtime keeps the one per-gene stable object publisher", () => {
+  assert.match(source, /export async function publishIconoplasmGeneStableObject\(/)
 })

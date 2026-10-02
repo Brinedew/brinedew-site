@@ -29,7 +29,7 @@ async function pendingWakes(primaryDb, eventId, limit) {
 
 export async function drainManifestationPublicCardPublicationWakes(
   primaryDb,
-  { authorityEventId = null, limit = 10, wakeCardPublication = null } = {},
+  { authorityEventId = null, limit = 10 } = {},
 ) {
   if (!primaryDb?.prepare || !primaryDb?.batch) {
     throw new IconoplasmManifestationPublicationWakeError(
@@ -102,12 +102,6 @@ export async function drainManifestationPublicCardPublicationWakes(
         "Canonical manifestation publication wake remains pending",
       )
     }
-  }
-  if ((eventId || published.length) && typeof wakeCardPublication === "function") {
-    await wakeCardPublication({
-      authority_event_id: eventId,
-      published: Object.freeze([...published]),
-    })
   }
   return Object.freeze({
     ok: true,

@@ -75,26 +75,6 @@ async function runBenchmark({
       expectStatuses: [409],
     },
   ]
-  if (includeAdminDirtyShardPublication) {
-    if (!adminToken) {
-      throw new Error(
-        "ICONOPLASM_ADMIN_TOKEN is required for --include-admin-dirty-shard-publication",
-      )
-    }
-    endpoints.push({
-      name: "admin_gallery_dirty_shard_publication",
-      url: `${baseUrl}/api/iconoplasm/admin/gallery/publish-dirty-shards`,
-      options: {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-        },
-        body: JSON.stringify({}),
-      },
-    })
-  }
-
   const samples = []
   for (let run = 0; run < runs; run += 1) {
     for (const endpoint of endpoints) {

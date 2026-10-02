@@ -29,7 +29,6 @@ test("schema staging preserves every production binding", () => {
     "/api/*",
     "/blot/*",
     "/portraits/*",
-    "/published-cards/v2/immutable/*",
     "/admin*",
     "/blocklist*",
     "/artist-styles*",
@@ -66,7 +65,7 @@ test("migration staging preserves the fallback and all release gates", () => {
     "Stage migration admission in the existing state owner",
     "Apply reviewed D1 migrations through prediction admission",
     "Prepare the published catalog through shared KV admission",
-    "Publish, verify, and activate immutable public reads",
+    "Deploy the stateful Worker after data maintenance",
   ]
   let previous = -1
   for (const name of names) {

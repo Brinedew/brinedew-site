@@ -219,7 +219,7 @@ function buildEnv({ bindGateway = true } = {}) {
   return bindGateway ? bindOnlyAllowedGateway(env, gatewayEnv) : env
 }
 
-test("admin read-model sync with publish_gallery_dirty_shards still honors skip flags", async () => {
+test("admin read-model sync honors skip flags and publishes nothing (B-898)", async () => {
   const env = buildEnv()
 
   const response = await viaStatefulWorker(
@@ -235,7 +235,6 @@ test("admin read-model sync with publish_gallery_dirty_shards still honors skip 
         skip_gene_rollups: true,
         skip_vision_rollups: true,
         skip_dashboard: true,
-        publish_gallery_dirty_shards: true,
       }),
     }),
     env,
@@ -246,9 +245,7 @@ test("admin read-model sync with publish_gallery_dirty_shards still honors skip 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
-  assert.equal(payload?.card_catalog?.artifact_gene_count, 1)
-  assert.equal(payload?.card_catalog?.catalog_gene_count, 1)
-  assert.equal(payload?.card_catalog?.source, "published_card_catalog")
+  assert.equal(payload?.card_catalog, undefined, "a read-model sync publishes nothing (B-898)")
 
   // This regression matters because the workstation uses skip flags to split a
   // 1,000-item Website sync into smaller durable phases. If the invalidate-
@@ -278,7 +275,6 @@ test("batched vision sync atomically refreshes the request-picker projection", a
         skip_vote_summaries: true,
         skip_gene_rollups: true,
         skip_dashboard: true,
-        publish_gallery_dirty_shards: false,
       }),
     }),
     env,
@@ -340,7 +336,6 @@ test("admin sync reads transactional counts without rebuilding catalogue history
         skip_vote_summaries: true,
         skip_gene_rollups: true,
         skip_vision_rollups: true,
-        publish_gallery_dirty_shards: false,
       }),
     }),
     env,

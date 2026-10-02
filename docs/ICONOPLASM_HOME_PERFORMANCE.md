@@ -28,22 +28,23 @@ The protected controller contract is `quartz/static/iconoplasm/collection-feed.t
 
 **ARCHITECTURE FENCE [IPD-011] — every public surface has one portrait authority.**
 
-D1 owns live authoring, vote projection, rich detail, and candidates. The exact
-versioned card artifact selected by `KV_GALLERY_VERSION` is the sole public
-portrait authority. A D1 leader may legitimately be newer while its dirty shard
-awaits publication; no public surface may reveal that SHA early.
+D1 owns live authoring, vote projection, rich detail, and candidates. The stable
+gene object `genes/v3/<SYMBOL>.json` (B-898) is the sole public portrait
+authority. A D1 leader may legitimately be newer for the minutes until the
+per-gene publisher or the Actions republish pass rewrites that object; no public
+surface may reveal that SHA early.
 
 The account window combines two kinds of data with deliberately different
 jobs:
 
 - discovery rows determine which genes belong to the account and in what order;
-- the versioned published card artifact determines every displayed card field,
+- the stable gene object determines every displayed card field,
   including the canonical portrait URL and `asset_sha256`.
 
 `view=image-only` is only a smaller wire representation. It is not a separate
 read model and must not have a separate freshness mechanism. The server first
-reads the account's bounded symbol window, resolves `KV_GALLERY_VERSION`, reads
-those symbols from `readPublishedCardCatalogArtifact(...)`, and then projects
+reads the account's bounded symbol window, reads those symbols' stable gene
+objects (`readStableGeneObjects(...)`), and then projects
 compact image cards from those published card VMs. The ordinary and image-only
 views therefore differ in response shape, not authority.
 
@@ -59,7 +60,7 @@ closed and uncached instead of selecting a D1 or catalog SHA.
 The removed design let the image-only branch return early from
 `publishedPortraitRefs(...)`. That snapshot looked efficient because it held
 only symbol-to-SHA pairs, but it was an independently published and cached
-portrait timeline. Routine dirty-shard publication advanced the canonical card
+portrait timeline. Routine publication advanced the canonical card
 artifact without guaranteeing the legacy portrait-reference snapshot advanced
 in the same atomic operation.
 
@@ -101,7 +102,7 @@ the homepage and gene page show the same character skin color.
 
 Undesired optimization: do not let browser storage decide that a gallery card page is fresh enough to paint before the page has checked the current backend manifest.
 
-The `/api/iconoplasm/mobile-card-manifest` response is the freshness authority for mobile/home gallery card view-models. IndexedDB rows are a write-through performance cache only. A fully populated local page cache must still ask the manifest endpoint for the current `KV_GALLERY_VERSION` before rendering, because browsers such as Edge can retain old IndexedDB rows for weeks. If local rows from an old version are allowed to short-circuit the manifest request, the gallery can show portraits that were outvoted long ago while the gene page correctly shows the current canonical portrait.
+The `/api/iconoplasm/mobile-card-manifest` response is the freshness authority for mobile/home gallery card view-models. IndexedDB rows are a write-through performance cache only. A fully populated local page cache must still ask the manifest endpoint before rendering, because browsers such as Edge can retain old IndexedDB rows for weeks. If local rows from an old version are allowed to short-circuit the manifest request, the gallery can show portraits that were outvoted long ago while the gene page correctly shows the current canonical portrait.
 
 This is intentionally stricter than a normal cache hit. The right behavior is:
 
@@ -120,4 +121,4 @@ The protected contract is `quartz/static/iconoplasm/home-performance-contract.te
 Global authority is additionally protected by the site-detail/public-media,
 range HTML, gene HTML, and sitemap concordance tests under `workers/`. Those
 tests must keep D1 portrait A and card portrait B intentionally different, then
-prove that only a `KV_GALLERY_VERSION` card-barrier flip can move public media.
+prove that only a rewrite of the gene's stable object can move public media.

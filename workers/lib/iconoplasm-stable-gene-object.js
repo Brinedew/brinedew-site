@@ -1,9 +1,11 @@
-// B-898: THE ONLY composer of the stable gene object, genes/v3/<SYMBOL>.json.
-// It is the projected gene record (what the card catalog materializer builds
-// from D1 and the authoring store) with the complete candidate pool inline, so
-// a reader fetches one URL and never walks an index. Written by
-// publishIconoplasmGeneStableObject in the stateful runtime; the publication
-// coordinator wrote the same shape until the deletion stage retired it.
+// ARCHITECTURE FENCE [IPD-011]: THE ONLY composer of the stable gene object,
+// genes/v3/<SYMBOL>.json (B-898). It is the projected gene record (what the
+// card materializer builds from D1 and the authoring store) with the complete
+// candidate pool inline, so a reader fetches one URL and never walks an index.
+// Written by publishIconoplasmGeneStableObject in the stateful runtime, the one
+// per-gene publisher. This object and catalog/v3/index.json (built by
+// scripts/publish-iconoplasm-catalog.mjs in GitHub Actions) are the two
+// published objects every reader resolves.
 const HASH = /^[a-f0-9]{64}$/
 
 export const STABLE_GENE_OBJECT_VERSION = 3
@@ -36,4 +38,27 @@ export function composeStableGeneObject(
     stable_object_version: STABLE_GENE_OBJECT_VERSION,
     published_at: now(),
   }
+}
+
+// The published record carries the complete candidate pool. A silent slice hid
+// candidates whenever a pool grew past a fixed number (B-792); the stable
+// object's size limit is the boundary instead, and exceeding it fails the
+// publication loudly rather than truncating what readers see.
+export async function enrichPublishedGeneCandidates(records, loadCandidates) {
+  const enriched = []
+  for (const record of Array.isArray(records) ? records : []) {
+    const candidates = await loadCandidates(record)
+    enriched.push({
+      ...record,
+      portrait_candidates: Array.isArray(candidates) ? candidates : [],
+    })
+  }
+  return enriched
+}
+
+export function projectCardBlot(record, blot) {
+  const projected = { ...record }
+  if (blot) projected.blot = blot
+  else delete projected.blot
+  return projected
 }

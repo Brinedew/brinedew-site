@@ -50,8 +50,8 @@ It owns things like:
 
 If the question is “what does the live authoring, vote, candidate, or rich-detail
 state know right now?”, stay in this repo and query remote D1. Public portrait
-identity is the exception: inspect the exact card artifact selected by
-`KV_GALLERY_VERSION`, because D1 may legitimately be ahead of the published
+identity is the exception: inspect the gene's stable object
+`genes/v3/<SYMBOL>.json` on Bunny (B-898), because D1 may legitimately be ahead of the published
 public portrait.
 
 For canonical portrait changes and vote auto-promotion, also read
@@ -247,7 +247,7 @@ Wrapping both sides in `upper(...)` looks harmless, but it can blow away index u
 
 This is the most important runtime barrier in Iconoplasm, and it is not only a D1 budget. The live admin cost cockpit at `/admin#costs` tracks the free-plan pressure points across D1, Workers, Durable Objects, KV, Queues, R2, Pages Functions, and Workers observability.
 
-Mutation and publication admission runs through the operation-cost ledger (`workers/iconoplasm/operation-cost-*.js`) and the card-publication coordinator's write reservations. There is no separate card-catalog budget preflight: one was defined but never called, and it was deleted on 2026-09-26 (B-869).
+Mutation and publication admission runs through the operation-cost ledger (`workers/iconoplasm/operation-cost-*.js`).
 
 D1 row-read blowups are still the easiest budget wall to hit accidentally.
 
@@ -279,14 +279,15 @@ If you change them, you are touching the thing that keeps the site from quietly 
 
 ### canonical portraits have a second barrier
 
-`icono_publish_state` is D1 authoring and vote-projection state. The exact
-versioned card artifact selected through `KV_GALLERY_VERSION` is the sole public
-portrait authority.
+`icono_publish_state` is D1 authoring and vote-projection state. The gene's
+stable object `genes/v3/<SYMBOL>.json` (B-898) is the sole public portrait
+authority.
 
-A newly selected D1 leader is allowed to exist before its dirty card shard is
-published. That is a legitimate publication window, not split-brain and not a
+A newly selected D1 leader is allowed to exist for the minutes before the
+per-gene publisher or the Actions republish pass rewrites the gene's stable
+object. That is a legitimate publication window, not split-brain and not a
 reason for a reader route to reveal the unpublished SHA. The public portrait
-changes only when the shared card-version barrier advances.
+changes only when that object is rewritten.
 
 During that window every public projection remains on the previous exact card
 artifact: signed-in and anonymous galleries, site-gene detail, gene-page lead
@@ -303,10 +304,11 @@ projection fails closed with an uncached unavailable or missing response.
 
 If publication appears stuck, fix it at the publication boundary:
 
-- distinguish an expected D1 lead from a failed dirty-shard release;
+- distinguish an expected D1 lead from a failed per-gene publication (the
+  republish route, `admin_publication.republish`, re-runs it);
 - use the authenticated admin read-model sync path for genuinely stuck
   publication state;
-- let the normal bounded dirty-shard publisher advance `KV_GALLERY_VERSION`; and
+- let the Actions catalog publisher's republish pass rewrite the dirty genes; and
 - purge only a proven stale symbol API URL if an outer Cloudflare cache still
   serves an older artifact after the barrier has advanced.
 
@@ -317,7 +319,8 @@ Non-negotiable rules:
    - they are not enough on their own
 
 2. **Versioned shared caches come first for full-table public reads.**
-   - use `KV_GALLERY_VERSION`-keyed snapshots
+   - key shared snapshots by a version a background job writes (the gallery
+     feed uses the catalog dispatch watermark), never by per-isolate memory
    - on invalidate, bump the version and let old snapshots die
 
 3. **Hot-path primary keys stay raw.**
