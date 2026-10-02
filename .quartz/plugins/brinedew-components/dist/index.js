@@ -641,7 +641,7 @@ var IconoplasmPageSwitcher = ({
         /* @__PURE__ */ u2(
           "a",
           {
-            href: "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
+            href: "https://brinedew.bio/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm",
             class: classNames("icono-page-tab", activeTab === "tutorial" && "is-active"),
             "data-icono-nav": true,
             "data-icono-switch": "tutorial",
@@ -2344,19 +2344,18 @@ var skippedSlugPrefixes = ["tags/", "apps/", "settings"];
 function hasAuthorDate(frontmatter) {
   return frontmatter.date !== void 0 || frontmatter.published !== void 0 || frontmatter.created !== void 0;
 }
-function dateParagraph(date) {
+function dateParagraph(date, label) {
+  const time = {
+    type: "element",
+    tagName: "time",
+    properties: { datetime: date.toISOString() },
+    children: [{ type: "text", value: formatDate(date, "en-US") }]
+  };
   return {
     type: "element",
     tagName: "p",
     properties: { className: ["content-meta"] },
-    children: [
-      {
-        type: "element",
-        tagName: "time",
-        properties: { datetime: date.toISOString() },
-        children: [{ type: "text", value: formatDate(date, "en-US") }]
-      }
-    ]
+    children: label ? [{ type: "text", value: `${label}: ` }, time] : [time]
   };
 }
 var PublicationDate = () => {
@@ -2368,7 +2367,8 @@ var PublicationDate = () => {
           const data = file.data;
           const slug2 = String(data.slug ?? "");
           const frontmatter = data.frontmatter ?? {};
-          if (!hasAuthorDate(frontmatter) || slug2 === "index" || skippedSlugPrefixes.some((prefix) => slug2.startsWith(prefix))) {
+          const label = typeof frontmatter.dateLabel === "string" ? frontmatter.dateLabel.trim() : "";
+          if (!hasAuthorDate(frontmatter) || slug2 === "index" || !label && skippedSlugPrefixes.some((prefix) => slug2.startsWith(prefix))) {
             return;
           }
           let date;
@@ -2381,11 +2381,11 @@ var PublicationDate = () => {
           let inserted = false;
           visit(tree, "element", (node, index, parent) => {
             if (inserted || node.tagName !== "h1" || index === void 0 || !parent) return;
-            parent.children.splice(index + 1, 0, dateParagraph(date));
+            parent.children.splice(index + 1, 0, dateParagraph(date, label));
             inserted = true;
           });
           if (!inserted) {
-            tree.children.unshift(dateParagraph(date));
+            tree.children.unshift(dateParagraph(date, label));
           }
         }
       ];

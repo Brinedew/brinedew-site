@@ -14,19 +14,18 @@ function hasAuthorDate(frontmatter: Record<string, unknown>): boolean {
   )
 }
 
-function dateParagraph(date: Date): Element {
+function dateParagraph(date: Date, label: string): Element {
+  const time: Element = {
+    type: "element",
+    tagName: "time",
+    properties: { datetime: date.toISOString() },
+    children: [{ type: "text", value: formatDate(date, "en-US") }],
+  }
   return {
     type: "element",
     tagName: "p",
     properties: { className: ["content-meta"] },
-    children: [
-      {
-        type: "element",
-        tagName: "time",
-        properties: { datetime: date.toISOString() },
-        children: [{ type: "text", value: formatDate(date, "en-US") }],
-      },
-    ],
+    children: label ? [{ type: "text", value: `${label}: ` }, time] : [time],
   }
 }
 
@@ -34,6 +33,11 @@ function dateParagraph(date: Date): Element {
  * The article title is markdown (the first h1), so the publication date is
  * placed in the tree directly below that heading instead of the frame's page
  * header. Pages without a heading keep the previous top-of-article placement.
+ *
+ * B-818: a page that names its date with frontmatter `dateLabel` (the Iconoplasm
+ * legal pages: "Last updated", "Effective") is dated here even under apps/, so
+ * the date a reader sees is the same `date` field the folder listing and the
+ * JSON-LD read. Such a page never hand-types its own date line.
  */
 export const PublicationDate: QuartzTransformerPlugin = () => {
   return {
@@ -44,10 +48,12 @@ export const PublicationDate: QuartzTransformerPlugin = () => {
           const data = file.data as QuartzPluginData
           const slug = String(data.slug ?? "")
           const frontmatter = (data.frontmatter ?? {}) as Record<string, unknown>
+          const label =
+            typeof frontmatter.dateLabel === "string" ? frontmatter.dateLabel.trim() : ""
           if (
             !hasAuthorDate(frontmatter) ||
             slug === "index" ||
-            skippedSlugPrefixes.some((prefix) => slug.startsWith(prefix))
+            (!label && skippedSlugPrefixes.some((prefix) => slug.startsWith(prefix)))
           ) {
             return
           }
@@ -63,11 +69,11 @@ export const PublicationDate: QuartzTransformerPlugin = () => {
           let inserted = false
           visit(tree, "element", (node: Element, index, parent) => {
             if (inserted || node.tagName !== "h1" || index === undefined || !parent) return
-            parent.children.splice(index + 1, 0, dateParagraph(date))
+            parent.children.splice(index + 1, 0, dateParagraph(date, label))
             inserted = true
           })
           if (!inserted) {
-            tree.children.unshift(dateParagraph(date))
+            tree.children.unshift(dateParagraph(date, label))
           }
         },
       ]

@@ -11,6 +11,7 @@ import {
   iconoplasmGeneNotFoundResponse,
 } from "./iconoplasm-gene-discovery-worker.js"
 import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
+import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 import {
   enforceIconoplasmRateLimit,
@@ -1189,9 +1190,7 @@ export function rewriteIconoplasmGeneDiscoveryMetadata(
   if (!symbol) return html
   const gene = normalizeIconoplasmPublishedGeneRecord(record)
   const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(symbol)}`
-  const title = gene.fullName
-    ? `${symbol} — ${gene.fullName} | Iconoplasm character profile`
-    : `${symbol} | Iconoplasm character profile`
+  const title = iconoplasmGenePageTitle(symbol, gene.fullName)
   const safeTitle = escapeIconoplasmStaticShellText(title)
   const description = iconoplasmGeneMetaDescription(record, cardPayload)
   const safeDescription = escapeIconoplasmHtmlAttribute(description)
@@ -2263,12 +2262,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       // CWS requires a privacy policy URL; this serves content/apps/iconoplasm/privacy.md.
       if (request.method === "GET" || request.method === "HEAD") {
         if (url.pathname === "/privacy/") {
-          return Response.redirect(`https://${ICONOPLASM_HOST}/privacy`, 301)
-        }
-        if (
-          url.pathname === "/apps/iconoplasm/privacy" ||
-          url.pathname === "/apps/iconoplasm/privacy/"
-        ) {
           return Response.redirect(`https://${ICONOPLASM_HOST}/privacy`, 301)
         }
         if (url.pathname === "/privacy") {

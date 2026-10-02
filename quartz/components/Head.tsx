@@ -12,6 +12,7 @@ import { unescapeHTML } from "../util/escape"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
+import { ICONOPLASM_HOME_TITLE, iconoplasmPageTitle } from "../static/iconoplasm/page-title.js"
 
 // Build-time cache buster - always include a fresh timestamp so production HTML
 // points at the latest static assets even when environment-level cache vars linger.
@@ -124,17 +125,24 @@ export default (() => {
     externalResources,
     ctx,
   }: QuartzComponentProps) => {
-    const titleSuffix = cfg.pageTitleSuffix ?? ""
-    const title =
-      (fileData.frontmatter?.title ?? i18n(cfg.locale).propertyDefaults.title) + titleSuffix
+    const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined
+    const normalizedSlug = slugValue?.replace(/\/index(?:\.html)?$/, "")
+    // B-816: every Iconoplasm page (app and legal pages) unfurls as Iconoplasm.
+    const isIconoplasmSite = normalizedSlug?.startsWith("apps/iconoplasm") === true
+    const pageTitle = fileData.frontmatter?.title ?? i18n(cfg.locale).propertyDefaults.title
+    // B-818: Iconoplasm pages take the one Iconoplasm title template; their
+    // frontmatter names the page only.
+    const title = isIconoplasmSite
+      ? normalizedSlug === "apps/iconoplasm"
+        ? ICONOPLASM_HOME_TITLE
+        : iconoplasmPageTitle(pageTitle)
+      : pageTitle + (cfg.pageTitleSuffix ?? "")
     const description =
       fileData.frontmatter?.socialDescription ??
       fileData.frontmatter?.description ??
       unescapeHTML(fileData.description?.trim() ?? i18n(cfg.locale).propertyDefaults.description)
 
     const { css, js, additionalHead } = externalResources
-    const slugValue = typeof fileData.slug === "string" ? fileData.slug : undefined
-    const normalizedSlug = slugValue?.replace(/\/index(?:\.html)?$/, "")
     const isIconoplasm =
       normalizedSlug === "apps/iconoplasm" ||
       fileData.frontmatter?.title === "Iconoplasm - Visual Mnemonics for Molecular Cell Biology"
@@ -342,9 +350,8 @@ export default (() => {
       : null
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some((e) => e.name === "CustomOgImages")
-    // B-816: every Iconoplasm page (app and legal pages) unfurls as Iconoplasm,
-    // with a real character card instead of the blog's generic image.
-    const isIconoplasmSite = normalizedSlug?.startsWith("apps/iconoplasm") === true
+    // B-816: Iconoplasm pages unfurl with a real character card instead of the
+    // blog's generic image.
     const siteName = isIconoplasmSite ? "Iconoplasm" : cfg.pageTitle
     const ogImageDefaultPath = isIconoplasmSite
       ? "https://iconoplasm.brinedew.bio/blot/TP53.webp"
@@ -769,8 +776,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
           )
         })()}
 
-        {/* Performance optimizations */}
-        <link rel="prefetch" href="/posts" as="document" />
+        {/* Performance optimizations. Iconoplasm pages live on their own host,
+            where the blog index is another site. */}
+        {!isIconoplasmSite && <link rel="prefetch" href="/posts" as="document" />}
         {pageJs
           .filter((resource) => resource.loadTime === "beforeDOMReady")
           .map((res) => JSResourceToScriptElement(res, true))}

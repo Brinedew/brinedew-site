@@ -1,13 +1,13 @@
 ---
-title: "Privacy Policy — Iconoplasm"
+title: "Privacy Policy"
 description: "How Iconoplasm handles your data"
-date: 2026-05-22
+date: 2026-09-25
+dateLabel: "Last updated"
 draft: false
+schemaType: WebPage
 ---
 
-# Privacy Policy — Iconoplasm
-
-**Last updated:** September 25, 2026
+# Privacy Policy
 
 This policy describes what data Iconoplasm collects and how it's handled.
 

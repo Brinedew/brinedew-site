@@ -3,6 +3,7 @@ import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "nod
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
+import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -147,11 +148,40 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 - [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
 `
 
-// Keep /portraits/* out of Static Assets redirects: those canonical URLs must
-// reach the existing Bunny-backed Worker when a browser cannot reach the CDN.
-const redirectsFile = `/genes / 301
-/genes/* / 301
-`
+// B-818: this host has one URL convention, clean lowercase paths (a gene page
+// keeps its HGNC symbol's case). Each older shape that something once linked
+// (a store listing, the Quartz nav, a page built for the main site) answers a
+// 301 to where it lives now. The static asset layer answers these before the
+// SPA fallback, so they cost no Worker request; matching is case-sensitive and
+// keeps the query string (measured in workerd). The same table rewrites those
+// links inside the Quartz pages below, so a page never links through a redirect.
+const MAIN_SITE_ORIGIN = "https://brinedew.bio"
+export const ICONOPLASM_MOVED_PATHS = Object.freeze([
+  ["/About.html", `${MAIN_SITE_ORIGIN}/about`],
+  ["/Iconoplasm", "/"],
+  ["/Iconoplasm.html", "/"],
+  ["/apps/iconoplasm", "/"],
+  ["/posts", `${MAIN_SITE_ORIGIN}/posts`],
+  [
+    "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
+    `${MAIN_SITE_ORIGIN}/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm`,
+  ],
+])
+export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
+  ["/apps/iconoplasm/", "/"],
+  ["/posts/", `${MAIN_SITE_ORIGIN}/posts/`],
+  ["/wiki/", `${MAIN_SITE_ORIGIN}/wiki/`],
+])
+
+// Static rules come before splats; the first matching line wins. Keep
+// /portraits/* out of Static Assets redirects: those canonical URLs must reach
+// the existing Bunny-backed Worker when a browser cannot reach the CDN.
+export const ICONOPLASM_REDIRECTS = `${[
+  "/genes / 301",
+  ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => `${from} ${to} 301`),
+  "/genes/* / 301",
+  ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => `${from}* ${to}:splat 301`),
+].join("\n")}\n`
 
 // B-809: one small static document per published gene, so search engines,
 // link unfurlers and scripts see that gene's own title, description,
@@ -180,9 +210,7 @@ const GENE_PAGE_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-the
 
 export function iconoplasmGenePageHtml({ symbol, fullName }) {
   const name = String(fullName || "").trim()
-  const title = name
-    ? `${symbol} — ${name} | Iconoplasm character profile`
-    : `${symbol} | Iconoplasm character profile`
+  const title = iconoplasmGenePageTitle(symbol, name)
   const description = `${symbol}${name ? ` (${name})` : ""} drawn as an Iconoplasm gene character card: a memorable labelled portrait for the human gene, free to reuse under CC0.`
   const url = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(symbol)}`
   const image = `${ICONOPLASM_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`
@@ -310,7 +338,7 @@ export async function writeIconoplasmCompatibilityArtifacts({
     iconoplasmSitemap(publishedSymbols),
     "utf8",
   )
-  await writeFile(path.join(resolvedOutput, "_redirects"), redirectsFile, "utf8")
+  await writeFile(path.join(resolvedOutput, "_redirects"), ICONOPLASM_REDIRECTS, "utf8")
   return { geneCount: publishedSymbols.length }
 }
 
@@ -350,23 +378,18 @@ async function inspectTree(directory, bundleRoot) {
 }
 
 // B-812: the Iconoplasm documents are Quartz pages emitted for the main site.
-// On iconoplasm.brinedew.bio their main-site links (About, posts, tutorial) and
+// On iconoplasm.brinedew.bio their main-site links (About, posts) and
 // app-relative legal links resolved to paths this host does not serve, so the
 // SPA fallback answered with the Iconoplasm homepage. Point each at its real
-// owner, then refuse a build that still links to a local path nobody serves.
-const MAIN_SITE_ORIGIN = "https://brinedew.bio"
+// owner (the moved-path table above, exact paths before prefixes), then refuse
+// a build that still links to a local path nobody serves.
 const ICONOPLASM_LINK_REWRITES = Object.freeze([
   ["../../apps/iconoplasm/privacy", "/privacy"],
   ["../../apps/iconoplasm/license", "/license"],
   ["../../apps/iconoplasm/developers", "/developers"],
   ["../../apps/iconoplasm/caretaker-terms", "/caretaker-terms"],
-  ['href="/About.html"', `href="${MAIN_SITE_ORIGIN}/about"`],
-  ['href="/posts/support-me"', `href="${MAIN_SITE_ORIGIN}/posts/support-me"`],
-  ['href="/posts"', `href="${MAIN_SITE_ORIGIN}/posts"`],
-  [
-    'href="/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm"',
-    `href="${MAIN_SITE_ORIGIN}/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm"`,
-  ],
+  ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => [`href="${from}"`, `href="${to}"`]),
+  ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => [`href="${from}`, `href="${to}`]),
 ])
 
 // Paths this host serves without a bundle file: SPA routes and Worker routes.

@@ -1,5 +1,5 @@
 ---
-title: "Iconoplasm - Gene character cards"
+title: "Iconoplasm"
 description: "Every human gene drawn as a character you can remember: 19,023 labelled cards, free to reuse under CC0, plus a browser extension that shows them while you read papers."
 canonicalUrl: "https://iconoplasm.brinedew.bio/"
 date: 2025-12-01

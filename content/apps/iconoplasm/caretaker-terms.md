@@ -1,16 +1,15 @@
 ---
-title: "Caretaker Terms - Iconoplasm"
+title: "Caretaker Terms"
 description: "The terms for writing and editing Iconoplasm gene manifestations"
 date: 2026-09-25
+dateLabel: "Effective"
 draft: false
 schemaType: WebPage
 ---
 
-# Caretaker Terms - Iconoplasm
+# Caretaker Terms
 
 **Version:** `terms_2026_09_25_v4`
-
-**Effective:** September 25, 2026
 
 These terms govern your participation as a caretaker on Iconoplasm.
 
