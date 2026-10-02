@@ -9174,7 +9174,7 @@
         )
       }
       var results = await Promise.all([
-        apiJson("/votes/vision-stats", { method: "GET" }),
+        apiJson("/votes/vision-stats?scope=all", { method: "GET" }),
         apiJson("/artist-blacklist-submissions/pending?limit=100", { method: "GET" }),
       ])
       var data = results[0] || {}
