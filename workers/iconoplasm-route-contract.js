@@ -939,15 +939,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_votes",
   }),
   iconoplasmApiContract({
-    // B-898 Stage 2: compare each vote coordinator (by Durable Object id) with
-    // D1; reads only.
-    id: "admin_votes_compare_coordinators",
-    match: exact("/api/iconoplasm/admin/votes/compare-coordinators"),
-    methods: POST,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
     id: "admin_votes_snapshot",
     match: exact("/api/iconoplasm/admin/votes/snapshot"),
     methods: POST,
