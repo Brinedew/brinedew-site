@@ -1,5 +1,5 @@
 // B-898 Stage 2: D1 is the only store for votes. These tests run the vote,
-// supervote, snapshot, upload and compare paths against a real SQLite database
+// supervote, snapshot and upload paths against a real SQLite database
 // built from every checked-in Iconoplasm migration (all tables, indexes and
 // triggers), behind the D1 prepare/bind/first/all/run/batch surface.
 //
@@ -18,13 +18,8 @@
 //     publication-affecting event, so the new candidate never reaches readers;
 //     a direct one-gene upload is not republished in process; or a sync batch
 //     (ingest with defer_read_models, then reconcile) republishes a gene twice.
-//  8. The coordinator compare route writes to D1, or hides a difference that
-//     matters for a rollback: a published winner, a caretaker assignment, or
-//     the vision_id and updated_at a replay needs; or caps samples when asked
-//     for all of them.
 //  9. A vote summary drifts from the vote rows (identical retries, flips,
 //     clears, bulk imports).
-// 10. A coordinator alarm scheduled before the cutover publishes a stale winner.
 // 11. A vote commits while its gene's stable object is being written, its own
 //     republish lands first, and the older object overwrites it for good.
 // 12. A vote, supervote or reader import past the daily vote budget writes
@@ -39,8 +34,6 @@
 //     an import cannot repair a gene whose election failed the first time.
 // 16. Restarting the admin read-model bootstrap empties the vote summaries the
 //     election reads, so every gene not yet rebuilt elects from zero votes.
-// 17. A leftover vote-projection Queue message throws, retries, reaches the
-//     dead-letter queue or reports a failure to the sync governor.
 // 18. A vote import names more genes, or carries more votes, than one Worker
 //     invocation can handle on the free plan's 50 D1 queries: it is accepted,
 //     writes some votes and dies before electing every gene, instead of being
@@ -61,8 +54,6 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
-  IconoplasmVoteCoordinator,
-  compareIconoplasmVoteCoordinatorWithD1,
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
   handleIconoplasmQueue,
   publishIconoplasmGeneStableObject,
@@ -490,7 +481,7 @@ async function supervote(db, symbol, fields) {
   })
 }
 
-test("4: a caretaker supervote weighs exactly 10 and obeys every coordinator rule", async () => {
+test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule", async () => {
   const db = new SqliteD1()
   seedAsset(db, "EGFR", sha("a"), { createdAt: "2026-01-02 00:00:00" })
   seedAsset(db, "EGFR", sha("b"), { createdAt: "2026-01-01 00:00:00" })
@@ -639,7 +630,7 @@ test("4: a caretaker supervote weighs exactly 10 and obeys every coordinator rul
   )
 })
 
-test("4: the supervote route answers in the coordinator's shape and re-elects the gene", async () => {
+test("4: the supervote route answers with the supervote and re-elects the gene", async () => {
   const db = new SqliteD1()
   seedAsset(db, "BRCA1", sha("a"), { createdAt: "2026-01-02 00:00:00" })
   seedAsset(db, "BRCA1", sha("b"), { createdAt: "2026-01-01 00:00:00" })
@@ -895,165 +886,6 @@ test("7: an upload that keeps the winner leaves a publication-affecting event, a
   assert.match(publisher, /WHERE id > \? AND action IN \(\$\{PUBLICATION_AFFECTING_ACTIONS/)
 })
 
-// --- 8 ------------------------------------------------------------------
-
-function coordinatorBinding(exported) {
-  return {
-    idFromString: (id) => id,
-    get: () => ({ fetch: async () => Response.json(exported) }),
-  }
-}
-
-test("8: the coordinator compare route reports every difference a replay needs and never writes", async () => {
-  const db = new SqliteD1()
-  seedAsset(db, "PDX1", sha("a"))
-  seedAsset(db, "PDX1", sha("b"))
-  seedPublished(db, "PDX1", sha("a"))
-  await vote(db, "PDX1", sha("a"), "both", 1)
-  await vote(db, "PDX1", sha("a"), "only-d1", 1)
-  await vote(db, "PDX1", sha("a"), "differs", 1)
-  // Voted and then cleared in D1: the row is gone, its events remain.
-  await vote(db, "PDX1", sha("a"), "cleared-in-d1", 1)
-  await vote(db, "PDX1", sha("a"), "cleared-in-d1", 0)
-  await seedCaretaker(db, "PDX1", "acct_d1")
-  const exported = {
-    ok: true,
-    bootstrapped: true,
-    symbol: "PDX1",
-    authority_epoch: "v2",
-    published_asset_sha256: sha("b"),
-    votes: [
-      { user_id: "both", asset_sha256: sha("a"), vote_value: 1 },
-      {
-        user_id: "differs",
-        asset_sha256: sha("a"),
-        vote_value: -1,
-        vision_id: "anima-v1-9",
-        updated_at: "2026-10-03 21:00:00",
-      },
-      {
-        user_id: "only-coordinator",
-        asset_sha256: sha("a"),
-        vote_value: 1,
-        vision_id: "anima-v1-7",
-        updated_at: "2026-10-03T21:05:00.000Z",
-      },
-      { user_id: "cleared-in-d1", asset_sha256: sha("a"), vote_value: 1 },
-      ...Array.from({ length: 24 }, (_, index) => ({
-        user_id: `bulk-${index}`,
-        asset_sha256: sha("b"),
-        vote_value: 1,
-      })),
-    ],
-    asset_summaries: [
-      { asset_sha256: sha("a"), upvotes: 2, downvotes: 1, score: 1, vote_count: 3 },
-    ],
-    caretaker_supervote: {
-      active: false,
-      assignment: {
-        caretaker_assignment_id: "assign-PDX1",
-        caretaker_account_id: "acct_coordinator",
-        status: "active",
-        assignment_version: 1,
-      },
-    },
-  }
-  const env = { ICONOPLASM_DB: db, ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(exported) }
-  const mark = db.mark()
-  const result = await compareIconoplasmVoteCoordinatorWithD1(env, "1".repeat(64))
-  assert.equal(result.compared, true)
-  assert.equal(result.differs, true)
-  assert.equal(result.votes_missing_in_d1, 26)
-  assert.equal(result.votes_only_in_d1, 1)
-  assert.equal(result.votes_value_differs, 1)
-  assert.equal(result.summaries_differ, 1)
-  assert.equal(result.published_asset_differs, true)
-  assert.equal(result.coordinator_published_asset_sha256, sha("b"))
-  assert.equal(result.d1_published_asset_sha256, sha("a"))
-  assert.equal(result.assignment_differs, true)
-  assert.equal(result.samples.assignment.d1.caretaker_account_id, "acct_d1")
-  assert.equal(result.samples.missing_in_d1.length, 20, "20 samples per category by default")
-  const differs = result.samples.value_differs[0]
-  assert.deepEqual(differs.coordinator, {
-    value: -1,
-    vision_id: "anima-v1-9",
-    updated_at: "2026-10-03 21:00:00",
-  })
-  assert.equal(differs.d1.value, 1)
-  assert.match(differs.d1.updated_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
-  assert.equal(differs.d1.vision_id, "anima-v1-1")
-  assert.equal(result.samples.only_in_d1[0].user_id, "only-d1")
-  assert.ok(result.samples.only_in_d1[0].d1.updated_at)
-
-  const all = await compareIconoplasmVoteCoordinatorWithD1(env, "1".repeat(64), { sampleLimit: 0 })
-  assert.equal(all.samples.missing_in_d1.length, 26, "sampleLimit 0 lifts the cap")
-  const onlyCoordinator = all.samples.missing_in_d1.find(
-    (row) => row.user_id === "only-coordinator",
-  )
-  assert.deepEqual(onlyCoordinator.coordinator, {
-    value: 1,
-    vision_id: "anima-v1-7",
-    updated_at: "2026-10-03T21:05:00.000Z",
-  })
-  assert.equal(onlyCoordinator.d1_last_event_at, null)
-  const cleared = all.samples.missing_in_d1.find((row) => row.user_id === "cleared-in-d1")
-  assert.ok(cleared.d1_last_event_at, "a vote cleared in D1 shows its last D1 event")
-  const writes = db.since(mark).filter(({ sql }) => /\b(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql))
-  assert.deepEqual(writes, [])
-
-  // The route passes all_samples through.
-  const route = await callApi(
-    db,
-    "/api/iconoplasm/admin/votes/compare-coordinators",
-    { object_ids: ["1".repeat(64)], all_samples: true },
-    {
-      env: {
-        admin: true,
-        bindings: { ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(exported) },
-      },
-    },
-  )
-  assert.equal(route.status, 200, JSON.stringify(route.payload))
-  assert.equal(route.payload.results[0].samples.missing_in_d1.length, 26)
-})
-
-// --- 9 ------------------------------------------------------------------
-
-test("8b: a bootstrapped coordinator from any authority epoch is compared; only an unbootstrapped one is skipped", async () => {
-  // Failure mode: a coordinator bootstrapped before the v2 epoch still holds
-  // votes, and a compare that skips it hides any vote D1 never received.
-  const db = new SqliteD1()
-  seedAsset(db, "EYS", sha("a"))
-  seedPublished(db, "EYS", sha("a"))
-  await vote(db, "EYS", sha("a"), "delivered", 1)
-  const legacy = {
-    ok: true,
-    bootstrapped: true,
-    symbol: "EYS",
-    authority_epoch: "",
-    published_asset_sha256: sha("a"),
-    votes: [
-      { user_id: "delivered", asset_sha256: sha("a"), vote_value: 1 },
-      { user_id: "undelivered", asset_sha256: sha("a"), vote_value: 1 },
-    ],
-    asset_summaries: [
-      { asset_sha256: sha("a"), upvotes: 2, downvotes: 0, score: 2, vote_count: 2 },
-    ],
-  }
-  const env = { ICONOPLASM_DB: db, ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(legacy) }
-  const result = await compareIconoplasmVoteCoordinatorWithD1(env, "2".repeat(64))
-  assert.equal(result.compared, true)
-  assert.equal(result.authority_epoch, "")
-  assert.equal(result.votes_missing_in_d1, 1)
-  assert.equal(result.samples.missing_in_d1[0].user_id, "undelivered")
-
-  const cold = { ok: true, bootstrapped: false, symbol: "", votes: [], asset_summaries: [] }
-  const coldEnv = { ICONOPLASM_DB: db, ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(cold) }
-  const skipped = await compareIconoplasmVoteCoordinatorWithD1(coldEnv, "3".repeat(64))
-  assert.equal(skipped.compared, false)
-  assert.equal(skipped.reason, "not_bootstrapped")
-})
-
 test("9: summaries move by the exact delta through retries, flips, clears and imports", async () => {
   const db = new SqliteD1()
   seedAsset(db, "KRAS", sha("a"))
@@ -1084,41 +916,6 @@ test("9: summaries move by the exact delta through retries, flips, clears and im
     -1,
     "a later item for the same user and asset wins",
   )
-})
-
-// --- 10 -----------------------------------------------------------------
-
-test("10: the retired vote coordinator only exports; its alarm is inert", async () => {
-  const sqlite = new DatabaseSync(":memory:")
-  sqlite.exec(`
-    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    CREATE TABLE vote_by_user_asset (user_id TEXT, asset_sha256 TEXT, vision_id TEXT, candidate_image_id INTEGER, vote_value INTEGER, created_at TEXT, updated_at TEXT);
-    CREATE TABLE asset_summary (asset_sha256 TEXT PRIMARY KEY, vision_id TEXT, candidate_image_id INTEGER, upvotes INTEGER, downvotes INTEGER, score INTEGER, vote_count INTEGER);
-    INSERT INTO meta VALUES ('symbol', 'TP53'), ('bootstrapped', '1'), ('authority_epoch', 'v2');
-  `)
-  sqlite
-    .prepare("INSERT INTO vote_by_user_asset VALUES ('u1', ?, '', NULL, 1, '', '')")
-    .run(sha("a"))
-  const state = {
-    storage: {
-      sql: {
-        exec(query, ...bindings) {
-          const rows = sqlite.prepare(query).all(...bindings)
-          return { toArray: () => rows }
-        },
-      },
-    },
-  }
-  const coordinator = new IconoplasmVoteCoordinator(state, {})
-  assert.deepEqual(await coordinator.alarm(), { ok: true, inert: true })
-  const refused = await coordinator.fetch(
-    new Request("https://c/vote/set", { method: "POST", body: "{}" }),
-  )
-  assert.equal(refused.status, 404)
-  const exported = await (await coordinator.fetch(new Request("https://c/vote/export"))).json()
-  assert.equal(exported.symbol, "TP53")
-  assert.equal(exported.votes.length, 1)
-  assert.equal(exported.caretaker_supervote.active, false)
 })
 
 // --- 11 -----------------------------------------------------------------
@@ -1512,29 +1309,6 @@ test("16: restarting the read-model bootstrap keeps the vote summaries elections
     assert.deepEqual(summary(db, symbol, sha("a")), recount(db, symbol, sha("a")), symbol)
 })
 
-// --- 17 -----------------------------------------------------------------
-
-test("17: leftover vote-projection Queue messages are acknowledged and dropped", async () => {
-  const acked = []
-  const retried = []
-  const messages = ["TP53", "KRAS"].map((symbol) => ({
-    body: { kind: "process_vote_projection_refresh", symbol },
-    ack: () => acked.push(symbol),
-    retry: () => retried.push(symbol),
-  }))
-  // No bindings at all: the drop must not reach the sync governor, D1 or
-  // the finalization consumer.
-  const result = await handleIconoplasmQueue(
-    { queue: "iconoplasm-vote-projection", messages },
-    {},
-    { waitUntil() {} },
-  )
-  assert.deepEqual(acked, ["TP53", "KRAS"])
-  assert.deepEqual(retried, [])
-  assert.equal(result.ok, true)
-  assert.equal(result.dropped, 2)
-})
-
 // --- 18 -----------------------------------------------------------------
 
 function seedPromotableGene(db, symbol) {
@@ -1855,4 +1629,49 @@ test("21: the publisher fingerprints what the print-copy queue consumer reads ba
   assert.equal(after.state, "ready")
   assert.equal(after.desired_card_fingerprint, queued.desired_card_fingerprint)
   assert.equal(after.wakeup_generation, ready.wakeup_generation)
+})
+
+// 22. Something still addresses the deleted vote coordinator, so the first
+//     vote-adjacent request after the migration throws on a missing binding; or
+//     a script, route or doc keeps describing a compare, an export or a queue
+//     message kind that no longer exists. Migration history (v2 created the
+//     class, v9 deleted it) is the only place the class may be named.
+test("22: nothing addresses the deleted vote coordinator, its compare route, its export or its queue messages", () => {
+  const root = new URL("../", import.meta.url)
+  const stale =
+    /IconoplasmVoteCoordinator|ICONOPLASM_VOTE_COORDINATORS|compare-coordinators|export-to-d1|export-iconoplasm-votes|process_vote_projection_refresh|iconoplasm-vote-projection/
+  const files = []
+  for (const [directory, extension] of [
+    ["workers", /\.js$/],
+    ["scripts", /\.(?:m?js|ps1)$/],
+    [".github/workflows", /\.ya?ml$/],
+    ["docs", /\.md$/],
+  ]) {
+    for (const name of readdirSync(new URL(`${directory}/`, root), { recursive: true }).map(
+      String,
+    )) {
+      const relative = `${directory}/${name.replaceAll("\\", "/")}`
+      if (
+        !extension.test(name) ||
+        /\.test\.js$/.test(name) ||
+        relative.startsWith("docs/superpowers/")
+      )
+        continue
+      files.push(relative)
+    }
+  }
+  const offenders = files.filter((relative) =>
+    stale.test(readFileSync(new URL(relative, root), "utf8")),
+  )
+  assert.deepEqual(offenders, [])
+  const toml = readFileSync(
+    new URL("wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml", root),
+    "utf8",
+  )
+  for (const line of toml.split(/\r?\n/).filter((item) => stale.test(item)))
+    assert.match(
+      line,
+      /^(?:new_sqlite_classes|deleted_classes) = /,
+      `the toml names the class outside a migration: ${line}`,
+    )
 })

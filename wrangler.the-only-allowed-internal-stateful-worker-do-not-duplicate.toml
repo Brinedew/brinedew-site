@@ -130,10 +130,6 @@ class_name = "GameSession"
 script_name = "geneguessr-api"
 
 [[durable_objects.bindings]]
-name = "ICONOPLASM_VOTE_COORDINATORS"
-class_name = "IconoplasmVoteCoordinator"
-
-[[durable_objects.bindings]]
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 
@@ -206,6 +202,14 @@ deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
 tag = "v8"
 deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 
+# v9 removes the vote coordinator class. A migration that deletes a class is
+# applied by the normal release through wrangler deploy
+# (scripts/stateful-worker-do-migration.mjs detects the pending tag), which also
+# installs this file's cron triggers.
+[[migrations]]
+tag = "v9"
+deleted_classes = ["IconoplasmVoteCoordinator"]
+
 # Cloudflare Email Service send binding.
 # Used by the site-wide /api/contact endpoint to deliver contact-form submissions
 # from no-reply@brinedew.bio -> contact@brinedew.bio (which Email Routing forwards
@@ -270,15 +274,14 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
 [triggers]
 # One Iconoplasm job per invocation; workers/iconoplasm-background-schedule.js
-# owns the minute map and its test checks this expression. Five jobs retain
-# quarter-hour recovery; account and manifestation recovery run every 12 minutes,
-# as does supervote delivery with five 16-message batches/hour. Minutes 4, 13,
-# 24, 34, 45 and 52 are idle (ICONOPLASM_IDLE_MINUTES): a normal push never
-# changes the installed trigger, so this line stays what is installed; only a
-# release that runs `wrangler deploy` may trim it, together with that list.
-# Nightly archive, canon repair and gallery run at 23:56/58/59
-# in separate invocations. GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,6,7,8,10,11,13,14,15,16,17,18,19,20,23,24,26,27,28,29,30,31,32,33,34,35,38,39,41,42,43,44,45,46,47,48,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
+# owns the minute map, and its test checks that this expression lists exactly
+# the job minutes, each once. Five jobs retain quarter-hour recovery; account
+# and manifestation recovery run every 12 minutes, as does supervote delivery
+# with five 16-message batches/hour. A normal push never changes the installed
+# trigger; only a release that runs `wrangler deploy` does. Nightly archive,
+# canon repair and gallery run at 23:56/58/59 in separate invocations.
+# GeneGuessr's three triggers stay independent.
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,5,6,7,8,10,11,14,15,16,17,18,19,20,23,26,27,28,29,30,31,32,33,35,38,39,41,42,43,44,46,47,48,50,51,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
@@ -352,10 +355,6 @@ class_name = "GameSession"
 script_name = "geneguessr-api"
 
 [[env.staging.durable_objects.bindings]]
-name = "ICONOPLASM_VOTE_COORDINATORS"
-class_name = "IconoplasmVoteCoordinator"
-
-[[env.staging.durable_objects.bindings]]
 name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
 class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 
@@ -420,6 +419,10 @@ deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
 [[env.staging.migrations]]
 tag = "v8"
 deleted_classes = ["IconoplasmCardPublicationCoordinator"]
+
+[[env.staging.migrations]]
+tag = "v9"
+deleted_classes = ["IconoplasmVoteCoordinator"]
 
 # Same email sending binding on staging so the form works end-to-end on
 # staging.brinedew.bio before any production deploy.

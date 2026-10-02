@@ -785,4 +785,4 @@ export async function invalidateCaretakerSupervoteInD1(db, { symbol, assetSha256
   }
 }
 
-export { normalizeAssignmentEvent, supervoteSnapshot }
+export { normalizeAssignmentEvent }

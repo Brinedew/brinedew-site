@@ -241,16 +241,6 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     "public edge worker should stay free of direct state bindings in runtime code",
   )
   assert.match(
-    internalRuntime,
-    /export \{ IconoplasmVoteCoordinator \}/,
-    "internal stateful worker runtime should explicitly export the Iconoplasm vote coordinator durable object class",
-  )
-  assert.match(
-    internalWrangler,
-    /name = "ICONOPLASM_VOTE_COORDINATORS"[\s\S]*class_name = "IconoplasmVoteCoordinator"/,
-    "internal stateful worker binds the vote coordinators the compare route reads",
-  )
-  assert.match(
     internalWrangler,
     /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"[\s\S]*class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
     "internal stateful worker should bind the hard daily budget durable object because alerts are not a kill switch",
