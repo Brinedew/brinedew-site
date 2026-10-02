@@ -1036,6 +1036,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_votes",
   }),
   iconoplasmApiContract({
+    // B-898 Stage 2: copy vote coordinators (by Durable Object id) into D1.
+    id: "admin_votes_export_to_d1",
+    match: exact("/api/iconoplasm/admin/votes/export-to-d1"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_votes",
+  }),
+  iconoplasmApiContract({
     id: "admin_votes_snapshot",
     match: exact("/api/iconoplasm/admin/votes/snapshot"),
     methods: POST,
