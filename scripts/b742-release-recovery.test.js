@@ -34,10 +34,6 @@ test("schema staging preserves every production binding", () => {
     "/artist-styles*",
     "/health",
     "/gene/*",
-    "/genes*",
-    "/sitemap*",
-    "/robots.txt",
-    "/llms.txt",
   ])
   assert.throws(() => prepareSchemaTransitionConfig(""), /exactly one/)
   assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)

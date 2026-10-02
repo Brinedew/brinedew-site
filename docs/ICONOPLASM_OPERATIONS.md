@@ -185,8 +185,8 @@ The authority relationship is:
   Read it from Bunny. It is rewritten in place; its `published_at` is the
   version that public responses report.
 - `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
-  metadata, public media, signed-in and anonymous galleries, archive ranges,
-  image sitemaps, extension cards, and print-copy inputs must all project that
+  metadata, public media, signed-in and anonymous galleries,
+  extension cards, and print-copy inputs must all project that
   object's portrait.
 - The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 

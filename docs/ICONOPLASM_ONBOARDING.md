@@ -290,7 +290,7 @@ changes only when that object is rewritten.
 
 During that window every public projection stays on the gene's current stable
 object: signed-in and anonymous galleries, site-gene detail, gene-page lead
-and metadata, public media, extension cards, archive ranges, image sitemaps, and
+and metadata, public media, extension cards, and
 print-copy inputs. Site-gene detail may combine fresh D1 traits, candidates, and
 votes with that object, but its portrait and candidate `is_current` state are
 overridden by the stable object's SHA.
@@ -332,7 +332,7 @@ Non-negotiable rules:
 5. **Regression tests are mandatory.**
    - the worker exports `resetIconoplasmRuntimeCachesForTest()` specifically so tests can simulate a fresh isolate
    - if you touch the portrait barrier, prove a D1-only SHA change cannot move
-     public media, gene HTML, archive ranges, or sitemaps, and prove a rewrite of
+     public media or gene HTML, and prove a rewrite of
      the gene's stable object moves them together
 
 ### do not delete the alarms
