@@ -114,8 +114,8 @@ test("F1: the first caller pays one scan, then every cold isolate reads a consta
     builder.totalRead() >= FULL_SCAN_READS && builder.totalRead() <= FULL_SCAN_READS + 20,
     `the build reads one scan, got ${builder.totalRead()}`,
   )
-  // Seven rows, once: four schema rows (table and three triggers), the pool row,
-  // and the stored pool.
+  // Seven rows written, once: the schema entries for the table and its three
+  // triggers, the pool row, and the stored pool.
   assert.ok(
     builder.totalWritten() <= 8,
     `the build writes a few rows, got ${builder.totalWritten()}`,
