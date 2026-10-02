@@ -19530,6 +19530,43 @@ export class IconoplasmVoteCoordinator {
       return Response.json({ ok: true, snapshots: out })
     }
 
+    // B-898 Stage 2, step 1: export everything this coordinator holds so D1
+    // becomes the one copy of the votes before the coordinator is deleted.
+    // Never bootstraps: a cold coordinator says so and reads nothing.
+    if (path === "/vote/export" && request.method === "GET") {
+      const bootstrapped = this.getMeta("bootstrapped") === "1"
+      const symbol = normalizeSymbol(this.getMeta("symbol") || "")
+      return Response.json({
+        ok: true,
+        bootstrapped,
+        symbol,
+        authority_epoch: String(this.getMeta("authority_epoch") || ""),
+        published_asset_sha256:
+          normalizeSha256(this.getMeta("published_asset_sha256") || "") || null,
+        admin_override: this.getMeta("admin_override") === "1",
+        votes: bootstrapped
+          ? this.state.storage.sql
+              .exec(
+                `SELECT user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
+                 FROM vote_by_user_asset ORDER BY user_id ASC, asset_sha256 ASC`,
+              )
+              .toArray()
+              .map((row) => ({
+                user_id: String(row.user_id),
+                asset_sha256: String(row.asset_sha256),
+                vision_id: String(row.vision_id || ""),
+                candidate_image_id:
+                  row.candidate_image_id == null ? null : optionalInt(row.candidate_image_id),
+                vote_value: Number(row.vote_value),
+                created_at: String(row.created_at || ""),
+                updated_at: String(row.updated_at || ""),
+              }))
+          : [],
+        asset_summaries: bootstrapped ? this.exportAssetSummaries() : [],
+        caretaker_supervote: bootstrapped ? this.caretakerSupervotes.snapshot() : null,
+      })
+    }
+
     if (path === "/state" && request.method === "POST") {
       const payload = await request.json()
       const requestedSymbol = normalizeSymbol(payload?.symbol || "")
@@ -22948,6 +22985,96 @@ async function projectVoteCoordinatorLedgerRow(
     )
     .run()
   return true
+}
+
+/**
+ * B-898 Stage 2, step 1: copy one vote coordinator's votes and summaries into
+ * D1, addressed by the Durable Object id the Cloudflare API lists (so no
+ * coordinator is created by the sweep). A v2 coordinator is the authority:
+ * its rows are upserted where they differ and D1 rows it no longer holds are
+ * deleted. A legacy or unbootstrapped coordinator is left alone: D1 already
+ * holds its votes. Returns what it found and what it wrote.
+ */
+export async function exportIconoplasmVoteCoordinatorToD1(env, objectId) {
+  const binding = iconoplasmVoteCoordinatorBinding(env)
+  if (!binding || !env?.ICONOPLASM_DB)
+    throw new Error("ICONOPLASM_VOTE_COORDINATORS or ICONOPLASM_DB binding missing")
+  const id = String(objectId || "")
+    .trim()
+    .toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("A 64-hex Durable Object id is required")
+  const stub = binding.get(binding.idFromString(id))
+  const exported = await iconoplasmVoteCoordinatorJson(stub, "/vote/export", null)
+  const symbol = normalizeSymbol(exported?.symbol || "")
+  const base = {
+    object_id: id,
+    symbol: symbol || null,
+    bootstrapped: exported?.bootstrapped === true,
+    authority_epoch: String(exported?.authority_epoch || ""),
+    votes_in_coordinator: Array.isArray(exported?.votes) ? exported.votes.length : 0,
+  }
+  if (!base.bootstrapped || base.authority_epoch !== "v2" || !symbol) {
+    return {
+      ...base,
+      exported: false,
+      reason: !base.bootstrapped ? "not_bootstrapped" : "legacy_epoch",
+    }
+  }
+  const rows = []
+  for (const vote of exported.votes) {
+    const assetSha = normalizeSha256(vote?.asset_sha256 || "")
+    const userId = normalizeUserId(vote?.user_id || "")
+    const value = normalizeVoteValue(vote?.vote_value)
+    if (!assetSha || !userId || value == null || value === 0) continue
+    rows.push([
+      voteAssetIdentity(symbol, assetSha),
+      assetSha,
+      sanitizeVoteVisionId(vote?.vision_id || "") || "",
+      optionalInt(vote?.candidate_image_id),
+      userId,
+      value,
+      String(vote?.created_at || "") || null,
+      String(vote?.updated_at || "") || null,
+    ])
+  }
+  const rowsJson = JSON.stringify(rows)
+  const results = await env.ICONOPLASM_DB.batch([
+    env.ICONOPLASM_DB.prepare(
+      `DELETE FROM icono_image_votes WHERE gene_symbol = ?
+         AND (asset_sha256 || '|' || user_id) NOT IN
+             (SELECT json_extract(value,'$[1]') || '|' || json_extract(value,'$[4]') FROM json_each(?))`,
+    ).bind(symbol, rowsJson),
+    env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_image_votes (
+         candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
+       ) SELECT json_extract(value,'$[0]'), ?, json_extract(value,'$[1]'), json_extract(value,'$[2]'),
+                json_extract(value,'$[3]'), json_extract(value,'$[4]'), json_extract(value,'$[5]'),
+                COALESCE(json_extract(value,'$[6]'), CURRENT_TIMESTAMP), COALESCE(json_extract(value,'$[7]'), CURRENT_TIMESTAMP)
+         FROM json_each(?) WHERE true
+       ON CONFLICT(gene_symbol, asset_sha256, user_id) DO UPDATE SET
+         candidate_ref = excluded.candidate_ref,
+         vision_id = excluded.vision_id,
+         candidate_image_id = excluded.candidate_image_id,
+         vote_value = excluded.vote_value,
+         updated_at = excluded.updated_at
+       WHERE icono_image_votes.vote_value IS NOT excluded.vote_value
+          OR icono_image_votes.vision_id IS NOT excluded.vision_id
+          OR icono_image_votes.candidate_image_id IS NOT excluded.candidate_image_id`,
+    ).bind(symbol, rowsJson),
+  ])
+  const summaries = await replaceVoteAssetSummaryForSymbolFromCoordinatorState(env, {
+    symbol,
+    assetSummaries: exported.asset_summaries,
+  })
+  return {
+    ...base,
+    exported: true,
+    votes_written: rows.length,
+    votes_deleted: Number(results?.[0]?.meta?.changes || 0),
+    votes_changed: Number(results?.[1]?.meta?.changes || 0),
+    summaries,
+    published_asset_sha256: normalizeSha256(exported?.published_asset_sha256 || "") || null,
+  }
 }
 
 export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
@@ -39056,6 +39183,60 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               mode: projectionRefresh.mode,
             },
             projection_refresh: projectionRefresh,
+          },
+          200,
+          { "Cache-Control": "no-store" },
+        ),
+      )
+    }
+
+    if (path === "/api/iconoplasm/admin/votes/export-to-d1" && request.method === "POST") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_votes_export_to_d1_403", json({ error: "Unauthorized" }, 403))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("admin_votes_export_to_d1_400", json({ error: "Invalid JSON" }, 400))
+      }
+      // Ten coordinators per call: one DO request plus a few D1 statements
+      // each keeps the call under the Worker's subrequest ceiling.
+      const ids = [
+        ...new Set(
+          (Array.isArray(p?.object_ids) ? p.object_ids : []).map((v) =>
+            String(v || "")
+              .trim()
+              .toLowerCase(),
+          ),
+        ),
+      ]
+        .filter((v) => /^[a-f0-9]{64}$/.test(v))
+        .slice(0, 10)
+      if (!ids.length)
+        return done(
+          "admin_votes_export_to_d1_400",
+          json({ error: "Provide 1 to 10 Durable Object ids" }, 400),
+        )
+      const results = []
+      for (const id of ids) {
+        try {
+          results.push({ ok: true, ...(await exportIconoplasmVoteCoordinatorToD1(env, id)) })
+        } catch (error) {
+          results.push({
+            ok: false,
+            object_id: id,
+            error: sanitizeText(String(error?.message || error), 300),
+          })
+        }
+      }
+      return done(
+        "admin_votes_export_to_d1",
+        json(
+          {
+            ok: true,
+            exported: results.filter((r) => r.exported).length,
+            failed: results.filter((r) => !r.ok).length,
+            results,
           },
           200,
           { "Cache-Control": "no-store" },
