@@ -51,13 +51,13 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-012]** — The Website is the sole command authority for caretaker manifestation history and canonical selection; prose bodies live as encrypted Bunny objects with wrapped keys in authoring D1. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-Caretaker autosave creates the caretaker's own version; new image requests use the selected canonical version. The caretaker editor now shows when those differ and offers the existing canonical-selection action. Do not assume “Saved” means the next image uses that edit, or add a second generation-source path.
+Caretaker autosave creates the caretaker's own version; new image requests use the selected canonical version. The caretaker editor shows when those differ and offers the existing canonical-selection action. Do not assume “Saved” means the next image uses that edit, or add a second generation-source path.
 
-The caretaker authority cutover is finished. Its per-package backup was abandoned at 23,894/38,300 on 24 Sep 2026 and its operator scripts were deleted (B-800): do not resume it because a stored status still says `building`. Off-Cloudflare recovery for every D1 database is the nightly dump from `scripts/backup-d1-rotation.mjs` (B-830).
+Off-Cloudflare recovery for every D1 database is the nightly dump from `scripts/backup-d1-rotation.mjs` (B-830). The authoring D1 tables `icono_manifestation_cutover_backup_*` hold an abandoned backup whose status reads `building`; no code reads or resumes it, and nothing should.
 
 **ARCHITECTURE FENCE [IPD-006]** — One completed workstation publication yields one bounded receipt per recipient and gene; never infer groups. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-007]** — Iconoplasm anonymous documents use one Static Assets SPA shell; healthy portrait reads go directly to Bunny. The stable first-party `/blot/{symbol}.webp` route enters the existing Worker to resolve the exact published card. Canonical first-party `/portraits/*` URLs enter that Worker only as the Bunny-backed fallback; never restore a static placeholder redirect for them. Explicit mutation/admin APIs use the same Worker. Never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-007]** — Iconoplasm anonymous documents use one Static Assets SPA shell; healthy portrait reads go directly to Bunny. The stable first-party `/blot/{symbol}.webp` route enters the existing Worker to read the gene's stable object. Canonical first-party `/portraits/*` URLs enter that Worker only as the Bunny-backed fallback; never redirect them to a static placeholder. Explicit mutation/admin APIs use the same Worker. Never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-008]** — Anonymous startup and extension hover read the two published objects (the stable gene object `genes/v3/<SYMBOL>.json` from the CDN and the catalog object `catalog/v3/index.json`); a guest page never probes identity or D1. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
 
@@ -100,7 +100,7 @@ Concrete rules:
 before changing publication or reloads. Hover detail is one stable object per
 gene on the CDN (`genes/v3/<SYMBOL>.json`), rewritten in place and purged on
 every publication; the catalog manifest and scanner artifact stay the
-extension's release contract. No whole-card shards enter the extension, no
+extension's release contract. No bulk card payloads enter the extension, no
 reader writes occur, no D1 fallback elects canon, and private/mutation traffic
 never enters the CDN. The 0.5.8 compatibility window still reads
 `GET /api/public/v1/card-snapshots/:snapshot/{genes|portraits}/:symbol`, which
@@ -111,7 +111,7 @@ newer code: compare package/runtime hashes, not only the displayed version.
 Verify Wikipedia-to-paper navigation and background restart without
 reinstalling the extension, clearing storage, or disabling browser caching.
 
-## Local development overrides
+## Factory recipes
 
 Before changing factory catalog status, model versions, or recipe admission,
 read `docs/ICONOPLASM_FACTORY_RETIREMENT.md`. Retired letters remain valid for
@@ -120,6 +120,8 @@ historical identity but cannot admit new generation, activation, or diagnostics.
 Before changing Factory output belts, read `docs/ICONOPLASM_FACTORY_BELTS.md`.
 Keep exact qualified lineage, bounded indexed newest-six reads, stable inspection,
 and the existing shared PhotoSwipe viewer. Belt pins never select canonical images.
+
+## Local development overrides
 
 - **Local API override:** `?gg_api=http://127.0.0.1:8787` for local dev only. Persists in localStorage; clear with `?gg_api=clear`.
 - **Staging on Cloudflare:** `brinedew-bio-staging` Pages project and three workers (`the-only-allowed-public-edge-worker-that-must-not-touch-state-staging`, `geneguessr-api-staging`, `geneguessr-benchmark-staging`) are live on the dashboard. `staging.brinedew.bio` resolves. **Production deploys do not update staging.** Staging serves whatever was last manually dispatched to it. Trust `brinedew.bio` for "is the live site correct"; do not trust `staging.brinedew.bio` as a preview of production.

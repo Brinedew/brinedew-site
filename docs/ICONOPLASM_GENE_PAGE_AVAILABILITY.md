@@ -1,9 +1,8 @@
 # Gene-page images and account availability
 
 The published card comes first, followed immediately by **Other candidate
-images**. Caretaker tools and suggestions follow the images. This replaces the
-older suggestions-first layout: comparing images should not require finding a
-gallery below an unrelated form.
+images**. Caretaker tools and suggestions follow the images: comparing images
+should not require finding a gallery below an unrelated form.
 
 ## Unknown is not empty
 
@@ -24,9 +23,9 @@ pinned for the open page, and candidate `is_current` markers use that displayed
 portrait identity. A response for a page the reader has left cannot update the
 new page.
 
-The existing exact-card publication boundary protects canonical image identity.
-This change preserves that boundary and adds no alternative image authority,
-database, cached candidate ledger, or provider fallback.
+The gene's stable object protects canonical image identity. Candidate
+availability adds no alternative image authority, database, cached candidate
+ledger, or provider fallback.
 
 ## Account failures belong to their action
 
@@ -43,14 +42,11 @@ The caretaker panel translates an actual expired session into a contextual
 sign-in link; service failures show a small tools-specific message and retry.
 Raw internal authentication/error codes never serve as its initial UI text.
 
-## Incident and verification
+## Verification
 
-On September 5, 2026 at approximately 17:48 UTC, the live TRIM28 document and
-detail response selected the published-card-only state. Account analytics
-reported 5,995,756 D1 rows read, 54,091 rows written, and 15,340 Worker requests.
-The read allowance was exhausted. The earlier consumption-prevention release
-had stopped before migration at the headroom check. A frontend repair is not
-evidence of database recovery; do not bypass that check to publish it.
+The published-card-only state appears when D1 is unavailable, for example when
+its daily read allowance is exhausted. A frontend repair is not evidence of
+database recovery; do not bypass a release headroom check to publish one.
 
 Focused tests cover service versus session failure, guest/valid sessions,
 unavailable versus empty galleries, explicit retries, and contextual sign-in.
@@ -60,24 +56,24 @@ Those fixtures prove rendering and interaction, not restoration of production
 candidate data. Fresh unmodified production checks remain required after the
 normal deployment succeeds.
 
-## B-742 maintenance reader recovery
+## Maintenance reader recovery
 
-While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`, the
-canonical transition deployment may set
-`ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`. That mode permits only
-GET/HEAD reads for `/gene/:symbol`,
+While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`, a
+`data_maintenance` release may set
+`ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`
+(`workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js`).
+That mode permits only GET/HEAD reads for `/gene/:symbol`,
 `/api/iconoplasm/site/genes/:symbol`, and exact content-addressed portrait
 renditions. Gene routes read the one stable gene object
-`genes/v3/<SYMBOL>.json` (B-898); they do not resolve live D1 rows.
+`genes/v3/<SYMBOL>.json`; they do not resolve live D1 rows.
 Portrait bytes use the existing storage adapter so first-party delivery remains
-available when Bunny is unreachable from the reader's network. No image
-selection, publication repair or D1 lookup is introduced.
+available when Bunny is unreachable from the reader's network. Reader recovery
+performs no image selection, publication repair or D1 lookup.
 
-A readable artifact with no requested card remains a 404. A missing, invalid,
-or unavailable artifact remains a 503. Candidate images, caretaker identity,
-voting, generation, authoring, and other mutation routes remain behind the
+A gene with no stable object is a 404. An unreadable or invalid stable object
+is a 503. Candidate images, caretaker identity, voting, generation, authoring, and other mutation routes remain behind the
 schema-transition response. The page is explicitly noindex during maintenance,
 and the rendered card marks live candidates and caretaker data as temporarily
-unavailable. This is the B-742 **Reading restored** milestone, not **Full
-service**: full service still requires the admitted migration, normal stateful
-Worker activation, background-capacity release, and fresh live acceptance.
+unavailable. Reader recovery restores reading, not full service: full service
+requires the admitted migration, normal stateful Worker activation,
+background-capacity release, and fresh live acceptance.

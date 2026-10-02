@@ -40,8 +40,7 @@ It owns things like:
 
 - the public Iconoplasm homepage and gene pages
 - the only-allowed internal stateful runtime, which `iconoplasm.brinedew.bio/*`
-  routes to directly (there is no public-edge proxy in front of it; the old
-  proxy module was deleted on 2026-09-26, B-869)
+  routes to directly, with no public-edge proxy in front of it
 - the stateful runtime's Iconoplasm handler in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
 - the production D1 runtime tables
 - the shared settings/auth bridge that connects `brinedew.bio` and `iconoplasm.brinedew.bio`
@@ -51,13 +50,13 @@ It owns things like:
 If the question is “what does the live authoring, vote, candidate, or rich-detail
 state know right now?”, stay in this repo and query remote D1. Public portrait
 identity is the exception: inspect the gene's stable object
-`genes/v3/<SYMBOL>.json` on Bunny (B-898), because D1 may legitimately be ahead of the published
-public portrait.
+`genes/v3/<SYMBOL>.json` on Bunny, because D1 may legitimately be ahead of the
+published public portrait.
 
 For canonical portrait changes and vote auto-promotion, also read
 `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`. That document explains why D1
-owns authoring and vote state while only the exact versioned public card artifact
-owns the portrait exposed to readers.
+owns authoring and vote state while only the gene's stable object owns the
+portrait exposed to readers.
 
 For gene-label matching and alias ownership, read `docs/ICONOPLASM_PUBLICATION_ALIASES.md` before editing the catalog, manifest, or extension cache path.
 
@@ -70,10 +69,6 @@ administrator-curated alias/blocklist recognition pair from the Website
 manifest. It does not own either policy.
 
 Important consequence: if discovery behavior looks wrong on the site, do not assume it is only a frontend problem. The contract between extension, worker, and homepage matters.
-
-## the homepage has two real modes
-
-This is the architectural rule that caused the biggest confusion.
 
 ## there is no single gallery order
 
@@ -97,7 +92,9 @@ The product rule is simpler:
 
 **A catalog gene must remain reachable even when rich card data is missing.**
 
-Precomputed rich card data is allowed to make cards faster or nicer. It is not allowed to decide whether a gene exists. The runtime card path is one published card-catalog artifact for the live gallery version. Publication must fail before the live version flips if that artifact does not cover every catalog gene; runtime browsing must not probe per-gene KV objects or compose ad hoc fallback cards.
+Precomputed rich card data may make cards faster or nicer. It does not decide whether a gene exists. Card data comes from each gene's stable object (`genes/v3/<SYMBOL>.json`); runtime browsing must not compose ad hoc fallback cards from D1.
+
+## the homepage has two real modes
 
 ### personal shelf / pokedex mode
 
@@ -127,7 +124,7 @@ Who gets it:
 
 What it shows:
 
-- the old full-catalog gallery
+- the full-catalog gallery
 
 What API drives it:
 
@@ -141,15 +138,17 @@ If you are debugging the homepage, figure out which of these two modes should be
 
 ## starter genes are part of the contract
 
-There is a starter trio:
+There is a starter trio, `ICONOPLASM_STARTER_GENE_SYMBOLS` in the stateful runtime:
 
 - `INS`
-- `LEP`
-- `GCG`
+- `RHO`
+- `PRL`
 
 ### signed-out visitors
 
-Guests see the starter trio as a lightweight introduction to the shelf idea.
+Guests see the starter genes (`GUEST_STARTER_GENES` in
+`quartz/static/iconoplasm/app.js`: the trio plus `CD4`) as a lightweight
+introduction to the shelf idea.
 Opening any dossier adds that gene to a compact browser-local shelf capable of
 retaining the full 19,023-gene catalog. Signed-out browsing does not post a
 discovery request. Each authenticated page session merges at most 200
@@ -196,7 +195,7 @@ In practice: if admin mode seems ignored on first load, inspect the settings bri
 Do these in order.
 
 1. **Figure out which system owns the bug.**
-   - workstation/control-plane problem → `d:\Coding\Datasets\iconoplasm`
+   - workstation/control-plane problem → `d:\Coding\Iconoplasm` (code) and `d:\Coding\Datasets\iconoplasm` (state)
    - live runtime problem → `d:\Coding\Website`
 
 2. **Figure out which homepage mode should be active.**
@@ -267,7 +266,7 @@ So the rule is:
 
 In `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`, treat these functions as the cost barrier:
 
-- `publishedPortraitRefs(...)` (legacy publication/discovery compatibility only;
+- `publishedPortraitRefs(...)` (publication and discovery compatibility only;
   never a public portrait source)
 - `publishedPortraitFingerprint(...)`
 - `galleryPublishedRows(...)`
@@ -280,7 +279,7 @@ If you change them, you are touching the thing that keeps the site from quietly 
 ### canonical portraits have a second barrier
 
 `icono_publish_state` is D1 authoring and vote-projection state. The gene's
-stable object `genes/v3/<SYMBOL>.json` (B-898) is the sole public portrait
+stable object `genes/v3/<SYMBOL>.json` is the sole public portrait
 authority.
 
 A newly selected D1 leader is allowed to exist for the minutes before the
@@ -289,18 +288,17 @@ object. That is a legitimate publication window, not split-brain and not a
 reason for a reader route to reveal the unpublished SHA. The public portrait
 changes only when that object is rewritten.
 
-During that window every public projection remains on the previous exact card
-artifact: signed-in and anonymous galleries, site-gene detail, gene-page lead
+During that window every public projection stays on the gene's current stable
+object: signed-in and anonymous galleries, site-gene detail, gene-page lead
 and metadata, public media, extension cards, archive ranges, image sitemaps, and
 print-copy inputs. Site-gene detail may combine fresh D1 traits, candidates, and
-votes with that artifact, but its portrait and candidate `is_current` state are
-overridden by the published card SHA.
+votes with that object, but its portrait and candidate `is_current` state are
+overridden by the stable object's SHA.
 
-The 2026-05-20 PRL failure occurred because the old site-gene-detail path exposed
-the D1 leader before the artifact advanced. That behavior is historical. Do not
-restore a signed-in, site-gene-detail, public-media, or print-copy fallback to
-D1. If the selected card artifact is unavailable or incomplete, the public
-projection fails closed with an uncached unavailable or missing response.
+Do not add a signed-in, site-gene-detail, public-media, or print-copy fallback to
+D1: it exposes the D1 leader before the stable object is rewritten. If the
+stable object is unavailable or incomplete, the public projection fails closed
+with an uncached unavailable or missing response.
 
 If publication appears stuck, fix it at the publication boundary:
 
@@ -310,7 +308,7 @@ If publication appears stuck, fix it at the publication boundary:
   publication state;
 - let the Actions catalog publisher's republish pass rewrite the dirty genes; and
 - purge only a proven stale symbol API URL if an outer Cloudflare cache still
-  serves an older artifact after the barrier has advanced.
+  serves an older copy after the stable object has been rewritten.
 
 Non-negotiable rules:
 
@@ -334,8 +332,8 @@ Non-negotiable rules:
 5. **Regression tests are mandatory.**
    - the worker exports `resetIconoplasmRuntimeCachesForTest()` specifically so tests can simulate a fresh isolate
    - if you touch the portrait barrier, prove a D1-only SHA change cannot move
-     public media, gene HTML, archive ranges, or sitemaps, and prove a card-version
-     flip moves them together
+     public media, gene HTML, archive ranges, or sitemaps, and prove a rewrite of
+     the gene's stable object moves them together
 
 ### do not delete the alarms
 
@@ -381,7 +379,7 @@ The point is to make the safe path embarrassing to rename and hard to ignore:
 - the routed public workers should call the one internal stateful worker
 - the internal stateful worker is the only worker in the repo that is allowed to hold D1/KV/R2/session capability
 - if you are about to add `binding = "DB"` or `binding = "ICONOPLASM_DB"` back into `Website/wrangler.toml` or `Website/workers/benchmark/wrangler.toml`, you have not found a shortcut; you have undone the architecture on purpose
-- if you are about to make the internal stateful worker public with workers.dev/preview URLs again, you are taking the one worker with the dangerous capability and making it easier to hit from outside
+- if you are about to make the internal stateful worker public with workers.dev/preview URLs, you are taking the one worker with the dangerous capability and making it easier to hit from outside
 - if you are about to add a new app worker with direct state bindings instead of the loud service binding, you are recreating the exact class of mistake that caused the billing incident
 
 Treat that name like a warning label on industrial equipment. Ugly is fine here. Quietly “cleaning it up” is not.
@@ -408,15 +406,8 @@ Do not quietly switch users to some other mode and call it done.
 - push `main`
 - let the production workflow deploy
 
-### worker-only hotfix or live debugging
-
-There is also a verified manual worker path from this repo:
-
-- from `d:\Coding\Website`, set `$cacheBust = git rev-parse HEAD`
-- run `pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$cacheBust"`
-- then run `pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$cacheBust"`
-
-If you do that, still commit and push right away so Git and production do not drift apart.
+Never run `wrangler deploy` or `wrangler pages deploy` for production by hand. A
+push to `main` is the release path; see "the deployment pipeline" in `CLAUDE.md`.
 
 ### always validate on the real page
 
@@ -426,9 +417,9 @@ For homepage bugs, validate the actual DOM on `https://iconoplasm.brinedew.bio/`
 
 ## sample labels on blots
 
-Public UI says **sample**, not manifestation. A sample is the generated character-description text for a gene. The workstation code may still use the internal name `manifestation`, but public copy, public API fields, and user-facing docs should use `sample`.
+Public UI says **sample**, not manifestation. A sample is the generated character-description text for a gene. The workstation code uses the internal name `manifestation`, but public copy, public API fields, and user-facing docs should use `sample`.
 
-Sample labels such as `TTN-1` and `TTN-2` belong to the sample text record, not to the gene and not to the image order. A gene has one latest sample. A blot records which sample produced it. Users do not pick a sample when requesting a blot; generation uses the latest sample for that gene.
+Sample labels such as `TTN-1` and `TTN-2` belong to the sample text record, not to the gene and not to the image order. A blot records which sample produced it. Users do not pick a sample when requesting a blot; generation uses the gene's selected canonical version (see "Exact generation contract" in `docs/CARETAKER_MANIFESTATION_AUTHORITY.md`).
 
 Pipeline:
 
@@ -437,7 +428,7 @@ Pipeline:
 - Website sync sends `sample_label`, `sample_number`, and `sample_text_hash` with each portrait asset.
 - Production D1 `icono_portrait_assets` stores the sample provenance columns.
 - Public gene payloads expose the label on `portrait` and `portrait_candidates`.
-- The gene page shows the label under Candidate blots so old blots with old samples are understandable without making samples selectable.
+- The gene page shows the label as **Sample** in each candidate's toolbar under **Other candidate images**, so old blots with old samples are understandable without making samples selectable.
 
 ## if you only remember five things
 
