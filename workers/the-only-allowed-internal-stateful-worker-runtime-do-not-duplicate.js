@@ -1331,6 +1331,7 @@ import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-a
 import { dispatchIconoplasmCatalogPublication } from "./iconoplasm-catalog-dispatch.js"
 import {
   iconoplasmBackgroundJob,
+  isIconoplasmRecurringTrigger,
   runIconoplasmBackgroundJob,
 } from "./iconoplasm-background-schedule.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
@@ -3253,10 +3254,6 @@ export default {
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
         caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),
         archive: () => archiveColdIconoplasmPublishEvents(env),
-        voteProjection: () =>
-          runScheduledIconoplasmMaintenanceStep(env, ctx, "process-vote-projection-refresh", {
-            limit: 2,
-          }),
         canonRepair: () =>
           runScheduledIconoplasmMaintenanceStep(env, ctx, "repair-canon-invariants", {
             limit: 250,
@@ -3277,6 +3274,8 @@ export default {
         return
       }
     }
+    // An idle minute of the recurring trigger: nothing is scheduled there.
+    if (isIconoplasmRecurringTrigger(backgroundEvent)) return
     if (cronExpr === "3 0 * * *") {
       try {
         const result = await handlePostDailyRecap(env)

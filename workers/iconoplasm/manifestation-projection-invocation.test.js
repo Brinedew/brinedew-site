@@ -152,19 +152,11 @@ test(
         })
       }
       let coordinatorRequests = 0
-      let failAssignmentOnce = false
       const coordinator = {
         idFromName: (name) => name,
         get: () => ({
-          async fetch(request) {
+          async fetch() {
             coordinatorRequests++
-            if (
-              failAssignmentOnce &&
-              String(request.url || request).includes("/caretaker-assignment/project")
-            ) {
-              failAssignmentOnce = false
-              throw new Error("coordinator temporarily unavailable")
-            }
             return Response.json({ ok: true })
           },
         }),
@@ -180,7 +172,6 @@ test(
           {
             ICONOPLASM_DB: observed.binding(primaryMeter.db),
             ICONOPLASM_AUTHORING_DB: observed.binding(authoringMeter.db),
-            ICONOPLASM_VOTE_COORDINATORS: coordinator,
             ICONOPLASM_CARD_PUBLICATION: coordinator,
           },
           25,
@@ -248,14 +239,21 @@ test(
         sourceEventSequence: 1,
         occurredAt: new Date().toISOString(),
       })
-      failAssignmentOnce = true
+      // The caretaker assignment projection (D1, caretaker-supervote.js) fails
+      // once; the event stays failed and the next scheduled drain publishes it.
+      await primary
+        .prepare(
+          "CREATE TRIGGER test_assignment_projection_unavailable BEFORE UPDATE ON icono_caretaker_vote_assignment_projection BEGIN SELECT RAISE(ABORT, 'assignment projection temporarily unavailable'); END",
+        )
+        .run()
       for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt === 1)
+          await primary.prepare("DROP TRIGGER test_assignment_projection_unavailable").run()
         const observed = createD1InvocationBudget()
         const result = await drainIconoplasmManifestationAuthorityProjection(
           {
             ICONOPLASM_DB: observed.binding(primary),
             ICONOPLASM_AUTHORING_DB: observed.binding(authoring),
-            ICONOPLASM_VOTE_COORDINATORS: coordinator,
             ICONOPLASM_CARD_PUBLICATION: coordinator,
           },
           1,

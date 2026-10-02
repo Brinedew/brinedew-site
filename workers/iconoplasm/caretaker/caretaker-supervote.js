@@ -1,5 +1,13 @@
+import {
+  VOTE_DAILY_BUDGET_EXHAUSTED,
+  VOTE_DAILY_BUDGET_MESSAGE,
+  VOTE_DAILY_LIMIT,
+  geneVoteVersionBumpStatement,
+  isVoteDailyBudgetRefusal,
+  voteDailyBudgetStatement,
+} from "../votes/vote-guards.js"
+
 export const CARETAKER_SUPERVOTE_WEIGHT = 10
-export const CARETAKER_SUPERVOTE_HISTORY_LIMIT = 100
 export const CARETAKER_SUPERVOTE_DIRECTIONS = Object.freeze([-1, 1])
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/
@@ -63,12 +71,6 @@ function normalizeRequestSha256(value) {
   return normalized
 }
 
-function normalizeReason(value, fallback) {
-  return String(value || fallback || "")
-    .trim()
-    .slice(0, 2000)
-}
-
 function normalizeDirection(value, { optional = false } = {}) {
   if (optional && (value == null || value === "")) return null
   const normalized = Number(value)
@@ -76,10 +78,6 @@ function normalizeDirection(value, { optional = false } = {}) {
     fail("INVALID_SUPERVOTE_INPUT", "direction must be -1 or 1")
   }
   return normalized
-}
-
-function first(sql, query, ...bindings) {
-  return sql.exec(query, ...bindings).toArray()[0] || null
 }
 
 function parseJson(value, fallback = null) {
@@ -122,31 +120,6 @@ function normalizeAssignmentEvent(rawEvent) {
       "assignment_version",
       { minimum: 1 },
     ),
-  }
-}
-
-function normalizeEligibilityEvent(rawEvent) {
-  const event = rawEvent && typeof rawEvent === "object" ? rawEvent : {}
-  const eligible = Number(event.eligible)
-  if (eligible !== 0 && eligible !== 1) {
-    fail("INVALID_ELIGIBILITY_PROJECTION", "Candidate eligibility must be explicit")
-  }
-  const eventSequence = normalizeVersion(event.source_event_sequence, "source_event_sequence", {
-    minimum: 1,
-  })
-  return {
-    event_id: normalizeId(
-      event.event_id || `candidate-eligibility:${eventSequence}`,
-      "eligibility_event_id",
-    ),
-    event_sequence: eventSequence,
-    gene_symbol: normalizeSymbol(event.gene_symbol),
-    asset_sha256: normalizeSha256(event.asset_sha256),
-    eligibility_version: normalizeVersion(event.eligibility_version, "eligibility_version", {
-      minimum: 1,
-    }),
-    eligible: Boolean(eligible),
-    reason: normalizeReason(event.reason || event.source_status, "Candidate eligibility changed"),
   }
 }
 
@@ -201,37 +174,6 @@ function supervoteSnapshot(assignment, head, viewerAccountId = "") {
   }
 }
 
-function outboxPayload({
-  mutationId,
-  eventType,
-  commandId = null,
-  requestSha256 = null,
-  assignment,
-  head,
-  fromAssetSha256 = null,
-  toAssetSha256 = null,
-  fromDirection = null,
-  toDirection = null,
-  response = null,
-  recomputeRequired = true,
-}) {
-  return JSON.stringify({
-    schema_version: 2,
-    mutation_id: mutationId,
-    event_type: eventType,
-    command_id: commandId,
-    request_sha256: requestSha256,
-    assignment: assignmentSnapshot(assignment),
-    supervote: supervoteSnapshot(assignment, head),
-    from_asset_sha256: fromAssetSha256,
-    to_asset_sha256: toAssetSha256,
-    from_direction: fromDirection,
-    to_direction: toDirection,
-    response,
-    recompute_required: recomputeRequired,
-  })
-}
-
 export async function caretakerSupervoteRequestSha256(fields) {
   const source = fields && typeof fields === "object" ? fields : {}
   const canonical = JSON.stringify({
@@ -279,395 +221,155 @@ export function compareCaretakerWeightedCandidates(left, right, fallback = () =>
   )
 }
 
-export class CaretakerSupervoteLedger {
-  constructor({ storage, getSymbol, armAlarm } = {}) {
-    if (!storage?.sql || typeof storage.transactionSync !== "function") {
-      throw new TypeError("Durable Object SQL storage is required")
-    }
-    if (typeof getSymbol !== "function") throw new TypeError("getSymbol is required")
-    this.storage = storage
-    this.sql = storage.sql
-    this.getSymbol = getSymbol
-    this.armAlarm = typeof armAlarm === "function" ? armAlarm : async () => {}
-  }
+// B-898 Stage 2: the caretaker supervote lives in D1 alone. The assignment
+// projection (one row per gene), the supervote head (one row per gene, with
+// its compare-and-set version), the audit events and the idempotency receipts
+// are the D1 tables migration 0085 created; candidate eligibility is the
+// trigger-maintained projection from migration 0088. Each write batch is
+// guarded so a concurrent command can only make it a no-op, never a torn
+// write.
 
-  install() {
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS caretaker_assignment_projection (
-        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-        gene_id TEXT NOT NULL,
-        gene_symbol TEXT NOT NULL,
-        caretaker_assignment_id TEXT NOT NULL,
-        caretaker_account_id TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (
-          status IN ('pending_acceptance', 'active', 'suspended', 'ended')
-        ),
-        assignment_version INTEGER NOT NULL CHECK (assignment_version >= 1),
-        authority_event_id TEXT NOT NULL,
-        authority_event_sequence INTEGER NOT NULL CHECK (authority_event_sequence >= 1),
-        projected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS caretaker_supervote_head (
-        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-        caretaker_assignment_id TEXT,
-        caretaker_account_id TEXT,
-        asset_sha256 TEXT,
-        direction INTEGER CHECK (direction IN (-1, 1) OR direction IS NULL),
-        supervote_version INTEGER NOT NULL DEFAULT 0 CHECK (supervote_version >= 0),
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      INSERT OR IGNORE INTO caretaker_supervote_head (singleton) VALUES (1);
-      CREATE TABLE IF NOT EXISTS caretaker_supervote_command_receipts (
-        command_id TEXT PRIMARY KEY,
-        request_sha256 TEXT NOT NULL,
-        response_json TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS caretaker_supervote_audit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mutation_id TEXT NOT NULL UNIQUE,
-        event_type TEXT NOT NULL,
-        command_id TEXT,
-        request_sha256 TEXT,
-        caretaker_assignment_id TEXT NOT NULL,
-        caretaker_account_id TEXT NOT NULL,
-        assignment_status TEXT NOT NULL,
-        assignment_version INTEGER NOT NULL,
-        from_asset_sha256 TEXT,
-        to_asset_sha256 TEXT,
-        from_direction INTEGER CHECK (from_direction IN (-1, 1) OR from_direction IS NULL),
-        to_direction INTEGER CHECK (to_direction IN (-1, 1) OR to_direction IS NULL),
-        supervote_version INTEGER NOT NULL,
-        authority_event_id TEXT,
-        authority_event_sequence INTEGER,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS caretaker_supervote_outbox (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mutation_id TEXT NOT NULL UNIQUE,
-        payload_json TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        last_error TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        delivered_at TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_caretaker_supervote_outbox_pending
-        ON caretaker_supervote_outbox (delivered_at, id);
-      CREATE TABLE IF NOT EXISTS caretaker_supervote_asset_eligibility (
-        asset_sha256 TEXT PRIMARY KEY,
-        eligibility_version INTEGER NOT NULL CHECK (eligibility_version >= 1),
-        eligible INTEGER NOT NULL CHECK (eligible IN (0, 1)),
-        source_event_id TEXT NOT NULL,
-        source_event_sequence INTEGER NOT NULL UNIQUE CHECK (source_event_sequence >= 1),
-        reason TEXT NOT NULL DEFAULT '',
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `)
-    const headColumns = new Set(
-      this.sql
-        .exec(`PRAGMA table_info(caretaker_supervote_head)`)
-        .toArray()
-        .map((row) => row.name),
+const STATE_SQL = `SELECT a.gene_id, a.gene_symbol, a.caretaker_assignment_id, a.caretaker_account_id,
+       a.status, a.assignment_version, a.authority_event_id, a.authority_event_sequence,
+       s.asset_sha256 AS head_asset_sha256, s.direction AS head_direction,
+       s.active AS head_active, s.supervote_version AS head_supervote_version
+  FROM icono_caretaker_vote_assignment_projection a
+  LEFT JOIN icono_caretaker_supervote_projection s ON s.gene_symbol = a.gene_symbol
+ WHERE a.gene_symbol = ?1
+ LIMIT 1`
+
+function stateFromRow(row) {
+  if (!row) return { assignment: null, head: { supervote_version: 0, asset_sha256: null } }
+  const active = Number(row.head_active) === 1
+  return {
+    assignment: {
+      gene_id: row.gene_id,
+      gene_symbol: row.gene_symbol,
+      caretaker_assignment_id: row.caretaker_assignment_id,
+      caretaker_account_id: row.caretaker_account_id,
+      status: row.status,
+      assignment_version: Number(row.assignment_version),
+      authority_event_id: row.authority_event_id,
+      authority_event_sequence: Number(row.authority_event_sequence),
+    },
+    head: {
+      asset_sha256: active ? row.head_asset_sha256 : null,
+      direction: active ? Number(row.head_direction) : null,
+      supervote_version: Number(row.head_supervote_version || 0),
+    },
+  }
+}
+
+export async function readCaretakerSupervoteFromD1(db, symbol, viewerAccountId = "") {
+  const geneSymbol = normalizeSymbol(symbol)
+  const state = stateFromRow(await db.prepare(STATE_SQL).bind(geneSymbol).first())
+  return {
+    ...state,
+    snapshot: supervoteSnapshot(state.assignment, state.head, viewerAccountId),
+  }
+}
+
+function supervoteProjectionUpsert(db, values) {
+  return db
+    .prepare(
+      `INSERT INTO icono_caretaker_supervote_projection (
+         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+         asset_sha256, direction, active, weight, supervote_version,
+         last_mutation_id, updated_at, deactivated_at
+       )
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, 10, ?8, ?9, CURRENT_TIMESTAMP,
+              CASE WHEN ?7 = 1 THEN NULL ELSE CURRENT_TIMESTAMP END
+        WHERE ${values.guardSql}
+       ON CONFLICT(gene_symbol) DO UPDATE SET
+         gene_id = excluded.gene_id,
+         caretaker_assignment_id = excluded.caretaker_assignment_id,
+         caretaker_account_id = excluded.caretaker_account_id,
+         asset_sha256 = excluded.asset_sha256,
+         direction = excluded.direction,
+         active = excluded.active,
+         weight = 10,
+         supervote_version = excluded.supervote_version,
+         last_mutation_id = excluded.last_mutation_id,
+         updated_at = CURRENT_TIMESTAMP,
+         deactivated_at = excluded.deactivated_at`,
     )
-    if (!headColumns.has("direction")) {
-      this.sql.exec(
-        `ALTER TABLE caretaker_supervote_head ADD COLUMN direction INTEGER CHECK (direction IN (-1, 1) OR direction IS NULL)`,
-      )
-      this.sql.exec(
-        `UPDATE caretaker_supervote_head SET direction = 1 WHERE asset_sha256 IS NOT NULL`,
-      )
-    }
-    const auditColumns = new Set(
-      this.sql
-        .exec(`PRAGMA table_info(caretaker_supervote_audit)`)
-        .toArray()
-        .map((row) => row.name),
+    .bind(
+      values.symbol,
+      values.geneId,
+      values.assignmentId,
+      values.accountId,
+      values.asset,
+      values.direction,
+      values.asset ? 1 : 0,
+      values.version,
+      values.mutationId,
+      ...values.guardArgs,
     )
-    if (!auditColumns.has("from_direction")) {
-      this.sql.exec(
-        `ALTER TABLE caretaker_supervote_audit ADD COLUMN from_direction INTEGER CHECK (from_direction IN (-1, 1) OR from_direction IS NULL)`,
-      )
-    }
-    if (!auditColumns.has("to_direction")) {
-      this.sql.exec(
-        `ALTER TABLE caretaker_supervote_audit ADD COLUMN to_direction INTEGER CHECK (to_direction IN (-1, 1) OR to_direction IS NULL)`,
-      )
-    }
-  }
+}
 
-  readAssignment() {
-    return first(
-      this.sql,
-      `SELECT gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
-              status, assignment_version, authority_event_id, authority_event_sequence
-         FROM caretaker_assignment_projection
-        WHERE singleton = 1`,
+function supervoteEventInsert(db, values) {
+  return db
+    .prepare(
+      `INSERT INTO icono_caretaker_supervote_events (
+         mutation_id, event_type, command_id, request_sha256,
+         gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
+         assignment_status, assignment_version, from_asset_sha256,
+         to_asset_sha256, from_direction, to_direction,
+         supervote_version, authority_event_id, authority_event_sequence, created_at
+       )
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+              CURRENT_TIMESTAMP
+        WHERE EXISTS (
+          SELECT 1 FROM icono_caretaker_supervote_projection
+           WHERE gene_symbol = ?6 AND last_mutation_id = ?1
+        )
+       ON CONFLICT(mutation_id) DO NOTHING`,
     )
-  }
-
-  readHead() {
-    return (
-      first(
-        this.sql,
-        `SELECT caretaker_assignment_id, caretaker_account_id, asset_sha256, direction,
-                supervote_version, updated_at
-           FROM caretaker_supervote_head
-          WHERE singleton = 1`,
-      ) || { supervote_version: 0, asset_sha256: null }
+    .bind(
+      values.mutationId,
+      values.eventType,
+      values.commandId || null,
+      values.requestSha256 || null,
+      values.assignment.gene_id,
+      values.symbol,
+      values.assignment.caretaker_assignment_id,
+      values.assignment.caretaker_account_id,
+      values.assignment.status,
+      values.assignment.assignment_version,
+      values.fromAsset,
+      values.toAsset,
+      values.fromDirection,
+      values.toDirection,
+      values.version,
+      values.assignment.authority_event_id,
+      values.assignment.authority_event_sequence,
     )
-  }
+}
 
-  snapshot(viewerAccountId = "") {
-    return supervoteSnapshot(this.readAssignment(), this.readHead(), viewerAccountId)
-  }
+function appliedMutationGuard(db, symbol, mutationId) {
+  return geneVoteVersionBumpStatement(db, symbol, {
+    whenSql:
+      "EXISTS (SELECT 1 FROM icono_caretaker_supervote_projection WHERE gene_symbol = ?1 AND last_mutation_id = ?2)",
+    whenArgs: [mutationId],
+  })
+}
 
-  compactHistory() {
-    this.sql.exec(
-      `DELETE FROM caretaker_supervote_audit
-        WHERE id NOT IN (
-          SELECT id
-            FROM caretaker_supervote_audit
-           ORDER BY id DESC
-           LIMIT ?
-        )`,
-      CARETAKER_SUPERVOTE_HISTORY_LIMIT,
-    )
-    this.sql.exec(
-      `DELETE FROM caretaker_supervote_command_receipts
-        WHERE command_id NOT IN (
-          SELECT command_id
-            FROM caretaker_supervote_audit
-           WHERE command_id IS NOT NULL
-        )`,
-    )
-    this.sql.exec(
-      `DELETE FROM caretaker_supervote_outbox INDEXED BY idx_caretaker_supervote_outbox_pending
-        WHERE delivered_at IS NOT NULL
-          AND id NOT IN (
-            SELECT id
-              FROM caretaker_supervote_outbox INDEXED BY idx_caretaker_supervote_outbox_pending
-             WHERE delivered_at IS NOT NULL
-             ORDER BY id DESC
-             LIMIT ?
-          )`,
-      CARETAKER_SUPERVOTE_HISTORY_LIMIT,
-    )
-  }
-
-  decorateSnapshot(snapshot) {
-    const source = snapshot && typeof snapshot === "object" ? snapshot : {}
-    const supervote = this.snapshot()
-    const selectedAsset = supervote.asset_sha256
-    const isSelected = Boolean(
-      selectedAsset && normalizeSha256(source.asset_sha256, { optional: true }) === selectedAsset,
-    )
-    return {
-      ...source,
-      caretaker_supervote: isSelected,
-      caretaker_supervote_direction: isSelected ? supervote.direction : null,
-      caretaker_supervote_weight: isSelected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0,
-      weighted_score:
-        Number(source.image_score || 0) +
-        (isSelected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0),
-    }
-  }
-
-  decorateAssetSummaries(rows) {
-    const supervote = this.snapshot()
-    const selectedAsset = supervote.asset_sha256
-    return (Array.isArray(rows) ? rows : []).map((row) => {
-      const selected = Boolean(selectedAsset && row?.asset_sha256 === selectedAsset)
-      return {
-        ...row,
-        caretaker_supervote: selected,
-        caretaker_supervote_direction: selected ? supervote.direction : null,
-        caretaker_supervote_weight: selected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0,
-        weighted_score:
-          Number(row?.score || 0) +
-          (selected ? supervote.direction * CARETAKER_SUPERVOTE_WEIGHT : 0),
-      }
-    })
-  }
-
-  /**
-   * Synchronous assignment projection core. Callers that must commit this
-   * state together with another authority change (for example the per-gene
-   * publication intent) run it inside their own storage transaction.
-   */
-  projectAssignmentCore(rawEvent) {
-    const event = normalizeAssignmentEvent(rawEvent)
-    const coordinatorSymbol = normalizeSymbol(this.getSymbol() || event.gene_symbol)
-    if (coordinatorSymbol !== event.gene_symbol) {
-      fail("ASSIGNMENT_GENE_MISMATCH", "Assignment event belongs to another gene", 409)
-    }
-    {
-      const current = this.readAssignment()
-      const head = this.readHead()
-      if (current) {
-        const currentSequence = Number(current.authority_event_sequence)
-        if (event.event_sequence === currentSequence) {
-          if (event.event_id !== current.authority_event_id) {
-            fail("ASSIGNMENT_EVENT_CONFLICT", "Event sequence already has another event", 409)
-          }
-          return { ok: true, changed: false, replayed: true, snapshot: this.snapshot() }
-        }
-        if (event.event_sequence < currentSequence) {
-          fail("STALE_ASSIGNMENT_EVENT", "Assignment projection cannot move backward", 409)
-        }
-        if (event.gene_id !== current.gene_id) {
-          fail("ASSIGNMENT_GENE_MISMATCH", "Stable gene identity changed", 409)
-        }
-        if (
-          event.caretaker_assignment_id === current.caretaker_assignment_id &&
-          event.assignment_version === Number(current.assignment_version)
-        ) {
-          if (
-            event.caretaker_account_id !== current.caretaker_account_id ||
-            event.status !== current.status ||
-            event.gene_symbol !== current.gene_symbol
-          ) {
-            fail(
-              "ASSIGNMENT_SNAPSHOT_CONFLICT",
-              "Assignment version already represents different authority state",
-              409,
-            )
-          }
-          return {
-            ok: true,
-            changed: false,
-            replayed: true,
-            snapshot: this.snapshot(),
-          }
-        }
-        if (
-          event.caretaker_assignment_id === current.caretaker_assignment_id &&
-          event.assignment_version < Number(current.assignment_version)
-        ) {
-          fail("STALE_ASSIGNMENT_EVENT", "Assignment version cannot move backward", 409)
-        }
-        if (
-          event.caretaker_assignment_id !== current.caretaker_assignment_id &&
-          current.status !== "ended"
-        ) {
-          fail(
-            "ASSIGNMENT_REPLACEMENT_CONFLICT",
-            "Open assignment must end before replacement",
-            409,
-          )
-        }
-      }
-
-      const previousStatus = String(current?.status || "")
-      const previousAsset = normalizeSha256(head?.asset_sha256, { optional: true })
-      const previousDirection = previousAsset ? normalizeDirection(head?.direction ?? 1) : null
-      const assignmentChanged =
-        current && event.caretaker_assignment_id !== current.caretaker_assignment_id
-      const mustDeactivate = event.status === "ended" || assignmentChanged
-      const nextAsset = mustDeactivate ? null : previousAsset
-      const nextDirection = mustDeactivate ? null : previousDirection
-      const nextVersion =
-        Number(head?.supervote_version || 0) + Number(Boolean(previousAsset && mustDeactivate))
-      const mutationId = `caretaker-assignment:${event.event_id}`
-      const eventType = assignmentEventType(previousStatus, event.status)
-
-      this.sql.exec(
-        `INSERT INTO caretaker_assignment_projection (
-           singleton, gene_id, gene_symbol, caretaker_assignment_id,
-           caretaker_account_id, status, assignment_version,
-           authority_event_id, authority_event_sequence, projected_at
-         ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(singleton) DO UPDATE SET
-           gene_id = excluded.gene_id,
-           gene_symbol = excluded.gene_symbol,
-           caretaker_assignment_id = excluded.caretaker_assignment_id,
-           caretaker_account_id = excluded.caretaker_account_id,
-           status = excluded.status,
-           assignment_version = excluded.assignment_version,
-           authority_event_id = excluded.authority_event_id,
-           authority_event_sequence = excluded.authority_event_sequence,
-           projected_at = CURRENT_TIMESTAMP`,
-        event.gene_id,
-        event.gene_symbol,
-        event.caretaker_assignment_id,
-        event.caretaker_account_id,
-        event.status,
-        event.assignment_version,
-        event.event_id,
-        event.event_sequence,
-      )
-      this.sql.exec(
-        `UPDATE caretaker_supervote_head
-            SET caretaker_assignment_id = ?, caretaker_account_id = ?,
-                asset_sha256 = ?, direction = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE singleton = 1`,
-        event.caretaker_assignment_id,
-        event.caretaker_account_id,
-        nextAsset,
-        nextDirection,
-        nextVersion,
-      )
-      const assignment = this.readAssignment()
-      const nextHead = this.readHead()
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_audit (
-           mutation_id, event_type, caretaker_assignment_id, caretaker_account_id,
-           assignment_status, assignment_version, from_asset_sha256, to_asset_sha256,
-           from_direction, to_direction, supervote_version,
-           authority_event_id, authority_event_sequence
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        mutationId,
-        eventType,
-        event.caretaker_assignment_id,
-        event.caretaker_account_id,
-        event.status,
-        event.assignment_version,
-        previousAsset,
-        nextAsset,
-        previousDirection,
-        nextDirection,
-        nextVersion,
-        event.event_id,
-        event.event_sequence,
-      )
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_outbox (mutation_id, payload_json)
-         VALUES (?, ?)`,
-        mutationId,
-        outboxPayload({
-          mutationId,
-          eventType,
-          assignment,
-          head: nextHead,
-          fromAssetSha256: previousAsset,
-          toAssetSha256: nextAsset,
-          fromDirection: previousDirection,
-          toDirection: nextDirection,
-          recomputeRequired: previousAsset !== nextAsset,
-        }),
-      )
-      this.compactHistory()
-      return { ok: true, changed: true, replayed: false, snapshot: this.snapshot() }
-    }
-  }
-
-  async projectAssignment(rawEvent) {
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => this.projectAssignmentCore(rawEvent))
-  }
-
-  async setSelection(options = {}) {
-    await this.armAlarm(1)
-    return this.storage.transactionSync(() => this.setSelectionCore(options))
-  }
-
-  /**
-   * Synchronous supervote mutation core. Callers that must commit this state
-   * together with the per-gene publication intent run it inside the shared
-   * storage transaction, so entitlement/version checks and command receipts
-   * are preserved while a failed intent can no longer leave a committed
-   * supervote change behind.
-   */
-  setSelectionCore({
+/**
+ * The caretaker's signed 10x vote: move, confirm or clear it. Compare-and-set
+ * on the assignment version and the supervote version the caller last saw;
+ * every accepted command advances the supervote version and leaves a receipt,
+ * so an identical retry replays the receipt and a reused command id with a
+ * different request is refused. A target must be an eligible candidate of
+ * this gene in the trigger-maintained eligibility projection.
+ *
+ * A supervote spends one unit of the daily vote budget it shares with reader
+ * votes (vote-guards.js). Once the day is spent the write batch is refused
+ * whole, nothing is written, and the caller gets a 429.
+ */
+export async function setCaretakerSupervoteInD1(
+  db,
+  {
+    symbol,
     accountId,
     assetSha256 = null,
     direction = null,
@@ -675,370 +377,412 @@ export class CaretakerSupervoteLedger {
     requestSha256,
     expectedAssignmentVersion,
     expectedSupervoteVersion,
-  } = {}) {
-    const account = normalizeId(accountId, "caretaker_account_id")
-    const targetAsset = normalizeSha256(assetSha256, { optional: true })
-    const targetDirection = targetAsset ? normalizeDirection(direction) : null
-    const command = normalizeId(commandId, "command_id")
-    const requestHash = normalizeRequestSha256(requestSha256)
-    const expectedAssignment = normalizeVersion(
-      expectedAssignmentVersion,
-      "expected_assignment_version",
-      { minimum: 1 },
-    )
-    const expectedSupervote = normalizeVersion(
-      expectedSupervoteVersion,
-      "expected_supervote_version",
-    )
-    {
-      const receipt = first(
-        this.sql,
-        `SELECT request_sha256, response_json
-           FROM caretaker_supervote_command_receipts
-          WHERE command_id = ?`,
-        command,
+  } = {},
+  { attempt = 1, dailyVoteLimit = VOTE_DAILY_LIMIT } = {},
+) {
+  const geneSymbol = normalizeSymbol(symbol)
+  const account = normalizeId(accountId, "caretaker_account_id")
+  const targetAsset = normalizeSha256(assetSha256, { optional: true })
+  const targetDirection = targetAsset ? normalizeDirection(direction) : null
+  const command = normalizeId(commandId, "command_id")
+  const requestHash = normalizeRequestSha256(requestSha256)
+  const expectedAssignment = normalizeVersion(
+    expectedAssignmentVersion,
+    "expected_assignment_version",
+    { minimum: 1 },
+  )
+  const expectedSupervote = normalizeVersion(expectedSupervoteVersion, "expected_supervote_version")
+
+  const reads = [
+    db
+      .prepare(
+        `SELECT request_sha256, response_json FROM icono_caretaker_supervote_command_receipts
+          WHERE command_id = ?1 LIMIT 1`,
       )
-      if (receipt) {
-        if (receipt.request_sha256 !== requestHash) {
-          fail("COMMAND_ID_CONFLICT", "command_id was already used for another request", 409)
-        }
-        return { ...parseJson(receipt.response_json, {}), replayed: true }
-      }
+      .bind(command),
+    db.prepare(STATE_SQL).bind(geneSymbol),
+  ]
+  if (targetAsset) {
+    reads.push(
+      db
+        .prepare(
+          `SELECT eligible FROM icono_caretaker_candidate_eligibility_projection
+            WHERE gene_symbol = ?1 AND asset_sha256 = ?2 LIMIT 1`,
+        )
+        .bind(geneSymbol, targetAsset),
+    )
+  }
+  const [receiptRead, stateRead, eligibilityRead] = await db.batch(reads)
+  if (targetAsset && Number(eligibilityRead?.results?.[0]?.eligible) !== 1) {
+    fail(
+      "SUPERVOTE_TARGET_INELIGIBLE",
+      "Caretaker supervotes require an eligible, current candidate blot",
+      409,
+    )
+  }
+  const receipt = receiptRead?.results?.[0] || null
+  if (receipt) {
+    if (receipt.request_sha256 !== requestHash) {
+      fail("COMMAND_ID_CONFLICT", "command_id was already used for another request", 409)
+    }
+    return { ...parseJson(receipt.response_json, {}), replayed: true }
+  }
+  const { assignment, head } = stateFromRow(stateRead?.results?.[0])
+  if (!assignment) fail("CARETAKER_ASSIGNMENT_REQUIRED", "Caretaker assignment is missing", 403)
+  if (assignment.status === "suspended") {
+    fail("CARETAKER_ASSIGNMENT_SUSPENDED", "Suspended caretakers cannot move the supervote", 409)
+  }
+  if (assignment.status !== "active") {
+    fail("CARETAKER_ASSIGNMENT_INACTIVE", "An active caretaker assignment is required", 403)
+  }
+  if (assignment.caretaker_account_id !== account) {
+    fail("CARETAKER_ASSIGNMENT_NOT_OWNED", "Only this gene's caretaker can move the supervote", 403)
+  }
+  if (Number(assignment.assignment_version) !== expectedAssignment) {
+    fail("STALE_ASSIGNMENT_STATE", "Caretaker assignment changed", 409)
+  }
+  if (Number(head.supervote_version || 0) !== expectedSupervote) {
+    fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
+  }
 
-      const assignment = this.readAssignment()
-      const head = this.readHead()
-      if (!assignment) fail("CARETAKER_ASSIGNMENT_REQUIRED", "Caretaker assignment is missing", 403)
-      if (assignment.status === "suspended") {
-        fail(
-          "CARETAKER_ASSIGNMENT_SUSPENDED",
-          "Suspended caretakers cannot move the supervote",
-          409,
+  const previousAsset = head.asset_sha256 || null
+  const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
+  const changed = previousAsset !== targetAsset || previousDirection !== targetDirection
+  // Every accepted command advances the CAS token, so a receipt that leaves
+  // the replay horizon can never execute its command a second time.
+  const nextVersion = Number(head.supervote_version || 0) + 1
+  const eventType = targetAsset
+    ? previousAsset
+      ? changed
+        ? "supervote_moved"
+        : "supervote_confirmed"
+      : "supervote_set"
+    : "supervote_cleared"
+  const mutationId = `caretaker-supervote:${command}`
+  const nextHead = {
+    asset_sha256: targetAsset,
+    direction: targetDirection,
+    supervote_version: nextVersion,
+  }
+  const response = {
+    ok: true,
+    changed,
+    replayed: false,
+    mutation_id: mutationId,
+    accepted_event_sequence: Number(assignment.authority_event_sequence),
+    supervote: supervoteSnapshot(assignment, nextHead, account),
+  }
+  let results
+  try {
+    results = await db.batch([
+      voteDailyBudgetStatement(db, 1, dailyVoteLimit),
+      supervoteProjectionUpsert(db, {
+        symbol: geneSymbol,
+        geneId: assignment.gene_id,
+        assignmentId: assignment.caretaker_assignment_id,
+        accountId: account,
+        asset: targetAsset,
+        direction: targetDirection,
+        version: nextVersion,
+        mutationId,
+        guardSql: `EXISTS (
+          SELECT 1 FROM icono_caretaker_vote_assignment_projection
+           WHERE gene_symbol = ?1 AND caretaker_assignment_id = ?3 AND caretaker_account_id = ?4
+             AND status = 'active' AND assignment_version = ?10
         )
-      }
-      if (assignment.status !== "active") {
-        fail("CARETAKER_ASSIGNMENT_INACTIVE", "An active caretaker assignment is required", 403)
-      }
-      if (assignment.caretaker_account_id !== account) {
-        fail(
-          "CARETAKER_ASSIGNMENT_NOT_OWNED",
-          "Only this gene's caretaker can move the supervote",
-          403,
-        )
-      }
-      if (Number(assignment.assignment_version) !== expectedAssignment) {
-        fail("STALE_ASSIGNMENT_STATE", "Caretaker assignment changed", 409)
-      }
-      if (Number(head.supervote_version || 0) !== expectedSupervote) {
-        fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
-      }
-      if (
-        targetAsset &&
-        !first(
-          this.sql,
-          `SELECT asset_sha256, eligibility_version
-             FROM caretaker_supervote_asset_eligibility
-            WHERE asset_sha256 = ? AND eligible = 1`,
-          targetAsset,
-        )
-      ) {
-        fail(
-          "SUPERVOTE_TARGET_INELIGIBLE",
-          "Caretaker supervotes require an eligible, current candidate blot",
-          409,
-        )
-      }
-
-      const previousAsset = normalizeSha256(head.asset_sha256, { optional: true })
-      const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
-      const changed = previousAsset !== targetAsset || previousDirection !== targetDirection
-      // Every accepted command advances the CAS token. Once its bounded receipt
-      // leaves the replay horizon, the original token is therefore guaranteed
-      // stale instead of accidentally executing the command a second time.
-      const nextVersion = Number(head.supervote_version || 0) + 1
-      const eventType = targetAsset
-        ? previousAsset
-          ? changed
-            ? "supervote_moved"
-            : "supervote_confirmed"
-          : "supervote_set"
-        : "supervote_cleared"
-      const mutationId = `caretaker-supervote:${command}`
-
-      this.sql.exec(
-        `UPDATE caretaker_supervote_head
-            SET asset_sha256 = ?, direction = ?, supervote_version = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE singleton = 1`,
-        targetAsset,
-        targetDirection,
-        nextVersion,
-      )
-      const nextHead = this.readHead()
-      const response = {
-        ok: true,
-        changed,
-        replayed: false,
-        mutation_id: mutationId,
-        accepted_event_sequence: Number(assignment.authority_event_sequence),
-        supervote: supervoteSnapshot(assignment, nextHead, account),
-      }
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_audit (
-           mutation_id, event_type, command_id, request_sha256,
-           caretaker_assignment_id, caretaker_account_id, assignment_status,
-           assignment_version, from_asset_sha256, to_asset_sha256,
-           from_direction, to_direction, supervote_version,
-           authority_event_id, authority_event_sequence
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        AND COALESCE((SELECT supervote_version FROM icono_caretaker_supervote_projection
+                       WHERE gene_symbol = ?1), 0) = ?11
+        AND NOT EXISTS (
+          SELECT 1 FROM icono_caretaker_supervote_command_receipts WHERE command_id = ?12
+        )`,
+        guardArgs: [expectedAssignment, expectedSupervote, command],
+      }),
+      supervoteEventInsert(db, {
         mutationId,
         eventType,
-        command,
-        requestHash,
-        assignment.caretaker_assignment_id,
-        account,
-        assignment.status,
-        assignment.assignment_version,
-        previousAsset,
-        targetAsset,
-        previousDirection,
-        targetDirection,
-        nextVersion,
-        assignment.authority_event_id,
-        assignment.authority_event_sequence,
-      )
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_outbox (mutation_id, payload_json)
-         VALUES (?, ?)`,
-        mutationId,
-        outboxPayload({
+        commandId: command,
+        requestSha256: requestHash,
+        symbol: geneSymbol,
+        assignment,
+        fromAsset: previousAsset,
+        toAsset: targetAsset,
+        fromDirection: previousDirection,
+        toDirection: targetDirection,
+        version: nextVersion,
+      }),
+      db
+        .prepare(
+          `INSERT INTO icono_caretaker_supervote_command_receipts (
+           command_id, request_sha256, mutation_id, response_json,
+           accepted_event_sequence, created_at
+         )
+         SELECT ?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP
+          WHERE EXISTS (
+            SELECT 1 FROM icono_caretaker_supervote_projection
+             WHERE gene_symbol = ?6 AND last_mutation_id = ?3
+          )`,
+        )
+        .bind(
+          command,
+          requestHash,
           mutationId,
-          eventType,
-          commandId: command,
-          requestSha256: requestHash,
-          assignment,
-          head: nextHead,
-          fromAssetSha256: previousAsset,
-          toAssetSha256: targetAsset,
-          fromDirection: previousDirection,
-          toDirection: targetDirection,
-          response,
-          recomputeRequired: changed,
-        }),
-      )
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_command_receipts (
-           command_id, request_sha256, response_json
-         ) VALUES (?, ?, ?)`,
-        command,
-        requestHash,
-        JSON.stringify(response),
-      )
-      this.compactHistory()
-      return response
-    }
+          JSON.stringify(response),
+          Number(assignment.authority_event_sequence),
+          geneSymbol,
+        ),
+      appliedMutationGuard(db, geneSymbol, mutationId),
+    ])
+  } catch (error) {
+    if (isVoteDailyBudgetRefusal(error))
+      fail(VOTE_DAILY_BUDGET_EXHAUSTED, VOTE_DAILY_BUDGET_MESSAGE, 429)
+    throw error
   }
-
-  projectAssetEligibilityInTransaction(rawEvent) {
-    const event = normalizeEligibilityEvent(rawEvent)
-    if (normalizeSymbol(this.getSymbol()) !== event.gene_symbol) {
-      fail("ELIGIBILITY_GENE_MISMATCH", "Candidate eligibility belongs to another gene", 409)
-    }
-    const current = first(
-      this.sql,
-      `SELECT asset_sha256, eligibility_version, eligible,
-              source_event_id, source_event_sequence
-         FROM caretaker_supervote_asset_eligibility
-        WHERE asset_sha256 = ?`,
-      event.asset_sha256,
+  if (Number(results?.[1]?.meta?.changes || 0) > 0) return response
+  // A concurrent command won the compare-and-set between the read and the
+  // write. Re-read once: an identical command replays its receipt, anything
+  // else reports the state that changed.
+  if (attempt < 2) {
+    return setCaretakerSupervoteInD1(
+      db,
+      {
+        symbol: geneSymbol,
+        accountId: account,
+        assetSha256: targetAsset,
+        direction: targetDirection,
+        commandId: command,
+        requestSha256: requestHash,
+        expectedAssignmentVersion: expectedAssignment,
+        expectedSupervoteVersion: expectedSupervote,
+      },
+      { attempt: attempt + 1, dailyVoteLimit },
     )
-    if (current) {
-      const currentVersion = Number(current.eligibility_version)
-      if (event.eligibility_version === currentVersion) {
-        if (
-          current.source_event_id !== event.event_id ||
-          Number(current.source_event_sequence) !== event.event_sequence ||
-          Boolean(current.eligible) !== event.eligible
-        ) {
-          fail(
-            "CANDIDATE_ELIGIBILITY_CONFLICT",
-            "Candidate eligibility version already has different content",
-            409,
-          )
-        }
-        return {
-          ok: true,
-          changed: false,
-          replayed: true,
-          asset_sha256: event.asset_sha256,
-          eligibility_version: currentVersion,
-          eligible: Boolean(current.eligible),
-          supervote: this.snapshot(),
-        }
+  }
+  fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
+}
+
+/**
+ * Projects one accepted caretaker assignment event (from the manifestation
+ * authority outbox) into D1. Sequence and version may only move forward; a
+ * different assignment replaces only an ended one. Ending or replacing the
+ * assignment clears its supervote. Returns whether the supervote changed, so
+ * the caller can re-run the gene's election.
+ */
+export async function projectCaretakerAssignmentInD1(db, rawEvent) {
+  const event = normalizeAssignmentEvent(rawEvent)
+  const { assignment: current, head } = stateFromRow(
+    await db.prepare(STATE_SQL).bind(event.gene_symbol).first(),
+  )
+  if (current) {
+    const currentSequence = Number(current.authority_event_sequence)
+    if (event.event_sequence === currentSequence) {
+      if (event.event_id !== current.authority_event_id) {
+        fail("ASSIGNMENT_EVENT_CONFLICT", "Event sequence already has another event", 409)
       }
-      if (event.eligibility_version < currentVersion) {
+      return { ok: true, changed: false, replayed: true, supervote_changed: false }
+    }
+    if (event.event_sequence < currentSequence) {
+      fail("STALE_ASSIGNMENT_EVENT", "Assignment projection cannot move backward", 409)
+    }
+    if (event.gene_id !== current.gene_id) {
+      fail("ASSIGNMENT_GENE_MISMATCH", "Stable gene identity changed", 409)
+    }
+    if (
+      event.caretaker_assignment_id === current.caretaker_assignment_id &&
+      event.assignment_version === Number(current.assignment_version)
+    ) {
+      if (
+        event.caretaker_account_id !== current.caretaker_account_id ||
+        event.status !== current.status ||
+        event.gene_symbol !== String(current.gene_symbol || "").toUpperCase()
+      ) {
         fail(
-          "STALE_CANDIDATE_ELIGIBILITY",
-          "Candidate eligibility projection cannot move backward",
+          "ASSIGNMENT_SNAPSHOT_CONFLICT",
+          "Assignment version already represents different authority state",
           409,
         )
       }
+      return { ok: true, changed: false, replayed: true, supervote_changed: false }
     }
-
-    this.sql.exec(
-      `INSERT INTO caretaker_supervote_asset_eligibility (
-         asset_sha256, eligibility_version, eligible,
-         source_event_id, source_event_sequence, reason, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(asset_sha256) DO UPDATE SET
-         eligibility_version = excluded.eligibility_version,
-         eligible = excluded.eligible,
-         source_event_id = excluded.source_event_id,
-         source_event_sequence = excluded.source_event_sequence,
-         reason = excluded.reason,
-         updated_at = CURRENT_TIMESTAMP`,
-      event.asset_sha256,
-      event.eligibility_version,
-      event.eligible ? 1 : 0,
-      event.event_id,
-      event.event_sequence,
-      event.reason,
-    )
-
-    const assignment = this.readAssignment()
-    const head = this.readHead()
-    const selectedAsset = normalizeSha256(head?.asset_sha256, { optional: true })
-    const selectedDirection = selectedAsset ? normalizeDirection(head?.direction ?? 1) : null
-    const selectionCleared = !event.eligible && selectedAsset === event.asset_sha256
-    const mutationId = `caretaker-supervote-eligibility:${event.event_id}`
-    if (selectionCleared) {
-      const nextVersion = Number(head.supervote_version || 0) + 1
-      this.sql.exec(
-        `UPDATE caretaker_supervote_head
-            SET asset_sha256 = NULL, direction = NULL,
-                supervote_version = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE singleton = 1`,
-        nextVersion,
-      )
-      const nextHead = this.readHead()
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_audit (
-           mutation_id, event_type, caretaker_assignment_id, caretaker_account_id,
-           assignment_status, assignment_version, from_asset_sha256, to_asset_sha256,
-           from_direction, to_direction, supervote_version,
-           authority_event_id, authority_event_sequence
-         ) VALUES (?, 'supervote_asset_invalidated', ?, ?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?)`,
-        mutationId,
-        assignment.caretaker_assignment_id,
-        assignment.caretaker_account_id,
-        assignment.status,
-        assignment.assignment_version,
-        event.asset_sha256,
-        selectedDirection,
-        nextVersion,
-        assignment.authority_event_id,
-        assignment.authority_event_sequence,
-      )
-      this.sql.exec(
-        `INSERT INTO caretaker_supervote_outbox (mutation_id, payload_json)
-         VALUES (?, ?)`,
-        mutationId,
-        outboxPayload({
-          mutationId,
-          eventType: "supervote_asset_invalidated",
-          assignment,
-          head: nextHead,
-          fromAssetSha256: event.asset_sha256,
-          toAssetSha256: null,
-          fromDirection: selectedDirection,
-          toDirection: null,
-          recomputeRequired: true,
-        }),
-      )
+    if (
+      event.caretaker_assignment_id === current.caretaker_assignment_id &&
+      event.assignment_version < Number(current.assignment_version)
+    ) {
+      fail("STALE_ASSIGNMENT_EVENT", "Assignment version cannot move backward", 409)
     }
-    // Eligibility alone adds no history or delivery row. Re-pruning for every
-    // candidate multiplied the entire outbox backlog by the projection batch.
-    if (selectionCleared) this.compactHistory()
-    return {
-      ok: true,
-      changed: true,
-      replayed: false,
-      selection_cleared: selectionCleared,
-      mutation_id: selectionCleared ? mutationId : null,
-      asset_sha256: event.asset_sha256,
-      eligibility_version: event.eligibility_version,
-      eligible: event.eligible,
-      supervote: this.snapshot(),
+    if (
+      event.caretaker_assignment_id !== current.caretaker_assignment_id &&
+      current.status !== "ended"
+    ) {
+      fail("ASSIGNMENT_REPLACEMENT_CONFLICT", "Open assignment must end before replacement", 409)
     }
   }
 
-  projectAssetEligibility(rawEvent) {
-    return this.storage.transactionSync(() => this.projectAssetEligibilityInTransaction(rawEvent))
+  const previousAsset = head.asset_sha256 || null
+  const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
+  const assignmentChanged = Boolean(
+    current && event.caretaker_assignment_id !== current.caretaker_assignment_id,
+  )
+  const mustDeactivate = event.status === "ended" || assignmentChanged
+  const nextAsset = mustDeactivate ? null : previousAsset
+  const nextDirection = mustDeactivate ? null : previousDirection
+  const supervoteChanged = Boolean(previousAsset && mustDeactivate)
+  const nextVersion = Number(head.supervote_version || 0) + Number(supervoteChanged)
+  const mutationId = `caretaker-assignment:${event.event_id}`
+  const nextAssignment = {
+    gene_id: event.gene_id,
+    gene_symbol: event.gene_symbol,
+    caretaker_assignment_id: event.caretaker_assignment_id,
+    caretaker_account_id: event.caretaker_account_id,
+    status: event.status,
+    assignment_version: event.assignment_version,
+    authority_event_id: event.event_id,
+    authority_event_sequence: event.event_sequence,
   }
-
-  projectAssetEligibilityBatch({ projections } = {}) {
-    const items = Array.isArray(projections) ? projections : []
-    if (!items.length || items.length > 5000) {
-      fail("INVALID_SUPERVOTE_INPUT", "projections must contain 1 to 5000 items")
-    }
-    return this.storage.transactionSync(() => {
-      const results = items.map((event) => this.projectAssetEligibilityInTransaction(event))
-      return {
-        ok: true,
-        changed: results.filter((result) => result.changed).length,
-        replayed: results.filter((result) => result.replayed).length,
-        results,
-      }
-    })
-  }
-
-  pendingOutboxRows(limit = 50) {
-    const safeLimit = Math.max(1, Math.min(100, Number(limit || 50) || 50))
-    return this.sql
-      .exec(
-        `SELECT id, mutation_id, payload_json, attempts
-           FROM caretaker_supervote_outbox
-          WHERE delivered_at IS NULL
-          ORDER BY id ASC
-          LIMIT ?`,
-        safeLimit,
+  const statements = [
+    db
+      .prepare(
+        `INSERT INTO icono_caretaker_vote_assignment_projection (
+           gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
+           status, assignment_version, authority_event_id,
+           authority_event_sequence, projected_at
+         )
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP
+          WHERE COALESCE((SELECT authority_event_sequence
+                            FROM icono_caretaker_vote_assignment_projection
+                           WHERE gene_symbol = ?1), 0) = ?9
+         ON CONFLICT(gene_symbol) DO UPDATE SET
+           gene_id = excluded.gene_id,
+           caretaker_assignment_id = excluded.caretaker_assignment_id,
+           caretaker_account_id = excluded.caretaker_account_id,
+           status = excluded.status,
+           assignment_version = excluded.assignment_version,
+           authority_event_id = excluded.authority_event_id,
+           authority_event_sequence = excluded.authority_event_sequence,
+           projected_at = CURRENT_TIMESTAMP`,
       )
-      .toArray()
-  }
-
-  async drainOutbox(deliver, { limit = 50 } = {}) {
-    if (typeof deliver !== "function") throw new TypeError("deliver is required")
-    const rows = this.pendingOutboxRows(limit)
-    for (const row of rows) {
-      try {
-        const payload = parseJson(row.payload_json)
-        if (!payload) throw new Error("Invalid caretaker supervote outbox payload")
-        await deliver(payload)
-        this.storage.transactionSync(() => {
-          this.sql.exec(
-            `UPDATE caretaker_supervote_outbox
-                SET delivered_at = CURRENT_TIMESTAMP, last_error = ''
-              WHERE id = ? AND delivered_at IS NULL`,
-            Number(row.id),
-          )
-          this.compactHistory()
-        })
-      } catch (error) {
-        const attempts = Math.max(0, Number(row.attempts || 0)) + 1
-        this.sql.exec(
-          `UPDATE caretaker_supervote_outbox
-              SET attempts = ?, last_error = ?
-            WHERE id = ? AND delivered_at IS NULL`,
-          attempts,
-          String(error?.message || error || "outbox delivery failed").slice(0, 2000),
-          Number(row.id),
-        )
-        await this.armAlarm(Math.min(60_000, Math.max(1_000, 2 ** Math.min(attempts, 6) * 1_000)))
-        return { ok: false, delivered: 0, pending: rows.length, error: String(error) }
-      }
-    }
-    const remaining = this.pendingOutboxRows(1).length
-    if (remaining) await this.armAlarm(1)
-    return { ok: true, delivered: rows.length, pending: remaining }
+      .bind(
+        event.gene_symbol,
+        event.gene_id,
+        event.caretaker_assignment_id,
+        event.caretaker_account_id,
+        event.status,
+        event.assignment_version,
+        event.event_id,
+        event.event_sequence,
+        Number(current?.authority_event_sequence || 0),
+      ),
+    supervoteProjectionUpsert(db, {
+      symbol: event.gene_symbol,
+      geneId: event.gene_id,
+      assignmentId: event.caretaker_assignment_id,
+      accountId: event.caretaker_account_id,
+      asset: nextAsset,
+      direction: nextDirection,
+      version: nextVersion,
+      mutationId,
+      guardSql: `EXISTS (
+          SELECT 1 FROM icono_caretaker_vote_assignment_projection
+           WHERE gene_symbol = ?1 AND authority_event_id = ?10
+        )`,
+      guardArgs: [event.event_id],
+    }),
+    supervoteEventInsert(db, {
+      mutationId,
+      eventType: assignmentEventType(String(current?.status || ""), event.status),
+      symbol: event.gene_symbol,
+      assignment: nextAssignment,
+      fromAsset: previousAsset,
+      toAsset: nextAsset,
+      fromDirection: previousDirection,
+      toDirection: nextDirection,
+      version: nextVersion,
+    }),
+  ]
+  if (supervoteChanged) statements.push(appliedMutationGuard(db, event.gene_symbol, mutationId))
+  const results = await db.batch(statements)
+  const changed = Number(results?.[0]?.meta?.changes || 0) > 0
+  if (!changed) fail("STALE_ASSIGNMENT_EVENT", "Assignment projection moved concurrently", 409)
+  return {
+    ok: true,
+    changed: true,
+    replayed: false,
+    symbol: event.gene_symbol,
+    supervote_changed: supervoteChanged,
   }
 }
 
-export { normalizeAssignmentEvent, normalizeEligibilityEvent, supervoteSnapshot }
+/**
+ * A candidate stopped being eligible (rejected, marked legacy, purged): a
+ * supervote that names it is cleared. The eligibility
+ * projection is maintained by D1 triggers on every candidate write; if the
+ * supervote names this asset and the projection does not say ineligible, the
+ * trigger chain is broken and the call fails loudly instead of guessing.
+ */
+export async function invalidateCaretakerSupervoteInD1(db, { symbol, assetSha256 } = {}) {
+  const geneSymbol = normalizeSymbol(symbol)
+  const asset = normalizeSha256(assetSha256)
+  const [stateRead, eligibilityRead] = await db.batch([
+    db.prepare(STATE_SQL).bind(geneSymbol),
+    db
+      .prepare(
+        `SELECT eligible, source_event_sequence
+           FROM icono_caretaker_candidate_eligibility_projection
+          WHERE gene_symbol = ?1 AND asset_sha256 = ?2 LIMIT 1`,
+      )
+      .bind(geneSymbol, asset),
+  ])
+  const { assignment, head } = stateFromRow(stateRead?.results?.[0])
+  if (!assignment || head.asset_sha256 !== asset) {
+    return { ok: true, selection_cleared: false }
+  }
+  const eligibility = eligibilityRead?.results?.[0] || null
+  if (!eligibility || Number(eligibility.eligible) !== 0) {
+    fail(
+      "CANDIDATE_INELIGIBILITY_PROJECTION_MISSING",
+      "Candidate mutation did not produce an exact ineligible projection",
+      503,
+    )
+  }
+  const mutationId = `caretaker-supervote-eligibility:candidate-eligibility:${Number(
+    eligibility.source_event_sequence,
+  )}`
+  const nextVersion = Number(head.supervote_version || 0) + 1
+  const previousDirection = normalizeDirection(head.direction ?? 1)
+  const results = await db.batch([
+    supervoteProjectionUpsert(db, {
+      symbol: geneSymbol,
+      geneId: assignment.gene_id,
+      assignmentId: assignment.caretaker_assignment_id,
+      accountId: assignment.caretaker_account_id,
+      asset: null,
+      direction: null,
+      version: nextVersion,
+      mutationId,
+      guardSql: `EXISTS (
+          SELECT 1 FROM icono_caretaker_supervote_projection
+           WHERE gene_symbol = ?1 AND active = 1 AND asset_sha256 = ?10
+             AND supervote_version = ?11
+        )`,
+      guardArgs: [asset, Number(head.supervote_version || 0)],
+    }),
+    supervoteEventInsert(db, {
+      mutationId,
+      eventType: "supervote_asset_invalidated",
+      symbol: geneSymbol,
+      assignment,
+      fromAsset: asset,
+      toAsset: null,
+      fromDirection: previousDirection,
+      toDirection: null,
+      version: nextVersion,
+    }),
+    appliedMutationGuard(db, geneSymbol, mutationId),
+  ])
+  return {
+    ok: true,
+    selection_cleared: Number(results?.[0]?.meta?.changes || 0) > 0,
+    mutation_id: mutationId,
+  }
+}
+
+export { normalizeAssignmentEvent, supervoteSnapshot }

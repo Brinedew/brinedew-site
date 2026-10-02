@@ -172,6 +172,15 @@ class FakeStatement {
   }
 
   async all() {
+    // The D1 vote write reads the copied asset back by its (gene, sha) key.
+    if (
+      this.sql.includes("FROM icono_portrait_assets") &&
+      this.sql.includes("WHERE gene_symbol = ?1 AND asset_sha256 = ?2") &&
+      this.db.copyAssetInsert?.target_gene_symbol === this.args[0] &&
+      this.db.copyAssetInsert?.asset_sha256 === this.args[1]
+    ) {
+      return { results: [{ vision_id: "", candidate_image_id: null }] }
+    }
     return { results: [] }
   }
 
@@ -293,6 +302,15 @@ class FakeDb {
   prepare(sql) {
     return new FakeStatement(this, sql)
   }
+
+  async batch(statements) {
+    const results = []
+    for (const statement of statements)
+      results.push(
+        /^\s*SELECT\b/i.test(statement.sql) ? await statement.all() : await statement.run(),
+      )
+    return results
+  }
 }
 
 function buildSessionBinding(session) {
@@ -313,45 +331,11 @@ function buildSessionBinding(session) {
   }
 }
 
-function buildVoteCoordinatorBinding(db) {
-  return {
-    idFromName(name) {
-      return name
-    },
-    get() {
-      return {
-        async fetch(request) {
-          const path = new URL(request.url).pathname
-          const payload = await request.json()
-          if (path === "/vote/set") db.voteCoordinatorSetPayload = payload
-          else db.voteCoordinatorStatePayload = payload
-          return new Response(
-            JSON.stringify({
-              ok: true,
-              resolved_vision_id: payload.vision_id || "",
-              candidate_image_id: payload.candidate_image_id || null,
-              final_vote_value: payload.vote_value,
-              changed: true,
-              mutation_id: `${payload.symbol}:1`,
-              snapshot: {
-                asset_sha256: payload.asset_sha256,
-                user_vote: payload.vote_value,
-              },
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          )
-        },
-      }
-    },
-  }
-}
-
 function buildEnv(db = new FakeDb()) {
   return {
     ICONOPLASM_DB: db,
     ICONOPLASM_AUTHORING_DB: AUTHORING_DB,
     GAME_SESSIONS: buildSessionBinding({ user_id: "user-1", username: "tester" }),
-    ICONOPLASM_VOTE_COORDINATORS: buildVoteCoordinatorBinding(db),
   }
 }
 
@@ -578,12 +562,12 @@ test("copy candidate endpoint adds target candidate and auto-checkmarks it", asy
   assert.equal(db.copyAssetInsert.asset_sha256, SOURCE_SHA)
   assert.equal(db.copyAssetInsert.created_by, "user-1")
   assert.equal(db.publishEvent.gene_symbol, "INS")
-  assert.equal(db.voteCoordinatorSetPayload.symbol, "INS")
-  assert.equal(db.voteCoordinatorSetPayload.asset_sha256, SOURCE_SHA)
-  assert.equal(db.voteCoordinatorSetPayload.vote_value, 1)
-  assert.equal(db.voteProjection, undefined)
-  assert.equal(payload.auto_promote.mode, "durable_outbox")
-  assert.equal(payload.auto_promote.mutation_id, "INS:1")
+  // The checkmark is the copier's D1 vote row on the target gene.
+  assert.equal(db.voteProjection.gene_symbol, "INS")
+  assert.equal(db.voteProjection.asset_sha256, SOURCE_SHA)
+  assert.equal(db.voteProjection.user_id, "user-1")
+  assert.equal(db.voteProjection.vote_value, 1)
+  assert.equal(payload.vote.vote_value, 1)
   assert.equal(payload.target_url, "/gene/INS")
 })
 

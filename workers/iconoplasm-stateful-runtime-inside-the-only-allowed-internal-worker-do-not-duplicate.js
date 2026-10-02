@@ -81,11 +81,15 @@ import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   createPublishedCardObjectStore,
+  publishedObjectAsRead,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
-import { CATALOG_DISPATCH_WATERMARK_KEY } from "./iconoplasm-catalog-dispatch.js"
+import {
+  CATALOG_DISPATCH_WATERMARK_KEY,
+  PUBLICATION_AFFECTING_ACTIONS,
+} from "./iconoplasm-catalog-dispatch.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import {
@@ -120,7 +124,6 @@ import {
   completeExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
 import {
-  authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityGenerationBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
@@ -129,18 +132,29 @@ import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.
 import { hydratePublicCanonicalGeneRecords } from "./iconoplasm-public-canonical-runtime.js"
 import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
 import {
-  CaretakerSupervoteError,
-  CaretakerSupervoteLedger,
   caretakerSupervoteRequestSha256,
-  caretakerWeightedScore,
   compareCaretakerWeightedCandidates,
+  invalidateCaretakerSupervoteInD1,
+  projectCaretakerAssignmentInD1,
+  readCaretakerSupervoteFromD1,
+  setCaretakerSupervoteInD1,
+  supervoteSnapshot,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
-import { IconoplasmGenePublicationState } from "./iconoplasm/vote-authority/gene-publication-state.js"
 import {
-  composeGeneSelectionReference,
-  electGeneAuthorityWinner,
-  winnerAssetShaFromSelectionReference,
-} from "./iconoplasm/vote-authority/gene-authority-election.js"
+  GENE_VOTE_ELECTION_ACTOR,
+  electAndProjectGeneWinner,
+  geneElectionReceipt,
+  importGeneVotes,
+  readGeneVoteSnapshots,
+  setGeneVote,
+} from "./iconoplasm/votes/gene-votes.js"
+import {
+  VOTE_DAILY_BUDGET_EXHAUSTED,
+  capImageEditInheritedUpvotes,
+  imageEditInheritedUpvotes,
+  readGeneVoteVersion,
+  voteImportBoundsError,
+} from "./iconoplasm/votes/vote-guards.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
@@ -148,7 +162,10 @@ import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-rou
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
-import { createIconoplasmAdminRepublishHandlers } from "./iconoplasm-admin-republish-route.js"
+import {
+  REPUBLISH_MAX_SYMBOLS,
+  createIconoplasmAdminRepublishHandlers,
+} from "./iconoplasm-admin-republish-route.js"
 import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-removal.js"
 import {
   composeStableGeneObject,
@@ -1034,8 +1051,8 @@ const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
 const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // ICONOPLASM PUBLICATION (B-898). Two published objects, no tree:
 //   genes/v3/<SYMBOL>.json, written by publishIconoplasmGeneStableObject below
-//   (called by the vote authority when a winner changes and by the admin
-//   republish route the GitHub Actions publisher drives), and
+//   (called after every changed vote and by the admin republish route the
+//   GitHub Actions publisher drives), and
 //   catalog/v3/index.json, built by scripts/publish-iconoplasm-catalog.mjs in
 //   GitHub Actions from D1 and uploaded through admin_publication.catalog_object_put.
 // The D1 rows icono_publish_state and icono_portrait_assets stay the authoring
@@ -1049,25 +1066,6 @@ const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
-// icono_publish_events.action values that change which portrait a gene shows in
-// the public card catalog. Any event with one of these actions after the
-// watermark means the gallery owes that gene a rebuild. Non-canonical bookkeeping
-// actions (e.g. unstale) are deliberately excluded so the dirty signal is tight.
-// `gene_card_materialized` is print-copy bookkeeping, not a public card change;
-// including it made one publish schedule a second no-op publish.
-const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
-  "publish",
-  "auto_promote",
-  "vote_auto_promote",
-  "reject",
-  "legacy_mark",
-  "restore_keep",
-  "remove_candidate",
-  "rollback",
-  "unpublish",
-  "purge_legacy",
-  "manifestation_canonical_changed",
-]
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
@@ -1098,9 +1096,6 @@ const ICONOPLASM_SYNC_GOVERNOR_BINDING = "ICONOPLASM_SYNC_GOVERNOR"
 const ICONOPLASM_SYNC_GOVERNOR_ID = "global"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV =
   "ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED"
-const ICONOPLASM_VOTE_PROJECTION_QUEUE_BINDING = "ICONOPLASM_VOTE_PROJECTION_QUEUE"
-const ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED_ENV = "ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED"
-const ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND = "process_vote_projection_refresh"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
 const ICONOPLASM_QUEUE_MAX_DELAY_SECONDS = 24 * 60 * 60
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
@@ -1473,11 +1468,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   if (family === "caretaker_coordination_write") return "first_party_write"
   if (family === "authority_workstation_sync" || family === "authority_workstation_material")
     return "workstation_sync_read"
-  if (
-    family === "authority_workstation_write" ||
-    family === "authority_generation_executor" ||
-    family === "authority_cutover"
-  )
+  if (family === "authority_workstation_write" || family === "authority_generation_executor")
     return "workstation_sync_write"
   if (family.startsWith("votes_"))
     return family === "votes_me" ? "first_party_read" : "first_party_write"
@@ -1570,8 +1561,7 @@ function iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily) {
   if (routeFamily.startsWith("internal_")) return "internal_maintenance"
   if (
     routeFamily.startsWith("authority_workstation_") ||
-    routeFamily === "authority_generation_executor" ||
-    routeFamily === "authority_cutover"
+    routeFamily === "authority_generation_executor"
   )
     return "workstation_sync"
   if (path.startsWith("/api/iconoplasm/admin/")) {
@@ -1659,15 +1649,9 @@ function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
 // own bounded per-invocation work, but that is a provider statement ceiling, not
 // a daily spending authority. Every re-enabled consumer must also be metered
 // into the shared daily D1 ledger so it cannot silently exhaust the account.
-// sync-finalization is now bound alongside vote-projection (B-754); it was the
-// remaining consumer with only the provider per-invocation ceiling. These
-// families are only ever supplied by non-HTTP worker entrypoints (a synthetic
-// attribution), so adding them does not widen the HTTP budgeted-route set.
-const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set([
-  "background_vote_outbox",
-  "background_vote_projection",
-  "background_sync_finalization",
-])
+// The family is only ever supplied by a non-HTTP worker entrypoint (a
+// synthetic attribution), so it does not widen the HTTP budgeted-route set.
+const ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES = new Set(["background_sync_finalization"])
 
 function isIconoplasmBackgroundBudgetedRouteFamily(routeFamily) {
   return ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES.has(String(routeFamily || "").trim())
@@ -3011,58 +2995,6 @@ function normalizeCandidateRef(raw, symbol = null, assetSha256 = null) {
 
 function voteAssetIdentity(symbol, assetSha256) {
   return normalizeCandidateRef("", symbol, assetSha256)
-}
-
-async function appendVoteEvent(
-  env,
-  {
-    symbol,
-    assetSha256,
-    visionId = "",
-    candidateRef = "",
-    candidateImageId = null,
-    userId,
-    voteValue,
-    mutationId = "",
-  },
-) {
-  if (!env?.ICONOPLASM_DB) return
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256)
-  const safeUserId = normalizeUserId(userId)
-  const safeVoteValue = normalizeVoteValue(voteValue)
-  if (!safeSymbol || !safeAssetSha || !safeUserId || safeVoteValue === null) return
-  const safeCandidateRef =
-    normalizeCandidateRef(candidateRef, safeSymbol, safeAssetSha) ||
-    voteAssetIdentity(safeSymbol, safeAssetSha)
-  const safeVisionId = sanitizeVoteVisionId(visionId || "")
-  const safeCandidateImageId = optionalInt(candidateImageId)
-  const safeMutationId = sanitizeText(mutationId || "", 255) || null
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_vote_events (
-       gene_symbol,
-       asset_sha256,
-       vision_id,
-       candidate_ref,
-       candidate_image_id,
-       user_id,
-       vote_value,
-       mutation_id,
-       created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(mutation_id) WHERE mutation_id IS NOT NULL DO NOTHING`,
-  )
-    .bind(
-      safeSymbol,
-      safeAssetSha,
-      safeVisionId,
-      safeCandidateRef,
-      safeCandidateImageId,
-      safeUserId,
-      safeVoteValue,
-      safeMutationId,
-    )
-    .run()
 }
 
 function esc(s) {
@@ -6593,7 +6525,7 @@ function mapImageEditJobRow(row, baseUrl = "") {
       downvotes: Math.max(0, Number(row?.source_downvotes || 0) || 0),
       score: Number(row?.source_score || 0) || 0,
     },
-    inherited_upvotes: Math.max(0, Number(row?.inherited_upvotes || 0) || 0),
+    inherited_upvotes: capImageEditInheritedUpvotes(row?.inherited_upvotes),
     adjustments: (() => {
       try {
         const parsed = JSON.parse(String(row?.adjustments_json || "[]"))
@@ -8416,7 +8348,7 @@ function imageEditInheritedVoteItems(job, userId) {
   const symbol = normalizeSymbol(job?.source_gene_symbol || "")
   const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
   if (!symbol || !assetSha) return []
-  const inherited = Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0))
+  const inherited = capImageEditInheritedUpvotes(job?.inherited_upvotes)
   const visionId = sanitizeVoteVisionId(`image-edit:${job.id}`)
   const items = []
   for (let index = 0; index < inherited; index += 1) {
@@ -8445,23 +8377,18 @@ async function applyImageEditInheritedVotes(env, ctx, job, userId) {
   const symbol = normalizeSymbol(job?.source_gene_symbol || "")
   const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
   if (!symbol || !assetSha) return { ok: false, error: "Missing vote target" }
-  const items = imageEditInheritedVoteItems(job, userId)
+  const items = imageEditInheritedVoteItems(job, userId).map((item) => ({ ...item, symbol }))
   if (!items.length) return { ok: true, inherited_upvotes: 0, projected: 0 }
-  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
-    symbol,
-    items,
+  const imported = await importIconoplasmVotes(env, ctx, items, {
     reason: "image_edit_publish_inherited_votes",
   })
-  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
-  const projectionOutboxPending = (
-    Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []
-  ).filter((row) => row?.changed).length
+  if (imported.refusal) return imported.refusal
+  if (imported.invalid) return { ok: false, error: "Inherited votes were refused" }
   return {
     ok: true,
-    inherited_upvotes: Math.max(0, Math.floor(Number(job?.inherited_upvotes || 0) || 0)),
+    inherited_upvotes: items.length - 1,
     imported_votes: items.length,
     user_upvote: true,
-    projection_outbox_pending: projectionOutboxPending,
   }
 }
 
@@ -9304,6 +9231,7 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
   const visionId = sanitizeVoteVisionId(`image-gen:${job.id}`)
   const items = [
     {
+      symbol,
       asset_sha256: assetSha,
       vision_id: visionId,
       candidate_image_id: null,
@@ -9311,20 +9239,15 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
       vote_value: 1,
     },
   ]
-  const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
-    symbol,
-    items,
+  const imported = await importIconoplasmVotes(env, ctx, items, {
     reason: "candidate_generation_publish_user_vote",
   })
-  if (!coordinatorImport?.ok) return { ok: false, error: "Vote coordinator import failed" }
-  const projectionOutboxPending = (
-    Array.isArray(coordinatorImport.results) ? coordinatorImport.results : []
-  ).filter((row) => row?.changed).length
+  if (imported.refusal) return imported.refusal
+  if (imported.invalid) return { ok: false, error: "The publisher's upvote was refused" }
   return {
     ok: true,
     imported_votes: items.length,
     user_upvote: true,
-    projection_outbox_pending: projectionOutboxPending,
   }
 }
 
@@ -13257,23 +13180,11 @@ function publicUrl(url, suffix = "") {
 
 const ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/repair-canon-invariants"
-const ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
-  "/__internal/iconoplasm/process-vote-projection-refresh"
 const ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/process-sync-finalization"
 function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
   return (
     path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
-    String(method || "GET").toUpperCase() === "POST"
-  )
-}
-
-function isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(
-  path,
-  method = "GET",
-) {
-  return (
-    path === ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
     String(method || "GET").toUpperCase() === "POST"
   )
 }
@@ -16187,21 +16098,8 @@ async function actor(request, env) {
   }
 }
 
-function iconoplasmVoteCoordinatorKey(symbol) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return ""
-  return `vote-gene:${safeSymbol}`
-}
-
 function iconoplasmVoteCoordinatorBinding(env) {
   return env?.ICONOPLASM_VOTE_COORDINATORS || null
-}
-
-function iconoplasmVoteCoordinatorStub(env, symbol) {
-  const binding = iconoplasmVoteCoordinatorBinding(env)
-  const key = iconoplasmVoteCoordinatorKey(symbol)
-  if (!binding || !key) return null
-  return binding.get(binding.idFromName(key))
 }
 
 async function iconoplasmVoteCoordinatorJson(stub, path, payload) {
@@ -16230,2989 +16128,109 @@ async function iconoplasmVoteCoordinatorJson(stub, path, payload) {
   return data
 }
 
-async function iconoplasmVoteCoordinatorSnapshot(
-  env,
-  { candidateRef, symbol, assetSha256, visionId, userId } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256)
-  if (!safeSymbol || !safeAssetSha) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/vote/snapshot", {
-    candidate_ref: normalizeCandidateRef(candidateRef, safeSymbol, safeAssetSha) || "",
-    symbol: safeSymbol,
-    asset_sha256: safeAssetSha,
-    vision_id: sanitizeVoteVisionId(visionId || ""),
-    user_id: normalizeUserId(userId || ""),
-  })
-}
-
-async function iconoplasmVoteCoordinatorSnapshotsBatch(env, { items, userId } = {}) {
-  if (!Array.isArray(items) || !items.length) return []
-  const groups = new Map()
-  for (const rawItem of items) {
-    const symbol = normalizeSymbol(rawItem?.symbol || "")
-    const assetSha = normalizeSha256(rawItem?.asset_sha256 || "")
-    if (!symbol || !assetSha) continue
-    const current = groups.get(symbol) || []
-    current.push({
-      symbol,
-      asset_sha256: assetSha,
-      candidate_ref: normalizeCandidateRef(rawItem?.candidate_ref || "", symbol, assetSha) || "",
-      vision_id: sanitizeVoteVisionId(rawItem?.vision_id || ""),
-      candidate_image_id: optionalInt(rawItem?.candidate_image_id),
-    })
-    groups.set(symbol, current)
-  }
-  const snapshots = []
-  for (const [symbol, groupItems] of groups.entries()) {
-    const stub = iconoplasmVoteCoordinatorStub(env, symbol)
-    if (!stub) return []
-    const payload = await iconoplasmVoteCoordinatorJson(stub, "/vote/snapshots", {
-      user_id: normalizeUserId(userId || ""),
-      items: groupItems,
-    })
-    for (const row of Array.isArray(payload?.snapshots) ? payload.snapshots : []) {
-      snapshots.push(row)
-    }
-  }
-  return snapshots
-}
-
-async function iconoplasmVoteCoordinatorSetVote(
-  env,
-  { symbol, assetSha256, visionId, candidateImageId, userId, requestedVoteValue, reason } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256)
-  if (!safeSymbol || !safeAssetSha) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/vote/set", {
-    symbol: safeSymbol,
-    asset_sha256: safeAssetSha,
-    vision_id: sanitizeVoteVisionId(visionId || ""),
-    candidate_image_id: optionalInt(candidateImageId),
-    user_id: normalizeUserId(userId || ""),
-    vote_value: Number(requestedVoteValue || 0),
-    reason: voteProjectionRefreshJobReason(reason || "vote_auto_promote"),
-  })
-}
-
-async function iconoplasmVoteCoordinatorImportVotes(env, { symbol, items = [], reason } = {}) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/vote/import", {
-    symbol: safeSymbol,
-    items: Array.isArray(items) ? items : [],
-    reason: voteProjectionRefreshJobReason(reason || "vote_import_auto_promote"),
-  })
-}
-
-async function iconoplasmVoteCoordinatorState(env, { symbol } = {}) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/state", {
-    symbol: safeSymbol,
-  })
-}
-
-async function iconoplasmCaretakerSupervoteSnapshot(env, { symbol, accountId } = {}) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAccountId = sanitizeText(accountId || "", 192) || ""
-  if (!safeSymbol || !safeAccountId) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/snapshot", {
-    symbol: safeSymbol,
-    account_id: safeAccountId,
-  })
-}
-
-async function iconoplasmCaretakerSupervoteSet(
-  env,
-  {
-    symbol,
-    accountId,
-    assetSha256 = null,
-    direction = null,
-    commandId,
-    requestSha256,
-    expectedAssignmentVersion,
-    expectedSupervoteVersion,
-  } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/set", {
-    symbol: safeSymbol,
-    account_id: sanitizeText(accountId || "", 192) || "",
-    asset_sha256: normalizeSha256(assetSha256 || "") || null,
-    direction: assetSha256 ? Number(direction) : null,
-    command_id: sanitizeText(commandId || "", 192) || "",
-    request_sha256: normalizeSha256(requestSha256 || "") || "",
-    expected_assignment_version: Number(expectedAssignmentVersion),
-    expected_supervote_version: Number(expectedSupervoteVersion),
-  })
-}
-
-async function iconoplasmCaretakerCandidateEligibilityProjection(
-  env,
-  { symbol, assetSha256 } = {},
-) {
+// A candidate stopped being eligible: clear a caretaker supervote that names
+// it (caretaker-supervote.js, D1 alone).
+async function iconoplasmCaretakerSupervoteInvalidate(env, { symbol, assetSha256 } = {}) {
   const safeSymbol = normalizeSymbol(symbol)
   const safeAssetSha = normalizeSha256(assetSha256 || "")
   if (!env?.ICONOPLASM_DB || !safeSymbol || !safeAssetSha) return null
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
-            source_status, source_event_sequence
-       FROM icono_caretaker_candidate_eligibility_projection
-      WHERE gene_symbol = ? AND asset_sha256 = ?
-      LIMIT 1`,
-  )
-    .bind(safeSymbol, safeAssetSha)
-    .first()
-  if (!row) return null
-  return {
-    event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
-    source_event_sequence: Number(row.source_event_sequence),
-    gene_symbol: safeSymbol,
-    asset_sha256: safeAssetSha,
-    eligibility_version: Number(row.eligibility_version),
-    eligible: Number(row.eligible),
-    source_status: sanitizeText(row.source_status || "", 64) || "unknown",
-  }
-}
-
-async function iconoplasmCaretakerSupervoteInvalidate(
-  env,
-  { symbol, assetSha256, invalidationId, reason } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256 || "")
-  if (!safeSymbol || !safeAssetSha) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  const projection = await iconoplasmCaretakerCandidateEligibilityProjection(env, {
+  return invalidateCaretakerSupervoteInD1(env.ICONOPLASM_DB, {
     symbol: safeSymbol,
     assetSha256: safeAssetSha,
   })
-  if (!projection || projection.eligible !== 0) {
-    throw new CaretakerSupervoteError(
-      "CANDIDATE_INELIGIBILITY_PROJECTION_MISSING",
-      "Candidate mutation did not produce an exact ineligible projection",
-      503,
-    )
-  }
-  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/eligibility/project", {
-    symbol: safeSymbol,
-    projection: {
-      ...projection,
-      reason:
-        sanitizeText(reason || "", 2000) ||
-        sanitizeText(invalidationId || "", 192) ||
-        "Candidate is no longer eligible",
-    },
-  })
 }
 
-async function iconoplasmCaretakerSupervoteRestoreEligibility(
-  env,
-  { symbol, assetSha256, restorationId } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256 || "")
-  if (!safeSymbol || !safeAssetSha) return null
-  const stub = iconoplasmVoteCoordinatorStub(env, safeSymbol)
-  if (!stub) return null
-  const projection = await iconoplasmCaretakerCandidateEligibilityProjection(env, {
-    symbol: safeSymbol,
-    assetSha256: safeAssetSha,
-  })
-  if (!projection || projection.eligible !== 1) {
-    throw new CaretakerSupervoteError(
-      "CANDIDATE_ELIGIBILITY_PROJECTION_MISSING",
-      "Candidate mutation did not produce an exact eligible projection",
-      503,
-    )
-  }
-  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-supervote/eligibility/project", {
-    symbol: safeSymbol,
-    projection: {
-      ...projection,
-      reason: sanitizeText(restorationId || "", 192) || "Candidate eligibility restored",
-    },
-  })
-}
-
-async function iconoplasmCaretakerSupervoteRestoreEligibilityBatch(
-  env,
-  rows,
-  { restorationPrefix = "candidate-restored" } = {},
-) {
-  const groups = new Map()
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const symbol = normalizeSymbol(row?.gene_symbol || row?.symbol || "")
-    const assetSha256 = normalizeSha256(row?.asset_sha256 || "")
-    if (!symbol || !assetSha256) continue
-    const group = groups.get(symbol) || new Set()
-    group.add(assetSha256)
-    groups.set(symbol, group)
-  }
-  const results = []
-  for (const [symbol, requestedAssets] of groups) {
-    const stub = iconoplasmVoteCoordinatorStub(env, symbol)
-    if (!stub) continue
-    const response = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, asset_sha256, eligibility_version, eligible,
-              source_status, source_event_sequence
-         FROM icono_caretaker_candidate_eligibility_projection
-        WHERE gene_symbol = ?
-        ORDER BY asset_sha256`,
-    )
-      .bind(symbol)
-      .all()
-    const projections = (Array.isArray(response?.results) ? response.results : [])
-      .filter((row) => requestedAssets.has(normalizeSha256(row?.asset_sha256 || "")))
-      .map((row) => ({
-        event_id: `candidate-eligibility:${Number(row.source_event_sequence)}`,
-        source_event_sequence: Number(row.source_event_sequence),
-        gene_symbol: symbol,
-        asset_sha256: normalizeSha256(row.asset_sha256),
-        eligibility_version: Number(row.eligibility_version),
-        eligible: Number(row.eligible),
-        source_status: sanitizeText(row.source_status || "", 64) || "unknown",
-        reason: `${restorationPrefix}:candidate eligibility restored`,
-      }))
-    if (
-      projections.length !== requestedAssets.size ||
-      projections.some((row) => row.eligible !== 1)
-    ) {
-      throw new CaretakerSupervoteError(
-        "CANDIDATE_ELIGIBILITY_PROJECTION_MISSING",
-        "Candidate restore did not produce complete eligible projections",
-        503,
-      )
-    }
-    for (let index = 0; index < projections.length; index += 5000) {
-      results.push(
-        await iconoplasmVoteCoordinatorJson(
-          stub,
-          "/caretaker-supervote/eligibility/project-batch",
-          {
-            symbol,
-            projections: projections.slice(index, index + 5000),
-          },
-        ),
-      )
-    }
-  }
-  return results
-}
-
-export async function projectCaretakerAssignmentEventToVoteCoordinator(env, event) {
-  const symbol = normalizeSymbol(
-    event?.gene?.canonical_symbol ||
-      event?.gene?.symbol ||
-      event?.canonical_symbol ||
-      event?.gene_symbol ||
-      "",
-  )
-  if (!symbol) {
-    throw new CaretakerSupervoteError(
-      "INVALID_ASSIGNMENT_PROJECTION",
-      "Assignment event is missing a canonical gene symbol",
-      400,
-    )
-  }
-  const stub = iconoplasmVoteCoordinatorStub(env, symbol)
-  if (!stub) {
-    throw new CaretakerSupervoteError(
-      "VOTE_COORDINATOR_REQUIRED",
-      "Caretaker assignment projection requires the per-gene vote coordinator",
-      503,
-    )
-  }
-  return iconoplasmVoteCoordinatorJson(stub, "/caretaker-assignment/project", {
-    symbol,
-    event,
-  })
-}
-
-function mapCoordinatorAssetSummaryRow(row) {
-  const assetSha = normalizeSha256(row?.asset_sha256 || "") || ""
-  return {
-    asset_sha256: assetSha,
-    candidate_ref: voteAssetIdentity(normalizeSymbol(row?.gene_symbol || "") || "", assetSha) || "",
-    vision_id: sanitizeVoteVisionId(row?.vision_id || "") || "",
-    candidate_image_id: optionalInt(row?.candidate_image_id),
-    upvotes: Math.max(0, Number(row?.upvotes || 0) || 0),
-    downvotes: Math.max(0, Number(row?.downvotes || 0) || 0),
-    score: Number(row?.score || 0) || 0,
-    vote_count: Math.max(0, Number(row?.vote_count || 0) || 0),
-  }
-}
-
-async function projectCaretakerSupervoteOutboxToD1(env, rawPayload) {
-  if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
-  const payload = rawPayload && typeof rawPayload === "object" ? rawPayload : {}
-  const assignment =
-    payload.assignment && typeof payload.assignment === "object" ? payload.assignment : null
-  const supervote =
-    payload.supervote && typeof payload.supervote === "object" ? payload.supervote : null
-  const symbol = normalizeSymbol(assignment?.gene_symbol || "")
-  const geneId = sanitizeText(assignment?.gene_id || "", 192) || ""
-  const assignmentId = sanitizeText(assignment?.caretaker_assignment_id || "", 192) || ""
-  const accountId = sanitizeText(assignment?.caretaker_account_id || "", 192) || ""
-  const assignmentStatus = sanitizeText(assignment?.status || "", 32) || ""
-  const assignmentVersion = Number(assignment?.assignment_version || 0)
-  const authorityEventId = sanitizeText(assignment?.authority_event_id || "", 192) || ""
-  const authorityEventSequence = Number(assignment?.authority_event_sequence || 0)
-  const mutationId = sanitizeText(payload?.mutation_id || "", 384) || ""
-  const eventType = sanitizeText(payload?.event_type || "", 64) || ""
-  const commandId = sanitizeText(payload?.command_id || "", 192) || null
-  const requestSha256 = normalizeSha256(payload?.request_sha256 || "") || null
-  const selectedAssetSha = normalizeSha256(supervote?.asset_sha256 || "") || null
-  const explicitDirection = Number(supervote?.direction)
-  const direction = [-1, 1].includes(explicitDirection)
-    ? explicitDirection
-    : supervote?.active && selectedAssetSha
-      ? 1
-      : null
-  const active = Boolean(supervote?.active && selectedAssetSha && [-1, 1].includes(direction))
-  const supervoteVersion = Number(supervote?.supervote_version || 0)
-  const fromAssetSha = normalizeSha256(payload?.from_asset_sha256 || "") || null
-  const toAssetSha = normalizeSha256(payload?.to_asset_sha256 || "") || null
-  const fromDirection = fromAssetSha ? Number(payload?.from_direction ?? 1) : null
-  const toDirection = toAssetSha ? Number(payload?.to_direction ?? direction) : null
-  if (
-    !symbol ||
-    !geneId ||
-    !assignmentId ||
-    !accountId ||
-    !["pending_acceptance", "active", "suspended", "ended"].includes(assignmentStatus) ||
-    !Number.isSafeInteger(assignmentVersion) ||
-    assignmentVersion < 1 ||
-    !authorityEventId ||
-    !Number.isSafeInteger(authorityEventSequence) ||
-    authorityEventSequence < 1 ||
-    !mutationId ||
-    !eventType ||
-    !Number.isSafeInteger(supervoteVersion) ||
-    supervoteVersion < 0 ||
-    (active && ![-1, 1].includes(direction)) ||
-    (fromDirection != null && ![-1, 1].includes(fromDirection)) ||
-    (toDirection != null && ![-1, 1].includes(toDirection))
-  ) {
-    throw new Error("Invalid caretaker supervote projection payload")
-  }
-
-  const statements = [
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_caretaker_vote_assignment_projection (
-         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-         status, assignment_version, authority_event_id,
-         authority_event_sequence, projected_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(gene_symbol) DO UPDATE SET
-         gene_id = excluded.gene_id,
-         caretaker_assignment_id = excluded.caretaker_assignment_id,
-         caretaker_account_id = excluded.caretaker_account_id,
-         status = excluded.status,
-         assignment_version = excluded.assignment_version,
-         authority_event_id = excluded.authority_event_id,
-         authority_event_sequence = excluded.authority_event_sequence,
-         projected_at = CURRENT_TIMESTAMP
-       WHERE excluded.authority_event_sequence >=
-             icono_caretaker_vote_assignment_projection.authority_event_sequence`,
-    ).bind(
-      symbol,
-      geneId,
-      assignmentId,
-      accountId,
-      assignmentStatus,
-      assignmentVersion,
-      authorityEventId,
-      authorityEventSequence,
-    ),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_caretaker_supervote_projection (
-         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-         asset_sha256, direction, active, weight, supervote_version,
-         last_mutation_id, updated_at, deactivated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 10, ?, ?, CURRENT_TIMESTAMP,
-                 CASE WHEN ? = 1 THEN NULL ELSE CURRENT_TIMESTAMP END)
-       ON CONFLICT(gene_symbol) DO UPDATE SET
-         gene_id = excluded.gene_id,
-         caretaker_assignment_id = excluded.caretaker_assignment_id,
-         caretaker_account_id = excluded.caretaker_account_id,
-         asset_sha256 = excluded.asset_sha256,
-         direction = excluded.direction,
-         active = excluded.active,
-         weight = 10,
-         supervote_version = excluded.supervote_version,
-         last_mutation_id = excluded.last_mutation_id,
-         updated_at = CURRENT_TIMESTAMP,
-         deactivated_at = CASE WHEN excluded.active = 1 THEN NULL ELSE CURRENT_TIMESTAMP END
-       WHERE excluded.supervote_version >= icono_caretaker_supervote_projection.supervote_version`,
-    ).bind(
-      symbol,
-      geneId,
-      assignmentId,
-      accountId,
-      active ? selectedAssetSha : null,
-      active ? direction : null,
-      active ? 1 : 0,
-      supervoteVersion,
-      mutationId,
-      active ? 1 : 0,
-    ),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_caretaker_supervote_events (
-         mutation_id, event_type, command_id, request_sha256,
-         gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
-         assignment_status, assignment_version, from_asset_sha256,
-         to_asset_sha256, from_direction, to_direction,
-         supervote_version, authority_event_id,
-         authority_event_sequence, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(mutation_id) DO NOTHING`,
-    ).bind(
-      mutationId,
-      eventType,
-      commandId,
-      requestSha256,
-      geneId,
-      symbol,
-      assignmentId,
-      accountId,
-      assignmentStatus,
-      assignmentVersion,
-      fromAssetSha,
-      toAssetSha,
-      fromDirection,
-      toDirection,
-      supervoteVersion,
-      authorityEventId,
-      authorityEventSequence,
-    ),
-  ]
-  if (commandId && requestSha256 && payload.response) {
-    statements.push(
-      env.ICONOPLASM_DB.prepare(
-        `INSERT INTO icono_caretaker_supervote_command_receipts (
-           command_id, request_sha256, mutation_id, response_json,
-           accepted_event_sequence, created_at
-         ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(command_id) DO UPDATE SET
-           request_sha256 = excluded.request_sha256,
-           mutation_id = excluded.mutation_id,
-           response_json = excluded.response_json,
-           accepted_event_sequence = excluded.accepted_event_sequence`,
-      ).bind(
-        commandId,
-        requestSha256,
-        mutationId,
-        JSON.stringify(payload.response),
-        authorityEventSequence,
-      ),
-    )
-  }
-  await env.ICONOPLASM_DB.batch(statements)
-  return { ok: true, mutation_id: mutationId, symbol }
-}
-
+/**
+ * B-898 Stage 2: the per-gene vote coordinators are a historical copy. D1 is
+ * the store of record for votes, caretaker supervotes and the election, and no
+ * request path addresses a coordinator. The class stays deployed, with its
+ * stored data, only so the compare route can read each coordinator's export;
+ * the next release deletes it with a `deleted_classes` migration. It never
+ * bootstraps, writes or publishes, and its alarm is inert: a wake scheduled
+ * before the cutover cannot project a stale winner over D1.
+ */
 export class IconoplasmVoteCoordinator {
   constructor(state, env) {
     this.state = state
     this.env = env
-    // B-762: the per-gene publication state is a storage helper inside this
-    // existing coordinator. It is not a second Durable Object or canon owner.
-    this.publication = new IconoplasmGenePublicationState(this.state.storage, {
-      clock: () => Date.now(),
-    })
-    this.caretakerSupervotes = new CaretakerSupervoteLedger({
-      storage: this.state.storage,
-      getSymbol: () => this.getMeta("symbol"),
-      armAlarm: (delayMs) => this.armOutboxAlarm(delayMs),
-    })
-    // The coordinator is the live vote authority. The old design treated D1's
-    // compatibility ledger as the live source of truth and re-counted historical
-    // rows in request paths. That was an expensive design mistake because each
-    // new vote got slower and more expensive as old votes accumulated.
-    this.state.blockConcurrencyWhile(async () => {
-      this.state.storage.sql.exec(`
-        CREATE TABLE IF NOT EXISTS meta (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS vote_by_user_asset (
-          user_id TEXT NOT NULL,
-          asset_sha256 TEXT NOT NULL,
-          vision_id TEXT NOT NULL DEFAULT '',
-          candidate_image_id INTEGER,
-          vote_value INTEGER NOT NULL CHECK (vote_value IN (-1, 1)),
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (user_id, asset_sha256)
-        );
-        CREATE TABLE IF NOT EXISTS asset_summary (
-          asset_sha256 TEXT PRIMARY KEY,
-          vision_id TEXT NOT NULL DEFAULT '',
-          candidate_image_id INTEGER,
-          upvotes INTEGER NOT NULL DEFAULT 0,
-          downvotes INTEGER NOT NULL DEFAULT 0,
-          score INTEGER NOT NULL DEFAULT 0,
-          vote_count INTEGER NOT NULL DEFAULT 0,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS vision_summary (
-          vision_id TEXT PRIMARY KEY,
-          upvotes INTEGER NOT NULL DEFAULT 0,
-          downvotes INTEGER NOT NULL DEFAULT 0,
-          score INTEGER NOT NULL DEFAULT 0,
-          vote_count INTEGER NOT NULL DEFAULT 0,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS vote_outbox (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          mutation_id TEXT UNIQUE,
-          asset_sha256 TEXT NOT NULL,
-          vision_id TEXT NOT NULL DEFAULT '',
-          candidate_image_id INTEGER,
-          user_id TEXT NOT NULL,
-          vote_value INTEGER NOT NULL CHECK (vote_value IN (-1, 0, 1)),
-          reason TEXT NOT NULL DEFAULT 'vote_auto_promote',
-          attempts INTEGER NOT NULL DEFAULT 0,
-          last_error TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          delivered_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_vote_outbox_pending
-          ON vote_outbox (delivered_at, id);
-      `)
-      // Vote lookups use (user_id, asset_sha256); asset lookups/export use the
-      // asset primary key, and vision totals have their own primary-key table.
-      // These retired secondary indexes served no query, but rewrote entries
-      // on every vote/summary timestamp update and every cold history import.
-      // DROP INDEX retains all data and measured constant SQL cost at 10k rows.
-      for (const index of [
-        "idx_vote_by_user_asset_asset",
-        "idx_vote_by_user_asset_vision",
-        "idx_asset_summary_vision",
-      ])
-        this.state.storage.sql.exec(`DROP INDEX IF EXISTS ${index}`)
-      this.installGeneAuthorityTables()
-      this.caretakerSupervotes.install()
-      const pendingOutbox = this.state.storage.sql
-        .exec(`SELECT 1 AS pending FROM vote_outbox WHERE delivered_at IS NULL LIMIT 1`)
-        .toArray()[0]
-      const pendingCaretakerSupervoteOutbox = this.caretakerSupervotes.pendingOutboxRows(1)[0]
-      if (pendingOutbox || pendingCaretakerSupervoteOutbox) await this.armOutboxAlarm(1)
-      // A v2 gene with unfinished publication intent repairs its own wake after
-      // a restart. This never reads or repairs another gene.
-      if (this.getMeta("authority_epoch") === "v2" && this.publication.read()?.pending) {
-        await this.publication.recoverWakeup()
-      }
-    })
   }
 
-  installGeneAuthorityTables() {
-    this.state.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS gene_candidate_authority (
-        asset_sha256 TEXT PRIMARY KEY,
-        status TEXT NOT NULL DEFAULT 'draft',
-        autopick_eligible INTEGER NOT NULL DEFAULT 0 CHECK (autopick_eligible IN (0, 1)),
-        is_stale INTEGER NOT NULL DEFAULT 0 CHECK (is_stale IN (0, 1)),
-        is_legacy INTEGER NOT NULL DEFAULT 0 CHECK (is_legacy IN (0, 1)),
-        created_at TEXT NOT NULL DEFAULT '',
-        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `)
-    this.publication.install()
-  }
-
-  sqlFirst(query, ...bindings) {
-    return this.state.storage.sql.exec(query, ...bindings).toArray()[0] || null
-  }
-
-  setMeta(key, value) {
-    this.state.storage.sql.exec(
-      `INSERT INTO meta (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      String(key || ""),
-      String(value || ""),
-    )
+  sqlRows(query, ...bindings) {
+    try {
+      return this.state.storage.sql.exec(query, ...bindings).toArray()
+    } catch {
+      return []
+    }
   }
 
   getMeta(key) {
-    return this.sqlFirst(`SELECT value FROM meta WHERE key = ?`, String(key || ""))?.value || ""
-  }
-
-  async armOutboxAlarm(delayMs = 1) {
-    const delay = Math.max(1, Number(delayMs || 1) || 1)
-    // A new vote or a coordinator restart must not erase a known daily pause.
-    const budgetRetryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
-    const due = Math.max(Date.now() + delay, budgetRetryAt)
-    // One DO owns one alarm for publication, outbox and caretaker duties.
-    // Never erase an earlier wake; only bring the shared alarm forward.
-    const existing = await this.state.storage.getAlarm()
-    if (existing === null || existing > due) await this.state.storage.setAlarm(due)
-  }
-
-  /**
-   * B-762 migration: bounded, idempotent candidate authority for one gene.
-   * The caller supplies the complete candidate set from D1; ordinary reads
-   * never run a cold full-history import. Unchanged rows do not write, and a
-   * replaced (withdrawn) candidate disappears from the election.
-   */
-  importGeneCandidateAuthority(rawItems, options = {}) {
-    return this.state.storage.transactionSync(() =>
-      this.applyCandidateAuthorityCore(rawItems, options),
+    return String(
+      this.sqlRows(`SELECT value FROM meta WHERE key = ?`, String(key || ""))[0]?.value || "",
     )
-  }
-
-  applyCandidateAuthorityCore(rawItems, { replace = true } = {}) {
-    if (!Array.isArray(rawItems))
-      throw new Error("Candidate authority items are required; refusing to clear candidates")
-    if (rawItems.length > 64)
-      throw new Error("Candidate authority batch exceeds the 64-candidate bound")
-    const incoming = new Map()
-    for (let index = 0; index < rawItems.length; index += 1) {
-      const raw = rawItems[index]
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        throw new Error(`Candidate at index ${index} must be an object`)
-      }
-      const assetSha = normalizeSha256(raw?.asset_sha256 || "")
-      // Validate every member before any destructive replacement: an invalid
-      // member must reject the whole batch instead of silently dropping a
-      // candidate and then deleting the stored set.
-      if (!assetSha) {
-        throw new Error(`Candidate at index ${index} has an invalid asset_sha256`)
-      }
-      if (incoming.has(assetSha)) continue
-      incoming.set(assetSha, {
-        asset_sha256: assetSha,
-        status:
-          sanitizeText(raw?.status || "draft", 32)
-            .trim()
-            .toLowerCase() || "draft",
-        autopick_eligible: Number(raw?.autopick_eligible) > 0 ? 1 : 0,
-        is_stale: Number(raw?.is_stale) > 0 ? 1 : 0,
-        is_legacy: Number(raw?.is_legacy) > 0 ? 1 : 0,
-        created_at: sanitizeText(raw?.created_at || "", 64) || "",
-      })
-    }
-    const existing = new Map(
-      this.state.storage.sql
-        .exec(`SELECT * FROM gene_candidate_authority`)
-        .toArray()
-        .map((row) => [String(row.asset_sha256), row]),
-    )
-    let changed = false
-    for (const item of incoming.values()) {
-      const prior = existing.get(item.asset_sha256)
-      if (!prior) {
-        this.state.storage.sql.exec(
-          `INSERT INTO gene_candidate_authority (
-               asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at, revision
-             ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
-          item.asset_sha256,
-          item.status,
-          item.autopick_eligible,
-          item.is_stale,
-          item.is_legacy,
-          item.created_at,
-        )
-        changed = true
-        continue
-      }
-      const unchanged =
-        String(prior.status || "") === item.status &&
-        Number(prior.autopick_eligible) === item.autopick_eligible &&
-        Number(prior.is_stale) === item.is_stale &&
-        Number(prior.is_legacy) === item.is_legacy &&
-        String(prior.created_at || "") === item.created_at
-      if (unchanged) continue
-      this.state.storage.sql.exec(
-        `UPDATE gene_candidate_authority
-              SET status = ?,
-                  autopick_eligible = ?,
-                  is_stale = ?,
-                  is_legacy = ?,
-                  created_at = ?,
-                  revision = revision + 1,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE asset_sha256 = ?`,
-        item.status,
-        item.autopick_eligible,
-        item.is_stale,
-        item.is_legacy,
-        item.created_at,
-        item.asset_sha256,
-      )
-      changed = true
-    }
-    if (replace) {
-      for (const assetSha of existing.keys()) {
-        if (incoming.has(assetSha)) continue
-        this.state.storage.sql.exec(
-          `DELETE FROM gene_candidate_authority WHERE asset_sha256 = ?`,
-          assetSha,
-        )
-        changed = true
-      }
-    }
-    if (changed) {
-      // Migration boundary token: authority transfer captures this before
-      // source verification and re-checks it inside the seed transaction, so a
-      // candidate change during transfer aborts instead of certifying stale
-      // state.
-      const revision = Number(this.getMeta("candidate_authority_revision")) || 0
-      this.setMeta("candidate_authority_revision", String(revision + 1))
-    }
-    return {
-      changed,
-      candidate_count: incoming.size,
-    }
-  }
-
-  /**
-   * Only the bounded candidate set participates in the election, so a gene
-   * with a large historical asset_summary never exports its whole history on
-   * the hot path. Scores for non-candidates cannot affect the winner.
-   */
-  geneAuthoritySummaries() {
-    return this.state.storage.sql
-      .exec(
-        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-           FROM asset_summary
-          WHERE asset_sha256 IN (SELECT asset_sha256 FROM gene_candidate_authority)`,
-      )
-      .toArray()
-      .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") }))
-  }
-
-  geneAuthorityWinner({ currentAssetSha, adminOverride } = {}) {
-    const candidates = this.state.storage.sql
-      .exec(`SELECT * FROM gene_candidate_authority ORDER BY asset_sha256 ASC`)
-      .toArray()
-      .map((row) => ({
-        ...row,
-        autopick_eligible: Number(row.autopick_eligible) === 1,
-        is_stale: Number(row.is_stale) === 1,
-        is_legacy: Number(row.is_legacy) === 1,
-      }))
-    return electGeneAuthorityWinner({
-      candidates,
-      summaries: this.geneAuthoritySummaries(),
-      caretaker: this.caretakerSupervotes.snapshot(),
-      currentAssetSha:
-        currentAssetSha === undefined
-          ? normalizeSha256(this.getMeta("published_asset_sha256")) || null
-          : normalizeSha256(currentAssetSha) || null,
-      adminOverride:
-        adminOverride === undefined
-          ? this.getMeta("admin_override") === "1"
-          : Boolean(adminOverride),
-    })
-  }
-
-  /**
-   * Synchronous canonical identity for the current winner. Runs inside the vote
-   * storage transaction; hashing happens in IconoplasmGenePublicationState.
-   */
-  authoritativeSelectionIdentity({ adminOverride, publishedAssetSha } = {}) {
-    const caretaker = this.caretakerSupervotes.snapshot()
-    const winner = this.geneAuthorityWinner({
-      currentAssetSha: publishedAssetSha,
-      adminOverride,
-    }).winner
-    return {
-      selectionRef: composeGeneSelectionReference({
-        symbol: normalizeSymbol(this.getMeta("symbol")),
-        winner,
-        candidateSetRevision: Number(this.getMeta("candidate_authority_revision")) || 0,
-        caretakerSupervoteVersion: Number(caretaker?.supervote_version || 0),
-        caretakerDirection:
-          caretaker?.active && winner && caretaker.asset_sha256 === winner.asset_sha256
-            ? Number(caretaker.direction || 0)
-            : 0,
-        adminOverride:
-          adminOverride === undefined
-            ? this.getMeta("admin_override") === "1"
-            : Boolean(adminOverride),
-      }),
-    }
-  }
-
-  async applyAuthoritativeVoteMutation(options = {}) {
-    if (this.getMeta("authority_epoch") !== "v2") {
-      // B-762 demand-driven handover: an ordinary canonical-affecting command
-      // on a legacy-epoch gene runs this bounded per-gene preparation first.
-      // The original command identity is preserved by the caller and replayed;
-      // a deferred handover mutates nothing and never falls back to the
-      // retired legacy write path.
-      const handover = await this.ensureDemandDrivenHandover({
-        publishedAssetSha: options.publishedAssetSha,
-        adminOverride: options.adminOverride,
-        verifySource: options.verifySource === true,
-      })
-      if (!handover.activated) {
-        return { authority: "deferred", publication: null, vote: null, deferral: handover }
-      }
-    } else {
-      // B-762: one-time bounded repair for an already-activated gene whose
-      // candidate authority was never reconstructed (a warm first use before
-      // the reconstruction fix). Without it the gene is permanently pinned to
-      // its empty winner identity and no command can advance the selection.
-      const repair = await this.reconstructCandidateAuthorityIfMissing(this.getMeta("symbol") || "")
-      if (!repair.ok && repair.defer) {
-        return { authority: "deferred", publication: null, vote: null, deferral: repair }
-      }
-    }
-    // An activated v2 gene never falls back to legacy execution, including
-    // when its eligible set is empty: the selection becomes an explicit
-    // empty/tombstone identity and local recovery owns the next step.
-    let vote = null
-    const publication = await this.publication.commitSelection(() => {
-      vote = this.applyVoteStateMutationCore(options)
-      return this.authoritativeSelectionIdentity()
-    })
-    return { authority: "v2", publication, vote }
-  }
-
-  /**
-   * B-762 demand-driven per-gene handover. Bounded to this gene: the retained
-   * accepted votes are verified against the legacy source, then the retained
-   * candidate/policy state seeds the v2 publication identity before the epoch
-   * flips. No other gene's state is consulted, so an unrelated unmigrated or
-   * stalled gene can never block this one. An explicit empty/tombstone state
-   * is a valid handover for a gene with no eligible candidate: the gene keeps
-   * its coverage and later first-candidate behavior through the normal v2
-   * selection path.
-   */
-  async ensureDemandDrivenHandover({ publishedAssetSha, adminOverride, verifySource } = {}) {
-    if (this.getMeta("authority_epoch") === "v2") return { activated: true, replayed: true }
-    const symbol = normalizeSymbol(this.getMeta("symbol") || "")
-    if (!symbol) return { activated: false, code: "SYMBOL_REQUIRED" }
-    if (this.pendingOutboxRows(1).length || this.caretakerSupervotes.pendingOutboxRows(1).length) {
-      // This gene's own accepted work must reach its retained destination
-      // before the epoch flips; the caller replays the same command after the
-      // outbox settles and nothing is acknowledged early.
-      return { activated: false, code: "OUTBOX_NOT_SETTLED" }
-    }
-    // Retained published selection survives handover even when the caller does
-    // not restate it: the coordinator's own legacy authority pointer is the
-    // fallback incumbent for the seeded identity.
-    const retainedAsset = normalizeSha256(this.getMeta("published_asset_sha256") || "") || ""
-    const requestedAsset = normalizeSha256(publishedAssetSha || "") || retainedAsset
-    const requestedOverride =
-      adminOverride === undefined ? this.getMeta("admin_override") === "1" : Boolean(adminOverride)
-    // Complete-input verification: the local authority must contain every
-    // accepted legacy vote with the same voter, candidate and value before the
-    // epoch flips. Migration-only, keyset-paginated, double-pass verified and
-    // bounded; the same contract as the operator transfer. It runs only for a
-    // coordinator whose retained state was imported in this same request
-    // (cold); a warm coordinator reconciles its retained local authority
-    // without a D1 round trip.
-    if (verifySource === true && this.env?.ICONOPLASM_DB) {
-      let snapshot = null
-      try {
-        snapshot = await this.readLegacyVoteSnapshot(symbol)
-      } catch (error) {
-        return {
-          activated: false,
-          code: "SOURCE_CHECK_FAILED",
-          message: sanitizeText(String(error?.message || error), 300),
-        }
-      }
-      if (snapshot.changed) return { activated: false, code: "SOURCE_CHANGED" }
-      const localVotes = new Map(
-        this.state.storage.sql
-          .exec(`SELECT user_id, asset_sha256, vote_value FROM vote_by_user_asset`)
-          .toArray()
-          .map((row) => [
-            `${String(row.user_id)}\u0000${String(row.asset_sha256)}`,
-            Number(row.vote_value),
-          ]),
-      )
-      let complete = snapshot.votes.size === localVotes.size
-      if (complete) {
-        for (const [key, value] of snapshot.votes) {
-          if (localVotes.get(key) !== value) {
-            complete = false
-            break
-          }
-        }
-      }
-      if (!complete) {
-        return {
-          activated: false,
-          code: "IMPORT_INCOMPLETE",
-          message: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
-        }
-      }
-    }
-    // B-762: retained candidate reconstruction must not depend on cold vote
-    // verification. A coordinator whose first touch was an ordinary page
-    // snapshot read has asset summaries but no candidate authority, and would
-    // otherwise certify a winner-less (tombstone) selection for its first
-    // canonical command. Bounded to this gene's own retained rows with one D1
-    // attempt per coordinator; a genuinely empty retained source remains the
-    // supported empty state and the warm path stays D1-free afterward.
-    {
-      const reconstruction = await this.reconstructCandidateAuthorityIfMissing(symbol)
-      if (!reconstruction.ok && reconstruction.defer) {
-        return {
-          activated: false,
-          code: reconstruction.code,
-          message: reconstruction.message,
-        }
-      }
-    }
-    // Captured after any retained candidate reconstruction so the in-seed
-    // recheck validates the boundary the seed actually uses.
-    const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
-    const requestedIdentity = this.authoritativeSelectionIdentity({
-      adminOverride: requestedOverride,
-      publishedAssetSha: requestedAsset,
-    })
-    try {
-      // The retained identity becomes the pending v2 publication intent; the
-      // existing publication adapter materializes the immutable artifact. No
-      // legacy bytes are adopted or fabricated, and a crash before the epoch
-      // flip leaves the seed recoverable by replay.
-      await this.publication.commitSelection(() => {
-        // Handover fence: revalidate accepted work, the candidate boundary and
-        // the final selection inside the same exclusive transaction that
-        // commits the seed. A concurrent accepted change aborts the handover
-        // instead of certifying a stale identity.
-        if (
-          this.pendingOutboxRows(1).length ||
-          this.caretakerSupervotes.pendingOutboxRows(1).length
-        ) {
-          const moved = new Error("Accepted work arrived during demand handover")
-          moved.code = "AUTHORITY_MOVED"
-          throw moved
-        }
-        if ((Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision) {
-          const moved = new Error("Candidate authority changed during demand handover")
-          moved.code = "AUTHORITY_MOVED"
-          throw moved
-        }
-        const currentIdentity = this.authoritativeSelectionIdentity({
-          adminOverride: requestedOverride,
-          publishedAssetSha: requestedAsset,
-        })
-        if (currentIdentity.selectionRef !== requestedIdentity.selectionRef) {
-          const moved = new Error("Selected winner changed during demand handover")
-          moved.code = "AUTHORITY_MOVED"
-          throw moved
-        }
-        return requestedIdentity
-      })
-    } catch (error) {
-      return {
-        activated: false,
-        code: String(error?.code || "SEED_REJECTED").slice(0, 100),
-        message: sanitizeText(String(error?.message || error), 300),
-      }
-    }
-    // Persist policy + epoch only after the verified identity is committed. A
-    // crash before this leaves the seed recoverable by replay.
-    if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
-    this.setMeta("admin_override", requestedOverride ? "1" : "0")
-    this.setMeta("authority_epoch", "v2")
-    return {
-      activated: true,
-      winner_asset_sha256: winnerAssetShaFromSelectionReference(requestedIdentity.selectionRef),
-    }
-  }
-
-  /**
-   * The gene's stable object is rewritten in process by the one per-gene
-   * publisher. The receipt the publication state records is the stable
-   * object's key and content hash. Tests may override this method.
-   */
-  genePublicationAdapter(env = this.env) {
-    if (!env?.ICONOPLASM_DB) return null
-    return async (ticket, { symbol } = {}) => {
-      const cleanSymbol = normalizeSymbol(symbol)
-      if (!cleanSymbol) throw new Error("Gene publication requires a symbol")
-      const winnerAssetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
-      let result
-      try {
-        result = await publishIconoplasmGeneStableObject(env, cleanSymbol, {
-          portraitAssetSha256: winnerAssetSha,
-          // An explicit empty selection publishes the gene's portrait-less
-          // version instead of resurrecting stale D1 canon.
-          withdraw: !winnerAssetSha,
-        })
-      } catch (error) {
-        const failure = new Error(
-          `Gene publication failed: ${sanitizeText(String(error?.message || error), 300)}`,
-        )
-        failure.code = String(error?.code || "GENE_PUBLICATION_FAILED")
-        throw failure
-      }
-      if (!result?.stable?.key || !normalizeSha256(result.stable.hash || "")) {
-        const failure = new Error("Gene publication returned no stable object receipt")
-        failure.code = "GENE_RECEIPT_MISSING"
-        throw failure
-      }
-      if ((result.selected_asset_sha256 || null) !== (winnerAssetSha || null)) {
-        const failure = new Error("Gene publication receipt names another source selection")
-        failure.code = "CARD_RECEIPT_WRONG_SELECTION"
-        throw failure
-      }
-      return {
-        selectionKey: ticket.selectionKey,
-        contentSha256: normalizeSha256(result.stable.hash),
-        objectKey: result.stable.key,
-      }
-    }
-  }
-
-  async drainGenePublication(env = this.env) {
-    if (this.getMeta("authority_epoch") !== "v2")
-      return { ok: true, skipped: true, reason: "legacy_epoch" }
-    const current = this.publication.read()
-    if (!current?.pending) return { ok: true, pending: false }
-    const adapter = this.genePublicationAdapter(env)
-    if (typeof adapter !== "function") {
-      return { ok: true, pending: true, reason: "publication_adapter_pending" }
-    }
-    const ticket = await this.publication.beginAttempt()
-    if (!ticket) return { ok: true, pending: true, reason: "retry_not_due" }
-    try {
-      const published = await adapter(ticket, { symbol: normalizeSymbol(this.getMeta("symbol")) })
-      const outcome = await this.publication.completeAttempt(ticket, published)
-      if (outcome.applied) {
-        const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
-        if (assetSha) this.setMeta("published_asset_sha256", assetSha)
-      }
-      return { ok: true, pending: false, ...outcome }
-    } catch (error) {
-      if (isIconoplasmDailyBudgetError(error)) throw error
-      const failed = await this.publication.failAttempt(ticket, { retryAt: error?.retryAt })
-      return {
-        ok: false,
-        pending: true,
-        retry_at: failed.retryAt,
-        error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
-      }
-    }
-  }
-
-  /**
-   * Any canonical-affecting mutation on an activated gene must update the
-   * publication intent in the same storage transaction. Returns null on the
-   * legacy epoch so v1 callers keep their exact behavior.
-   */
-  async commitAuthorityIntentIfActivated() {
-    if (this.getMeta("authority_epoch") !== "v2") return null
-    return this.publication.commitSelection(() => this.authoritativeSelectionIdentity())
-  }
-
-  /**
-   * Migration-only legacy vote read. Keyset pagination (not OFFSET) plus two
-   * complete passes: a row changed between pages makes the passes disagree and
-   * refuses the transfer instead of certifying a torn read. Bounded env, no
-   * hot-path use.
-   */
-  async readLegacyVoteSnapshot(symbol) {
-    const pageSize = 500
-    const maxPages = 40
-    const readPass = async () => {
-      const votes = new Map()
-      let lastUserId = null
-      let lastAssetSha = null
-      for (let page = 0; page < maxPages; page += 1) {
-        const response =
-          lastUserId === null
-            ? await this.env.ICONOPLASM_DB.prepare(
-                `SELECT user_id, asset_sha256, vote_value
-                   FROM icono_image_votes
-                  WHERE gene_symbol = ?
-                  ORDER BY user_id ASC, asset_sha256 ASC
-                  LIMIT ?`,
-              )
-                .bind(symbol, pageSize)
-                .all()
-            : await this.env.ICONOPLASM_DB.prepare(
-                `SELECT user_id, asset_sha256, vote_value
-                   FROM icono_image_votes
-                  WHERE gene_symbol = ?
-                    AND (user_id > ? OR (user_id = ? AND asset_sha256 > ?))
-                  ORDER BY user_id ASC, asset_sha256 ASC
-                  LIMIT ?`,
-              )
-                .bind(symbol, lastUserId, lastUserId, lastAssetSha, pageSize)
-                .all()
-        const rows = Array.isArray(response?.results) ? response.results : []
-        for (const row of rows) {
-          const userId = normalizeUserId(row?.user_id || "")
-          const assetSha = normalizeSha256(row?.asset_sha256 || "")
-          const voteValue = normalizeVoteValue(row?.vote_value)
-          if (!userId || !assetSha || voteValue == null || voteValue === 0) continue
-          votes.set(`${userId}\u0000${assetSha}`, voteValue)
-        }
-        if (rows.length < pageSize) return { complete: true, votes }
-        const last = rows[rows.length - 1]
-        const nextUser = String(last?.user_id ?? "")
-        const nextAsset = normalizeSha256(last?.asset_sha256 || "")
-        if (!nextAsset || (nextUser === lastUserId && nextAsset === lastAssetSha)) {
-          throw new Error("Legacy vote source paging did not advance")
-        }
-        lastUserId = nextUser
-        lastAssetSha = nextAsset
-      }
-      return { complete: false, votes }
-    }
-    const first = await readPass()
-    if (!first.complete) {
-      throw new Error("Legacy vote source exceeds the bounded migration envelope")
-    }
-    const second = await readPass()
-    if (!second.complete) {
-      throw new Error("Legacy vote source exceeds the bounded migration envelope")
-    }
-    if (first.votes.size !== second.votes.size) return { changed: true }
-    for (const [key, value] of first.votes) {
-      if (second.votes.get(key) !== value) return { changed: true }
-    }
-    return { changed: false, votes: second.votes }
-  }
-
-  /**
-   * One bounded retained-candidate reconstruction for this gene, independent
-   * of the warm/cold vote flag. Runs only while the coordinator has no
-   * candidate authority and has not yet attempted reconstruction, so an
-   * ordinary warm command performs no D1 read once the gene owns candidates
-   * (or its retained source is genuinely empty). The 64-candidate envelope is
-   * shared with the operator transfer; a larger retained source defers
-   * explicitly instead of certifying a truncated candidate set, and the
-   * deferral does not mark the attempt so a later command re-evaluates the
-   * same condition. An administrator-pinned gene never reconstructs.
-   */
-  async reconstructCandidateAuthorityIfMissing(symbol) {
-    const safeSymbol = normalizeSymbol(symbol)
-    if (!safeSymbol) return { ok: true, skipped: true, reason: "symbol_required" }
-    if (!this.env?.ICONOPLASM_DB) return { ok: true, skipped: true, reason: "no_database" }
-    if (this.getMeta("admin_override") === "1")
-      return { ok: true, skipped: true, reason: "admin_override" }
-    if (Number(this.sqlFirst(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)?.n) > 0)
-      return { ok: true, skipped: true, reason: "candidates_present" }
-    if (this.getMeta("candidate_authority_reconstruction") === "1")
-      return { ok: true, skipped: true, reason: "reconstruction_attempted" }
-    let retained = null
-    try {
-      retained = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
-    } catch (error) {
-      return {
-        ok: false,
-        defer: true,
-        code: "CANDIDATE_SOURCE_FAILED",
-        message: sanitizeText(String(error?.message || error), 300),
-      }
-    }
-    if (retained.overflow) {
-      return {
-        ok: false,
-        defer: true,
-        code: "CANDIDATE_SOURCE_EXCEEDS_ENVELOPE",
-        message: "Retained candidate source exceeds the bounded handover envelope",
-      }
-    }
-    try {
-      this.importGeneCandidateAuthority(retained.items)
-    } catch (error) {
-      return {
-        ok: false,
-        defer: true,
-        code: "CANDIDATE_SOURCE_REJECTED",
-        message: sanitizeText(String(error?.message || error), 300),
-      }
-    }
-    this.setMeta("candidate_authority_reconstruction", "1")
-    return {
-      ok: true,
-      reconstructed: Array.isArray(retained.items) ? retained.items.length : 0,
-    }
-  }
-
-  /**
-   * Migration-only bounded candidate read for the demand handover. Reads at
-   * most the operator transfer's 64-candidate envelope plus one overflow
-   * probe; a larger retained source defers the handover explicitly instead of
-   * certifying a truncated candidate set. One gene's own rows only, so no
-   * unrelated gene or catalog-wide state is consulted.
-   */
-  async readLegacyCandidateAuthorityEnvelope(symbol) {
-    const envelope = 64
-    const response = await this.env.ICONOPLASM_DB.prepare(
-      `SELECT asset_sha256, status, autopick_eligible, is_stale, is_legacy, created_at
-         FROM icono_portrait_assets
-        WHERE gene_symbol = ?
-        ORDER BY asset_sha256 ASC
-        LIMIT ?`,
-    )
-      .bind(symbol, envelope + 1)
-      .all()
-    if (response?.success === false || !Array.isArray(response?.results))
-      throw new Error("Candidate authority source did not return a verified row set")
-    const rows = response.results
-    if (rows.length > envelope) return { overflow: true, items: [] }
-    return {
-      overflow: false,
-      items: rows.map((row) => ({
-        asset_sha256: row?.asset_sha256,
-        status: row?.status,
-        autopick_eligible: row?.autopick_eligible,
-        is_stale: row?.is_stale,
-        is_legacy: row?.is_legacy,
-        created_at: row?.created_at,
-      })),
-    }
-  }
-
-  /**
-   * Accept one completed workstation finalization into the per-gene V2
-   * authority/publication path. The retained source is read only for this gene,
-   * twice, so a concurrent candidate change defers instead of certifying stale
-   * membership. Legacy-epoch genes use the same demand-driven handover as an
-   * ordinary canonical command; there is no global publisher fallback.
-   */
-  async acceptSyncFinalizationHandoff(symbol, rawJobVersion) {
-    const safeSymbol = this.ensureSymbol(symbol)
-    const jobVersion = Number(rawJobVersion)
-    const deferred = (code, retryAfterMs = 300000, error = null) => ({
-      ok: false,
-      accepted: false,
-      code,
-      ...(error ? { error } : {}),
-      retry_after_ms: retryAfterMs,
-    })
-    if (!Number.isSafeInteger(jobVersion) || jobVersion < 1)
-      return deferred("FINALIZATION_JOB_VERSION_REQUIRED")
-
-    let previousReceipt = null
-    try {
-      previousReceipt = JSON.parse(this.getMeta("sync_finalization_receipt") || "null")
-    } catch {
-      return deferred("FINALIZATION_RECEIPT_INVALID")
-    }
-    if (previousReceipt?.job_version === jobVersion) return previousReceipt
-    if (Number(previousReceipt?.job_version || 0) > jobVersion)
-      return deferred("FINALIZATION_JOB_SUPERSEDED")
-    if (!this.env?.ICONOPLASM_DB) return deferred("FINALIZATION_SOURCE_UNAVAILABLE")
-
-    const readJob = () =>
-      this.env.ICONOPLASM_DB.prepare(
-        `SELECT job_version, status, phase FROM icono_sync_finalization_jobs
-       WHERE gene_symbol = ? AND job_version = ? LIMIT 1`,
-      )
-        .bind(safeSymbol, jobVersion)
-        .first()
-    const ready = (job) =>
-      job &&
-      Number(job.job_version) === jobVersion &&
-      job.status !== "completed" &&
-      ["completed_pending_finalize", "completed"].includes(job.phase)
-    try {
-      if (!ready(await readJob())) return deferred("FINALIZATION_JOB_SUPERSEDED")
-    } catch {
-      return deferred("FINALIZATION_SOURCE_UNAVAILABLE")
-    }
-
-    if (this.getMeta("authority_epoch") !== "v2") {
-      await this.ensureBootstrapped(safeSymbol)
-      const retainedProjection =
-        (await this.env.ICONOPLASM_DB.prepare(
-          `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-             FROM icono_publish_state
-            WHERE gene_symbol = ?
-            LIMIT 1`,
-        )
-          .bind(safeSymbol)
-          .first()) || null
-      const handover = await this.ensureDemandDrivenHandover({
-        publishedAssetSha: retainedProjection?.current_asset_sha256 || "",
-        adminOverride: Number(retainedProjection?.admin_override || 0) > 0,
-        // Finalization is a system transfer boundary, so verify the complete
-        // retained vote source even if an earlier read warmed the coordinator.
-        verifySource: true,
-      })
-      if (!handover?.activated) return deferred(String(handover?.code || "HANDOVER_DEFERRED"))
-    }
-
-    const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
-    let first
-    let second
-    try {
-      first = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
-      second = await this.readLegacyCandidateAuthorityEnvelope(safeSymbol)
-      if (!ready(await readJob())) return deferred("FINALIZATION_JOB_SUPERSEDED")
-    } catch (error) {
-      return deferred(
-        "CANDIDATE_SOURCE_FAILED",
-        300000,
-        sanitizeText(String(error?.message || error), 300),
-      )
-    }
-    if (first.overflow || second.overflow)
-      return deferred("CANDIDATE_SOURCE_EXCEEDS_ENVELOPE", 900000)
-    if (JSON.stringify(first.items) !== JSON.stringify(second.items))
-      return deferred("CANDIDATE_SOURCE_CHANGED", 30000)
-
-    const receipt = {
-      ok: true,
-      accepted: true,
-      symbol: safeSymbol,
-      authority_epoch: "v2",
-      job_version: jobVersion,
-      operation_id: `sync-finalization:${safeSymbol}:${jobVersion}`,
-    }
-    const normalizeCandidate = (raw) => ({
-      asset_sha256: normalizeSha256(raw?.asset_sha256 || ""),
-      status:
-        sanitizeText(raw?.status || "draft", 32)
-          .trim()
-          .toLowerCase() || "draft",
-      autopick_eligible: Number(raw?.autopick_eligible) > 0 ? 1 : 0,
-      is_stale: Number(raw?.is_stale) > 0 ? 1 : 0,
-      is_legacy: Number(raw?.is_legacy) > 0 ? 1 : 0,
-      created_at: sanitizeText(raw?.created_at || "", 64) || "",
-    })
-    let imported = null
-    try {
-      await this.publication.commitSelection(() => {
-        if ((Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision)
-          throw new Error("FINALIZATION_AUTHORITY_MOVED")
-        // Retained finalization may introduce accepted candidates. Existing
-        // V2 rows remain authoritative: an omitted or divergent legacy copy
-        // is evidence to retain in the receipt, never permission to erase or
-        // overwrite the newer authority.
-        const incoming = new Map(
-          second.items.map((raw) => {
-            const item = normalizeCandidate(raw)
-            return [item.asset_sha256, item]
-          }),
-        )
-        const existingAssetShas = new Set()
-        let candidateConflictCount = 0
-        let candidateOmittedCount = 0
-        for (const raw of this.state.storage.sql
-          .exec("SELECT * FROM gene_candidate_authority")
-          .toArray()) {
-          const item = normalizeCandidate(raw)
-          existingAssetShas.add(item.asset_sha256)
-          const legacyCopy = incoming.get(item.asset_sha256)
-          if (!legacyCopy) candidateOmittedCount += 1
-          else if (JSON.stringify(legacyCopy) !== JSON.stringify(item)) candidateConflictCount += 1
-        }
-        const newCandidates = second.items.filter(
-          (raw) => !existingAssetShas.has(normalizeSha256(raw?.asset_sha256 || "")),
-        )
-        imported = this.applyCandidateAuthorityCore(newCandidates, { replace: false })
-        const total = this.state.storage.sql
-          .exec("SELECT COUNT(*) AS candidate_count FROM gene_candidate_authority")
-          .toArray()[0]
-        receipt.candidate_count = Number(total?.candidate_count || 0) || 0
-        receipt.candidate_imported_count = Number(imported?.candidate_count || 0) || 0
-        receipt.candidate_conflict_count = candidateConflictCount
-        receipt.candidate_omitted_count = candidateOmittedCount
-        receipt.candidate_changed = imported?.changed === true
-        // The receipt, candidate mutation and publication intent share the
-        // existing owner's transaction. A failed intent/alarm rolls all back.
-        this.setMeta("sync_finalization_receipt", JSON.stringify(receipt))
-        return this.authoritativeSelectionIdentity()
-      })
-    } catch (error) {
-      return deferred(sanitizeText(String(error?.message || "FINALIZATION_HANDOFF_REJECTED"), 100))
-    }
-    await this.armOutboxAlarm(1)
-    return receipt
-  }
-
-  pendingOutboxRows(limit = 50) {
-    const safeLimit = Math.max(1, Math.min(100, Number(limit || 50) || 50))
-    return this.state.storage.sql
-      .exec(
-        `SELECT
-           id,
-           mutation_id,
-           asset_sha256,
-           vision_id,
-           candidate_image_id,
-           user_id,
-           vote_value,
-           reason,
-           attempts
-         FROM vote_outbox
-         WHERE delivered_at IS NULL
-         ORDER BY id ASC
-         LIMIT ?`,
-        safeLimit,
-      )
-      .toArray()
-  }
-
-  async deliverOutboxRow(row, env = this.env) {
-    const symbol = normalizeSymbol(this.getMeta("symbol"))
-    const mutationId = sanitizeText(row?.mutation_id || "", 255)
-    const assetSha = normalizeSha256(row?.asset_sha256 || "")
-    const userId = normalizeUserId(row?.user_id || "")
-    const voteValue = normalizeVoteValue(row?.vote_value)
-    if (!symbol || !mutationId || !assetSha || !userId || voteValue == null) {
-      throw new Error("Invalid VoteCoordinator outbox row")
-    }
-
-    const reservationOperationId = `vote:${mutationId}`
-    const admission = await reserveIconoplasmMutationWrites(env, {
-      lane: "user_action",
-      operationId: reservationOperationId,
-      units: 4,
-    })
-    if (admission?.ok !== true) {
-      const error = new Error(
-        "Vote D1 delivery is pending because the user-action mutation lane is full",
-      )
-      error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
-      throw error
-    }
-
-    await projectVoteCoordinatorLedgerRow(env, {
-      symbol,
-      assetSha256: assetSha,
-      visionId: row?.vision_id,
-      candidateImageId: row?.candidate_image_id,
-      userId,
-      voteValue,
-    })
-    await appendVoteEvent(env, {
-      symbol,
-      assetSha256: assetSha,
-      visionId: row?.vision_id,
-      candidateRef: voteAssetIdentity(symbol, assetSha),
-      candidateImageId: row?.candidate_image_id,
-      userId,
-      voteValue,
-      mutationId,
-    })
-    const projection = await scheduleVoteProjectionRefresh(env, null, {
-      symbol,
-      actorId: userId,
-      reason: row?.reason || "vote_auto_promote",
-    })
-    if (!projection?.durable) {
-      throw new Error("Vote projection refresh job was not durably enqueued")
-    }
-    this.state.storage.sql.exec(
-      `UPDATE vote_outbox
-       SET delivered_at = CURRENT_TIMESTAMP,
-           last_error = ''
-       WHERE id = ?
-         AND delivered_at IS NULL`,
-      Number(row.id),
-    )
-    await completeIconoplasmMutationReservation(env, reservationOperationId)
-  }
-
-  async deliverCaretakerSupervoteOutbox(payload, env = this.env) {
-    const projection = await projectCaretakerSupervoteOutboxToD1(env, payload)
-    if (payload?.recompute_required) {
-      const refresh = await scheduleVoteProjectionRefresh(env, null, {
-        symbol: projection.symbol,
-        actorId: payload?.assignment?.caretaker_account_id || "caretaker_supervote",
-        reason: `caretaker_${sanitizeText(payload?.event_type || "supervote", 64)}`,
-      })
-      if (!refresh?.durable) {
-        throw new Error("Caretaker supervote projection refresh was not durably enqueued")
-      }
-    }
-    return projection
-  }
-
-  async drainVoteOutbox(env = this.env, limit = 4) {
-    const rows = this.pendingOutboxRows(limit)
-    for (const row of rows) {
-      try {
-        await this.deliverOutboxRow(row, env)
-      } catch (error) {
-        if (isIconoplasmDailyBudgetError(error)) throw error
-        const attempts = Math.max(0, Number(row?.attempts || 0) || 0) + 1
-        this.state.storage.sql.exec(
-          `UPDATE vote_outbox
-           SET attempts = ?,
-               last_error = ?
-           WHERE id = ?
-             AND delivered_at IS NULL`,
-          attempts,
-          sanitizeText(String(error?.message || error || "outbox delivery failed"), 2000),
-          Number(row.id),
-        )
-        const delayMs = Math.min(60_000, Math.max(1_000, 2 ** Math.min(attempts, 6) * 1_000))
-        await this.armOutboxAlarm(delayMs)
-        return { ok: false, delivered: 0, pending: rows.length, error: String(error) }
-      }
-    }
-    const remaining = this.pendingOutboxRows(1).length
-    if (remaining) await this.armOutboxAlarm(1)
-    return { ok: true, delivered: rows.length, pending: remaining }
   }
 
   async alarm() {
-    const retryAt = Number(this.getMeta("outbox_budget_retry_at")) || 0
-    // B-762: publication uses only this coordinator's SQLite state and the
-    // immutable object store. A legacy D1 pause must never block it, so the
-    // D1-free publication runs first and independently of legacy duties.
-    let publicationResult
-    try {
-      publicationResult = await this.drainGenePublication(this.env)
-    } catch (error) {
-      if (isIconoplasmDailyBudgetError(error)) {
-        const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
-        this.setMeta("outbox_budget_retry_at", String(nextReset))
-        await this.armOutboxAlarm(1)
-        return {
-          ok: true,
-          deferred: true,
-          retry_at: nextReset,
-          reason: "daily_d1_budget",
-          publication: { ok: false, deferred: true },
-        }
-      }
-      publicationResult = {
-        ok: false,
-        error: sanitizeText(String(error?.message || error || "publication failed"), 500),
-      }
-    }
-    if (
-      !this.pendingOutboxRows(1).length &&
-      !this.caretakerSupervotes.pendingOutboxRows(1).length
-    ) {
-      return {
-        ok: true,
-        publication: publicationResult,
-        vote: { ok: true, delivered: 0, pending: 0 },
-      }
-    }
-    if (retryAt > Date.now()) {
-      await this.armOutboxAlarm(1)
-      return {
-        ok: true,
-        deferred: true,
-        retry_at: retryAt,
-        publication: publicationResult,
-      }
-    }
-    // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
-    if (String(this.env.ICONOPLASM_SCHEMA_TRANSITION || "") === "1") {
-      await this.armOutboxAlarm(300000)
-      return {
-        ok: true,
-        deferred: true,
-        reason: "schema_transition",
-        publication: publicationResult,
-      }
-    }
-    let env
-    try {
-      env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(this.env, null, {
-        ...iconoplasmBackgroundBudgetAttribution("background_vote_outbox"),
-        source_class: "background_alarm",
-      })
-      env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
-      if (retryAt) this.setMeta("outbox_budget_retry_at", "")
-      // Four ordinary outbox records plus two caretaker records share one
-      // provider statement envelope, including enqueue and failure handling.
-      const voteResult = await this.drainVoteOutbox(env, 4)
-      let dailyError = null
-      const caretakerResult = await this.caretakerSupervotes.drainOutbox(
-        async (payload) => {
-          try {
-            return await this.deliverCaretakerSupervoteOutbox(payload, env)
-          } catch (error) {
-            if (isIconoplasmDailyBudgetError(error)) dailyError = error
-            throw error
-          }
-        },
-        { limit: 2 },
-      )
-      if (dailyError) throw dailyError
-      return {
-        publication: publicationResult,
-        vote: voteResult,
-        caretaker_supervote: caretakerResult,
-      }
-    } catch (error) {
-      if (isIconoplasmDailyBudgetError(error)) {
-        const nextReset = Date.now() + secondsUntilCloudflareDailyReset() * 1000
-        this.setMeta("outbox_budget_retry_at", String(nextReset))
-        await this.armOutboxAlarm(1)
-        return {
-          ok: true,
-          deferred: true,
-          retry_at: nextReset,
-          reason: "daily_d1_budget",
-          publication: publicationResult,
-        }
-      }
-      await this.armOutboxAlarm(900000)
-      console.error(
-        "Iconoplasm vote outbox alarm deferred after failure",
-        String(error?.message || error),
-      )
-      return {
-        ok: false,
-        deferred: true,
-        reason: "outbox_alarm_failed",
-        publication: publicationResult,
-      }
-    } finally {
-      if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
-    }
-  }
-
-  async lookupAssetMetadata(symbol, assetSha256) {
-    if (!this.env.ICONOPLASM_DB) return null
-    const safeSymbol = normalizeSymbol(symbol)
-    const safeAssetSha = normalizeSha256(assetSha256)
-    if (!safeSymbol || !safeAssetSha) return null
-    return (
-      (await this.env.ICONOPLASM_DB.prepare(
-        `SELECT vision_id, candidate_image_id
-         FROM icono_portrait_assets
-         WHERE gene_symbol = ?
-           AND asset_sha256 = ?
-         LIMIT 1`,
-      )
-        .bind(safeSymbol, safeAssetSha)
-        .first()) || null
-    )
-  }
-
-  async requireEligibleCaretakerSupervoteTarget(symbol, assetSha256) {
-    if (!this.env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
-    const safeSymbol = normalizeSymbol(symbol)
-    const safeAssetSha = normalizeSha256(assetSha256)
-    if (!safeSymbol || !safeAssetSha) {
-      throw new CaretakerSupervoteError(
-        "INVALID_SUPERVOTE_TARGET",
-        "Caretaker supervote target is invalid",
-        400,
-      )
-    }
-    const projection = await iconoplasmCaretakerCandidateEligibilityProjection(this.env, {
-      symbol: safeSymbol,
-      assetSha256: safeAssetSha,
-    })
-    if (!projection || projection.eligible !== 1) {
-      throw new CaretakerSupervoteError(
-        "SUPERVOTE_TARGET_INELIGIBLE",
-        "Caretaker supervotes require an eligible, current candidate blot",
-        409,
-      )
-    }
-    return projection
-  }
-
-  ensureVisionSummaryRow(visionId) {
-    const safeVisionId = sanitizeVoteVisionId(visionId || "")
-    if (!safeVisionId) return
-    this.state.storage.sql.exec(
-      `INSERT INTO vision_summary (
-         vision_id, upvotes, downvotes, score, vote_count, updated_at
-       ) VALUES (?, 0, 0, 0, 0, CURRENT_TIMESTAMP)
-       ON CONFLICT(vision_id) DO NOTHING`,
-      safeVisionId,
-    )
-  }
-
-  bumpVisionSummary(visionId, { upvotes = 0, downvotes = 0, score = 0, voteCount = 0 } = {}) {
-    const safeVisionId = sanitizeVoteVisionId(visionId || "")
-    if (!safeVisionId) return
-    this.ensureVisionSummaryRow(safeVisionId)
-    this.state.storage.sql.exec(
-      `UPDATE vision_summary
-       SET upvotes = MAX(0, upvotes + ?),
-           downvotes = MAX(0, downvotes + ?),
-           score = score + ?,
-           vote_count = MAX(0, vote_count + ?),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE vision_id = ?`,
-      Number(upvotes || 0),
-      Number(downvotes || 0),
-      Number(score || 0),
-      Number(voteCount || 0),
-      safeVisionId,
-    )
-  }
-
-  ensureAssetSummaryRow(assetSha256, { visionId = "", candidateImageId = null } = {}) {
-    const safeAssetSha = normalizeSha256(assetSha256)
-    if (!safeAssetSha) return null
-    this.state.storage.sql.exec(
-      `INSERT INTO asset_summary (
-         asset_sha256,
-         vision_id,
-         candidate_image_id,
-         upvotes,
-         downvotes,
-         score,
-         vote_count,
-         updated_at
-       ) VALUES (?, ?, ?, 0, 0, 0, 0, CURRENT_TIMESTAMP)
-       ON CONFLICT(asset_sha256) DO UPDATE SET
-         vision_id = CASE
-           WHEN excluded.vision_id <> '' THEN excluded.vision_id
-           ELSE asset_summary.vision_id
-         END,
-         candidate_image_id = COALESCE(excluded.candidate_image_id, asset_summary.candidate_image_id),
-         updated_at = CURRENT_TIMESTAMP
-       WHERE (excluded.vision_id <> '' AND asset_summary.vision_id IS NOT excluded.vision_id)
-          OR (excluded.candidate_image_id IS NOT NULL AND asset_summary.candidate_image_id IS NOT excluded.candidate_image_id)`,
-      safeAssetSha,
-      sanitizeVoteVisionId(visionId || ""),
-      optionalInt(candidateImageId),
-    )
-    const row = this.sqlFirst(
-      `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-       FROM asset_summary
-       WHERE asset_sha256 = ?`,
-      safeAssetSha,
-    )
-    return row
-      ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") })
-      : null
-  }
-
-  getExistingAssetSummary(assetSha256) {
-    const safeAssetSha = normalizeSha256(assetSha256)
-    if (!safeAssetSha) return null
-    const row = this.sqlFirst(
-      `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-       FROM asset_summary
-       WHERE asset_sha256 = ?`,
-      safeAssetSha,
-    )
-    return row
-      ? mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: this.getMeta("symbol") })
-      : null
-  }
-
-  voteAssetExceedsActiveCandidateLimit(assetSha256) {
-    const safeAssetSha = normalizeSha256(assetSha256)
-    if (!safeAssetSha) return false
-    if (
-      this.sqlFirst(
-        `SELECT 1 AS present FROM gene_candidate_authority WHERE asset_sha256 = ?`,
-        safeAssetSha,
-      )
-    ) {
-      return false
-    }
-    return (
-      Number(this.sqlFirst(`SELECT COUNT(*) AS count FROM gene_candidate_authority`)?.count || 0) >=
-      8
-    )
-  }
-
-  async ensureAssetSummaryFromMetadata(
-    symbol,
-    assetSha256,
-    visionId = "",
-    candidateImageId = null,
-  ) {
-    const existing = this.getExistingAssetSummary(assetSha256)
-    if (existing)
-      return {
-        ...existing,
-        vision_id: visionId || existing.vision_id || "",
-        candidate_image_id: optionalInt(candidateImageId ?? existing.candidate_image_id),
-      }
-    const metadata = await this.lookupAssetMetadata(symbol, assetSha256)
-    return {
-      asset_sha256: assetSha256,
-      vision_id: visionId || metadata?.vision_id || "",
-      candidate_image_id: optionalInt(candidateImageId ?? metadata?.candidate_image_id),
-    }
-  }
-
-  applyVoteMutation(options = {}) {
-    return this.state.storage.transactionSync(() => {
-      const result = this.applyVoteStateMutationCore(options)
-      if (!result.changed) return result
-      const reason = voteProjectionRefreshJobReason(options?.reason || "vote_auto_promote")
-      this.state.storage.sql.exec(
-        `INSERT INTO vote_outbox (
-           asset_sha256,
-           vision_id,
-           candidate_image_id,
-           user_id,
-           vote_value,
-           reason,
-           created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-        normalizeSha256(options?.assetSha256),
-        result.resolved_vision_id,
-        result.candidate_image_id,
-        normalizeUserId(options?.userId || ""),
-        result.final_vote_value,
-        reason,
-      )
-      const outboxId = Number(this.sqlFirst(`SELECT last_insert_rowid() AS id`)?.id || 0)
-      const mutationId = `${normalizeSymbol(this.getMeta("symbol"))}:${outboxId}`
-      this.state.storage.sql.exec(
-        `UPDATE vote_outbox SET mutation_id = ? WHERE id = ?`,
-        mutationId,
-        outboxId,
-      )
-      return { ...result, mutation_id: mutationId }
-    })
-  }
-
-  applyVoteStateMutationCore({
-    assetSha256,
-    userId,
-    requestedVoteValue,
-    visionId = "",
-    candidateImageId = null,
-    ensuredAsset = null,
-  } = {}) {
-    const safeAssetSha = normalizeSha256(assetSha256)
-    const safeUserId = normalizeUserId(userId || "")
-    const safeRequestedVoteValue = normalizeVoteValue(requestedVoteValue)
-    if (!safeAssetSha || !safeUserId || safeRequestedVoteValue == null) {
-      throw new Error("Missing or invalid vote payload")
-    }
-
-    {
-      const currentRow =
-        this.sqlFirst(
-          `SELECT vote_value, vision_id, candidate_image_id, created_at
-           FROM vote_by_user_asset
-           WHERE user_id = ?
-             AND asset_sha256 = ?
-           LIMIT 1`,
-          safeUserId,
-          safeAssetSha,
-        ) || null
-      const currentVoteValue = Number(currentRow?.vote_value || 0)
-      const finalVoteValue = resolveDesiredVoteValue(currentVoteValue, safeRequestedVoteValue)
-      const resolvedVisionId = sanitizeVoteVisionId(
-        visionId || currentRow?.vision_id || ensuredAsset?.vision_id || "",
-      )
-      const resolvedCandidateImageId = optionalInt(
-        candidateImageId ?? currentRow?.candidate_image_id ?? ensuredAsset?.candidate_image_id,
-      )
-      const currentVisionId = sanitizeVoteVisionId(currentRow?.vision_id || "")
-      const currentCandidateImageId = optionalInt(currentRow?.candidate_image_id)
-      const changed =
-        currentVoteValue !== finalVoteValue ||
-        (finalVoteValue !== 0 &&
-          (currentVisionId !== resolvedVisionId ||
-            currentCandidateImageId !== resolvedCandidateImageId))
-
-      if (!changed) {
-        return {
-          changed: false,
-          mutation_id: null,
-          current_vote_value: currentVoteValue,
-          final_vote_value: finalVoteValue,
-          resolved_vision_id: resolvedVisionId,
-          candidate_image_id: resolvedCandidateImageId,
-          snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
-        }
-      }
-
-      if (finalVoteValue !== 0 && this.voteAssetExceedsActiveCandidateLimit(safeAssetSha)) {
-        const error = new Error("VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED")
-        error.code = "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED"
-        throw error
-      }
-
-      if (finalVoteValue === 0) {
-        this.state.storage.sql.exec(
-          `DELETE FROM vote_by_user_asset
-           WHERE user_id = ?
-             AND asset_sha256 = ?`,
-          safeUserId,
-          safeAssetSha,
-        )
-      } else {
-        this.state.storage.sql.exec(
-          `INSERT INTO vote_by_user_asset (
-             user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)
-           ON CONFLICT(user_id, asset_sha256) DO UPDATE SET
-             vision_id = excluded.vision_id,
-             candidate_image_id = excluded.candidate_image_id,
-             vote_value = excluded.vote_value,
-             updated_at = CURRENT_TIMESTAMP`,
-          safeUserId,
-          safeAssetSha,
-          resolvedVisionId,
-          resolvedCandidateImageId,
-          finalVoteValue,
-          sanitizeText(currentRow?.created_at || "", 64) || null,
-        )
-      }
-
-      const assetDelta = voteDeltaFromTransition(currentVoteValue, finalVoteValue)
-      this.ensureAssetSummaryRow(safeAssetSha, {
-        visionId: resolvedVisionId,
-        candidateImageId: resolvedCandidateImageId,
-      })
-      this.state.storage.sql.exec(
-        `UPDATE asset_summary
-         SET vision_id = CASE
-               WHEN ? <> '' THEN ?
-               ELSE vision_id
-             END,
-             candidate_image_id = COALESCE(?, candidate_image_id),
-             upvotes = MAX(0, upvotes + ?),
-             downvotes = MAX(0, downvotes + ?),
-             score = score + ?,
-             vote_count = MAX(0, vote_count + ?),
-             updated_at = CURRENT_TIMESTAMP
-         WHERE asset_sha256 = ?`,
-        resolvedVisionId,
-        resolvedVisionId,
-        resolvedCandidateImageId,
-        Number(assetDelta.upvotes || 0),
-        Number(assetDelta.downvotes || 0),
-        Number(assetDelta.score || 0),
-        Number(assetDelta.vote_count || 0),
-        safeAssetSha,
-      )
-
-      const oldVisionId = sanitizeVoteVisionId(currentRow?.vision_id || "")
-      if (oldVisionId && oldVisionId !== resolvedVisionId) {
-        const oldVisionDelta = voteDeltaFromTransition(currentVoteValue, 0)
-        this.bumpVisionSummary(oldVisionId, {
-          upvotes: oldVisionDelta.upvotes,
-          downvotes: oldVisionDelta.downvotes,
-          score: oldVisionDelta.score,
-          voteCount: oldVisionDelta.vote_count,
-        })
-        const newVisionDelta = voteDeltaFromTransition(0, finalVoteValue)
-        this.bumpVisionSummary(resolvedVisionId, {
-          upvotes: newVisionDelta.upvotes,
-          downvotes: newVisionDelta.downvotes,
-          score: newVisionDelta.score,
-          voteCount: newVisionDelta.vote_count,
-        })
-      } else {
-        this.bumpVisionSummary(resolvedVisionId, {
-          upvotes: assetDelta.upvotes,
-          downvotes: assetDelta.downvotes,
-          score: assetDelta.score,
-          voteCount: assetDelta.vote_count,
-        })
-      }
-
-      return {
-        changed: true,
-        mutation_id: null,
-        current_vote_value: currentVoteValue,
-        final_vote_value: finalVoteValue,
-        resolved_vision_id: resolvedVisionId,
-        candidate_image_id: resolvedCandidateImageId,
-        snapshot: this.snapshotForAsset(safeAssetSha, safeUserId, resolvedVisionId),
-      }
-    }
-  }
-
-  snapshotForAsset(assetSha256, userId, requestedVisionId = "") {
-    const safeAssetSha = normalizeSha256(assetSha256)
-    const safeUserId = normalizeUserId(userId || "")
-    const assetRow =
-      this.sqlFirst(
-        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-         FROM asset_summary
-         WHERE asset_sha256 = ?`,
-        safeAssetSha,
-      ) || null
-    const userVoteRow =
-      this.sqlFirst(
-        `SELECT vote_value
-         FROM vote_by_user_asset
-         WHERE user_id = ?
-           AND asset_sha256 = ?
-         LIMIT 1`,
-        safeUserId,
-        safeAssetSha,
-      ) || null
-    const resolvedVisionId = sanitizeVoteVisionId(requestedVisionId || assetRow?.vision_id || "")
-    const visionRow = resolvedVisionId
-      ? this.sqlFirst(
-          `SELECT upvotes, downvotes, score, vote_count
-             FROM vision_summary
-             WHERE vision_id = ?`,
-          resolvedVisionId,
-        ) || null
-      : null
-    return {
-      image_upvotes: Number(assetRow?.upvotes || 0),
-      image_downvotes: Number(assetRow?.downvotes || 0),
-      image_score: Number(assetRow?.score || 0),
-      user_vote: Number(userVoteRow?.vote_value || 0),
-      vision_upvotes: Number(visionRow?.upvotes || 0),
-      vision_downvotes: Number(visionRow?.downvotes || 0),
-      vision_score: Number(visionRow?.score || 0),
-      candidate_ref: voteAssetIdentity(this.getMeta("symbol"), safeAssetSha) || "",
-      vision_id: resolvedVisionId,
-    }
-  }
-
-  exportAssetSummaries() {
-    const symbol = this.getMeta("symbol")
-    return this.state.storage.sql
-      .exec(
-        `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
-         FROM asset_summary
-         ORDER BY asset_sha256 ASC`,
-      )
-      .toArray()
-      .map((row) => mapCoordinatorAssetSummaryRow({ ...row, gene_symbol: symbol }))
-  }
-
-  ensureSymbol(symbol) {
-    const safeSymbol = normalizeSymbol(symbol)
-    if (!safeSymbol) throw new Error("Missing or invalid symbol")
-    const storedSymbol = this.getMeta("symbol")
-    if (storedSymbol && storedSymbol !== safeSymbol)
-      throw new Error("Vote coordinator belongs to another gene symbol")
-    if (!storedSymbol) this.setMeta("symbol", safeSymbol)
-    return safeSymbol
-  }
-
-  async ensureBootstrapped(symbol) {
-    // B-742 fence: legacy votes seed a cold coordinator exactly once; afterward
-    // the coordinator owns votes. Do not replace a warm coordinator with a D1
-    // mirror, or declare paging elsewhere sufficient: this cold read/write set
-    // still needs bounded, resumable admission including Durable Object cost.
-    const safeSymbol = this.ensureSymbol(symbol)
-    // An activated v2 gene is locally authoritative and D1-free: a cold
-    // bootstrap or any later fallback must never reimport legacy D1 vote
-    // history or clear the votes, caretaker state and publication intent
-    // accepted under v2.
-    if (this.getMeta("authority_epoch") === "v2") return safeSymbol
-    if (!this.env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
-    if (this.getMeta("bootstrapped") === "1") return safeSymbol
-    await this.state.blockConcurrencyWhile(async () => {
-      if (this.getMeta("bootstrapped") === "1") return
-
-      const assetResp = await this.env.ICONOPLASM_DB.prepare(
-        `SELECT asset_sha256, vision_id, candidate_image_id
-         FROM icono_portrait_assets
-         WHERE gene_symbol = ?`,
-      )
-        .bind(safeSymbol)
-        .all()
-      const voteResp = await this.env.ICONOPLASM_DB.prepare(
-        `SELECT user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
-         FROM icono_image_votes
-         WHERE gene_symbol = ?`,
-      )
-        .bind(safeSymbol)
-        .all()
-      const assetRows = Array.isArray(assetResp?.results) ? assetResp.results : []
-      const voteRows = Array.isArray(voteResp?.results) ? voteResp.results : []
-      // Caretaker eligibility is independent of ordinary vote history. Each
-      // deliberate selection checks the exact current D1 projection before its
-      // CAS command, and versioned invalidations retain their existing delivery
-      // path. Copying every candidate here adds no selection guarantee.
-
-      const assetMap = new Map()
-      const visionMap = new Map()
-      const voteRowsNorm = []
-
-      for (const rawAsset of Array.isArray(assetRows) ? assetRows : []) {
-        const assetSha = normalizeSha256(rawAsset?.asset_sha256 || "")
-        if (!assetSha) continue
-        assetMap.set(assetSha, {
-          asset_sha256: assetSha,
-          vision_id: sanitizeVoteVisionId(rawAsset?.vision_id || "") || "",
-          candidate_image_id: optionalInt(rawAsset?.candidate_image_id),
-          upvotes: 0,
-          downvotes: 0,
-          score: 0,
-          vote_count: 0,
-        })
-      }
-
-      for (const rawVote of Array.isArray(voteRows) ? voteRows : []) {
-        const assetSha = normalizeSha256(rawVote?.asset_sha256 || "")
-        const userId = normalizeUserId(rawVote?.user_id || "")
-        const voteValue = normalizeVoteValue(rawVote?.vote_value)
-        if (!assetSha || !userId || voteValue == null || voteValue === 0) continue
-        const current = assetMap.get(assetSha) || {
-          asset_sha256: assetSha,
-          vision_id: sanitizeVoteVisionId(rawVote?.vision_id || "") || "",
-          candidate_image_id: optionalInt(rawVote?.candidate_image_id),
-          upvotes: 0,
-          downvotes: 0,
-          score: 0,
-          vote_count: 0,
-        }
-        current.vision_id =
-          sanitizeVoteVisionId(current.vision_id || rawVote?.vision_id || "") || ""
-        current.candidate_image_id = optionalInt(
-          current.candidate_image_id ?? rawVote?.candidate_image_id,
-        )
-        current.upvotes += Number(voteValue === 1)
-        current.downvotes += Number(voteValue === -1)
-        current.score += Number(voteValue)
-        current.vote_count += 1
-        assetMap.set(assetSha, current)
-        if (current.vision_id) {
-          const currentVision = visionMap.get(current.vision_id) || {
-            upvotes: 0,
-            downvotes: 0,
-            score: 0,
-            vote_count: 0,
-          }
-          currentVision.upvotes += Number(voteValue === 1)
-          currentVision.downvotes += Number(voteValue === -1)
-          currentVision.score += Number(voteValue)
-          currentVision.vote_count += 1
-          visionMap.set(current.vision_id, currentVision)
-        }
-        voteRowsNorm.push({
-          user_id: userId,
-          asset_sha256: assetSha,
-          vision_id: sanitizeVoteVisionId(rawVote?.vision_id || "") || "",
-          candidate_image_id: optionalInt(rawVote?.candidate_image_id),
-          vote_value: voteValue,
-          created_at: sanitizeText(rawVote?.created_at || "", 64) || "",
-          updated_at: sanitizeText(rawVote?.updated_at || "", 64) || "",
-        })
-      }
-
-      this.state.storage.sql.exec(`
-        DELETE FROM vote_by_user_asset;
-        DELETE FROM asset_summary;
-        DELETE FROM vision_summary;
-      `)
-      this.setMeta("symbol", safeSymbol)
-      this.setMeta("bootstrapped", "1")
-      this.setMeta("bootstrapped_at", new Date().toISOString())
-
-      for (const asset of assetMap.values()) {
-        this.state.storage.sql.exec(
-          `INSERT INTO asset_summary (
-             asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          asset.asset_sha256,
-          asset.vision_id,
-          asset.candidate_image_id,
-          Number(asset.upvotes || 0),
-          Number(asset.downvotes || 0),
-          Number(asset.score || 0),
-          Number(asset.vote_count || 0),
-        )
-      }
-      for (const [visionId, vision] of visionMap.entries()) {
-        this.state.storage.sql.exec(
-          `INSERT INTO vision_summary (
-             vision_id, upvotes, downvotes, score, vote_count, updated_at
-           ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-          visionId,
-          Number(vision.upvotes || 0),
-          Number(vision.downvotes || 0),
-          Number(vision.score || 0),
-          Number(vision.vote_count || 0),
-        )
-      }
-      for (const vote of voteRowsNorm) {
-        this.state.storage.sql.exec(
-          `INSERT INTO vote_by_user_asset (
-             user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          vote.user_id,
-          vote.asset_sha256,
-          vote.vision_id,
-          vote.candidate_image_id,
-          Number(vote.vote_value || 0),
-          vote.created_at || new Date().toISOString(),
-          vote.updated_at || new Date().toISOString(),
-        )
-      }
-    })
-    return safeSymbol
+    return { ok: true, inert: true }
   }
 
   async fetch(request) {
     const url = new URL(request.url)
-    const path = url.pathname
-    if (path === "/caretaker-assignment/project" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      // Assignment/eligibility/selection live in their own tables in this same
-      // coordinator. None needs to import all historical ordinary votes.
-      this.ensureSymbol(requestedSymbol)
-      try {
-        if (this.getMeta("authority_epoch") === "v2") {
-          // Caretaker authority and publication intent commit in one storage
-          // transaction, so a failed intent can never leave the assignment
-          // ahead of the canonical selection it implies.
-          let result = null
-          const publication = await this.publication.commitSelection(() => {
-            result = this.caretakerSupervotes.projectAssignmentCore(payload?.event)
-            return this.authoritativeSelectionIdentity()
-          })
-          return Response.json({
-            ...result,
-            publication: {
-              changed: publication.changed,
-              pending: publication.state?.pending === true,
-            },
-          })
-        }
-        const result = await this.caretakerSupervotes.projectAssignment(payload?.event)
-        return Response.json(result)
-      } catch (error) {
-        if (error instanceof CaretakerSupervoteError) {
-          return Response.json(
-            { ok: false, code: error.code, error: error.message },
-            { status: error.status },
-          )
-        }
-        throw error
-      }
+    if (url.pathname !== "/vote/export" || request.method !== "GET") {
+      return new Response("Not found", { status: 404 })
     }
-
-    if (path === "/caretaker-supervote/snapshot" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = this.ensureSymbol(requestedSymbol)
-      return Response.json({
-        ok: true,
-        symbol,
-        supervote: this.caretakerSupervotes.snapshot(payload?.account_id || ""),
-      })
-    }
-
-    if (path === "/caretaker-supervote/set" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = this.ensureSymbol(requestedSymbol)
-      try {
-        const targetAsset = normalizeSha256(payload?.asset_sha256 || "") || null
-        let eligibilityProjection = null
-        if (targetAsset) {
-          eligibilityProjection = await this.requireEligibleCaretakerSupervoteTarget(
-            symbol,
-            targetAsset,
-          )
-        }
-        const selectionOptions = {
-          accountId: payload?.account_id,
-          assetSha256: targetAsset,
-          direction: targetAsset ? Number(payload?.direction) : null,
-          commandId: payload?.command_id,
-          requestSha256: payload?.request_sha256,
-          expectedAssignmentVersion: payload?.expected_assignment_version,
-          expectedSupervoteVersion: payload?.expected_supervote_version,
-        }
-        if (this.getMeta("authority_epoch") === "v2") {
-          // Eligibility, supervote state and publication intent commit in one
-          // storage transaction, so a failed intent cannot leave a committed
-          // supervote change behind while publication stays clean.
-          let result = null
-          const publication = await this.publication.commitSelection(() => {
-            if (eligibilityProjection) {
-              this.caretakerSupervotes.projectAssetEligibilityInTransaction(eligibilityProjection)
-            }
-            result = this.caretakerSupervotes.setSelectionCore(selectionOptions)
-            return this.authoritativeSelectionIdentity()
-          })
-          return Response.json({
-            ...result,
-            symbol,
-            publication: {
-              changed: publication.changed,
-              pending: publication.state?.pending === true,
-            },
-          })
-        }
-        if (eligibilityProjection) {
-          this.caretakerSupervotes.projectAssetEligibility(eligibilityProjection)
-        }
-        const result = await this.caretakerSupervotes.setSelection(selectionOptions)
-        return Response.json({ ...result, symbol })
-      } catch (error) {
-        if (error instanceof CaretakerSupervoteError) {
-          return Response.json(
-            { ok: false, code: error.code, error: error.message },
-            { status: error.status },
-          )
-        }
-        throw error
-      }
-    }
-
-    if (path === "/caretaker-supervote/eligibility/project" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol)
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      this.ensureSymbol(requestedSymbol)
-      try {
-        return Response.json(this.caretakerSupervotes.projectAssetEligibility(payload?.projection))
-      } catch (error) {
-        if (error instanceof CaretakerSupervoteError) {
-          return Response.json(
-            { ok: false, code: error.code, error: error.message },
-            { status: error.status },
-          )
-        }
-        throw error
-      }
-    }
-
-    if (path === "/caretaker-supervote/eligibility/project-batch" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol)
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      this.ensureSymbol(requestedSymbol)
-      try {
-        return Response.json(
-          this.caretakerSupervotes.projectAssetEligibilityBatch({
-            projections: payload?.projections,
-          }),
-        )
-      } catch (error) {
-        if (error instanceof CaretakerSupervoteError) {
-          return Response.json(
-            { ok: false, code: error.code, error: error.message },
-            { status: error.status },
-          )
-        }
-        throw error
-      }
-    }
-
-    if (path === "/authority/candidates" && request.method === "POST") {
-      const payload = await request.json().catch(() => ({}))
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = this.ensureSymbol(requestedSymbol)
-      if (!Array.isArray(payload?.items)) {
-        return Response.json(
-          {
-            ok: false,
-            code: "CANDIDATE_ITEMS_REQUIRED",
-            error: "Candidate authority requires a complete items array; refusing to clear",
-          },
-          { status: 400 },
-        )
-      }
-      if (payload.items.length > 64) {
-        return Response.json(
-          {
-            ok: false,
-            code: "CANDIDATE_BATCH_TOO_LARGE",
-            error: "Candidate authority batch exceeds the 64-candidate bound",
-          },
-          { status: 400 },
-        )
-      }
-      const replace = payload?.replace !== false
-      let imported = null
-      let publication = null
-      try {
-        if (this.getMeta("authority_epoch") === "v2") {
-          // Candidate changes are canonical-affecting: one transaction updates
-          // the candidate authority and the publication intent, so a withdrawal
-          // of the current winner can never leave a stale clean pointer.
-          publication = await this.publication.commitSelection(() => {
-            imported = this.applyCandidateAuthorityCore(payload.items, { replace })
-            return this.authoritativeSelectionIdentity()
-          })
-        } else {
-          imported = this.importGeneCandidateAuthority(payload.items, { replace })
-        }
-      } catch (error) {
-        return Response.json(
-          {
-            ok: false,
-            code: "CANDIDATE_IMPORT_REJECTED",
-            error: sanitizeText(String(error?.message || error), 300),
-          },
-          { status: 400 },
-        )
-      }
-      const election = this.geneAuthorityWinner()
-      return Response.json({
-        ok: true,
-        symbol,
-        ...imported,
-        winner_asset_sha256: election?.winner?.asset_sha256 || null,
-        publication: publication
-          ? {
-              changed: publication.changed,
-              pending: publication.state?.pending === true,
-            }
-          : null,
-      })
-    }
-
-    if (path === "/authority/activate" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = this.ensureSymbol(requestedSymbol)
-      // Authority transfer requires the old writers to be settled first; an
-      // unsettled outbox would lose accepted changes after the epoch flips.
-      if (
-        this.pendingOutboxRows(1).length ||
-        this.caretakerSupervotes.pendingOutboxRows(1).length
-      ) {
-        return Response.json(
-          {
-            ok: false,
-            code: "OUTBOX_NOT_SETTLED",
-            error: "Legacy vote/caretaker outbox must settle before authority transfer",
-          },
-          { status: 409 },
-        )
-      }
-      // Replay/conflict is decided before any mutation. A rejected activation
-      // must not change an active policy, and an identical repeated activation
-      // is an idempotent replay.
-      const requestedAsset = normalizeSha256(payload?.published_asset_sha256 || "")
-      const requestedOverride =
-        payload?.admin_override === undefined
-          ? this.getMeta("admin_override") === "1"
-          : Boolean(payload.admin_override)
-      const requestedIdentity = this.authoritativeSelectionIdentity({
-        adminOverride: requestedOverride,
-        publishedAssetSha: requestedAsset,
-      })
-      const existingPublication = this.publication.read()
-      if (existingPublication) {
-        const currentAsset = normalizeSha256(this.getMeta("published_asset_sha256") || "")
-        const currentOverride = this.getMeta("admin_override") === "1"
-        const samePolicy = requestedOverride === currentOverride && requestedAsset === currentAsset
-        if (
-          this.getMeta("authority_epoch") === "v2" &&
-          samePolicy &&
-          !existingPublication.pending
-        ) {
-          return Response.json({
-            ok: true,
-            symbol,
-            replayed: true,
-            authority_epoch: "v2",
-            winner_asset_sha256: winnerAssetShaFromSelectionReference(
-              existingPublication.selectionRef,
-            ),
-          })
-        }
-        if (
-          this.getMeta("authority_epoch") !== "v2" &&
-          !existingPublication.pending &&
-          existingPublication.selectionRef === requestedIdentity.selectionRef
-        ) {
-          // Crash window recovery: the seed committed but the epoch flip did
-          // not. Finish the coherent commit without rewriting the selection.
-          if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
-          this.setMeta("admin_override", requestedOverride ? "1" : "0")
-          this.setMeta("authority_epoch", "v2")
-          return Response.json({
-            ok: true,
-            symbol,
-            recovered: true,
-            authority_epoch: "v2",
-            winner_asset_sha256: winnerAssetShaFromSelectionReference(
-              existingPublication.selectionRef,
-            ),
-          })
-        }
-        return Response.json(
-          {
-            ok: false,
-            code: "ALREADY_ACTIVATED",
-            error: "Gene authority is already activated with a different policy",
-          },
-          { status: 409 },
-        )
-      }
-      // Complete-input verification: the local authority must contain every
-      // accepted legacy vote with the same voter, candidate and value before
-      // the epoch flips. Row counts alone are not evidence of a complete
-      // transfer. Migration-only, keyset-paginated, double-pass verified and
-      // bounded.
-      const boundaryRevision = Number(this.getMeta("candidate_authority_revision")) || 0
-      if (this.env?.ICONOPLASM_DB) {
-        try {
-          const snapshot = await this.readLegacyVoteSnapshot(symbol)
-          if (snapshot.changed) {
-            return Response.json(
-              {
-                ok: false,
-                code: "SOURCE_CHANGED",
-                error: "Legacy vote source changed during verification; retry the transfer",
-              },
-              { status: 409 },
-            )
-          }
-          const localVotes = new Map(
-            this.state.storage.sql
-              .exec(`SELECT user_id, asset_sha256, vote_value FROM vote_by_user_asset`)
-              .toArray()
-              .map((row) => [
-                `${String(row.user_id)}\u0000${String(row.asset_sha256)}`,
-                Number(row.vote_value),
-              ]),
-          )
-          let complete = snapshot.votes.size === localVotes.size
-          if (complete) {
-            for (const [key, value] of snapshot.votes) {
-              if (localVotes.get(key) !== value) {
-                complete = false
-                break
-              }
-            }
-          }
-          if (!complete) {
-            return Response.json(
-              {
-                ok: false,
-                code: "IMPORT_INCOMPLETE",
-                error: `Legacy vote import does not match the accepted source (${localVotes.size} local / ${snapshot.votes.size} source)`,
-              },
-              { status: 409 },
-            )
-          }
-        } catch (error) {
-          return Response.json(
-            {
-              ok: false,
-              code: "SOURCE_CHECK_FAILED",
-              error: sanitizeText(String(error?.message || error), 300),
-            },
-            { status: 503 },
-          )
-        }
-      }
-      const election = this.geneAuthorityWinner({
-        currentAssetSha: requestedAsset,
-        adminOverride: requestedOverride,
-      })
-      if (!election?.winner) {
-        return Response.json(
-          {
-            ok: false,
-            code: "NO_AUTHORITY_WINNER",
-            error: "Candidate authority has no eligible winner to seed",
-          },
-          { status: 409 },
-        )
-      }
-      try {
-        await this.publication.seedPublished(
-          requestedIdentity,
-          {
-            contentSha256: sanitizeText(payload?.published?.content_sha256 || "", 64),
-            objectKey: sanitizeText(payload?.published?.object_key || "", 512),
-          },
-          {
-            // Handover fence: revalidate accepted work, the candidate boundary
-            // and the final selection inside the same exclusive transaction
-            // that commits the seed. A concurrent accepted change aborts the
-            // transfer instead of certifying a stale clean identity.
-            guard: () => {
-              if (
-                this.pendingOutboxRows(1).length ||
-                this.caretakerSupervotes.pendingOutboxRows(1).length
-              ) {
-                const moved = new Error("Accepted work arrived during authority transfer")
-                moved.code = "AUTHORITY_MOVED"
-                throw moved
-              }
-              if (
-                (Number(this.getMeta("candidate_authority_revision")) || 0) !== boundaryRevision
-              ) {
-                const moved = new Error("Candidate authority changed during transfer")
-                moved.code = "AUTHORITY_MOVED"
-                throw moved
-              }
-              const currentIdentity = this.authoritativeSelectionIdentity({
-                adminOverride: requestedOverride,
-                publishedAssetSha: requestedAsset,
-              })
-              if (currentIdentity.selectionRef !== requestedIdentity.selectionRef) {
-                const moved = new Error("Selected winner changed during authority transfer")
-                moved.code = "AUTHORITY_MOVED"
-                throw moved
-              }
-            },
-          },
-        )
-      } catch (error) {
-        if (error?.code === "AUTHORITY_MOVED") {
-          return Response.json(
-            {
-              ok: false,
-              code: "AUTHORITY_MOVED",
-              error: sanitizeText(String(error?.message || error), 300),
-            },
-            { status: 409 },
-          )
-        }
-        return Response.json(
-          {
-            ok: false,
-            code: "SEED_REJECTED",
-            error: sanitizeText(String(error?.message || error), 500),
-          },
-          { status: 409 },
-        )
-      }
-      // Persist policy + epoch only after the verified published identity is
-      // committed. A crash before this leaves the seed recoverable by replay.
-      if (requestedAsset) this.setMeta("published_asset_sha256", requestedAsset)
-      this.setMeta("admin_override", requestedOverride ? "1" : "0")
-      this.setMeta("authority_epoch", "v2")
-      return Response.json({
-        ok: true,
-        symbol,
-        authority_epoch: "v2",
-        winner_asset_sha256: election.winner.asset_sha256,
-      })
-    }
-
-    if (path === "/publication/finalization-handoff" && request.method === "POST") {
-      const payload = await request.json().catch(() => ({}))
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ ok: false, error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      return Response.json(
-        await this.acceptSyncFinalizationHandoff(requestedSymbol, payload?.job_version),
-        {
-          headers: { "Cache-Control": "no-store" },
-        },
-      )
-    }
-
-    if (path === "/publication/state" && request.method === "POST") {
-      const payload = await request.json().catch(() => ({}))
-      const requestedSymbol = normalizeSymbol(payload?.symbol || this.getMeta("symbol") || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = this.ensureSymbol(requestedSymbol)
-      const election = this.geneAuthorityWinner()
-      return Response.json({
-        ok: true,
-        symbol,
-        authority_epoch: this.getMeta("authority_epoch") || "legacy",
-        admin_override: this.getMeta("admin_override") === "1",
-        publication: this.publication.read(),
-        winner_asset_sha256: election?.winner?.asset_sha256 || null,
-        candidate_count:
-          Number(
-            this.state.storage.sql
-              .exec(`SELECT COUNT(*) AS n FROM gene_candidate_authority`)
-              .toArray()[0]?.n || 0,
-          ) || 0,
-      })
-    }
-
-    if (path === "/vote/set" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const wasWarm = this.getMeta("bootstrapped") === "1"
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
-      const assetSha = normalizeSha256(payload?.asset_sha256 || "")
-      const userId = normalizeUserId(payload?.user_id || "")
-      const requested = normalizeVoteValue(payload?.vote_value)
-      if (!assetSha || !userId || requested == null) {
-        return Response.json({ error: "Missing or invalid vote payload" }, { status: 400 })
-      }
-      if (requested !== 0 && this.voteAssetExceedsActiveCandidateLimit(assetSha)) {
-        return Response.json(
-          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
-          { status: 409 },
-        )
-      }
-      const ensuredAsset = await this.ensureAssetSummaryFromMetadata(
-        symbol,
-        assetSha,
-        payload?.vision_id || "",
-        payload?.candidate_image_id,
-      )
-      // The v2 path commits the vote, the new selection intent and its wakeup
-      // in one storage transaction. The legacy path keeps scheduling durable
-      // delivery before the vote/outbox transaction exactly as before.
-      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
-      const outcome = await this.applyAuthoritativeVoteMutation({
-        assetSha256: assetSha,
-        userId,
-        requestedVoteValue: requested,
-        visionId: payload?.vision_id || "",
-        candidateImageId: payload?.candidate_image_id,
-        ensuredAsset,
-        reason: payload?.reason || "vote_auto_promote",
-        // A cold gene just imported its complete retained state from D1 in
-        // this request, so the handover re-verifies that source once. A warm
-        // coordinator reconciles its retained local authority without touching
-        // D1: the settled outbox proves no accepted work is in flight, and the
-        // warm-vote cost fence forbids a D1 round trip.
-        verifySource: !wasWarm,
-      })
-      if (outcome.authority === "deferred") {
-        // The demand-driven handover could not safely complete yet. Nothing
-        // was mutated and no legacy write occurred; the caller replays the
-        // same canonical command once the named condition clears.
-        return Response.json(
-          {
-            ok: false,
-            code: String(outcome.deferral?.code || "HANDOVER_DEFERRED").slice(0, 100),
-            error: "The gene handover must complete before the v2 mutation; nothing was applied",
-            retryable: true,
-            symbol,
-            asset_sha256: assetSha,
-          },
-          { status: 409, headers: { "Cache-Control": "no-store" } },
-        )
-      }
-      const result = outcome.vote
-      return Response.json({
-        ok: true,
-        symbol,
-        asset_sha256: assetSha,
-        ...result,
-        snapshot: this.caretakerSupervotes.decorateSnapshot(result.snapshot),
-        authority: outcome.authority,
-        publication: outcome.publication
-          ? {
-              changed: outcome.publication.changed,
-              pending: outcome.publication.state?.pending === true,
-            }
-          : null,
-      })
-    }
-
-    if (path === "/vote/import" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const wasWarm = this.getMeta("bootstrapped") === "1"
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
-      const items = Array.isArray(payload?.items) ? payload.items : []
-      if (
-        items.some((item) => {
-          const requested = normalizeVoteValue(item?.vote_value)
-          const assetSha = normalizeSha256(item?.asset_sha256 || "")
-          return requested !== 0 && assetSha && this.voteAssetExceedsActiveCandidateLimit(assetSha)
-        })
-      ) {
-        return Response.json(
-          { ok: false, code: "VOTE_ACTIVE_ASSET_LIMIT_EXCEEDED" },
-          { status: 409 },
-        )
-      }
-      const results = []
-      let upserted = 0
-      let deleted = 0
-      let invalid = 0
-      if (this.getMeta("authority_epoch") !== "v2") await this.armOutboxAlarm(1)
-
-      for (const raw of items) {
-        const assetSha = normalizeSha256(raw?.asset_sha256 || "")
-        const userId = normalizeUserId(raw?.user_id || raw?.user || "")
-        const requested = normalizeVoteValue(raw?.vote_value)
-        if (!assetSha || !userId || requested == null) {
-          invalid += 1
-          continue
-        }
-        const ensuredAsset = await this.ensureAssetSummaryFromMetadata(
-          symbol,
-          assetSha,
-          raw?.vision_id || "",
-          raw?.candidate_image_id,
-        )
-        const outcome = await this.applyAuthoritativeVoteMutation({
-          assetSha256: assetSha,
-          userId,
-          requestedVoteValue: requested,
-          visionId: raw?.vision_id || "",
-          candidateImageId: raw?.candidate_image_id,
-          ensuredAsset,
-          reason: raw?.reason || payload?.reason || "vote_import_auto_promote",
-          // A cold gene just imported its complete retained state from D1 in
-          // this request, so the handover re-verifies that source once. A warm
-          // coordinator reconciles its retained local authority without
-          // touching D1: the settled outbox proves no accepted work is in
-          // flight, and the cost fence forbids a D1 round trip on warm votes.
-          verifySource: !wasWarm,
-        })
-        const result = outcome.vote
-        if (result.final_vote_value === 0) {
-          deleted += 1
-        } else {
-          upserted += 1
-        }
-        results.push({
-          candidate_ref: voteAssetIdentity(symbol, assetSha),
-          symbol,
-          asset_sha256: assetSha,
-          vision_id: result.resolved_vision_id,
-          candidate_image_id: result.candidate_image_id,
-          user_id: userId,
-          current_vote_value: result.current_vote_value,
-          final_vote_value: result.final_vote_value,
-          changed: result.changed,
-          mutation_id: result.mutation_id,
-          authority: outcome.authority,
-        })
-      }
-
-      return Response.json({
-        ok: true,
-        symbol,
-        upserted,
-        deleted,
-        invalid,
-        results,
-      })
-    }
-
-    if (path === "/vote/snapshot" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
-      const assetSha = normalizeSha256(payload?.asset_sha256 || "")
-      const userId = normalizeUserId(payload?.user_id || "")
-      if (!assetSha) {
-        return Response.json({ error: "Missing or invalid asset_sha256" }, { status: 400 })
-      }
-      return Response.json({
-        ok: true,
-        symbol,
-        asset_sha256: assetSha,
-        snapshot: this.caretakerSupervotes.decorateSnapshot(
-          this.snapshotForAsset(assetSha, userId, payload?.vision_id || ""),
-        ),
-      })
-    }
-
-    if (path === "/vote/snapshots" && request.method === "POST") {
-      const payload = await request.json()
-      const userId = normalizeUserId(payload?.user_id || "")
-      const items = Array.isArray(payload?.items) ? payload.items : []
-      const out = []
-      for (const rawItem of items) {
-        const symbol = await this.ensureBootstrapped(rawItem?.symbol || "")
-        const assetSha = normalizeSha256(rawItem?.asset_sha256 || "")
-        if (!assetSha) continue
-        const snapshot = this.caretakerSupervotes.decorateSnapshot(
-          this.snapshotForAsset(assetSha, userId, rawItem?.vision_id || ""),
-        )
-        out.push({
-          candidate_ref: snapshot.candidate_ref,
-          symbol,
-          asset_sha256: assetSha,
-          vision_id: snapshot.vision_id,
-          snapshot,
-        })
-      }
-      return Response.json({ ok: true, snapshots: out })
-    }
-
-    // B-898 Stage 2, step 1: export everything this coordinator holds so D1
-    // becomes the one copy of the votes before the coordinator is deleted.
-    // Never bootstraps: a cold coordinator says so and reads nothing.
-    if (path === "/vote/export" && request.method === "GET") {
-      const bootstrapped = this.getMeta("bootstrapped") === "1"
-      const symbol = normalizeSymbol(this.getMeta("symbol") || "")
-      return Response.json({
-        ok: true,
-        bootstrapped,
-        symbol,
-        authority_epoch: String(this.getMeta("authority_epoch") || ""),
-        published_asset_sha256:
-          normalizeSha256(this.getMeta("published_asset_sha256") || "") || null,
-        admin_override: this.getMeta("admin_override") === "1",
-        votes: bootstrapped
-          ? this.state.storage.sql
-              .exec(
-                `SELECT user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
-                 FROM vote_by_user_asset ORDER BY user_id ASC, asset_sha256 ASC`,
-              )
-              .toArray()
-              .map((row) => ({
-                user_id: String(row.user_id),
-                asset_sha256: String(row.asset_sha256),
-                vision_id: String(row.vision_id || ""),
-                candidate_image_id:
-                  row.candidate_image_id == null ? null : optionalInt(row.candidate_image_id),
-                vote_value: Number(row.vote_value),
-                created_at: String(row.created_at || ""),
-                updated_at: String(row.updated_at || ""),
-              }))
-          : [],
-        asset_summaries: bootstrapped ? this.exportAssetSummaries() : [],
-        caretaker_supervote: bootstrapped ? this.caretakerSupervotes.snapshot() : null,
-      })
-    }
-
-    if (path === "/state" && request.method === "POST") {
-      const payload = await request.json()
-      const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-      if (!requestedSymbol) {
-        return Response.json({ error: "Missing or invalid symbol" }, { status: 400 })
-      }
-      const symbol = await this.ensureBootstrapped(requestedSymbol)
-      return Response.json({
-        ok: true,
-        symbol,
-        caretaker_supervote: this.caretakerSupervotes.snapshot(),
-        asset_summaries: this.caretakerSupervotes.decorateAssetSummaries(
-          this.exportAssetSummaries(),
-        ),
-      })
-    }
-
-    return new Response("Not found", { status: 404 })
+    const bootstrapped = this.getMeta("bootstrapped") === "1"
+    const symbol = normalizeSymbol(this.getMeta("symbol") || "") || ""
+    const assignment = bootstrapped
+      ? this.sqlRows(
+          `SELECT gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id, status,
+                  assignment_version, authority_event_id, authority_event_sequence
+             FROM caretaker_assignment_projection WHERE singleton = 1`,
+        )[0] || null
+      : null
+    const head = bootstrapped
+      ? this.sqlRows(
+          `SELECT asset_sha256, direction, supervote_version
+             FROM caretaker_supervote_head WHERE singleton = 1`,
+        )[0] || null
+      : null
+    return Response.json({
+      ok: true,
+      bootstrapped,
+      symbol,
+      authority_epoch: this.getMeta("authority_epoch"),
+      published_asset_sha256: normalizeSha256(this.getMeta("published_asset_sha256")) || null,
+      admin_override: this.getMeta("admin_override") === "1",
+      votes: bootstrapped
+        ? this.sqlRows(
+            `SELECT user_id, asset_sha256, vision_id, candidate_image_id, vote_value, created_at, updated_at
+               FROM vote_by_user_asset ORDER BY user_id ASC, asset_sha256 ASC`,
+          ).map((row) => ({
+            user_id: String(row.user_id),
+            asset_sha256: String(row.asset_sha256),
+            vision_id: String(row.vision_id || ""),
+            candidate_image_id:
+              row.candidate_image_id == null ? null : optionalInt(row.candidate_image_id),
+            vote_value: Number(row.vote_value),
+            created_at: String(row.created_at || ""),
+            updated_at: String(row.updated_at || ""),
+          }))
+        : [],
+      asset_summaries: bootstrapped
+        ? this.sqlRows(
+            `SELECT asset_sha256, vision_id, candidate_image_id, upvotes, downvotes, score, vote_count
+               FROM asset_summary ORDER BY asset_sha256 ASC`,
+          ).map((row) => ({
+            asset_sha256: normalizeSha256(row.asset_sha256) || "",
+            vision_id: sanitizeVoteVisionId(row.vision_id || "") || "",
+            candidate_image_id: optionalInt(row.candidate_image_id),
+            upvotes: Math.max(0, Number(row.upvotes || 0) || 0),
+            downvotes: Math.max(0, Number(row.downvotes || 0) || 0),
+            score: Number(row.score || 0) || 0,
+            vote_count: Math.max(0, Number(row.vote_count || 0) || 0),
+          }))
+        : [],
+      caretaker_supervote: bootstrapped ? supervoteSnapshot(assignment, head) : null,
+    })
   }
 }
 
@@ -19970,16 +16988,8 @@ export class IconoplasmSyncGovernor {
     return this.deferQueueUntil("finalization_reset_wake", message, admissionAt)
   }
 
-  async deferVoteProjectionToReset() {
-    const dueAt = Date.now() + secondsUntilCloudflareDailyReset() * 1000
-    return this.deferQueueUntil("vote_projection_reset_wake", null, dueAt)
-  }
-
   async schedulePendingResetAlarm(txn) {
-    const wakes = await Promise.all(
-      ["finalization_reset_wake", "vote_projection_reset_wake"].map((key) => txn.get(key)),
-    )
-    const pending = wakes.filter(Boolean)
+    const pending = [await txn.get("finalization_reset_wake")].filter(Boolean)
     if (pending.some((wake) => !Number.isFinite(wake.due_at)))
       throw new Error("Queue reset wake is malformed")
     if (pending.length) await txn.setAlarm(Math.min(...pending.map((wake) => wake.due_at)))
@@ -20043,17 +17053,7 @@ export class IconoplasmSyncGovernor {
   }
 
   async alarm() {
-    const finalization = await this.runQueueResetWake("finalization_reset_wake")
-    const votes = await this.runQueueResetWake("vote_projection_reset_wake")
-    if (!votes.pending && !votes.queue_message_sent && !votes.deferred) return finalization
-    return {
-      ok: finalization.ok && votes.ok,
-      pending: Boolean(finalization.pending || votes.pending),
-      deferred: Boolean(finalization.deferred || votes.deferred),
-      queue_message_sent: Boolean(finalization.queue_message_sent || votes.queue_message_sent),
-      finalization,
-      votes,
-    }
+    return this.runQueueResetWake("finalization_reset_wake")
   }
 
   async runQueueResetWake(key) {
@@ -20074,9 +17074,7 @@ export class IconoplasmSyncGovernor {
     }
     if (
       this.env.ICONOPLASM_SCHEMA_TRANSITION === "1" ||
-      (key === "finalization_reset_wake"
-        ? iconoplasmSyncFinalizationQueueDisabled(this.env)
-        : iconoplasmVoteProjectionQueueDisabled(this.env))
+      iconoplasmSyncFinalizationQueueDisabled(this.env)
     ) {
       await defer(Date.now() + 300000)
       return { ok: true, deferred: true, reason: "schema_transition_or_disabled" }
@@ -20135,21 +17133,7 @@ export class IconoplasmSyncGovernor {
         queue_messages_sent: messages.length,
       }
     }
-
-    const sent = await sendVoteProjectionDrainQueueMessage(this.env)
-    if (!sent.ok) {
-      const delay = /daily.*queue|queue.*daily/i.test(sent.detail || "")
-        ? secondsUntilCloudflareDailyReset() * 1000
-        : 900000
-      await defer(Date.now() + delay)
-      return { ok: false, deferred: true, reason: sent.code }
-    }
-    await this.state.storage.transaction(async (txn) => {
-      const current = await txn.get(key)
-      if (current?.day === wake.day) await txn.delete(key)
-      await this.schedulePendingResetAlarm(txn)
-    })
-    return { ok: true, pending: false, queue_message_sent: true }
+    return { ok: true, pending: false }
   }
 
   async storedState() {
@@ -20203,8 +17187,6 @@ export class IconoplasmSyncGovernor {
         await this.deferFinalizationUntil(payload, Number(payload?.next_admission_at || 0)),
       )
     }
-    if (request.method === "POST" && url.pathname === "/defer-vote-projection")
-      return Response.json(await this.deferVoteProjectionToReset())
     if (request.method === "POST" && url.pathname === "/permit") {
       const stored = await this.storedState()
       const requestedRaw = Number(url.searchParams.get("requested") || "1") || 1
@@ -20326,268 +17308,153 @@ export class IconoplasmSyncGovernor {
   }
 }
 
-export function resolveDesiredVoteValue(currentVoteValue, requestedVoteValue) {
-  const current = normalizeVoteValue(currentVoteValue)
-  const requested = normalizeVoteValue(requestedVoteValue)
-  if (current == null || requested == null) throw new Error("Invalid vote transition")
-  // The API is a desired-state command, not a toggle command. Replaying an
-  // identical request must therefore be a no-op instead of reversing the vote.
-  return requested
+// B-898 Stage 2: vote snapshots (per-asset counts, the caller's own vote, the
+// caretaker decoration) come from D1 alone. Every statement is keyed by the
+// named genes or the named (gene, asset, user) identities; see gene-votes.js.
+async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
+  return readGeneVoteSnapshots(env.ICONOPLASM_DB, {
+    userId,
+    items,
+    sanitizeVisionId: sanitizeVoteVisionId,
+  })
 }
 
-function voteDeltaFromTransition(currentVoteValue, nextVoteValue) {
-  const current = Number(currentVoteValue || 0)
-  const next = Number(nextVoteValue || 0)
-  return {
-    upvotes: Number(next === 1) - Number(current === 1),
-    downvotes: Number(next === -1) - Number(current === -1),
-    score: next - current,
-    vote_count: Number(next !== 0) - Number(current !== 0),
+// After a vote or supervote has committed: elect the gene's winner from D1 and
+// project it (only while the gene's vote version is unchanged), then rewrite
+// the gene's stable object after the response, so the shared vote counts in
+// it stay current. Nothing here can turn the committed vote into a failure: an
+// election error is logged and the next vote re-elects; a publish failure
+// leaves a winner change to the Actions publisher (the projection wrote a
+// `publish` event) and a count-only change to the next vote on the gene.
+async function electGeneAfterVote(env, symbol, { reason } = {}) {
+  try {
+    const { projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {
+      actor: GENE_VOTE_ELECTION_ACTOR,
+      reason,
+    })
+    return projection
+  } catch (error) {
+    console.warn("Iconoplasm vote election deferred to the next vote", {
+      symbol,
+      error: sanitizeText(String(error?.message || error), 300),
+    })
+    return null
   }
 }
 
-async function iconoVoteSnapshot(env, { candidateRef, symbol, assetSha256, visionId, userId }) {
-  // Read the hot snapshot from the coordinator first. If the coordinator has no
-  // state yet, return the zero snapshot instead of falling back to a raw D1 vote
-  // ledger aggregation. The previous "just count the ledger" shape is exactly
-  // what turns a harmless click into a history-sized database bill.
-  const coordinatorSnapshot = await iconoplasmVoteCoordinatorSnapshot(env, {
-    candidateRef,
+async function settleGeneAfterVote(env, ctx, symbol, { reason } = {}) {
+  const projection = await electGeneAfterVote(env, symbol, { reason })
+  republishGeneAfterResponse(env, ctx, symbol)
+  return projection
+}
+
+// `admit: false` only for the administrator's vote route; every vote a
+// reader causes spends the daily vote budget and is refused (429) once it is
+// spent.
+async function setIconoplasmVote(
+  env,
+  ctx,
+  {
     symbol,
     assetSha256,
+    userId,
+    voteValue,
+    visionId = "",
+    candidateImageId = null,
+    reason,
+    admit = true,
+  } = {},
+) {
+  const vote = await setGeneVote(env.ICONOPLASM_DB, {
+    symbol,
+    assetSha256,
+    userId,
+    voteValue,
     visionId,
-    userId,
+    candidateImageId: optionalInt(candidateImageId),
+    sanitizeVisionId: sanitizeVoteVisionId,
+    admit,
   })
-  if (coordinatorSnapshot?.snapshot) {
-    return coordinatorSnapshot.snapshot
-  }
-  const symbolNorm = normalizeSymbol(symbol)
-  const assetShaNorm = normalizeSha256(assetSha256)
-  const candidateRefNorm = normalizeCandidateRef(candidateRef, symbolNorm, assetShaNorm)
+  if (!vote.ok) return vote
+  if (vote.changed) await settleGeneAfterVote(env, ctx, symbol, { reason })
+  const [entry] = await iconoVoteSnapshots(env, {
+    userId,
+    items: [{ symbol, asset_sha256: assetSha256, vision_id: vote.resolved_vision_id }],
+  })
+  return { ...vote, snapshot: entry?.snapshot || null }
+}
 
+// Many votes at once (the administrator's import route, an image edit's
+// inherited upvotes, a generated candidate's first upvote). Every gene the
+// request names is elected, also when its votes did not change, so re-running
+// an import repairs a gene whose election failed or was refused the first
+// time; `failed_symbols` lists the genes whose election failed. The route
+// bounds the genes and votes of one request (voteImportBoundsError); the
+// reader callers import one gene. `republish` also rewrites, after the
+// response, the stable object of every gene whose votes or winner changed;
+// callers enable it only for one gene. `admit: false` only for the
+// administrator's import route.
+async function importIconoplasmVotes(
+  env,
+  ctx,
+  items,
+  { reason, republish = true, admit = true } = {},
+) {
+  const imported = await importGeneVotes(env.ICONOPLASM_DB, items, {
+    sanitizeVisionId: sanitizeVoteVisionId,
+    admit,
+  })
+  const changed = new Set(imported.changed_symbols)
+  let promoted = 0
+  const failedSymbols = []
+  for (const symbol of imported.symbols) {
+    const projection = await electGeneAfterVote(env, symbol, { reason })
+    if (!projection) failedSymbols.push(symbol)
+    if (projection?.changed) promoted += 1
+    if (republish && (changed.has(symbol) || projection?.changed))
+      republishGeneAfterResponse(env, ctx, symbol)
+  }
+  const applied = imported.results.filter((row) => row.ok)
+  const refused = imported.results.filter((row) => row.code === VOTE_DAILY_BUDGET_EXHAUSTED)
   return {
-    image_upvotes: 0,
-    image_downvotes: 0,
-    image_score: 0,
-    user_vote: 0,
-    vision_upvotes: 0,
-    vision_downvotes: 0,
-    vision_score: 0,
-    candidate_ref: candidateRefNorm || voteAssetIdentity(symbolNorm, assetShaNorm) || "",
-    vision_id: sanitizeVoteVisionId(visionId || ""),
+    upserted: applied.filter((row) => row.final_vote_value !== 0).length,
+    deleted: applied.filter((row) => row.final_vote_value === 0).length,
+    invalid:
+      imported.invalid +
+      imported.results.filter((row) => !row.ok && row.code !== VOTE_DAILY_BUDGET_EXHAUSTED).length,
+    refused: refused.length,
+    refusal: refused[0]
+      ? { status: refused[0].status, code: refused[0].code, error: refused[0].error }
+      : null,
+    changed: applied.filter((row) => row.changed).length,
+    promoted,
+    elected: imported.symbols.length - failedSymbols.length,
+    elections_failed: failedSymbols.length,
+    failed_symbols: failedSymbols,
+    results: imported.results,
   }
 }
 
-async function iconoVoteSnapshotsBatch(env, { items, userId }) {
-  const normalizedItems = Array.isArray(items)
-    ? items.filter((item) => item && typeof item === "object")
-    : []
-  const coordinatorSnapshots = await iconoplasmVoteCoordinatorSnapshotsBatch(env, {
-    items: normalizedItems,
-    userId,
-  })
-  return Array.isArray(coordinatorSnapshots) ? coordinatorSnapshots : []
-}
-
-async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}) {
+async function autoPromoteTopVotedPortrait(
+  env,
+  { symbol, actorId, reason, inputsChanged = true } = {},
+) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-  // This helper only mutates the D1 source of truth. It does not publish the
-  // gene's stable object; the recorded publish event makes the gene dirty for
-  // the Actions republish pass, and the vote authority publishes its own
-  // winner in process (B-898).
+  // This helper only mutates the D1 source of truth. It elects with the one
+  // election every vote uses (electGeneAuthorityWinner over the gene's D1
+  // rows) and projects the winner with a `publish` event, so the Actions
+  // publisher republishes the gene's stable object. A caller that changed the
+  // gene's candidates just before calling (the default) first advances the
+  // gene's vote version, so an older election can no longer project over it.
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
-
-  // B-888 (30 Sep 2026): one vote owner. The per-gene vote authority holds the
-  // votes; D1's summary is a delivered copy that can lag for as long as a
-  // delivery waits on budget admission. Electing here from that copy made
-  // reconcile promote ADO's newest zero-vote upload while the authority
-  // published the upvoted one, so the catalog and the gene page disagreed for
-  // three days. Every caller now elects from the authority's own summaries,
-  // exactly like the vote projection job. If the authority cannot be read,
-  // nothing is elected from D1: the durable projection job owns the retry.
-  if (iconoplasmVoteCoordinatorBinding(env)) {
-    let coordinatorState = null
-    try {
-      coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: symbolNorm })
-    } catch (error) {
-      const deferred = await scheduleVoteProjectionRefresh(env, null, {
-        symbol: symbolNorm,
-        actorId,
-        reason,
-      })
-      return {
-        ok: true,
-        changed: false,
-        code: "DEFERRED_TO_VOTE_AUTHORITY",
-        durable: Boolean(deferred?.durable),
-        error: sanitizeText(String(error?.message || error), 300),
-      }
-    }
-    return autoPromoteTopVotedPortraitFromCoordinatorState(env, {
-      symbol: symbolNorm,
-      actorId,
-      reason,
-      assetSummaries: Array.isArray(coordinatorState?.asset_summaries)
-        ? coordinatorState.asset_summaries
-        : [],
-    })
-  }
-
-  // No vote authority is bound (isolated tests and tooling only): D1's summary
-  // is then the only vote source there is.
-  const currentRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-     FROM icono_publish_state
-     WHERE gene_symbol = ?
-     LIMIT 1`,
-  )
-    .bind(symbolNorm)
-    .first()
-  const currentAssetSha = normalizeSha256(currentRow?.current_asset_sha256 || "")
-  const adminOverride = Number(currentRow?.admin_override || 0) > 0
-  if (adminOverride) {
-    return {
-      ok: true,
-      changed: false,
-      code: "ADMIN_OVERRIDE",
-      current_asset_sha256: currentAssetSha || null,
-    }
-  }
-
-  // Chesterton's fence: publish-state auto-promotion must rank candidates with
-  // the exact same vote identity that admin/audit surfaces use. Older vote rows
-  // may carry legacy `candidate_ref` values like `c:2704`, so canon selection
-  // cannot depend on candidate_ref-shaped joins if the rest of the site already
-  // treats `(gene_symbol, asset_sha256)` as the durable image identity.
-  // D1 cost fence: the community vote route can call this immediately after a
-  // public thumbs-up/down. The hot asset-key predicates therefore have to stay on
-  // the canonical `(gene_symbol, asset_sha256)` columns with raw equality so the
-  // vote index can do its job.
-  const topRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       pa.asset_sha256,
-       COALESCE(pa.is_legacy, 0) AS is_legacy,
-       COALESCE(vs.upvotes, 0) AS image_upvotes,
-       COALESCE(vs.downvotes, 0) AS image_downvotes,
-       COALESCE(vs.score, 0) AS image_score,
-       CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
-         ELSE 0
-       END AS caretaker_supervote,
-       CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256
-         THEN COALESCE(caretaker.direction, 1)
-         ELSE NULL
-       END AS caretaker_supervote_direction,
-       COALESCE(vs.score, 0) + CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256
-         THEN 10 * COALESCE(caretaker.direction, 1)
-         ELSE 0
-       END AS weighted_score,
-       pa.created_at,
-       CASE
-         WHEN pa.asset_sha256 = ? THEN 1
-         ELSE 0
-       END AS is_current
-     FROM icono_portrait_assets pa
-     LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = pa.gene_symbol
-      AND vs.asset_sha256 = pa.asset_sha256
-     LEFT JOIN icono_caretaker_supervote_projection caretaker
-       ON caretaker.gene_symbol = pa.gene_symbol
-     WHERE pa.gene_symbol = ?
-       AND COALESCE(pa.autopick_eligible, 1) = 1
-       AND COALESCE(pa.status, '') <> 'rejected'
-       AND COALESCE(pa.is_stale, 0) = 0
-       AND COALESCE(pa.asset_sha256, '') <> ''
-     ORDER BY
-       weighted_score DESC,
-       CASE WHEN caretaker_supervote_direction = 1 THEN 1 ELSE 0 END DESC,
-       COALESCE(vs.score, 0) DESC,
-       CASE
-         WHEN COALESCE(pa.is_legacy, 0) = 0 THEN 1
-         ELSE 0
-       END DESC,
-       COALESCE(vs.upvotes, 0) DESC,
-       COALESCE(pa.created_at, '') DESC,
-       CASE
-         WHEN pa.asset_sha256 = ? THEN 1
-         ELSE 0
-       END DESC,
-       pa.asset_sha256 ASC
-     LIMIT 1`,
-  )
-    .bind(currentAssetSha || "", symbolNorm, currentAssetSha || "")
-    .first()
-
-  const topAssetSha = normalizeSha256(topRow?.asset_sha256 || "")
-  const topUpvotes = Number(topRow?.image_upvotes || 0)
-  const topDownvotes = Number(topRow?.image_downvotes || 0)
-  const topScore = Number(topRow?.image_score || 0)
-  const topWeightedScore = Number(topRow?.weighted_score || topScore)
-  if (!topAssetSha) return { ok: true, changed: false, code: "NO_CANDIDATE" }
-  if (currentAssetSha && topAssetSha === currentAssetSha) {
-    return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
-  }
-
-  const actorNorm = normalizeUserId(actorId || "vote_auto")
-  const eventReason = String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote"
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       current_asset_sha256 = excluded.current_asset_sha256,
-       admin_override = 0,
-       updated_by = excluded.updated_by,
-       updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(symbolNorm, topAssetSha, actorNorm)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_portrait_assets
-     SET status = 'approved'
-     WHERE gene_symbol = ?
-       AND asset_sha256 = ?`,
-  )
-    .bind(symbolNorm, topAssetSha)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_publish_events (
-       gene_symbol,
-       from_asset_sha256,
-       to_asset_sha256,
-       action,
-       actor,
-       reason,
-       created_at
-     ) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)`,
-  )
-    .bind(symbolNorm, currentAssetSha || null, topAssetSha, actorNorm, eventReason)
-    .run()
-
-  return {
-    ok: true,
-    changed: true,
-    code: "PROMOTED",
-    from_asset_sha256: currentAssetSha || null,
-    to_asset_sha256: topAssetSha,
-    image_score: topScore,
-    weighted_score: topWeightedScore,
-    caretaker_supervote: Number(topRow?.caretaker_supervote || 0) > 0,
-    caretaker_supervote_direction: [-1, 1].includes(Number(topRow?.caretaker_supervote_direction))
-      ? Number(topRow.caretaker_supervote_direction)
-      : null,
-    image_upvotes: topUpvotes,
-    image_downvotes: topDownvotes,
-  }
+  const outcome = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbolNorm, {
+    actor: normalizeUserId(actorId || "vote_auto"),
+    reason: String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote",
+    bump: inputsChanged !== false,
+  })
+  return geneElectionReceipt(outcome)
 }
 
 async function iconoExistingAssetsBatch(env, rawItems) {
@@ -20853,9 +17720,9 @@ async function listAdminReadModelVisionIdsAfter(env, rawAfterVisionId = "", limi
 
 export async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
   // B-742 unresolved fence: the transactional replacement protects readers from
-  // partial summaries, but this legacy vote-history rebuild is not a bounded
-  // canonical projection. Replace it coherently with coordinator-owned state
-  // only after bounding cold bootstrap, export, replacement and phase admission.
+  // partial summaries, but this rebuild reads each named gene's whole vote
+  // history. It is an administrator repair (read-model sync and bootstrap),
+  // never a vote path: votes move summaries by exact deltas in gene-votes.js.
   if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return 0
   const symbols = Array.from(
     new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
@@ -22439,66 +19306,26 @@ async function syncAdminReadModels(
   }
 }
 
-async function projectVoteCoordinatorLedgerRow(
-  env,
-  { symbol, assetSha256, visionId, candidateImageId, userId, voteValue } = {},
-) {
-  // This D1 table is now a projection for compatibility, audit, and imports.
-  // Never turn it back into the live authority with a read-before-write tally.
-  // The old pattern paid historical vote cost on every click, which is the dumb
-  // part we are fencing against here.
-  if (!env.ICONOPLASM_DB) return false
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeAssetSha = normalizeSha256(assetSha256)
-  const safeUserId = normalizeUserId(userId || "")
-  const safeVoteValue = normalizeVoteValue(voteValue)
-  if (!safeSymbol || !safeAssetSha || !safeUserId || safeVoteValue == null) return false
-
-  if (safeVoteValue === 0) {
-    await env.ICONOPLASM_DB.prepare(
-      `DELETE FROM icono_image_votes
-       WHERE gene_symbol = ?
-         AND asset_sha256 = ?
-         AND user_id = ?`,
-    )
-      .bind(safeSymbol, safeAssetSha, safeUserId)
-      .run()
-    return true
-  }
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_image_votes (
-       candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT(gene_symbol, asset_sha256, user_id) DO UPDATE SET
-       candidate_ref = excluded.candidate_ref,
-       vision_id = excluded.vision_id,
-       candidate_image_id = excluded.candidate_image_id,
-       vote_value = excluded.vote_value,
-       updated_at = CURRENT_TIMESTAMP`,
-  )
-    .bind(
-      voteAssetIdentity(safeSymbol, safeAssetSha),
-      safeSymbol,
-      safeAssetSha,
-      sanitizeVoteVisionId(visionId || ""),
-      optionalInt(candidateImageId),
-      safeUserId,
-      safeVoteValue,
-    )
-    .run()
-  return true
-}
+const VOTE_COMPARE_SAMPLE_LIMIT = 20
 
 /**
- * B-898 Stage 2, step 1: copy one vote coordinator's votes and summaries into
- * D1, addressed by the Durable Object id the Cloudflare API lists (so no
- * coordinator is created by the sweep). A v2 coordinator is the authority:
- * its rows are upserted where they differ and D1 rows it no longer holds are
- * deleted. A legacy or unbootstrapped coordinator is left alone: D1 already
- * holds its votes. Returns what it found and what it wrote.
+ * B-898 Stage 2: compare one vote coordinator (addressed by the Durable
+ * Object id the Cloudflare API lists, so nothing is created) with D1, and
+ * report every difference that matters for a cutover or a rollback: votes D1
+ * lacks, votes only D1 holds, votes whose value differs, summaries whose
+ * counts differ, the published winner, the caretaker assignment and the
+ * caretaker supervote. Vote samples carry each side's vision_id and
+ * updated_at, so an operator can tell a vote cast after an export from one
+ * the export missed. Samples stop at `sampleLimit` per category (20 by
+ * default; 0 lifts the cap). Reads only: D1 is the store of record and the
+ * coordinator a historical copy, so a write here would put stale coordinator
+ * state over fresh votes.
  */
-export async function exportIconoplasmVoteCoordinatorToD1(env, objectId) {
+export async function compareIconoplasmVoteCoordinatorWithD1(
+  env,
+  objectId,
+  { sampleLimit = VOTE_COMPARE_SAMPLE_LIMIT } = {},
+) {
   const binding = iconoplasmVoteCoordinatorBinding(env)
   if (!binding || !env?.ICONOPLASM_DB)
     throw new Error("ICONOPLASM_VOTE_COORDINATORS or ICONOPLASM_DB binding missing")
@@ -22506,8 +19333,13 @@ export async function exportIconoplasmVoteCoordinatorToD1(env, objectId) {
     .trim()
     .toLowerCase()
   if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("A 64-hex Durable Object id is required")
-  const stub = binding.get(binding.idFromString(id))
-  const exported = await iconoplasmVoteCoordinatorJson(stub, "/vote/export", null)
+  const limit = Math.max(0, Math.trunc(Number(sampleLimit) || 0))
+  const sample = (rows) => (limit ? rows.slice(0, limit) : rows)
+  const exported = await iconoplasmVoteCoordinatorJson(
+    binding.get(binding.idFromString(id)),
+    "/vote/export",
+    null,
+  )
   const symbol = normalizeSymbol(exported?.symbol || "")
   const base = {
     object_id: id,
@@ -22519,773 +19351,190 @@ export async function exportIconoplasmVoteCoordinatorToD1(env, objectId) {
   if (!base.bootstrapped || base.authority_epoch !== "v2" || !symbol) {
     return {
       ...base,
-      exported: false,
+      compared: false,
+      differs: false,
       reason: !base.bootstrapped ? "not_bootstrapped" : "legacy_epoch",
     }
   }
-  const rows = []
+  const db = env.ICONOPLASM_DB
+  const [voteRead, summaryRead, caretakerRead, stateRead] = await db.batch([
+    db
+      .prepare(
+        `SELECT asset_sha256, user_id, vote_value, vision_id, updated_at
+           FROM icono_image_votes WHERE gene_symbol = ?`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT asset_sha256, vision_id, upvotes, downvotes, score, vote_count
+           FROM icono_vote_asset_summary WHERE gene_symbol = ?`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT a.caretaker_assignment_id, a.caretaker_account_id, a.status, a.assignment_version,
+                s.asset_sha256, s.direction, s.active, s.supervote_version
+           FROM icono_caretaker_vote_assignment_projection a
+           LEFT JOIN icono_caretaker_supervote_projection s ON s.gene_symbol = a.gene_symbol
+          WHERE a.gene_symbol = ? LIMIT 1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
+           FROM icono_publish_state WHERE gene_symbol = ? LIMIT 1`,
+      )
+      .bind(symbol),
+  ])
+  const d1Votes = new Map(
+    (voteRead?.results || []).map((row) => [
+      `${normalizeSha256(row.asset_sha256)}|${normalizeUserId(row.user_id)}`,
+      {
+        value: Number(row.vote_value),
+        vision_id: String(row.vision_id || ""),
+        updated_at: String(row.updated_at || ""),
+      },
+    ]),
+  )
+  const missingInD1 = []
+  const valueDiffers = []
+  const seen = new Set()
   for (const vote of exported.votes) {
     const assetSha = normalizeSha256(vote?.asset_sha256 || "")
     const userId = normalizeUserId(vote?.user_id || "")
     const value = normalizeVoteValue(vote?.vote_value)
-    if (!assetSha || !userId || value == null || value === 0) continue
-    rows.push([
-      voteAssetIdentity(symbol, assetSha),
-      assetSha,
-      sanitizeVoteVisionId(vote?.vision_id || "") || "",
-      optionalInt(vote?.candidate_image_id),
-      userId,
+    if (!assetSha || !userId || !value) continue
+    const key = `${assetSha}|${userId}`
+    seen.add(key)
+    const coordinator = {
       value,
-      String(vote?.created_at || "") || null,
-      String(vote?.updated_at || "") || null,
-    ])
+      vision_id: String(vote?.vision_id || ""),
+      updated_at: String(vote?.updated_at || ""),
+    }
+    const d1 = d1Votes.get(key)
+    if (!d1) missingInD1.push({ asset_sha256: assetSha, user_id: userId, coordinator })
+    else if (d1.value !== value)
+      valueDiffers.push({ asset_sha256: assetSha, user_id: userId, coordinator, d1 })
   }
-  const rowsJson = JSON.stringify(rows)
-  const results = await env.ICONOPLASM_DB.batch([
-    env.ICONOPLASM_DB.prepare(
-      `DELETE FROM icono_image_votes WHERE gene_symbol = ?
-         AND (asset_sha256 || '|' || user_id) NOT IN
-             (SELECT json_extract(value,'$[1]') || '|' || json_extract(value,'$[4]') FROM json_each(?))`,
-    ).bind(symbol, rowsJson),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_image_votes (
-         candidate_ref, gene_symbol, asset_sha256, vision_id, candidate_image_id, user_id, vote_value, created_at, updated_at
-       ) SELECT json_extract(value,'$[0]'), ?, json_extract(value,'$[1]'), json_extract(value,'$[2]'),
-                json_extract(value,'$[3]'), json_extract(value,'$[4]'), json_extract(value,'$[5]'),
-                COALESCE(json_extract(value,'$[6]'), CURRENT_TIMESTAMP), COALESCE(json_extract(value,'$[7]'), CURRENT_TIMESTAMP)
-         FROM json_each(?) WHERE true
-       ON CONFLICT(gene_symbol, asset_sha256, user_id) DO UPDATE SET
-         candidate_ref = excluded.candidate_ref,
-         vision_id = excluded.vision_id,
-         candidate_image_id = excluded.candidate_image_id,
-         vote_value = excluded.vote_value,
-         updated_at = excluded.updated_at
-       WHERE icono_image_votes.vote_value IS NOT excluded.vote_value
-          OR icono_image_votes.vision_id IS NOT excluded.vision_id
-          OR icono_image_votes.candidate_image_id IS NOT excluded.candidate_image_id`,
-    ).bind(symbol, rowsJson),
-  ])
-  const summaries = await replaceVoteAssetSummaryForSymbolFromCoordinatorState(env, {
-    symbol,
-    assetSummaries: exported.asset_summaries,
+  // A vote missing from D1 may have been cleared there since the cutover (a
+  // clear deletes the row but leaves an icono_vote_events row). Its latest D1
+  // event time lets a replay tell "never arrived" from "removed since".
+  if (missingInD1.length) {
+    const events = await db
+      .prepare(
+        `SELECT asset_sha256, user_id, MAX(created_at) AS last_event_at
+           FROM icono_vote_events WHERE gene_symbol = ?
+          GROUP BY asset_sha256, user_id`,
+      )
+      .bind(symbol)
+      .all()
+    const lastEventAt = new Map(
+      (events?.results || []).map((row) => [
+        `${normalizeSha256(row.asset_sha256)}|${normalizeUserId(row.user_id)}`,
+        String(row.last_event_at || ""),
+      ]),
+    )
+    for (const row of missingInD1)
+      row.d1_last_event_at = lastEventAt.get(`${row.asset_sha256}|${row.user_id}`) || null
+  }
+  const onlyInD1 = [...d1Votes.entries()]
+    .filter(([key]) => !seen.has(key))
+    .map(([key, d1]) => {
+      const [assetSha, userId] = key.split("|")
+      return { asset_sha256: assetSha, user_id: userId, d1 }
+    })
+  const d1Summaries = new Map(
+    (summaryRead?.results || []).map((row) => [normalizeSha256(row.asset_sha256), row]),
+  )
+  const summaryDiffers = []
+  const counts = ["upvotes", "downvotes", "score", "vote_count"]
+  const summaryView = (row) => ({
+    vision_id: String(row?.vision_id || ""),
+    ...Object.fromEntries(counts.map((field) => [field, Number(row?.[field] || 0)])),
   })
+  for (const row of Array.isArray(exported.asset_summaries) ? exported.asset_summaries : []) {
+    const assetSha = normalizeSha256(row?.asset_sha256 || "")
+    if (!assetSha) continue
+    const d1 = d1Summaries.get(assetSha)
+    if (!d1 || counts.some((field) => Number(d1[field] || 0) !== Number(row?.[field] || 0))) {
+      summaryDiffers.push({
+        asset_sha256: assetSha,
+        coordinator: summaryView(row),
+        d1: d1 ? summaryView(d1) : null,
+      })
+    }
+  }
+  const coordinatorSupervote = exported?.caretaker_supervote || null
+  const caretakerRow = caretakerRead?.results?.[0] || null
+  const d1SupervoteActive =
+    Number(caretakerRow?.active) === 1 && ["active", "suspended"].includes(caretakerRow?.status)
+  const supervoteDiffers =
+    (coordinatorSupervote?.active ? coordinatorSupervote.asset_sha256 : null) !==
+      (d1SupervoteActive ? caretakerRow.asset_sha256 : null) ||
+    (coordinatorSupervote?.active ? Number(coordinatorSupervote.direction) : null) !==
+      (d1SupervoteActive ? Number(caretakerRow.direction) : null)
+  const assignmentView = (row) =>
+    row
+      ? {
+          caretaker_assignment_id: String(row.caretaker_assignment_id || ""),
+          caretaker_account_id: String(row.caretaker_account_id || ""),
+          status: String(row.status || ""),
+          assignment_version: Number(row.assignment_version || 0),
+        }
+      : null
+  const coordinatorAssignment = assignmentView(coordinatorSupervote?.assignment)
+  const d1Assignment = assignmentView(caretakerRow)
+  const assignmentDiffers = JSON.stringify(coordinatorAssignment) !== JSON.stringify(d1Assignment)
+  const stateRow = stateRead?.results?.[0] || null
+  const coordinatorPublished = normalizeSha256(exported?.published_asset_sha256 || "") || null
+  const d1Published = normalizeSha256(stateRow?.current_asset_sha256 || "") || null
+  const publishedAssetDiffers = coordinatorPublished !== d1Published
+  const differs = Boolean(
+    missingInD1.length ||
+    onlyInD1.length ||
+    valueDiffers.length ||
+    summaryDiffers.length ||
+    supervoteDiffers ||
+    assignmentDiffers ||
+    publishedAssetDiffers,
+  )
   return {
     ...base,
-    exported: true,
-    votes_written: rows.length,
-    votes_deleted: Number(results?.[0]?.meta?.changes || 0),
-    votes_changed: Number(results?.[1]?.meta?.changes || 0),
-    summaries,
-    published_asset_sha256: normalizeSha256(exported?.published_asset_sha256 || "") || null,
-  }
-}
-
-export async function replaceVoteAssetSummaryForSymbolFromCoordinatorState(
-  env,
-  { symbol, assetSummaries = [] } = {},
-) {
-  if (!env.ICONOPLASM_DB) return 0
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return 0
-
-  const rows = []
-  const seenAssets = new Set()
-  for (const rawRow of Array.isArray(assetSummaries) ? assetSummaries : []) {
-    const assetSha = normalizeSha256(rawRow?.asset_sha256 || "")
-    if (!assetSha) continue
-    if (seenAssets.has(assetSha)) throw new Error("Duplicate coordinator vote summary asset")
-    seenAssets.add(assetSha)
-    rows.push([
-      assetSha,
-      voteAssetIdentity(safeSymbol, assetSha),
-      sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
-      optionalInt(rawRow?.candidate_image_id),
-      Math.max(0, Number(rawRow?.upvotes || 0) || 0),
-      Math.max(0, Number(rawRow?.downvotes || 0) || 0),
-      Number(rawRow?.score || 0) || 0,
-      Math.max(0, Number(rawRow?.vote_count || 0) || 0),
-    ])
-  }
-  // Preserve the coordinator's exact set atomically, but do not rewrite every
-  // historical image after one vote. Unchanged rows (and their index entries)
-  // retain their timestamps. Only removed assets and changed values write D1.
-  const rowsJson = JSON.stringify(rows)
-  await env.ICONOPLASM_DB.batch([
-    env.ICONOPLASM_DB.prepare(
-      `DELETE FROM icono_vote_asset_summary WHERE gene_symbol = ?
-       AND asset_sha256 NOT IN (SELECT json_extract(value,'$[0]') FROM json_each(?))`,
-    ).bind(safeSymbol, rowsJson),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_vote_asset_summary (
-      gene_symbol, asset_sha256, candidate_ref, vision_id, candidate_image_id,
-      upvotes, downvotes, score, vote_count, updated_at
-    ) SELECT ?, json_extract(value,'$[0]'), json_extract(value,'$[1]'),
-      json_extract(value,'$[2]'), json_extract(value,'$[3]'), json_extract(value,'$[4]'),
-      json_extract(value,'$[5]'), json_extract(value,'$[6]'), json_extract(value,'$[7]'),
-      CURRENT_TIMESTAMP FROM json_each(?) WHERE true
-    ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
-      candidate_ref = excluded.candidate_ref,
-      vision_id = excluded.vision_id,
-      candidate_image_id = excluded.candidate_image_id,
-      upvotes = excluded.upvotes,
-      downvotes = excluded.downvotes,
-      score = excluded.score,
-      vote_count = excluded.vote_count,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE icono_vote_asset_summary.candidate_ref IS NOT excluded.candidate_ref
-       OR icono_vote_asset_summary.vision_id IS NOT excluded.vision_id
-       OR icono_vote_asset_summary.candidate_image_id IS NOT excluded.candidate_image_id
-       OR icono_vote_asset_summary.upvotes IS NOT excluded.upvotes
-       OR icono_vote_asset_summary.downvotes IS NOT excluded.downvotes
-       OR icono_vote_asset_summary.score IS NOT excluded.score
-       OR icono_vote_asset_summary.vote_count IS NOT excluded.vote_count`,
-    ).bind(safeSymbol, rowsJson),
-  ])
-  return rows.length
-}
-
-function voteProjectionVisionIdsFromCoordinatorAssetSummaries(assetSummaries) {
-  return Array.from(
-    new Set(
-      (Array.isArray(assetSummaries) ? assetSummaries : [])
-        .map((row) => validAdminRollupVisionId(row?.vision_id || ""))
-        .filter(Boolean),
-    ),
-  )
-}
-
-async function projectVoteReadModelsFromCoordinatorState(
-  env,
-  { symbol, assetSummaries = [] } = {},
-) {
-  if (!env.ICONOPLASM_DB) return { symbols: 0, visions: 0, vision_ids: [] }
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return { symbols: 0, visions: 0, vision_ids: [] }
-
-  await replaceVoteAssetSummaryForSymbolFromCoordinatorState(env, {
-    symbol: safeSymbol,
-    assetSummaries,
-  })
-  await rebuildGeneRollupForSymbol(env, safeSymbol)
-  const visionIds = voteProjectionVisionIdsFromCoordinatorAssetSummaries(assetSummaries)
-  return { symbols: 1, visions: visionIds.length, vision_ids: visionIds }
-}
-
-function voteProjectionRefreshJobReason(rawReason, fallback = "vote_projection_refresh") {
-  return sanitizeText(rawReason || "", 2000) || fallback
-}
-
-async function claimVoteProjectionWake(env, symbol) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol || !env?.ICONOPLASM_DB) return 0
-  const wake = await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_vote_projection_refresh_jobs
-     SET wake_outstanding = 1, wake_version = job_version
-     WHERE gene_symbol = ? AND wake_outstanding = 0
-     RETURNING wake_version`,
-  )
-    .bind(safeSymbol)
-    .first()
-  return Math.max(0, Number(wake?.wake_version || 0) || 0)
-}
-
-async function enqueueVoteProjectionRefreshJob(env, { symbol, actorId, reason } = {}) {
-  if (!env?.ICONOPLASM_DB) return { ok: false, code: "NO_DB" }
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
-  const nowIso = new Date().toISOString()
-  const row = await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_vote_projection_refresh_jobs (
-       gene_symbol,
-       actor_id,
-       reason,
-       requested_at,
-       last_attempt_at,
-       next_attempt_at,
-       attempts,
-       last_error,
-       job_version
-     ) VALUES (?, ?, ?, ?, NULL, ?, 0, '', 1)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       actor_id = excluded.actor_id,
-       reason = excluded.reason,
-       requested_at = excluded.requested_at,
-       next_attempt_at = excluded.next_attempt_at,
-       attempts = 0,
-       last_error = '',
-       job_version = icono_vote_projection_refresh_jobs.job_version + 1
-     RETURNING job_version`,
-  )
-    .bind(
-      safeSymbol,
-      normalizeUserId(actorId || "vote_projection"),
-      voteProjectionRefreshJobReason(reason),
-      nowIso,
-      nowIso,
-    )
-    .first()
-  const jobVersion = Number(row?.job_version || 0)
-  if (!Number.isSafeInteger(jobVersion) || jobVersion < 1) {
-    throw new Error("Vote projection refresh job did not return its durable generation")
-  }
-  const wakeVersion = await claimVoteProjectionWake(env, safeSymbol)
-  return {
-    ok: true,
-    symbol: safeSymbol,
-    job_version: jobVersion,
-    // The insert is the only transition from clean to dirty. Further votes
-    // update the same durable gene row and must not mint Queue operations. If a
-    // vote supersedes a running generation, that consumer schedules the single
-    // follow-up drain after its current delivery is consumed.
-    wake_required: wakeVersion > 0,
-    wake_version: wakeVersion,
-  }
-}
-
-async function releaseVoteProjectionWakeClaim(env, { symbol, wakeVersion } = {}) {
-  const safeSymbol = normalizeSymbol(symbol)
-  const safeWakeVersion = Math.max(1, Number.parseInt(String(wakeVersion || 0), 10) || 0)
-  if (!safeSymbol || !safeWakeVersion || !env?.ICONOPLASM_DB) return false
-  const result = await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_vote_projection_refresh_jobs
-     SET wake_outstanding = 0
-     WHERE gene_symbol = ? AND wake_outstanding = 1 AND wake_version = ?`,
-  )
-    .bind(safeSymbol, safeWakeVersion)
-    .run()
-  return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0
-}
-
-async function recordVoteProjectionRefreshFailure(
-  env,
-  { symbol, actorId, reason, error, attemptCount = 0, jobVersion } = {},
-) {
-  if (!env?.ICONOPLASM_DB) return false
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return false
-  const delayMinutes = Math.max(
-    1,
-    Math.min(60, Math.pow(2, Math.max(0, Number(attemptCount || 0)))),
-  )
-  const nextAttemptAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
-  const safeJobVersion = Math.max(1, Number.parseInt(String(jobVersion || 0), 10) || 0)
-  if (!safeJobVersion) return false
-  const result = await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_vote_projection_refresh_jobs
-        SET actor_id = ?,
-            reason = ?,
-            last_attempt_at = CURRENT_TIMESTAMP,
-            next_attempt_at = ?,
-            attempts = attempts + 1,
-            last_error = ?
-      WHERE gene_symbol = ? AND job_version = ?`,
-  )
-    .bind(
-      normalizeUserId(actorId || "vote_projection"),
-      voteProjectionRefreshJobReason(reason),
-      nextAttemptAt,
-      sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
-        "vote projection refresh failed",
-      safeSymbol,
-      safeJobVersion,
-    )
-    .run()
-  const changed = Number(result?.meta?.changes ?? result?.changes ?? 0) > 0
-  return changed
-    ? { ok: true, next_attempt_at: nextAttemptAt }
-    : { ok: true, superseded: true, next_attempt_at: "" }
-}
-
-function iconoplasmVoteProjectionQueueDisabled(env) {
-  const disabled = String(env?.[ICONOPLASM_VOTE_PROJECTION_QUEUE_DISABLED_ENV] || "")
-    .trim()
-    .toLowerCase()
-  return ["1", "true", "yes", "on"].includes(disabled)
-}
-
-function iconoplasmVoteProjectionQueueBinding(env) {
-  if (iconoplasmVoteProjectionQueueDisabled(env)) return null
-  const queue = env?.[ICONOPLASM_VOTE_PROJECTION_QUEUE_BINDING]
-  return queue && typeof queue.send === "function" ? queue : null
-}
-
-async function sendVoteProjectionRefreshQueueMessage(
-  env,
-  { symbol, actorId = "vote_projection", reason = "vote_projection_refresh", wakeVersion = 0 } = {},
-) {
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL" }
-  if (iconoplasmVoteProjectionQueueDisabled(env)) return { ok: false, code: "QUEUE_DISABLED" }
-  const queue = iconoplasmVoteProjectionQueueBinding(env)
-  if (!queue) return { ok: false, code: "QUEUE_BINDING_MISSING" }
-  const body = {
-    kind: ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND,
-    symbol: safeSymbol,
-    actor_id: normalizeUserId(actorId || "vote_projection"),
-    reason: voteProjectionRefreshJobReason(reason),
-    wake_version: Math.max(0, Number.parseInt(String(wakeVersion || 0), 10) || 0),
-  }
-  try {
-    await queue.send(body)
-    return { ok: true, symbol: safeSymbol, body }
-  } catch (error) {
-    return {
-      ok: false,
-      code: "QUEUE_SEND_FAILED",
-      error:
-        sanitizeText(String(error?.message || error || "vote projection Queue send failed"), 500) ||
-        "vote projection Queue send failed",
-    }
-  }
-}
-
-async function sendVoteProjectionDrainQueueMessage(env, delaySeconds = 0) {
-  const queue = iconoplasmVoteProjectionQueueBinding(env)
-  if (!queue) return { ok: false, code: "QUEUE_BINDING_MISSING" }
-  try {
-    await queue.send(
-      { kind: "drain_vote_projection_ledger" },
-      delaySeconds > 0 ? { delaySeconds } : undefined,
-    )
-    return { ok: true }
-  } catch (error) {
-    return { ok: false, code: "QUEUE_SEND_FAILED", detail: String(error?.message || error) }
-  }
-}
-
-async function rollbackVoteAutoPromoteAfterProjectionFailure(
-  env,
-  { symbol, actorId, reason, autoPromote, error } = {},
-) {
-  // ICONOPLASM D1 AUTHORING / READ-MODEL PROJECTION CONTRACT.
-  // A vote-driven auto-promotion may update the D1 authoring selection before
-  // the dependent D1 read models are rebuilt. The exact published card remains
-  // the public portrait authority and is not changed here. If projection fails
-  // after the D1 mutation, roll back only if `icono_publish_state` still points
-  // at the exact asset this job promoted; that keeps the D1 authoring/read-model
-  // state coherent without undoing a later admin publish or retry.
-  if (!env?.ICONOPLASM_DB || !autoPromote?.changed) return { ok: true, changed: false }
-  const symbolNorm = normalizeSymbol(symbol)
-  const promotedAssetSha = normalizeSha256(autoPromote?.to_asset_sha256 || "")
-  if (!symbolNorm || !promotedAssetSha) return { ok: false, changed: false, code: "BAD_INPUT" }
-
-  const previousAssetSha = normalizeSha256(autoPromote?.from_asset_sha256 || "")
-  const actorNorm = normalizeUserId(actorId || "vote_projection")
-  const failureMessage =
-    sanitizeText(String(error?.message || error || "vote projection refresh failed"), 500) ||
-    "vote projection refresh failed"
-  const rollbackReason =
-    sanitizeText(
-      `Auto-promote rollback after ${voteProjectionRefreshJobReason(reason)} failed read-model projection: ${failureMessage}`,
-      2000,
-    ) || "Auto-promote rollback after failed read-model projection"
-
-  const rollbackStatement = previousAssetSha
-    ? env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_publish_state
-         SET current_asset_sha256 = ?,
-             admin_override = 0,
-             updated_by = ?,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE gene_symbol = ?
-           AND current_asset_sha256 = ?
-           AND COALESCE(admin_override, 0) = 0`,
-      ).bind(previousAssetSha, actorNorm, symbolNorm, promotedAssetSha)
-    : env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_publish_state
-         SET current_asset_sha256 = NULL,
-             admin_override = 0,
-             updated_by = ?,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE gene_symbol = ?
-           AND current_asset_sha256 = ?
-           AND COALESCE(admin_override, 0) = 0`,
-      ).bind(actorNorm, symbolNorm, promotedAssetSha)
-
-  const previousPromotedStatus =
-    sanitizeText(autoPromote?.to_asset_previous_status || "", 32) || "draft"
-  const rollbackBatch = await env.ICONOPLASM_DB.batch([
-    rollbackStatement,
-    env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_portrait_assets
-       SET status = ?
-       WHERE gene_symbol = ?
-         AND asset_sha256 = ?
-         AND changes() > 0`,
-    ).bind(previousPromotedStatus, symbolNorm, promotedAssetSha),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_publish_events (
-       gene_symbol,
-       from_asset_sha256,
-       to_asset_sha256,
-       action,
-       actor,
-       reason,
-       created_at
-     )
-     SELECT ?, ?, ?, 'rollback', ?, ?, CURRENT_TIMESTAMP
-     WHERE changes() > 0`,
-    ).bind(symbolNorm, promotedAssetSha, previousAssetSha || null, actorNorm, rollbackReason),
-  ])
-  const rollbackResult = Array.isArray(rollbackBatch) ? rollbackBatch[0] : null
-  const changed = Number(rollbackResult?.meta?.changes ?? rollbackResult?.changes ?? 0) > 0
-  if (!changed) return { ok: true, changed: false, code: "STATE_ALREADY_CHANGED" }
-  await rebuildGeneRollupForSymbol(env, symbolNorm)
-  return {
-    ok: true,
-    changed: true,
-    from_asset_sha256: promotedAssetSha,
-    to_asset_sha256: previousAssetSha || null,
-  }
-}
-
-function normalizeVoteProjectionRefreshJobRow(rawRow, fallback = {}) {
-  const symbol = normalizeSymbol(rawRow?.gene_symbol || rawRow?.symbol || fallback.symbol || "")
-  if (!symbol) return null
-  return {
-    symbol,
-    actor_id: normalizeUserId(
-      rawRow?.actor_id ||
-        rawRow?.actorId ||
-        fallback.actor_id ||
-        fallback.actorId ||
-        "vote_projection",
-    ),
-    reason: voteProjectionRefreshJobReason(
-      rawRow?.reason || fallback.reason || "vote_projection_refresh",
-    ),
-    attempts: Math.max(
-      0,
-      Number.parseInt(String(rawRow?.attempts ?? fallback.attempts ?? 0), 10) || 0,
-    ),
-    job_version: Math.max(
-      1,
-      Number.parseInt(String(rawRow?.job_version ?? fallback.job_version ?? 0), 10) || 0,
-    ),
-    next_attempt_at: sanitizeText(rawRow?.next_attempt_at || fallback.next_attempt_at || "", 64),
-  }
-}
-
-function voteProjectionRefreshErrorMessage(error) {
-  return (
-    sanitizeText(String(error?.message || error || "vote projection refresh failed"), 2000) ||
-    "vote projection refresh failed"
-  )
-}
-
-function voteProjectionRefreshFailureResult(job, error, extra = {}) {
-  return {
-    ok: false,
-    symbol: normalizeSymbol(job?.symbol || "") || null,
-    actor_id: normalizeUserId(job?.actor_id || "vote_projection"),
-    reason: voteProjectionRefreshJobReason(job?.reason),
-    attempts: Math.max(0, Number.parseInt(String(job?.attempts || 0), 10) || 0),
-    job_version: Math.max(1, Number.parseInt(String(job?.job_version || 0), 10) || 0),
-    error: voteProjectionRefreshErrorMessage(error),
-    ...(isIconoplasmDailyBudgetError(error) ? { daily_budget: true } : {}),
-    ...extra,
-  }
-}
-
-async function applyVoteProjectionRefreshWithoutPublicArtifact(
-  env,
-  job,
-  suppliedCoordinatorState = null,
-) {
-  const safeSymbol = normalizeSymbol(job?.symbol || "")
-  if (!safeSymbol) throw new Error("Bad vote projection refresh symbol.")
-  const actorNorm = normalizeUserId(job?.actor_id || "vote_projection")
-  const reasonNorm = voteProjectionRefreshJobReason(job?.reason)
-  const coordinatorState =
-    suppliedCoordinatorState || (await iconoplasmVoteCoordinatorState(env, { symbol: safeSymbol }))
-  const assetSummaries = Array.isArray(coordinatorState?.asset_summaries)
-    ? coordinatorState.asset_summaries
-    : []
-  // Eight is the forward creation limit. Historical coordinators may contain
-  // more and must remain projectable; the measured D1 cost scales by five
-  // writes per asset and is admitted using that actual bounded count.
-  if (assetSummaries.length > 64) {
-    const error = new Error("VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED")
-    error.code = "VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED"
-    throw error
-  }
-  let autoPromote = { ok: true, changed: false, code: "NOT_STARTED" }
-  try {
-    autoPromote = await autoPromoteTopVotedPortraitFromCoordinatorState(env, {
-      symbol: safeSymbol,
-      actorId: actorNorm,
-      reason: reasonNorm,
-      assetSummaries,
-    })
-    const readModels = await projectVoteReadModelsFromCoordinatorState(env, {
-      symbol: safeSymbol,
-      assetSummaries,
-    })
-    return {
-      ok: true,
-      symbol: safeSymbol,
-      actor_id: actorNorm,
-      reason: reasonNorm,
-      attempts: Math.max(0, Number.parseInt(String(job?.attempts || 0), 10) || 0),
-      job_version: Math.max(1, Number.parseInt(String(job?.job_version || 0), 10) || 0),
-      asset_count: assetSummaries.length,
-      auto_promote: autoPromote,
-      read_models: {
-        symbols: readModels.symbols || 0,
-        visions: readModels.visions || 0,
-      },
-      vision_ids: Array.isArray(readModels.vision_ids) ? readModels.vision_ids : [],
-    }
-  } catch (error) {
-    try {
-      await rollbackVoteAutoPromoteAfterProjectionFailure(env, {
-        symbol: safeSymbol,
-        actorId: actorNorm,
-        reason: reasonNorm,
-        autoPromote,
-        error,
-      })
-    } catch (rollbackError) {
-      console.error("[Iconoplasm] vote auto-promote rollback failed:", rollbackError)
-      const originalMessage = voteProjectionRefreshErrorMessage(error)
-      const rollbackMessage =
-        sanitizeText(
-          String(rollbackError?.message || rollbackError || "auto-promote rollback failed"),
-          1000,
-        ) || "auto-promote rollback failed"
-      throw new Error(
-        `Vote projection failed after auto-promote and rollback failed: ${originalMessage}; rollback: ${rollbackMessage}`,
-      )
-    }
-    throw error
-  }
-}
-
-async function rollbackAppliedVoteProjectionRefreshes(env, applied, error) {
-  const rollbackErrors = []
-  for (const result of Array.isArray(applied) ? applied : []) {
-    try {
-      await rollbackVoteAutoPromoteAfterProjectionFailure(env, {
-        symbol: result.symbol,
-        actorId: result.actor_id,
-        reason: result.reason,
-        autoPromote: result.auto_promote,
-        error,
-      })
-    } catch (rollbackError) {
-      console.error("[Iconoplasm] vote auto-promote rollback failed:", rollbackError)
-      rollbackErrors.push(rollbackError)
-    }
-  }
-  if (!rollbackErrors.length) return null
-  const originalMessage = voteProjectionRefreshErrorMessage(error)
-  const rollbackMessage =
-    sanitizeText(
-      rollbackErrors
-        .map((rollbackError) => rollbackError?.message || String(rollbackError || ""))
-        .filter(Boolean)
-        .join("; "),
-      1000,
-    ) || "auto-promote rollback failed"
-  return new Error(
-    `Vote projection failed after auto-promote and rollback failed: ${originalMessage}; rollback: ${rollbackMessage}`,
-  )
-}
-
-// Two jobs leave room for both complete promotions, a failed shared vision
-// rebuild, guarded rollbacks, and durable failure records under D1's 50 statements.
-export const VOTE_PROJECTION_RECOVERY_LIMIT = 2
-
-export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
-  if (rawJobs.length > VOTE_PROJECTION_RECOVERY_LIMIT)
-    throw new RangeError("Vote recovery batch exceeds rollback-safe limit")
-  const jobs = []
-  const seen = new Set()
-  for (const rawJob of Array.isArray(rawJobs) ? rawJobs : []) {
-    const job = normalizeVoteProjectionRefreshJobRow(rawJob)
-    if (!job || seen.has(job.symbol)) continue
-    seen.add(job.symbol)
-    jobs.push(job)
-  }
-  if (!jobs.length) return []
-
-  const resultBySymbol = new Map()
-  const applied = []
-  for (const job of jobs) {
-    try {
-      const coordinatorState = await iconoplasmVoteCoordinatorState(env, { symbol: job.symbol })
-      const assetCount = Array.isArray(coordinatorState?.asset_summaries)
-        ? coordinatorState.asset_summaries.length
-        : 0
-      if (assetCount > 64) {
-        const error = new Error("VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED")
-        error.code = "VOTE_PROJECTION_HISTORICAL_ASSET_AUDIT_REQUIRED"
-        throw error
-      }
-      const projectionUnits = 4 + assetCount * 5
-      const reservationOperationId = `vote-projection:${job.symbol}:${job.job_version}`
-      const admission = await reserveIconoplasmMutationWrites(env, {
-        lane: "publication",
-        operationId: reservationOperationId,
-        // Real SQLite/D1-shaped migrations, indexes and triggers measure four
-        // fixed writes plus five writes for each coordinator asset.
-        units: projectionUnits,
-      })
-      if (admission?.ok !== true) {
-        throw new IconoplasmD1DailyBudgetExceededError({
-          exhausted: true,
-          exhausted_by: "publication_mutation_lane",
-          mutation_lane: admission,
-        })
-      }
-      const result = await applyVoteProjectionRefreshWithoutPublicArtifact(
-        env,
-        job,
-        coordinatorState,
-      )
-      result.reservation_operation_id = reservationOperationId
-      applied.push(result)
-      resultBySymbol.set(job.symbol, result)
-    } catch (error) {
-      resultBySymbol.set(job.symbol, voteProjectionRefreshFailureResult(job, error))
-    }
-  }
-
-  if (applied.length) {
-    try {
-      const visionIds = Array.from(
-        new Set(
-          applied
-            .flatMap((result) => (Array.isArray(result.vision_ids) ? result.vision_ids : []))
-            .map((visionId) => validAdminRollupVisionId(visionId || ""))
-            .filter(Boolean),
-        ),
-      )
-      if (visionIds.length) {
-        await rebuildVisionRollupsBatch(env, visionIds)
-      }
-      // Vote projection intentionally stops at D1 authoring/read models. The
-      // gene's stable object is published by the vote authority's own per-gene
-      // publisher when the winner changes, and the catalog object by the
-      // Actions publisher the quarter-hour cron dispatches (B-898).
-      adminReadModelState.ready = true
-      // Complete the batch atomically: a later delete failure must not erase
-      // an earlier job before the shared projection is rolled back.
-      const cleared = await env.ICONOPLASM_DB.batch(
-        applied.map((result) =>
-          env.ICONOPLASM_DB.prepare(
-            `DELETE FROM icono_vote_projection_refresh_jobs
-          WHERE gene_symbol = ? AND job_version = ?`,
-          ).bind(result.symbol, result.job_version),
-        ),
-      )
-      for (const result of applied) {
-        await completeIconoplasmMutationReservation(env, result.reservation_operation_id)
-      }
-      applied.forEach((result, index) => {
-        result.superseded = !(
-          Number(cleared[index]?.meta?.changes ?? cleared[index]?.changes ?? 0) > 0
-        )
-        delete result.vision_ids
-      })
-    } catch (error) {
-      const rollbackError = await rollbackAppliedVoteProjectionRefreshes(env, applied, error)
-      const finalError = rollbackError || error
-      for (const result of applied) {
-        resultBySymbol.set(
-          result.symbol,
-          voteProjectionRefreshFailureResult(result, finalError, {
-            auto_promote: result.auto_promote,
-          }),
-        )
-      }
-    }
-  }
-
-  return jobs.map(
-    (job) => resultBySymbol.get(job.symbol) || voteProjectionRefreshFailureResult(job),
-  )
-}
-
-export async function processPendingVoteProjectionRefreshJobs(
-  env,
-  { limit = VOTE_PROJECTION_RECOVERY_LIMIT } = {},
-) {
-  if (!env?.ICONOPLASM_DB)
-    return { ok: false, code: "NO_DB", processed: 0, failed: 0, has_more: false }
-  env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
-  const safeLimit = Math.max(
-    1,
-    Math.min(
-      VOTE_PROJECTION_RECOVERY_LIMIT,
-      Number.parseInt(String(limit), 10) || VOTE_PROJECTION_RECOVERY_LIMIT,
-    ),
-  )
-  const nowIso = new Date().toISOString()
-  const today = nowIso.slice(0, 10)
-  // The retained ledger has both SQLite UTC and ISO UTC timestamps. Three
-  // disjoint indexed ranges avoid treating future SQL timestamps as already due.
-  const queued = await env.ICONOPLASM_DB.prepare(
-    `WITH older AS (
-       SELECT * FROM icono_vote_projection_refresh_jobs
-       WHERE next_attempt_at < ? ORDER BY next_attempt_at, requested_at LIMIT ?
-     ), sql_today AS (
-       SELECT * FROM icono_vote_projection_refresh_jobs
-       WHERE next_attempt_at >= ? AND next_attempt_at <= ?
-       ORDER BY next_attempt_at, requested_at LIMIT ?
-     ), iso_today AS (
-       SELECT * FROM icono_vote_projection_refresh_jobs
-       WHERE next_attempt_at >= ? AND next_attempt_at <= ?
-       ORDER BY next_attempt_at, requested_at LIMIT ?
-     )
-     SELECT * FROM (
-       SELECT * FROM older UNION ALL SELECT * FROM sql_today UNION ALL SELECT * FROM iso_today
-     ) ORDER BY next_attempt_at, requested_at LIMIT ?`,
-  )
-    .bind(
-      today,
-      safeLimit + 1,
-      `${today} `,
-      nowIso.slice(0, 19).replace("T", " "),
-      safeLimit + 1,
-      `${today}T`,
-      nowIso,
-      safeLimit + 1,
-      safeLimit + 1,
-    )
-    .all()
-  const rows = Array.isArray(queued?.results) ? queued.results : []
-  const results = await processVoteProjectionRefreshJobBatch(env, rows.slice(0, safeLimit))
-  let processed = 0
-  let failed = 0
-  for (const result of results) {
-    if (result?.ok) {
-      processed += 1
-      continue
-    }
-    failed += 1
-    if (result?.daily_budget) {
-      const error = new Error(result.error)
-      error.code = "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED"
-      throw error
-    }
-    if (result?.symbol) {
-      await recordVoteProjectionRefreshFailure(env, {
-        symbol: result.symbol,
-        actorId: result.actor_id || "vote_projection",
-        reason: result.reason || "vote_projection_refresh",
-        error: new Error(result.error || "vote projection refresh failed"),
-        attemptCount: Number(result.attempts || 0),
-        jobVersion: result.job_version,
-      })
-    }
-  }
-  return {
-    ok: true,
-    processed,
-    failed,
-    has_more: rows.length > safeLimit || results.some((result) => result?.superseded),
-    results,
+    compared: true,
+    differs,
+    votes_in_d1: d1Votes.size,
+    votes_missing_in_d1: missingInD1.length,
+    votes_only_in_d1: onlyInD1.length,
+    votes_value_differs: valueDiffers.length,
+    summaries_differ: summaryDiffers.length,
+    supervote_differs: supervoteDiffers,
+    assignment_differs: assignmentDiffers,
+    published_asset_differs: publishedAssetDiffers,
+    coordinator_published_asset_sha256: coordinatorPublished,
+    d1_published_asset_sha256: d1Published,
+    d1_admin_override: Number(stateRow?.admin_override || 0) > 0,
+    samples: {
+      missing_in_d1: sample(missingInD1),
+      only_in_d1: sample(onlyInD1),
+      value_differs: sample(valueDiffers),
+      summaries: sample(summaryDiffers),
+      supervote: supervoteDiffers
+        ? {
+            coordinator: coordinatorSupervote,
+            d1: caretakerRow
+              ? {
+                  asset_sha256: d1SupervoteActive ? caretakerRow.asset_sha256 : null,
+                  direction: d1SupervoteActive ? Number(caretakerRow.direction) : null,
+                  active: d1SupervoteActive,
+                  supervote_version: Number(caretakerRow.supervote_version || 0),
+                }
+              : null,
+          }
+        : null,
+      assignment: assignmentDiffers
+        ? { coordinator: coordinatorAssignment, d1: d1Assignment }
+        : null,
+    },
   }
 }
 
@@ -23309,389 +19558,6 @@ function decodeIconoplasmQueueMessageBody(rawMessage, depth = 0) {
     if (sanitizeText(nested?.kind || "", 80)) return nested
   }
   return body
-}
-
-function normalizeVoteProjectionRefreshQueueMessage(rawMessage) {
-  const body = decodeIconoplasmQueueMessageBody(rawMessage)
-  const kind = sanitizeText(body.kind || "", 80)
-  if (kind !== ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND) return null
-  const symbol = normalizeSymbol(body.symbol || body.gene_symbol || "")
-  if (!symbol) return null
-  return {
-    kind,
-    symbol,
-    actor_id: normalizeUserId(body.actor_id || body.actorId || "vote_projection"),
-    reason: voteProjectionRefreshJobReason(body.reason),
-    wake_version: Math.max(0, Number.parseInt(String(body.wake_version || 0), 10) || 0),
-  }
-}
-
-function voteProjectionUtcTimestamp(raw) {
-  const value = String(raw || "")
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(" ", "T")}Z` : value
-}
-
-function voteProjectionQueueRetryDelaySeconds(rawNextAttemptAt, nowMs = Date.now()) {
-  // ARCHITECTURE FENCE [IPD-004]: retry delivery is a wakeup for due work, not
-  // a five-minute poll. Capping a one-hour ledger backoff at five minutes burns
-  // retries and can dead-letter the message before the job is runnable.
-  return queueDelaySecondsUntil(voteProjectionUtcTimestamp(rawNextAttemptAt), nowMs, 30)
-}
-
-export async function nextVoteProjectionAttemptAt(db) {
-  // The covering due-time index reads the first key plus the first ISO key on
-  // that same day. SQLite-space and ISO-T timestamps must be compared in UTC,
-  // without applying a function to every row in the retained job ledger.
-  const response = await db
-    .prepare(
-      `
-    WITH first AS MATERIALIZED (
-      SELECT next_attempt_at FROM icono_vote_projection_refresh_jobs
-      ORDER BY next_attempt_at, requested_at LIMIT 1
-    ), iso AS (
-      SELECT next_attempt_at FROM icono_vote_projection_refresh_jobs
-      WHERE next_attempt_at >= (SELECT substr(next_attempt_at, 1, 10) || 'T' FROM first)
-        AND next_attempt_at < (SELECT substr(next_attempt_at, 1, 10) || 'U' FROM first)
-      ORDER BY next_attempt_at, requested_at LIMIT 1
-    )
-    SELECT next_attempt_at FROM first UNION ALL SELECT next_attempt_at FROM iso
-  `,
-    )
-    .all()
-  const values = (response?.results || []).map((row) =>
-    Date.parse(voteProjectionUtcTimestamp(row.next_attempt_at)),
-  )
-  if (values.some((value) => !Number.isFinite(value)))
-    throw new Error("Vote projection due time is malformed")
-  return values.length ? new Date(Math.min(...values)).toISOString() : null
-}
-
-async function deferVoteProjectionThroughExistingGovernor(env, messages) {
-  const wake = await iconoplasmSyncGovernorJson(env, "/defer-vote-projection")
-  if (wake?.ok !== true || wake?.deferred !== true || !Number.isFinite(wake?.reset_at))
-    throw new Error("Existing SyncGovernor did not retain the vote projection reset wake")
-  for (const message of messages) {
-    if (typeof message?.ack !== "function") throw new Error("Vote transport cannot acknowledge")
-    message.ack()
-  }
-  return {
-    ok: false,
-    processed: 0,
-    failed: 0,
-    retrying: 0,
-    skipped: 0,
-    deferred: true,
-    reason: "daily_d1_budget",
-    reset_at: wake.reset_at,
-  }
-}
-
-export async function handleIconoplasmVoteProjectionQueue(batch, env) {
-  const messages = Array.isArray(batch?.messages) ? batch.messages : []
-  if (iconoplasmVoteProjectionQueueDisabled(env)) {
-    for (const message of messages) {
-      if (typeof message?.retry === "function") message.retry({ delaySeconds: 300 })
-    }
-    return {
-      ok: false,
-      processed: 0,
-      failed: 0,
-      retrying: messages.length,
-      error:
-        "Iconoplasm vote projection Queue path is disabled; refusing to ack without processing.",
-    }
-  }
-
-  let processed = 0
-  let failed = 0
-  let retrying = 0
-  let skipped = 0
-  const results = []
-  if (!env?.ICONOPLASM_DB) {
-    for (const message of messages) {
-      results.push({ ok: false, skipped: true, reason: "NO_DB" })
-      skipped += 1
-      if (typeof message?.ack === "function") message.ack()
-    }
-    return { ok: true, processed, failed, retrying, skipped, results }
-  }
-
-  // RECOVERY-001 / B-745: meter this background consumer into the shared daily
-  // D1 ledger (fail closed when the day is exhausted) in addition to the
-  // provider per-invocation statement ceiling, so a re-enabled vote-projection
-  // consumer cannot silently exhaust the account.
-  try {
-    env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
-      env,
-      null,
-      iconoplasmBackgroundBudgetAttribution("background_vote_projection"),
-    )
-  } catch (error) {
-    if (!isIconoplasmDailyBudgetError(error)) throw error
-    return deferVoteProjectionThroughExistingGovernor(env, messages)
-  }
-  env = { ...env, ICONOPLASM_DB: createD1InvocationBudget().binding(env.ICONOPLASM_DB) }
-  const drainMessages = messages.filter(
-    (message) =>
-      decodeIconoplasmQueueMessageBody(message.body).kind === "drain_vote_projection_ledger",
-  )
-  if (drainMessages.length) {
-    // A global reset wake runs one existing job and leaves ordinary messages
-    // intact. It never installs another job authority or resets attempt/version.
-    const otherMessages = messages.filter((message) => !drainMessages.includes(message))
-    for (const message of otherMessages) {
-      if (typeof message.retry !== "function") throw new Error("Vote transport cannot defer")
-      message.retry({ delaySeconds: 30 })
-    }
-    try {
-      const result = await processPendingVoteProjectionRefreshJobs(env, { limit: 1 })
-      const nextAttemptAt = await nextVoteProjectionAttemptAt(env.ICONOPLASM_DB)
-      if (nextAttemptAt) {
-        const sent = await sendVoteProjectionDrainQueueMessage(
-          env,
-          // Free retains a message for 24 hours, including its delay. Leave
-          // delivery headroom instead of scheduling at the expiry boundary.
-          Math.min(12 * 60 * 60, voteProjectionQueueRetryDelaySeconds(nextAttemptAt)),
-        )
-        if (!sent.ok) throw new Error(sent.detail || sent.code)
-      }
-      // Retain the original delivery if replacement or accounting is uncertain.
-      await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
-      for (const message of drainMessages) message.ack()
-      return { ...result, retrying: otherMessages.length, next_attempt_at: nextAttemptAt }
-    } catch (error) {
-      if (!isIconoplasmDailyBudgetError(error)) throw error
-      return deferVoteProjectionThroughExistingGovernor(env, drainMessages)
-    }
-  }
-  let resetAt = null
-  const nowIso = new Date().toISOString()
-  const dueEntries = []
-  const dueJobsBySymbol = new Map()
-  const rowBySymbol = new Map()
-  let lookupAttempts = 0
-  for (const message of messages) {
-    try {
-      const queueMessage = normalizeVoteProjectionRefreshQueueMessage(message?.body)
-      if (!queueMessage) {
-        throw new Error("Unsupported Iconoplasm vote projection Queue message.")
-      }
-      if (!rowBySymbol.has(queueMessage.symbol)) {
-        if (lookupAttempts >= VOTE_PROJECTION_RECOVERY_LIMIT) {
-          if (typeof message?.retry !== "function")
-            throw new Error("Deferred vote recovery cannot be retried")
-          message.retry({ delaySeconds: 30 })
-          retrying += 1
-          skipped += 1
-          results.push({
-            ok: true,
-            skipped: true,
-            reason: "INVOCATION_WORK_LIMIT",
-            symbol: queueMessage.symbol,
-          })
-          continue
-        }
-        lookupAttempts += 1
-        const row = await env.ICONOPLASM_DB.prepare(
-          `SELECT gene_symbol, actor_id, reason, attempts, next_attempt_at, job_version,
-                  wake_outstanding, wake_version
-           FROM icono_vote_projection_refresh_jobs
-           WHERE gene_symbol = ?
-           LIMIT 1`,
-        )
-          .bind(queueMessage.symbol)
-          .first()
-        rowBySymbol.set(queueMessage.symbol, row || null)
-      }
-      const row = rowBySymbol.get(queueMessage.symbol)
-      if (!row) {
-        results.push({
-          ok: true,
-          skipped: true,
-          reason: "JOB_ALREADY_DRAINED",
-          symbol: queueMessage.symbol,
-        })
-        skipped += 1
-        if (typeof message?.ack === "function") message.ack()
-        continue
-      }
-      const nextAttemptAt = sanitizeText(row?.next_attempt_at || "", 64)
-      if (
-        nextAttemptAt &&
-        Date.parse(voteProjectionUtcTimestamp(nextAttemptAt)) > Date.parse(nowIso)
-      ) {
-        results.push({
-          ok: true,
-          skipped: true,
-          reason: "BACKOFF_NOT_DUE",
-          symbol: queueMessage.symbol,
-          next_attempt_at: nextAttemptAt,
-        })
-        skipped += 1
-        retrying += 1
-        if (typeof message?.retry === "function") {
-          message.retry({
-            delaySeconds: voteProjectionQueueRetryDelaySeconds(nextAttemptAt, Date.parse(nowIso)),
-          })
-        } else {
-          throw new Error("Vote projection Queue job backoff is not due and cannot be retried.")
-        }
-        continue
-      }
-      if (queueMessage.wake_version > 0) {
-        await releaseVoteProjectionWakeClaim(env, {
-          symbol: queueMessage.symbol,
-          wakeVersion: queueMessage.wake_version,
-        })
-      }
-      const job = normalizeVoteProjectionRefreshJobRow(row, queueMessage)
-      if (!job) {
-        throw new Error("Malformed Iconoplasm vote projection refresh job row.")
-      }
-      dueEntries.push({ message, queueMessage, job })
-      dueJobsBySymbol.set(job.symbol, job)
-    } catch (error) {
-      if (isIconoplasmDailyBudgetError(error)) {
-        const wake = await deferVoteProjectionThroughExistingGovernor(env, [message])
-        resetAt = wake.reset_at
-        continue
-      }
-      failed += 1
-      retrying += 1
-      results.push({
-        ok: false,
-        error:
-          sanitizeText(String(error?.message || error || "vote projection Queue failed"), 1000) ||
-          "vote projection Queue failed",
-      })
-      if (typeof message?.retry === "function") {
-        message.retry({ delaySeconds: 30 })
-      } else {
-        throw error
-      }
-    }
-  }
-
-  const batchResults = await processVoteProjectionRefreshJobBatch(
-    env,
-    Array.from(dueJobsBySymbol.values()),
-  )
-  const resultBySymbol = new Map(batchResults.map((result) => [result.symbol, result]))
-  const recordedFailureSymbols = new Set()
-  const retryAtBySymbol = new Map()
-  const followupWakeSymbols = new Set()
-  for (const entry of dueEntries) {
-    const result =
-      resultBySymbol.get(entry.job.symbol) ||
-      voteProjectionRefreshFailureResult(entry.job, new Error("vote projection refresh failed"))
-    results.push(result)
-    if (result?.ok) {
-      if (result.superseded && !followupWakeSymbols.has(result.symbol)) {
-        const wakeVersion = await claimVoteProjectionWake(env, result.symbol)
-        if (wakeVersion > 0) {
-          const followup = await sendVoteProjectionRefreshQueueMessage(env, {
-            symbol: result.symbol,
-            actorId: result.actor_id || "vote_projection",
-            reason: result.reason || "vote_projection_refresh",
-            wakeVersion,
-          })
-          if (!followup.ok) {
-            await releaseVoteProjectionWakeClaim(env, {
-              symbol: result.symbol,
-              wakeVersion,
-            })
-            throw new Error(followup.error || followup.code)
-          }
-        }
-        followupWakeSymbols.add(result.symbol)
-      }
-      processed += 1
-      if (typeof entry.message?.ack === "function") entry.message.ack()
-      continue
-    }
-    if (result?.daily_budget) {
-      const wake = await deferVoteProjectionThroughExistingGovernor(env, [entry.message])
-      resetAt = wake.reset_at
-      continue
-    }
-    failed += 1
-    retrying += 1
-    if (result?.symbol && !recordedFailureSymbols.has(result.symbol)) {
-      recordedFailureSymbols.add(result.symbol)
-      let recordedFailure
-      try {
-        recordedFailure = await recordVoteProjectionRefreshFailure(env, {
-          symbol: result.symbol,
-          actorId: result.actor_id || entry.queueMessage.actor_id,
-          reason: result.reason || entry.queueMessage.reason,
-          error: new Error(result.error || "vote projection refresh failed"),
-          attemptCount: Number(result.attempts || entry.job.attempts || 0),
-          jobVersion: result.job_version || entry.job.job_version,
-        })
-      } catch (error) {
-        if (!isIconoplasmDailyBudgetError(error)) throw error
-        const wake = await deferVoteProjectionThroughExistingGovernor(env, [entry.message])
-        resetAt = wake.reset_at
-        failed -= 1
-        retrying -= 1
-        continue
-      }
-      retryAtBySymbol.set(result.symbol, recordedFailure?.next_attempt_at || "")
-    }
-    if (typeof entry.message?.retry === "function") {
-      entry.message.retry({
-        delaySeconds: voteProjectionQueueRetryDelaySeconds(
-          retryAtBySymbol.get(result?.symbol) || "",
-        ),
-      })
-    } else {
-      throw new Error(result?.error || "vote projection Queue failed")
-    }
-  }
-  // Flush buffered shared-daily-ledger usage for this invocation so background
-  // work is fully metered (RECOVERY-001 / B-745).
-  await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
-  return {
-    ok: failed <= 0 && !resetAt,
-    processed,
-    failed,
-    retrying,
-    skipped,
-    results,
-    ...(resetAt ? { deferred: true, reason: "daily_d1_budget", reset_at: resetAt } : {}),
-  }
-}
-
-async function listPendingVoteProjectionRefreshJobs(env, { limit = 200 } = {}) {
-  if (!env?.ICONOPLASM_DB) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(1000, Number.parseInt(String(limit || "200"), 10) || 200),
-  )
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, actor_id, reason, requested_at, last_attempt_at, next_attempt_at, attempts, last_error, job_version
-     FROM icono_vote_projection_refresh_jobs
-     ORDER BY next_attempt_at ASC, requested_at ASC, gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
-  // Chesterton's fence: this queue is the durable breadcrumb for vote-driven
-  // auto-promote/read-model work that got kicked off the request path on purpose.
-  // Keep the operator view tied to the actual D1 job rows instead of reconstructing
-  // "probably deferred" from response flags later.
-  return (Array.isArray(resp?.results) ? resp.results : []).map((row) => ({
-    symbol: normalizeSymbol(row?.gene_symbol || ""),
-    actor_id: normalizeUserId(row?.actor_id || "vote_projection"),
-    reason: sanitizeText(row?.reason || "", 2000) || "vote_projection_refresh",
-    requested_at: sanitizeText(row?.requested_at || "", 64) || "",
-    last_attempt_at: sanitizeText(row?.last_attempt_at || "", 64) || "",
-    next_attempt_at: sanitizeText(row?.next_attempt_at || "", 64) || "",
-    attempts: Math.max(0, Number.parseInt(String(row?.attempts || 0), 10) || 0),
-    job_version: Math.max(1, Number.parseInt(String(row?.job_version || 0), 10) || 0),
-    last_error: sanitizeText(row?.last_error || "", 2000) || "",
-    retrying: Math.max(0, Number.parseInt(String(row?.attempts || 0), 10) || 0) > 0,
-  }))
 }
 
 const ICONOPLASM_SYNC_FINALIZATION_STATUS_QUEUED = "queued"
@@ -24540,8 +20406,9 @@ async function finalizeCompletedSyncFinalizationJobsIfDrained(
   return drainCompletedFinalization(env.ICONOPLASM_DB, {
     symbols: scopedSymbols,
     rows,
-    // Finalization hands nothing to a publisher: the gene's stable object is
-    // rewritten by publishIconoplasmGeneStableObject on its own triggers.
+    // A finished upload already wrote its candidate_added event; the Actions
+    // publisher (or the ingest route itself, for small batches) republishes
+    // the gene. Finalization has nothing left to hand to a publisher.
     notifyPublisher: async () => ({ accepted: true }),
   })
 }
@@ -24998,13 +20865,31 @@ function iconoplasmQueueBatchKind(batch) {
   return ""
 }
 
+// The iconoplasm-vote-projection queue keeps this Worker as its consumer until
+// the queue itself is deleted, and its messages ask for a gene election that
+// every vote already runs inside its own request. They carry no work: each is
+// acknowledged and dropped here, before the finalization consumer, where an
+// unknown kind throws, retries, lands in the dead-letter queue and reports a
+// failure to the sync governor.
+const ICONOPLASM_DROPPED_QUEUE_KINDS = new Set(["process_vote_projection_refresh"])
+
 export async function handleIconoplasmQueue(batch, env, ctx) {
+  const messages = Array.isArray(batch?.messages) ? batch.messages : []
+  const dropped = messages.filter((message) =>
+    ICONOPLASM_DROPPED_QUEUE_KINDS.has(
+      sanitizeText(decodeIconoplasmQueueMessageBody(message?.body).kind || "", 80),
+    ),
+  )
+  for (const message of dropped) message?.ack?.()
+  if (dropped.length) {
+    if (dropped.length === messages.length) {
+      return { ok: true, processed: 0, dropped: dropped.length }
+    }
+    batch = { ...batch, messages: messages.filter((message) => !dropped.includes(message)) }
+  }
   const kind = iconoplasmQueueBatchKind(batch)
   if (kind === ICONOPLASM_GENE_CARD_QUEUE_KIND) {
     return handleIconoplasmGeneCardMaterializationQueue(batch, env, ctx)
-  }
-  if (kind === ICONOPLASM_VOTE_PROJECTION_QUEUE_MESSAGE_KIND) {
-    return handleIconoplasmVoteProjectionQueue(batch, env, ctx)
   }
   return handleIconoplasmSyncFinalizationQueue(batch, env, ctx)
 }
@@ -25431,244 +21316,6 @@ async function summarizePendingSyncFinalizationWork(
   }
 }
 
-export async function scheduleVoteProjectionRefresh(
-  env,
-  ctx,
-  { symbol, actorId = "vote_projection", reason = "vote_projection_refresh" } = {},
-) {
-  // Public vote requests must stay cheap and responsive, so D1 authoring
-  // auto-promotion and read-model projection run after the vote write. The D1
-  // job row is the durable ledger and the Cloudflare Queue message is the only
-  // live drain path. Do not run the projection directly from request waitUntil:
-  // Cloudflare can interrupt that task after the D1 authoring selection moves
-  // but before its dependent read models settle. This queue does not publish the
-  // public portrait; only the later card-artifact barrier flip can do that.
-  const safeSymbol = normalizeSymbol(symbol)
-  if (!safeSymbol) return { ok: false, code: "BAD_SYMBOL", queued: false }
-  const safeActorId = normalizeUserId(actorId || "vote_projection")
-  const safeReason = voteProjectionRefreshJobReason(reason)
-
-  let durable = false
-  let job = null
-  try {
-    job = await enqueueVoteProjectionRefreshJob(env, {
-      symbol: safeSymbol,
-      actorId: safeActorId,
-      reason: safeReason,
-    })
-    durable = Boolean(job?.ok)
-  } catch (error) {
-    durable = false
-    console.error("[Iconoplasm] vote projection queue enqueue failed:", error)
-  }
-
-  const queueResult =
-    durable && job?.wake_required
-      ? await sendVoteProjectionRefreshQueueMessage(env, {
-          symbol: safeSymbol,
-          actorId: safeActorId,
-          reason: safeReason,
-          wakeVersion: job.wake_version,
-        })
-      : durable
-        ? { ok: true, skipped: true, code: "DIRTY_GENE_WAKE_ALREADY_PENDING" }
-        : { ok: false, code: "DURABLE_JOB_NOT_ENQUEUED" }
-  if (!queueResult?.ok) {
-    if (durable && job?.wake_required) {
-      await releaseVoteProjectionWakeClaim(env, {
-        symbol: safeSymbol,
-        wakeVersion: job.wake_version,
-      })
-    }
-    console.error("[Iconoplasm] vote projection Queue send failed:", {
-      symbol: safeSymbol,
-      code: queueResult?.code || "UNKNOWN",
-      error: queueResult?.error || "",
-    })
-  }
-
-  return {
-    ok: true,
-    queued: Boolean(queueResult?.ok && !queueResult?.skipped),
-    durable,
-    queue_sent: Boolean(queueResult?.ok && !queueResult?.skipped),
-    mode: queueResult?.skipped
-      ? "durable_coalesced"
-      : queueResult?.ok
-        ? "queue"
-        : durable
-          ? "durable_pending"
-          : "best_effort",
-    symbol: safeSymbol,
-  }
-}
-
-async function listAutopromoteCandidateAssetsForSymbol(env, rawSymbol) {
-  if (!env.ICONOPLASM_DB) return []
-  const symbol = normalizeSymbol(rawSymbol)
-  if (!symbol) return []
-  const assetResp = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       pa.asset_sha256,
-       lower(COALESCE(pa.status, 'draft')) AS status,
-       COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
-       COALESCE(pa.is_stale, 0) AS is_stale,
-       COALESCE(pa.is_legacy, 0) AS is_legacy,
-       pa.vision_id,
-       pa.emulsion_id,
-       pa.artist_tag,
-       pa.artist_name,
-       pa.created_at
-     FROM icono_portrait_assets pa
-     WHERE pa.gene_symbol = ?`,
-  )
-    .bind(symbol)
-    .all()
-  return (Array.isArray(assetResp?.results) ? assetResp.results : []).map((row) => ({
-    asset_sha256: normalizeSha256(row?.asset_sha256 || "") || null,
-    status: sanitizeText(row?.status || "", 32) || "draft",
-    autopick_eligible: Number(row?.autopick_eligible || 0) > 0,
-    is_stale: Number(row?.is_stale || 0) > 0,
-    is_legacy: Number(row?.is_legacy || 0) > 0,
-    vision_id: validAdminRollupVisionId(row?.vision_id || ""),
-    emulsion_id: sanitizeText(row?.emulsion_id || "", 64) || "",
-    artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
-    artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-    created_at: sanitizeText(row?.created_at || "", 64) || "",
-    upvotes: 0,
-    downvotes: 0,
-    score: 0,
-    caretaker_supervote: false,
-    caretaker_supervote_direction: null,
-  }))
-}
-
-async function autoPromoteTopVotedPortraitFromCoordinatorState(
-  env,
-  { symbol, actorId, reason, assetSummaries = [] } = {},
-) {
-  // ICONOPLASM D1 PORTRAIT-AUTHORING PROJECTION CONTRACT.
-  // This vote projection ranks the already-settled VoteCoordinator summaries
-  // against renderable portrait assets, then mutates D1 `icono_publish_state`
-  // and records the publication event. It does not publish the gene's stable
-  // object (B-898: the vote authority and the Actions republish pass do). Call
-  // this only from the Queue-backed pipeline that also refreshes the dependent
-  // D1 read models, not from a request handler that immediately returns success.
-  if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
-  const symbolNorm = normalizeSymbol(symbol)
-  if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
-
-  const currentRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
-     FROM icono_publish_state
-     WHERE gene_symbol = ?
-     LIMIT 1`,
-  )
-    .bind(symbolNorm)
-    .first()
-  const currentAssetSha = normalizeSha256(currentRow?.current_asset_sha256 || "")
-  const adminOverride = Number(currentRow?.admin_override || 0) > 0
-  if (adminOverride) {
-    return {
-      ok: true,
-      changed: false,
-      code: "ADMIN_OVERRIDE",
-      current_asset_sha256: currentAssetSha || null,
-    }
-  }
-
-  const voteByAsset = new Map()
-  for (const rawRow of Array.isArray(assetSummaries) ? assetSummaries : []) {
-    const assetSha = normalizeSha256(rawRow?.asset_sha256 || "")
-    if (!assetSha) continue
-    voteByAsset.set(assetSha, {
-      upvotes: Math.max(0, Number(rawRow?.upvotes || 0) || 0),
-      downvotes: Math.max(0, Number(rawRow?.downvotes || 0) || 0),
-      score: Number(rawRow?.score || 0) || 0,
-      caretaker_supervote: Boolean(rawRow?.caretaker_supervote),
-      caretaker_supervote_direction: [-1, 1].includes(Number(rawRow?.caretaker_supervote_direction))
-        ? Number(rawRow.caretaker_supervote_direction)
-        : null,
-      vision_id: sanitizeVoteVisionId(rawRow?.vision_id || "") || "",
-      candidate_image_id: optionalInt(rawRow?.candidate_image_id),
-    })
-  }
-
-  const assets = await listAutopromoteCandidateAssetsForSymbol(env, symbolNorm)
-  const candidateAssets = assets
-    .map((row) => {
-      const vote = voteByAsset.get(row.asset_sha256 || "") || null
-      return {
-        ...row,
-        vision_id: validAdminRollupVisionId(vote?.vision_id || row.vision_id || ""),
-        candidate_image_id: optionalInt(vote?.candidate_image_id ?? row.candidate_image_id),
-        upvotes: Number(vote?.upvotes || 0),
-        downvotes: Number(vote?.downvotes || 0),
-        score: Number(vote?.score || 0),
-        caretaker_supervote: Boolean(vote?.caretaker_supervote),
-        caretaker_supervote_direction: vote?.caretaker_supervote_direction ?? null,
-      }
-    })
-    .filter((row) => row.asset_sha256)
-    .filter(
-      (row) =>
-        row.autopick_eligible && row.status !== "rejected" && assetHasRenderablePortrait(row),
-    )
-
-  candidateAssets.sort((left, right) => compareAdminLeaderRows(left, right, currentAssetSha))
-  const topAsset = candidateAssets[0] || null
-  if (!topAsset?.asset_sha256) return { ok: true, changed: false, code: "NO_CANDIDATE" }
-  if (currentAssetSha && topAsset.asset_sha256 === currentAssetSha) {
-    return { ok: true, changed: false, code: "UNCHANGED", current_asset_sha256: currentAssetSha }
-  }
-
-  const actorNorm = normalizeUserId(actorId || "vote_auto")
-  const eventReason = String(reason || "vote_auto_promote").slice(0, 2000) || "vote_auto_promote"
-  await env.ICONOPLASM_DB.batch([
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       current_asset_sha256 = excluded.current_asset_sha256,
-       admin_override = 0,
-       updated_by = excluded.updated_by,
-       updated_at = CURRENT_TIMESTAMP`,
-    ).bind(symbolNorm, topAsset.asset_sha256, actorNorm),
-    env.ICONOPLASM_DB.prepare(
-      `UPDATE icono_portrait_assets
-     SET status = 'approved'
-     WHERE gene_symbol = ?
-       AND asset_sha256 = ?`,
-    ).bind(symbolNorm, topAsset.asset_sha256),
-    env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_publish_events (
-       gene_symbol,
-       from_asset_sha256,
-       to_asset_sha256,
-       action,
-       actor,
-       reason,
-       created_at
-     ) VALUES (?, ?, ?, 'publish', ?, ?, CURRENT_TIMESTAMP)`,
-    ).bind(symbolNorm, currentAssetSha || null, topAsset.asset_sha256, actorNorm, eventReason),
-  ])
-
-  return {
-    ok: true,
-    changed: true,
-    code: "PROMOTED",
-    from_asset_sha256: currentAssetSha || null,
-    to_asset_sha256: topAsset.asset_sha256,
-    to_asset_previous_status: sanitizeText(topAsset.status || "", 32) || "draft",
-    image_score: Number(topAsset.score || 0),
-    weighted_score: caretakerWeightedScore(topAsset),
-    caretaker_supervote: Boolean(topAsset.caretaker_supervote),
-    caretaker_supervote_direction: topAsset.caretaker_supervote_direction ?? null,
-    image_upvotes: Number(topAsset.upvotes || 0),
-    image_downvotes: Number(topAsset.downvotes || 0),
-  }
-}
-
 function normalizeAdminReadModelBootstrapSteps(raw) {
   return Math.max(
     1,
@@ -25817,8 +21464,11 @@ async function resetAdminReadModelBootstrap(env) {
     ).first(),
   ])
 
+  // icono_vote_asset_summary is not an admin read model: it is the vote
+  // counts every election reads. The bootstrap's symbol phase rebuilds it gene
+  // by gene from the vote ledger in place (rebuildVoteAssetSummaryForSymbols
+  // upserts and drops only orphan rows), so it is never emptied here.
   await Promise.all([
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_vote_asset_summary`).run(),
     env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_gene_rollup`).run(),
     env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup`).run(),
   ])
@@ -26176,6 +21826,7 @@ export async function repairCanonInvariants(
       symbol,
       actorId,
       reason: auditReason,
+      inputsChanged: false,
     })
     if (result?.changed) changedSymbols.push(symbol)
     else unresolved.push(symbol)
@@ -27534,96 +23185,83 @@ function cardPublicationSourceForEnv(env) {
     stable: stableCardCatalogMaterialValue,
     project: (payload) => stableCardCatalogMaterialValue(projectGeneRecord(payload, null)),
     locator: (card) => publishedPortraitLocatorFromCard(card, ""),
-    // B-888: project the winner a per-gene publication just wrote into D1
-    // `icono_publish_state`, approve that asset, and record one `publish`
-    // event (a canonical-affecting action, so the next base release rewrites
-    // this gene from the same decision). A row with an admin override is
-    // left alone; an unchanged winner writes nothing. Measured 2026-09-30: 50
-    // of the 60 genes in the delta chain disagreed with D1 because D1 only ever
-    // learned the winner through a second election run on the next touch.
-    async publishSelection(symbol, assetSha256) {
-      const symbolNorm = normalizeSymbol(symbol)
-      if (!symbolNorm) return
-      const asset = normalizeSha256(assetSha256 || "") || null
-      const actor = "vote_authority"
-      await env.ICONOPLASM_DB.batch([
-        env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
-           SELECT ?, current_asset_sha256, ?, 'publish', ?, 'Vote authority published this winner (B-888 projection)'
-           FROM icono_publish_state
-           WHERE gene_symbol = ?
-             AND COALESCE(admin_override, 0) = 0
-             AND current_asset_sha256 IS NOT ?`,
-        ).bind(symbolNorm, asset, actor, symbolNorm, asset),
-        env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, updated_at, admin_override)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)
-           ON CONFLICT(gene_symbol) DO UPDATE SET
-             current_asset_sha256 = excluded.current_asset_sha256,
-             updated_by = excluded.updated_by,
-             updated_at = CURRENT_TIMESTAMP
-           WHERE COALESCE(icono_publish_state.admin_override, 0) = 0
-             AND icono_publish_state.current_asset_sha256 IS NOT excluded.current_asset_sha256`,
-        ).bind(symbolNorm, asset, actor),
-        env.ICONOPLASM_DB.prepare(
-          `UPDATE icono_portrait_assets SET status = 'approved'
-           WHERE gene_symbol = ? AND asset_sha256 = ? AND status = 'draft'`,
-        ).bind(symbolNorm, asset || ""),
-      ])
-    },
   }
 }
 
+// The most times one publish writes a gene's object while votes keep landing.
+const STABLE_GENE_OBJECT_MAX_PASSES = 3
+
 /**
  * ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
- * B-898: THE ONLY per-gene publisher. Rewrites the
- * gene's stable object genes/v3/<SYMBOL>.json from D1 and the authoring store,
- * purges its CDN URL, projects the selected winner into D1, keeps the gene's
- * route membership, and advances its print-copy materialization. About five
- * subrequests, no Durable Object, no index tree. Called by the vote authority
- * when a winner changes and by the republish admin route the Actions publisher
- * drives for every other canonical change.
+ * B-898: THE ONLY per-gene publisher. Rewrites the gene's stable object
+ * genes/v3/<SYMBOL>.json from D1 and the authoring store, purges its CDN URL,
+ * keeps the gene's route membership, and advances its print-copy
+ * materialization. About five subrequests and three D1 point reads per pass
+ * besides the materialization, no index tree. Called after every changed vote or
+ * supervote, after uploads and admin changes that touch a few genes, and by
+ * the republish admin route the Actions publisher drives for every other
+ * canonical change.
+ *
+ * No selection publishes whatever D1 holds. An explicit winner (the
+ * administrator's /admin/publish pin, already written to D1) is the portrait
+ * override and the pool's current mark; the publisher never writes it back.
+ *
+ * Votes race with this write. The object is stamped with the gene's vote
+ * version read before the materialization, and the version is read again
+ * after every write: a vote that committed in between may have finished its
+ * own republish before this older object landed on top of it, so a moved
+ * version materializes and writes the gene again from the fresh rows, at most
+ * STABLE_GENE_OBJECT_MAX_PASSES passes in all. After the last pass the vote
+ * that moved the version is left to its own republish.
  */
 export async function publishIconoplasmGeneStableObject(
   env,
   symbolValue,
-  { portraitAssetSha256 = null, withdraw = false, source = null, objects = null } = {},
+  { portraitAssetSha256 = null, source = null, objects = null } = {},
 ) {
   const symbol = normalizeSymbol(symbolValue)
   if (!symbol) throw new Error("A symbol is required to publish a gene")
-  const selected = withdraw ? null : normalizeSha256(portraitAssetSha256 || "") || null
-  // Three cases, and the difference matters (2026-10-01: a republish with no
-  // selection was treated as a withdrawal and nulled a gene's winner):
-  // an explicit winner overrides D1 and is projected back into it; a
-  // withdrawal publishes the portrait-less version and projects null; no
-  // selection at all publishes whatever D1 holds and projects nothing.
-  const explicit = withdraw || selected !== null
+  const selected = normalizeSha256(portraitAssetSha256 || "") || null
   const adapter = source || cardPublicationSourceForEnv(env)
   const store = objects || createPublishedCardObjectStore(env)
-  const overrides = withdraw ? { [symbol]: "none" } : selected ? { [symbol]: selected } : null
-  const cards = await adapter.materialize([symbol], { portraitOverrides: overrides })
-  const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
-  if (!card) return { symbol, withdrawn: true, stable: null }
-  if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
-  const stableCard = adapter.stable(card)
-  const projected = adapter.project(stableCard.payload)
-  const object = composeStableGeneObject(projected, {
-    ...(selected ? { selectedAssetSha256: selected } : {}),
-  })
-  const stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
-  if (explicit && typeof adapter.publishSelection === "function") {
-    await adapter.publishSelection(symbol, selected)
+  const db = env?.ICONOPLASM_DB || null
+  let republishedAfterVote = false
+  let stableCard
+  let object
+  let stable
+  for (let pass = 1; ; pass += 1) {
+    const voteVersion = db ? await readGeneVoteVersion(db, symbol) : null
+    const cards = await adapter.materialize([symbol], {
+      portraitOverrides: selected ? { [symbol]: selected } : null,
+    })
+    const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
+    if (!card) return { symbol, withdrawn: true, stable: null }
+    if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
+    stableCard = adapter.stable(card)
+    const projected = adapter.project(stableCard.payload)
+    object = composeStableGeneObject(projected, {
+      ...(selected ? { selectedAssetSha256: selected } : {}),
+      voteVersion,
+    })
+    stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
+    if (!db || pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
+    if ((await readGeneVoteVersion(db, symbol)) === voteVersion) break
+    republishedAfterVote = true
   }
-  if (env?.ICONOPLASM_DB) {
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
-       SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ?`,
-    )
+  if (db) {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
+         SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ?`,
+      )
       .bind(symbol)
       .run()
+    // The fingerprint of the object as storage holds it: the queue consumer
+    // reads that object back through the card route and must arrive at the
+    // same value, or it would advance and render again.
     await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
       symbol,
-      cardFingerprint: iconoplasmGeneCardFingerprint(stableCard.payload),
+      cardFingerprint: iconoplasmGeneCardFingerprint(publishedObjectAsRead(object)),
       assetSha256: iconoplasmPrintCopyAssetSha(stableCard.payload),
     })
   }
@@ -27631,13 +23269,55 @@ export async function publishIconoplasmGeneStableObject(
     symbol,
     withdrawn: false,
     selected_asset_sha256: selected,
+    vote_version: object.vote_version,
     stable: { key: stable.key, hash: stable.hash, size: stable.size, purged: stable.purged },
     published_at: object.published_at,
+    ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
 }
 
-function cardCatalogCanonicalActionPlaceholders() {
-  return CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.map(() => "?").join(",")
+// Republishes one gene in process. Returns the receipt, or null after logging
+// a failure: every caller has already written a publication-affecting event,
+// so the Actions publisher republishes the gene on its next pass.
+async function republishGene(env, symbol, options = {}) {
+  try {
+    return await publishIconoplasmGeneStableObject(env, symbol, options)
+  } catch (error) {
+    console.warn("Iconoplasm gene republish left to the Actions publisher", {
+      symbol,
+      error: sanitizeText(String(error?.message || error), 300),
+    })
+    return null
+  }
+}
+
+// The same, after the response (votes, uploads): the request never waits on
+// Bunny and never fails because of it.
+function republishGeneAfterResponse(env, ctx, symbol) {
+  const work = republishGene(env, symbol)
+  if (typeof ctx?.waitUntil === "function") ctx.waitUntil(work)
+  return work
+}
+
+// Uploads and reconcile republish their touched genes in process when they
+// touch at most REPUBLISH_MAX_SYMBOLS of them (about five external
+// subrequests each), so a new candidate reaches readers within seconds.
+// Larger batches rely on their publication-affecting events and the Actions
+// publisher, which works through them eight genes per call.
+function republishTouchedGenesAfterResponse(env, ctx, symbols) {
+  const unique = [
+    ...new Set((symbols || []).map((value) => normalizeSymbol(value)).filter(Boolean)),
+  ]
+  if (!unique.length || unique.length > REPUBLISH_MAX_SYMBOLS) return false
+  const work = (async () => {
+    for (const symbol of unique) await republishGene(env, symbol)
+  })()
+  if (typeof ctx?.waitUntil === "function") ctx.waitUntil(work)
+  return true
+}
+
+function publicationAffectingActionPlaceholders() {
+  return PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")
 }
 
 function parseJsonTextList(raw) {
@@ -27904,20 +23584,18 @@ async function cardCatalogRecordsForArtifact(
       if (Array.isArray(result?.results)) rows.push(...result.results)
     }
   }
-  // B-762: an explicit per-symbol portrait override lets the per-gene vote
-  // authority materialize its selected winner before D1 canon changes. The
+  // B-762: an explicit per-symbol portrait override (the administrator's
+  // /admin/publish pin) materializes that asset as the gene's portrait. The
   // override reads only that gene's exact asset row; a missing asset fails the
-  // materialization instead of silently publishing a different candidate.
+  // materialization instead of silently publishing a different candidate. A
+  // value that is not an asset SHA overrides nothing.
   let resolvedRows = rows
   if (portraitOverrides && typeof portraitOverrides === "object") {
     const overrideBySymbol = new Map()
     for (const [key, value] of Object.entries(portraitOverrides)) {
       const overrideSymbol = normalizeSymbol(key)
-      if (!overrideSymbol) continue
-      const raw = String(value || "")
-        .trim()
-        .toLowerCase()
-      overrideBySymbol.set(overrideSymbol, raw === "none" ? "none" : normalizeSha256(raw) || "")
+      const overrideSha = normalizeSha256(String(value || ""))
+      if (overrideSymbol && overrideSha) overrideBySymbol.set(overrideSymbol, overrideSha)
     }
     const overrideRows = []
     for (const row of rows) {
@@ -27928,30 +23606,6 @@ async function cardCatalogRecordsForArtifact(
         continue
       }
       const currentSha = normalizeSha256(row?.asset_sha256 || "") || ""
-      if (override === "none" || override === "") {
-        overrideRows.push(
-          currentSha
-            ? {
-                ...row,
-                asset_sha256: null,
-                width: null,
-                height: null,
-                vision_id: null,
-                candidate_image_id: null,
-                emulsion_id: null,
-                workflow_id: null,
-                workflow_label: null,
-                workflow_path: null,
-                prompt_version: null,
-                variant_slot: null,
-                sample_label: null,
-                sample_number: null,
-                sample_text_hash: null,
-              }
-            : row,
-        )
-        continue
-      }
       if (override === currentSha) {
         overrideRows.push(row)
         continue
@@ -28051,11 +23705,11 @@ async function newestCanonicalPublishEventId(env) {
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT id
        FROM icono_publish_events
-      WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
+      WHERE action IN (${publicationAffectingActionPlaceholders()})
       ORDER BY id DESC
       LIMIT 1`,
   )
-    .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
+    .bind(...PUBLICATION_AFFECTING_ACTIONS)
     .first()
   return Math.max(0, Number(row?.id || 0) || 0)
 }
@@ -28202,12 +23856,12 @@ async function automaticCandidateGeneBlotBacklog(env, { after, limit }) {
   const result = await env.ICONOPLASM_DB.prepare(
     `SELECT id, gene_symbol
        FROM icono_publish_events
-      WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
+      WHERE action IN (${publicationAffectingActionPlaceholders()})
         AND id > ?
       ORDER BY id ASC
       LIMIT ?`,
   )
-    .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, since, GENE_BLOT_BACKLOG_EVENT_WINDOW + 1)
+    .bind(...PUBLICATION_AFFECTING_ACTIONS, since, GENE_BLOT_BACKLOG_EVENT_WINDOW + 1)
     .all()
   const allEvents = (Array.isArray(result?.results) ? result.results : [])
     .map((row) => ({ id: Number(row?.id || 0), symbol: normalizeSymbol(row?.gene_symbol || "") }))
@@ -31145,6 +26799,7 @@ const STABLE_GENE_OBJECT_ENVELOPE_KEYS = [
   "portrait_candidates",
   "candidate_count",
   "stable_object_version",
+  "vote_version",
   "published_at",
   "resolved_from",
 ]
@@ -32025,21 +27680,6 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
 
     if (
-      isIconoplasmVoteProjectionRefreshRequestForTheOnlyAllowedStatefulWorker(path, request.method)
-    ) {
-      const payload = await parseJsonBody(request)
-      const response = json(
-        await processPendingVoteProjectionRefreshJobs(meteredEnv, {
-          limit: payload?.limit,
-        }),
-        200,
-        { "Cache-Control": "no-store" },
-      )
-      responseStatus = response.status
-      return response
-    }
-
-    if (
       isIconoplasmSyncFinalizationProcessRequestForTheOnlyAllowedStatefulWorker(
         path,
         request.method,
@@ -32439,7 +28079,18 @@ export async function drainIconoplasmManifestationAuthorityProjection(
     invocationBudget,
     projectAssignmentEvent: async (event) => {
       await projectCaretakerAssignmentNotification(env.ICONOPLASM_DB, event)
-      return projectCaretakerAssignmentEventToVoteCoordinator(env, event)
+      const projected = await projectCaretakerAssignmentInD1(env.ICONOPLASM_DB, event)
+      // Ending or replacing an assignment clears its supervote, an election
+      // input; the projection already advanced the gene's vote version.
+      if (projected.supervote_changed) {
+        await autoPromoteTopVotedPortrait(env, {
+          symbol: projected.symbol,
+          actorId: "caretaker_assignment",
+          reason: "caretaker_assignment_supervote_cleared",
+          inputsChanged: false,
+        })
+      }
+      return projected
     },
     projectPublicMaterialEvent: (event) =>
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
@@ -32541,67 +28192,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
-  // Per-gene retained-work preparation for the v2 cutover. This is
-  // operator-triggered preparation, so it uses the existing cutover
-  // authorization and accounting. A replica credential must not acquire
-  // authority to replace candidate sets or activate policy, and the
-  // coordinator still owns every admission, replay and completeness decision.
-  // Ordinary canonical-affecting user commands do not use this route: they
-  // demand-drive the same handover inside the gene coordinator itself.
-  discovery_authority_cutover: async ({ match, request, env, done }) => {
-    const authorization = await authorizeIconoplasmAuthorityCutoverBearer(request, env)
-    if (!authorization.authorized)
-      return done("discovery_authority_cutover_403", json({ error: "Unauthorized" }, 403))
-    const payload = await request.json().catch(() => ({}))
-    const requestedSymbol = normalizeSymbol(payload?.symbol || "")
-    if (!requestedSymbol)
-      return done(
-        "discovery_authority_cutover_400",
-        json({ error: "Missing or invalid symbol" }, 400),
-      )
-    if (match.route.id === "authority_discovery_candidates" && !Array.isArray(payload?.items))
-      return done(
-        "discovery_authority_cutover_400",
-        json(
-          {
-            ok: false,
-            code: "CANDIDATE_ITEMS_REQUIRED",
-            error: "Candidate authority requires a complete items array; refusing to clear",
-          },
-          400,
-        ),
-      )
-    const stub = iconoplasmVoteCoordinatorStub(env, requestedSymbol)
-    if (!stub)
-      return done(
-        "discovery_authority_cutover_503",
-        json({ error: "Vote coordinator unavailable" }, 503),
-      )
-    const coordinatorPath =
-      match.route.id === "authority_discovery_candidates"
-        ? "/authority/candidates"
-        : "/authority/activate"
-    try {
-      const result = await iconoplasmVoteCoordinatorJson(stub, coordinatorPath, {
-        ...payload,
-        symbol: requestedSymbol,
-      })
-      return done("discovery_authority_cutover", json(result, 200, { "Cache-Control": "no-store" }))
-    } catch (error) {
-      return done(
-        "discovery_authority_cutover_error",
-        json(
-          {
-            ok: false,
-            code: String(error?.code || "VOTE_COORDINATOR_REQUEST_FAILED").slice(0, 100),
-            error: sanitizeText(String(error?.message || error), 300),
-          },
-          Number.isSafeInteger(error?.status) && error.status >= 400 ? error.status : 503,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-  },
   // B-871: fulfil an erasure request. The account projection outbox carries
   // the result into the caretaker authority (assignments end, credit shows the
   // anonymous label) on its scheduled drain.
@@ -34903,11 +30493,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/image-edit/jobs" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("image_edit_jobs_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "image_edit_jobs_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -34972,9 +30557,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const jobId = crypto.randomUUID()
-      const inheritedUpvotes = Math.floor(
-        Math.max(0, Number(sourceRow.image_upvotes || 0) || 0) * 0.9,
-      )
+      const inheritedUpvotes = imageEditInheritedUpvotes(sourceRow.image_upvotes)
       const promptTemplatesByKind = await getImageEditPromptTemplatesByKind(env)
       const materializedAdjustments = materializeImageEditAdjustments(
         adjustmentsResult.items,
@@ -35136,11 +30719,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (imageEditPublishMatch && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("image_edit_publish_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "image_edit_publish_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -35218,13 +30796,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       if (!voteResult.ok) {
+        // A spent daily vote budget is a 429 the reader can retry after the
+        // reset; the retry re-imports the same votes and adds nothing twice.
+        const budgetSpent = voteResult.code === VOTE_DAILY_BUDGET_EXHAUSTED
         return done(
-          "image_edit_publish_votes_502",
+          budgetSpent ? "image_edit_publish_votes_429" : "image_edit_publish_votes_502",
           publishFailureResponse({
-            status: 502,
-            code: "IMAGE_EDIT_PUBLISH_VOTES_FAILED",
+            status: budgetSpent ? 429 : 502,
+            code: budgetSpent ? voteResult.code : "IMAGE_EDIT_PUBLISH_VOTES_FAILED",
             stage: "record_votes",
-            error: "The edited candidate was added, but its votes were not recorded.",
+            error: budgetSpent
+              ? `The edited candidate was added, but its votes were not recorded. ${voteResult.error}`
+              : "The edited candidate was added, but its votes were not recorded.",
             job,
             jobPayload: mapImageEditJobRow(job, portraitBase(url, env)),
             resultLabel: "edited image",
@@ -35653,12 +31236,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           "candidate_generation_publish_500",
           json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
-      if (!iconoplasmVoteCoordinatorBinding(env)) {
-        return done(
-          "candidate_generation_publish_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
-      }
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -35742,13 +31319,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       if (!voteResult.ok) {
+        const budgetSpent = voteResult.code === VOTE_DAILY_BUDGET_EXHAUSTED
         return done(
-          "candidate_generation_publish_vote_502",
+          budgetSpent
+            ? "candidate_generation_publish_vote_429"
+            : "candidate_generation_publish_vote_502",
           publishFailureResponse({
-            status: 502,
-            code: "CANDIDATE_PUBLISH_VOTE_FAILED",
+            status: budgetSpent ? 429 : 502,
+            code: budgetSpent ? voteResult.code : "CANDIDATE_PUBLISH_VOTE_FAILED",
             stage: "record_vote",
-            error: "The generated candidate was added, but your upvote was not recorded.",
+            error: budgetSpent
+              ? `The generated candidate was added, but your upvote was not recorded. ${voteResult.error}`
+              : "The generated candidate was added, but your upvote was not recorded.",
             job,
             jobPayload: mapCandidateGenerationJobRow(job, portraitBase(url, env)),
             resultLabel: "generated image",
@@ -35803,10 +31385,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     const caretakerSupervoteRouteMatch =
       /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/supervote$/.exec(path)
     if (caretakerSupervoteRouteMatch) {
-      if (!iconoplasmVoteCoordinatorBinding(env)) {
+      if (!env.ICONOPLASM_DB) {
         return done(
           "caretaker_supervote_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
       }
       const sessionUser = await iconoplasmSessionUser(request, env)
@@ -35840,10 +31422,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       try {
         if (request.method === "GET" || request.method === "HEAD") {
-          const snapshot = await iconoplasmCaretakerSupervoteSnapshot(env, {
+          const { snapshot } = await readCaretakerSupervoteFromD1(
+            env.ICONOPLASM_DB,
             symbol,
             accountId,
-          })
+          )
           return done(
             "caretaker_supervote",
             json(
@@ -35851,7 +31434,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 ok: true,
                 symbol,
                 account_id: accountId,
-                supervote: snapshot?.supervote || null,
+                supervote: snapshot,
               },
               200,
               { "Cache-Control": "no-store" },
@@ -35915,7 +31498,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           expected_assignment_version: expectedAssignmentVersion,
           expected_supervote_version: expectedSupervoteVersion,
         })
-        const result = await iconoplasmCaretakerSupervoteSet(env, {
+        const result = await setCaretakerSupervoteInD1(env.ICONOPLASM_DB, {
           symbol,
           accountId,
           assetSha256: assetSha,
@@ -35925,6 +31508,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           expectedAssignmentVersion,
           expectedSupervoteVersion,
         })
+        if (result?.changed && !result?.replayed) {
+          await settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_supervote" })
+        }
         return done(
           "caretaker_supervote",
           json(
@@ -35957,11 +31543,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/candidates/copy" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("candidate_copy_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "candidate_copy_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -36005,17 +31586,26 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       }
-      const coordinatorWrite = await iconoplasmVoteCoordinatorSetVote(env, {
+      const vote = await setIconoplasmVote(env, ctx, {
         symbol: copyResult.target_gene_symbol,
         assetSha256: copyResult.asset_sha256,
         visionId: copyResult.vision_id,
         candidateImageId: copyResult.candidate_image_id,
         userId,
-        requestedVoteValue: 1,
+        voteValue: 1,
         reason: "candidate_copy_auto_checkmark",
       })
-      if (!coordinatorWrite?.ok) {
-        return done("candidate_copy_502", json({ error: "Vote coordinator write failed" }, 502))
+      if (!vote.ok) {
+        // The copy landed; only its checkmark did not. A spent daily vote
+        // budget says so in words a reader can act on.
+        return vote.code === VOTE_DAILY_BUDGET_EXHAUSTED
+          ? done(
+              "candidate_copy_429",
+              json({ ok: false, code: vote.code, error: vote.error }, 429, {
+                "Cache-Control": "no-store",
+              }),
+            )
+          : done("candidate_copy_502", json({ error: "Vote write failed" }, 502))
       }
       const assetCandidateRef = voteAssetIdentity(
         copyResult.target_gene_symbol,
@@ -36030,17 +31620,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             target_gene_symbol: copyResult.target_gene_symbol,
             target_full_name: copyResult.target_full_name,
             asset_sha256: copyResult.asset_sha256,
-            candidate_image_id: coordinatorWrite.candidate_image_id,
+            candidate_image_id: vote.candidate_image_id,
             target_url: `/gene/${encodeURIComponent(copyResult.target_gene_symbol)}`,
             vote: {
               candidate_ref: assetCandidateRef,
-              vote_value: coordinatorWrite.final_vote_value,
-            },
-            auto_promote: {
-              deferred: true,
-              queued: Boolean(coordinatorWrite?.changed),
-              mode: "durable_outbox",
-              mutation_id: coordinatorWrite?.mutation_id || null,
+              vote_value: vote.final_vote_value,
             },
             message: `Copied to ${copyResult.target_gene_symbol} and checkmarked.`,
           },
@@ -36053,11 +31637,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/votes/set" && request.method === "POST") {
       if (!env.ICONOPLASM_DB)
         return done("votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "votes_set_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -36086,15 +31665,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
       const visionId = normalizeVisionId(p?.vision_id || "")
       const requested = normalizeVoteValue(p?.vote_value)
-      const commandId = String(p?.command_id || "").trim()
-      const commandHeader = String(request.headers.get("x-iconoplasm-command-id") || "").trim()
-      if (
-        (commandId || commandHeader) &&
-        (!commandId ||
-          commandId !== commandHeader ||
-          !/^viral-load:tp53:\d{4}-\d{2}-\d{2}:\d{6}$/.test(commandId))
-      )
-        return done("votes_set_400", json({ error: "Invalid Task 5 command identity" }, 400))
       if (!candidateRef)
         return done(
           "votes_set_400",
@@ -36113,73 +31683,34 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       const userId = normalizeUserId(sessionUser.user_id)
-      const coordinatorWrite = await iconoplasmVoteCoordinatorSetVote(env, {
+      const vote = await setIconoplasmVote(env, ctx, {
         symbol,
         assetSha256: assetSha,
         visionId,
         candidateImageId,
         userId,
-        requestedVoteValue: requested,
+        voteValue: requested,
         reason: "vote_auto_promote",
       })
-      if (!coordinatorWrite?.ok) {
-        return done("votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
+      if (!vote.ok) {
+        return done(
+          `votes_set_${vote.status}`,
+          json({ ok: false, code: vote.code, error: vote.error }, vote.status, {
+            "Cache-Control": "no-store",
+          }),
+        )
       }
-      // The coordinator transaction has already committed both the authoritative
-      // desired state and its projection intent. Nothing after this point may turn
-      // that successful commit into an HTTP failure. The coordinator alarm owns
-      // idempotent D1/event/Queue delivery from here.
-      const projectionRefresh = {
-        ok: true,
-        durable: true,
-        queued: Boolean(coordinatorWrite?.changed),
-        mode: "durable_outbox",
-        mutation_id: coordinatorWrite?.mutation_id || null,
-      }
-      const snapshot =
-        coordinatorWrite.snapshot ||
-        (await iconoVoteSnapshot(env, {
-          candidateRef: assetCandidateRef,
-          symbol,
-          assetSha256: assetSha,
-          visionId: coordinatorWrite.resolved_vision_id,
-          userId,
-        }))
       return done(
         "votes_set",
         json(
           {
             ok: true,
-            ...(commandId ? { command_id: commandId } : {}),
-            ...(commandId
-              ? {
-                  operations: {
-                    d1RowsRead: 0,
-                    d1RowsWritten: 4,
-                    durableObjectRequests: 2,
-                    durableObjectRowsRead: 8,
-                    durableObjectRowsWritten: 8,
-                    queueOperations: 0,
-                  },
-                  operation_receipt: {
-                    basis: "admitted_vote_command_v1",
-                    d1_reservation: { lane: "user_action", units: 4 },
-                    durable_outbox: true,
-                  },
-                }
-              : {}),
             candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
-            candidate_image_id: coordinatorWrite.candidate_image_id,
+            candidate_image_id: vote.candidate_image_id,
             user_id: userId,
-            snapshot,
-            auto_promote: {
-              deferred: true,
-              queued: Boolean(projectionRefresh?.queued),
-              mode: projectionRefresh.mode,
-            },
-            projection_refresh: projectionRefresh,
+            snapshot: vote.snapshot,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -36188,11 +31719,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST") {
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "votes_snapshot_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
+      if (!env.ICONOPLASM_DB)
+        return done("votes_snapshot_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       let p
       try {
         p = await request.json()
@@ -36201,7 +31729,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
-      const candidateImageId = optionalInt(p?.candidate_image_id ?? p?.emulsion_id)
       const candidateRef = normalizeCandidateRef(
         p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
         symbol,
@@ -36219,13 +31746,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("votes_snapshot_400", json({ error: "Missing or invalid asset_sha256" }, 400))
 
       const sessionUser = await iconoplasmSessionUser(request, env)
-      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : "__guest__"
-      const snapshot = await iconoVoteSnapshot(env, {
-        candidateRef,
-        symbol,
-        assetSha256: assetSha,
-        visionId,
+      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : ""
+      const [entry] = await iconoVoteSnapshots(env, {
         userId,
+        items: [{ symbol, asset_sha256: assetSha, vision_id: visionId }],
       })
       return done(
         "votes_snapshot",
@@ -36236,65 +31760,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_ref: candidateRef,
             symbol,
             asset_sha256: assetSha,
-            snapshot,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/votes/snapshots" && request.method === "POST") {
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "votes_snapshots_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("votes_snapshots_400", json({ error: "Invalid JSON" }, 400))
-      }
-      const rawItems = Array.isArray(p?.items) ? p.items : []
-      if (rawItems.length < 1 || rawItems.length > 500) {
-        return done(
-          "votes_snapshots_400",
-          json({ error: "items must contain between 1 and 500 vote targets" }, 400),
-        )
-      }
-      const items = rawItems
-        .map((raw) => {
-          const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
-          const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
-          if (!symbol || !assetSha) return null
-          return {
-            symbol,
-            asset_sha256: assetSha,
-            candidate_ref:
-              normalizeCandidateRef(raw?.candidate_ref || "", symbol, assetSha) ||
-              voteAssetIdentity(symbol, assetSha),
-            vision_id: sanitizeVoteVisionId(raw?.vision_id || ""),
-            candidate_image_id: optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id),
-          }
-        })
-        .filter(Boolean)
-      if (items.length !== rawItems.length) {
-        return done(
-          "votes_snapshots_400",
-          json({ error: "Every item requires a valid symbol and asset_sha256" }, 400),
-        )
-      }
-      const sessionUser = await iconoplasmSessionUser(request, env)
-      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : "__guest__"
-      const snapshots = await iconoVoteSnapshotsBatch(env, { items, userId })
-      return done(
-        "votes_snapshots",
-        json(
-          {
-            ok: true,
-            authenticated: Boolean(sessionUser?.user_id),
-            snapshots,
+            snapshot: entry.snapshot,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -36307,11 +31773,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("admin_votes_import_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
         return done("admin_votes_import_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "admin_votes_import_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       let p
       try {
         p = await request.json()
@@ -36321,22 +31782,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const items = Array.isArray(p?.items) ? p.items : []
       if (!items.length)
         return done("admin_votes_import_400", json({ error: "No items provided" }, 400))
-      if (items.length > 20000)
-        return done("admin_votes_import_400", json({ error: "Too many items (max 20000)" }, 400))
 
       let invalid = 0
-      const groups = new Map()
+      const valid = []
       for (const raw of items) {
         const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
         const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
-        const candidateImageId = optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id)
         const candidateRef = normalizeCandidateRef(
           raw?.candidate_ref ||
             (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
           symbol,
           assetSha,
         )
-        const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
         const visionId = normalizeVisionId(raw?.vision_id || "")
         const userId = normalizeUserId(raw?.user_id || raw?.user || "local")
         const voteValue = normalizeVoteValue(raw?.vote_value)
@@ -36348,60 +31805,57 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           invalid += 1
           continue
         }
-        const group = groups.get(symbol) || []
-        group.push({
-          candidate_ref: assetCandidateRef,
+        valid.push({
           symbol,
           asset_sha256: assetSha,
           vision_id: visionId,
-          candidate_image_id: candidateImageId,
+          candidate_image_id: optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id),
           user_id: userId,
           vote_value: voteValue,
         })
-        groups.set(symbol, group)
       }
-
-      let upserted = 0
-      let deleted = 0
-      let projectionRefreshQueued = 0
-      for (const [symbol, groupItems] of groups.entries()) {
-        const coordinatorImport = await iconoplasmVoteCoordinatorImportVotes(env, {
-          symbol,
-          items: groupItems,
-          reason: "vote_import_auto_promote",
-        })
-        if (!coordinatorImport?.ok) {
-          return done(
-            "admin_votes_import_502",
-            json({ error: `Vote coordinator import failed for ${symbol}` }, 502),
-          )
-        }
-        upserted += Math.max(0, Number(coordinatorImport?.upserted || 0) || 0)
-        deleted += Math.max(0, Number(coordinatorImport?.deleted || 0) || 0)
-        invalid += Math.max(0, Number(coordinatorImport?.invalid || 0) || 0)
-        if (
-          (Array.isArray(coordinatorImport?.results) ? coordinatorImport.results : []).some(
-            (row) => row?.changed,
-          )
-        ) {
-          projectionRefreshQueued += 1
-        }
+      // One Worker invocation allows 50 D1 queries on the free plan; a request
+      // past the bounds is refused before anything is written.
+      const boundsError = voteImportBoundsError({
+        items: items.length,
+        genes: new Set(valid.map((item) => item.symbol)).size,
+      })
+      if (boundsError) return done("admin_votes_import_400", json({ error: boundsError }, 400))
+      const imported = await importIconoplasmVotes(env, ctx, valid, {
+        reason: "vote_import_auto_promote",
+        republish: false,
+        admit: false,
+      })
+      const summary = {
+        total: items.length,
+        upserted: imported.upserted,
+        deleted: imported.deleted,
+        invalid: invalid + imported.invalid,
+        auto_promoted: imported.promoted,
+        elected: imported.elected,
+        elections_failed: imported.elections_failed,
       }
+      // The votes are committed either way. A gene whose election failed is
+      // not settled, so the import is not done: the caller runs the same import
+      // again, which elects every named gene afresh.
+      if (imported.failed_symbols.length)
+        return done(
+          "admin_votes_import_502",
+          json(
+            {
+              ok: false,
+              code: "VOTE_IMPORT_ELECTION_FAILED",
+              error: `The votes were written but the election failed for ${imported.failed_symbols.join(", ")}; run the import again to settle ${imported.failed_symbols.length === 1 ? "it" : "them"}.`,
+              failed_symbols: imported.failed_symbols,
+              ...summary,
+            },
+            502,
+            { "Cache-Control": "no-store" },
+          ),
+        )
       return done(
         "admin_votes_import",
-        json(
-          {
-            ok: true,
-            total: items.length,
-            upserted,
-            deleted,
-            invalid,
-            auto_promoted: null,
-            projection_refresh_queued: projectionRefreshQueued,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
+        json({ ok: true, ...summary }, 200, { "Cache-Control": "no-store" }),
       )
     }
 
@@ -36410,11 +31864,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done("admin_votes_set_403", json({ error: "Unauthorized" }, 403))
       if (!env.ICONOPLASM_DB)
         return done("admin_votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      if (!iconoplasmVoteCoordinatorBinding(env))
-        return done(
-          "admin_votes_set_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
-        )
       let p
       try {
         p = await request.json()
@@ -36460,34 +31909,24 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
 
-      const coordinatorWrite = await iconoplasmVoteCoordinatorSetVote(env, {
+      const vote = await setIconoplasmVote(env, ctx, {
         symbol,
         assetSha256: assetSha,
         visionId,
         candidateImageId,
         userId,
-        requestedVoteValue: requested,
+        voteValue: requested,
         reason: "admin_vote_auto_promote",
+        admit: false,
       })
-      if (!coordinatorWrite?.ok) {
-        return done("admin_votes_set_502", json({ error: "Vote coordinator write failed" }, 502))
+      if (!vote.ok) {
+        return done(
+          `admin_votes_set_${vote.status}`,
+          json({ ok: false, code: vote.code, error: vote.error }, vote.status, {
+            "Cache-Control": "no-store",
+          }),
+        )
       }
-      const projectionRefresh = {
-        ok: true,
-        durable: true,
-        queued: Boolean(coordinatorWrite?.changed),
-        mode: "durable_outbox",
-        mutation_id: coordinatorWrite?.mutation_id || null,
-      }
-      const snapshot =
-        coordinatorWrite.snapshot ||
-        (await iconoVoteSnapshot(env, {
-          candidateRef: assetCandidateRef,
-          symbol,
-          assetSha256: assetSha,
-          visionId: coordinatorWrite.resolved_vision_id,
-          userId,
-        }))
       return done(
         "admin_votes_set",
         json(
@@ -36496,15 +31935,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_ref: assetCandidateRef,
             symbol,
             asset_sha256: assetSha,
-            candidate_image_id: coordinatorWrite.candidate_image_id,
+            candidate_image_id: vote.candidate_image_id,
             user_id: userId,
-            snapshot,
-            auto_promote: {
-              deferred: true,
-              queued: Boolean(projectionRefresh?.queued),
-              mode: projectionRefresh.mode,
-            },
-            projection_refresh: projectionRefresh,
+            snapshot: vote.snapshot,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -36512,17 +31945,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/votes/export-to-d1" && request.method === "POST") {
+    if (path === "/api/iconoplasm/admin/votes/compare-coordinators" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_export_to_d1_403", json({ error: "Unauthorized" }, 403))
+        return done("admin_votes_compare_coordinators_403", json({ error: "Unauthorized" }, 403))
       let p
       try {
         p = await request.json()
       } catch {
-        return done("admin_votes_export_to_d1_400", json({ error: "Invalid JSON" }, 400))
+        return done("admin_votes_compare_coordinators_400", json({ error: "Invalid JSON" }, 400))
       }
-      // Ten coordinators per call: one DO request plus a few D1 statements
-      // each keeps the call under the Worker's subrequest ceiling.
+      // Ten coordinators per call: one Durable Object request plus one batch
+      // of four D1 reads each keeps the call under the Worker's subrequest
+      // ceiling. `all_samples: true` lifts the 20-per-category sample cap.
       const ids = [
         ...new Set(
           (Array.isArray(p?.object_ids) ? p.object_ids : []).map((v) =>
@@ -36536,13 +31970,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         .slice(0, 10)
       if (!ids.length)
         return done(
-          "admin_votes_export_to_d1_400",
+          "admin_votes_compare_coordinators_400",
           json({ error: "Provide 1 to 10 Durable Object ids" }, 400),
         )
       const results = []
       for (const id of ids) {
         try {
-          results.push({ ok: true, ...(await exportIconoplasmVoteCoordinatorToD1(env, id)) })
+          results.push({
+            ok: true,
+            ...(await compareIconoplasmVoteCoordinatorWithD1(env, id, {
+              ...(p?.all_samples === true ? { sampleLimit: 0 } : {}),
+            })),
+          })
         } catch (error) {
           results.push({
             ok: false,
@@ -36552,11 +31991,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
       }
       return done(
-        "admin_votes_export_to_d1",
+        "admin_votes_compare_coordinators",
         json(
           {
             ok: true,
-            exported: results.filter((r) => r.exported).length,
+            compared: results.filter((r) => r.compared).length,
+            differing: results.filter((r) => r.differs).length,
             failed: results.filter((r) => !r.ok).length,
             results,
           },
@@ -36569,10 +32009,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/votes/snapshot" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_votes_snapshot_403", json({ error: "Unauthorized" }, 403))
-      if (!iconoplasmVoteCoordinatorBinding(env))
+      if (!env.ICONOPLASM_DB)
         return done(
           "admin_votes_snapshot_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
       let p
       try {
@@ -36602,12 +32042,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           json({ error: "Missing or invalid asset_sha256" }, 400),
         )
 
-      const snapshot = await iconoVoteSnapshot(env, {
-        candidateRef,
-        symbol,
-        assetSha256: assetSha,
-        visionId,
+      const [entry] = await iconoVoteSnapshots(env, {
         userId,
+        items: [{ symbol, asset_sha256: assetSha, vision_id: visionId }],
       })
       return done(
         "admin_votes_snapshot",
@@ -36618,7 +32055,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             symbol,
             asset_sha256: assetSha,
             user_id: userId,
-            snapshot,
+            snapshot: entry.snapshot,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -36629,10 +32066,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     if (path === "/api/iconoplasm/admin/votes/snapshots" && request.method === "POST") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_votes_snapshots_403", json({ error: "Unauthorized" }, 403))
-      if (!iconoplasmVoteCoordinatorBinding(env))
+      if (!env.ICONOPLASM_DB)
         return done(
           "admin_votes_snapshots_500",
-          json({ error: "ICONOPLASM_VOTE_COORDINATORS binding missing" }, 500),
+          json({ error: "ICONOPLASM_DB binding missing" }, 500),
         )
       let p
       try {
@@ -36663,18 +32100,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const key = `${candidateRef}|${visionId}`
         if (seen.has(key)) continue
         seen.add(key)
-        deduped.push({
-          candidate_ref: candidateRef,
-          symbol,
-          asset_sha256: assetSha,
-          vision_id: visionId,
-        })
+        deduped.push({ symbol, asset_sha256: assetSha, vision_id: visionId })
       }
 
-      // optimize/harden: the Website Ops sync asks for thousands of snapshots at
-      // once. Keep this set-based so scan_local does not stall behind per-item D1
-      // round-trips.
-      const snapshots = await iconoVoteSnapshotsBatch(env, { items: deduped, userId })
+      // The Website Ops sync asks for thousands of snapshots at once: three
+      // set-based statements answer the whole list (iconoVoteSnapshots).
+      const snapshots = await iconoVoteSnapshots(env, { items: deduped, userId })
 
       return done(
         "admin_votes_snapshots",
@@ -36823,134 +32254,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
-      )
-    }
-
-    if (
-      path === "/api/iconoplasm/admin/votes/projection-refresh/reconcile" &&
-      request.method === "POST"
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done(
-          "admin_votes_projection_refresh_reconcile_403",
-          json({ error: "Unauthorized" }, 403),
-        )
-      let payload
-      try {
-        payload = await parseJsonBody(request)
-      } catch {
-        return done(
-          "admin_votes_projection_refresh_reconcile_400",
-          json({ error: "Invalid JSON" }, 400),
-        )
-      }
-      const symbols = Array.from(
-        new Set(
-          (Array.isArray(payload?.symbols) ? payload.symbols : [])
-            .map((symbol) => normalizeSymbol(symbol || ""))
-            .filter(Boolean),
-        ),
-      )
-      if (!symbols.length || symbols.length > 100) {
-        return done(
-          "admin_votes_projection_refresh_reconcile_400",
-          json({ error: "Provide 1 to 100 valid gene symbols" }, 400),
-        )
-      }
-      const results = []
-      for (const symbol of symbols) {
-        const job = await enqueueVoteProjectionRefreshJob(env, {
-          symbol,
-          actorId: "admin_reconciliation",
-          reason: voteProjectionRefreshJobReason(
-            payload?.reason,
-            "admin_vote_projection_reconciliation",
-          ),
-        })
-        const wake = job?.wake_required
-          ? await sendVoteProjectionRefreshQueueMessage(env, {
-              symbol,
-              actorId: "admin_reconciliation",
-              reason: voteProjectionRefreshJobReason(
-                payload?.reason,
-                "admin_vote_projection_reconciliation",
-              ),
-            })
-          : { ok: true, skipped: true }
-        results.push({
-          symbol,
-          job_version: job?.job_version || 0,
-          queued: wake?.ok === true && !wake?.skipped,
-          coalesced: wake?.skipped === true,
-        })
-      }
-      return done(
-        "admin_votes_projection_refresh_reconcile",
-        json({ ok: true, count: results.length, results }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (
-      path === "/api/iconoplasm/admin/votes/projection-refresh/pending" &&
-      request.method === "GET"
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done(
-          "admin_votes_projection_refresh_pending_403",
-          json({ error: "Unauthorized" }, 403),
-        )
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_votes_projection_refresh_pending_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-
-      const limit = Math.max(
-        1,
-        Math.min(1000, Number.parseInt(url.searchParams.get("limit") || "200", 10) || 200),
-      )
-      const requests = await listPendingVoteProjectionRefreshJobs(env, { limit })
-      return done(
-        "admin_votes_projection_refresh_pending",
-        json(
-          {
-            ok: true,
-            count: requests.length,
-            requests,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (
-      path === "/api/iconoplasm/admin/votes/projection-refresh/process" &&
-      request.method === "POST"
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done(
-          "admin_votes_projection_refresh_process_403",
-          json({ error: "Unauthorized" }, 403),
-        )
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_votes_projection_refresh_process_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        return done(
-          "admin_votes_projection_refresh_process_400",
-          json({ error: "Invalid JSON" }, 400),
-        )
-      }
-      const result = await processPendingVoteProjectionRefreshJobs(env, { limit: p?.limit })
-      return done(
-        "admin_votes_projection_refresh_process",
-        json(result, 200, { "Cache-Control": "no-store" }),
       )
     }
 
@@ -37496,10 +32799,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               pending_finalize: pendingFinalizeCount,
               completed: completedCount,
               unfinished: unfinishedCount,
-              // Publication completion is owned by each gene's V2 coordinator.
-              // The legacy singleton remains queryable for migrations, but it
-              // must never hold workstation completion open after all scoped
-              // finalization rows have finished.
+              // A finished upload writes its own candidate_added event and
+              // the gene is republished from it; finalization hands nothing
+              // to a publisher, so no handoff is ever pending and workstation
+              // completion never waits on one.
               pending_handoffs: 0,
               publication_next_attempt_at: null,
               last_completed_at: latestCompletedAt,
@@ -37789,31 +33092,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ),
         )
       }
-      const restoreRows = []
-      let afterSymbol = ""
-      let afterAssetSha256 = ""
-      while (restoreRows.length < matched) {
-        const page = await env.ICONOPLASM_DB.prepare(
-          `SELECT pa.gene_symbol, pa.asset_sha256
-             FROM icono_portrait_assets pa
-            WHERE ${whereSql}
-              AND (
-                pa.gene_symbol > ?
-                OR (pa.gene_symbol = ? AND pa.asset_sha256 > ?)
-              )
-            ORDER BY pa.gene_symbol ASC, pa.asset_sha256 ASC
-            LIMIT 1000`,
-        )
-          .bind(...scopeBinds, afterSymbol, afterSymbol, afterAssetSha256)
-          .all()
-        const rows = Array.isArray(page?.results) ? page.results : []
-        if (!rows.length) break
-        restoreRows.push(...rows)
-        const last = rows[rows.length - 1]
-        afterSymbol = normalizeSymbol(last?.gene_symbol || "") || ""
-        afterAssetSha256 = normalizeSha256(last?.asset_sha256 || "") || ""
-        if (rows.length < 1000) break
-      }
       await env.ICONOPLASM_DB.batch([
         env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at)
@@ -37827,9 +33105,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
            WHERE ${whereSqlBare}`,
         ).bind(...scopeBinds),
       ])
-      await iconoplasmCaretakerSupervoteRestoreEligibilityBatch(env, restoreRows, {
-        restorationPrefix: "mass-candidate-restore",
-      })
       const remainingRow = await env.ICONOPLASM_DB.prepare(
         `SELECT COUNT(*) AS n FROM icono_portrait_assets pa WHERE ${whereSql}`,
       )
@@ -38537,6 +33812,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           if (blacklisted) finalStatus = "rejected"
           const persistedAutopickEligible = finalStatus === "rejected" ? false : autopickEligible
           const persistedIsStale = finalStatus === "rejected" ? false : isStale
+          let candidateAction = ""
 
           if (!dryRun) {
             await env.ICONOPLASM_DB.prepare(PORTRAIT_ASSET_UPSERT_SQL)
@@ -38568,6 +33844,34 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 createdBy,
               )
               .run()
+
+            // A new candidate, or one whose eligibility moved, changes the
+            // gene's published object (its candidate gallery) even when the
+            // winner stays. The event is what makes the Actions publisher
+            // republish the gene; reconcile then elects the winner.
+            candidateAction = isNewAsset
+              ? "candidate_added"
+              : existingStatus !== finalStatus ||
+                  Number(existingAsset?.is_stale || 0) !== (persistedIsStale ? 1 : 0) ||
+                  Number(existingAsset?.autopick_eligible ?? 1) !==
+                    (persistedAutopickEligible ? 1 : 0)
+                ? "candidate_changed"
+                : ""
+            if (candidateAction) {
+              await env.ICONOPLASM_DB.prepare(
+                `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+              )
+                .bind(
+                  symbol,
+                  isNewAsset ? null : assetSha,
+                  assetSha,
+                  candidateAction,
+                  createdBy,
+                  reason,
+                )
+                .run()
+            }
 
             // Keep the durable storage truth in step with successful repair or
             // verification work. The whole point of the queue redesign is to
@@ -38621,6 +33925,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               symbol,
               asset_sha256: assetSha,
               dry_run: dryRun,
+              candidate_event: candidateAction || null,
               vision_id: visionId,
               emulsion_id: emulsionId,
               workflow_id: workflowId,
@@ -38694,6 +33999,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
       }
+      // One republish per sync batch: a workstation sync marks its ingest
+      // calls `defer_read_models` because reconcile follows with the batch's
+      // genes, elects them and republishes them. A direct ingest has no such
+      // follow-up and republishes its genes itself.
+      const republished =
+        dryRun || deferReadModels
+          ? false
+          : republishTouchedGenesAfterResponse(
+              env,
+              ctx,
+              results.filter((row) => row?.candidate_event).map((row) => row.symbol),
+            )
 
       const statusCode = failed > 0 && processed === 0 ? 400 : 200
       return done(
@@ -38706,6 +34023,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             processed,
             failed,
             total: itemsRaw.length,
+            republished_in_process: republished,
             mutation_limiter: iconoplasmAdminMutationLimiterSnapshotFromEnv(env),
             results,
           },
@@ -38807,6 +34125,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const touchedSymbols = new Set(
         scopeSymbols.length ? scopeSymbols : keep.map((row) => row.symbol),
       )
+      // The genes whose candidates or published state this call changes; only
+      // those advance their vote version before the election.
+      const changedSymbols = new Set()
 
       // Reconcile is purely AFFIRMATIVE: it restores keep-assets and marks legacy
       // assets. It cannot reject, hide, or delete anything — absence from the keep
@@ -38840,6 +34161,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             Number(row?.is_legacy || 0) > 0
           if (!restoreRejectedKeep) continue
           touchedSymbols.add(symbol)
+          changedSymbols.add(symbol)
           restoredKeep += 1
           if (dryRun) continue
           // The workstation keep-set is the durable source of truth for which
@@ -38854,11 +34176,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
             .bind(symbol, assetSha)
             .run()
-          await iconoplasmCaretakerSupervoteRestoreEligibility(env, {
-            symbol,
-            assetSha256: assetSha,
-            restorationId: `candidate-restored:${crypto.randomUUID()}`,
-          })
           await env.ICONOPLASM_DB.prepare(
             "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'restore_keep', ?, ?, CURRENT_TIMESTAMP)",
           )
@@ -38877,6 +34194,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             continue
           }
           legacyMarked += 1
+          changedSymbols.add(symbol)
           if (dryRun) continue
           await env.ICONOPLASM_DB.prepare(
             "UPDATE icono_portrait_assets SET status=CASE WHEN lower(COALESCE(status, ''))='rejected' THEN 'draft' ELSE status END, is_stale=1, is_legacy=1 WHERE gene_symbol=? AND asset_sha256=?",
@@ -38905,6 +34223,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           if (!currentAssetSha) continue
           unpublished += 1
           touchedSymbols.add(symbol)
+          changedSymbols.add(symbol)
           if (dryRun) continue
           await env.ICONOPLASM_DB.prepare(
             "UPDATE icono_publish_state SET current_asset_sha256=NULL, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE gene_symbol=?",
@@ -38919,15 +34238,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
       }
 
+      let republished = false
       if (!dryRun) {
         for (const symbol of touchedSymbols) {
           const result = await autoPromoteTopVotedPortrait(env, {
             symbol,
             actorId,
             reason: "site_reconcile_resolve",
+            inputsChanged: changedSymbols.has(symbol),
           })
           if (result?.changed) autoResolved += 1
         }
+        republished = republishTouchedGenesAfterResponse(env, ctx, Array.from(touchedSymbols))
       }
 
       if (!dryRun && !deferReadModels)
@@ -38954,6 +34276,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             auto_resolved: autoResolved,
             unpublished,
             ignored_invalid: ignoredInvalid,
+            republished_in_process: republished,
             defer_read_models: deferReadModels,
           },
           200,
@@ -39035,9 +34358,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(...symbols)
           .run()
-        await iconoplasmCaretakerSupervoteRestoreEligibilityBatch(env, staleRows, {
-          restorationPrefix: "candidate-unstale-batch",
-        })
 
         await env.ICONOPLASM_DB.batch(
           staleRows.map((row) => {
@@ -39126,6 +34446,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
+        // The override is in D1; readers see it as soon as the gene's stable
+        // object is rewritten with that asset. A failure here leaves the
+        // `publish` event for the Actions publisher.
+        const republished = await republishGene(env, symbol, {
+          portraitAssetSha256: normalizeSha256(asset) || asset,
+        })
         return done(
           "publish",
           json({
@@ -39134,6 +34460,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             symbol,
             to_asset_sha256: asset,
             admin_override: true,
+            republished: Boolean(republished),
           }),
         )
       }
@@ -39230,6 +34557,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
+        const republished = await republishGene(env, symbol)
         return done(
           "reject",
           json({
@@ -39238,6 +34566,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             symbol,
             asset_sha256: asset,
             auto_promote: autoPromote,
+            republished: Boolean(republished),
           }),
         )
       }
@@ -39285,11 +34614,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, asset)
           .run()
-        await iconoplasmCaretakerSupervoteRestoreEligibility(env, {
-          symbol,
-          assetSha256: asset,
-          restorationId: `candidate-unstaled:${crypto.randomUUID()}`,
-        })
         await env.ICONOPLASM_DB.prepare(
           "INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at) VALUES (?, ?, ?, 'unstale', ?, ?, CURRENT_TIMESTAMP)",
         )

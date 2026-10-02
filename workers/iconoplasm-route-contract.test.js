@@ -175,7 +175,6 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_tags_derivative_submit",
       "authority_tags_derivative_select",
     ],
-    "authority-cutover-bearer": ["authority_discovery_candidates", "authority_discovery_activate"],
   }
   const authorityRoutes = ICONOPLASM_ROUTE_CONTRACTS.filter((route) =>
     route.id.startsWith("authority_"),

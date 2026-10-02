@@ -3,7 +3,6 @@ import test from "node:test"
 
 import {
   AUTHORITY_BEARER_BINDINGS,
-  authorizeIconoplasmAuthorityCutoverBearer,
   authorizeIconoplasmAuthorityGenerationBearer,
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
@@ -12,7 +11,6 @@ const ADMIN_TOKEN = "legacy-admin-token-0000000000000000001"
 const AUDIENCES = Object.freeze({
   replica: authorizeIconoplasmAuthorityReplicaBearer,
   generation: authorizeIconoplasmAuthorityGenerationBearer,
-  cutover: authorizeIconoplasmAuthorityCutoverBearer,
 })
 const TOKENS = Object.freeze(
   Object.fromEntries(

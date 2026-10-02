@@ -154,6 +154,11 @@ function output() {
   }
   const migrations = [
     [
+      "GENE_VOTE_VERSION",
+      "0113_gene_vote_version.sql",
+      reviewedMigrationStatements("migrations-iconoplasm", "0113_gene_vote_version.sql", 0, 2),
+    ],
+    [
       "GENE_BLOT_BACKLOG_WATERMARK",
       "0112_gene_blot_backlog_watermark.sql",
       reviewedMigrationStatements(

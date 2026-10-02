@@ -85,6 +85,51 @@ test("gene-card identity ignores publication wrappers but changes with visible c
   )
 })
 
+// The print copy is a picture of the image-only card label; the budget is
+// eight browser launches a day. Failure modes:
+// 1. A vote that only changes counts (on the portrait or in the candidate
+//    pool, or the pool's order) changes the fingerprint and queues a render.
+// 2. A republish changes the fingerprint through its own envelope
+//    (published_at, vote_version, candidate_count, stable_object_version).
+// 3. The publisher fingerprints a different shape than the queue consumer
+//    reads back through the card route, so every publish ping-pongs a
+//    superseded advance and a render. That is proven end to end, through the
+//    real queue consumer, in iconoplasm.d1-votes.test.js (failure mode 21).
+// 4. A change the picture does show (portrait, name) keeps the fingerprint.
+test("gene-card identity ignores votes and the stable object envelope", async () => {
+  const { composeStableGeneObject } = await import("./lib/iconoplasm-stable-gene-object.js")
+  const pool = (upvotes) => [
+    { asset_sha256: "ab".repeat(32), image_upvotes: upvotes, image_score: upvotes },
+    { asset_sha256: "cd".repeat(32), image_upvotes: 3, image_score: 3 },
+  ]
+  const object = (upvotes, { reverse = false, version = 1, at = "2026-10-03T10:00:00Z" } = {}) =>
+    composeStableGeneObject(
+      {
+        ...card({
+          image_upvotes: upvotes,
+          image_downvotes: 0,
+          image_score: upvotes,
+          weighted_score: upvotes,
+        }),
+        portrait_candidates: reverse ? pool(upvotes).reverse() : pool(upvotes),
+      },
+      { voteVersion: version, now: () => at },
+    )
+  const baseline = iconoplasmGeneCardFingerprint(object(1))
+  assert.equal(
+    iconoplasmGeneCardFingerprint(
+      object(9, { reverse: true, version: 7, at: "2026-10-03T11:00:00Z" }),
+    ),
+    baseline,
+    "counts, pool order, vote version and published_at do not enter the fingerprint",
+  )
+  assert.notEqual(
+    iconoplasmGeneCardFingerprint({ ...object(1), portrait: { asset_sha256: "ef".repeat(32) } }),
+    baseline,
+  )
+  assert.notEqual(iconoplasmGeneCardFingerprint({ ...object(1), full_name: "renamed" }), baseline)
+})
+
 test("materialized objects and downloads carry the canonical gene symbol", () => {
   const fingerprint = iconoplasmGeneCardFingerprint(card())
   const key = iconoplasmGeneCardObjectKey("sox12", fingerprint)

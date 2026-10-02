@@ -12,7 +12,9 @@ import { composeStableGeneObject } from "./iconoplasm-stable-gene-object.js"
 // 2. the selected winner is marked is_current in the pool; nothing else is;
 // 3. a projected record without a pool still composes (empty pool, count 0);
 // 4. the published_at stamp comes from the injected clock, so tests and
-//    rematerializations are deterministic.
+//    rematerializations are deterministic;
+// 5. the object carries the gene vote version its publisher read before
+//    materializing, or null when the publisher had none (never a guess).
 const projected = {
   symbol: "TP53",
   full_name: "tumor protein p53",
@@ -26,9 +28,11 @@ const projected = {
 test("the stable object is the projected record with its pool inline (B-898)", () => {
   const object = composeStableGeneObject(projected, {
     selectedAssetSha256: "a".repeat(64),
+    voteVersion: 7,
     now: () => "2026-10-01T16:00:00.000Z",
   })
   assert.equal(object.symbol, "TP53")
+  assert.equal(object.vote_version, 7)
   assert.equal(object.stable_object_version, 3)
   assert.equal(object.published_at, "2026-10-01T16:00:00.000Z")
   assert.equal(object.candidate_count, 2)
@@ -52,6 +56,7 @@ test("a record without a pool composes with an empty pool (B-898)", () => {
   assert.equal(object.candidate_count, 0)
   assert.equal(object.portrait, null)
   assert.equal(object.stable_object_version, 3)
+  assert.equal(object.vote_version, null)
 })
 
 test("without a selection the pool's own is_current flags are kept (B-898)", () => {
