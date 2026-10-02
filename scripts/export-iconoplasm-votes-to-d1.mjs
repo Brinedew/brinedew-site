@@ -307,9 +307,9 @@ async function main(argv) {
   const summary =
     mode.name === "compare"
       ? {
-          compared_v2: results.filter((r) => r.compared).length,
+          compared: results.filter((r) => r.compared).length,
           differing: results.filter((r) => r.differs).length,
-          legacy_or_cold: results.filter((r) => r.ok && !r.compared).length,
+          not_bootstrapped: results.filter((r) => r.ok && !r.compared).length,
           failed: results.filter((r) => !r.ok).length,
           votes_missing_in_d1: sum(results, "votes_missing_in_d1"),
           votes_only_in_d1: sum(results, "votes_only_in_d1"),
@@ -332,9 +332,9 @@ async function main(argv) {
     const requests = replayImportRequests(replay.items)
     Object.assign(summary, {
       replay_since: replaySince,
-      replay_items: replay.items.length,
-      replay_requests: requests.length,
-      replay_skipped: replay.skipped.length,
+      replay_item_count: replay.items.length,
+      replay_request_count: requests.length,
+      replay_skipped_count: replay.skipped.length,
     })
     Object.assign(receipt, { replay_requests: requests, replay_skipped: replay.skipped })
   }
