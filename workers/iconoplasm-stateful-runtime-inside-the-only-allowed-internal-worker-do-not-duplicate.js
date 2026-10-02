@@ -32494,12 +32494,6 @@ async function readStableGeneObjects(env, symbols) {
   return bySymbol
 }
 
-async function readStableGeneObject(env, symbol) {
-  const normalized = normalizeSymbol(symbol)
-  if (!normalized) return null
-  return (await readStableGeneObjects(env, [normalized])).get(normalized) || null
-}
-
 function stableGeneObjectVersion(object) {
   return String(object?.published_at || "").trim() || STABLE_GENE_OBJECT_SNAPSHOT_LABEL
 }
