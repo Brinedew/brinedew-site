@@ -248,12 +248,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   assert.match(
     internalWrangler,
     /name = "ICONOPLASM_VOTE_COORDINATORS"[\s\S]*class_name = "IconoplasmVoteCoordinator"/,
-    "internal stateful worker should bind the per-gene vote coordinator durable object",
-  )
-  assert.match(
-    internalWrangler,
-    /binding = "ICONOPLASM_VOTE_PROJECTION_QUEUE"[\s\S]*queue = "iconoplasm-vote-projection"[\s\S]*\[\[queues\.consumers\]\][\s\S]*queue = "iconoplasm-vote-projection"/,
-    "vote-driven canonical promotion must drain through a real Cloudflare Queue, not request waitUntil",
+    "internal stateful worker binds the vote coordinators the compare route reads",
   )
   assert.match(
     internalWrangler,

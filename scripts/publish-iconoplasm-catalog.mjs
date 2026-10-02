@@ -11,9 +11,9 @@
 // object in Node (a free-plan Worker request has 10 ms of CPU, this needs all
 // 19k genes), and hands the bytes to the Worker's admin route, which holds the
 // Bunny storage password and purges the CDN URL. Incremental runs read the
-// previous object from the CDN and only the genes with a canonical-affecting
-// publish event since that object's watermark; a vote that does not flip the
-// winner only changes a score, which the daily full run picks up.
+// previous object from the CDN and only the genes with a publication-affecting
+// event since that object's watermark (a winner or candidate change; a vote
+// republishes its own gene's stable object in the Worker).
 //
 // Object shape (schema 3): { schema, generated_at, watermark_event_id, genes }
 // where each gene row is
@@ -25,6 +25,7 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
+import { PUBLICATION_AFFECTING_ACTIONS } from "../workers/iconoplasm-catalog-dispatch.js"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
@@ -32,20 +33,6 @@ const KEY = "catalog/v3/index.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
 const PAGE = 2000
 const MAX_INCREMENTAL_SYMBOLS = 2000
-// Mirrors CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS in the Worker runtime.
-const CANONICAL_ACTIONS = [
-  "publish",
-  "auto_promote",
-  "vote_auto_promote",
-  "reject",
-  "legacy_mark",
-  "restore_keep",
-  "remove_candidate",
-  "rollback",
-  "unpublish",
-  "purge_legacy",
-  "manifestation_canonical_changed",
-]
 const ROW_SQL = `
   SELECT gc.gene_symbol AS symbol,
          COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), gc.gene_symbol) AS full_name,
@@ -154,8 +141,8 @@ async function readRowsFor(symbols) {
 
 async function highWater() {
   const { rows } = await d1(
-    `SELECT COALESCE(MAX(id), 0) AS id FROM icono_publish_events WHERE action IN (${CANONICAL_ACTIONS.map(() => "?").join(",")})`,
-    CANONICAL_ACTIONS,
+    `SELECT COALESCE(MAX(id), 0) AS id FROM icono_publish_events WHERE action IN (${PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")})`,
+    PUBLICATION_AFFECTING_ACTIONS,
   )
   return Number(rows[0]?.id || 0)
 }
@@ -163,9 +150,9 @@ async function highWater() {
 async function dirtySymbolsSince(watermark) {
   const { rows, meta } = await d1(
     `SELECT DISTINCT gene_symbol FROM icono_publish_events
-      WHERE id > ? AND action IN (${CANONICAL_ACTIONS.map(() => "?").join(",")})
+      WHERE id > ? AND action IN (${PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")})
       LIMIT ${MAX_INCREMENTAL_SYMBOLS + 1}`,
-    [watermark, ...CANONICAL_ACTIONS],
+    [watermark, ...PUBLICATION_AFFECTING_ACTIONS],
   )
   return {
     symbols: rows.map((row) => String(row.gene_symbol || "").toUpperCase()),

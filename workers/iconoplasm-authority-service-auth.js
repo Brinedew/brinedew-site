@@ -1,7 +1,6 @@
 export const AUTHORITY_BEARER_BINDINGS = Object.freeze({
   replica: "ICONOPLASM_AUTHORITY_REPLICA_TOKEN",
   generation: "ICONOPLASM_AUTHORITY_GENERATION_TOKEN",
-  cutover: "ICONOPLASM_AUTHORITY_CUTOVER_TOKEN",
 })
 
 function bearerToken(request) {
@@ -49,4 +48,3 @@ function createAudienceAuthorizer(audience) {
 
 export const authorizeIconoplasmAuthorityReplicaBearer = createAudienceAuthorizer("replica")
 export const authorizeIconoplasmAuthorityGenerationBearer = createAudienceAuthorizer("generation")
-export const authorizeIconoplasmAuthorityCutoverBearer = createAudienceAuthorizer("cutover")

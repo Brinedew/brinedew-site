@@ -68,6 +68,15 @@ class FakeIconoplasmDb {
     return new FakeStatement(this, sql)
   }
 
+  // The gene election and the caretaker invalidation read and write in D1
+  // batches; this fake holds no votes, candidates or supervotes for them.
+  async batch(statements) {
+    return statements.map((statement) => {
+      this.calls.push({ method: "batch", sql: statement.sql, args: statement.args })
+      return { success: true, results: [], meta: { changes: 0 } }
+    })
+  }
+
   distinctEmulsionIdsForIncomingSymbols(rawSymbols) {
     let symbols = []
     try {

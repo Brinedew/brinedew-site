@@ -2,11 +2,6 @@ import { pathToFileURL } from "node:url"
 
 const CONSUMERS = [
   { queue: "iconoplasm-sync-finalization", deadLetterQueue: "iconoplasm-sync-dlq", batchSize: 1 },
-  {
-    queue: "iconoplasm-vote-projection",
-    deadLetterQueue: "iconoplasm-vote-projection-dlq",
-    batchSize: 2,
-  },
 ]
 const QUEUE_NAMES = CONSUMERS.flatMap(({ queue, deadLetterQueue }) => [queue, deadLetterQueue])
 const RETENTION_SECONDS = 86400

@@ -20,7 +20,13 @@ import { createCompactDiscoveryActivationMigrationCostAdapter } from "./operatio
 import { createPublishStateIndexMigrationCostAdapter } from "./operation-cost-publish-state-index-migration-adapter.js"
 import { createFinalizationHandoffRetirementMigrationCostAdapter } from "./operation-cost-finalization-handoff-retirement-migration-adapter.js"
 import { createDiscoveryShelfMigrationCostAdapter } from "./operation-cost-discovery-shelf-migration-adapter.js"
-import { createGeneBlotBacklogWatermarkMigrationCostAdapter } from "./operation-cost-gene-blot-backlog-watermark-migration-adapter.js"
+import { createSchemaTableMigrationCostAdapter } from "./operation-cost-schema-table-migration-adapter.js"
+import {
+  GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME,
+  GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS,
+  GENE_VOTE_VERSION_MIGRATION_NAME,
+  GENE_VOTE_VERSION_MIGRATION_STATEMENTS,
+} from "../generated/operation-cost-migrations.js"
 import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
   createInboxCountersMigrationCostAdapter,
@@ -32,9 +38,20 @@ import {
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
     [
-      "iconoplasm-migration-0112",
-      createGeneBlotBacklogWatermarkMigrationCostAdapter({
+      "iconoplasm-migration-0113",
+      createSchemaTableMigrationCostAdapter({
         db: env.ICONOPLASM_DB,
+        name: GENE_VOTE_VERSION_MIGRATION_NAME,
+        statements: GENE_VOTE_VERSION_MIGRATION_STATEMENTS,
+        ...identities,
+      }),
+    ],
+    [
+      "iconoplasm-migration-0112",
+      createSchemaTableMigrationCostAdapter({
+        db: env.ICONOPLASM_DB,
+        name: GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME,
+        statements: GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS,
         ...identities,
       }),
     ],

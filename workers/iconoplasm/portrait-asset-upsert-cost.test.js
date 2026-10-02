@@ -4,10 +4,6 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { PORTRAIT_ASSET_UPSERT_SQL } from "./portrait-asset-upsert.js"
-import {
-  nextVoteProjectionAttemptAt,
-  handleIconoplasmVoteProjectionQueue,
-} from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
 const require = createRequire(import.meta.url)
@@ -123,51 +119,6 @@ test(
         sample_label: "new sample",
       })
       t.diagnostic(JSON.stringify({ assets: 100, old: oldCost, repeated: repeatedCost }))
-
-      await db
-        .prepare(
-          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<20000)
-      INSERT INTO icono_vote_projection_refresh_jobs(gene_symbol,next_attempt_at)
-      SELECT 'G'||n,'2099-09-13 12:00:00' FROM ids`,
-        )
-        .run()
-      await db
-        .prepare(
-          "INSERT INTO icono_vote_projection_refresh_jobs(gene_symbol,next_attempt_at) VALUES('EARLY','2099-09-13T01:00:00Z')",
-        )
-        .run()
-      const meter = createOperationCostD1Meter(db)
-      assert.equal(await nextVoteProjectionAttemptAt(meter.db), "2099-09-13T01:00:00.000Z")
-      const dueCost = meter.finish()
-      assert.ok(dueCost.rows_read <= 12, JSON.stringify(dueCost))
-      assert.equal(dueCost.rows_written, 0)
-      let acked = 0
-      const sends = []
-      const delivery = {
-        body: { kind: "drain_vote_projection_ledger" },
-        ack() {
-          acked++
-        },
-      }
-      const result = await handleIconoplasmVoteProjectionQueue(
-        { messages: [delivery] },
-        {
-          ICONOPLASM_DB: db,
-          ICONOPLASM_VOTE_PROJECTION_QUEUE: { send: async (...args) => sends.push(args) },
-        },
-      )
-      assert.equal(result.processed, 0)
-      assert.equal(acked, 1)
-      assert.equal(sends.length, 1)
-      assert.equal(
-        sends[0][1].delaySeconds,
-        43200,
-        "future work leaves 12 hours of delivery headroom inside Free retention",
-      )
-      await db.prepare("DELETE FROM icono_vote_projection_refresh_jobs").run()
-      await handleIconoplasmVoteProjectionQueue({ messages: [delivery] }, { ICONOPLASM_DB: db })
-      assert.equal(acked, 2, "empty ledger terminates the wake chain")
-      t.diagnostic(JSON.stringify({ futureJobs: 20001, dueCost }))
     } finally {
       schema.close()
       await runtime.dispose()
