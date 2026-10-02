@@ -79,7 +79,6 @@ import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-writ
 import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
 import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
-import { mergePublishedGeneOverlay } from "../quartz/static/iconoplasm/publication-reader.js"
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
@@ -27824,7 +27823,6 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.loadedAt = 0
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  clearAdvertisedGeneDeltaViewCache()
   cardCatalogArtifactCache.version = null
   cardCatalogArtifactCache.value = null
   cardCatalogParsedManifestCache.clear()
@@ -29861,7 +29859,7 @@ function geneBlotBacklogItem(card, scope) {
 async function geneBlotBacklogDecision(env, symbol, row, scope) {
   let card
   try {
-    card = await readStableGeneObjectForBlot(env, symbol)
+    card = await readStableGeneObject(env, symbol)
   } catch (error) {
     return { kind: "error", error: String(error?.message || error) }
   }
@@ -30072,7 +30070,7 @@ async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
     // published lane is verified against the same object the backlog listed.
     let card
     try {
-      card = await readStableGeneObjectForBlot(env, symbol)
+      card = await readStableGeneObject(env, symbol)
     } catch {
       throw geneBlotServiceError(
         503,
@@ -30163,7 +30161,7 @@ export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
   })
 }
 
-async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {
+export async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {
   const url = new URL(request.url)
   const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
   const scope = String(url.searchParams.get("scope") || "candidate")
@@ -33296,25 +33294,31 @@ async function handlePublicImageResolve(request, env) {
   const canonicalSymbols = Array.from(
     new Set(resolved.map((item) => item.canonical_symbol).filter(Boolean)),
   )
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const version = String(versionInfo?.current || "").trim()
-  if (!version || version === "0") {
-    return json(cardArtifactUnavailablePayload(version), 503, { "Cache-Control": "no-store" })
-  }
-  const artifact = canonicalSymbols.length
-    ? await readPublishedCardCatalogArtifact(env, version, canonicalSymbols, {
-        allowWholeArtifact: false,
+  // B-898 Stage 1: one stable gene object per canonical symbol, read in
+  // parallel. There is no catalog-wide version any more; the envelope's
+  // card_snapshot_version is the newest published_at among the resolved
+  // objects and each result carries its own.
+  const projections = await Promise.all(
+    canonicalSymbols.map((symbol) => readStableGeneObjectProjection(env, symbol)),
+  )
+  const cards = new Map()
+  let version = ""
+  for (const [index, projection] of projections.entries()) {
+    if (projection.kind === "unavailable") {
+      return json(cardArtifactUnavailablePayload(projection.version), 503, {
+        "Cache-Control": "no-store",
       })
-    : { bySymbol: new Map() }
-  if (!artifact) {
-    return json(cardArtifactUnavailablePayload(version), 503, { "Cache-Control": "no-store" })
+    }
+    if (projection.kind !== "available") continue
+    cards.set(canonicalSymbols[index], projection)
+    if (projection.version > version) version = projection.version
   }
 
   const url = new URL(request.url)
   const results = resolved.map((identity) => {
     if (!identity.found || !identity.canonical_symbol) return { ...identity, images: null }
-    const card = artifact.bySymbol.get(identity.canonical_symbol)
-    const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
+    const card = cards.get(identity.canonical_symbol)
+    const payload = card?.payload || null
     if (!payload) {
       return {
         ...identity,
@@ -33334,6 +33338,7 @@ async function handlePublicImageResolve(request, env) {
     return {
       ...identity,
       page_url: `${url.origin}/gene/${encodeURIComponent(identity.canonical_symbol)}`,
+      card_snapshot_version: card.version,
       images: {
         gene_blot: geneBlot,
       },
@@ -33501,7 +33506,7 @@ async function handlePublicMedia(request, env, symbol) {
   const url = new URL(request.url)
   const resolvedSymbol = normalizeSymbol(symbol)
   if (!resolvedSymbol) return json({ error: "Invalid symbol" }, 400)
-  const publishedCard = await readPublishedGeneCardPortraitProjection(env, resolvedSymbol)
+  const publishedCard = await readStableGeneObjectProjection(env, resolvedSymbol)
   if (publishedCard.kind === "unavailable") {
     return json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
       "Cache-Control": "no-store",
@@ -33563,83 +33568,45 @@ async function handlePublicMedia(request, env, symbol) {
   )
 }
 
-// B-767: the site detail/page must resolve the same advertised v2 view the
-// reader lanes consume. The projection is one small KV document; a short TTL
-// memo keeps a page burst from paying one KV read per symbol while the exact
-// chain itself is already cached once per isolate by the reader-view module.
-const ADVERTISED_GENE_DELTA_VIEW_TTL_MS = 30000
-const advertisedGeneDeltaViewCache = { value: null, loadedAt: 0, loaded: false }
-function clearAdvertisedGeneDeltaViewCache() {
-  advertisedGeneDeltaViewCache.value = null
-  advertisedGeneDeltaViewCache.loadedAt = 0
-  advertisedGeneDeltaViewCache.loaded = false
-}
-async function advertisedGeneDeltaViewForDetail(env) {
-  const now = Date.now()
-  if (
-    advertisedGeneDeltaViewCache.loaded &&
-    now - advertisedGeneDeltaViewCache.loadedAt < ADVERTISED_GENE_DELTA_VIEW_TTL_MS
-  )
-    return advertisedGeneDeltaViewCache.value
-  const value = await readAdvertisedGeneDeltaView(env)
-  advertisedGeneDeltaViewCache.value = value
-  advertisedGeneDeltaViewCache.loadedAt = Date.now()
-  advertisedGeneDeltaViewCache.loaded = true
-  return value
-}
-
-async function readAdvertisedDeltaCardProjection(env, baseVersion, symbol) {
-  const delta = await advertisedGeneDeltaViewForDetail(env)
-  if (!delta || delta.base !== baseVersion) return null
-  const parsed = parsePublishedViewId(delta.view)
-  if (!parsed.chainHash) return null
-  const resolved = await readPublishedViewEntry({
-    readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
-    chainHash: parsed.chainHash,
-    base: delta.base,
-    symbol,
-  })
-  // A view that names this symbol is authoritative: a committed entry replaces
-  // the base card, a tombstone stays a tombstone, and an unreadable dependency
-  // fails closed exactly like the reader lanes instead of resurrecting base
-  // content the view retired.
-  if (!resolved.ok) return { kind: "unavailable", version: delta.view, payload: null }
-  if (!resolved.entry) return null
-  const cardKey = resolved.entry.card?.key || ""
-  const card = cardKey
-    ? await readPublishedBunnyCardObject(env, cardKey, (value) => value?.symbol === symbol)
-    : null
-  const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
-  return payload
-    ? { kind: "available", version: delta.view, payload }
-    : { kind: "unavailable", version: delta.view, payload: null }
-}
-
-async function readPublishedGeneCardPortraitProjection(env, symbol) {
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const version = String(versionInfo?.current || "").trim()
-  if (!version || version === "0") return { kind: "unavailable", version, payload: null }
-  const advertised = await readAdvertisedDeltaCardProjection(env, version, symbol)
-  if (advertised?.kind === "available") {
-    const base = await readPublishedCardCatalogArtifact(env, version, [symbol], {
-      allowWholeArtifact: false,
-    })
-    const basePayload = base?.bySymbol.get(symbol)?.payload || null
-    return {
-      ...advertised,
-      payload: mergePublishedGeneOverlay(basePayload, advertised.payload),
-    }
+// B-898 Stage 1, step B: the readers below resolve a gene from the ONE stable
+// object at genes/v3/<SYMBOL>.json, exactly like the blot route. One
+// authenticated Bunny Storage read; no KV head pointer, no manifest, no shard,
+// no delta chain, no D1 lookup of the published card. The result keeps the
+// {kind, version, payload} shape the handlers already consume:
+//   available   -> payload is the projected gene record (symbol, portrait,
+//                  canonical_manifestation, blot when the publisher recorded
+//                  one, ...) and version is the object's published_at.
+//   missing     -> Bunny has no object for the symbol (404).
+//   unavailable -> storage failed, the body was unparsable, or the object
+//                  names another symbol; callers answer 503 no-store.
+// The stable object also carries the full candidate pool and its own
+// envelope; those keys are stripped here because the live detail reads
+// candidates from D1 and the recovery fallback deliberately serves none.
+const STABLE_GENE_OBJECT_ENVELOPE_KEYS = [
+  "portrait_candidates",
+  "candidate_count",
+  "stable_object_version",
+  "published_at",
+  "resolved_from",
+]
+async function readStableGeneObjectProjection(env, symbol) {
+  let card
+  try {
+    card = await readStableGeneObject(env, symbol)
+  } catch (error) {
+    console.error("Iconoplasm stable gene object read failed:", String(error))
+    return { kind: "unavailable", version: "", payload: null }
   }
-  if (advertised) return advertised
-  const artifact = await readPublishedCardCatalogArtifact(env, version, [symbol], {
-    allowWholeArtifact: false,
-  })
-  if (!artifact) return { kind: "unavailable", version, payload: null }
-  const card = artifact.bySymbol.get(symbol)
-  const payload = card?.payload && typeof card.payload === "object" ? card.payload : null
-  return payload
-    ? { kind: "available", version, payload }
-    : { kind: "missing", version, payload: null }
+  if (!card) return { kind: "missing", version: "", payload: null }
+  const version = String(card.published_at || "").trim()
+  const cardSymbol = normalizeSymbol(card.symbol || card.canonical_symbol || "")
+  if (cardSymbol !== symbol) {
+    console.error(`Iconoplasm stable gene object for ${symbol} names ${cardSymbol || "no symbol"}`)
+    return { kind: "unavailable", version, payload: null }
+  }
+  const payload = { ...card }
+  for (const key of STABLE_GENE_OBJECT_ENVELOPE_KEYS) delete payload[key]
+  return { kind: "available", version, payload }
 }
 
 async function publishedCardOnlySiteGeneDetailResponse(request, url, symbol, publishedCard) {
@@ -33681,11 +33648,12 @@ async function publishedCardOnlySiteGeneDetailResponse(request, url, symbol, pub
 }
 
 // B-742 READER RECOVERY: this is the only application route allowed to bypass
-// the schema-transition fence. It reads the exact immutable card selected by
-// KV_GALLERY_VERSION and never resolves a live gene, caretakers, candidates, or
-// any other D1-backed projection. Keep this helper deliberately narrower than
-// handleSiteGeneDetail so the maintenance entrypoint cannot accidentally make
-// authoring or voting work reachable while the schema is being repaired.
+// the schema-transition fence. It reads the one stable gene object at
+// genes/v3/<SYMBOL>.json (B-898) and never resolves a live gene, caretakers,
+// candidates, or any other D1-backed projection. Keep this helper deliberately
+// narrower than handleSiteGeneDetail so the maintenance entrypoint cannot
+// accidentally make authoring or voting work reachable while the schema is
+// being repaired.
 export async function handleIconoplasmReaderRecoverySiteGeneDetail(
   request,
   env,
@@ -33705,15 +33673,9 @@ export async function handleIconoplasmReaderRecoverySiteGeneDetail(
     return asHead(request, json({ error: "Gene not found" }, 404, { "Cache-Control": "no-store" }))
   }
 
-  let publishedCard
-  try {
-    publishedCard = await readPublishedGeneCardPortraitProjection(env, symbol)
-  } catch (error) {
-    // Do not expose KV/provider details. A failed artifact read is an
-    // unavailable published reader, not evidence that the gene is unknown.
-    console.error("Iconoplasm reader-recovery card artifact read failed:", String(error))
-    publishedCard = { kind: "unavailable", version: "", payload: null }
-  }
+  // A failed storage read surfaces as kind "unavailable" (never as "the gene
+  // is unknown"); the reader logs the provider detail and does not expose it.
+  const publishedCard = await readStableGeneObjectProjection(env, symbol)
 
   if (publishedCard.kind === "available") {
     return asHead(
@@ -33752,7 +33714,7 @@ async function handleSiteGeneDetail(request, env, path) {
   const rawId = path.slice(`${SITE_GENE_API_PREFIX}/`.length)
   const requestedSymbol = normalizeSymbol(rawId)
   const requestedPublishedCard = requestedSymbol
-    ? await readPublishedGeneCardPortraitProjection(env, requestedSymbol)
+    ? await readStableGeneObjectProjection(env, requestedSymbol)
     : { kind: "missing", version: "", payload: null }
   let resolved = null
   let liveReadUnavailable = false
@@ -33789,13 +33751,16 @@ async function handleSiteGeneDetail(request, env, path) {
     return Response.redirect(`${url.origin}${canonicalPath}`, 302)
   }
   // ARCHITECTURE FENCE [IPD-011]: D1 remains the live authoring/vote source
-  // for rich detail and candidates, but the exact versioned published card is
-  // the sole public portrait authority. This bounded one-symbol artifact read
-  // keeps the visible page, metadata, archive, and sitemap on one image epoch.
+  // for rich detail and candidates, but the one stable published gene object
+  // (genes/v3/<SYMBOL>.json, B-898) is the sole public portrait authority.
+  // This single one-symbol storage read keeps the visible page, metadata,
+  // archive, and sitemap on one image epoch.
+  // Only an alias request (requested symbol != canonical) reads a second
+  // object; a canonical request that found no object is a 503 below.
   const publishedCard =
-    requestedSymbol === resolved.symbol && requestedPublishedCard.kind === "available"
+    requestedSymbol === resolved.symbol
       ? requestedPublishedCard
-      : await readPublishedGeneCardPortraitProjection(env, resolved.symbol)
+      : await readStableGeneObjectProjection(env, resolved.symbol)
   if (publishedCard.kind !== "available") {
     return json(cardArtifactUnavailablePayload(publishedCard.version), 503, {
       "Cache-Control": "no-store",
@@ -34171,11 +34136,13 @@ export async function handlePublishedImageAssetRoute(
 }
 
 // B-898 Stage 1: the one stable gene object at genes/v3/<SYMBOL>.json is the
-// whole published card for the blot route. One authenticated Bunny Storage
-// read; no KV head pointer, no manifest, no delta chain, no D1. Returns the
-// parsed object, null when Bunny has no object for the symbol, and throws on a
-// storage failure or an unparsable body so the caller answers 503 no-store.
-async function readStableGeneObjectForBlot(env, symbol) {
+// whole published card for the blot route and, through
+// readStableGeneObjectProjection, for every other gene reader. One
+// authenticated Bunny Storage read; no KV head pointer, no manifest, no delta
+// chain, no D1. Returns the parsed object, null when Bunny has no object for
+// the symbol, and throws on a storage failure or an unparsable body so the
+// caller answers 503 no-store.
+async function readStableGeneObject(env, symbol) {
   const object = await createPublishedCardObjectStore(env).readStable(stableGeneObjectKey(symbol))
   if (!object) return null
   const parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(object.bytes))
@@ -34187,7 +34154,7 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
   if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
   let card
   try {
-    card = await readStableGeneObjectForBlot(env, symbol)
+    card = await readStableGeneObject(env, symbol)
   } catch (error) {
     console.error("Iconoplasm blot stable gene object read failed:", String(error))
     return json(

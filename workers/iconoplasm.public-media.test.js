@@ -19,6 +19,7 @@ import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  uploadIconoplasmGeneBlot,
   buildPublishedScannerArtifact,
   buildPortraitAwareManifestHash,
   mergePublishedPortraitRefsIntoArtifact,
@@ -643,13 +644,6 @@ function buildPublishedCardReadKv({
   })
 }
 
-function buildAgentImageResolverKv(options = {}) {
-  const catalog = buildCatalogResolveKv()
-  const cards = buildPublishedCardReadKv(options)
-  for (const [key, value] of cards.entries) catalog.entries.set(key, value)
-  return catalog
-}
-
 function buildSessionBinding(sessions) {
   return {
     idFromName(name) {
@@ -735,16 +729,9 @@ test("public gene payload includes published portrait dimensions", async () => {
   )
 })
 
-test("site gene payload includes published portrait dimensions for first-party browser requests", async () => {
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: {
-        Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-      },
-    }),
-    buildEnv({ KV: buildPublishedCardReadKv() }),
-    {},
-  )
+test("site gene payload includes published portrait dimensions for first-party browser requests", async (t) => {
+  const { env } = stableReaderEnv(t, { objects: stableA1bgObjects() })
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
@@ -752,9 +739,9 @@ test("site gene payload includes published portrait dimensions for first-party b
     response.headers.get("Cache-Control"),
     "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
   )
-  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "test-card-v1")
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
   assert.equal(response.headers.get("X-Iconoplasm-Portrait-Source"), "published-card-catalog")
-  assert.equal(payload?.card_snapshot_version, "test-card-v1")
+  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
   assert.equal(payload?.portrait?.status, "published")
   assert.equal(payload?.portrait?.width, 384)
   assert.equal(payload?.portrait?.height, 512)
@@ -775,22 +762,21 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal("description" in payload, false)
 })
 
-test("site gene detail survives a D1 read outage from the exact published card", async () => {
+test("site gene detail survives a D1 read outage from the stable gene object", async (t) => {
   const unavailableDb = {
     prepare() {
       throw new Error("D1 free tier daily row read limit exceeded")
     },
   }
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-    }),
-    buildEnv({ ICONOPLASM_DB: unavailableDb, KV: buildPublishedCardReadKv() }),
-    {},
-  )
+  const { env, storageReads } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(),
+    overrides: { ICONOPLASM_DB: unavailableDb },
+  })
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
   assert.equal(response.headers.get("X-Iconoplasm-Detail-Source"), "published-card-fallback")
   assert.equal(payload?.symbol, "A1BG")
   assert.equal(payload?.portrait?.status, "published")
@@ -799,16 +785,12 @@ test("site gene detail survives a D1 read outage from the exact published card",
   assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
 })
 
-test("site gene detail exposes an exact ready blot without republishing the card artifact", async () => {
-  const kv = buildPublishedCardReadKv({ version: "test-card-zero-kv-blot" })
-  const shardKey = "iconoplasm:card-catalog-shard:test-card-zero-kv-blot:0"
-  const shard = JSON.parse(await kv.get(shardKey))
-  const cardPayload = shard.cards[0].payload
+test("site gene detail exposes an exact ready blot without rewriting the stable gene object", async (t) => {
+  const cardPayload = publishedCardPayloadFixture()
   delete cardPayload.blot
-  await kv.put(shardKey, JSON.stringify(shard))
   const fingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
   const objectKey = iconoplasmGeneBlotObjectKey("A1BG", fingerprint)
-  const env = buildEnv({ KV: kv })
+  const { env } = stableReaderEnv(t, { objects: stableA1bgObjects(cardPayload) })
   env.gatewayDb.blots.set("A1BG", {
     gene_blot_fingerprint: fingerprint,
     gene_blot_portrait_asset_sha256: cardPayload.portrait.asset_sha256,
@@ -818,17 +800,11 @@ test("site gene detail exposes an exact ready blot without republishing the card
     gene_blot_height: 1024,
   })
 
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-    }),
-    env,
-    {},
-  )
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.card_snapshot_version, "test-card-zero-kv-blot")
+  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
   assert.equal(payload?.blot?.status, "ready")
   assert.equal(payload?.blot?.blot_fingerprint, fingerprint)
   assert.equal(payload?.blot?.portrait_asset_sha256, cardPayload.portrait.asset_sha256)
@@ -836,50 +812,40 @@ test("site gene detail exposes an exact ready blot without republishing the card
   assert.equal(payload?.blot?.semantic_url, "https://iconoplasm.brinedew.bio/blot/A1BG.webp")
 })
 
-test("site gene detail rejects a stale blot row as a public image authority", async () => {
-  const kv = buildPublishedCardReadKv({ version: "test-card-stale-d1-blot" })
-  const shardKey = "iconoplasm:card-catalog-shard:test-card-stale-d1-blot:0"
-  const shard = JSON.parse(await kv.get(shardKey))
-  delete shard.cards[0].payload.blot
-  await kv.put(shardKey, JSON.stringify(shard))
-  const env = buildEnv({ KV: kv })
+test("site gene detail rejects a stale blot row as a public image authority", async (t) => {
+  const cardPayload = publishedCardPayloadFixture()
+  delete cardPayload.blot
+  const { env } = stableReaderEnv(t, { objects: stableA1bgObjects(cardPayload) })
   env.gatewayDb.blots.set("A1BG", {
     gene_blot_fingerprint: "0".repeat(32),
-    gene_blot_portrait_asset_sha256: shard.cards[0].payload.portrait.asset_sha256,
+    gene_blot_portrait_asset_sha256: cardPayload.portrait.asset_sha256,
     gene_blot_asset_sha256: "b".repeat(64),
     gene_blot_object_key: iconoplasmGeneBlotObjectKey("A1BG", "0".repeat(32)),
     gene_blot_width: 768,
     gene_blot_height: 1024,
   })
 
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-    }),
-    env,
-    {},
-  )
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
   const payload = await response.json()
 
   assert.equal(response.status, 200)
   assert.equal("blot" in payload, false)
 })
 
-test("site gene detail is identical for guest, Loweren, and every other account", async () => {
+test("site gene detail is identical for guest, Loweren, and every other account", async (t) => {
   const sessions = buildSessionBinding({
     "session:loweren-session": { user_id: "loweren-id", username: "Loweren" },
     "session:another-session": { user_id: "another-id", username: "another-user" },
   })
+  const { env } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(),
+    overrides: { GAME_SESSIONS: sessions },
+  })
   const read = async (cookie = "") => {
     resetIconoplasmRuntimeCachesForTest()
     const response = await viaStatefulWorker(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: {
-          Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-          ...(cookie ? { Cookie: cookie } : {}),
-        },
-      }),
-      buildEnv({ GAME_SESSIONS: sessions, KV: buildPublishedCardReadKv() }),
+      siteGeneRequest("A1BG", cookie ? { Cookie: cookie } : {}),
+      env,
       {},
     )
     assert.equal(response.status, 200)
@@ -905,26 +871,15 @@ test("site gene detail is identical for guest, Loweren, and every other account"
   assert.ok(Array.isArray(guest.portrait_candidates))
 })
 
-test("site gene detail keeps the public cache policy on conditional responses", async () => {
-  const env = buildEnv({ KV: buildPublishedCardReadKv() })
-  const first = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-    }),
-    env,
-    {},
-  )
+test("site gene detail keeps the public cache policy on conditional responses", async (t) => {
+  const { env } = stableReaderEnv(t, { objects: stableA1bgObjects() })
+  const first = await viaStatefulWorker(siteGeneRequest(), env, {})
   const etag = first.headers.get("ETag")
   assert.ok(etag)
 
   resetIconoplasmRuntimeCachesForTest()
   const conditional = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: {
-        Referer: "https://iconoplasm.brinedew.bio/gene/A1BG",
-        "If-None-Match": etag,
-      },
-    }),
+    siteGeneRequest("A1BG", { "If-None-Match": etag }),
     env,
     {},
   )
@@ -934,19 +889,13 @@ test("site gene detail keeps the public cache policy on conditional responses", 
     conditional.headers.get("Cache-Control"),
     "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
   )
-  assert.equal(conditional.headers.get("X-Iconoplasm-Card-Version"), "test-card-v1")
+  assert.equal(conditional.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
 })
 
-test("unpublished D1 portrait changes cannot move the published gene portrait", async () => {
-  const env = buildEnv({ KV: buildPublishedCardReadKv() })
-  const read = async () =>
-    viaStatefulWorker(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-        headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-      }),
-      env,
-      {},
-    )
+test("unpublished D1 portrait changes cannot move the published gene portrait", async (t) => {
+  const objects = stableA1bgObjects()
+  const { env } = stableReaderEnv(t, { objects })
+  const read = async () => viaStatefulWorker(siteGeneRequest(), env, {})
 
   const before = await read()
   const beforePayload = await before.clone().json()
@@ -968,19 +917,23 @@ test("unpublished D1 portrait changes cannot move the published gene portrait", 
   assert.equal(afterPayload?.portrait?.asset_sha256, beforePayload?.portrait?.asset_sha256)
   assert.notEqual(afterPayload?.portrait?.asset_sha256, votedAssetSha)
 
-  const nextPublishedKv = buildPublishedCardReadKv({
-    version: "test-card-v2",
-    portraitSha: votedAssetSha,
-  })
-  for (const [key, value] of nextPublishedKv.entries) env.KV.entries.set(key, value)
+  // The vote publisher rewrites genes/v3/A1BG.json; only that moves the public portrait.
+  objects.set(
+    stableObjectPath("A1BG"),
+    JSON.stringify(
+      stableGeneObjectFromCard(publishedCardPayloadFixture({ portraitSha: votedAssetSha }), {
+        published_at: "2026-10-01T12:00:00.000Z",
+      }),
+    ),
+  )
   resetIconoplasmRuntimeCachesForTest()
   const published = await read()
   const publishedPayload = await published.clone().json()
 
   assert.equal(published.status, 200)
   assert.notEqual(published.headers.get("ETag"), before.headers.get("ETag"))
-  assert.equal(published.headers.get("X-Iconoplasm-Card-Version"), "test-card-v2")
-  assert.equal(publishedPayload?.card_snapshot_version, "test-card-v2")
+  assert.equal(published.headers.get("X-Iconoplasm-Card-Version"), "2026-10-01T12:00:00.000Z")
+  assert.equal(publishedPayload?.card_snapshot_version, "2026-10-01T12:00:00.000Z")
   assert.equal(publishedPayload?.portrait?.asset_sha256, votedAssetSha)
 })
 
@@ -1002,18 +955,25 @@ test("site gene detail canonicalizes alias requests before rendering the gene pa
   )
 })
 
-test("public media exposes only the canonical gene blot", async () => {
+test("public media exposes only the canonical gene blot", async (t) => {
+  const { env, storageReads, kvReads } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(),
+    overrides: {
+      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    },
+  })
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
-    buildEnv({
-      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-      KV: buildPublishedCardReadKv(),
-    }),
+    env,
     {},
   )
   const payload = await response.json()
 
   assert.equal(response.status, 200)
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
+  assert.deepEqual(publicationTreeKvReads(kvReads), [])
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
+  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
   assert.equal(payload?.media?.type, "gene_blot")
   assert.equal(payload?.media?.width, 768)
   assert.equal(payload?.media?.height, 1024)
@@ -1031,18 +991,22 @@ test("public media exposes only the canonical gene blot", async () => {
   assert.equal("portrait" in payload.media, false)
 })
 
-test("public image resolver exposes labelled gene blots without source portraits", async () => {
+test("public image resolver exposes labelled gene blots without source portraits", async (t) => {
   resetIconoplasmRuntimeCachesForTest()
+  const { env } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(),
+    kv: buildCatalogResolveKv(),
+    overrides: {
+      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
+    },
+  })
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbols: ["A1BG", "USAG1", "NOT_A_GENE"] }),
     }),
-    buildEnv({
-      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
-      KV: buildAgentImageResolverKv(),
-    }),
+    env,
     {},
   )
   const payload = await response.json()
@@ -1070,20 +1034,21 @@ test("public image resolver exposes labelled gene blots without source portraits
   assert.equal(payload.results[2]?.images, null)
 })
 
-test("public image resolver derives the stable blot URL before catalog metadata catches up", async () => {
+test("public image resolver derives the stable blot URL before the stable object records a blot", async (t) => {
   resetIconoplasmRuntimeCachesForTest()
-  const kv = buildAgentImageResolverKv({ version: "test-card-without-blot" })
-  const shardKey = "iconoplasm:card-catalog-shard:test-card-without-blot:0"
-  const shard = JSON.parse(await kv.get(shardKey))
-  delete shard.cards[0].payload.blot
-  await kv.put(shardKey, JSON.stringify(shard))
+  const cardPayload = publishedCardPayloadFixture()
+  delete cardPayload.blot
+  const { env } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(cardPayload),
+    kv: buildCatalogResolveKv(),
+  })
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifiers: ["A1BG"] }),
     }),
-    buildEnv({ KV: kv }),
+    env,
     {},
   )
   const payload = await response.json()
@@ -1125,21 +1090,32 @@ function stableGeneObjectFromCard(cardPayload, overrides = {}) {
   }
 }
 
+// Re-entrant: a second install inside the same test swaps the served objects,
+// status and read log instead of wrapping fetch twice (two wraps would restore
+// in the wrong order and leak the mock into the next test).
+let stableGeneStorageMock = null
 function installStableGeneStorage(t, objects, { status = 200 } = {}) {
   const storageReads = []
+  if (stableGeneStorageMock) {
+    Object.assign(stableGeneStorageMock, { objects, status, reads: storageReads })
+    return storageReads
+  }
+  const mock = { objects, status, reads: storageReads }
+  stableGeneStorageMock = mock
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init = {}) => {
     const parsed = new URL(url instanceof Request ? url.url : String(url))
     if (!parsed.hostname.endsWith("storage.test")) return originalFetch(url, init)
-    storageReads.push(parsed.pathname)
-    if (status !== 200) return new Response(null, { status })
-    const value = objects.get(parsed.pathname)
+    mock.reads.push(parsed.pathname)
+    if (mock.status !== 200) return new Response(null, { status: mock.status })
+    const value = mock.objects.get(parsed.pathname)
     return value
       ? new Response(value, { status: 200, headers: { "content-type": "application/json" } })
       : new Response(null, { status: 404 })
   }
   t.after(() => {
     globalThis.fetch = originalFetch
+    stableGeneStorageMock = null
     resetIconoplasmRuntimeCachesForTest()
   })
   return storageReads
@@ -1173,8 +1149,8 @@ function stableBlotEnv({ kvReads, d1Calls, portraits }) {
 
 const STABLE_A1BG_PATH = "/test-zone/genes/v3/A1BG.json"
 
-function publishedCardPayloadFixture() {
-  const kv = buildPublishedCardReadKv({ version: "test-card-stable-blot" })
+function publishedCardPayloadFixture({ portraitSha } = {}) {
+  const kv = buildPublishedCardReadKv({ version: "test-card-stable-blot", portraitSha })
   const shard = JSON.parse(kv.entries.get("iconoplasm:card-catalog-shard:test-card-stable-blot:0"))
   return shard.cards[0].payload
 }
@@ -1194,6 +1170,319 @@ function blotStorageFake(reads, servedKey) {
     },
   }
 }
+
+// B-898 Stage 1, step B: the site gene detail (live and reader-recovery), the
+// public media envelope, the public image resolver and the blot-upload source
+// card resolve a gene from the same stable object as the blot route. Failure
+// modes these tests have to cover, written before the handlers changed:
+//   1. Stable object present: the response is built from it with exactly one
+//      authenticated storage read of genes/v3/<SYMBOL>.json. KV is never asked
+//      for the gallery head, a card-catalog manifest/shard, or the gene-delta
+//      view, and D1 is not consulted to find the published card (the live site
+//      detail still reads D1 for candidates, caretaker and the ready-blot row;
+//      the recovery route reads no D1 at all).
+//   2. Stable object missing (storage 404): site detail with live D1 answers
+//      503 artifact-unavailable (a catalog gene without a published card);
+//      site detail during a D1 outage and the recovery route answer 404 "Gene
+//      not found"; public media answers 404; the resolver reports images: null
+//      for that symbol and keeps answering the others.
+//   3. Stable object present with portrait null: site detail serves the record
+//      with portrait.status "missing"; public media answers 404; the resolver
+//      reports gene_blot null.
+//   4. Storage read fails (5xx after retries, malformed body): 503 with
+//      Cache-Control no-store on every handler so the edge never caches it.
+//   5. The object has no blot key: that is "no blot yet". Site detail serves
+//      the exact ready D1 row when it matches the stable portrait, otherwise no
+//      blot field; media and the resolver fall back to resolve_at_canonical_url.
+//   6. D1 portrait rows change (a vote lands) without the object being
+//      rewritten: nothing public moves, same ETag. Rewriting the object moves
+//      the portrait, the ETag and the card version.
+const PUBLICATION_TREE_KV_PREFIXES = [
+  "iconoplasm:gallery-version",
+  "iconoplasm:card-catalog",
+  "iconoplasm:gene-delta",
+]
+
+function publicationTreeKvReads(kvReads) {
+  return kvReads.filter((key) =>
+    PUBLICATION_TREE_KV_PREFIXES.some((prefix) => String(key).startsWith(prefix)),
+  )
+}
+
+function stableObjectPath(symbol) {
+  return `/test-zone/genes/v3/${symbol}.json`
+}
+
+// Env whose authenticated Bunny Storage serves the stable objects in `objects`
+// (pathname -> JSON string), records every storage path it is asked for, and
+// whose KV records every key it is asked for. The KV carries only what the
+// caller passes (the catalog identity fixture for the resolver); it never
+// carries the retired publication tree.
+function stableReaderEnv(t, { objects = new Map(), status = 200, kv = null, overrides = {} } = {}) {
+  const storageReads = installStableGeneStorage(t, objects, { status })
+  const kvReads = []
+  const baseKv = kv || new FakeKV({})
+  const recordingKv = {
+    entries: baseKv.entries,
+    async get(key, ...rest) {
+      kvReads.push(key)
+      return baseKv.get(key, ...rest)
+    },
+    async put(key, value, ...rest) {
+      return baseKv.put(key, value, ...rest)
+    },
+    async list(options) {
+      return baseKv.list(options)
+    },
+  }
+  const env = buildEnv({
+    KV: recordingKv,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+    ...overrides,
+  })
+  return { env, storageReads, kvReads }
+}
+
+function stableA1bgObjects(cardPayload = publishedCardPayloadFixture(), overrides = {}) {
+  return new Map([
+    [stableObjectPath("A1BG"), JSON.stringify(stableGeneObjectFromCard(cardPayload, overrides))],
+  ])
+}
+
+function siteGeneRequest(symbol = "A1BG", headers = {}) {
+  return new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`, {
+    headers: { Referer: `https://iconoplasm.brinedew.bio/gene/${symbol}`, ...headers },
+  })
+}
+
+test("site gene detail is built from the stable gene object with one storage read and no publication-tree KV", async (t) => {
+  const { env, storageReads, kvReads } = stableReaderEnv(t, { objects: stableA1bgObjects() })
+  const d1Calls = []
+  const originalPrepare = env.gatewayDb.prepare.bind(env.gatewayDb)
+  env.gatewayDb.prepare = (sql) => {
+    d1Calls.push(String(sql))
+    return originalPrepare(sql)
+  }
+
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
+  assert.deepEqual(publicationTreeKvReads(kvReads), [])
+  assert.equal(
+    d1Calls.some((sql) => /icono_card_catalog|published_card|card_catalog/i.test(sql)),
+    false,
+    "D1 is not asked for the published card",
+  )
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
+  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
+  assert.equal(
+    payload?.portrait?.asset_sha256,
+    "4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212",
+  )
+  assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
+})
+
+test("site gene detail answers 503 artifact-unavailable when a catalog gene has no stable object", async (t) => {
+  const { env, storageReads } = stableReaderEnv(t)
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
+
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
+})
+
+test("site gene detail answers 404 during a D1 outage when the stable object is missing", async (t) => {
+  const { env, storageReads } = stableReaderEnv(t, {
+    overrides: {
+      ICONOPLASM_DB: {
+        prepare() {
+          throw new Error("D1 free tier daily row read limit exceeded")
+        },
+      },
+    },
+  })
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
+
+  assert.equal(response.status, 404)
+  assert.equal((await response.json()).error, "Gene not found")
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
+})
+
+test("site gene detail serves a stable object whose portrait is null as a missing portrait", async (t) => {
+  const { env } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(publishedCardPayloadFixture(), { portrait: null, blot: undefined }),
+  })
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.portrait?.status, "missing")
+  assert.equal(payload?.portrait?.asset_sha256, null)
+  assert.equal("blot" in payload, false)
+})
+
+test("site gene detail answers 503 no-store when the stable object read fails", async (t) => {
+  const { env, storageReads } = stableReaderEnv(t, { status: 500 })
+  const response = await viaStatefulWorker(siteGeneRequest(), env, {})
+
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal(response.headers.get("X-Iconoplasm-Portrait-Source"), "artifact-unavailable")
+  assert.ok(storageReads.length >= 1)
+  assert.ok(storageReads.every((path) => path === stableObjectPath("A1BG")))
+})
+
+test("public media answers 404 when the stable object is missing and 503 no-store when storage fails", async (t) => {
+  const missing = stableReaderEnv(t)
+  const missingResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+    missing.env,
+    {},
+  )
+  assert.equal(missingResponse.status, 404)
+  assert.equal(missingResponse.headers.get("Cache-Control"), "no-store")
+  assert.equal((await missingResponse.json()).error, "Published media not found")
+  assert.deepEqual(missing.storageReads, [stableObjectPath("A1BG")])
+
+  resetIconoplasmRuntimeCachesForTest()
+  const failing = stableReaderEnv(t, { status: 500 })
+  const failingResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+    failing.env,
+    {},
+  )
+  assert.equal(failingResponse.status, 503)
+  assert.equal(failingResponse.headers.get("Cache-Control"), "no-store")
+  assert.equal((await failingResponse.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+})
+
+test("public media answers 404 when the stable object has no published portrait", async (t) => {
+  const { env, storageReads } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(publishedCardPayloadFixture(), { portrait: null, blot: undefined }),
+  })
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
+    env,
+    {},
+  )
+  assert.equal(response.status, 404)
+  assert.equal((await response.json()).error, "Published media not found")
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG")])
+})
+
+test("public image resolver reads one stable object per canonical symbol and reports missing objects as images null", async (t) => {
+  const { env, storageReads, kvReads } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(),
+    kv: buildCatalogResolveKv(),
+  })
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["A1BG", "USAG1", "NOT_A_GENE"] }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(storageReads, [stableObjectPath("A1BG"), stableObjectPath("SOSTDC1")])
+  assert.deepEqual(publicationTreeKvReads(kvReads), [])
+  assert.equal(payload.results[0]?.images?.gene_blot?.type, "gene_blot")
+  assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
+  assert.equal(payload.results[1]?.images, null)
+  assert.equal(payload.results[2]?.found, false)
+  assert.equal(payload.results[2]?.images, null)
+})
+
+test("public image resolver reports a stable object without a published portrait as gene_blot null", async (t) => {
+  const { env } = stableReaderEnv(t, {
+    objects: stableA1bgObjects(publishedCardPayloadFixture(), { portrait: null, blot: undefined }),
+    kv: buildCatalogResolveKv(),
+  })
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["A1BG"] }),
+    }),
+    env,
+    {},
+  )
+  const payload = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(payload.results[0]?.found, true)
+  assert.equal(payload.results[0]?.images?.gene_blot, null)
+})
+
+test("public image resolver answers 503 no-store when a stable object read fails", async (t) => {
+  const { env } = stableReaderEnv(t, { status: 500, kv: buildCatalogResolveKv() })
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/images/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols: ["A1BG"] }),
+    }),
+    env,
+    {},
+  )
+  assert.equal(response.status, 503)
+  assert.equal(response.headers.get("Cache-Control"), "no-store")
+  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
+})
+
+test("the blot upload resolves its published source card from the stable gene object", async (t) => {
+  const cardPayload = publishedCardPayloadFixture()
+  delete cardPayload.blot
+  const fingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
+  const upload = (env, requestedFingerprint) =>
+    uploadIconoplasmGeneBlot(
+      { ...env, ICONOPLASM_DB: env.gatewayDb },
+      {
+        request: new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/admin/blots/A1BG?scope=published&fingerprint=${requestedFingerprint}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "image/webp" },
+            body: new Uint8Array([82, 73, 70, 70]),
+          },
+        ),
+        symbol: "A1BG",
+      },
+    )
+
+  const present = stableReaderEnv(t, { objects: stableA1bgObjects(cardPayload) })
+  await assert.rejects(upload(present.env, "0".repeat(32)), (error) => {
+    assert.equal(error.status, 409)
+    assert.equal(error.code, "STALE_BLOT_FINGERPRINT")
+    return true
+  })
+  assert.deepEqual(present.storageReads, [stableObjectPath("A1BG")])
+  assert.deepEqual(publicationTreeKvReads(present.kvReads), [])
+
+  resetIconoplasmRuntimeCachesForTest()
+  const missing = stableReaderEnv(t)
+  await assert.rejects(upload(missing.env, fingerprint), (error) => {
+    assert.equal(error.status, 404)
+    assert.equal(error.code, "BLOT_SOURCE_NOT_FOUND")
+    return true
+  })
+
+  resetIconoplasmRuntimeCachesForTest()
+  const failing = stableReaderEnv(t, { status: 500 })
+  await assert.rejects(upload(failing.env, fingerprint), (error) => {
+    assert.equal(error.status, 503)
+    assert.equal(error.code, "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE")
+    return true
+  })
+})
 
 test("stable blot route derives the Bunny object from the stable gene object with one storage read and no KV or D1", async (t) => {
   const cardPayload = publishedCardPayloadFixture()
@@ -1350,16 +1639,12 @@ test("stable blot route preserves an exact-card legacy blot until its replacemen
   )
 })
 
-test("public media follows the published card barrier instead of D1 portrait changes", async () => {
+test("public media follows the stable gene object instead of D1 portrait changes", async (t) => {
   const d1PortraitA = "a".repeat(64)
   const publishedCardB = "b".repeat(64)
   const publishedCardC = "c".repeat(64)
-  const env = buildEnv({
-    KV: buildPublishedCardReadKv({
-      version: "test-card-media-v1",
-      portraitSha: publishedCardB,
-    }),
-  })
+  const objects = stableA1bgObjects(publishedCardPayloadFixture({ portraitSha: publishedCardB }))
+  const { env } = stableReaderEnv(t, { objects })
   env.gatewayDb.published.set("A1BG", {
     ...env.gatewayDb.published.get("A1BG"),
     asset_sha256: d1PortraitA,
@@ -1375,7 +1660,7 @@ test("public media follows the published card barrier instead of D1 portrait cha
 
   const before = await read()
   assert.equal(before.response.status, 200)
-  assert.equal(before.response.headers.get("X-Iconoplasm-Card-Version"), "test-card-media-v1")
+  assert.equal(before.response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
   assert.equal(before.response.headers.get("X-Iconoplasm-Media-Source"), "published-card-gene-blot")
   assert.equal(
     before.payload?.media?.canonical_url,
@@ -1392,33 +1677,33 @@ test("public media follows the published card barrier instead of D1 portrait cha
 
   assert.equal(afterD1Change.response.status, 200)
   assert.equal(afterD1Change.response.headers.get("ETag"), before.response.headers.get("ETag"))
-  assert.equal(afterD1Change.payload?.card_snapshot_version, "test-card-media-v1")
+  assert.equal(afterD1Change.payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
   assert.deepEqual(afterD1Change.payload?.media, before.payload?.media)
 
-  const nextPublishedKv = buildPublishedCardReadKv({
-    version: "test-card-media-v2",
-    portraitSha: publishedCardC,
-  })
-  for (const [key, value] of nextPublishedKv.entries) env.KV.entries.set(key, value)
+  objects.set(
+    stableObjectPath("A1BG"),
+    JSON.stringify(
+      stableGeneObjectFromCard(publishedCardPayloadFixture({ portraitSha: publishedCardC }), {
+        published_at: "2026-10-01T12:00:00.000Z",
+      }),
+    ),
+  )
   resetIconoplasmRuntimeCachesForTest()
-  const afterCardBarrierFlip = await read()
+  const afterRewrite = await read()
 
-  assert.equal(afterCardBarrierFlip.response.status, 200)
-  assert.notEqual(
-    afterCardBarrierFlip.response.headers.get("ETag"),
-    before.response.headers.get("ETag"),
-  )
+  assert.equal(afterRewrite.response.status, 200)
+  assert.notEqual(afterRewrite.response.headers.get("ETag"), before.response.headers.get("ETag"))
   assert.equal(
-    afterCardBarrierFlip.response.headers.get("X-Iconoplasm-Card-Version"),
-    "test-card-media-v2",
+    afterRewrite.response.headers.get("X-Iconoplasm-Card-Version"),
+    "2026-10-01T12:00:00.000Z",
   )
-  assert.equal(afterCardBarrierFlip.payload?.card_snapshot_version, "test-card-media-v2")
+  assert.equal(afterRewrite.payload?.card_snapshot_version, "2026-10-01T12:00:00.000Z")
   assert.equal(
-    afterCardBarrierFlip.payload?.media?.checksum_sha256,
+    afterRewrite.payload?.media?.checksum_sha256,
     createHash("sha256").update(`blot-bytes:${publishedCardC}`).digest("hex"),
   )
   assert.equal(
-    afterCardBarrierFlip.payload?.media?.canonical_url,
+    afterRewrite.payload?.media?.canonical_url,
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
 })
@@ -2053,7 +2338,7 @@ test("manifest cache is bounded and cannot cross published artifact versions", a
   assert.equal(kv.parses(manifests[0].manifestKey), 2)
 })
 
-test("site gene detail resolves the advertised v2 delta view for its symbol", async (t) => {
+test("site gene detail reads the stable gene object while the blot backlog still resolves the advertised v2 delta view", async (t) => {
   const objects = new Map()
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init = {}) => {
@@ -2137,6 +2422,11 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
     "iconoplasm:gene-delta",
     JSON.stringify({ view: `test-card-v1.c${chainRef.hash}`, base: "test-card-v1" }),
   )
+  // The vote publisher rewrote the stable object with the same winner.
+  objects.set(
+    stableObjectPath("A1BG"),
+    new TextEncoder().encode(JSON.stringify(stableGeneObjectFromCard(deltaCard.payload))),
+  )
   resetIconoplasmRuntimeCachesForTest()
 
   const response = await viaStatefulWorker(
@@ -2149,8 +2439,8 @@ test("site gene detail resolves the advertised v2 delta view for its symbol", as
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), `test-card-v1.c${chainRef.hash}`)
-  assert.equal(payload?.card_snapshot_version, `test-card-v1.c${chainRef.hash}`)
+  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
+  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
   assert.equal(payload?.portrait?.asset_sha256, deltaPortrait)
   assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
 })
