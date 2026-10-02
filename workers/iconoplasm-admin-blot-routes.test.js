@@ -16,6 +16,7 @@ function blotServices(overrides = {}) {
     json,
     listBacklog: async (_env, context) => ({ payload: context.payload }),
     upload: async (_env, context) => ({ symbol: context.symbol }),
+    republish: async () => ({}),
     ...overrides,
   }
 }
@@ -109,3 +110,38 @@ test("blot upload forwards the route symbol and preserves typed failures", async
     code: "GENE_BLOT_FINGERPRINT_MISMATCH",
   })
 })
+
+// A newly registered blot changes what the gene's stable object carries, so
+// the upload republishes that gene before it answers; before this, the drain
+// asked the deleted dirty-shard publisher to do it. Failure modes written
+// before the code:
+// 1. a changed blot republishes exactly its gene and says so;
+// 2. an identical re-upload (changed: false) republishes nothing;
+// 3. a republish failure keeps the stored blot a success, republished: false.
+for (const [description, changed, fails, expectedCalls, expectedFlag] of [
+  ["a changed blot republishes its gene", true, false, ["TP53"], true],
+  ["an identical re-upload republishes nothing", false, false, [], undefined],
+  ["a failed republish keeps the upload a success", true, true, ["TP53"], false],
+]) {
+  test(description, async () => {
+    const republished = []
+    const handlers = createIconoplasmAdminBlotHandlers(
+      blotServices({
+        upload: async (_env, context) => ({ ok: true, changed, symbol: context.symbol }),
+        republish: async (_env, symbol) => {
+          republished.push(symbol)
+          if (fails) throw new Error("Bunny PUT refused")
+        },
+      }),
+    )
+    const response = await invoke(handlers["admin_blots.upload"], {
+      method: "PUT",
+      match: { params: { symbol: "TP53" } },
+    })
+    const payload = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(payload.ok, true)
+    assert.deepEqual(republished, expectedCalls)
+    assert.equal(payload.republished, expectedFlag)
+  })
+}

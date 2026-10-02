@@ -33152,6 +33152,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     json,
     listBacklog: listIconoplasmGeneBlotBacklog,
     upload: uploadIconoplasmGeneBlot,
+    republish: (env, symbol) => publishIconoplasmGeneStableObject(env, symbol),
   }),
   ...createIconoplasmAdminPullZoneHandlers({ isAdmin: isIconoplasmAdmin, json }),
   ...createIconoplasmAdminCatalogObjectHandlers({
