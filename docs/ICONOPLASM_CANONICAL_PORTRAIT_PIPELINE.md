@@ -165,9 +165,7 @@ and refuses a larger one with a 400 that names the limits, before writing
 anything. When any named gene's election fails it answers 502 with the
 `failed_symbols` (the votes are committed); running the same import again
 elects every named gene afresh. Callers split their imports by the same
-bounds: `scripts/export-iconoplasm-votes-to-d1.mjs --replay-since` writes
-`replay_requests`, each a body the route accepts, and the workstation's vote
-baseline import sends requests of the same size.
+bounds; the workstation's vote baseline import sends requests of that size.
 
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
@@ -178,14 +176,6 @@ moves counts never queues a browser render; a winner change still does. The
 publisher fingerprints the object as storage holds it
 (`publishedObjectAsRead`), which is what the queue consumer reads back through
 the card route.
-
-The `IconoplasmVoteCoordinator` Durable Objects hold a historical copy only.
-`POST /api/iconoplasm/admin/votes/compare-coordinators` (driven by
-`scripts/export-iconoplasm-votes-to-d1.mjs --compare`) reports each
-coordinator's differences from D1 (votes, summaries, the published winner, the
-caretaker assignment and supervote, with each side's `vision_id` and
-`updated_at`) and writes nothing. `--write` refuses once
-`icono_gene_vote_version` has a row.
 
 The workstation drain polls the authenticated `blots/backlog` route, which
 answers from D1 and the stable objects, renders the missing blots for the
