@@ -1019,6 +1019,41 @@ test("8: the coordinator compare route reports every difference a replay needs a
 
 // --- 9 ------------------------------------------------------------------
 
+test("8b: a bootstrapped coordinator from any authority epoch is compared; only an unbootstrapped one is skipped", async () => {
+  // Failure mode: a coordinator bootstrapped before the v2 epoch still holds
+  // votes, and a compare that skips it hides any vote D1 never received.
+  const db = new SqliteD1()
+  seedAsset(db, "EYS", sha("a"))
+  seedPublished(db, "EYS", sha("a"))
+  await vote(db, "EYS", sha("a"), "delivered", 1)
+  const legacy = {
+    ok: true,
+    bootstrapped: true,
+    symbol: "EYS",
+    authority_epoch: "",
+    published_asset_sha256: sha("a"),
+    votes: [
+      { user_id: "delivered", asset_sha256: sha("a"), vote_value: 1 },
+      { user_id: "undelivered", asset_sha256: sha("a"), vote_value: 1 },
+    ],
+    asset_summaries: [
+      { asset_sha256: sha("a"), upvotes: 2, downvotes: 0, score: 2, vote_count: 2 },
+    ],
+  }
+  const env = { ICONOPLASM_DB: db, ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(legacy) }
+  const result = await compareIconoplasmVoteCoordinatorWithD1(env, "2".repeat(64))
+  assert.equal(result.compared, true)
+  assert.equal(result.authority_epoch, "")
+  assert.equal(result.votes_missing_in_d1, 1)
+  assert.equal(result.samples.missing_in_d1[0].user_id, "undelivered")
+
+  const cold = { ok: true, bootstrapped: false, symbol: "", votes: [], asset_summaries: [] }
+  const coldEnv = { ICONOPLASM_DB: db, ICONOPLASM_VOTE_COORDINATORS: coordinatorBinding(cold) }
+  const skipped = await compareIconoplasmVoteCoordinatorWithD1(coldEnv, "3".repeat(64))
+  assert.equal(skipped.compared, false)
+  assert.equal(skipped.reason, "not_bootstrapped")
+})
+
 test("9: summaries move by the exact delta through retries, flips, clears and imports", async () => {
   const db = new SqliteD1()
   seedAsset(db, "KRAS", sha("a"))
