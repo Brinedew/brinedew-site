@@ -1402,9 +1402,8 @@ import {
   ProteinReadUnavailableError,
   fetchProteinByUniprot,
   searchProteins,
-  getEligibleProteinIds,
   pickDailyTarget,
-  pickRandomProteinBalanced,
+  pickPracticeCandidateIds,
   getBlendedSimilarity,
   getHig2vecSimilarity,
   markStructureFailure,
@@ -5730,16 +5729,17 @@ function isForbiddenByAvailabilityPin(protein, availabilityPin) {
 }
 
 async function getDailyTargetProtein(env, options = {}) {
-  const eligibleIds = options.practice ? await getEligibleProteinIds(env.DB) : []
-  if (options.practice && !eligibleIds.length) {
+  // Practice candidates come from the stored practice pool: the primary pick
+  // first, then other random families for the availability walk below.
+  const practiceIds = options.practice ? await pickPracticeCandidateIds(env.DB) : []
+  if (options.practice && !practiceIds.length) {
     return null
   }
 
   let protein = null
   let startIdx = 0
-  let balancedPick = null // Track surname info for practice mode
   let explicitOverrideSelected = false
-  let dailyCandidateIds = eligibleIds
+  let dailyCandidateIds = []
   let availabilityPin = null
   let computedDailySelection = null
   let dailySelectionAttempted = false
@@ -5756,23 +5756,16 @@ async function getDailyTargetProtein(env, options = {}) {
     : null
 
   if (options.practice) {
-    // Practice mode: Use surname-based balanced picking
-    // This prevents over-representation of large gene families like ZNF, OR, KRTAP
-    balancedPick = await pickRandomProteinBalanced(env.DB)
-
-    if (balancedPick?.protein) {
-      protein = balancedPick.protein
-      startIdx = eligibleIds.indexOf(protein.uniprot)
-      if (startIdx < 0) startIdx = 0
-      console.log(
-        `[PRACTICE] Balanced pick: ${protein.gene} from ${balancedPick.surname} family (${balancedPick.familySize} members)`,
-      )
-    } else {
-      // Fallback to unbalanced random if surname-based fails
-      console.warn("[PRACTICE] Balanced pick failed, using unbalanced random")
-      startIdx = Math.floor(Math.random() * eligibleIds.length)
-      const randomId = eligibleIds[startIdx]
-      protein = await fetchProteinByUniprot(env.DB, randomId)
+    // Practice mode: the first candidate that loads is the pick. Each candidate
+    // is a different surname family, so the large families (ZNF, OR, KRTAP) weigh
+    // no more than a family of one, and the availability walk below continues
+    // with the candidates after it.
+    for (let index = 0; index < practiceIds.length && !protein; index += 1) {
+      protein = await fetchProteinByUniprot(env.DB, practiceIds[index])
+      startIdx = index
+    }
+    if (protein) {
+      console.log(`[PRACTICE] Balanced pick: ${protein.gene}`)
     }
   } else {
     // THE ONLY DAILY TARGET SELECTION PATH — DO NOT DUPLICATE. Read the
@@ -5959,7 +5952,7 @@ async function getDailyTargetProtein(env, options = {}) {
         maxCandidates: 10,
       })
     const availabilityIds = options.practice
-      ? eligibleIds
+      ? practiceIds
       : [protein.uniprot, ...dailyCandidateIds.filter((uniprot) => uniprot !== protein.uniprot)]
     let availableTarget = await selectAvailable(availabilityIds)
     if (!options.practice && !availableTarget.protein && !dailySelectionAttempted) {

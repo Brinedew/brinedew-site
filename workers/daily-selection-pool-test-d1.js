@@ -1,9 +1,10 @@
-// Test support for the stored GeneGuessr daily selection pool.
+// Test support for the stored GeneGuessr selection pools (daily and practice).
 //
 // Opens a real local D1 (Miniflare) built from the real GeneGuessr migrations
 // that define `proteins` and its search triggers, seeds a catalog with the
-// production shape measured on 2026-10-02 (19,110 rows, 10,312 playable, 3,900
-// surname families), and wraps the database so each statement's D1 receipt
+// production shape measured on 2026-10-02 (19,110 rows, 10,312 playable for the
+// daily pool in 3,900 surname families, 17,513 playable for practice in 6,049
+// families), and wraps the database so each statement's D1 receipt
 // (`rows_read`, `rows_written`) is recorded.
 import { createRequire } from "node:module"
 import { readFileSync } from "node:fs"
@@ -62,8 +63,12 @@ export async function openCatalogDb() {
 }
 
 // Deterministic catalog. Counts per (structure_source, has summary) are the
-// production counts, and the 10,312 playable rows fall into 3,900 surnames with
-// a heavy-tailed size distribution (a few large families, many singletons).
+// production counts, and the 10,312 daily-playable rows (a curated structure and
+// a summary) fall into 3,900 surnames with a heavy-tailed size distribution (a
+// few large families, many singletons). Practice also plays the 7,201 AlphaFold
+// rows that have a summary: 2,149 families exist only because of them, so
+// practice draws from 6,049 families. Every row with a structure source carries
+// the stored link its source needs, so the Worker can resolve its structure.
 // `quirks` adds rows whose raw values need the normalization the pool applies:
 // padded and lower-case surnames, an empty surname, a missing surname, and a
 // lower-case accession.
@@ -71,6 +76,9 @@ export const PRODUCTION_SHAPE = Object.freeze({
   proteins: 19110,
   playable: 10312,
   families: 3900,
+  practiceEligible: 17513,
+  alphafoldEligible: 7201,
+  practiceFamilies: 6049,
 })
 
 export function productionShapedCatalogRows({ quirks = false } = {}) {
@@ -92,6 +100,8 @@ export function productionShapedCatalogRows({ quirks = false } = {}) {
   ]
   const rows = []
   let playable = 0
+  let alphafoldSeated = 0
+  const alphafoldOnlyFamilies = PRODUCTION_SHAPE.practiceFamilies - PRODUCTION_SHAPE.families
   for (const [source, hasSummary, count] of groups) {
     for (let index = 0; index < count; index += 1) {
       const id = rows.length + 1
@@ -102,16 +112,30 @@ export function productionShapedCatalogRows({ quirks = false } = {}) {
         // pile onto low-numbered families.
         family = playable < PRODUCTION_SHAPE.families ? playable : Math.floor(next() ** 3 * 3900)
         playable += 1
+      } else if (source === "alphafold" && hasSummary) {
+        // The first AlphaFold rows seat one member in each AlphaFold-only family;
+        // the rest spread over every family.
+        const draw = next()
+        family =
+          alphafoldSeated < alphafoldOnlyFamilies
+            ? PRODUCTION_SHAPE.families + alphafoldSeated
+            : Math.floor(draw * PRODUCTION_SHAPE.practiceFamilies)
+        alphafoldSeated += 1
       } else {
         family = Math.floor(next() * 3900)
       }
+      const accession = `Q${String(id).padStart(5, "0")}`
       rows.push({
         id,
-        uniprot: `Q${String(id).padStart(5, "0")}`,
+        uniprot: accession,
         gene: `GENE${id}`,
         gene_surname: surname(family),
         structure_source: source,
         gene_summary: hasSummary ? `Summary of protein ${id}` : null,
+        pdb_id: source === "pdb" ? `1${String(id).padStart(5, "0")}` : null,
+        swissmodel_url: source === "swissmodel" ? `https://swissmodel.test/${accession}.pdb` : null,
+        swissmodel_template: source === "swissmodel" ? "tmpl" : null,
+        alphafold_url: source === "alphafold" ? `https://alphafold.test/${accession}.cif` : null,
       })
     }
   }
@@ -146,10 +170,13 @@ export async function seedCatalog(db, rows) {
     statements.push(
       db
         .prepare(
-          `INSERT INTO proteins (id, uniprot, gene, gene_surname, structure_source, gene_summary)
+          `INSERT INTO proteins (id, uniprot, gene, gene_surname, structure_source, gene_summary,
+                                 pdb_id, swissmodel_url, swissmodel_template, alphafold_url)
            SELECT json_extract(value, '$.id'), json_extract(value, '$.uniprot'),
                   json_extract(value, '$.gene'), json_extract(value, '$.gene_surname'),
-                  json_extract(value, '$.structure_source'), json_extract(value, '$.gene_summary')
+                  json_extract(value, '$.structure_source'), json_extract(value, '$.gene_summary'),
+                  json_extract(value, '$.pdb_id'), json_extract(value, '$.swissmodel_url'),
+                  json_extract(value, '$.swissmodel_template'), json_extract(value, '$.alphafold_url')
            FROM json_each(?)`,
         )
         .bind(JSON.stringify(rows.slice(start, start + 400))),
@@ -158,7 +185,7 @@ export async function seedCatalog(db, rows) {
   if (statements.length) await db.batch(statements)
 }
 
-// Removes the stored pool and its triggers, as on a database that has never run
+// Removes the stored pools and the triggers, as on a database that has never run
 // the pool code.
 export async function dropPoolSchema(db) {
   const triggers = await db
@@ -168,6 +195,7 @@ export async function dropPoolSchema(db) {
     .all()
   for (const { name } of triggers.results) await db.prepare(`DROP TRIGGER "${name}"`).run()
   await db.prepare("DROP TABLE IF EXISTS daily_selection_pool").run()
+  await db.prepare("DROP TABLE IF EXISTS practice_selection_pool").run()
 }
 
 // Wraps a D1 database. Every statement's receipt lands in `receipts`, in order.

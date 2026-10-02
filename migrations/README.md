@@ -18,6 +18,11 @@ that historical table by assuming the first migration is the current schema.
   families as one row, kept fresh by triggers on `proteins`. `workers/lib/protein-store.js`
   creates it on first use; no migration here creates or changes it
   (`docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`, "Pool storage").
+- **Practice selection pool:** D1 `practice_selection_pool` holds the practice
+  surname families as one row, valid while it matches the `catalog_version` of
+  `daily_selection_pool`, so the same triggers keep it fresh.
+  `workers/lib/protein-store.js` creates it on first use; no migration here creates
+  or changes it (`docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`, "Practice pool").
 - **Game attempt and completed result:** The existing `GameSession` Durable
   Object in `workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js`
   owns game state. `workers/lib/the-only-geneguessr-completed-result-ledger-do-not-duplicate.js`

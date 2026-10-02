@@ -5,11 +5,6 @@ import { sanitizeProteinSummary } from "./structure-utils.js"
 const MAX_CACHE_SIZE = 512
 const proteinCache = new Map()
 const DUAL_EMBEDDINGS_TABLE = "protein_embeddings_old"
-const eligibleCache = {
-  ids: null,
-  fetchedAt: 0,
-  ttl: 5 * 60 * 1000,
-}
 let structureFailureTableEnsured = false
 
 export class ProteinReadUnavailableError extends Error {
@@ -527,38 +522,6 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
   }
 }
 
-export async function getEligibleProteinIds(db) {
-  const now = Date.now()
-  if (eligibleCache.ids && now - eligibleCache.fetchedAt < eligibleCache.ttl) {
-    return eligibleCache.ids.slice()
-  }
-  await ensureStructureFailureTable(db)
-  const fetchIds = async (clause) => {
-    const statement = `
-      SELECT p.uniprot
-      FROM proteins p
-      LEFT JOIN structure_failures sf ON sf.uniprot = p.uniprot
-      ${clause}
-    `
-    const { results } = await db.prepare(statement).all()
-    return (results || []).map((row) => row.uniprot)
-  }
-  let ids = []
-  try {
-    ids = await fetchIds(
-      `WHERE p.structure_source IS NOT NULL
-         AND p.gene_summary IS NOT NULL
-         AND sf.uniprot IS NULL`,
-    )
-  } catch (err) {
-    console.warn("GeneGuessr: D1 getEligibleProteinIds failed", err)
-    ids = []
-  }
-  eligibleCache.ids = ids
-  eligibleCache.fetchedAt = now
-  return ids.slice()
-}
-
 // THE ONLY DAILY SELECTION POOL — DO NOT DUPLICATE.
 //
 // The playable pool is the set of proteins the daily lottery may pick from,
@@ -582,9 +545,12 @@ export async function getEligibleProteinIds(db) {
 // stores its result only if the version is unchanged, so a write that lands
 // during the scan can never leave a stale pool behind.
 //
-// To force a rebuild by hand: UPDATE daily_selection_pool SET families_json = NULL.
+// To force a rebuild by hand, of this pool and of the practice pool that counts
+// the same version, run the statement the triggers run:
+// UPDATE daily_selection_pool SET catalog_version = catalog_version + 1,
+// fingerprint = NULL, families_json = NULL, built_at = NULL WHERE id = 1.
 // A table rebuild that drops `proteins` also drops these triggers; run any
-// reader (or delete the `daily_selection_pool` table and its triggers) afterwards.
+// reader (or delete both pool tables and the triggers) afterwards.
 export const DAILY_SELECTION_POOL_SOURCE_SQL = `SELECT p.uniprot, p.gene_surname
          FROM proteins p
          WHERE p.structure_source IS NOT NULL
@@ -645,16 +611,16 @@ async function readDailySelectionPoolState(db) {
 
 // A stored row that does not parse into a non-empty list of named families with
 // text members is as good as no row: it is rebuilt, never thrown.
-function parseStoredDailySelectionPool(state) {
-  if (!state?.families_json || !state?.fingerprint) {
+function parseStoredFamilies(text) {
+  if (!text) {
     return null
   }
   try {
-    const stored = JSON.parse(state.families_json)
+    const stored = JSON.parse(text)
     if (!Array.isArray(stored) || !stored.length) {
       return null
     }
-    const families = stored.map((entry) => {
+    return stored.map((entry) => {
       const [surname, members] = Array.isArray(entry) ? entry : []
       if (
         typeof surname !== "string" ||
@@ -667,10 +633,18 @@ function parseStoredDailySelectionPool(state) {
       }
       return { surname, members }
     })
-    return { families, fingerprint: state.fingerprint }
   } catch {
     return null
   }
+}
+
+function serializeFamilies(families) {
+  return JSON.stringify(families.map((family) => [family.surname, family.members]))
+}
+
+function parseStoredDailySelectionPool(state) {
+  const families = state?.fingerprint ? parseStoredFamilies(state.families_json) : null
+  return families ? { families, fingerprint: state.fingerprint } : null
 }
 
 async function storeDailySelectionPool(db, pool, catalogVersion) {
@@ -681,12 +655,7 @@ async function storeDailySelectionPool(db, pool, catalogVersion) {
          SET fingerprint = ?, families_json = ?, built_at = ?
          WHERE id = 1 AND catalog_version = ?`,
       )
-      .bind(
-        pool.fingerprint,
-        JSON.stringify(pool.families.map((family) => [family.surname, family.members])),
-        Date.now(),
-        catalogVersion,
-      )
+      .bind(pool.fingerprint, serializeFamilies(pool.families), Date.now(), catalogVersion)
       .run()
     if (!stored?.meta?.changes) {
       console.warn("GeneGuessr: the catalog changed during a pool rebuild; the pool was not stored")
@@ -696,65 +665,173 @@ async function storeDailySelectionPool(db, pool, catalogVersion) {
   }
 }
 
-// Requests that arrive while a load is in flight share it, so a rebuild costs one
-// scan per isolate however many requests ask at once. Nothing is kept afterwards.
-const dailySelectionPoolLoads = new WeakMap()
+// THE ONLY PRACTICE SELECTION POOL — DO NOT DUPLICATE.
+//
+// Practice plays every protein that has a structure and a summary, AlphaFold-only
+// ones included (7,201 of 17,513 on 2026-10-02, in 2,149 families that exist only
+// because of them). The daily pool leaves those out, so practice cannot read it.
+// It stores the same shape, surname families with sorted members, in one row of
+// `practice_selection_pool`. A practice start reads that row, draws candidates
+// from it, and asks `structure_failures` about those candidates only.
+//
+// Freshness has one path. The row records the `catalog_version` of
+// `daily_selection_pool` it was built at and counts only while that version is
+// current. The triggers that clear the daily pool bump the version, which retires
+// this row too. They watch uniprot, gene_surname, structure_source and
+// gene_summary, the columns the statement below reads (a test ties the statement
+// to that list). The stored pool does not depend on `structure_failures`, a table
+// that changes at runtime, so a failure write never invalidates it.
+//
+// `practice_selection_pool` is created by this code on first use, beside
+// `daily_selection_pool` and for the same reason: no migration here applies to this
+// database. A rebuild reads the version before it scans and stores its result
+// only while the version is unchanged, as the daily pool does. The daily pool's
+// comment says how to force a rebuild by hand.
+export const PRACTICE_SELECTION_POOL_SOURCE_SQL = `SELECT p.uniprot, p.gene_surname
+         FROM proteins p
+         WHERE p.structure_source IS NOT NULL
+           AND p.gene_summary IS NOT NULL
+           AND p.gene_surname IS NOT NULL`
 
-// The pool as { families, fingerprint }, or null when D1 cannot be read.
-function loadDailySelectionPool(db) {
+const PRACTICE_SELECTION_POOL_SCHEMA_SQL = [
+  `CREATE TABLE IF NOT EXISTS practice_selection_pool (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     catalog_version INTEGER NOT NULL,
+     families_json TEXT NOT NULL,
+     built_at INTEGER NOT NULL
+   )`,
+]
+
+// One row of each table: the daily row's version, and the practice families when
+// they were built at that version.
+const PRACTICE_SELECTION_POOL_STATE_SQL = `SELECT d.catalog_version AS catalog_version, p.families_json AS families_json
+   FROM daily_selection_pool d
+   LEFT JOIN practice_selection_pool p ON p.id = 1 AND p.catalog_version = d.catalog_version
+   WHERE d.id = 1`
+
+const PRACTICE_SELECTION_POOL_STORE_SQL = `INSERT INTO practice_selection_pool (id, catalog_version, families_json, built_at)
+   SELECT 1, ?, ?, ? WHERE (SELECT catalog_version FROM daily_selection_pool WHERE id = 1) = ?
+   ON CONFLICT (id) DO UPDATE SET catalog_version = excluded.catalog_version,
+     families_json = excluded.families_json, built_at = excluded.built_at`
+
+async function readPracticeSelectionPoolState(db) {
+  try {
+    return await db.prepare(PRACTICE_SELECTION_POOL_STATE_SQL).first()
+  } catch (error) {
+    if (!/no such table/i.test(String(error?.message || error))) {
+      throw error
+    }
+    await db.batch(
+      [...DAILY_SELECTION_POOL_SCHEMA_SQL, ...PRACTICE_SELECTION_POOL_SCHEMA_SQL].map((sql) =>
+        db.prepare(sql),
+      ),
+    )
+    return db.prepare(PRACTICE_SELECTION_POOL_STATE_SQL).first()
+  }
+}
+
+function parseStoredPracticeSelectionPool(state) {
+  const families = parseStoredFamilies(state?.families_json)
+  return families ? { families } : null
+}
+
+async function storePracticeSelectionPool(db, pool, catalogVersion) {
+  try {
+    const stored = await db
+      .prepare(PRACTICE_SELECTION_POOL_STORE_SQL)
+      .bind(catalogVersion, serializeFamilies(pool.families), Date.now(), catalogVersion)
+      .run()
+    if (!stored?.meta?.changes) {
+      console.warn("GeneGuessr: the catalog changed during a pool rebuild; the pool was not stored")
+    }
+  } catch (err) {
+    console.warn("GeneGuessr: D1 could not store the practice selection pool", err)
+  }
+}
+
+// Each stored pool is built and read the same way. Requests that arrive while a
+// load is in flight share it, so a rebuild costs one scan per isolate however many
+// requests ask at once. Nothing is kept afterwards.
+const DAILY_SELECTION_POOL = {
+  label: "daily selection pool",
+  loads: new WeakMap(),
+  readState: readDailySelectionPoolState,
+  parse: parseStoredDailySelectionPool,
+  sourceSql: DAILY_SELECTION_POOL_SOURCE_SQL,
+  assemble: async (families) => ({
+    families,
+    fingerprint: await buildDailySelectionPoolFingerprint(families),
+  }),
+  store: storeDailySelectionPool,
+}
+
+const PRACTICE_SELECTION_POOL = {
+  label: "practice selection pool",
+  loads: new WeakMap(),
+  readState: readPracticeSelectionPoolState,
+  parse: parseStoredPracticeSelectionPool,
+  sourceSql: PRACTICE_SELECTION_POOL_SOURCE_SQL,
+  assemble: async (families) => ({ families }),
+  store: storePracticeSelectionPool,
+}
+
+// The pool as { families, ... }, or null when D1 cannot be read.
+function loadSelectionPool(db, pool) {
   if (!db) {
-    console.warn("GeneGuessr: the daily selection pool needs a D1 binding")
+    console.warn(`GeneGuessr: the ${pool.label} needs a D1 binding`)
     return Promise.resolve(null)
   }
-  let load = dailySelectionPoolLoads.get(db)
+  let load = pool.loads.get(db)
   if (!load) {
-    load = readOrBuildDailySelectionPool(db).finally(() => dailySelectionPoolLoads.delete(db))
-    dailySelectionPoolLoads.set(db, load)
+    load = readOrBuildSelectionPool(db, pool).finally(() => pool.loads.delete(db))
+    pool.loads.set(db, load)
   }
   return load
 }
 
-async function readOrBuildDailySelectionPool(db) {
+const loadDailySelectionPool = (db) => loadSelectionPool(db, DAILY_SELECTION_POOL)
+
+async function readOrBuildSelectionPool(db, pool) {
   try {
     // When the stored pool cannot be read or created (D1 refuses its schema),
     // the pool is still built from the catalog and returned, just not stored:
     // selection keeps working and the warning names the cost.
     let catalogVersion = null
     try {
-      let state = await readDailySelectionPoolState(db)
-      const stored = parseStoredDailySelectionPool(state)
+      let state = await pool.readState(db)
+      const stored = pool.parse(state)
       if (stored) {
         return stored
       }
       if (!state) {
         await db.prepare(DAILY_SELECTION_POOL_ROW_SQL).run()
-        state = await db.prepare(DAILY_SELECTION_POOL_STATE_SQL).first()
+        state = await pool.readState(db)
       }
       catalogVersion = Number(state?.catalog_version ?? 0)
     } catch (err) {
       console.warn(
-        "GeneGuessr: the stored daily selection pool is unavailable; building it from the catalog",
+        `GeneGuessr: the stored ${pool.label} is unavailable; building it from the catalog`,
         err,
       )
     }
-    const { results } = await db.prepare(DAILY_SELECTION_POOL_SOURCE_SQL).all()
+    const { results } = await db.prepare(pool.sourceSql).all()
     const rows = (results || []).map((row) => ({
       uniprot: normalizeKey(row.uniprot),
       gene_surname: String(row.gene_surname || "")
         .trim()
         .toUpperCase(),
     }))
-    const families = buildDailySelectionFamilies(
+    const families = buildSelectionFamilies(
       rows,
       rows.map((row) => row.uniprot),
     )
-    const pool = { families, fingerprint: await buildDailySelectionPoolFingerprint(families) }
+    const built = await pool.assemble(families)
     if (families.length && catalogVersion !== null) {
-      await storeDailySelectionPool(db, pool, catalogVersion)
+      await pool.store(db, built, catalogVersion)
     }
-    return pool
+    return built
   } catch (err) {
-    console.warn("GeneGuessr: D1 daily selection pool failed", err)
+    console.warn(`GeneGuessr: D1 ${pool.label} failed`, err)
     return null
   }
 }
@@ -810,7 +887,7 @@ function mixUint64(value) {
   return (mixed ^ (mixed >> 31n)) & UINT64_MASK
 }
 
-function buildDailySelectionFamilies(rows, eligibleIds) {
+function buildSelectionFamilies(rows, eligibleIds) {
   const eligible =
     Array.isArray(eligibleIds) && eligibleIds.length
       ? new Set(eligibleIds.map((id) => normalizeKey(id)).filter(Boolean))
@@ -865,7 +942,7 @@ export async function buildFamilyBalancedDailyCandidateIds(
   salt,
   date = new Date(),
 ) {
-  const families = buildDailySelectionFamilies(rows, eligibleIds)
+  const families = buildSelectionFamilies(rows, eligibleIds)
   return buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
 }
 
@@ -925,115 +1002,105 @@ function selectFamilyMember(families, familyIndex, familyCycle, memberSeed) {
   return family.members[memberIndex]
 }
 
-// Cache for surname-based protein grouping (for balanced random selection)
-const surnameCache = {
-  surnames: null, // Array of unique surnames
-  byName: null, // Map<surname, Array<uniprot>>
-  fetchedAt: 0,
-  ttl: 5 * 60 * 1000, // 5 minutes
+// A practice start needs one pick and a few fallbacks: the availability check
+// moves on to the next candidate when a structure cannot be reached. The
+// candidates are distinct families drawn uniformly without replacement, one
+// random member from each. Every family has the same chance of being the primary
+// pick however many members it has (ARCHITECTURE FENCE [GG-001]: the 400 OR genes
+// weigh as much as TP53), and a fallback is another family, never a neighbouring
+// row of the protein table.
+//
+// The primary pick takes two random numbers: one for the family, one for the
+// member.
+const PRACTICE_CANDIDATE_COUNT = 10
+const PRACTICE_DRAW_ROUNDS = 3
+
+export function drawPracticeCandidateIds(
+  families,
+  random = Math.random,
+  count = PRACTICE_CANDIDATE_COUNT,
+) {
+  const familyCount = families.length
+  // A partial Fisher-Yates shuffle of the family indexes that remembers only the
+  // positions it has moved.
+  const moved = new Map()
+  const ids = []
+  for (let slot = 0; slot < Math.min(count, familyCount); slot += 1) {
+    const chosen = slot + Math.floor(random() * (familyCount - slot))
+    const familyIndex = moved.get(chosen) ?? chosen
+    moved.set(chosen, moved.get(slot) ?? slot)
+    const { members } = families[familyIndex]
+    ids.push(members[Math.floor(random() * members.length)])
+  }
+  return ids
 }
 
-/**
- * Get eligible proteins grouped by gene surname.
- * This enables balanced random selection that doesn't over-represent
- * large gene families like ZNF, OR, KRTAP, etc.
- */
-export async function getEligibleProteinsBySurname(db) {
-  const now = Date.now()
-  if (surnameCache.surnames && now - surnameCache.fetchedAt < surnameCache.ttl) {
-    return {
-      surnames: surnameCache.surnames.slice(),
-      byName: new Map(surnameCache.byName),
-    }
-  }
+// The stored pool ignores `structure_failures`, so the candidates are checked
+// against it here, in one batch of point lookups. A lookup that finds nothing reads
+// no row, so the batch costs one row per recorded failure among the candidates; an
+// IN list would cost a row per listed id. D1 allows five terms in a compound
+// SELECT, hence a statement per five candidates. A table that does not exist yet
+// holds no failures. A lookup that fails is advisory: the availability check that
+// follows still tests the structure itself.
+const FAILURE_LOOKUPS_PER_STATEMENT = 5
 
-  await ensureStructureFailureTable(db)
-
+async function readFailedStructureIds(db, ids) {
   try {
-    const statement = `
-      SELECT p.uniprot, p.gene_surname
-      FROM proteins p
-      LEFT JOIN structure_failures sf ON sf.uniprot = p.uniprot
-      WHERE p.structure_source IS NOT NULL
-        AND p.gene_summary IS NOT NULL
-        AND sf.uniprot IS NULL
-        AND p.gene_surname IS NOT NULL
-    `
-    const { results } = await db.prepare(statement).all()
-
-    // Group proteins by surname
-    const byName = new Map()
-    for (const row of results || []) {
-      const surname = row.gene_surname
-      if (!byName.has(surname)) {
-        byName.set(surname, [])
-      }
-      byName.get(surname).push(row.uniprot)
+    const statements = []
+    for (let start = 0; start < ids.length; start += FAILURE_LOOKUPS_PER_STATEMENT) {
+      const chunk = ids.slice(start, start + FAILURE_LOOKUPS_PER_STATEMENT)
+      statements.push(
+        db
+          .prepare(
+            chunk
+              .map(() => "SELECT uniprot FROM structure_failures WHERE uniprot = ?")
+              .join(" UNION ALL "),
+          )
+          .bind(...chunk),
+      )
     }
-
-    const surnames = Array.from(byName.keys()).sort()
-
-    surnameCache.surnames = surnames
-    surnameCache.byName = byName
-    surnameCache.fetchedAt = now
-
-    console.log(`[SURNAME-CACHE] Loaded ${surnames.length} unique gene surnames`)
-
-    return { surnames: surnames.slice(), byName: new Map(byName) }
+    const answers = await db.batch(statements)
+    return new Set(
+      answers.flatMap((answer) => (answer.results || []).map((row) => normalizeKey(row.uniprot))),
+    )
   } catch (err) {
-    console.warn("GeneGuessr: D1 getEligibleProteinsBySurname failed", err)
-    return { surnames: [], byName: new Map() }
+    if (!/no such table/i.test(String(err?.message || err))) {
+      console.warn("GeneGuessr: D1 could not read structure failures; picking without them", err)
+    }
+    return new Set()
   }
 }
 
 /**
- * Pick a random protein using surname-based balancing.
- * 1. Pick a random surname
- * 2. Pick a random protein within that surname
- *
- * This ensures each gene family has equal representation regardless of size.
- * For example, the 400+ OR genes now have the same probability as the 1 TP53 gene.
- *
- * Returns: { protein, surname, familySize } or null
+ * Candidate UniProt IDs for a practice start, primary pick first, or [] when
+ * there is nothing to pick or D1 cannot be read. Candidates whose structure is
+ * recorded as failed are dropped; when a whole round has failed another is drawn.
  */
-export async function pickRandomProteinBalanced(db) {
-  const { surnames, byName } = await getEligibleProteinsBySurname(db)
-
-  if (!surnames.length) {
-    console.warn("[BALANCED-PICK] No surnames available, falling back to unbalanced")
-    return null
+export async function pickPracticeCandidateIds(db, { random = Math.random } = {}) {
+  const pool = await loadSelectionPool(db, PRACTICE_SELECTION_POOL)
+  if (!pool?.families.length) {
+    return []
   }
-
-  // Step 1: Pick random surname
-  const surnameIdx = Math.floor(Math.random() * surnames.length)
-  const surname = surnames[surnameIdx]
-  const familyProteins = byName.get(surname) || []
-
-  if (!familyProteins.length) {
-    console.warn(`[BALANCED-PICK] Surname ${surname} has no proteins, retrying`)
-    return pickRandomProteinBalanced(db) // Retry with different surname
+  for (let round = 0; round < PRACTICE_DRAW_ROUNDS; round += 1) {
+    const drawn = drawPracticeCandidateIds(pool.families, random)
+    const failed = await readFailedStructureIds(db, drawn)
+    const usable = drawn.filter((uniprot) => !failed.has(uniprot))
+    if (usable.length) {
+      return usable
+    }
   }
+  return []
+}
 
-  // Step 2: Pick random protein within surname
-  const proteinIdx = Math.floor(Math.random() * familyProteins.length)
-  const uniprot = familyProteins[proteinIdx]
-
-  const protein = await fetchProteinByUniprot(db, uniprot)
-
-  if (!protein) {
-    console.warn(`[BALANCED-PICK] Protein ${uniprot} not found, retrying`)
-    return pickRandomProteinBalanced(db)
+// One random practice protein, for callers that do not run an availability check.
+export async function pickRandomPracticeProtein(db) {
+  for (const uniprot of await pickPracticeCandidateIds(db)) {
+    const protein = await fetchProteinByUniprot(db, uniprot)
+    if (protein) {
+      return protein
+    }
   }
-
-  console.log(
-    `[BALANCED-PICK] Picked ${protein.gene} from ${surname} family (${familyProteins.length} members)`,
-  )
-
-  return {
-    protein,
-    surname,
-    familySize: familyProteins.length,
-  }
+  return null
 }
 
 export async function planDailyTarget(db, salt, date = new Date()) {
