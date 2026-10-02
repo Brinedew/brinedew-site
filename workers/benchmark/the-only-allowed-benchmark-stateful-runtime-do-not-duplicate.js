@@ -29,7 +29,7 @@ import {
   fetchProteinByUniprot,
   fetchProteinByGene,
   getBlendedSimilarity,
-  pickRandomProteinBalanced,
+  pickRandomPracticeProtein,
 } from "../lib/protein-store.js"
 
 // ---------------------------------------------------------------------------
@@ -200,11 +200,10 @@ async function handleCreateSession(request, db, auth) {
     }
   } else {
     // Random balanced pick
-    const pick = await pickRandomProteinBalanced(db)
-    if (!pick?.protein) {
+    targetProtein = await pickRandomPracticeProtein(db)
+    if (!targetProtein) {
       return jsonResponse({ error: "Failed to pick a target protein" }, 500, request)
     }
-    targetProtein = pick.protein
   }
 
   const sessionId = generateId("bench")
