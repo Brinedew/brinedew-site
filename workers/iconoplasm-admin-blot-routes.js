@@ -1,6 +1,6 @@
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 
-const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json", "listBacklog", "upload"])
+const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json", "listBacklog", "upload", "republish"])
 
 function assertServices(services) {
   for (const name of REQUIRED_SERVICES) {
@@ -22,7 +22,25 @@ async function requestPayload(request) {
 
 export function createIconoplasmAdminBlotHandlers(services) {
   assertServices(services)
-  const { isAdmin, json, listBacklog, upload } = services
+  const { isAdmin, json, listBacklog, upload, republish } = services
+
+  // A newly registered blot changes what the gene's stable object carries, so
+  // the gene is republished before the upload answers. A failed republish
+  // leaves the stored blot a success; the next publication of the gene picks
+  // the blot up.
+  async function republishQuietly(env, symbol) {
+    try {
+      await republish(env, symbol)
+      return true
+    } catch (error) {
+      console.error(
+        "Blot upload republish failed:",
+        symbol,
+        String(error?.message || error).slice(0, 300),
+      )
+      return false
+    }
+  }
 
   async function backlog({ request, env, done }) {
     if (!(await isAdmin(request, env))) {
@@ -63,6 +81,9 @@ export function createIconoplasmAdminBlotHandlers(services) {
         request,
         symbol: match?.params?.symbol || "",
       })
+      if (result?.changed === true) {
+        result.republished = await republishQuietly(env, result.symbol)
+      }
       return done("admin_blots_upload", json(result, 200, NO_STORE))
     } catch (error) {
       const status = Number(error?.status || 0) || 500
