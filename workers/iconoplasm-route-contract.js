@@ -1,22 +1,9 @@
 export const ICONOPLASM_PUBLIC_API_VERSION = "v1"
-// ARCHITECTURE FENCE [IPD-008]: immutable snapshot-addressed hover detail is the modern read path.
+// ARCHITECTURE FENCE [IPD-008]: hover detail is one stable object per gene on the CDN (B-898);
+// the card-snapshots routes below serve the 0.5.8 compatibility window from that same object.
 export const ICONOPLASM_API_SCHEMA_VERSION = 4
 export const ICONOPLASM_PUBLIC_API_PREFIX = `/api/public/${ICONOPLASM_PUBLIC_API_VERSION}`
 export const ICONOPLASM_SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
-
-// IPD-001 / B-881: every immutable object kind the website reader and the
-// extension may fetch from the canonical origin when Bunny is unreachable. The
-// delivery handler shares this list. Packed shards (up to 4 MiB) stay off it.
-export const PUBLIC_ORIGIN_OBJECT_KINDS = Object.freeze([
-  "cards",
-  "genes",
-  "portraits",
-  "indexes",
-  "manifests",
-  "galleries",
-  "catalogs",
-  "catalogindexes",
-])
 
 export function iconoplasmPublicApiPath(suffix = "") {
   const normalized = String(suffix || "")
@@ -189,41 +176,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("gene_search", 120),
   }),
   contract({
-    id: "public_card_delivery_index",
-    match: pattern(/^\/api\/public\/v1\/card-snapshots\/([^/]+)\/delivery-index$/, ["snapshot"]),
-    methods: GET,
-    auth: "trusted-client",
-    cache: "immutable",
-    budgetFamily: "public_gene_detail",
-    gatewayHandler: "public_card_delivery_index",
-    rateLimit: rateLimit("gene_detail", 120),
-  }),
-  contract({
-    id: "public_card_current",
-    match: exact("/api/public/v1/card-current"),
-    methods: GET,
-    auth: "public",
-    cache: "handler-defined",
-    budgetFamily: "public_catalog",
-    gatewayHandler: "public_card_current",
-    rateLimit: rateLimit("card_current", 120),
-  }),
-  contract({
-    id: "public_card_object",
-    match: pattern(
-      new RegExp(
-        `^/published-cards/v2/immutable/(${PUBLIC_ORIGIN_OBJECT_KINDS.join("|")})/([a-f0-9]{64})\\.json$`,
-      ),
-      ["kind", "hash"],
-    ),
-    methods: GET,
-    auth: "public",
-    cache: "immutable",
-    budgetFamily: "public_gene_detail",
-    gatewayHandler: "public_card_object",
-    rateLimit: rateLimit("card_object", 120),
-  }),
-  contract({
     // B-898: the one stable catalog object, canonical-origin fallback only.
     id: "public_stable_catalog_object",
     match: exact("/api/public/v1/stable-catalog.json"),
@@ -246,32 +198,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "public_gene_detail",
     gatewayHandler: "public_stable_gene_object",
     rateLimit: rateLimit("card_object", 120),
-  }),
-  contract({
-    id: "public_card_content_gene",
-    match: pattern(
-      /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(genes)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
-      ["hash", "lane", "symbol"],
-    ),
-    methods: GET,
-    auth: "trusted-client",
-    cache: "immutable",
-    budgetFamily: "public_gene_detail",
-    gatewayHandler: "public_card_content",
-    rateLimit: rateLimit("card_content_gene", 120),
-  }),
-  contract({
-    id: "public_card_content_portrait",
-    match: pattern(
-      /^\/api\/public\/v1\/card-content\/v1\/([a-f0-9]{64})\/(portraits)\/([A-Z0-9][A-Z0-9._-]{0,63})$/,
-      ["hash", "lane", "symbol"],
-    ),
-    methods: GET,
-    auth: "trusted-client",
-    cache: "immutable",
-    budgetFamily: "public_gene_detail",
-    gatewayHandler: "public_card_content",
-    rateLimit: rateLimit("card_content_portrait", 120),
   }),
   contract({
     id: "public_card_snapshot_gene",
@@ -1366,48 +1292,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_publication_catalog_object",
     apiHandler: "admin_publication.catalog_object_put",
   }),
-  adminApiContract(
-    "admin_gallery_publish_status",
-    "/gallery/publish-status",
-    GET,
-    "admin_gallery_publish_status",
-    "admin_gallery.publish_status",
-  ),
-  adminApiContract(
-    "admin_gallery_dirty_shard_publication",
-    "/gallery/publish-dirty-shards",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.publish_dirty_shards",
-  ),
-  adminApiContract(
-    "admin_gallery_storage_migration",
-    "/gallery/migrate-card-storage",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.migrate_card_storage",
-  ),
-  adminApiContract(
-    "admin_gallery_rematerialize_card_candidates",
-    "/gallery/rematerialize-card-candidates",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.rematerialize_card_candidates",
-  ),
-  adminApiContract(
-    "admin_gallery_card_rematerialization_cancel",
-    "/gallery/cancel-card-rematerialization",
-    POST,
-    "admin_gallery_dirty_shard_publication",
-    "admin_gallery.cancel_card_rematerialization",
-  ),
-  adminApiContract(
-    "admin_gallery_storage_migration_status",
-    "/gallery/migrate-card-storage/status",
-    GET,
-    "admin_gallery_storage_migration_status",
-    "admin_gallery.migrate_card_storage_status",
-  ),
   adminApiContract("admin_gallery", "/gallery", GET, "admin_gallery", "admin_gallery.list"),
   adminApiContract(
     "admin_extension_blocklist",
@@ -1552,13 +1436,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     methods: POST,
     auth: "internal-stateful-worker",
     budgetFamily: "internal_vote_projection_refresh",
-  }),
-  iconoplasmApiContract({
-    id: "internal_gallery_dirty_shard_publication",
-    match: exact("/__internal/iconoplasm/publish-gallery-dirty-shards"),
-    methods: POST,
-    auth: "internal-stateful-worker",
-    budgetFamily: "internal_gallery_dirty_shard_publication",
   }),
   iconoplasmApiContract({
     id: "internal_sync_finalization",

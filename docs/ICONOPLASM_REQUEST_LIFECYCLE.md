@@ -15,9 +15,10 @@ or a second publication owner. The shell stays static. Healthy portraits use
 Bunny directly; their canonical first-party URLs reach the same Worker only
 when that browser needs byte delivery from the fallback.
 
-The publication system owns one coherent head. Immutable records beneath that
-head provide search, gallery, gene dossiers, passive candidate and vote
-summaries, portraits, and blots. Bunny may accelerate the same public bytes.
+The publication system owns two objects (B-898): one stable gene object per
+gene and one catalog object. They provide search, gallery, gene dossiers,
+passive candidate and vote summaries, portraits, and blots. Bunny may accelerate
+the same public bytes.
 Neither Bunny nor a browser cache chooses canon.
 
 Anonymous reading does not require:
@@ -44,8 +45,8 @@ different public gene truth.
 ## Freshness
 
 An open reading context may remain on one coherent publication. A new context or
-reload checks for a newer head through a bounded path. It reuses unchanged
-immutable bytes.
+reload revalidates the stable objects it needs through a bounded path. It
+reuses unchanged immutable portrait bytes.
 
 There is no continuous open-tab freshness requirement and no reader-triggered
 whole-catalog repair.

@@ -129,18 +129,8 @@ includesOrFail(
 )
 includesOrFail(
   worker,
-  "currentGalleryVersionBarrier",
-  "Worker must keep the shared gallery version barrier.",
-)
-includesOrFail(
-  worker,
-  "nextGroup + CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP",
-  "Worker must publish dirty card-catalog shards in bounded steps, never a whole-catalog rewrite.",
-)
-doesNotMatchOrFail(
-  worker,
-  /CARD_CATALOG_ARTIFACT_FULL_PUBLISH_KV_WRITE_HEADROOM|async function publishCardCatalogArtifact\(/,
-  "Worker must not retain a whole-catalog routine publication path or budget name.",
+  "export async function publishIconoplasmGeneStableObject(",
+  "Worker must keep the one per-gene stable object publisher.",
 )
 doesNotMatchOrFail(
   routeContract,
@@ -151,11 +141,6 @@ doesNotMatchOrFail(
   readModelRoutes,
   /CARD_ARTIFACT_REQUIRES_FULL_CATALOG|invalidate_gallery|invalidateGalleryCache/,
   "Read-model routes must use explicit dirty-shard publication naming.",
-)
-includesOrFail(
-  worker,
-  "reserve-card-catalog-kv-writes",
-  "Worker must keep the shared card-catalog KV write budget reservation endpoint.",
 )
 
 includesOrFail(

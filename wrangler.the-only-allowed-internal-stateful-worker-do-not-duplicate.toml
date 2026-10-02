@@ -42,10 +42,6 @@ run_worker_first = [
   # entry the SPA fallback answered it with the HTML shell (200 text/html).
   "/blots/*",
   "/portraits/*",
-  # B-807: the released extension hedges immutable publication objects to this
-  # first-party path when Bunny is slow or unreachable (IPD-001/IPD-008).
-  # The SPA fallback answered those JSON URLs with the HTML shell.
-  "/published-cards/v2/immutable/*",
   "/admin*",
   "/blocklist*",
   "/artist-styles*",
@@ -145,10 +141,6 @@ class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 name = "ICONOPLASM_SYNC_GOVERNOR"
 class_name = "IconoplasmSyncGovernor"
 
-[[durable_objects.bindings]]
-name = "ICONOPLASM_CARD_PUBLICATION"
-class_name = "IconoplasmCardPublicationCoordinator"
-
 [[queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization"
@@ -221,6 +213,13 @@ new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 [[migrations]]
 tag = "v7"
 deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
+
+# v8 removes the card-publication coordinator class. Applied by the normal
+# release through wrangler deploy (scripts/stateful-worker-do-migration.mjs
+# detects the pending tag).
+[[migrations]]
+tag = "v8"
+deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 
 # Cloudflare Email Service send binding.
 # Used by the site-wide /api/contact endpoint to deliver contact-form submissions
@@ -377,10 +376,6 @@ class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
 name = "ICONOPLASM_SYNC_GOVERNOR"
 class_name = "IconoplasmSyncGovernor"
 
-[[env.staging.durable_objects.bindings]]
-name = "ICONOPLASM_CARD_PUBLICATION"
-class_name = "IconoplasmCardPublicationCoordinator"
-
 [[env.staging.queues.producers]]
 binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
 queue = "iconoplasm-sync-finalization-staging"
@@ -447,6 +442,10 @@ new_sqlite_classes = ["IconoplasmManifestationCutoverCoordinator"]
 [[env.staging.migrations]]
 tag = "v7"
 deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
+
+[[env.staging.migrations]]
+tag = "v8"
+deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 
 # Same email sending binding on staging so the form works end-to-end on
 # staging.brinedew.bio before any production deploy.

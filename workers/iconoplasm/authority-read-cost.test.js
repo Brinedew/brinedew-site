@@ -9,8 +9,10 @@ import {
   ICONOPLASM_NIGHTLY_CRON,
 } from "../iconoplasm-background-schedule.js"
 
-test("scheduled gallery publication exposes a failed internal response", async () => {
-  await assert.rejects(
+// The gallery tick only decides whether to dispatch the Actions catalog
+// publisher. Without a dispatch token it reports that and does nothing else.
+test("the scheduled gallery tick is only the catalog dispatch and never throws without a token", async () => {
+  await assert.doesNotReject(
     runtime.scheduled(
       {
         cron: ICONOPLASM_RECURRING_CRON,
@@ -19,7 +21,6 @@ test("scheduled gallery publication exposes a failed internal response", async (
       {},
       {},
     ),
-    /Scheduled publish-gallery-dirty-shards failed/,
   )
 })
 

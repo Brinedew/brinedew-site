@@ -5,10 +5,7 @@ import test from "node:test"
 import { iconoplasmGeneDiscoveryStateForPath } from "./iconoplasm-gene-discovery-worker.js"
 import { iconoplasmPublishedGeneRecordIsDiscoveryCandidate } from "./iconoplasm-gene-discovery.js"
 import { iconoplasmGeneHtmlCacheKeyForTest } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
-import {
-  resetIconoplasmRuntimeCachesForTest,
-  syncPublishedGeneRouteMembershipAfterPublicationForTest,
-} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { resetIconoplasmRuntimeCachesForTest } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PROTECTED_ICONOPLASM_ENTRYPOINTS = Object.freeze([
   "the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
@@ -63,45 +60,6 @@ test("canonical gene discovery uses the indexed publication route without KV rea
     assert.deepEqual(fixture.kvReads, [])
   } finally {
     resetIconoplasmRuntimeCachesForTest()
-  }
-})
-
-test("publication route membership advances only through the bounded event window", async () => {
-  const statements = []
-  const env = {
-    ICONOPLASM_DB: {
-      prepare(sql) {
-        const statement = { sql: String(sql), binds: [] }
-        statements.push(statement)
-        return {
-          bind(...binds) {
-            statement.binds = binds
-            return {
-              async run() {
-                return { meta: { changes: statements.length } }
-              },
-            }
-          },
-        }
-      },
-    },
-  }
-
-  const result = await syncPublishedGeneRouteMembershipAfterPublicationForTest(env, {
-    afterEventAt: "2026-08-01 10:00:00",
-    throughEventAt: "2026-08-01 10:15:00",
-    afterEventId: 410,
-    throughEventId: 417,
-  })
-
-  assert.deepEqual(result, { inserted: 1, deleted: 2 })
-  assert.equal(statements.length, 2)
-  assert.match(statements[0].sql, /INSERT OR IGNORE INTO icono_published_gene_routes/)
-  assert.match(statements[1].sql, /DELETE FROM icono_published_gene_routes/)
-  for (const statement of statements) {
-    assert.match(statement.sql, /FROM icono_publish_events/)
-    assert.match(statement.sql, /id > \? AND id <= \?/)
-    assert.deepEqual(statement.binds.slice(-2), [410, 417])
   }
 })
 

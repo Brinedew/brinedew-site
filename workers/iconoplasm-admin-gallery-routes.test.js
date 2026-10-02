@@ -18,8 +18,6 @@ function galleryServices(overrides = {}) {
       count: 0,
       rows: [],
     }),
-    fetchPublishStatus: async () => ({ changes_since_publish: 0 }),
-    publishIconoplasmGalleryDirtyShards: async () => ({ version: "current" }),
     isAdmin: async () => true,
     json,
     normalizeFilter: (value) => `filter:${value}`,
@@ -60,31 +58,7 @@ test("gallery handler factory rejects incomplete composition roots", () => {
 test("gallery handler registry is immutable and domain-complete", () => {
   const handlers = createIconoplasmAdminGalleryHandlers(galleryServices())
   assert.equal(Object.isFrozen(handlers), true)
-  assert.deepEqual(Object.keys(handlers).sort(), [
-    "admin_gallery.list",
-    "admin_gallery.publish_dirty_shards",
-    "admin_gallery.publish_status",
-  ])
-})
-
-test("gallery publish status executes its declared HEAD path", async () => {
-  let reads = 0
-  const handlers = createIconoplasmAdminGalleryHandlers(
-    galleryServices({
-      fetchPublishStatus: async () => {
-        reads += 1
-        return { changes_since_publish: 0 }
-      },
-    }),
-  )
-  const response = await responseFrom(handlers["admin_gallery.publish_status"], {
-    method: "HEAD",
-    path: "/api/iconoplasm/admin/gallery/publish-status",
-  })
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(reads, 1)
+  assert.deepEqual(Object.keys(handlers).sort(), ["admin_gallery.list"])
 })
 
 test("gallery list executes HEAD through the same normalized bounded query", async () => {
@@ -119,57 +93,4 @@ test("gallery list executes HEAD through the same normalized bounded query", asy
     mode: "mode:audit",
     query: "tp53",
   })
-})
-
-test("dirty-shard publication ignores caller work sizing and reports safe refusal", async () => {
-  const publicationEnvs = []
-  const publicationOptions = []
-  const statusEnvs = []
-  const refusal = Object.assign(new Error("write budget exhausted"), {
-    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
-    payload: {
-      day_key: "2026-08-24",
-      daily_limit: 900,
-      estimated_writes: 897,
-      requested_writes: 6,
-      projected_writes: 903,
-      estimated_writes_remaining: 3,
-    },
-  })
-  const handlers = createIconoplasmAdminGalleryHandlers(
-    galleryServices({
-      publishIconoplasmGalleryDirtyShards: async (env, options) => {
-        publicationEnvs.push(env)
-        publicationOptions.push(options)
-        throw refusal
-      },
-      fetchPublishStatus: async (env) => {
-        statusEnvs.push(env)
-        return { changes_since_publish: 4 }
-      },
-    }),
-  )
-  const response = await responseFrom(handlers["admin_gallery.publish_dirty_shards"], {
-    method: "POST",
-    path: "/api/iconoplasm/admin/gallery/publish-dirty-shards",
-    body: { chunk_size: 37, reason: "manual_cost_verification" },
-  })
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(statusEnvs[0], publicationEnvs[0])
-  assert.equal(publicationOptions[0].triggerReason, "manual_cost_verification")
-  assert.equal(payload.ok, false)
-  assert.equal(payload.skipped, true)
-  assert.equal(payload.code, "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED")
-  assert.deepEqual(payload.budget, {
-    day_key: "2026-08-24",
-    daily_limit: 900,
-    estimated_writes: 897,
-    requested_writes: 6,
-    projected_writes: 903,
-    estimated_writes_remaining: 3,
-  })
-  assert.equal(payload.publish_status.changes_since_publish, 4)
 })

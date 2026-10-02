@@ -6,7 +6,7 @@ import { createRequire } from "node:module"
 import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
-import { preparePublicReadCutoverConfig } from "../scripts/prepare-iconoplasm-public-read-cutover.mjs"
+import { prepareRetainedAssetsConfig } from "../scripts/prepare-iconoplasm-schema-transition-config.mjs"
 import { proveAnonymousRouteTopology } from "../scripts/lib/iconoplasm-static-topology-proof.mjs"
 
 const require = createRequire(import.meta.url)
@@ -32,12 +32,7 @@ async function makeAssetFixture() {
   const summary = await prepareIconoplasmEdgeAssets({
     sourceRoot,
     outputRoot,
-    publicationIndexes: [
-      {
-        schema_version: 2,
-        search_entries: [["TP53", "tumor protein p53", 0, 0]],
-      },
-    ],
+    publishedGenes: [["TP53", "tumor protein p53", "", "", 0]],
   })
   assert.ok(summary.fileCount > 10, "the prepared bundle contains the actual Iconoplasm modules")
   return { temporaryRoot, outputRoot }
@@ -139,7 +134,7 @@ test(
         ),
         "utf8",
       )
-      const config = parseToml(preparePublicReadCutoverConfig(canonical))
+      const config = parseToml(prepareRetainedAssetsConfig(canonical))
       const retained = config.unsafe.metadata.assets.config
       assert.equal(config.unsafe.metadata.keep_assets, true)
       runtime = new Miniflare(

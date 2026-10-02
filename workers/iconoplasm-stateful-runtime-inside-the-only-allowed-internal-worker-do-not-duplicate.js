@@ -82,28 +82,13 @@ import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membersh
 import {
   CARD_PUBLICATION_STORAGE,
   cardPublicationManifestKey,
-  enrichPublishedGeneCandidates,
-  projectCardBlot,
-} from "./lib/iconoplasm-card-publication.js"
-import {
   createPublishedCardObjectStore,
   publishedCardObjectKey,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
-import {
-  callCardPublication,
-  createCardPublicationCoordinatorClass,
-} from "./lib/iconoplasm-card-publication-coordinator.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
-import {
-  parsePublishedViewId,
-  readAdvertisedGeneDeltaView,
-  readGeneDeltaChain,
-  readPublishedViewEntry,
-  resetPublishedViewReaderCachesForTest,
-} from "./lib/iconoplasm-card-reader-view.js"
-import { createHoverDeliveryHandlers } from "./iconoplasm-hover-delivery-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+import { CATALOG_DISPATCH_WATERMARK_KEY } from "./iconoplasm-catalog-dispatch.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
 import {
@@ -167,7 +152,11 @@ import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-route
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
 import { createIconoplasmAdminRepublishHandlers } from "./iconoplasm-admin-republish-route.js"
-import { composeStableGeneObject } from "./lib/iconoplasm-stable-gene-object.js"
+import {
+  composeStableGeneObject,
+  enrichPublishedGeneCandidates,
+  projectCardBlot,
+} from "./lib/iconoplasm-stable-gene-object.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -1045,30 +1034,20 @@ const USER_EMULSION_MAX_LENGTH = 140
 const KV_CATALOG_MANIFEST = "iconoplasm:catalog-manifest"
 const KV_CATALOG_PREFIX = "iconoplasm:catalog:"
 const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
-// ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-// Search terms for future maintainers: PRL split-brain, canonical portrait,
-// canonical blot, logged-in logged-out mismatch, public card artifact,
-// KV_GALLERY_VERSION, VoteCoordinator, D1 authoring source.
-//
-// The D1 rows `icono_publish_state` and `icono_portrait_assets` are the durable
-// authoring/vote-projection source. The exact card artifact selected by this
-// shared version barrier is the sole published source-portrait authority and
-// owns the matching workstation-rendered blot reference. Mobile manifests and
-// cards use that exact card VM; gene discovery/media project its blot, never the
-// raw portrait, as the canonical public image.
-//
-// The PRL incident in May 2026 happened because D1 canonical state advanced
-// before the public artifact visible to logged-out users advanced and different
-// surfaces chose different SHAs. There is now one exact-card image contract:
-// routine publication replaces only event-owned dirty shards before atomically
-// flipping KV_GALLERY_VERSION. Individual gene detail may read fresh D1 facts,
-// candidates, and votes, but it overrides the portrait and `is_current` marker
-// with the card from this published barrier.
-//
-// Do not publish this artifact from vote projection. A vote records durable D1
-// intent; the scheduled dirty-shard publisher applies the bounded KV change.
-// The old manifest remains live until every dirty replacement is prepared.
-const KV_GALLERY_VERSION = "iconoplasm:gallery-version"
+// ICONOPLASM PUBLICATION (B-898). Two published objects, no tree:
+//   genes/v3/<SYMBOL>.json, written by publishIconoplasmGeneStableObject below
+//   (called by the vote authority when a winner changes and by the admin
+//   republish route the GitHub Actions publisher drives), and
+//   catalog/v3/index.json, built by scripts/publish-iconoplasm-catalog.mjs in
+//   GitHub Actions from D1 and uploaded through admin_publication.catalog_object_put.
+// The D1 rows icono_publish_state and icono_portrait_assets stay the authoring
+// source; what readers see is whatever those two objects hold, and every
+// surface reads the same object per gene.
+// The head of the frozen card snapshot. Nothing writes it; its one reader is
+// the gene-discovery worker's range pages and sitemaps through
+// readIconoplasmPublishedGeneDiscoveryProjections, until those documents are
+// rendered at build time from catalog/v3/index.json.
+const KV_FROZEN_CARD_TREE_HEAD = "iconoplasm:gallery-version"
 const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
 const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
@@ -1077,15 +1056,6 @@ const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
-const KV_CARD_CATALOG_ARTIFACT_PREFIX = "iconoplasm:card-catalog:"
-// Watermark recorded after every successful card-catalog publish: which artifact
-// version is live and the max icono_publish_events position it reflects. The
-// dirty-shard publication path reads this to identify changed genes and their
-// owning shards; the
-// /admin/gallery/publish-status endpoint reads it to answer "is the gallery
-// stale?" without a whole-catalog scan. Stored as one small KV object, not a
-// recomputed D1 view.
-const KV_CARD_CATALOG_PUBLISH_WATERMARK = "iconoplasm:card-catalog-publish-watermark:v1"
 // icono_publish_events.action values that change which portrait a gene shows in
 // the public card catalog. Any event with one of these actions after the
 // watermark means the gallery owes that gene a rebuild. Non-canonical bookkeeping
@@ -1106,27 +1076,10 @@ const CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS = [
   "manifestation_canonical_changed",
 ]
 const CARD_CATALOG_ARTIFACT_SCHEMA = "iconoplasm.cardCatalog.v1"
-// Changes whenever source records are mapped into public card fields differently.
-// D1 publication events only detect data changes; this revision makes a deployed
-// mapping change invalidate an otherwise-fresh artifact and require an explicit
-// deployment migration instead of silently mixing cards produced by two mappers.
-// `blot` is an additive, optional projection on the revision-2 card artifact so it can be
-// backfilled shard-by-shard without taking every existing published card offline.
-const CARD_CATALOG_BUILD_REVISION = 4
-const CARD_CATALOG_ARTIFACT_SHARD_SIZE = 750
-const CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX = "ccv1"
-// Content-addressed shard storage (B-530). Shards are keyed by the sha256 of their
-// cards, so they are immutable, deduplicated, and shared across artifact versions.
-// A publish only writes the shards whose genes changed; the manifest references
-// unchanged shards by their existing hash. This is what keeps a publish from ever
-// loading/hashing the whole ~19k-card artifact in one Worker invocation.
-const CARD_CATALOG_CONTENT_ADDRESSED_STORAGE = "kv_card_catalog_content_addressed_shards"
-const KV_CARD_CATALOG_CONTENT_ADDRESSED_SHARD_PREFIX = "iconoplasm:card-catalog-shard:"
-// Successful partial card reads are the extension hover hot path. Keep parsed
-// immutable manifests and shards in a small isolate-local LRU so overlapping
-// batches do not repeatedly pay KV transfer + JSON.parse. This is only a speed
-// layer: KV remains the published authority, entries are keyed by immutable
-// publication identity, and malformed/missing values are never cached.
+// The frozen tree's manifest and shards stay in a small isolate-local LRU so
+// overlapping range-page reads do not repeatedly pay storage transfer +
+// JSON.parse. This is only a speed layer; entries are keyed by immutable
+// object identity and malformed/missing values are never cached.
 const CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT = 3
 // The earlier count-only cache could retain 16 * 750 rich cards with no memory
 // ceiling. A prior capacity trace measured about 6.3 MiB of serialized data for
@@ -1140,24 +1093,15 @@ const CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT = 16 * 1024 * 1024
 const CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER = 6
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
-const CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT = 900
-// ARCHITECTURE FENCE [IPD-010]: Routine publication never rebuilds the complete
-// catalog. It prepares at most
-// this many dirty shards per invocation, retaining the old live manifest until
-// every dirty shard is ready for one atomic version flip. This is a cost and CPU
-// boundary, not a trigger for a broader fallback.
-const CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP = 6
-// The gene universe is fixed and currently below 20k. Querying one extra symbol
-// lets publication fail explicitly if that invariant changes; it must never turn
-// a large delta into a surprise full-catalog rebuild.
-const CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT = 25000
-const KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION = "iconoplasm:card-catalog-dirty-shard-publication:v1"
 const MOBILE_CARD_MANIFEST_SCHEMA = "iconoplasm.mobileCardManifest.v1"
 const MOBILE_CARD_VM_SCHEMA = "iconoplasm.mobileCard.v1"
 const MOBILE_CARD_LAYOUT = "mobile-dossier-v1"
 const PUBLIC_DUMP_PREFIX = "public-dumps"
-const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 100
-const PUBLIC_MAX_GENE_BATCH_LIMIT = 250
+// B-898: a batch costs one Bunny Storage read per symbol (readStableGeneObjects)
+// and a free-plan Worker request has about 50 subrequests, a few of which the
+// handler's own bookkeeping may use. 40 keeps one request under that cap.
+const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 40
+const PUBLIC_MAX_GENE_BATCH_LIMIT = 40
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 const PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT = 50
 const PUBLIC_STATS_SCHEMA_VERSION = "iconoplasm.publicStats.v1"
@@ -1191,10 +1135,6 @@ const ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_ENV_DO_NOT_SET_CASUALLY =
 const ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE = "global"
-const ICONOPLASM_CARD_CATALOG_DAILY_KV_WRITE_BUDGET_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_DO_NOT_SET_CASUALLY"
 // Alerts did not solve the real failure mode here because the expensive query day
 // was already over by the time a human could notice and react. Keep the hard stop
 // loud in names and bindings so future edits do not quietly downgrade it to a
@@ -1273,10 +1213,6 @@ const galleryUniquenessRowsCache = {
 }
 const hydratedCatalogArtifactCache = {
   key: null,
-  value: null,
-}
-const cardCatalogArtifactCache = {
-  version: null,
   value: null,
 }
 const cardCatalogParsedManifestCache = new Map()
@@ -1580,8 +1516,6 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_coverage" ||
     family === "admin_cost_usage" ||
     family === "admin_mutation_limiter_policy" ||
-    family === "admin_gallery_publish_status" ||
-    family === "admin_gallery_storage_migration_status" ||
     family === "admin_me"
   )
     return "admin_dashboard"
@@ -1601,7 +1535,6 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_blots_upload" ||
     // B-898: about five subrequests and a few D1 rows per gene, bounded per call.
     family === "admin_publication_republish" ||
-    family === "admin_gallery_dirty_shard_publication" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
     family === "admin_essence_state"
@@ -1796,8 +1729,6 @@ function isIconoplasmAdminReadBudgetedRouteFamily(routeFamily) {
     value === "admin_assets_state" ||
     value === "admin_blots_backlog" ||
     value === "admin_gallery" ||
-    value === "admin_gallery_publish_status" ||
-    value === "admin_gallery_dirty_shard_publication" ||
     value.startsWith("admin_gallery_mutation")
   )
 }
@@ -1982,43 +1913,6 @@ class IconoplasmD1DailyBudgetConfigurationError extends Error {
   }
 }
 
-class IconoplasmCardCatalogKvWriteBudgetExceededError extends Error {
-  constructor(payload) {
-    super("CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED")
-    this.name = "IconoplasmCardCatalogKvWriteBudgetExceededError"
-    this.code = "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED"
-    this.payload = payload || null
-  }
-}
-
-class IconoplasmCardCatalogKvWriteBudgetConfigurationError extends Error {
-  constructor(message) {
-    super(message)
-    this.name = "IconoplasmCardCatalogKvWriteBudgetConfigurationError"
-    this.code = "CARD_CATALOG_KV_WRITE_BUDGET_MISCONFIGURED"
-  }
-}
-
-export function iconoplasmCardCatalogKvWriteBudgetDeferral(error) {
-  if (String(error?.code || "") !== "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED") return null
-  const payload = error?.payload && typeof error.payload === "object" ? error.payload : null
-  const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.day_key || ""))
-    ? String(payload.day_key)
-    : null
-  const dayStartMs = dayKey ? Date.parse(`${dayKey}T00:00:00.000Z`) : Number.NaN
-  const resumeAfter = Number.isFinite(dayStartMs)
-    ? new Date(dayStartMs + 24 * 60 * 60 * 1000).toISOString()
-    : null
-  return {
-    ok: true,
-    deferred: true,
-    code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
-    reason: "daily_kv_write_budget",
-    resume_after: resumeAfter,
-    budget: payload,
-  }
-}
-
 class IconoplasmAdminMutationLimiterActiveError extends Error {
   constructor(detail) {
     super("ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
@@ -2111,63 +2005,6 @@ async function iconoplasmD1DailyBudgetKillSwitchJson(stub, path, payload) {
     )
   }
   return response.json()
-}
-
-function iconoplasmCardCatalogKvWriteBudgetRequired(env) {
-  const required = String(
-    env?.[ICONOPLASM_CARD_CATALOG_KV_WRITE_BUDGET_REQUIRED_ENV_DO_NOT_SET_CASUALLY] || "",
-  )
-    .trim()
-    .toLowerCase()
-  return required === "1" || required === "true"
-}
-
-function iconoplasmCardCatalogDailyKvWriteBudget(env) {
-  return positiveIntFromEnv(
-    env?.[ICONOPLASM_CARD_CATALOG_DAILY_KV_WRITE_BUDGET_ENV_DO_NOT_SET_CASUALLY],
-    CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT,
-  )
-}
-
-async function reserveIconoplasmCardCatalogKvWrites(
-  env,
-  { operation, artifactVersion = "", estimatedKvWrites = 0, cardCount = 0, shardCount = 0 } = {},
-) {
-  const estimated = Math.max(0, Number(estimatedKvWrites || 0) || 0)
-  if (estimated <= 0) return null
-  const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
-  if (!stub) {
-    if (!iconoplasmCardCatalogKvWriteBudgetRequired(env)) return null
-    throw new IconoplasmCardCatalogKvWriteBudgetConfigurationError(
-      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while card-catalog KV write budget enforcement is required",
-    )
-  }
-  const dayKey = iconoplasmUtcDayKey()
-  const response = await stub.fetch(
-    new Request("https://iconoplasm-d1-daily-budget-kill-switch/reserve-card-catalog-kv-writes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day_key: dayKey,
-        daily_limit: iconoplasmCardCatalogDailyKvWriteBudget(env),
-        estimated_kv_writes: estimated,
-        operation: String(operation || "card_catalog_publish"),
-        artifact_version: String(artifactVersion || ""),
-        card_count: Math.max(0, Number(cardCount || 0) || 0),
-        shard_count: Math.max(0, Number(shardCount || 0) || 0),
-      }),
-    }),
-  )
-  const payload = await response.json().catch(() => null)
-  if (!response.ok || payload?.ok === false) {
-    if (payload?.code === "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED") {
-      throw new IconoplasmCardCatalogKvWriteBudgetExceededError(payload)
-    }
-    throw new IconoplasmCardCatalogKvWriteBudgetConfigurationError(
-      `Card-catalog KV write budget reservation failed (${response.status})`,
-    )
-  }
-  return payload
 }
 
 async function reserveIconoplasmMutationWrites(
@@ -13420,22 +13257,9 @@ const ICONOPLASM_VOTE_PROJECTION_REFRESH_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKE
   "/__internal/iconoplasm/process-vote-projection-refresh"
 const ICONOPLASM_SYNC_FINALIZATION_PROCESS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
   "/__internal/iconoplasm/process-sync-finalization"
-const ICONOPLASM_PUBLISH_GALLERY_DIRTY_SHARDS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER =
-  "/__internal/iconoplasm/publish-gallery-dirty-shards"
-
 function isIconoplasmCanonRepairRequestForTheOnlyAllowedStatefulWorker(path, method = "GET") {
   return (
     path === ICONOPLASM_CANON_REPAIR_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
-    String(method || "GET").toUpperCase() === "POST"
-  )
-}
-
-function isIconoplasmPublishGalleryDirtyShardsRequestForTheOnlyAllowedStatefulWorker(
-  path,
-  method = "GET",
-) {
-  return (
-    path === ICONOPLASM_PUBLISH_GALLERY_DIRTY_SHARDS_PATH_ON_THE_ONLY_ALLOWED_STATEFUL_WORKER &&
     String(method || "GET").toUpperCase() === "POST"
   )
 }
@@ -17008,13 +16832,6 @@ export class IconoplasmVoteCoordinator {
       if (this.getMeta("authority_epoch") === "v2" && this.publication.read()?.pending) {
         await this.publication.recoverWakeup()
       }
-      // Durable reader-projection handoff survives a crash between local
-      // publication and the shared view: re-enqueue from the published artifact
-      // and wake the shared alarm, which drains it.
-      const recoveredHandoff = this.ensureReaderHandoffFromPublished()
-      if (recoveredHandoff && !this.getMeta("outbox_budget_retry_at")) {
-        await this.armOutboxAlarm(1000)
-      }
     })
   }
 
@@ -17029,15 +16846,6 @@ export class IconoplasmVoteCoordinator {
         created_at TEXT NOT NULL DEFAULT '',
         revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS publication_handoffs (
-        symbol TEXT PRIMARY KEY,
-        version INTEGER NOT NULL,
-        selection_key TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        next_attempt_at INTEGER NOT NULL DEFAULT 0,
-        delivered_at TEXT
       );
     `)
     this.publication.install()
@@ -17442,18 +17250,8 @@ export class IconoplasmVoteCoordinator {
   }
 
   /**
-   * B-762 immutable publication adapter. It asks the existing card-publication
-   * coordinator to materialize exactly this gene's selected winner version
-   * (three verified immutable objects: card, gene projection, portrait
-   * locator) and returns the verified card receipt. The coordinator route
-   * never touches the global head, watermark or job. Without the binding the
-   * adapter is absent and no attempt is opened, so an unwired gene costs zero
-   * publication writes. Tests may override this method.
-   */
-  /**
-   * B-898 (deletion stage): the gene's stable object is rewritten in process by
-   * the one per-gene publisher; no coordinator hop, no immutable receipts, no
-   * reader handoff. The receipt the publication state records is the stable
+   * The gene's stable object is rewritten in process by the one per-gene
+   * publisher. The receipt the publication state records is the stable
    * object's key and content hash. Tests may override this method.
    */
   genePublicationAdapter(env = this.env) {
@@ -17512,7 +17310,6 @@ export class IconoplasmVoteCoordinator {
       if (outcome.applied) {
         const assetSha = winnerAssetShaFromSelectionReference(ticket.selectionRef)
         if (assetSha) this.setMeta("published_asset_sha256", assetSha)
-        this.recordReaderHandoff(ticket, published)
       }
       return { ok: true, pending: false, ...outcome }
     } catch (error) {
@@ -17525,147 +17322,6 @@ export class IconoplasmVoteCoordinator {
         error: sanitizeText(String(error?.message || error || "gene publication failed"), 500),
       }
     }
-  }
-
-  /**
-   * Durable handover to the shared reader-view owner. The verified receipts are
-   * persisted locally first, so a crash between local publication and the KV
-   * projection is recovered on restart and retried with bounded backoff.
-   */
-  recordReaderHandoff(ticket, published) {
-    const artifacts = published?.projections
-    if (!artifacts) return null
-    const symbol = normalizeSymbol(this.getMeta("symbol"))
-    const version = Number(ticket?.desiredVersion || 0)
-    const selectionKey = normalizeSha256(ticket?.selectionKey || "")
-    if (!symbol || !Number.isSafeInteger(version) || version < 1 || !selectionKey) return null
-    const payload = {
-      symbol,
-      version,
-      selection_key: selectionKey,
-      withdrawn: !winnerAssetShaFromSelectionReference(ticket.selectionRef),
-      card: { key: published.objectKey, hash: published.contentSha256 },
-      gene: { key: artifacts.gene.key, hash: artifacts.gene.hash },
-      portrait: { key: artifacts.portrait.key, hash: artifacts.portrait.hash },
-    }
-    return this.state.storage.transactionSync(() => {
-      this.state.storage.sql.exec(
-        `INSERT INTO publication_handoffs (
-           symbol, version, selection_key, payload_json, attempts, next_attempt_at, delivered_at
-         ) VALUES (?, ?, ?, ?, 0, 0, NULL)
-         ON CONFLICT(symbol) DO UPDATE SET
-           version = excluded.version,
-           selection_key = excluded.selection_key,
-           payload_json = excluded.payload_json,
-           attempts = 0,
-           next_attempt_at = 0,
-           delivered_at = NULL
-         WHERE excluded.version >= publication_handoffs.version`,
-        symbol,
-        version,
-        selectionKey,
-        JSON.stringify(payload),
-      )
-      return payload
-    })
-  }
-
-  ensureReaderHandoffFromPublished() {
-    if (this.getMeta("authority_epoch") !== "v2") return null
-    const state = this.publication.read()
-    if (!state?.publishedArtifact?.projections) return null
-    const symbol = normalizeSymbol(this.getMeta("symbol"))
-    if (!symbol) return null
-    const existing = this.sqlFirst(
-      `SELECT version, delivered_at FROM publication_handoffs WHERE symbol = ?`,
-      symbol,
-    )
-    if (existing && Number(existing.version) >= state.publishedVersion && existing.delivered_at) {
-      return null
-    }
-    return this.recordReaderHandoff(
-      {
-        desiredVersion: state.publishedVersion,
-        selectionKey: state.publishedArtifact.selectionKey,
-        selectionRef: state.selectionRef,
-      },
-      state.publishedArtifact,
-    )
-  }
-
-  async drainReaderHandoffs(env = this.env) {
-    const rows = this.state.storage.sql
-      .exec(
-        `SELECT symbol, version, payload_json, attempts
-           FROM publication_handoffs
-          WHERE delivered_at IS NULL
-            AND next_attempt_at <= ?
-          ORDER BY version ASC
-          LIMIT 4`,
-        Date.now(),
-      )
-      .toArray()
-    if (!rows.length) {
-      const pending = Number(
-        this.state.storage.sql
-          .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
-          .toArray()[0]?.n || 0,
-      )
-      return { ok: true, delivered: 0, pending }
-    }
-    const binding = env?.ICONOPLASM_CARD_PUBLICATION
-    if (!binding) {
-      return {
-        ok: true,
-        delivered: 0,
-        pending: rows.length,
-        reason: "card_publication_binding_missing",
-      }
-    }
-    let delivered = 0
-    for (const row of rows) {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      const version = Number(row?.version || 0)
-      try {
-        const stub = binding.get(binding.idFromName("canonical-cards-v2"))
-        const response = await stub.fetch("https://card-publication.internal/commit-gene-version", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: String(row.payload_json || "{}"),
-        })
-        const data = await response.json().catch(() => null)
-        if (!response.ok || data?.ok !== true) {
-          throw new Error(String(data?.error || `Gene commit rejected (${response.status})`))
-        }
-        this.state.storage.sql.exec(
-          `UPDATE publication_handoffs
-              SET delivered_at = CURRENT_TIMESTAMP, attempts = 0, next_attempt_at = 0
-            WHERE symbol = ? AND version = ?`,
-          symbol,
-          version,
-        )
-        delivered += 1
-      } catch (error) {
-        const attempts = Number(row?.attempts || 0) + 1
-        const delay = Math.min(3600000, 1000 * 2 ** Math.min(attempts - 1, 12))
-        this.state.storage.sql.exec(
-          `UPDATE publication_handoffs
-              SET attempts = ?, next_attempt_at = ?
-            WHERE symbol = ? AND version = ?`,
-          attempts,
-          Date.now() + delay,
-          symbol,
-          version,
-        )
-      }
-    }
-    const pending = Number(
-      this.state.storage.sql
-        .exec(`SELECT COUNT(*) AS n FROM publication_handoffs WHERE delivered_at IS NULL`)
-        .toArray()[0]?.n || 0,
-    )
-    if (pending) await this.armOutboxAlarm(1000)
-    return { ok: true, delivered, pending }
   }
 
   /**
@@ -18152,18 +17808,6 @@ export class IconoplasmVoteCoordinator {
         error: sanitizeText(String(error?.message || error || "publication failed"), 500),
       }
     }
-    // The durable reader-view handoff is D1-free and must drain even when no
-    // legacy outbox work exists, so a crash between local publication and the
-    // shared projection recovers.
-    let handoffResult
-    try {
-      handoffResult = await this.drainReaderHandoffs(this.env)
-    } catch (error) {
-      handoffResult = {
-        ok: false,
-        error: sanitizeText(String(error?.message || error || "reader handoff failed"), 500),
-      }
-    }
     if (
       !this.pendingOutboxRows(1).length &&
       !this.caretakerSupervotes.pendingOutboxRows(1).length
@@ -18171,7 +17815,6 @@ export class IconoplasmVoteCoordinator {
       return {
         ok: true,
         publication: publicationResult,
-        handoff: handoffResult,
         vote: { ok: true, delivered: 0, pending: 0 },
       }
     }
@@ -18182,7 +17825,6 @@ export class IconoplasmVoteCoordinator {
         deferred: true,
         retry_at: retryAt,
         publication: publicationResult,
-        handoff: handoffResult,
       }
     }
     // Alarm entrypoints run independently of HTTP/Queue maintenance checks.
@@ -18193,7 +17835,6 @@ export class IconoplasmVoteCoordinator {
         deferred: true,
         reason: "schema_transition",
         publication: publicationResult,
-        handoff: handoffResult,
       }
     }
     let env
@@ -18222,7 +17863,6 @@ export class IconoplasmVoteCoordinator {
       if (dailyError) throw dailyError
       return {
         publication: publicationResult,
-        handoff: handoffResult,
         vote: voteResult,
         caretaker_supervote: caretakerResult,
       }
@@ -18249,7 +17889,6 @@ export class IconoplasmVoteCoordinator {
         deferred: true,
         reason: "outbox_alarm_failed",
         publication: publicationResult,
-        handoff: handoffResult,
       }
     } finally {
       if (env) await flushIconoplasmD1DailyBudgetUsageFromEnv(env)
@@ -19674,19 +19313,6 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
             PRIMARY KEY (day_key, cycle_key, route_family, actor_class, source_class)
           );
         `)
-        this.state.storage.sql.exec(`
-          CREATE TABLE IF NOT EXISTS daily_card_catalog_kv_write_budget (
-            day_key TEXT PRIMARY KEY,
-            daily_limit INTEGER NOT NULL DEFAULT 0,
-            estimated_writes INTEGER NOT NULL DEFAULT 0,
-            reservation_count INTEGER NOT NULL DEFAULT 0,
-            last_operation TEXT NOT NULL DEFAULT '',
-            last_artifact_version TEXT NOT NULL DEFAULT '',
-            last_card_count INTEGER NOT NULL DEFAULT 0,
-            last_shard_count INTEGER NOT NULL DEFAULT 0,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-          );
-        `)
         const attributionColumns = this.state.storage.sql
           .exec(`PRAGMA table_info(daily_budget_usage_attribution)`)
           .toArray()
@@ -20028,103 +19654,6 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     })
   }
 
-  cardCatalogKvWriteBudgetSnapshot(dayKey, dailyLimit) {
-    const row =
-      this.state.storage.sql
-        .exec(
-          `SELECT
-             day_key,
-             daily_limit,
-             estimated_writes,
-             reservation_count,
-             last_operation,
-             last_artifact_version,
-             last_card_count,
-             last_shard_count,
-             updated_at
-           FROM daily_card_catalog_kv_write_budget
-           WHERE day_key = ?`,
-          String(dayKey || ""),
-        )
-        .toArray()[0] || {}
-    const limit = Math.max(0, Number(dailyLimit || row?.daily_limit || 0) || 0)
-    const estimatedWrites = Math.max(0, Number(row?.estimated_writes || 0) || 0)
-    return {
-      day_key: String(dayKey || ""),
-      daily_limit: limit,
-      estimated_writes: estimatedWrites,
-      estimated_writes_remaining: limit > 0 ? Math.max(0, limit - estimatedWrites) : null,
-      reservation_count: Math.max(0, Number(row?.reservation_count || 0) || 0),
-      last_operation: row?.last_operation || "",
-      last_artifact_version: row?.last_artifact_version || "",
-      last_card_count: Math.max(0, Number(row?.last_card_count || 0) || 0),
-      last_shard_count: Math.max(0, Number(row?.last_shard_count || 0) || 0),
-      updated_at: row?.updated_at || null,
-    }
-  }
-
-  reserveCardCatalogKvWrites(payload) {
-    const dayKeyRaw = String(payload?.day_key || "").trim()
-    const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(dayKeyRaw) ? dayKeyRaw : iconoplasmUtcDayKey()
-    const dailyLimit = positiveIntFromEnv(
-      payload?.daily_limit,
-      CARD_CATALOG_DAILY_KV_WRITE_BUDGET_DEFAULT,
-    )
-    const estimatedWrites = Math.max(0, Number(payload?.estimated_kv_writes || 0) || 0)
-    const before = this.cardCatalogKvWriteBudgetSnapshot(dayKey, dailyLimit)
-    const projected = before.estimated_writes + estimatedWrites
-    if (dailyLimit > 0 && projected > dailyLimit) {
-      return {
-        ok: false,
-        code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
-        error:
-          "Iconoplasm card-catalog publication is blocked because the shared KV write budget for today would be exceeded.",
-        day_key: dayKey,
-        daily_limit: dailyLimit,
-        estimated_writes: before.estimated_writes,
-        requested_writes: estimatedWrites,
-        projected_writes: projected,
-        estimated_writes_remaining: Math.max(0, dailyLimit - before.estimated_writes),
-      }
-    }
-    this.state.storage.sql.exec(
-      `INSERT INTO daily_card_catalog_kv_write_budget (
-         day_key,
-         daily_limit,
-         estimated_writes,
-         reservation_count,
-         last_operation,
-         last_artifact_version,
-         last_card_count,
-         last_shard_count,
-         updated_at
-       ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(day_key) DO UPDATE SET
-         daily_limit = excluded.daily_limit,
-         estimated_writes = daily_card_catalog_kv_write_budget.estimated_writes + excluded.estimated_writes,
-         reservation_count = daily_card_catalog_kv_write_budget.reservation_count + 1,
-         last_operation = excluded.last_operation,
-         last_artifact_version = excluded.last_artifact_version,
-         last_card_count = excluded.last_card_count,
-         last_shard_count = excluded.last_shard_count,
-         updated_at = CURRENT_TIMESTAMP`,
-      dayKey,
-      dailyLimit,
-      estimatedWrites,
-      String(payload?.operation || ""),
-      String(payload?.artifact_version || ""),
-      Math.max(0, Number(payload?.card_count || 0) || 0),
-      Math.max(0, Number(payload?.shard_count || 0) || 0),
-    )
-    return {
-      ok: true,
-      code: "OK",
-      requested_writes: estimatedWrites,
-      projected_writes: projected,
-      ...this.cardCatalogKvWriteBudgetSnapshot(dayKey, dailyLimit),
-    }
-  }
-
   snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle) {
     const row = this.usageRow(dayKey) || {}
     const cycleRow = this.cycleUsageRow(cycleKey) || {}
@@ -20323,20 +19852,9 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
     }
 
-    if (url.pathname === "/reserve-card-catalog-kv-writes") {
-      const reservation = this.reserveCardCatalogKvWrites(payload)
-      return Response.json(reservation, {
-        status: reservation.ok === false ? 429 : 200,
-      })
-    }
-
     if (url.pathname === "/report") {
       return Response.json({
         snapshot: this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle),
-        card_catalog_kv_write_budget: this.cardCatalogKvWriteBudgetSnapshot(
-          dayKey,
-          positiveIntFromEnv(payload?.card_catalog_daily_kv_write_budget, 0),
-        ),
         cycle_days: this.cycleDayRowsWithBudgetHistory(cycleKey, budgets),
         daily_attribution: this.attributionRows(dayKey, cycleKey, "daily"),
         cycle_attribution: this.attributionRows(dayKey, cycleKey, "cycle"),
@@ -20885,13 +20403,9 @@ async function iconoVoteSnapshotsBatch(env, { items, userId }) {
 async function autoPromoteTopVotedPortrait(env, { symbol, actorId, reason } = {}) {
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
   // This helper only mutates the D1 source of truth. It does not publish the
-  // logged-out/public card artifact and it does not flip KV_GALLERY_VERSION.
-  // Callers that can affect public `/api/iconoplasm/cards/:symbol` output must
-  // follow this with read-model sync plus `publishIconoplasmGalleryDirtyShards`, or use the
-  // VoteCoordinator projection path below, which also rolls D1 back if public
-  // artifact publication fails. The searchable failure mode is the PRL
-  // split-brain incident: one surface exposed the new D1 source portrait while
-  // published card traffic kept the old exact-card image epoch.
+  // gene's stable object; the recorded publish event makes the gene dirty for
+  // the Actions republish pass, and the vote authority publishes its own
+  // winner in process (B-898).
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
@@ -23661,13 +23175,10 @@ export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
       if (visionIds.length) {
         await rebuildVisionRollupsBatch(env, visionIds)
       }
-      // Vote projection intentionally stops at D1 authoring/read models. It
-      // records events that can make a card shard dirty, but it never moves the
-      // published source portrait or public blot. The exact card selected by
-      // KV_GALLERY_VERSION remains the sole published source-portrait authority,
-      // and its matching local blot remains the canonical public image until
-      // bounded publication prepares every dirty replacement and atomically flips the barrier. Never publish
-      // per vote; one vote cannot pay for shard preparation and release writes.
+      // Vote projection intentionally stops at D1 authoring/read models. The
+      // gene's stable object is published by the vote authority's own per-gene
+      // publisher when the winner changes, and the catalog object by the
+      // Actions publisher the quarter-hour cron dispatches (B-898).
       adminReadModelState.ready = true
       // Complete the batch atomically: a later delete failure must not erase
       // an earlier job before the shared projection is rolled back.
@@ -23702,15 +23213,6 @@ export async function processVoteProjectionRefreshJobBatch(env, rawJobs) {
     }
   }
 
-  if (env.ICONOPLASM_CARD_PUBLICATION && applied.length) {
-    try {
-      await callCardPublication(env, "/wake", { method: "POST" })
-    } catch (error) {
-      // The committed vote/event must not be rolled back because a wakeup
-      // failed. The durable event log and scheduled recovery retain the work.
-      console.error("Card publication wakeup failed", String(error?.message || error))
-    }
-  }
   return jobs.map(
     (job) => resultBySymbol.get(job.symbol) || voteProjectionRefreshFailureResult(job),
   )
@@ -26099,11 +25601,10 @@ async function autoPromoteTopVotedPortraitFromCoordinatorState(
   // ICONOPLASM D1 PORTRAIT-AUTHORING PROJECTION CONTRACT.
   // This vote projection ranks the already-settled VoteCoordinator summaries
   // against renderable portrait assets, then mutates D1 `icono_publish_state`
-  // and records the publication event. It does not change the published source
-  // portrait or public blot; the exact card selected by KV_GALLERY_VERSION
-  // remains authoritative until dirty-shard publication flips the barrier. Call this only from the
-  // Queue-backed pipeline that also refreshes the dependent D1 read models, not
-  // from a request handler that immediately returns success.
+  // and records the publication event. It does not publish the gene's stable
+  // object (B-898: the vote authority and the Actions republish pass do). Call
+  // this only from the Queue-backed pipeline that also refreshes the dependent
+  // D1 read models, not from a request handler that immediately returns success.
   if (!env.ICONOPLASM_DB) return { ok: false, changed: false, code: "NO_DB" }
   const symbolNorm = normalizeSymbol(symbol)
   if (!symbolNorm) return { ok: false, changed: false, code: "BAD_SYMBOL" }
@@ -26732,7 +26233,7 @@ export async function repairCanonInvariants(
   }
 
   if (touchedSymbols.length) {
-    await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+    await syncAdminReadModels(env, {
       symbols: touchedSymbols,
       skipVisionRollups: true,
     })
@@ -27657,7 +27158,7 @@ async function removePortraitAssetAndQueueLocalRemoval(
     actorId: actorNorm,
     reason: `admin_remove_candidate:${assetShaNorm}`,
   })
-  await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, { symbols: [symbolNorm] })
+  await syncAdminReadModels(env, { symbols: [symbolNorm] })
 
   return {
     ok: true,
@@ -27942,15 +27443,14 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.loadedAt = 0
   clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  cardCatalogArtifactCache.version = null
-  cardCatalogArtifactCache.value = null
   cardCatalogParsedManifestCache.clear()
   cardCatalogParsedManifestReadPromises.clear()
   cardCatalogParsedShardCache.clear()
   cardCatalogParsedShardReadPromises.clear()
-  resetPublishedViewReaderCachesForTest()
   galleryVersionCache.value = "0"
   galleryVersionCache.loadedAt = 0
+  frozenCardTreeHeadCache.value = null
+  frozenCardTreeHeadCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
 }
@@ -28015,66 +27515,43 @@ function gallerySnapshotMaxAgeMs(order) {
   return order === "votes" ? GALLERY_VOTES_SNAPSHOT_TTL_MS : GALLERY_SNAPSHOT_TTL_MS
 }
 
+// B-898: the public gallery feed's cache version. The feed's rows come from
+// D1 (icono_publish_state joined to assets and votes); they change exactly
+// when a canonical publish event lands, and the quarter-hour catalog cron
+// records the newest such event id in KV when it dispatches the Actions
+// publisher (iconoplasm-catalog-dispatch.js). That integer is the version the
+// shared KV row snapshots and the edge cache key are stamped with: one KV read
+// per isolate per five seconds, written only by that background job, never
+// parsed from the 3.4 MB catalog object in a request. Fail mode: with no
+// dispatch token the key never moves and the gallery feed stays on its first
+// snapshot; the cron result names "no_token" in its logs.
 async function currentGalleryVersion(env) {
-  const barrier = await currentGalleryVersionBarrier(env)
-  return barrier.current
+  const now = Date.now()
+  if (
+    galleryVersionCache.loadedAt > 0 &&
+    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
+    galleryVersionCache.value
+  ) {
+    return galleryVersionCache.value
+  }
+  let value = "0"
+  if (env?.KV) {
+    try {
+      const raw = await env.KV.get(CATALOG_DISPATCH_WATERMARK_KEY)
+      value = String(Number(raw || 0) || 0)
+    } catch {
+      value = galleryVersionCache.value || "0"
+    }
+  }
+  galleryVersionCache.value = `catalog-v3:${value}`
+  galleryVersionCache.loadedAt = now
+  return galleryVersionCache.value
 }
 
-// B-898: the one publication source. The per-gene publisher below and the
-// (retiring) card-publication coordinator read genes through the same adapter.
+// B-898: the one publication source: how a gene becomes a card. The per-gene
+// publisher below materializes through it; nothing else reads cards from D1.
 function cardPublicationSourceForEnv(env) {
   return {
-    buildRevision: CARD_CATALOG_BUILD_REVISION,
-    // Revisions 2-4 retain the same immutable card, gene and portrait object
-    // contracts. The migration adds the compact catalog projection and a new
-    // manifest; rewriting and re-verifying three objects for all 19,023 genes
-    // would turn this metadata cutover into a multi-hour Bunny upload. Dirty
-    // genes are still fully rematerialized through source.materialize().
-    reuseExistingCardObjectsForMigration: true,
-    async legacyBaseline() {
-      const raw = await env.KV.get(KV_GALLERY_VERSION)
-      const barrier = normalizeGalleryVersionBarrierValue(JSON.parse(raw))
-      const manifest = await readCardCatalogArtifactManifest(env, barrier.current)
-      if (
-        manifest?.storage !== CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
-        Number(manifest.build_revision) !== CARD_CATALOG_BUILD_REVISION
-      ) {
-        throw new Error("Card storage migration requires the current complete mapping revision")
-      }
-      const watermark = JSON.parse(await env.KV.get(KV_CARD_CATALOG_PUBLISH_WATERMARK))
-      if (!watermark) throw new Error("Card storage migration requires the legacy event watermark")
-      return {
-        manifest,
-        watermark: {
-          id: Number(watermark.watermark_event_id || 0),
-          created_at: watermark.watermark_event_at || null,
-        },
-      }
-    },
-    async legacyCards(ref) {
-      const parsed = await readPublishedCardCatalogShard(env, "legacy-migration", ref, true)
-      if (!parsed?.cards?.every(assertCompleteMobileCardVM))
-        throw new Error("Invalid legacy migration shard")
-      return parsed.cards
-    },
-    async highWater() {
-      // Unlike a diagnostic best-effort query, a publisher must fail closed on
-      // a database error; treating failure as zero would incorrectly go idle.
-      const row = await env.ICONOPLASM_DB.prepare(
-        `SELECT id, created_at FROM icono_publish_events WHERE action IN (${cardCatalogCanonicalActionPlaceholders()}) ORDER BY id DESC LIMIT 1`,
-      )
-        .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
-        .first()
-      return { id: Number(row?.id || 0), created_at: row?.created_at || null }
-    },
-    changed: (after, through) =>
-      cardCatalogChangedSymbolsWithinPublicationWindow(env, {
-        afterEventId: after.id,
-        afterEventAt: after.created_at,
-        throughEventId: through.id,
-        throughEventAt: through.created_at,
-        limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
-      }),
     async materialize(symbols, { portraitOverrides = null } = {}) {
       const records = await cardCatalogRecordsForArtifact(env, {
         requestUrl: "https://iconoplasm.brinedew.bio/",
@@ -28130,25 +27607,12 @@ function cardPublicationSourceForEnv(env) {
         ).bind(symbolNorm, asset || ""),
       ])
     },
-    async afterCommit({ version, after, through, symbols, offset }) {
-      if (offset === 0)
-        await syncPublishedGeneRouteMembershipAfterPublication(env, {
-          afterEventAt: after.created_at,
-          throughEventAt: through.created_at,
-          afterEventId: after.id,
-          throughEventId: through.id,
-        })
-      await advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols)
-    },
   }
 }
 
-export const IconoplasmCardPublicationCoordinator = createCardPublicationCoordinatorClass(
-  cardPublicationSourceForEnv,
-)
-
 /**
- * B-898 (deletion stage, step A): THE ONLY per-gene publisher. Rewrites the
+ * ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
+ * B-898: THE ONLY per-gene publisher. Rewrites the
  * gene's stable object genes/v3/<SYMBOL>.json from D1 and the authoring store,
  * purges its CDN URL, projects the selected winner into D1, keeps the gene's
  * route membership, and advances its print-copy materialization. About five
@@ -28208,1243 +27672,37 @@ export async function publishIconoplasmGeneStableObject(
   }
 }
 
-function normalizeGalleryVersionBarrierValue(value) {
-  if (value && typeof value === "object") {
-    const current = String(value.current || "").trim() || "0"
-    const previous = String(value.previous || "").trim()
-    return {
-      current,
-      previous: previous && previous !== current ? previous : null,
-      raw: value,
-    }
-  }
-  const current = String(value || "0").trim() || "0"
-  return { current, previous: null, raw: value || "0" }
-}
-
-async function currentGalleryVersionBarrier(env) {
+// B-898: the head of the frozen immutable card tree, read for the gene-discovery
+// worker only (see KV_FROZEN_CARD_TREE_HEAD). One KV read per isolate per five
+// seconds; a missing or unparsable head reads as "0" and the discovery
+// documents fail closed (503) instead of guessing.
+const frozenCardTreeHeadCache = { value: null, loadedAt: 0 }
+async function frozenCardTreeHead(env) {
   const now = Date.now()
-  // This is a speed cache, not the source of truth. The coordinator is the sole
-  // writer; KV is its immutable public read projection.
-  // The five-second isolate TTL is still worth keeping:
-  // mobile-card and home traffic can call the barrier repeatedly inside one
-  // isolate, and reading storage on every nested call spends shared budgets.
-  // Do not replace this with a memory-only cache: isolates are independent.
   if (
-    galleryVersionCache.loadedAt > 0 &&
-    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
-    galleryVersionCache.value !== null &&
-    galleryVersionCache.value !== undefined
+    frozenCardTreeHeadCache.loadedAt > 0 &&
+    now - frozenCardTreeHeadCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
+    frozenCardTreeHeadCache.value
   ) {
-    return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
+    return frozenCardTreeHeadCache.value
   }
-  // Public reads use the coordinator's immutable KV projection. Calling the
-  // Durable Object from every catalog/card read coupled the entire public site
-  // to the account-wide DO duration allowance: one migration could exhaust the
-  // allowance and take unrelated gene pages offline. The coordinator remains
-  // the only writer and projects a committed, storage-verified head to KV.
-  if (!env.KV) {
-    galleryVersionCache.loadedAt = now
-    return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
-  }
-  try {
-    const raw = await env.KV.get(KV_GALLERY_VERSION)
-    let value = null
+  let head = { current: "0", published_at: "" }
+  if (env?.KV) {
     try {
-      value = raw ? JSON.parse(raw) : null
+      const parsed = JSON.parse((await env.KV.get(KV_FROZEN_CARD_TREE_HEAD)) || "null")
+      const current = String(parsed?.current || "").trim()
+      if (current) head = { current, published_at: String(parsed?.published_at || "") }
     } catch {
-      value = null
+      head = frozenCardTreeHeadCache.value || head
     }
-    galleryVersionCache.value =
-      value && typeof value === "object" ? value : String(raw || "0").trim() || "0"
-  } catch {
-    galleryVersionCache.value = galleryVersionCache.value || "0"
   }
-  galleryVersionCache.loadedAt = now
-  return normalizeGalleryVersionBarrierValue(galleryVersionCache.value || "0")
-}
-
-async function currentMobileCardSnapshotVersion(env) {
-  return currentGalleryVersionBarrier(env)
-}
-
-function nextGalleryVersionBarrier(previousBarrier, artifactVersion = "") {
-  const previous = String(previousBarrier.current || "").trim()
-  const next =
-    String(artifactVersion || "").trim() ||
-    `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-  return {
-    current: next,
-    previous: previous && previous !== next && previous !== "0" ? previous : null,
-    schema: MOBILE_CARD_VM_SCHEMA,
-    published_at: new Date().toISOString(),
-    status: "active",
-  }
-}
-
-async function publishGalleryVersionBarrier(env, barrier) {
-  if (env.ICONOPLASM_CARD_PUBLICATION)
-    throw new Error("Legacy KV head writes are retired; use the durable card publication migration")
-  // The barrier is the public release pointer and portrait epoch, not just a
-  // cache token. Only call this after the exact card-catalog artifact for
-  // `barrier.current` has been fully written and validated. Flipping
-  // KV_GALLERY_VERSION first would make public routes request a missing or
-  // invalid artifact and fail 503. Until the flip, D1 authoring may be ahead,
-  // but every public surface must remain on the previous exact card instead of
-  // falling back to a D1, route, or discovery/catalog portrait.
-  if (env.KV) {
-    await env.KV.put(KV_GALLERY_VERSION, JSON.stringify(barrier))
-  }
-  galleryVersionCache.value = barrier
-  galleryVersionCache.loadedAt = Date.now()
-  return String(barrier?.current || "")
+  frozenCardTreeHeadCache.value = head
+  frozenCardTreeHeadCache.loadedAt = now
+  return head
 }
 
 function cardCatalogCanonicalActionPlaceholders() {
   return CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS.map(() => "?").join(",")
-}
-
-async function maxCardCatalogPublishEventPosition(env) {
-  // The high-water mark a fresh publish will cover: the newest canonical-affecting
-  // event at build time. Captured BEFORE the build so any event that lands during
-  // the build is conservatively left for the next cycle (worst case: one extra
-  // gene update later, never a silently-skipped change). ID is the correctness
-  // cursor: created_at has one-second precision and can be shared by an event
-  // captured here and a later event that arrives mid-build.
-  if (!env?.ICONOPLASM_DB) return { id: 0, created_at: null }
-  try {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT id, created_at
-         FROM icono_publish_events
-        WHERE action IN (${cardCatalogCanonicalActionPlaceholders()})
-        ORDER BY id DESC
-        LIMIT 1`,
-    )
-      .bind(...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS)
-      .first()
-    const id = Math.max(0, Number(row?.id || 0) || 0)
-    const createdAt = row?.created_at ? String(row.created_at) : null
-    return { id, created_at: createdAt }
-  } catch {
-    return { id: 0, created_at: null }
-  }
-}
-
-async function readCardCatalogPublishWatermark(env) {
-  if (env.ICONOPLASM_CARD_PUBLICATION) {
-    const status = await callCardPublication(env, "/status")
-    if (status.current)
-      return {
-        artifact_version: status.current,
-        content_hash: status.current,
-        watermark_event_id: status.watermark.id,
-        watermark_event_at: status.watermark.created_at,
-        card_count: status.card_count,
-        catalog_gene_count: status.card_count,
-        published_at: status.published_at,
-      }
-  }
-  if (!env?.KV?.get) return null
-  try {
-    const raw = await env.KV.get(KV_CARD_CATALOG_PUBLISH_WATERMARK)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === "object" ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-async function syncPublishedGeneRouteMembershipAfterPublication(
-  env,
-  { afterEventAt = null, throughEventAt = null, afterEventId = 0, throughEventId = 0 } = {},
-) {
-  if (!env?.ICONOPLASM_DB || (!throughEventAt && !throughEventId)) {
-    return { inserted: 0, deleted: 0 }
-  }
-  const placeholders = cardCatalogCanonicalActionPlaceholders()
-  const useEventIds = Number(throughEventId) > 0
-  const positionClause = useEventIds
-    ? Number(afterEventId) > 0
-      ? "id > ? AND id <= ?"
-      : "id <= ?"
-    : afterEventAt
-      ? "created_at > ? AND created_at <= ?"
-      : "created_at <= ?"
-  const positionBinds = useEventIds
-    ? Number(afterEventId) > 0
-      ? [Number(afterEventId), Number(throughEventId)]
-      : [Number(throughEventId)]
-    : afterEventAt
-      ? [String(afterEventAt), String(throughEventAt)]
-      : [String(throughEventAt)]
-  const eventSymbolsSql = `SELECT DISTINCT gene_symbol
-                              FROM icono_publish_events
-                             WHERE action IN (${placeholders})
-                               AND ${positionClause}`
-  const actionBinds = [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
-
-  // The D1 route index and discovery/catalog rows are identity and membership
-  // only. This sync advances route membership after the exact-card barrier;
-  // mutable D1 portrait authoring and vote state never supply the public
-  // portrait. Both statements are idempotent so a failed invocation can safely
-  // retry before advancing the publication watermark.
-  const inserted = await env.ICONOPLASM_DB.prepare(
-    `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
-     SELECT c.gene_symbol
-       FROM icono_gene_catalog c
-       JOIN (${eventSymbolsSql}) changed
-         ON changed.gene_symbol = c.gene_symbol`,
-  )
-    .bind(...actionBinds, ...positionBinds)
-    .run()
-  const deleted = await env.ICONOPLASM_DB.prepare(
-    `DELETE FROM icono_published_gene_routes
-      WHERE gene_symbol IN (${eventSymbolsSql})
-        AND NOT EXISTS (
-          SELECT 1
-            FROM icono_gene_catalog c
-           WHERE c.gene_symbol = icono_published_gene_routes.gene_symbol
-        )`,
-  )
-    .bind(...actionBinds, ...positionBinds)
-    .run()
-  return {
-    inserted: Math.max(0, Number(inserted?.meta?.changes || 0) || 0),
-    deleted: Math.max(0, Number(deleted?.meta?.changes || 0) || 0),
-  }
-}
-
-export async function syncPublishedGeneRouteMembershipAfterPublicationForTest(env, options) {
-  return syncPublishedGeneRouteMembershipAfterPublication(env, options)
-}
-
-async function writeCardCatalogPublishWatermark(
-  env,
-  {
-    artifactVersion,
-    watermarkEventAt,
-    watermarkEventId = 0,
-    cardCount,
-    catalogGeneCount,
-    contentHash,
-  } = {},
-) {
-  if (!env?.KV?.put) return { watermark: null, wrote: false }
-  const nextVersion = String(artifactVersion || "")
-  const nextEventAt = watermarkEventAt ? String(watermarkEventAt) : null
-  const nextEventId = Math.max(0, Number(watermarkEventId || 0) || 0)
-  // Idempotent: the daily cron calls publish even when nothing changed. Writing
-  // the watermark every time would burn the binding constraint (KV writes, 1k/day
-  // free cap) on no-op cycles. Only put when the covered version or high-water
-  // event actually advances. (Architecture fence: keep the no-op publish path
-  // write-free.)
-  const existing = await readCardCatalogPublishWatermark(env)
-  if (
-    existing &&
-    String(existing.artifact_version || "") === nextVersion &&
-    (existing.watermark_event_at || null) === nextEventAt &&
-    Math.max(0, Number(existing.watermark_event_id || 0) || 0) === nextEventId
-  ) {
-    return { watermark: existing, wrote: false }
-  }
-  const payload = {
-    schema: "iconoplasm.cardCatalogPublishWatermark.v1",
-    artifact_version: nextVersion,
-    content_hash: String(contentHash || ""),
-    watermark_event_at: nextEventAt,
-    watermark_event_id: nextEventId || null,
-    card_count: Math.max(0, Number(cardCount || 0) || 0),
-    catalog_gene_count: Math.max(0, Number(catalogGeneCount || 0) || 0),
-    published_at: new Date().toISOString(),
-  }
-  try {
-    await env.KV.put(KV_CARD_CATALOG_PUBLISH_WATERMARK, JSON.stringify(payload))
-  } catch {
-    return { watermark: null, wrote: false }
-  }
-  return { watermark: payload, wrote: true }
-}
-
-async function cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermarkEventId = 0) {
-  // One indexed query answers "which genes changed since the last publish" — no
-  // whole-catalog scan. With no watermark yet, every canonical-affecting event
-  // counts (we cannot prove what the live artifact covers).
-  const empty = {
-    changed_symbol_count: 0,
-    event_count: 0,
-    min_created_at: null,
-    max_created_at: null,
-  }
-  if (!env?.ICONOPLASM_DB) return empty
-  const placeholders = cardCatalogCanonicalActionPlaceholders()
-  const where =
-    Number(watermarkEventId) > 0
-      ? `action IN (${placeholders}) AND id > ?`
-      : watermarkEventAt
-        ? `action IN (${placeholders}) AND created_at > ?`
-        : `action IN (${placeholders})`
-  const binds =
-    Number(watermarkEventId) > 0
-      ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, Number(watermarkEventId)]
-      : watermarkEventAt
-        ? [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS, String(watermarkEventAt)]
-        : [...CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS]
-  try {
-    const summary = await env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(DISTINCT gene_symbol) AS changed_symbol_count,
-              COUNT(*) AS event_count,
-              MIN(created_at) AS min_created_at,
-              MAX(created_at) AS max_created_at
-         FROM icono_publish_events
-        WHERE ${where}`,
-    )
-      .bind(...binds)
-      .first()
-    return {
-      changed_symbol_count: Math.max(0, Number(summary?.changed_symbol_count || 0) || 0),
-      event_count: Math.max(0, Number(summary?.event_count || 0) || 0),
-      min_created_at: summary?.min_created_at ? String(summary.min_created_at) : null,
-      max_created_at: summary?.max_created_at ? String(summary.max_created_at) : null,
-    }
-  } catch {
-    return empty
-  }
-}
-
-async function cardCatalogPublishStatus(env) {
-  if (env.ICONOPLASM_CARD_PUBLICATION) {
-    const status = await callCardPublication(env, "/status")
-    const barrier = await currentGalleryVersionBarrier(env)
-    const changes = await cardCatalogChangesSinceWatermark(
-      env,
-      status.watermark?.created_at,
-      status.watermark?.id || 0,
-    )
-    return {
-      ok: true,
-      live_gallery_version: barrier.current,
-      published_artifact_version: status.current,
-      has_watermark: Boolean(status.watermark),
-      live_matches_published: status.current === barrier.current,
-      changes_since_publish: changes.changed_symbol_count,
-      change_events_since_publish: changes.event_count,
-      is_stale: !status.current || changes.changed_symbol_count > 0,
-      dirty_shard_publication_in_progress: Boolean(status.job),
-      dirty_shards_total: status.job?.groups || 0,
-      dirty_shards_prepared: status.job?.group || 0,
-      publication: status,
-    }
-  }
-  const barrier = await currentGalleryVersionBarrier(env)
-  const liveVersion = String(barrier?.current || "")
-  const watermark = await readCardCatalogPublishWatermark(env)
-  const watermarkEventAt = watermark?.watermark_event_at || null
-  const watermarkEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
-  const publishedVersion = watermark?.artifact_version || null
-  const changes = await cardCatalogChangesSinceWatermark(env, watermarkEventAt, watermarkEventId)
-  const dirtyPublication = await readCardCatalogDirtyShardPublication(env)
-  return {
-    ok: true,
-    live_gallery_version: liveVersion || null,
-    published_artifact_version: publishedVersion,
-    published_at: watermark?.published_at || null,
-    watermark_event_at: watermarkEventAt,
-    watermark_event_id: watermarkEventId || null,
-    has_watermark: Boolean(watermark),
-    live_matches_published: Boolean(publishedVersion) && liveVersion === publishedVersion,
-    changes_since_publish: changes.changed_symbol_count,
-    change_events_since_publish: changes.event_count,
-    oldest_pending_change_at: changes.min_created_at,
-    newest_pending_change_at: changes.max_created_at,
-    is_stale: changes.changed_symbol_count > 0 || !watermark,
-    dirty_shard_publication_in_progress: Boolean(dirtyPublication),
-    dirty_shards_total: Array.isArray(dirtyPublication?.groups)
-      ? dirtyPublication.groups.length
-      : 0,
-    dirty_shards_prepared: Math.max(0, Number(dirtyPublication?.next_group || 0) || 0),
-    publication_operation_id: dirtyPublication?.operation_id || null,
-  }
-}
-
-function isoToSqliteDatetimeFloor(value) {
-  // icono_publish_events.created_at is a SQLite datetime ("YYYY-MM-DD HH:MM:SS",
-  // UTC). Artifact validated_at is ISO ("...T...Z"). Convert to the comparable
-  // SQLite form, flooring to the second so the cutoff is never AFTER the real
-  // build time — worst case we update a gene already covered (idempotent), never
-  // skip a real change.
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(String(value || ""))
-  return m ? `${m[1]} ${m[2]}` : null
-}
-
-async function cardCatalogChangedSymbolsWithinPublicationWindow(
-  env,
-  {
-    afterEventAt = null,
-    throughEventAt = null,
-    afterEventId = 0,
-    throughEventId = 0,
-    limit,
-    actions = CARD_CATALOG_CANONICAL_AFFECTING_ACTIONS,
-  },
-) {
-  // The genes whose owning gallery shards need publication: distinct symbols with a
-  // canonical-affecting event after the watermark. `limit` is ceiling+1 so the
-  // caller can detect "delta too large" without counting the whole history.
-  if (!env?.ICONOPLASM_DB) return { symbols: [], truncated: false }
-  const actionList = Array.from(new Set(Array.isArray(actions) ? actions : [])).filter(Boolean)
-  if (!actionList.length) return { symbols: [], truncated: false }
-  const placeholders = actionList.map(() => "?").join(",")
-  const clauses = [`action IN (${placeholders})`]
-  const binds = [...actionList]
-  if (Number(afterEventId) > 0) {
-    clauses.push("id > ?")
-    binds.push(Number(afterEventId))
-  } else if (afterEventAt) {
-    clauses.push("created_at > ?")
-    binds.push(String(afterEventAt))
-  }
-  if (Number(throughEventId) > 0) {
-    clauses.push("id <= ?")
-    binds.push(Number(throughEventId))
-  } else if (throughEventAt) {
-    clauses.push("created_at <= ?")
-    binds.push(String(throughEventAt))
-  }
-  const cappedLimit = Math.max(1, Number(limit) || 1)
-  const result = await env.ICONOPLASM_DB.prepare(
-    `SELECT DISTINCT gene_symbol
-       FROM icono_publish_events
-      WHERE ${clauses.join(" AND ")}
-      ORDER BY gene_symbol ASC
-      LIMIT ?`,
-  )
-    .bind(...binds, cappedLimit)
-    .all()
-  const rows = Array.isArray(result?.results) ? result.results : []
-  const symbols = rows.map((row) => normalizeSymbol(row?.gene_symbol || "")).filter(Boolean)
-  return { symbols, truncated: symbols.length >= cappedLimit }
-}
-
-function cardCatalogPublicationError(code, message) {
-  const error = new Error(message)
-  error.code = code
-  return error
-}
-
-function cardCatalogArtifactShardSize(env) {
-  // Production uses the fixed contract size. Tests may lower it to exercise
-  // multi-shard publication without manufacturing thousands of cards.
-  const raw = Number.parseInt(String(env?.ICONOPLASM_CARD_CATALOG_SHARD_SIZE || "").trim(), 10)
-  return Number.isFinite(raw) && raw > 0 ? raw : CARD_CATALOG_ARTIFACT_SHARD_SIZE
-}
-
-function normalizedCardCatalogManifestShards(manifest) {
-  return (Array.isArray(manifest?.shards) ? manifest.shards : [])
-    .slice()
-    .sort((left, right) => Number(left?.index) - Number(right?.index))
-    .map((shard, index) => ({
-      key: String(shard?.key || ""),
-      index,
-      card_count: Math.max(0, Number(shard?.card_count || 0) || 0),
-      content_hash: String(shard?.content_hash || ""),
-      first_symbol: normalizeSymbol(shard?.first_symbol || "") || null,
-      last_symbol: normalizeSymbol(shard?.last_symbol || "") || null,
-    }))
-}
-
-function cardCatalogOwningShardIndex(shards, symbol) {
-  const normalized = normalizeSymbol(symbol || "")
-  if (!normalized || !shards.length) return null
-  for (const shard of shards) {
-    if (shard.first_symbol && shard.last_symbol) {
-      if (normalized >= shard.first_symbol && normalized <= shard.last_symbol) return shard.index
-      // Stable local insertion: a symbol in a boundary gap belongs to the next
-      // range. No following shard is renumbered unless this one locally splits.
-      if (normalized < shard.first_symbol) return shard.index
-    }
-  }
-  return shards[shards.length - 1].index
-}
-
-function cardCatalogDirtyShardGroups(shards, changedSymbols) {
-  const byIndex = new Map()
-  for (const rawSymbol of changedSymbols) {
-    const symbol = normalizeSymbol(rawSymbol || "")
-    const index = cardCatalogOwningShardIndex(shards, symbol)
-    if (!symbol || index === null) continue
-    if (!byIndex.has(index)) byIndex.set(index, new Set())
-    byIndex.get(index).add(symbol)
-  }
-  return Array.from(byIndex.entries())
-    .sort((left, right) => left[0] - right[0])
-    .map(([baselineIndex, symbols]) => ({
-      baseline_index: baselineIndex,
-      symbols: Array.from(symbols).sort(),
-    }))
-}
-
-async function readCardCatalogDirtyShardPublication(env) {
-  if (!env?.KV?.get) return null
-  const raw = await env.KV.get(KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION)
-  if (!raw) return null
-  let parsed
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_DIRTY_PUBLICATION_CORRUPT",
-      "Dirty-shard publication state is corrupt; refusing an implicit recovery.",
-    )
-  }
-  if (!parsed?.active) return null
-  if (Number(parsed.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED",
-      "A card mapping revision changed during publication; run the explicit schema migration.",
-    )
-  }
-  return { ...parsed, persisted: true }
-}
-
-async function writeCardCatalogDirtyShardPublication(env, publication) {
-  if (!env?.KV?.put) return
-  await env.KV.put(
-    KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION,
-    JSON.stringify({
-      ...publication,
-      schema: "iconoplasm.cardCatalogDirtyShardPublication.v1",
-      build_revision: CARD_CATALOG_BUILD_REVISION,
-      active: true,
-      updated_at: new Date().toISOString(),
-    }),
-  )
-}
-
-async function clearCardCatalogDirtyShardPublication(env) {
-  if (env?.KV?.delete) {
-    await env.KV.delete(KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION)
-  } else if (env?.KV?.put) {
-    await env.KV.put(
-      KV_CARD_CATALOG_DIRTY_SHARD_PUBLICATION,
-      JSON.stringify({ active: false, updated_at: new Date().toISOString() }),
-    )
-  }
-}
-
-async function recordCardCatalogDirtyShardPublicationAudit(
-  env,
-  publication,
-  { outcome, preparedShardCount = 0, targetVersion = null, error = null } = {},
-) {
-  if (!env?.ICONOPLASM_DB || !publication?.operation_id) return
-  const groups = Array.isArray(publication.groups) ? publication.groups : []
-  const dirtyShardCount =
-    groups.length || Math.max(0, Number(publication.dirty_shard_count || 0) || 0)
-  const completed = outcome === "completed" || outcome === "failed"
-  const cost = publication.cost && typeof publication.cost === "object" ? publication.cost : {}
-  const startedAt = publication.started_at || new Date().toISOString()
-  const startedAtMs = Date.parse(startedAt)
-  const durationMs =
-    completed && Number.isFinite(startedAtMs) ? Math.max(0, Date.now() - startedAtMs) : null
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_card_catalog_publication_audit (
-       operation_id, publication_kind, baseline_version, target_version,
-       after_event_at, through_event_at, after_event_id, through_event_id,
-       dirty_symbol_count, dirty_shard_count, prepared_shard_count,
-       trigger_reason, shards_read, shards_written,
-       kv_writes_reserved, kv_writes_used, duration_ms,
-       outcome, error_code, error_message,
-       started_at, updated_at, completed_at
-     ) VALUES (?, 'dirty_shards', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-               CURRENT_TIMESTAMP,
-               CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
-     ON CONFLICT(operation_id) DO UPDATE SET
-       target_version = excluded.target_version,
-       prepared_shard_count = excluded.prepared_shard_count,
-       trigger_reason = excluded.trigger_reason,
-       shards_read = excluded.shards_read,
-       shards_written = excluded.shards_written,
-       kv_writes_reserved = excluded.kv_writes_reserved,
-       kv_writes_used = excluded.kv_writes_used,
-       duration_ms = excluded.duration_ms,
-       outcome = excluded.outcome,
-       error_code = excluded.error_code,
-       error_message = excluded.error_message,
-       updated_at = CURRENT_TIMESTAMP,
-       completed_at = excluded.completed_at`,
-  )
-    .bind(
-      publication.operation_id,
-      String(publication.baseline_version || ""),
-      targetVersion ? String(targetVersion) : null,
-      publication.after_event_at ? String(publication.after_event_at) : null,
-      publication.through_event_at ? String(publication.through_event_at) : null,
-      Math.max(0, Number(publication.after_event_id || 0) || 0) || null,
-      Math.max(0, Number(publication.through_event_id || 0) || 0) || null,
-      Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
-      dirtyShardCount,
-      Math.max(0, Number(preparedShardCount || 0) || 0),
-      sanitizeText(String(publication.trigger_reason || "unspecified"), 255) || "unspecified",
-      Math.max(0, Number(cost.shards_read || 0) || 0),
-      Math.max(0, Number(cost.shards_written || 0) || 0),
-      Math.max(0, Number(cost.kv_writes_reserved || 0) || 0),
-      Math.max(0, Number(cost.kv_writes_used || 0) || 0),
-      durationMs,
-      String(outcome || "started"),
-      error?.code ? sanitizeText(String(error.code), 128) : null,
-      error ? sanitizeText(String(error?.message || error), 500) : null,
-      startedAt,
-      completed ? 1 : 0,
-    )
-    .run()
-  console.log(
-    JSON.stringify({
-      service: "iconoplasm",
-      operation: "card_catalog_dirty_shard_publication",
-      operation_id: publication.operation_id,
-      outcome,
-      baseline_version: publication.baseline_version,
-      target_version: targetVersion,
-      dirty_symbol_count: publication.dirty_symbol_count,
-      dirty_shard_count: dirtyShardCount,
-      prepared_shard_count: preparedShardCount,
-      trigger_reason: publication.trigger_reason || "unspecified",
-      shards_read: Math.max(0, Number(cost.shards_read || 0) || 0),
-      shards_written: Math.max(0, Number(cost.shards_written || 0) || 0),
-      kv_writes_reserved: Math.max(0, Number(cost.kv_writes_reserved || 0) || 0),
-      kv_writes_used: Math.max(0, Number(cost.kv_writes_used || 0) || 0),
-      duration_ms: durationMs,
-      error_code: error?.code || null,
-    }),
-  )
-}
-
-async function readCardCatalogShardCardsForPublication(env, shard) {
-  let parsed = null
-  try {
-    const raw = await env.KV.get(String(shard?.key || ""))
-    parsed = raw ? JSON.parse(raw) : null
-  } catch {
-    parsed = null
-  }
-  if (parsed && Array.isArray(parsed.cards)) return parsed.cards
-  throw cardCatalogPublicationError(
-    "CARD_CATALOG_BASELINE_SHARD_MISSING",
-    "A baseline shard is missing. Repair it through the resumable card publication coordinator; an in-request D1 rebuild is forbidden.",
-  )
-}
-
-function cardCatalogRefsAfterDirtyReplacements(baselineShards, replacementRefsByIndex) {
-  const refs = []
-  for (const shard of baselineShards) {
-    const replacement = replacementRefsByIndex[String(shard.index)]
-    if (Array.isArray(replacement)) refs.push(...replacement)
-    else refs.push(shard)
-  }
-  return refs.map((ref, index) => ({ ...ref, index }))
-}
-
-async function publishNextCardCatalogDirtyShardStep(
-  env,
-  { previousVersion, manifest, publication, requestUrl, reserveGalleryVersionWrite },
-) {
-  const baselineShards = normalizedCardCatalogManifestShards(manifest)
-  if (!baselineShards.length) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_BASELINE_REQUIRED",
-      "Routine publication requires a valid content-addressed baseline manifest.",
-    )
-  }
-  if (String(publication.baseline_version || "") !== previousVersion) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_PUBLICATION_BASELINE_MOVED",
-      "The live gallery version changed while dirty shards were being prepared.",
-    )
-  }
-
-  const groups = Array.isArray(publication.groups) ? publication.groups : []
-  const dirtySymbols = Array.from(
-    new Set(groups.flatMap((group) => (Array.isArray(group?.symbols) ? group.symbols : []))),
-  )
-  const nextGroup = Math.max(0, Number(publication.next_group || 0) || 0)
-  const stepGroups = groups.slice(
-    nextGroup,
-    nextGroup + CARD_CATALOG_DIRTY_SHARDS_PER_PUBLICATION_STEP,
-  )
-  const stepSymbols = Array.from(
-    new Set(stepGroups.flatMap((group) => (Array.isArray(group?.symbols) ? group.symbols : []))),
-  )
-  const records = await cardCatalogRecordsForArtifact(env, {
-    requestUrl,
-    symbols: stepSymbols,
-    snapshotVersion: "content-addressed",
-  })
-  const recordBySymbol = new Map()
-  for (const record of records) {
-    const symbol = normalizeSymbol(record?.symbol || "")
-    if (symbol) recordBySymbol.set(symbol, record)
-  }
-
-  const finalStep = nextGroup + stepGroups.length >= groups.length
-  const estimatedKvWrites =
-    stepGroups.length * 2 + (finalStep ? 3 + (reserveGalleryVersionWrite ? 1 : 0) : 1)
-  const cost = {
-    shards_read: Math.max(0, Number(publication.cost?.shards_read || 0) || 0),
-    shards_written: Math.max(0, Number(publication.cost?.shards_written || 0) || 0),
-    kv_writes_reserved:
-      Math.max(0, Number(publication.cost?.kv_writes_reserved || 0) || 0) + estimatedKvWrites,
-    kv_writes_used: Math.max(0, Number(publication.cost?.kv_writes_used || 0) || 0),
-  }
-  publication.cost = cost
-  await reserveIconoplasmCardCatalogKvWrites(env, {
-    operation: "card_catalog_dirty_shard_publication",
-    artifactVersion: previousVersion,
-    estimatedKvWrites,
-    cardCount: stepSymbols.length,
-    shardCount: stepGroups.length,
-  })
-
-  const replacementRefsByIndex = {
-    ...(publication.replacement_refs_by_index &&
-    typeof publication.replacement_refs_by_index === "object"
-      ? publication.replacement_refs_by_index
-      : {}),
-  }
-  const shardSize = cardCatalogArtifactShardSize(env)
-  for (const group of stepGroups) {
-    const index = Number(group?.baseline_index)
-    const shard = baselineShards[index]
-    if (!shard) {
-      throw cardCatalogPublicationError(
-        "CARD_CATALOG_DIRTY_SHARD_RANGE_INVALID",
-        `Dirty-shard publication referenced missing baseline shard ${index}.`,
-      )
-    }
-    const existingCards = await readCardCatalogShardCardsForPublication(env, shard)
-    cost.shards_read += 1
-    const cardBySymbol = new Map()
-    for (const card of existingCards) {
-      const symbol = normalizeSymbol(card?.symbol || "")
-      if (symbol) cardBySymbol.set(symbol, card)
-    }
-    for (const rawSymbol of Array.isArray(group?.symbols) ? group.symbols : []) {
-      const symbol = normalizeSymbol(rawSymbol || "")
-      const record = recordBySymbol.get(symbol)
-      if (!record) {
-        cardBySymbol.delete(symbol)
-        continue
-      }
-      const vm = buildMobileCardVMFromGeneRecord(record, {
-        snapshotVersion: "content-addressed",
-        source: "published_card_catalog",
-      })
-      if (!assertCompleteMobileCardVM(vm)) {
-        throw cardCatalogPublicationError(
-          "CARD_CATALOG_DIRTY_CARD_INVALID",
-          `Dirty-shard publication refused an invalid card for ${symbol}.`,
-        )
-      }
-      cardBySymbol.set(symbol, { ...vm, data_source: "published_card_catalog" })
-    }
-    const nextCards = Array.from(cardBySymbol.values()).sort((left, right) =>
-      String(left.symbol).localeCompare(String(right.symbol)),
-    )
-    const refs = []
-    for (let offset = 0; offset < nextCards.length; offset += shardSize) {
-      const { ref, wrote } = await writeCardCatalogContentAddressedShard(env, {
-        index: index + refs.length / 10,
-        cards: nextCards.slice(offset, offset + shardSize),
-      })
-      refs.push(ref)
-      if (wrote) {
-        cost.shards_written += 1
-        cost.kv_writes_used += 1
-      }
-    }
-    replacementRefsByIndex[String(index)] = refs
-  }
-
-  const completedGroups = nextGroup + stepGroups.length
-  if (completedGroups < groups.length) {
-    const continuedCost = {
-      ...cost,
-      kv_writes_used: cost.kv_writes_used + 1,
-    }
-    const continuedPublication = {
-      ...publication,
-      next_group: completedGroups,
-      replacement_refs_by_index: replacementRefsByIndex,
-      cost: continuedCost,
-    }
-    await writeCardCatalogDirtyShardPublication(env, continuedPublication)
-    await recordCardCatalogDirtyShardPublicationAudit(env, continuedPublication, {
-      outcome: "preparing",
-      preparedShardCount: completedGroups,
-    })
-    return {
-      artifact_version: previousVersion,
-      artifact_gene_count: Math.max(0, Number(manifest.card_count || 0) || 0),
-      catalog_gene_count: Math.max(0, Number(manifest.catalog_gene_count || 0) || 0),
-      content_hash: String(manifest.content_hash || ""),
-      reused_existing: true,
-      reserved_gallery_version_write: false,
-      source: "published_card_catalog",
-      dirty_shard_publication: true,
-      publication_more: true,
-      dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
-      dirty_symbols: dirtySymbols,
-      dirty_shard_count: groups.length,
-      publication_operation_id: publication.operation_id,
-      publication_trigger_reason: publication.trigger_reason || "unspecified",
-      prepared_shard_count: completedGroups,
-      publication_cost: continuedCost,
-    }
-  }
-
-  const nextRefs = cardCatalogRefsAfterDirtyReplacements(baselineShards, replacementRefsByIndex)
-  const catalogGeneCount = nextRefs.reduce((sum, ref) => sum + Number(ref.card_count || 0), 0)
-  const artifactVersion = await cardCatalogContentAddressedVersion(nextRefs)
-  if (artifactVersion === previousVersion) {
-    if (publication.persisted) {
-      await clearCardCatalogDirtyShardPublication(env)
-      cost.kv_writes_used += 1
-    }
-    return {
-      artifact_version: previousVersion,
-      artifact_gene_count: catalogGeneCount,
-      catalog_gene_count: catalogGeneCount,
-      content_hash: artifactVersion,
-      reused_existing: true,
-      reserved_gallery_version_write: false,
-      source: "published_card_catalog",
-      dirty_shard_publication: true,
-      publication_more: false,
-      watermark_event_at_override: publication.through_event_at || null,
-      watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
-      dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
-      dirty_symbols: dirtySymbols,
-      dirty_shard_count: groups.length,
-      publication_operation_id: publication.operation_id,
-      publication_trigger_reason: publication.trigger_reason || "unspecified",
-      publication_cost: cost,
-    }
-  }
-  const nextManifest = cardCatalogContentAddressedManifest({
-    artifactVersion,
-    shardRefs: nextRefs,
-    catalogGeneCount,
-    cardCount: catalogGeneCount,
-  })
-  await env.KV.put(cardCatalogArtifactStoreKey(artifactVersion), JSON.stringify(nextManifest))
-  cost.kv_writes_used += 1
-  if (publication.persisted) {
-    await clearCardCatalogDirtyShardPublication(env)
-    cost.kv_writes_used += 1
-  }
-  cardCatalogArtifactCache.version = null
-  cardCatalogArtifactCache.value = null
-  return {
-    artifact_version: artifactVersion,
-    artifact_gene_count: catalogGeneCount,
-    catalog_gene_count: catalogGeneCount,
-    artifact_validated_at: nextManifest.artifact_validated_at,
-    content_hash: artifactVersion,
-    reused_existing: false,
-    reserved_gallery_version_write: Boolean(reserveGalleryVersionWrite),
-    source: "published_card_catalog",
-    dirty_shard_publication: true,
-    publication_more: false,
-    watermark_event_at_override: publication.through_event_at || null,
-    watermark_event_id_override: Math.max(0, Number(publication.through_event_id || 0) || 0),
-    dirty_symbol_count: Math.max(0, Number(publication.dirty_symbol_count || 0) || 0),
-    dirty_symbols: dirtySymbols,
-    dirty_shard_count: groups.length,
-    affected_shards: groups.length,
-    publication_operation_id: publication.operation_id,
-    publication_trigger_reason: publication.trigger_reason || "unspecified",
-    publication_cost: cost,
-  }
-}
-
-async function publishNextCardCatalogDirtyShardStepWithAudit(env, options) {
-  try {
-    return await publishNextCardCatalogDirtyShardStep(env, options)
-  } catch (error) {
-    await recordCardCatalogDirtyShardPublicationAudit(env, options.publication, {
-      outcome: "failed",
-      preparedShardCount: options.publication?.next_group || 0,
-      error,
-    })
-    throw error
-  }
-}
-
-async function publishCardCatalogArtifactSmart(
-  env,
-  {
-    version,
-    requestUrl = "https://iconoplasm.brinedew.bio/",
-    reserveGalleryVersionWrite = false,
-    throughEventAt = null,
-    throughEventId = 0,
-    triggerReason = "unspecified",
-  } = {},
-) {
-  // Routine publication has exactly one mutating strategy: prepare the shards
-  // named by canonical publish events, then atomically flip one manifest. Cold
-  // bootstrap and card-mapping migrations are operator deployment tasks; they
-  // are deliberately errors here, never hidden fallbacks from cron or voting.
-  const previousVersion = String(version || "").trim()
-  // Manifest-only read (small): never parse the full sharded artifact here.
-  const manifest = previousVersion
-    ? await readCardCatalogArtifactManifest(env, previousVersion)
-    : null
-  if (!manifest) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_BASELINE_REQUIRED",
-      "Routine gallery publication has no valid baseline; run the explicit deployment bootstrap.",
-    )
-  }
-  if (manifest.storage !== CARD_CATALOG_CONTENT_ADDRESSED_STORAGE) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_STORAGE_MIGRATION_REQUIRED",
-      "Routine gallery publication requires the content-addressed shard format.",
-    )
-  }
-  if (Number(manifest.build_revision) !== CARD_CATALOG_BUILD_REVISION) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_SCHEMA_MIGRATION_REQUIRED",
-      "The live card mapping revision differs from this deploy; migrate it explicitly before activation.",
-    )
-  }
-
-  const activePublication = await readCardCatalogDirtyShardPublication(env)
-  if (activePublication) {
-    return publishNextCardCatalogDirtyShardStepWithAudit(env, {
-      previousVersion,
-      manifest,
-      publication: activePublication,
-      requestUrl,
-      reserveGalleryVersionWrite,
-    })
-  }
-  const watermark = await readCardCatalogPublishWatermark(env)
-  let watermarkEventAt = watermark?.watermark_event_at || null
-  const watermarkEventId = Math.max(0, Number(watermark?.watermark_event_id || 0) || 0)
-  if (!watermarkEventAt) {
-    // Bootstrap cutoff from the live manifest's build time (no artifact load).
-    watermarkEventAt = isoToSqliteDatetimeFloor(manifest.artifact_validated_at)
-  }
-  const changed = await cardCatalogChangedSymbolsWithinPublicationWindow(env, {
-    afterEventAt: watermarkEventAt,
-    throughEventAt,
-    afterEventId: watermarkEventId,
-    throughEventId,
-    limit: CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT + 1,
-  })
-  if (changed.truncated) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_DIRTY_SET_SAFETY_LIMIT",
-      `More than ${CARD_CATALOG_DIRTY_SYMBOL_SAFETY_LIMIT} genes are dirty; refusing a hidden catalog rebuild.`,
-    )
-  }
-  if (!changed.symbols.length) {
-    // Nothing canonical changed since the live artifact — reuse it as-is.
-    return {
-      artifact_version: previousVersion,
-      artifact_gene_count: Math.max(0, Number(manifest.card_count || 0) || 0),
-      catalog_gene_count: Math.max(0, Number(manifest.catalog_gene_count || 0) || 0),
-      artifact_validated_at: manifest.artifact_validated_at || null,
-      content_hash: String(manifest.content_hash || ""),
-      reused_existing: true,
-      reserved_gallery_version_write: false,
-      source: "published_card_catalog",
-    }
-  }
-  const groups = cardCatalogDirtyShardGroups(
-    normalizedCardCatalogManifestShards(manifest),
-    changed.symbols,
-  )
-  if (!groups.length) {
-    throw cardCatalogPublicationError(
-      "CARD_CATALOG_DIRTY_RANGE_UNRESOLVED",
-      "Canonical changes exist but none map to a catalog shard.",
-    )
-  }
-  const publication = {
-    operation_id: crypto.randomUUID(),
-    trigger_reason: sanitizeText(String(triggerReason || "unspecified"), 255) || "unspecified",
-    baseline_version: previousVersion,
-    after_event_at: watermarkEventAt,
-    through_event_at: throughEventAt,
-    after_event_id: watermarkEventId,
-    through_event_id: Math.max(0, Number(throughEventId || 0) || 0),
-    dirty_symbol_count: changed.symbols.length,
-    groups,
-    next_group: 0,
-    replacement_refs_by_index: {},
-    cost: {
-      shards_read: 0,
-      shards_written: 0,
-      kv_writes_reserved: 0,
-      kv_writes_used: 0,
-    },
-    started_at: new Date().toISOString(),
-  }
-  await recordCardCatalogDirtyShardPublicationAudit(env, publication, { outcome: "started" })
-  return publishNextCardCatalogDirtyShardStepWithAudit(env, {
-    previousVersion,
-    manifest,
-    publication,
-    requestUrl,
-    reserveGalleryVersionWrite,
-  })
-}
-
-async function publishIconoplasmGalleryDirtyShards(env, { triggerReason = "unspecified" } = {}) {
-  if (env.ICONOPLASM_CARD_PUBLICATION) {
-    const queued = await callCardPublication(env, "/wake", { method: "POST" })
-    const barrier = await currentGalleryVersionBarrier(env)
-    return {
-      version: barrier.current,
-      publication_queued: queued.accepted,
-      migration_pending: queued.migration_pending || false,
-    }
-  }
-  // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-  // Strict order matters:
-  // 1. Capture the canonical-event high-water while the old manifest stays live.
-  // 2. Identify the changed symbols and their owning baseline shards.
-  // 3. Prepare one bounded dirty-shard step; reuse every unrelated shard ref.
-  // 4. After the final step, write one manifest and flip KV_GALLERY_VERSION.
-  //
-  // If step 2 or 3 fails, the old exact card artifact remains coherently live
-  // even when D1 authoring has moved ahead. Do not substitute a D1, route, or
-  // discovery/catalog SHA, and do not roll D1 back merely to match the old
-  // public card; retry bounded publication. Only the final barrier flip moves
-  // the published source-portrait and canonical-blot epoch.
-  clearGallerySnapshotCache()
-  clearSharedD1CostCaches()
-  const previousPublicationWatermark = await readCardCatalogPublishWatermark(env)
-  // Capture the high-water mark BEFORE the build. Anything reflected in the
-  // artifact has created_at <= this; events landing mid-build stay pending.
-  const publicationHighWater = await maxCardCatalogPublishEventPosition(env)
-  const watermarkEventAt = publicationHighWater.created_at
-  const watermarkEventId = publicationHighWater.id
-  const previousBarrier = await currentGalleryVersionBarrier(env)
-  const cardCatalog = await publishCardCatalogArtifactSmart(env, {
-    version: previousBarrier.current,
-    requestUrl: "https://iconoplasm.brinedew.bio/",
-    reserveGalleryVersionWrite: true,
-    throughEventAt: watermarkEventAt,
-    throughEventId: watermarkEventId,
-    triggerReason,
-  })
-  cardCatalog.publication_cost = {
-    shards_read: Math.max(0, Number(cardCatalog.publication_cost?.shards_read || 0) || 0),
-    shards_written: Math.max(0, Number(cardCatalog.publication_cost?.shards_written || 0) || 0),
-    kv_writes_reserved: Math.max(
-      0,
-      Number(cardCatalog.publication_cost?.kv_writes_reserved || 0) || 0,
-    ),
-    kv_writes_used: Math.max(0, Number(cardCatalog.publication_cost?.kv_writes_used || 0) || 0),
-  }
-  // Dirty shards can span multiple bounded invocations, but the live manifest and
-  // freshness watermark move only together after the final prepared shard. Events
-  // arriving after the captured high-water remain pending for the next publish.
-  const skipWatermark = cardCatalog.publication_more === true
-  const effectiveWatermarkEventAt = cardCatalog.watermark_event_at_override ?? watermarkEventAt
-  const effectiveWatermarkEventId = cardCatalog.watermark_event_id_override ?? watermarkEventId
-  const recordWatermark = async () => {
-    if (skipWatermark) return
-    const result = await writeCardCatalogPublishWatermark(env, {
-      artifactVersion: cardCatalog.artifact_version,
-      watermarkEventAt: effectiveWatermarkEventAt,
-      watermarkEventId: effectiveWatermarkEventId,
-      cardCount: cardCatalog.artifact_gene_count,
-      catalogGeneCount: cardCatalog.catalog_gene_count,
-      contentHash: cardCatalog.content_hash || "",
-    })
-    if (result.wrote) cardCatalog.publication_cost.kv_writes_used += 1
-  }
-  const syncPublishedRoutes = async () => {
-    if (skipWatermark || !effectiveWatermarkEventAt) return
-    await syncPublishedGeneRouteMembershipAfterPublication(env, {
-      afterEventAt: previousPublicationWatermark?.watermark_event_at || null,
-      throughEventAt: effectiveWatermarkEventAt,
-      afterEventId: previousPublicationWatermark?.watermark_event_id || 0,
-      throughEventId: effectiveWatermarkEventId,
-    })
-  }
-  const finishPublicationAudit = async (outcome, error = null) => {
-    if (!cardCatalog.publication_operation_id || cardCatalog.publication_more) return
-    await recordCardCatalogDirtyShardPublicationAudit(
-      env,
-      {
-        operation_id: cardCatalog.publication_operation_id,
-        baseline_version: previousBarrier.current,
-        after_event_at: previousPublicationWatermark?.watermark_event_at || null,
-        through_event_at: effectiveWatermarkEventAt,
-        after_event_id: previousPublicationWatermark?.watermark_event_id || 0,
-        through_event_id: effectiveWatermarkEventId,
-        dirty_symbol_count: cardCatalog.dirty_symbol_count,
-        dirty_shard_count: cardCatalog.dirty_shard_count,
-        trigger_reason: cardCatalog.publication_trigger_reason || triggerReason,
-        cost: cardCatalog.publication_cost,
-      },
-      {
-        outcome,
-        preparedShardCount: cardCatalog.dirty_shard_count,
-        targetVersion: cardCatalog.artifact_version,
-        error,
-      },
-    )
-  }
-  const reconcileRequestedGeneCards = async (artifactVersion) => {
-    if (skipWatermark || !Array.isArray(cardCatalog.dirty_symbols)) return
-    try {
-      await advanceEnrolledIconoplasmGeneCardsAfterPublication(
-        env,
-        artifactVersion,
-        cardCatalog.dirty_symbols,
-      )
-    } catch (error) {
-      // The published card barrier is already authoritative. A failed wakeup
-      // cannot roll it back; the durable cron recovery owns retrying ledger work.
-      console.error("Requested gene-card reconciliation failed after publication", {
-        artifact_version: artifactVersion,
-        error: String(error?.message || error),
-      })
-    }
-  }
-  if (String(previousBarrier.current || "").trim() === String(cardCatalog.artifact_version || "")) {
-    galleryVersionCache.value = previousBarrier.raw || previousBarrier.current
-    galleryVersionCache.loadedAt = Date.now()
-    try {
-      await syncPublishedRoutes()
-      await recordWatermark()
-      await finishPublicationAudit("completed")
-      await reconcileRequestedGeneCards(previousBarrier.current)
-    } catch (error) {
-      await finishPublicationAudit("failed", error)
-      throw error
-    }
-    return {
-      version: previousBarrier.current,
-      card_catalog: { ...cardCatalog, reused_gallery_version: true },
-    }
-  }
-  const barrier = nextGalleryVersionBarrier(previousBarrier, cardCatalog.artifact_version)
-  const galleryVersionKvWriteBudget = cardCatalog.reserved_gallery_version_write
-    ? null
-    : await reserveIconoplasmCardCatalogKvWrites(env, {
-        operation: "card_catalog_gallery_version_barrier",
-        artifactVersion: cardCatalog.artifact_version,
-        estimatedKvWrites: 1,
-        cardCount: cardCatalog.artifact_gene_count,
-        shardCount: 0,
-      })
-  if (galleryVersionKvWriteBudget) cardCatalog.publication_cost.kv_writes_reserved += 1
-  barrier.card_catalog = {
-    artifact_version: cardCatalog.artifact_version,
-    content_hash: cardCatalog.content_hash || "",
-    artifact_gene_count: cardCatalog.artifact_gene_count,
-    catalog_gene_count: cardCatalog.catalog_gene_count,
-    reused_existing: Boolean(cardCatalog.reused_existing),
-    kv_write_budget: cardCatalog.kv_write_budget || galleryVersionKvWriteBudget || null,
-  }
-  let version
-  try {
-    version = await publishGalleryVersionBarrier(env, barrier)
-    cardCatalog.publication_cost.kv_writes_used += 1
-    // Route membership and the watermark advance only after the exact-card
-    // version flip. The route table remains identity-only; portrait authority
-    // stays in the card artifact and mutable vote state stays out of the route.
-    await syncPublishedRoutes()
-    await recordWatermark()
-    await finishPublicationAudit("completed")
-    await reconcileRequestedGeneCards(version)
-  } catch (error) {
-    await finishPublicationAudit("failed", error)
-    throw error
-  }
-  return { version, card_catalog: cardCatalog }
-}
-
-export async function publishIconoplasmGalleryDirtyShardsForTest(env, options) {
-  return publishIconoplasmGalleryDirtyShards(env, options)
-}
-
-async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(
-  env,
-  {
-    symbols = [],
-    visionIds = [],
-    fullVision = false,
-    fullRebuild = false,
-    skipVoteSummaries = false,
-    skipGeneRollups = false,
-    skipVisionRollups = false,
-    skipDashboard = false,
-  } = {},
-  dependencies = {},
-) {
-  // This wrapper is a trap for well-meaning cleanup. It exists because callers
-  // often want "refresh read models and then publish a fresh artifact", but the
-  // finalization queue deliberately decomposes that work into narrow phases.
-  // Dropping any skip flag here turns a symbol-scoped phase into a surprise
-  // rebuild and reintroduces the 2026-05 failure mode where a cheap GUI action
-  // quietly spends D1 rows and may publish KV artifacts too early.
-  const syncReadModels = dependencies.syncReadModels || syncAdminReadModels
-  const publishDirtyShards = dependencies.publishDirtyShards || publishIconoplasmGalleryDirtyShards
-  const result = await syncReadModels(env, {
-    symbols,
-    visionIds,
-    fullVision,
-    fullRebuild,
-    // Keep the invalidate-gallery wrapper behaviorally identical to the plain
-    // read-model sync path. The workstation relies on these skip flags to break
-    // the large Website sync into smaller durable phases; dropping them here
-    // turns a scoped refresh back into an accidental full rebuild.
-    skipVoteSummaries,
-    skipGeneRollups,
-    skipVisionRollups,
-    skipDashboard,
-  })
-  let publication
-  try {
-    publication = await publishDirtyShards(env, {
-      triggerReason: "admin_read_model_sync",
-    })
-  } catch (error) {
-    const deferredPublication = iconoplasmCardCatalogKvWriteBudgetDeferral(error)
-    if (!deferredPublication) throw error
-    // The D1 read models are durable and the publish-event watermark still owns
-    // the exact dirty set. Completing this Queue ledger row is safe: the 15-minute
-    // gallery publisher will retry after the UTC budget resets. Retrying this same
-    // Queue message every 30 seconds only burns Queue/D1 operations and cannot
-    // create KV allowance.
-    return {
-      ...result,
-      card_catalog: null,
-      card_catalog_publication: deferredPublication,
-    }
-  }
-  return {
-    ...result,
-    card_catalog: publication.card_catalog,
-    publication_queued: publication.publication_queued,
-    migration_pending: publication.migration_pending,
-  }
-}
-
-export async function syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShardsForTest(
-  env,
-  options,
-  dependencies,
-) {
-  return syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, options, dependencies)
 }
 
 function parseJsonTextList(raw) {
@@ -31379,7 +29637,6 @@ async function handlePublicCatalogManifest(request, env) {
     return json({ error: "Public catalog manifest not found — publish the catalog first" }, 404)
   }
   const portraitFingerprint = await sharedPublishedPortraitFingerprint(env)
-  const cardSnapshot = await currentMobileCardSnapshotVersion(env)
   const buildHash = String(manifest.current_hash || "").trim() || null
   const catalogHash = catalogBaseHash(buildHash)
   const payload = {
@@ -31407,7 +29664,9 @@ async function handlePublicCatalogManifest(request, env) {
     portrait_delivery: manifest.portrait_delivery || portraitDeliveryPolicy(url, env),
     publication_aliases: manifest.publication_aliases || null,
     extension_blocklist: manifest.extension_blocklist || null,
-    card_snapshot_version: String(cardSnapshot.current || "").trim() || null,
+    // B-898: hover detail has no epoch; 0.5.8 extensions still send this token
+    // to the card-snapshots routes, which resolve the stable object regardless.
+    card_snapshot_version: STABLE_GENE_OBJECT_SNAPSHOT_LABEL,
     scanner_artifact: manifest.scanner_artifact || null,
     artifact_url: buildHash
       ? publicUrl(url, `/catalog/${publicCatalogArtifactFilename(buildHash)}`)
@@ -31536,82 +29795,8 @@ async function handlePublicGeneBatch(request, env) {
   )
 }
 
-export const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers({
-  barrier: currentGalleryVersionBarrier,
-  readerView: readAdvertisedGeneDeltaView,
-})
-export const hoverDeliveryHandlers = createHoverDeliveryHandlers({
-  barrier: currentMobileCardSnapshotVersion,
-  manifest: readPublishedCardCatalogManifest,
-  shard: readPublishedCardCatalogShard,
-  object: readPublishedBunnyCardObject,
-  complete: assertCompleteMobileCardVM,
-  stable: stableCardCatalogMaterialValue,
-  project: projectGeneRecord,
-  locator: publishedPortraitLocatorFromCard,
-  json,
-})
+export const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers()
 
-/**
- * B-898: no reader in this file calls this any more (public_gene_batch, the
- * card-snapshots routes, mobile cards and the account window all read the
- * stable gene object). It is left for the deletion PR that removes the delta
- * chain and its coordinator together.
- *
- * B-762 exact resolution for a snapshot-addressed reader. The view id is an
- * exact immutable identity: base epoch plus the content hash of the chain
- * object that names the exact segment set. `committed` carries the verified
- * immutable record, `withdrawn` is a tombstone that must stay missing,
- * `absent` means the symbol is untouched and must resolve from the view's own
- * base epoch, and `unavailable` fails closed instead of reading newer state.
- */
-async function readPublishedViewRecord(env, view, kind, symbol) {
-  let resolved
-  try {
-    resolved = await readPublishedViewEntry({
-      readObject: (key, validate) => readPublishedBunnyCardObject(env, key, validate),
-      chainHash: view.chainHash,
-      base: view.base,
-      symbol,
-    })
-  } catch {
-    return { status: "unavailable", code: "VIEW_READ_FAILED" }
-  }
-  if (!resolved.ok) return { status: "unavailable", code: resolved.code }
-  if (!resolved.entry) return { status: "absent" }
-  if (resolved.entry.status === "withdrawn") return { status: "withdrawn" }
-  const receipt = resolved.entry[kind]
-  if (!receipt) return { status: "unavailable", code: "ENTRY_RECEIPT_MISSING" }
-  let record = null
-  try {
-    record = await readPublishedBunnyCardObject(
-      env,
-      receipt.key,
-      (value) => value?.symbol === symbol,
-    )
-  } catch {
-    record = null
-  }
-  if (!record) return { status: "unavailable", code: "ENTRY_RECORD_UNAVAILABLE" }
-  return { status: "committed", record }
-}
-
-// B-898 Stage 1 (step B): `card-snapshots/<version>/genes|portraits/<SYM>`
-// stay registered for installed 0.5.8 extensions until the stores update
-// them. The `<version>` segment is now only a URL token: there is no KV head
-// to compare it against, so any syntactically valid token resolves to the one
-// stable gene object and the envelope keeps its keys. The body is mutable
-// under a constant URL, so the response and the Worker cache copy live 300 s
-// (STABLE_GENE_OBJECT_CACHE_CONTROL), never a year.
-//
-// Failure modes, written before the switch:
-//   1. Object present: 200, same envelope keys (api_version, schema_version,
-//      snapshot_version, canonical_key, gene, missing); snapshot_version is the
-//      object's published_at; one storage read, no KV.
-//   2. Object missing: 404 with gene null and missing [symbol], same keys.
-//   3. Storage error: 503 CARD_ARTIFACT_UNAVAILABLE, Cache-Control no-store.
-//   4. Second request for the same URL inside 300 s: served from the Worker
-//      cache with X-Iconoplasm-Detail-Cache HIT, no storage read.
 export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotToken = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
@@ -31880,36 +30065,6 @@ function assertCompleteMobileCardVM(vm) {
   return payloadPortraitStatus !== "published"
 }
 
-function normalizeCardCatalogArtifact(raw) {
-  if (!raw || typeof raw !== "object") return null
-  if (raw.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return null
-  const artifactVersion = String(raw.artifact_version || raw.snapshot_version || "").trim()
-  const cards = Array.isArray(raw.cards) ? raw.cards : []
-  const bySymbol = new Map()
-  for (const card of cards) {
-    if (!assertCompleteMobileCardVM(card)) return null
-    const symbol = normalizeSymbol(card.symbol || "")
-    if (!symbol || bySymbol.has(symbol)) return null
-    bySymbol.set(symbol, card)
-  }
-  const catalogGeneCount = Math.max(0, Number(raw.catalog_gene_count || 0) || 0)
-  if (catalogGeneCount > 0 && bySymbol.size !== catalogGeneCount) return null
-  if (Math.max(0, Number(raw.card_count || 0) || 0) !== bySymbol.size) return null
-  return {
-    ...raw,
-    artifact_version: artifactVersion,
-    snapshot_version: artifactVersion,
-    catalog_gene_count: catalogGeneCount || bySymbol.size,
-    card_count: bySymbol.size,
-    cards,
-    bySymbol,
-  }
-}
-
-function cardCatalogArtifactStoreKey(artifactVersion) {
-  return `${KV_CARD_CATALOG_ARTIFACT_PREFIX}${artifactVersion}`
-}
-
 function stableCardCatalogMaterialValue(value) {
   if (Array.isArray(value)) return value.map((item) => stableCardCatalogMaterialValue(item))
   if (!value || typeof value !== "object") return value === undefined ? null : value
@@ -31926,19 +30081,6 @@ function stableCardCatalogMaterialValue(value) {
     out[key] = stableCardCatalogMaterialValue(value[key])
   }
   return out
-}
-
-function stableJsonStringify(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`
-  }
-  if (!value || typeof value !== "object") {
-    return JSON.stringify(value === undefined ? null : value)
-  }
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(value[key])}`)
-    .join(",")}}`
 }
 
 function readCardCatalogLru(cache, key) {
@@ -31987,11 +30129,7 @@ async function readParsedCardCatalogJson(
     shouldCache = () => true,
   },
 ) {
-  if (
-    !storageKey ||
-    !cacheKey ||
-    (!env?.KV?.get && !storageKey.startsWith("published-cards/v2/immutable/"))
-  )
+  if (!storageKey || !cacheKey || !storageKey.startsWith("published-cards/v2/immutable/"))
     return null
   const cached = readCardCatalogLru(cache, cacheKey)
   if (cached) return cached
@@ -32000,11 +30138,9 @@ async function readParsedCardCatalogJson(
   if (pending) return pending
 
   const readPromise = (async () => {
-    const raw = storageKey.startsWith("published-cards/v2/immutable/")
-      ? await createPublishedCardObjectStore(env)
-          .read(storageKey)
-          .then((object) => (object ? new TextDecoder().decode(object.bytes) : null))
-      : await env.KV.get(storageKey)
+    const raw = await createPublishedCardObjectStore(env)
+      .read(storageKey)
+      .then((object) => (object ? new TextDecoder().decode(object.bytes) : null))
     if (!raw) return null
     const serialized = typeof raw === "string" ? raw : String(raw)
     const rawUtf8Bytes = new TextEncoder().encode(serialized).byteLength
@@ -32033,40 +30169,22 @@ async function readParsedCardCatalogJson(
 
 async function readPublishedCardCatalogManifest(env, artifactVersion) {
   const version = String(artifactVersion || "").trim()
-  if (!version) return null
   const bunnyKey = cardPublicationManifestKey(version)
-  const result = await readParsedCardCatalogJson(
-    env,
-    bunnyKey || cardCatalogArtifactStoreKey(version),
-    {
-      cache: cardCatalogParsedManifestCache,
-      readPromises: cardCatalogParsedManifestReadPromises,
-      cacheKey: version,
-      cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
-      validate: (parsed) =>
-        parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
-        (bunnyKey
-          ? parsed.storage === CARD_PUBLICATION_STORAGE
-          : String(parsed.artifact_version || parsed.snapshot_version || "") === version),
-      // Whole legacy artifacts already enter cardCatalogArtifactCache after
-      // normalization. This LRU is for sharded manifests, not a second multi-
-      // version whole-catalog retention layer.
-      shouldCache: (parsed) => Array.isArray(parsed?.shards),
-    },
-  )
-  return result && bunnyKey
+  if (!bunnyKey) return null
+  const result = await readParsedCardCatalogJson(env, bunnyKey, {
+    cache: cardCatalogParsedManifestCache,
+    readPromises: cardCatalogParsedManifestReadPromises,
+    cacheKey: version,
+    cacheEntryLimit: CARD_CATALOG_PARSED_MANIFEST_CACHE_LIMIT,
+    validate: (parsed) =>
+      parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
+      parsed.storage === CARD_PUBLICATION_STORAGE &&
+      Array.isArray(parsed.shards),
+    shouldCache: (parsed) => Array.isArray(parsed?.shards),
+  })
+  return result
     ? { ...result, artifact_version: version, snapshot_version: version, content_hash: version }
-    : result
-}
-
-async function readCardCatalogArtifactManifest(env, artifactVersion) {
-  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
-    return null
-  try {
-    return await readPublishedCardCatalogManifest(env, artifactVersion)
-  } catch {
-    return null
-  }
+    : null
 }
 
 function cardCatalogShardMayContainSymbol(shard, symbol) {
@@ -32135,44 +30253,25 @@ function cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) {
   return shards.filter((shard) => selected.has(Number(shard?.index)))
 }
 
-function cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed) {
-  const storageKey = String(shard?.key || "")
-  if (!storageKey) return ""
-  return contentAddressed
-    ? `content-addressed:${storageKey}`
-    : `versioned:${String(artifactVersion || "")}:${storageKey}`
+function parsedCardCatalogShardMatchesManifest(parsed, shard) {
+  return (
+    parsed?.schema_version === 2 &&
+    Array.isArray(parsed.cards) &&
+    parsed.cards.length === Number(shard?.card_count || 0)
+  )
 }
 
-function parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed) {
-  if (cardPublicationManifestKey(artifactVersion)) {
-    return (
-      parsed?.schema_version === 2 &&
-      Array.isArray(parsed.cards) &&
-      parsed.cards.length === Number(shard?.card_count || 0)
-    )
-  }
-  if (parsed?.schema !== CARD_CATALOG_ARTIFACT_SCHEMA) return false
-  if (!Array.isArray(parsed.cards)) return false
-  if (parsed.cards.length !== Number(shard?.card_count || 0)) return false
-  return contentAddressed
-    ? String(parsed.content_hash || "") === String(shard?.content_hash || "")
-    : String(parsed.artifact_version || "") === String(artifactVersion || "") &&
-        Number(parsed.shard_index) === Number(shard?.index)
-}
-
-async function readPublishedCardCatalogShard(env, artifactVersion, shard, contentAddressed) {
+async function readPublishedCardCatalogShard(env, shard) {
   const storageKey = String(shard?.key || "")
-  const cacheKey = cardCatalogParsedShardCacheKey(artifactVersion, shard, contentAddressed)
-  if (!storageKey || !cacheKey) return null
+  if (!storageKey) return null
   return readParsedCardCatalogJson(env, storageKey, {
     cache: cardCatalogParsedShardCache,
     readPromises: cardCatalogParsedShardReadPromises,
-    cacheKey,
+    cacheKey: `content-addressed:${storageKey}`,
     cacheEntryLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ENTRY_LIMIT,
     cacheEstimatedByteLimit: CARD_CATALOG_PARSED_SHARD_CACHE_ESTIMATED_BYTE_LIMIT,
     cacheParsedHeapMultiplier: CARD_CATALOG_PARSED_SHARD_HEAP_MULTIPLIER,
-    validate: (parsed) =>
-      parsedCardCatalogShardMatchesManifest(parsed, shard, artifactVersion, contentAddressed),
+    validate: (parsed) => parsedCardCatalogShardMatchesManifest(parsed, shard),
   })
 }
 
@@ -32221,252 +30320,80 @@ async function readPublishedBunnyCards(env, manifest, symbols) {
   return normalizePartialCardCatalogArtifact(manifest, cards.filter(Boolean))
 }
 
-function cardCatalogContentAddressedShardKey(contentHash) {
-  return `${KV_CARD_CATALOG_CONTENT_ADDRESSED_SHARD_PREFIX}${contentHash}`
-}
-
-async function cardCatalogShardContentHash(cards) {
-  // Hash only this shard's cards (stable form, stripped of per-publish fields).
-  // ~750 cards -> bounded CPU, independent of catalog size.
-  return sha256Hex(stableJsonStringify(cards.map((card) => stableCardCatalogMaterialValue(card))))
-}
-
-async function writeCardCatalogContentAddressedShard(env, { index, cards }) {
-  // Write one content-addressed shard if its blob is not already present. Returns
-  // the manifest ref (key = content hash) and whether a KV write happened, so the
-  // caller can keep KV writes proportional to the delta, not the catalog.
-  const contentHash = await cardCatalogShardContentHash(cards)
-  const key = cardCatalogContentAddressedShardKey(contentHash)
-  let wrote = false
-  const existing = await env.KV.get(key)
-  if (!existing) {
-    await env.KV.put(
-      key,
-      JSON.stringify({
-        schema: CARD_CATALOG_ARTIFACT_SCHEMA,
-        storage: CARD_CATALOG_CONTENT_ADDRESSED_STORAGE,
-        content_hash: contentHash,
-        cards,
-      }),
-    )
-    wrote = true
-  }
-  return {
-    ref: {
-      key,
-      index,
-      card_count: cards.length,
-      content_hash: contentHash,
-      first_symbol: cards[0]?.symbol || null,
-      last_symbol: cards[cards.length - 1]?.symbol || null,
-    },
-    wrote,
-  }
-}
-
-async function cardCatalogContentAddressedVersion(shardRefs) {
-  // Artifact version = hash of the ordered shard content-hashes (hash ~26 hashes,
-  // not 19k cards). Two catalogs with identical shard content get identical
-  // versions, so a no-op republish short-circuits without rewriting anything.
-  const ordered = shardRefs.map((ref) => String(ref?.content_hash || ""))
-  const hash = await sha256Hex(
-    JSON.stringify({ build_revision: CARD_CATALOG_BUILD_REVISION, shard_hashes: ordered }),
-  )
-  return `${CARD_CATALOG_ARTIFACT_CONTENT_VERSION_PREFIX}-${hash.slice(0, 32)}`
-}
-
-function cardCatalogContentAddressedManifest({
-  artifactVersion,
-  shardRefs,
-  catalogGeneCount,
-  cardCount,
-}) {
-  // Range-based reads: content-addressed shards are contiguous symbol ranges, so
-  // first_symbol/last_symbol make scoped reads exact via the existing range
-  // fallback. (symbol_shard_index is intentionally omitted to keep the staging
-  // cursor compact during multi-invocation rebuilds.)
-  const shards = shardRefs
-    .slice()
-    .sort((a, b) => Number(a.index) - Number(b.index))
-    .map((ref) => ({
-      key: ref.key,
-      index: Number(ref.index),
-      card_count: Number(ref.card_count || 0),
-      content_hash: ref.content_hash,
-      first_symbol: ref.first_symbol || null,
-      last_symbol: ref.last_symbol || null,
-    }))
-  return {
-    schema: CARD_CATALOG_ARTIFACT_SCHEMA,
-    build_revision: CARD_CATALOG_BUILD_REVISION,
-    artifact_version: artifactVersion,
-    snapshot_version: artifactVersion,
-    artifact_validated_at: new Date().toISOString(),
-    content_hash: artifactVersion,
-    source: "published_card_catalog",
-    storage: CARD_CATALOG_CONTENT_ADDRESSED_STORAGE,
-    shard_size: CARD_CATALOG_ARTIFACT_SHARD_SIZE,
-    shard_count: shards.length,
-    catalog_gene_count: catalogGeneCount,
-    card_count: cardCount,
-    shards,
-  }
-}
-
-async function readPublishedCardCatalogArtifact(
-  env,
-  version,
-  symbols = null,
-  { allowWholeArtifact = true } = {},
-) {
-  // Runtime public card reads have one data path: KV artifact selected by
-  // KV_GALLERY_VERSION. Do not add a "helpful" D1 fallback here. A fallback
-  // would hide broken artifact publication in tests, multiply D1 reads across
-  // Cloudflare cold isolates, and recreate the exact PRL split-brain symptom
-  // where private views and logged-out card routes disagree.
+// B-898: the frozen tree's partial card reader, for the gene-discovery worker
+// only. Reads the head's manifest, then either one exact object per gene (up
+// to PUBLISHED_EXACT_CARD_READ_LIMIT symbols) or the packed 750-card shards
+// whose ranges cover the requested symbols. Never the whole artifact.
+async function readFrozenCardTreeCards(env, version, symbols) {
   const artifactVersion = String(version || "").trim()
-  if (!artifactVersion || (!env?.KV?.get && !cardPublicationManifestKey(artifactVersion)))
-    return null
-  const requestedSymbols = Array.isArray(symbols)
-    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
-    : null
-  if (
-    !requestedSymbols &&
-    cardCatalogArtifactCache.version === artifactVersion &&
-    normalizeCardCatalogArtifact(cardCatalogArtifactCache.value)
-  ) {
-    return cardCatalogArtifactCache.value
+  if (!artifactVersion) return null
+  const requestedSymbols = normalizeRequestedSymbols(
+    Array.isArray(symbols) ? symbols : [],
+    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
+  )
+  const manifest = await readPublishedCardCatalogManifest(env, artifactVersion)
+  if (!manifest) return null
+  if (requestedSymbols.length <= PUBLISHED_EXACT_CARD_READ_LIMIT) {
+    return readPublishedBunnyCards(env, manifest, requestedSymbols)
   }
-  if (
-    requestedSymbols &&
-    cardCatalogArtifactCache.version === artifactVersion &&
-    normalizeCardCatalogArtifact(cardCatalogArtifactCache.value) &&
-    requestedSymbols.every((symbol) => cardCatalogArtifactCache.value.bySymbol.has(symbol))
-  ) {
-    return cardCatalogArtifactCache.value
-  }
-  let parsed = await readPublishedCardCatalogManifest(env, artifactVersion)
-  // A one-gene hover or site card must not parse a 750-card packed shard on a
-  // cold Free Worker. Bulk pages keep packed reads; up to
-  // PUBLISHED_EXACT_CARD_READ_LIMIT cards use small exact objects, bounded even
-  // when every directory and storage fallback is cold. B-885: the signed-in
-  // home window asks for 12 SCATTERED cards; at 11-12 it fell through to packed
-  // reads of up to 12 shards (~2 MB of JSON each, all at once) and died with
-  // Cloudflare 1102 (memory) on the owner's home page.
-  if (
-    parsed?.storage === CARD_PUBLICATION_STORAGE &&
-    requestedSymbols?.length <= PUBLISHED_EXACT_CARD_READ_LIMIT
-  ) {
-    return readPublishedBunnyCards(env, parsed, requestedSymbols)
-  }
-  const contentAddressed =
-    parsed?.storage === CARD_CATALOG_CONTENT_ADDRESSED_STORAGE ||
-    parsed?.storage === CARD_PUBLICATION_STORAGE
-  if (
-    parsed?.schema === CARD_CATALOG_ARTIFACT_SCHEMA &&
-    (parsed.storage === "kv_sharded" || contentAddressed) &&
-    Array.isArray(parsed.shards)
-  ) {
-    const cards = []
-    const shards = requestedSymbols
-      ? cardCatalogIndexedShardsForSymbols(parsed, requestedSymbols) ||
-        // Old manifests do not have symbol_shard_index. Range fallback keeps
-        // those artifacts readable until the next publish, but it must remain a
-        // KV-shard fallback only. Do not add a D1 fallback here for public card
-        // traffic; cold isolates multiplying D1 reads is the budget failure we
-        // are explicitly avoiding.
-        parsed.shards.filter((shard) =>
-          requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
-        )
-      : parsed.shards
-    const shardPayloads = await Promise.all(
-      shards.map(async (shard) => {
-        const shardParsed = await readPublishedCardCatalogShard(
-          env,
-          artifactVersion,
-          shard,
-          contentAddressed,
-        )
-        return { shard, shardParsed }
-      }),
+  const shards =
+    cardCatalogIndexedShardsForSymbols(manifest, requestedSymbols) ||
+    manifest.shards.filter((shard) =>
+      requestedSymbols.some((symbol) => cardCatalogShardMayContainSymbol(shard, symbol)),
     )
-    for (const { shard, shardParsed } of shardPayloads) {
-      // Content-addressed shards are immutable blobs shared across artifact
-      // versions and shard positions, so they are validated by their content hash
-      // (which IS the KV key) plus card_count — NOT by artifact_version or
-      // shard_index, which are manifest-level concerns. Version-keyed (legacy)
-      // shards keep the strict artifact_version + shard_index check.
-      if (
-        !parsedCardCatalogShardMatchesManifest(
-          shardParsed,
-          shard,
-          artifactVersion,
-          contentAddressed,
-        )
-      ) {
-        return null
-      }
-      cards.push(...shardParsed.cards)
-    }
-    if (requestedSymbols) {
-      const requestedSet = new Set(requestedSymbols)
-      const artifact = normalizePartialCardCatalogArtifact(
-        parsed,
-        cards.filter((card) => requestedSet.has(normalizeSymbol(card?.symbol || ""))),
-      )
-      return artifact
-    }
-    parsed = { ...parsed, cards }
+  const cards = []
+  for (const { shard, shardParsed } of await Promise.all(
+    shards.map(async (shard) => ({
+      shard,
+      shardParsed: await readPublishedCardCatalogShard(env, shard),
+    })),
+  )) {
+    if (!parsedCardCatalogShardMatchesManifest(shardParsed, shard)) return null
+    cards.push(...shardParsed.cards)
   }
-  if (requestedSymbols && allowWholeArtifact === false) return null
-  const artifact = normalizeCardCatalogArtifact(parsed)
-  if (!artifact) return null
-  cardCatalogArtifactCache.version = artifactVersion
-  cardCatalogArtifactCache.value = artifact
-  return artifact
-}
-
-export async function readIconoplasmPublishedCardCatalogArtifactForTest(
-  env,
-  version,
-  symbols = null,
-  options = {},
-) {
-  return readPublishedCardCatalogArtifact(env, version, symbols, options)
+  const requestedSet = new Set(requestedSymbols)
+  return normalizePartialCardCatalogArtifact(
+    manifest,
+    cards.filter((card) => requestedSet.has(normalizeSymbol(card?.symbol || ""))),
+  )
 }
 
 // ARCHITECTURE FENCE [IPD-003] + [IPD-011]: range pages and gene sitemaps
-// retain every complete card from the exact published shards selected by
-// KV_GALLERY_VERSION. A ready matching blot adds image projections; it is never
-// a gate on the underlying gene URL. These reads never query votes, compose D1
-// cards, or trigger rendering. A range normally overlaps one 750-card immutable
-// shard.
+// retain every complete card of their frozen range. A ready matching blot adds
+// image projections; it is never a gate on the underlying gene URL. These reads
+// never query votes, compose D1 cards, or trigger rendering.
 //
-// B-898 Stage 1 (step B) deliberately LEFT this reader on the head/manifest/
-// shard path. Every caller is a per-request reader in
-// workers/iconoplasm-gene-discovery-worker.js: a range page or range sitemap
-// asks for its whole frozen range (measured 2026-10-02 against the live
-// catalog object: 58 ranges of 16 to 500 genes, median 351, 54 of them above
-// 50), which is past the free-plan Worker's ~50-subrequest cap for
-// one-object-per-gene reads, and the sitemap index asks for the publication
-// timestamp of the whole catalog.
-// Neither may parse the 3.4 MB catalog/v3/index.json inside a reader request
-// (CLAUDE.md, "Iconoplasm cost barriers"). The root fix is a build-time one:
-// render the range pages and sitemaps from the catalog object in the GitHub
-// Actions publisher and serve them as static files. Until that lands, this
-// function and its five callers are the last readers of the old tree.
+// This reader, and only this reader, reads the frozen card snapshot. Every
+// caller is a per-request reader in workers/iconoplasm-gene-discovery-
+// worker.js: a range page or range sitemap asks for its whole frozen range
+// (measured 2026-10-02 against the live catalog object: 58 ranges of 16 to 500
+// genes, median 351, 54 of them above 50), past the free-plan Worker's
+// ~50-subrequest cap for one-object-per-gene reads, and neither may parse the
+// 3.4 MB catalog/v3/index.json inside a reader request (CLAUDE.md, "Iconoplasm
+// cost barriers"). The root fix is build time: render the range pages and
+// sitemaps from the catalog object in the GitHub Actions publisher and serve
+// them as static files; that change deletes this function, the frozen head,
+// and the manifest/shard readers above it. Until then the range pages show
+// the portraits of the frozen snapshot, and the stable gene object is the
+// truth every other reader sees.
 export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbols, options = {}) {
   const requestedSymbols = normalizeRequestedSymbols(
     Array.isArray(symbols) ? symbols : [],
     MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
   )
-  const versionInfo = await currentMobileCardSnapshotVersion(env)
-  const version = String(versionInfo?.current || "").trim()
+  const head = await frozenCardTreeHead(env)
+  const version = String(head?.current || "").trim()
   if (!version || version === "0") return null
-  const publishedAt = String(versionInfo?.raw?.published_at || "").trim()
-  const artifact = await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
-    allowWholeArtifact: false,
-  })
+  const publishedAt = String(head?.published_at || "").trim()
+  // A missing, unreadable or incomplete object anywhere in the walk is "no
+  // coherent snapshot": the discovery documents answer 503 and never guess.
+  let artifact
+  try {
+    artifact = await readFrozenCardTreeCards(env, version, requestedSymbols)
+  } catch (error) {
+    console.error("Frozen card tree read failed:", String(error?.message || error))
+    return null
+  }
   if (!artifact) return null
   if (!requestedSymbols.length) {
     // Root/static sitemap documents do not need a shard body, but they still
@@ -32517,33 +30444,6 @@ export async function readIconoplasmPublishedGeneDiscoveryProjections(env, symbo
     bySymbol.set(symbol, projection)
   }
   return { version, publishedAt, bySymbol, cardSymbols }
-}
-
-async function advanceEnrolledIconoplasmGeneCardsAfterPublication(env, version, symbols) {
-  const requestedSymbols = normalizeRequestedSymbols(
-    Array.isArray(symbols) ? symbols : [],
-    MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT,
-  )
-  if (!requestedSymbols.length) return { considered: 0, advanced: 0 }
-  const artifact = await readPublishedCardCatalogArtifact(env, version, requestedSymbols, {
-    allowWholeArtifact: false,
-  })
-  if (!artifact) throw new Error(`Published card artifact ${version} is unavailable`)
-  let advanced = 0
-  for (const symbol of requestedSymbols) {
-    const card = artifact.bySymbol.get(symbol)
-    if (!card?.payload) continue
-    if (
-      await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
-        symbol,
-        cardFingerprint: iconoplasmGeneCardFingerprint(card.payload),
-        assetSha256: iconoplasmPrintCopyAssetSha(card.payload),
-      })
-    ) {
-      advanced += 1
-    }
-  }
-  return { considered: requestedSymbols.length, advanced }
 }
 
 function cardArtifactUnavailablePayload(version, detail = "") {
@@ -34368,10 +32268,6 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
 }
 
 const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
-  public_card_current: async (args) =>
-    asHead(args.request, await publishedCardDeliveryHandlers.current(args)),
-  public_card_object: async (args) =>
-    asHead(args.request, await publishedCardDeliveryHandlers.object(args)),
   public_stable_gene_object: async (args) =>
     asHead(args.request, await publishedCardDeliveryHandlers.stableGene(args)),
   public_stable_catalog_object: async (args) =>
@@ -34389,10 +32285,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
-  public_card_delivery_index: async (args) =>
-    asHead(args.request, await hoverDeliveryHandlers.index(args)),
-  public_card_content: async (args) =>
-    asHead(args.request, await hoverDeliveryHandlers.content(args)),
   public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
     asHead(
       request,
@@ -34594,56 +32486,6 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         200,
         { "Cache-Control": "no-store" },
       )
-      responseStatus = response.status
-      return response
-    }
-
-    if (
-      isIconoplasmPublishGalleryDirtyShardsRequestForTheOnlyAllowedStatefulWorker(
-        path,
-        request.method,
-      )
-    ) {
-      // Exactly one bounded dirty-shard step per invocation. A caller cannot
-      // smuggle `max_chunks` into a CPU/KV burst; cron and manual publication share
-      // the same cost boundary.
-      const payload = await parseJsonBody(request)
-      let lastResult
-      try {
-        lastResult = {
-          ok: true,
-          ...(await publishIconoplasmGalleryDirtyShards(meteredEnv, {
-            triggerReason:
-              sanitizeText(String(payload?.reason || ""), 255) ||
-              "internal_gallery_dirty_shard_publication",
-          })),
-        }
-      } catch (error) {
-        console.error(
-          "[CRON] gallery dirty-shard publication failed:",
-          String(error?.message || error || "unknown"),
-          "code=" + String(error?.code || ""),
-        )
-        lastResult = {
-          ok: false,
-          skipped: true,
-          code:
-            sanitizeText(String(error?.code || ""), 128) ||
-            "GALLERY_DIRTY_SHARD_PUBLICATION_SKIPPED",
-          error: sanitizeText(String(error?.message || error), 500),
-        }
-      }
-      console.log(
-        "[CRON] gallery dirty-shard publication complete: ok=" +
-          Boolean(lastResult?.ok) +
-          " publication_more=" +
-          Boolean(lastResult?.card_catalog?.publication_more) +
-          " dirty_shards=" +
-          Number(lastResult?.card_catalog?.dirty_shard_count || 0),
-      )
-      const response = json(lastResult || { ok: false, error: "no result" }, 200, {
-        "Cache-Control": "no-store",
-      })
       responseStatus = response.status
       return response
     }
@@ -35029,9 +32871,6 @@ async function publishCatalogArtifact(env) {
   catalogCache.symbolByUniprot = new Map()
   catalogCache.symbolByAlias = new Map()
   catalogCache.loadedAt = 0
-  await publishIconoplasmGalleryDirtyShards(env, {
-    triggerReason: "catalog_artifact_publication",
-  })
 
   return {
     ok: true,
@@ -35072,7 +32911,6 @@ export async function drainIconoplasmManifestationAuthorityProjection(
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
         authorityEventId: event.event_id,
         limit: 10,
-        wakeCardPublication: () => callCardPublication(env, "/wake", { method: "POST" }),
       }),
     onIntegrityFailure: async (failure) => {
       console.error("[ICONOPLASM_AUTHORITY_PROJECTION_INTEGRITY]", failure)
@@ -35274,53 +33112,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     const response = await handleIconoplasmGenerationExecutorRoute({ match, request, env, ctx })
     return done("manifestation_generation_executor", response)
   },
-  "admin_gallery.migrate_card_storage": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done("admin_gallery_storage_migration_403", json({ error: "Unauthorized" }, 403))
-    const result = await callCardPublication(env, "/migrate", { method: "POST" })
-    return done(
-      "admin_gallery_storage_migration",
-      json(result, 202, { "Cache-Control": "no-store" }),
-    )
-  },
-  "admin_gallery.rematerialize_card_candidates": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done(
-        "admin_gallery_rematerialize_candidates_403",
-        json({ error: "Unauthorized" }, 403),
-      )
-    const result = await callCardPublication(env, "/rematerialize", { method: "POST" })
-    return done(
-      "admin_gallery_rematerialize_candidates",
-      json(result, 202, { "Cache-Control": "no-store" }),
-    )
-  },
-  "admin_gallery.cancel_card_rematerialization": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done(
-        "admin_gallery_card_rematerialization_cancel_403",
-        json({ error: "Unauthorized" }, 403),
-      )
-    const result = await callCardPublication(env, "/cancel-rematerialization", {
-      method: "POST",
-    })
-    return done(
-      "admin_gallery_card_rematerialization_cancel",
-      json(result, 200, { "Cache-Control": "no-store" }),
-    )
-  },
-  "admin_gallery.migrate_card_storage_status": async ({ request, env, done }) => {
-    if (!(await isIconoplasmAdmin(request, env)))
-      return done(
-        "admin_gallery_storage_migration_status_403",
-        json({ error: "Unauthorized" }, 403),
-      )
-    const result = await callCardPublication(env, "/status", { method: "GET" })
-    return done(
-      "admin_gallery_storage_migration_status",
-      json(result, 200, { "Cache-Control": "no-store" }),
-    )
-  },
   ...createIconoplasmAdminAssetHandlers({
     adminPortraitUrl,
     buildSummaryScope: buildAdminAssetSummaryScope,
@@ -35372,8 +33163,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   }),
   ...createIconoplasmAdminGalleryHandlers({
     fetchGallery: fetchAdminGallery,
-    fetchPublishStatus: cardCatalogPublishStatus,
-    publishIconoplasmGalleryDirtyShards,
     isAdmin: isIconoplasmAdmin,
     json,
     normalizeFilter: normalizeAdminGalleryFilter,
@@ -35415,8 +33204,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     sanitizeText,
     symbolRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX,
     syncReadModels: syncAdminReadModels,
-    syncReadModelsAndPublishGalleryDirtyShards:
-      syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards,
     validVisionId: validAdminRollupVisionId,
     visionRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
     writeBootstrapState: writeAdminReadModelBootstrapState,
@@ -39982,7 +37769,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           dryRun,
         })
         if (!dryRun)
-          await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+          await syncAdminReadModels(env, {
             symbols: Array.isArray(result.affected_symbols) ? result.affected_symbols : [],
           })
         return done("artist_styles_remove", json(result, 200, { "Cache-Control": "no-store" }))
@@ -41355,7 +39142,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // ingest batch turned one sync into hundreds of global refreshes. Keep
         // the eager behavior for direct admin calls, but let the sync defer the
         // expensive refresh until reconcile has the full touched-symbol set.
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
         })
       }
@@ -41596,7 +39383,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
 
       if (!dryRun && !deferReadModels)
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: Array.from(touchedSymbols),
         })
       // Reconcile can restore, reject, or unpublish many source assets. Refresh
@@ -41731,7 +39518,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         // Unstaling can make previously hidden source assets eligible examples.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, touchedSymbols)
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: touchedSymbols,
         })
         return done(
@@ -41788,7 +39575,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // Publishing changes currentness and approval state, so rebuild all
         // emulsion examples on this gene from source rows.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -41828,7 +39615,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
         // Clearing an override can auto-promote a different current asset.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -41892,7 +39679,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // Rejecting removes an asset from example eligibility and may auto-promote
         // a replacement current asset.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -41927,7 +39714,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .run()
         // Unpublishing changes currentness even when the asset row remains.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -41967,7 +39754,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
         // Unstaling can restore source assets to the picker example pool.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -42052,7 +39839,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
         // Purging deletes the source asset; rebuild the affected examples.
         await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-        await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, {
+        await syncAdminReadModels(env, {
           symbols: [symbol],
         })
         return done(
@@ -42139,7 +39926,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         .run()
       // Rollback changes currentness and may expose a different preview first.
       await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
-      await syncAdminReadModelsAndPublishIconoplasmGalleryDirtyShards(env, { symbols: [symbol] })
+      await syncAdminReadModels(env, { symbols: [symbol] })
       return done(
         "rollback",
         json({
