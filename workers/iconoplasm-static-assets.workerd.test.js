@@ -100,18 +100,6 @@ test(
           599,
           "the first-party portrait route owns the fallback",
         )
-        // B-807: the extension's origin hedge for immutable publication objects.
-        const objectResponse = await runtime.dispatchFetch(
-          "https://iconoplasm.test/published-cards/v2/immutable/manifests/" +
-            "c".repeat(64) +
-            ".json",
-          { method, redirect: "manual" },
-        )
-        assert.equal(
-          objectResponse.status,
-          599,
-          "immutable publication objects never fall through to the HTML shell",
-        )
       }
     } finally {
       await runtime?.dispose()

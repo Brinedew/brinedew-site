@@ -33,7 +33,6 @@ function readModelServices(overrides = {}) {
     sanitizeText: (value, limit) => String(value || "").slice(0, limit),
     symbolRequestMax: 100,
     syncReadModels: async () => ({ symbols: 0, visions: 0 }),
-    syncReadModelsAndPublishGalleryDirtyShards: async () => ({ symbols: 0, visions: 0 }),
     validVisionId: (value) => {
       const normalized = String(value || "").trim()
       return normalized.startsWith("vision-") ? normalized : ""
@@ -76,7 +75,6 @@ test("read-model handler registry is immutable and domain-complete", () => {
 })
 
 test("scoped read-model sync remains D1-only and normalizes targets", async () => {
-  let invalidatingCalls = 0
   const directCalls = []
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
@@ -84,24 +82,17 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
         directCalls.push(options)
         return { symbols: 1, visions: 1 }
       },
-      syncReadModelsAndPublishGalleryDirtyShards: async () => {
-        invalidatingCalls += 1
-        return { symbols: 0, visions: 0 }
-      },
     }),
   )
   const response = await responseFrom(handlers["admin_read_models.sync"], {
     body: {
       symbols: [" tp53 ", "TP53", ""],
       vision_ids: ["vision-one", "invalid", "vision-one"],
-      publish_gallery_dirty_shards: false,
     },
   })
-  const payload = await response.json()
 
   assert.equal(response.status, 200)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(invalidatingCalls, 0)
   assert.deepEqual(directCalls, [
     {
       symbols: ["TP53"],
@@ -114,7 +105,6 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
       skipDashboard: false,
     },
   ])
-  assert.equal(payload.publish_gallery_dirty_shards, false)
 })
 
 const emptyScopes = [
@@ -128,134 +118,64 @@ const emptyScopes = [
 ]
 
 for (const [description, body] of emptyScopes) {
-  for (const publish of [false, true]) {
-    test(`rejects ${description} before ${publish ? "publication" : "direct sync"}`, async () => {
-      const calls = []
-      const handlers = createIconoplasmAdminReadModelHandlers(
-        readModelServices({
-          syncReadModels: async () => calls.push("direct"),
-          syncReadModelsAndPublishGalleryDirtyShards: async () => calls.push("publication"),
-        }),
-      )
-      const response = await responseFrom(handlers["admin_read_models.sync"], {
-        body: body === null ? null : { ...body, publish_gallery_dirty_shards: publish },
-      })
-      const payload = await response.json()
-
-      assert.equal(response.status, 400)
-      assert.match(payload.error, /at least one symbol or vision_id/)
-      assert.deepEqual(calls, [])
-    })
-  }
-}
-
-for (const flag of ["full_rebuild", "fullRebuild", "full_vision", "fullVision"]) {
-  for (const publish of [false, true]) {
-    test(`scoped ${publish ? "publication" : "direct sync"} rejects ${flag}`, async () => {
-      const calls = []
-      const handlers = createIconoplasmAdminReadModelHandlers(
-        readModelServices({
-          syncReadModels: async () => calls.push("direct"),
-          syncReadModelsAndPublishGalleryDirtyShards: async () => calls.push("publication"),
-        }),
-      )
-      const response = await responseFrom(handlers["admin_read_models.sync"], {
-        body: { symbols: ["TP53"], [flag]: true, publish_gallery_dirty_shards: publish },
-      })
-      const payload = await response.json()
-
-      assert.equal(response.status, 400)
-      assert.equal(response.headers.get("Cache-Control"), "no-store")
-      assert.match(payload.error, /does not allow full_vision or full_rebuild/)
-      assert.deepEqual(calls, [])
-    })
-  }
-}
-
-for (const publish of [false, true]) {
-  test(`vision-only ${publish ? "publication" : "direct sync"} keeps its explicit scope`, async () => {
+  test(`rejects ${description} before any sync`, async () => {
     const calls = []
-    const sync = async (_env, options) => {
-      calls.push(options)
-      return { symbols: 0, visions: 1 }
-    }
-    const forbidden = async () => {
-      throw new Error("wrong sync service")
-    }
     const handlers = createIconoplasmAdminReadModelHandlers(
-      readModelServices({
-        syncReadModels: publish ? forbidden : sync,
-        syncReadModelsAndPublishGalleryDirtyShards: publish ? sync : forbidden,
-      }),
+      readModelServices({ syncReadModels: async () => calls.push("direct") }),
     )
-    const response = await responseFrom(handlers["admin_read_models.sync"], {
-      body: {
-        visionIds: [" vision-one ", "invalid", "vision-one"],
-        publish_gallery_dirty_shards: publish,
-        full_vision: false,
-        full_rebuild: false,
-      },
-    })
+    const response = await responseFrom(handlers["admin_read_models.sync"], { body })
     const payload = await response.json()
 
-    assert.equal(response.status, 200)
-    assert.equal(payload.visions, 1)
-    assert.equal(calls.length, 1)
-    assert.deepEqual(calls[0].symbols, [])
-    assert.deepEqual(calls[0].visionIds, ["vision-one"])
-    assert.equal(calls[0].fullVision, false)
-    assert.equal(calls[0].fullRebuild, false)
+    assert.equal(response.status, 400)
+    assert.match(payload.error, /at least one symbol or vision_id/)
+    assert.deepEqual(calls, [])
   })
 }
 
-test("scoped publication sync returns the durable publisher handoff outcome", async () => {
+for (const flag of ["full_rebuild", "fullRebuild", "full_vision", "fullVision"]) {
+  test(`scoped sync rejects ${flag}`, async () => {
+    const calls = []
+    const handlers = createIconoplasmAdminReadModelHandlers(
+      readModelServices({ syncReadModels: async () => calls.push("direct") }),
+    )
+    const response = await responseFrom(handlers["admin_read_models.sync"], {
+      body: { symbols: ["TP53"], [flag]: true },
+    })
+    const payload = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    assert.match(payload.error, /does not allow full_vision or full_rebuild/)
+    assert.deepEqual(calls, [])
+  })
+}
+
+test("vision-only sync keeps its explicit scope", async () => {
+  const calls = []
   const handlers = createIconoplasmAdminReadModelHandlers(
     readModelServices({
-      syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 1,
-        visions: 0,
-        publication_queued: true,
-        migration_pending: false,
-      }),
+      syncReadModels: async (_env, options) => {
+        calls.push(options)
+        return { symbols: 0, visions: 1 }
+      },
     }),
   )
-
   const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
+    body: {
+      visionIds: [" vision-one ", "invalid", "vision-one"],
+      full_vision: false,
+      full_rebuild: false,
+    },
   })
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload.publication_queued, true)
-  assert.equal(payload.migration_pending, false)
-  assert.equal(payload.card_catalog_publication, null)
-})
-
-test("scoped publication sync preserves a safe publisher deferral", async () => {
-  const handlers = createIconoplasmAdminReadModelHandlers(
-    readModelServices({
-      syncReadModelsAndPublishGalleryDirtyShards: async () => ({
-        symbols: 1,
-        visions: 0,
-        card_catalog_publication: {
-          deferred: true,
-          resume_after: "2026-09-11T00:00:00.000Z",
-          private_diagnostic: "must not leave the worker",
-        },
-      }),
-    }),
-  )
-
-  const response = await responseFrom(handlers["admin_read_models.sync"], {
-    body: { symbols: ["TP53"], publish_gallery_dirty_shards: true },
-  })
-  const payload = await response.json()
-
-  assert.deepEqual(payload.card_catalog_publication, {
-    deferred: true,
-    resume_after: "2026-09-11T00:00:00.000Z",
-  })
-  assert.equal("private_diagnostic" in payload.card_catalog_publication, false)
+  assert.equal(payload.visions, 1)
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].symbols, [])
+  assert.deepEqual(calls[0].visionIds, ["vision-one"])
+  assert.equal(calls[0].fullVision, false)
+  assert.equal(calls[0].fullRebuild, false)
 })
 
 test("bootstrap implements the HEAD method admitted by its route contract", async () => {

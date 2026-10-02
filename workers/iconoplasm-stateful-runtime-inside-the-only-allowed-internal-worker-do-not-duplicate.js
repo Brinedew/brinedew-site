@@ -24443,7 +24443,6 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
-          publish_gallery_dirty_shards: false,
           skip_gene_rollups: true,
           skip_vision_rollups: true,
           skip_dashboard: true,
@@ -24468,7 +24467,6 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
         path: "/api/iconoplasm/admin/read-models/sync",
         payload: {
           symbols: [symbol],
-          publish_gallery_dirty_shards: false,
           skip_vote_summaries: true,
           skip_vision_rollups: true,
           skip_dashboard: true,
@@ -24501,7 +24499,6 @@ async function processSyncFinalizationJobPhase(env, ctx, job) {
           path: "/api/iconoplasm/admin/read-models/sync",
           payload: {
             vision_ids: visionIds.slice(0, 1),
-            publish_gallery_dirty_shards: false,
             skip_dashboard: true,
           },
         })

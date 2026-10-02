@@ -4,8 +4,9 @@ export const RELEASE_REQUEST_LIMIT = 40
 export const MIGRATION_RELEASE_REQUEST_LIMIT = 256
 
 // The checkpoint step is emitted only when the admitted migration requests a
-// continuation. Check the two reader activation steps as well: a successful
-// deployment is not by itself proof that this was only a migration checkpoint.
+// continuation. Check that the Worker and Pages deploys after it were skipped
+// as well: a successful run is not by itself proof that this was only a
+// migration checkpoint.
 function isMigrationCheckpoint(run, jobs) {
   if (run.status !== "completed" || run.conclusion !== "success") return false
   const production = jobs.filter((job) => job.name === "deploy-production")
@@ -22,7 +23,7 @@ function isMigrationCheckpoint(run, jobs) {
   return (
     hasStep("Apply reviewed D1 migrations through prediction admission", "success") &&
     hasStep("Record staged migration continuation checkpoint", "success") &&
-    hasStep("Publish, verify, and activate immutable public reads", "skipped") &&
+    hasStep("Deploy the stateful Worker after data maintenance", "skipped") &&
     hasStep("Deploy production static site to Cloudflare Pages", "skipped")
   )
 }
