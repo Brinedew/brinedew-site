@@ -26880,13 +26880,13 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
         .filter(Boolean),
     ),
   )
-  const applyFilter = cleanedVisionIds.length > 0
+  // A bound `? = 0 OR vision_id IN (...)` hides idx_icono_portrait_assets_vision_id
+  // from the planner and scans every asset (59,346 on 2 Oct 2026), so the
+  // filtered read gets its own predicate.
+  const visionFilter =
+    cleanedVisionIds.length > 0 ? "AND pa.vision_id IN (SELECT value FROM json_each(?))" : ""
   const statsResp = await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id
-       FROM json_each(?)
-     )
-     SELECT
+    `SELECT
        pa.vision_id,
        MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
        MAX(NULLIF(pa.artist_name, '')) AS artist_name,
@@ -26921,19 +26921,19 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
        ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
      WHERE COALESCE(pa.vision_id, '') <> ''
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'
-       AND (
-         ? = 0
-         OR pa.vision_id IN (SELECT vision_id FROM incoming)
-       )
+       ${visionFilter}
      GROUP BY pa.vision_id
      ORDER BY live_count DESC, score DESC, image_count DESC, pa.vision_id ASC`,
   )
-    .bind(JSON.stringify(cleanedVisionIds), applyFilter ? 1 : 0)
+    .bind(...(visionFilter ? [JSON.stringify(cleanedVisionIds)] : []))
     .all()
   return mapAdminVisionStatsRows(statsResp?.results)
 }
 
-async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
+// `visionIds` reads those rollup rows by primary key. `scopeAll` is the admin
+// Styles scorecard, the one caller that reads every rollup row (19,193 on
+// 2 Oct 2026, growing with generation); the route refuses any other unfiltered call.
+async function fetchAdminVisionStats(env, { visionIds = [], scopeAll = false } = {}) {
   if (!env.ICONOPLASM_DB) return { rows: [], blacklisted: [] }
 
   const cleanedVisionIds = Array.from(
@@ -26955,31 +26955,36 @@ async function fetchAdminVisionStats(env, { visionIds = [] } = {}) {
   const bootstrapRunning =
     bootstrapState && bootstrapState.status !== ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
 
+  const filtered = cleanedVisionIds.length > 0
   let rows = []
-  if (!bootstrapRunning) {
-    const applyFilter = cleanedVisionIds.length > 0
-    const statsResp = await env.ICONOPLASM_DB.prepare(
-      `WITH incoming AS (
-         SELECT value AS vision_id
-         FROM json_each(?)
-       )
-       SELECT *
-       FROM icono_admin_vision_rollup
-       WHERE (
-         ? = 0
-         OR vision_id IN (SELECT vision_id FROM incoming)
-       )
-       ORDER BY live_count DESC, score DESC, image_count DESC, vision_id ASC`,
-    )
-      .bind(JSON.stringify(cleanedVisionIds), applyFilter ? 1 : 0)
-      .all()
+  if (!bootstrapRunning && (filtered || scopeAll)) {
+    // The filtered read drives from the requested ids through the primary key.
+    // A bound `? = 0 OR vision_id IN (...)` makes the planner walk the whole
+    // rollup in index order instead (19,194 rows for one id on 2 Oct 2026).
+    const statsResp = filtered
+      ? await env.ICONOPLASM_DB.prepare(
+          `SELECT avr.*
+           FROM json_each(?) incoming
+           JOIN icono_admin_vision_rollup avr
+             ON avr.vision_id = incoming.value
+           ORDER BY avr.live_count DESC, avr.score DESC, avr.image_count DESC, avr.vision_id ASC`,
+        )
+          .bind(JSON.stringify(cleanedVisionIds))
+          .all()
+      : await env.ICONOPLASM_DB.prepare(
+          `SELECT *
+           FROM icono_admin_vision_rollup
+           ORDER BY live_count DESC, score DESC, image_count DESC, vision_id ASC`,
+        ).all()
     rows = mapAdminVisionStatsRows(statsResp?.results)
   }
 
   // When the big gene-centric bootstrap is still running, the vision rollup is only
   // partially populated. In that state we would rather do one direct grouped read
   // over the indexed raw asset table than serve a silently incomplete scorecard.
-  if (bootstrapRunning || rows.length === 0) {
+  // An empty full scorecard also means the rollup was never built. An empty
+  // filtered answer from a built rollup is the answer: those visions have no assets.
+  if (bootstrapRunning || (scopeAll && !filtered && rows.length === 0)) {
     rows = await fetchAdminVisionStatsDirect(env, { visionIds: cleanedVisionIds })
   }
 
@@ -36988,7 +36993,20 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           json({ error: "Too many vision_ids (max 2000)" }, 400),
         )
       }
-      const visionStats = await fetchAdminVisionStats(env, { visionIds })
+      const scopeAll = String(p?.scope || url.searchParams.get("scope") || "") === "all"
+      if (visionIds.length === 0 && !scopeAll) {
+        return done(
+          "admin_votes_vision_stats_400",
+          json(
+            {
+              error:
+                "vision_ids is required; scope=all reads every vision rollup row and is reserved for the admin Styles scorecard",
+            },
+            400,
+          ),
+        )
+      }
+      const visionStats = await fetchAdminVisionStats(env, { visionIds, scopeAll })
       const rows = visionStats.rows
       return done(
         "admin_votes_vision_stats",
