@@ -11,10 +11,10 @@ a recipe or queues generation.
 
 ## Fences: preserve these distinctions
 
-- Group only by normalized `icono_portrait_assets.emulsion_id`. Migration 0076 made
-  qualified codes evidence of factory lineage. Never infer a factory from an artist
-  Vision ID, a filename, or today's active recipe. Unqualified legacy assets and
-  edited derivatives are not factory outputs.
+- Group only by normalized `icono_portrait_assets.emulsion_id`. Qualified codes
+  (normalized by migration 0076) are the evidence of factory lineage. Never infer a
+  factory from an artist Vision ID, a filename, or today's active recipe.
+  Unqualified assets and edited derivatives are not factory outputs.
 - Retired pipelines keep their historical belts under Retired, but cannot become
   active. Empty recommended recipes remain discoverable under All factories.
 - `open_count` means open requests, not proven running GPU jobs. Keep the label
@@ -33,20 +33,19 @@ the runtime: an unregistered handler is unreachable through the real gateway.
 It runs in the existing stateful worker and uses existing immutable portrait URLs.
 There is no new publisher, storage service, KV write or public request path.
 
-Migration 0080 adds a partial expression index only for qualified factory assets.
+Migration 0080's partial expression index covers only qualified factory assets.
 The output query performs an indexed top-six seek per registered recipe, not a
-corpus-wide scan/window ranking. At present 16 pipelines × 9 Visions means 144
+corpus-wide scan/window ranking. The catalog's 16 pipelines × 9 Visions mean 144
 small seeks. A hard 512-recipe limit fails explicitly before querying; implement
 pagination before raising it. Open counts use the existing request-status index.
 Catalog expansion must preserve the query-plan test and its bounded access path.
 
 The request-picker factory summary is a different query, not this belt index.
-Its case-insensitive emulsion lookup requires migration 0081's NOCASE index.
-Migration 0077 removed the duplicate emulsion column and its old NOCASE index,
-but the replacement join kept that collation. SQLite could scan the BINARY
-index but could not seek it: live query insights measured 434.32 million reads
-in 33 summary updates on 2026-08-27. Do not remove the replacement as a
-"duplicate" of the BINARY user-emulsion index. The two predicates differ.
+Its case-insensitive emulsion lookup requires migration 0081's NOCASE index:
+the join compares with NOCASE collation, and SQLite can scan but not seek the
+BINARY index for it (measured at 434 million rows read across 33 summary
+updates). Do not remove the NOCASE index as a "duplicate" of the BINARY
+user-emulsion index. The two predicates differ.
 `iconoplasm-factory-rollup-cost.test.js` checks unchanged output, mixed-case
 identity, the real query plan and measured workerd rows read.
 

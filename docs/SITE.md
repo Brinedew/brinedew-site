@@ -22,13 +22,13 @@ Wrangler configuration must continue to agree on this route owner.
 
 ## Route table
 
-| Host/path                                   | First owner           | Dynamic owner      | State                                                                              |
-| ------------------------------------------- | --------------------- | ------------------ | ---------------------------------------------------------------------------------- |
-| `iconoplasm.brinedew.bio/<published asset>` | Workers Static Assets | none               | immutable build output                                                             |
-| `iconoplasm.brinedew.bio/gene/<SYMBOL>`     | Static Assets miss    | `geneguessr-api`   | published D1 identity index, rich-detail ETag, exact card portrait, and HTML cache |
-| `iconoplasm.brinedew.bio/api/*`             | Static Assets miss    | `geneguessr-api`   | existing Iconoplasm read/write contracts                                           |
-| `iconoplasm.brinedew.bio/health`            | Static Assets miss    | `geneguessr-api`   | bounded health response                                                            |
-| `brinedew.bio/*`                            | public edge Worker    | public edge Worker | separate Brinedew site boundary                                                    |
+| Host/path                                   | First owner           | Dynamic owner                      | State                                                                                 |
+| ------------------------------------------- | --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `iconoplasm.brinedew.bio/<published asset>` | Workers Static Assets | none                               | immutable build output                                                                |
+| `iconoplasm.brinedew.bio/gene/<SYMBOL>`     | Static Assets miss    | `geneguessr-api`                   | published D1 identity index, rich-detail ETag, stable-object portrait, and HTML cache |
+| `iconoplasm.brinedew.bio/api/*`             | Static Assets miss    | `geneguessr-api`                   | existing Iconoplasm read/write contracts                                              |
+| `iconoplasm.brinedew.bio/health`            | Static Assets miss    | `geneguessr-api`                   | bounded health response                                                               |
+| `brinedew.bio/*`                            | Cloudflare Pages      | public edge Worker (`/api/*` only) | separate Brinedew site boundary                                                       |
 
 ## Deployment graph
 
@@ -53,9 +53,9 @@ identity in their path or filename and must never use a vague catch-all such as
 
 ## Anti-ping-pong rule
 
-The rejected design was “public proxy → stateful Worker”. It charged two
-Worker invocations for dynamic reads and made ownership easy to misread. Do
-not recreate it under a new service name, a service binding, a “lightweight”
-edge Worker, or an `iconoplasm-web` directory. Refactoring means smaller
-responsibility modules behind the same route and state owner, not a new
-invocation topology.
+Do not put a public proxy in front of the stateful Worker for Iconoplasm
+requests: it charges two Worker invocations for every dynamic read and makes
+ownership easy to misread. That holds under any name: a new service, a service
+binding, a “lightweight” edge Worker, or an `iconoplasm-web` directory.
+Refactoring means smaller responsibility modules behind the same route and state
+owner, not a new invocation topology.

@@ -56,7 +56,7 @@ If you skip `--remote`, you are not looking at the live data.
 - `icono_gene_essence`
   - synced NiceGUI/runtime traits like `sex`, `full_name`, `weight_kg`, `age_years`, `manifestation`
 - `icono_gene_discoveries`
-  - per-user discovery history
+  - retained legacy per-user discovery rows (the shelf reads compact V2 state)
 - `icono_publish_state`
   - retained legacy authoring/vote projection; check the gene's authority epoch before interpreting it; never public image authority
 - `icono_portrait_assets`
@@ -80,7 +80,7 @@ Exception: do **not** JSON-aggregate giant full-catalog payloads just because it
 
 ## offline analysis example: shortest male full names
 
-This historical query pattern answers “top 100 shortest full names for genes
+This query pattern answers “top 100 shortest full names for genes
 marked as male”. Its expression filter and sort can scan the corpus. Run it
 against a local retained snapshot; the output limit does not make it a safe
 production D1 lookup.
@@ -111,10 +111,13 @@ WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';
 
 ## discovery questions
 
-First identify whether the deployed reader uses compact V2 discovery state or
-retained legacy rows; B-764 owns this cutover. The query below diagnoses the
-legacy projection for one user. It must not overwrite migrated compact state
-or serve as an ordinary fallback when the compact reader is unavailable.
+The signed-in shelf reads compact V2 discovery state
+(`icono_discovery_user_state_v2` and its chronology,
+`workers/iconoplasm/discovery-compact-*.js`). Retained legacy
+`icono_gene_discoveries` rows are read only by the per-user compact import
+(`workers/iconoplasm/discovery-compact-migrate.js`). The query below diagnoses
+one user's legacy rows. It must not overwrite compact state or serve as a
+fallback when the compact reader is unavailable.
 
 Shape to remember:
 
@@ -178,18 +181,19 @@ The authority relationship is:
 - The gene's active authority owns its desired selection. D1
   `icono_publish_state` is the retained legacy projection and may differ after
   a per-gene authority transfer.
-- The stable gene object `genes/v3/<SYMBOL>.json` owns the public portrait
-  (B-898). Read it from Bunny; there is no head, baseline or version to select.
+- The stable gene object `genes/v3/<SYMBOL>.json` owns the public portrait.
+  Read it from Bunny. It is rewritten in place; its `published_at` is the
+  version that public responses report.
 - `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
   metadata, public media, signed-in and anonymous galleries, archive ranges,
   image sitemaps, extension cards, and print-copy inputs must all project that
-  artifact portrait.
-- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname now routes directly to the asset-first stateful worker; shared-host requests can still cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
+  object's portrait.
+- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 
-Site-gene detail still reads bounded D1 rich detail and candidates, but it
-overrides the portrait and candidate `is_current` state with the published-card
-SHA. There is no signed-in or gene-detail fallback. Missing or incomplete exact
-card state fails closed and uncached instead of selecting the D1 leader.
+Site-gene detail reads bounded D1 rich detail and candidates, but it overrides
+the portrait and candidate `is_current` state with the stable object's SHA.
+There is no signed-in or gene-detail fallback. A missing or incomplete stable
+object fails closed and uncached instead of selecting the D1 leader.
 
 ### diagnose one symbol
 
@@ -225,7 +229,7 @@ for (const endpoint of endpoints) {
     status: res.status,
     cfCacheStatus: res.headers.get("cf-cache-status"),
     portraitSource: res.headers.get("x-iconoplasm-portrait-source"),
-    artifactVersion:
+    version:
       res.headers.get("x-iconoplasm-card-version") ||
       payload?.card_snapshot_version ||
       payload?.diagnostics?.artifact_version ||
@@ -237,7 +241,7 @@ for (const endpoint of endpoints) {
 '@ | node -
 ```
 
-All three public responses must name the same artifact version and portrait SHA.
+All three public responses must name the same stable-object version and portrait SHA.
 An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
 publication failure, not permission to query D1 for substitute public bytes.
 
@@ -282,17 +286,12 @@ is materially charged for unrelated backlog, record its original scope,
 receipt and provider cost as a concrete defect. Never bypass a scope refusal
 with a full flag, a new operation ID or a global continuation.
 
-`scripts/repair-iconoplasm-newer-tie-canon.mjs` is permanently retired in source.
-Every flag mode exits with `LEGACY_GLOBAL_REPAIR_RETIRED` before network or D1
-access. The original May repair is preserved in git history. Its old direct D1
-writer and empty-scope final publication are not available as recovery tools.
-
 ### do not repeat the bad repair paths
 
 Avoid these even if they look faster:
 
 - do not trust the frontend candidate count as the source of truth
-- do not disguise a partial catalog as a complete baseline; verified V2 per-gene immutable cards and exact delta views are the supported source design
+- do not disguise a partial catalog as a complete one; the per-gene stable objects and the one catalog object are the supported source design
 - do not add a D1 fallback to the public card, site-gene-detail, public-media,
   gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
@@ -304,19 +303,17 @@ Avoid these even if they look faster:
 - If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
 - If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
-- If public portraits look wrong, inspect the exact advertised view, its
-  immutable objects and the gene's active authority. Compare retained D1 rows
-  only after identifying their epoch and role.
+- If public portraits look wrong, inspect the gene's stable object, its
+  immutable portrait bytes and the gene's active authority. Compare retained D1
+  rows only after identifying their epoch and role.
 
 ## website ops sync: missing Cloudflare telemetry
 
-Missing telemetry is not a pause (B-897, 30 Sep 2026). The workstation budget
-registry shows an unreadable meter as `needs_telemetry` and keeps syncing; only
-a meter known to have crossed its ceiling pauses sync. The Worker's D1 write
-admission is the authority, and it counts every worst-case reservation since
-its last same-day provider sample (or since midnight) when a sample is missing.
-The old "Durable Objects guard lost live telemetry" pause and its message were
-deleted: one failed GraphQL read used to park a publication until the UTC reset.
+Missing telemetry is not a pause (B-897). The workstation budget registry
+shows an unreadable meter as `needs_telemetry` and keeps syncing; only a meter
+known to have crossed its ceiling pauses sync. The Worker's D1 write admission
+is the authority, and it counts every worst-case reservation since its last
+same-day provider sample (or since midnight) when a sample is missing.
 
 When a meter is unreadable, fix the credential: `CLOUDFLARE_API_TOKEN` must be
 the account-owned `iconoplasm-admin` token that can read `CLOUDFLARE_ACCOUNT_ID`;
@@ -346,9 +343,9 @@ Publication contract:
 - `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It can also be dispatched manually. Both checks still run if collection or publication fails; cancellation stops them.
 - The generator writes one JSON snapshot. The account check reports every capacity alert but permits its one atomic KV write only when KV write headroom is available; exhausted D1 must not hide fresh telemetry. The key is `iconoplasm:observability-snapshot:v1`.
 - The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
-- The old observability-only usage ledger is retired. Cloudflare GraphQL owns
-  account-wide usage truth. The shared operation-cost admission ledger still
-  reserves work and retains uncertain reservations; it is a different owner.
+- Cloudflare GraphQL owns account-wide usage truth. The shared operation-cost
+  admission ledger reserves work and retains uncertain reservations; it is a
+  different owner.
 
 Freshness SLA:
 
@@ -370,7 +367,7 @@ belongs in its owning issue with the current source and live receipts.
 
 ## when to leave this repo
 
-Leave this repo and inspect `d:\Coding\Datasets\iconoplasm` when the problem is about:
+Leave this repo and inspect the workstation, `d:\Coding\Iconoplasm` (code) and `d:\Coding\Datasets\iconoplasm` (state), when the problem is about:
 
 - authoring workstation sync
 - local reconcile batching

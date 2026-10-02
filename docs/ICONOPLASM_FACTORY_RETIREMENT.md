@@ -1,18 +1,13 @@
 # Factory retirement contract
 
-The authoring authority is the Iconoplasm dataset factory registry; its public
-projection is `workers/generated/iconoplasm-factory-catalog.js`. The mutable
-website pointer chooses a Pipeline/Vision for future work only.
+The authoring authority is the workstation's immutable factory registry; its
+public projection is `workers/generated/iconoplasm-factory-catalog.js`. Each
+pipeline letter there carries `status: accepted` or `status: retired`. The
+mutable website pointer chooses a Pipeline/Vision for future work only.
 
-## B-714: Turbo 1.0 to 1.1
-
-E/L retain their original Turbo 1.0 identities with `status: retired`.
-O/P are new Turbo 1.1 definitions at 896x1152 and 1536x2048. They use 10 steps,
-CFG 1, Euler and recommend existing Vision 9. Existing images and queued recipe
-snapshots must never be relabeled as O/P. An unrelated active H9 stays H9.
-
-The model replacement procedure and official file hash live in the workstation
-runbook `docs/FACTORY_MODEL_CUTOVER.md` and Linear B-714.
+A replacement model gets a new letter. The retired letter keeps its original
+definition, and existing images and queued recipe snapshots keep the letter
+they were made with; they are never relabeled to the replacement.
 
 ## Chesterton's fence
 

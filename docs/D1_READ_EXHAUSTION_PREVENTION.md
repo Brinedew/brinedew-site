@@ -1,6 +1,6 @@
 # Preventing D1 exhaustion
 
-This is an engineering guide for D1 work. It is not a recovery chronology.
+This is an engineering guide for D1 work.
 
 ## Why D1 exhaustion happens
 
@@ -109,6 +109,3 @@ A quota reset, green CI, or a successful deployment alone is not completion.
 RECOVERY-001 applies whenever an exhaustion incident recurs: the executor owns
 delivery through a verified user operation. Containment protects the system
 while the repair ships; it does not replace the repair.
-
-Historical incident evidence is available in Git and closed Linear issues. Do
-not append it to this guide.

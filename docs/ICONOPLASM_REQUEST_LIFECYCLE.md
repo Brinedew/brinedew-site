@@ -9,16 +9,16 @@ file names, cache policy, or storage layout.
 
 An anonymous reader receives the application shell and published Iconoplasm
 artifacts without consulting mutable application state. The stable
-`/blot/{symbol}.webp` route enters the existing Worker to select the exact
-published card and its immutable WebP object. It does not use D1, a session,
+`/blot/{symbol}.webp` route enters the existing Worker to read the gene's
+stable object and its immutable WebP object. It does not use D1, a session,
 or a second publication owner. The shell stays static. Healthy portraits use
 Bunny directly; their canonical first-party URLs reach the same Worker only
 when that browser needs byte delivery from the fallback.
 
-The publication system owns two objects (B-898): one stable gene object per
-gene and one catalog object. They provide search, gallery, gene dossiers,
-passive candidate and vote summaries, portraits, and blots. Bunny may accelerate
-the same public bytes.
+The publication system owns two objects: one stable gene object per gene
+(`genes/v3/<SYMBOL>.json`) and one catalog object (`catalog/v3/index.json`).
+They provide search, gallery, gene dossiers, passive candidate and vote
+summaries, portraits, and blots. Bunny may accelerate the same public bytes.
 Neither Bunny nor a browser cache chooses canon.
 
 Anonymous reading does not require:
@@ -65,5 +65,5 @@ whole-catalog repair.
 Verify anonymous and authenticated paths separately. A useful release check
 opens fresh cache-busted contexts for at least two genes, confirms the published
 identity and media agree, and then verifies one relevant authenticated action.
-Record source revision, deployed revision, publication head, and observation
-time separately.
+Record source revision, deployed revision, the stable objects' `published_at`
+versions, and observation time separately.

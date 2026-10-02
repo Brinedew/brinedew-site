@@ -1,7 +1,7 @@
 # Caretaker manifestation authority
 
-Status: implementation contract for IPD-012 / B-705. The words **caretaker** and
-**manifestation** are product language. Do not reintroduce `curator`, `latest`
+Implementation contract for IPD-012 / B-705. The words **caretaker** and
+**manifestation** are product language. Do not use `curator`, a `latest`
 manifestation, or a second command authority in code or UI.
 
 ## Ownership boundary
@@ -28,19 +28,13 @@ secrets enforce least privilege, and a token is valid only for its named routes:
 - `ICONOPLASM_AUTHORITY_GENERATION_TOKEN`: generation lease claim, renew, fail,
   and complete;
 - `ICONOPLASM_AUTHORITY_CUTOVER_TOKEN`: the discovery candidate/activate
-  handover only. (The one-time manifestation cutover it was named for finished
-  on 2026-08-31 and its code was deleted on 2026-09-25.)
+  handover only.
 
-There are no maintenance routes and no separate backup protocol. Both were
-deleted on 2026-09-26 because nothing had ever called them: no schedule,
-workflow or workstation job held either token, and 0 checkpoints, 0 tombstones
-and 0 backup capabilities were ever written. Command receipts are not
-compacted; almost all 58,116 are the one-time 2026-08-31 cutover, and real use
-adds about three a day (B-859 has the 100x sizing). Recovery is D1 Time Travel (30 days)
-for `iconoplasm-authoring`, plus the immutable body objects in Bunny Storage.
-The `ICONOPLASM_AUTHORITY_BACKUP_TOKEN` and `ICONOPLASM_AUTHORITY_MAINTENANCE_TOKEN` Worker secrets are unused. Secrets must contain different
-values; admin credentials and the retired generic service token are never
-fallbacks.
+Command receipts are kept in full and not compacted; real use adds about three a
+day (B-859 has the 100x sizing). Recovery for `iconoplasm-authoring` is D1 Time
+Travel (30 days), the rotating nightly dump from `scripts/backup-d1-rotation.mjs`,
+and the immutable body objects in Bunny Storage. The three secrets must contain
+different values; admin credentials are never fallbacks.
 
 ## Stable identities
 
@@ -49,10 +43,12 @@ fallbacks.
 - `gene_id` is permanent. Symbols are aliases that may be renamed or merged.
 - `caretaker_assignment_id`, `manifestation_id`, `manifestation_revision_id`, and
   `canonical_selection_id` are opaque. Labels and hashes are not identities.
-- A successful self-claim creates an `active` assignment immediately. Its bounded
-  state machine is `active` <-> `suspended` -> `ended`; `ended` is terminal and a
-  later tenure receives a new ID. `pending_acceptance` is legacy history, not a
-  product action, invitation, or sidebar state.
+- A successful self-claim creates an `active` assignment immediately. An
+  administrator can instead offer a gene (`caretaker_admin_offer`), which creates
+  a `pending_acceptance` assignment that the account accepts or declines, or the
+  administrator cancels. The bounded state machine is `pending_acceptance` ->
+  `active` or `ended`, and `active` <-> `suspended` -> `ended`; `ended` is
+  terminal and a later tenure receives a new ID.
 - Any active Brinedew account authenticated through Discord may self-claim an
   available gene. Membership in the Brinedew Discord server is not an entitlement
   gate. One account may have at most one active or suspended gene tenure at a time.
@@ -111,18 +107,10 @@ fallback.
 
 Withdrawal immediately removes the lineage from public view and canonical
 eligibility; it is never purged. There is no hard purge, retention sweep or
-legal hold (deleted 2026-09-25, B-859): no comparable open-contribution site
-promises more than "remove it from public view on the site, though it will not
-remove it from backups" (iNaturalist). An erasure request arrives by email and
-is handled by hand.
-
-The one-time legacy cutover finished on 2026-08-31 (one run, mode
-`authoritative`). Its code — the cutover processor, materializer, Durable Object
-coordinator, backup-artifact writer, 30-day backup retention sweeper, plaintext
-retirement and the never-called key-rotation job — was deleted on 2026-09-25.
-The cutover's backup artifact stays untouched in the private
-`iconoplasm-authoring-backup` Bunny zone as a cold archive; nothing reads or
-sweeps it any more.
+legal hold (B-859): comparable open-contribution sites promise no more than
+removal from public view, not from backups (iNaturalist). An erasure request
+arrives by email; the operator fulfils it with the account erase command in
+`docs/ICONOPLASM_OPERATIONS.md`.
 
 Production uses `iconoplasm-authoring`; staging uses the credential-isolated
 `iconoplasm-authoring-staging`. Both are private Storage zones with
@@ -153,7 +141,7 @@ the Website. A gap, expired cursor, or authority epoch change forces an immutabl
 watermarked snapshot; it never edits local rows until the snapshot validates and
 swaps atomically.
 
-Snapshot transport v2 (migration `0012`) streams directly from a pinned authority
+Snapshot transport v2 streams directly from a pinned authority
 epoch, event watermark and baseline rowid ceiling. GET pages are
 read-only and contain at most 250 parts; no per-consumer D1 payload copy or build
 poller exists. Each signed continuation binds the cumulative part count and SHA-256
@@ -173,28 +161,20 @@ events. An invalidated lease clears only its download cache so the next attempt
 can obtain a fresh lease; it never advances the last verified replica.
 Private prose and Tags are fetched only when opening the selected gene, with at
 most 128 revisions and 128 derivatives held in process memory. Sync never fetches
-the catalogue's private bodies. Legacy snapshot cleanup deletes at most 250 copied
-parts per maintenance call and retains each lease until its copied parts are gone.
-
-Deploy order: apply authoring migration `0012` and publish the v2 Worker through the
-normal Website pipeline, then restart the workstation with local schema v9 and the
-v2 client. Old clients reject the explicit version change; their last verified state
-remains intact. Generation continues through its independent exact-lease endpoint.
+the catalogue's private bodies.
 
 Offline edits remain drafts. Reconnection submits each durable command with its
 original command ID and expected entity version. Conflict preserves the draft,
 shows the remote head, and requires a human rebase/retry. Local candidates without
-an exact source binding remain `legacy_unbound`; migration never guesses by gene or
-timestamp.
+an exact source binding remain `legacy_unbound`; nothing guesses a binding by gene
+or timestamp.
 
 The Website never prunes events. Cold history moves to the sealed event archive
 (`iconoplasm-event-archive`), which snapshot and event pages read as one ordered
 source; a fresh replica receives the baselines followed by every event after
-them. An earlier design pruned the event prefix behind a verified normalized
-checkpoint and tombstoned command receipts. It was never activated (0 checkpoints,
-retention floor 0, 0 tombstones on 2026-09-26) and was deleted that day (B-869).
-If the retention floor were ever raised, a new snapshot refuses with
-`SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE` instead of streaming an incomplete history.
+them. Nothing raises the event retention floor; if it is ever above zero, a new
+snapshot refuses with `SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE` instead of streaming
+an incomplete history.
 
 Full command response receipts are kept and stay replayable; they are not
 compacted (see above).
@@ -249,16 +229,15 @@ case where it crosses Website/workstation boundaries.
 | 4,001 code points or more than 16 KiB                | Validation refuses consistently in browser and authority                                  |
 | Public/anonymous gene view                           | Zero caretaker-authority requests and no private metadata                                 |
 | Workstation admin credential                         | Can replicate/service commands; cannot forge caretaker actor                              |
-| Legacy writer runs after freeze                      | Primary trigger and route both refuse it; authority mode never rewinds                    |
-| Staging authoring or backup storage is compromised   | Distinct staging zones and environment secrets grant no production-zone access            |
+| Write to the frozen legacy manifestation columns     | Primary trigger and route both refuse it; authority mode never rewinds                    |
+| Staging authoring storage is compromised             | The distinct staging zone and environment secrets grant no production-zone access         |
 | Recovery mode is entered                             | Reads/repair continue while all authority mutations remain disabled                       |
 | Signed caretaker 10x vote is replayed or tenure ends | Separate receipt/outbox stays idempotent; ranking recomputes without FIT mutation         |
 | Caretaker moves +10 to -10 or another candidate      | One CAS head transfers atomically; no ordinary FIT/MISFIT row is rewritten                |
 | Preferred +10 candidate loses canon                  | One transition-keyed Discord DM is queued; stale preference or ended tenure suppresses it |
 
-## Release gate (historical)
+## Release verification
 
-The cutover release gate was met on 2026-08-31. Deployment is still not proof:
-fresh logged-in browser tests must cover edit, version rollback, own-only deletion,
-both leave policies, exact generation, and one conflict/retry path on two gene
-pages.
+Deployment is not proof. Fresh logged-in browser tests must cover edit, version
+rollback, own-only deletion, both leave policies, exact generation, and one
+conflict/retry path on two gene pages.

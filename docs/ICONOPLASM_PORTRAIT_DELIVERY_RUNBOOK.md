@@ -37,22 +37,21 @@ candidate, edit-job, or catalog payloads.
 
 Portrait selection happens before delivery policy. D1 owns authoring, vote,
 rich-detail, and candidate state and may legitimately name a newer leader while
-publication is pending. The stable gene object `genes/v3/<SYMBOL>.json`
-(B-898) is the sole published source-portrait selection used by
-signed-in and anonymous cards, gene detail, extension cards, and print-copy
-inputs. Missing exact-card state fails closed; there is no D1 or gene-detail
-portrait fallback.
+publication is pending. The stable gene object `genes/v3/<SYMBOL>.json` is
+the sole published source-portrait selection used by signed-in and anonymous
+cards, gene detail, extension cards, and print-copy inputs. A missing stable
+object fails closed; there is no D1 or gene-detail portrait fallback.
 
 The source portrait is not Iconoplasm's canonical public/search image. That role
 belongs to the matching **gene blot**: the workstation-rendered 768x1024 WebP
 containing the portrait cover crop, protection gradient, full gene name, and
-symbol. Blots use versioned immutable keys derived from the exact card and
-renderer revision. The stable first-party `/blot/<SYMBOL>.webp` route recomputes
-that key from the exact published card, so backfill uploads require zero KV
-writes. During the renderer-v2 migration it falls back only to a ready legacy
-blot whose portrait SHA matches that same card. Public media, page metadata, structured
-data and image sitemaps expose the blot, while raw portraits
-is explicitly subordinate.
+symbol. Blots use versioned immutable keys derived from the gene's stable
+object and the renderer revision. The stable first-party `/blot/<SYMBOL>.webp`
+route recomputes that key from the stable object, so blot uploads require zero
+KV writes. When the renderer-v2 object is absent, it serves only a ready v1 blot
+whose portrait SHA matches that same object. Public media, page metadata,
+structured data and image sitemaps expose the blot, while the raw portrait is
+explicitly subordinate.
 
 For both portraits and blots, Bunny is the accelerator on any working network,
 including a Vietnamese ISP or VPN that can reach it. A failed probe selects the
@@ -61,7 +60,7 @@ That choice changes only byte delivery, never identity.
 
 Labelled gene-card PNGs are a separate derived asset class under
 `gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
-Their fingerprint comes from the exact versioned published card payload and the
+Their fingerprint comes from the gene's stable-object card payload and the
 renderer revision, including the selected portrait identity. They never choose
 or reconstruct a portrait independently. Public downloads go through the
 first-party print-copy route and set the same gene-specific filename in
@@ -87,11 +86,11 @@ server-side adapter. Healthy browsers load immutable portraits directly from
 Bunny. When Bunny is unreachable from a browser, canonical first-party
 `/portraits/*` requests reach the existing Worker, which reads the same
 immutable key through that adapter. The build must not redirect those URLs to
-the static placeholder: that old redirect returned SVG with HTTP 200 under a
-`.webp` name and also broke workstation blot rendering. The mutable
-`/blot/<SYMBOL>.webp` alias enters the same Worker, reads the exact published
-card, and serves only its matching immutable WebP. Neither route elects a
-portrait from D1 or starts a repair.
+the static placeholder: that serves SVG with HTTP 200 under a `.webp` name and
+breaks workstation blot rendering. The mutable `/blot/<SYMBOL>.webp` alias
+enters the same Worker, reads the gene's stable object, and serves only its
+matching immutable WebP. Neither route elects a portrait from D1 or starts a
+repair.
 
 Website Ops stores `regionally_divergent` separately from ordinary
 `renderable`. Its existing storage-audit action always prioritizes unknown rows,
@@ -129,44 +128,32 @@ message outcomes remain terminal and must not be replayed automatically.
 The owner pays for Bunny as the alternative to R2, whose billing is unavailable.
 Do not require R2 enablement or a paid Cloudflare upgrade to complete delivery.
 The canonical-URL rule prohibits provider-owned identity, not provider delivery.
-It also permits byte-equivalent CDN caching of public immutable hover metadata.
+It also permits CDN caching of public hover metadata (the gene's stable object).
 Neither a cached response nor a deterministic projection is a second canon:
 only independent image selection or an independent publication pointer is.
 
-### Metadata acceleration: authorized, not yet deployed
+### Hover metadata on the CDN
 
-The current extension still reads two first-party immutable projections per
-prepared gene. Cloudflare Cache API hits still invoke the Worker; this is not
-the scalable healthy-path end state. B-711 owns the authorized Bunny cutover.
-Evaluate caching the existing exact snapshot URLs before adding publisher-owned
-copies, storage writes, manifests, or a second synchronization process.
+The extension reads hover detail from the gene's stable object on the free CDN,
+`https://iconoplasmportraits.b-cdn.net/genes/v3/<SYMBOL>.json`
+(`iconoplasm-extension/service-worker.js`). It sends no cookies and no
+client-version header, so every reader shares one CDN cache entry per gene, and
+it revalidates with `cache: "no-cache"`. The Worker purges that exact URL on
+every rewrite. A CDN 404 means the gene has no card. The service worker keeps at
+most 512 objects in memory for five minutes. The pull zone's CORS extensions are
+owned by `bunny/the-only-iconoplasm-pull-zone-policy.json`, which
+`scripts/reconcile-iconoplasm-pull-zone.mjs` applies from the production deploy.
 
-Acceptance is evidence, not another provider ban:
+Rules for any public cache in front of Iconoplasm:
 
-- Cache only anonymous immutable detail/locator responses. Never proxy private,
-  auth, vote, admin, mutable manifest, or mutation routes through a public cache.
-- Preserve the exact snapshot, symbol, and portrait SHA. A vote that leaves the
-  winner unchanged creates no publication; a changed winner rewrites the gene's
-  stable object in place through the per-gene publisher. Cached old URLs remain old snapshots,
-  not aliases for the current winner. Never require corpus purges on voting.
-- Prove actual CDN HITs and origin-request savings. Account separately for cold
-  misses, eviction, regional fallback, CDN traffic, and publication work. A warm
-  HIT is not a guarantee that every cold request costs zero Workers or KV reads.
-  In particular, the current per-symbol URL includes the whole snapshot version:
-  changing one winner changes those URLs for every gene. A simple CDN in front
-  of them can therefore lose all reuse on each publication. Prove bounded cost
-  under repeated snapshot changes or use content-addressed unchanged projections;
-  a warm, no-voting benchmark cannot satisfy this gate.
-- Preserve independent portrait/detail progress, bounded cancellation and tab
-  fallback. Prove failure on the affected network without disabling healthy tabs.
+- Cache only anonymous public objects. Never proxy private, auth, vote, admin,
+  mutable manifest, or mutation routes through a public cache.
+- A vote that leaves the winner unchanged creates no publication; a changed
+  winner rewrites the gene's stable object in place through the per-gene
+  publisher, which purges its CDN URL. Never require corpus purges on voting.
 - Confirm CDN rules do not cache `no-store` failures or personalized responses.
   Bunny Smart Cache excludes JSON by default; changing a URL alone is not proof
   of acceleration. Follow the current [Bunny caching contract](https://bunny.net/docs/cdn/smart-cache).
-
-The dashboard's startup JSON at `panel-production-libs.b-cdn.net` failed on the
-affected ISP on 2026-08-27. That blocks this session's CDN administration, not
-the architecture; it is not evidence for disabling Bunny globally. Do not call
-the metadata cutover shipped until configuration and end-to-end proof exist.
 
 ### Protected image behavior
 
@@ -223,12 +210,8 @@ its consumers. The HTML's per-build entrypoint URL completes this chain. Never
 freeze a dated import URL while changing the module bytes behind it; a returning
 browser would otherwise keep the old routing code despite a successful deploy.
 
-- The extension requests a compact immutable portrait locator in parallel with
-  rich detail. Both are projections of the same named card snapshot; the locator
-  owns no separate pointer or publication. The first valid locator may start
-  portrait delivery even if rich detail stalls or exhausts its retry. If detail
-  later disagrees on `asset_sha256`, the extension suppresses the portrait and
-  vote controls instead of guessing. The background runtime first looks up
+- The extension reads the gene's stable object, then resolves its portrait
+  through the tab decision. The background runtime first looks up
   immutable bytes in extension-origin IndexedDB, independent of the host
   website. Only a miss fetches a portrait. If Bunny is unresolved after 350 ms,
   it starts the canonical URL in a second bounded lane. The first successful
@@ -252,11 +235,10 @@ browser would otherwise keep the old routing code despite a successful deploy.
   tab decision survives ordinary reloads. A new tab has a new decision; a
   browser's DNS/VPN change is not reliably detectable and must not be inferred
   from elapsed time or fluctuating connection-speed estimates.
-- A probe **timeout** is a different signal (2026-10-01). Cold Bunny objects
-  measured 0.4 to 1.7 s from a healthy network against the 2.5 s ceiling, and
-  one clean browser tripped the fallback on its first visit, after which every
-  image on every page in that tab became a metered Worker request. A timeout
-  therefore selects canonical now and arms one re-probe after
+- A probe **timeout** is a different signal. Cold Bunny objects take 0.4 to
+  1.7 s on a healthy network against the 2.5 s ceiling, and a permanent fallback
+  would turn every later image in that tab into a metered Worker request. A
+  timeout therefore selects canonical now and arms one re-probe after
   `accelerator_retry_after_ms` (default 60 s, server-configurable 5 s to 10 min).
   Inside the window nothing re-probes and there is no hedge. A second timeout
   re-arms the window; a definitive failure afterwards makes the block permanent;
@@ -275,51 +257,21 @@ owns tab-scoped source persistence, the bounded hedge and cross-site byte reuse.
 The renderer receives a data URL and decodes it without another HTTPS request.
 Neither adapter owns source-selection rules.
 
-### Cross-site reuse migration, 2026-08-28
+### Extension byte cache
 
-A retained extension installation on Wikipedia BRCA1 followed by the linked
-PMC395646 paper took 3.7 seconds to paint the same BRCA1 portrait. The foreground
-path bypassed content-store hydration and fetched metadata again. The frame's
-HTTP cache also transferred the same portrait again under the new top-level site.
-Native frame loading fixed a duplicate within one page but did not establish
-reuse across websites. That assumption is superseded by background-owned storage.
+The extension background stores immutable portrait bytes in an extension-origin
+IndexedDB cache (`iconoplasm-extension/immutable-response-cache.js`, store
+`iconoplasm-portrait-bytes-v1`) bounded to 8,192 entries, 64 MiB in total and
+512 KiB per image, with a 48-entry in-memory layer. A separate metadata record
+tracks recency, so reading a saved image never rewrites its blob. Oversized
+responses still render but are not persisted; a quota or storage failure keeps
+the bounded memory copy and cannot evict committed data. No unlimited-storage
+permission is added. The key is the immutable asset path, not a gene-name
+guess, so the same portrait is reused across websites. Hover metadata is held
+only in memory; private APIs, failures and mutations never enter the cache.
 
-The extension stores public exact-snapshot/lane responses within 32 MiB (64 KiB
-per record) and immutable portrait responses within 64 MiB (512 KiB per image).
-IndexedDB atomically tracks payload bytes and least-recently-used metadata;
-8,192 image and 32,768 metadata entry ceilings bound tiny-record overhead, not
-the normal working set. Reading a saved image updates only its recency record,
-not the blob. Disk and RAM reuse both protect recency, including the data-URL
-fast path. Oversized responses still render but are not persisted; quota failure
-keeps the bounded memory copy and cannot partially evict committed data. No
-unlimited-storage permission is added. A cache hit performs no provider probe
-and does not invent a connectivity decision for a different tab. Concurrent
-requests for the same portrait share one transfer. The key includes the immutable
-asset path, not a gene-name guess; a changed snapshot cannot reuse an old metadata
-envelope. Mutable heads, private APIs, failures and mutations never enter these
-caches. Cache writes do not block display. Old Cache Storage bytes migrate by
-exact-key lookup, deleting the old copy only after the IndexedDB commit. The
-legacy 4 MiB detail and 768 KiB locator projections migrate once at extension
-upgrade/startup; pages no longer hydrate or rewrite those entire collections.
-Migration failures preserve the old bounded copy for a later startup. During
-migration, both old and new copies may coexist; the limits above describe the
-new stores, not a claim that total browser storage never exceeds 96 MiB.
-New articles pin the last-known published epoch locally; a background
-head check updates the saved selection for future articles without blocking
-cached cards. A first installation without an epoch waits for the head. Open
-articles retain their selected epoch, except explicit retirement recovery.
-
-A retained-install restart trace exposed a second gate: BRCA1 took 830 ms with
-zero portrait requests because selection awaited the online head. The local
-selection migration removes that gate, deliberately trading immediate adoption
-of a new publication on the first article for immediate reuse of its saved
-coherent card. Tests cover delayed heads, later-article adoption, out-of-order
-checks, offline reuse and retirement. Do not describe this as always-latest.
-
-This is an explicit IPD-001/IPD-008 client transport migration. Provider choice,
-server-side Storage/CDN ordering, canonical identity and production/staging
-provider configuration are unchanged. Both deployment and package tests cover
-the cross-site cache. Source deployment is not an extension-store release.
+This cache is part of the IPD-001/IPD-008 client transport. Source deployment is
+not an extension-store release.
 
 ## Release contract
 
@@ -330,11 +282,11 @@ the cross-site cache. Source deployment is not an extension-store release.
 - Published portrait snapshot schema: `v3`
 - Minimum extension version: the value in `iconoplasm-extension/publisher-release.json`
 - Full catalog portrait field: `p` (`PortraitAssetRefV1`)
-- Extension scanner portrait fields: none; parallel version-addressed immutable
-  detail and locator GETs project the same card artifact. One HTML/PDF reading session prepares
+- Extension scanner portrait fields: none; hover detail and its portrait come
+  from the gene's stable object. One HTML/PDF reading session prepares
   the ordinary document's unique-symbol cards before hover and uses deterministic
   near-viewport working windows for large documents. A matching foreground hover
-  reuses the same immutable detail and portrait work instead of restarting it
+  reuses the same detail and portrait work instead of restarting it
 - Image-edit and candidate-generation result field: `result_asset`
 
 The catalog artifact schema and contract revision are part of both its
