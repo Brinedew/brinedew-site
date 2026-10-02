@@ -158,6 +158,8 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 const MAIN_SITE_ORIGIN = "https://brinedew.bio"
 export const ICONOPLASM_MOVED_PATHS = Object.freeze([
   ["/About.html", `${MAIN_SITE_ORIGIN}/about`],
+  // The footer these Quartz pages share with the main site links /about.
+  ["/about", `${MAIN_SITE_ORIGIN}/about`],
   ["/Iconoplasm", "/"],
   ["/Iconoplasm.html", "/"],
   ["/apps/iconoplasm", "/"],

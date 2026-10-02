@@ -14,7 +14,7 @@ const markup = renderToString(
   }),
 )
 
-function createHarness(initialMarkup = "", url = "https://brinedew.bio/About.html") {
+function createHarness(initialMarkup = "", url = "https://brinedew.bio/about") {
   const { document, window } = parseHTML(
     `<!doctype html><html><body>${initialMarkup}</body></html>`,
   )
@@ -111,7 +111,7 @@ test("browser Back enhances the replacement form instead of relying on popstate 
 })
 
 test("enhancement consumes a fallback fragment without leaving a contradictory status visible", async () => {
-  const harness = createHarness(markup, "https://brinedew.bio/About.html#contact-invalid")
+  const harness = createHarness(markup, "https://brinedew.bio/about#contact-invalid")
 
   harness.document.dispatchEvent(new harness.window.CustomEvent("nav"))
 
