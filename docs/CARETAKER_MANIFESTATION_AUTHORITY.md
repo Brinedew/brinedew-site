@@ -1,241 +1,77 @@
 # Caretaker manifestation authority
 
-Implementation contract for IPD-012 / B-705. The words **caretaker** and
-**manifestation** are product language. Do not use `curator`, a `latest`
-manifestation, or a second command authority in code or UI.
+**Caretaker** and **manifestation** are product words. Do not use `curator`, a `latest`
+manifestation, or a second command authority in code or UI. Storage and key plumbing live in
+the IPD-012 fence in `AGENTS.md`; this page holds the rules a caretaker feels.
 
-## Ownership boundary
+The Website is the only command authority for tenure, prose revisions, lifecycle, accepted Tags
+derivatives and each gene's canonical manifestation. The workstation keeps an exact replica,
+offline drafts and an idempotent outgoing command ledger. It may generate Tags and images from
+an exact revision, but it cannot act as a caretaker or choose canon. The public catalog and the
+primary D1 are projections; a projection that lags never rolls back an accepted command.
 
-The Website is the only command authority for caretaker tenure, immutable prose
-revisions, lifecycle changes, accepted Tags derivatives, and the canonical
-manifestation selected for a gene. The workstation keeps an exact local replica,
-durable offline drafts, and an idempotent outgoing command ledger. It may generate
-Tags and images from an exact revision document, but it cannot impersonate a
-caretaker or choose a canonical revision locally.
+## The caretaker stewards the gene; the writer owns nothing
 
-The public catalog and primary Iconoplasm D1 are read projections. A projection
-lag or failure never rolls back an accepted authoring command. Generation refuses
-an unresolved source; it never substitutes whichever manifestation is newest when
-the job happens to run.
+- No one owns a manifestation. The active caretaker of a gene may edit, show or hide, withdraw,
+  restore and select any lineage on it, whoever wrote it. History names each version's writer.
+- A former caretaker has no say over text they left, and a stranger has none: both get
+  `403 ACTIVE_ASSIGNMENT_REQUIRED` and nothing changes. Leaving always keeps what was written.
+- The system seed is the gene's first lineage. It cannot be withdrawn and is the last fallback.
+- Any active Brinedew account signed in through Discord may claim an available gene (server
+  membership is no gate); an account holds one active or suspended gene and a gene has one
+  caretaker. An administrator may offer a gene instead, and the account accepts or declines.
+  Tenure runs `pending_acceptance` -> `active` or `ended`, and `active` <-> `suspended` ->
+  `ended`; `ended` is final, a later tenure gets a new ID, and suspension is read-only.
+- An active caretaker's supervote on a candidate image of their gene weighs 10, up or down. A new
+  gene-page comment queues a Discord DM to the active caretaker; a Discord failure never rolls
+  the comment back, and nobody is told of their own comment.
 
-### Service bearer audiences
+## History is append-only; rollback selects an older version
 
-No general manifestation-authority service bearer exists. Three independent Worker
-secrets enforce least privilege, and a token is valid only for its named routes:
+- Saving appends an immutable revision and advances the lineage head; nothing edits old prose.
+- Selecting canonical appends an immutable selection and advances the gene head. Selecting an
+  older active revision is the rollback. The revision and manifestation must be active, belong to
+  the gene and have a verified body, and the actor needs a current active assignment on it.
+- Withdrawing hides a lineage from public view and canonical eligibility; restoring brings it
+  back. Withdrawal is not a purge and does not touch backups. An erasure request arrives by
+  email and the operator runs the account erase command in `docs/ICONOPLASM_OPERATIONS.md`.
+- If the canonical lineage is withdrawn, canon walks the selection history back to the latest
+  explicit selection that is still eligible and outside that lineage; the seed ends the walk. If
+  nothing is eligible the command fails before changing anything.
+- Prose shows under the gene card only while its manifestation is shown on the page (hidden by
+  default) and renders as text under CSP, never as markup.
 
-- `ICONOPLASM_AUTHORITY_REPLICA_TOKEN`: events, snapshots, exact material reads,
-  and Tags enrichment submission/selection;
-- `ICONOPLASM_AUTHORITY_GENERATION_TOKEN`: generation lease claim, renew, fail,
-  and complete.
+## Conflicts are compare-and-swap; the actor comes from the session
 
-Command receipts are kept in full and not compacted; real use adds about three a
-day (B-859 has the 100x sizing). Recovery for `iconoplasm-authoring` is D1 Time
-Travel (30 days), the rotating nightly dump from `scripts/backup-d1-rotation.mjs`,
-and the immutable body objects in Bunny Storage. The three secrets must contain
-different values; admin credentials are never fallbacks.
+- Every command carries the versions it saw: assignment, lineage head, gene head and canonical
+  revision. A mismatch is `409 STALE_AUTHORITY_STATE` and writes nothing. The loser keeps their
+  text, sees the current head and rebases by hand; nothing merges silently. Two accounts claiming
+  one gene, or one account claiming two, commit one and conflict the other.
+- A command ID is an idempotency key: the same ID and bytes return the original response, and the
+  same ID with different bytes is refused (`409 IDEMPOTENCY_KEY_REUSED`). A receipt older than 30
+  days that no event references may be deleted (`scripts/reap-authoring-residue.mjs`); one an
+  event references lives as long as the event. A retry after that runs as a new command and its
+  expected versions make it an ordinary conflict.
+- A user command takes its actor from the authenticated session; an actor ID in a body is ignored
+  or refused, and a cross-origin or ambiguous browser mutation is refused before parsing. A
+  disabled or erased account is refused on every mutation, even with an old session.
+- `account_id` and `gene_id` are permanent. Symbols are aliases that can be renamed or merged, and
+  tenure and history follow the gene ID. An erased author shows as a stable anonymous name.
 
-## Stable identities
+## The size limit
 
-- `account_id` is permanent and provider-independent. Discord subject, username,
-  avatar, role, and access token are mutable identity projections.
-- `gene_id` is permanent. Symbols are aliases that may be renamed or merged.
-- `caretaker_assignment_id`, `manifestation_id`, `manifestation_revision_id`, and
-  `canonical_selection_id` are opaque. Labels and hashes are not identities.
-- A successful self-claim creates an `active` assignment immediately. An
-  administrator can instead offer a gene (`caretaker_admin_offer`), which creates
-  a `pending_acceptance` assignment that the account accepts or declines, or the
-  administrator cancels. The bounded state machine is `pending_acceptance` ->
-  `active` or `ended`, and `active` <-> `suspended` -> `ended`; `ended` is
-  terminal and a later tenure receives a new ID.
-- Any active Brinedew account authenticated through Discord may self-claim an
-  available gene. Membership in the Brinedew Discord server is not an entitlement
-  gate. One account may have at most one active or suspended gene tenure at a time.
-- Gene-page comments are the first caretaker coordination channel. The caretaker
-  sidebar shows only the current gene and its unread comment count. New comments
-  are durably queued for a Discord DM to the active caretaker; a Discord failure
-  never rolls back the comment and an author's own comment never notifies them.
-- A user command derives its actor from the authenticated session. Actor IDs in a
-  request body are rejected or ignored; they are never trusted.
+Prose is at most 4,000 code points and 16 KiB, checked the same way in the browser and in the
+authority. A caretaker's lineage holds at most 256 revisions, 512 Tags derivatives and 2 MiB of
+bodies, and the store admits at most 350 MB of bodies in all. Admission counts every byte before
+metadata commits, so a refused save keeps the draft.
 
-## Revision and canonical semantics
+## Images and the replica use exact sources, and releases are proven in a browser
 
-A manifestation is an authored lineage. Saving edits appends an immutable revision
-and advances the lineage head; it does not update old prose. Selecting canonical
-appends an immutable selection and advances the gene head with compare-and-swap.
-Selecting an older active revision is the supported rollback operation.
-
-Canonical eligibility requires all of the following:
-
-1. the manifestation, revision, and verified encrypted body are present;
-2. the manifestation and revision are active and belong to the same gene;
-3. the requested head version still matches;
-4. the actor has a current active assignment for that gene, unless the command is
-   an explicit administrator, migration, moderation, or service operation.
-
-An author may withdraw only a lineage they authored. System seed lineages are not
-withdrawable. A withdrawn canonical lineage walks the append-only selection history
-backward to the most recent explicit selection that is still eligible and does not
-belong to the withdrawn lineage; the system seed is the terminal fallback. It never
-picks by ambiguous row order or by whichever revision was merely saved most recently.
-If no eligible revision exists, the command fails before changing anything.
-
-## Caretaker departure
-
-The leave policy is an explicit, versioned choice: `retain` keeps the caretaker's
-lineage eligible; `withdraw` withdraws it and applies canonical fallback. The UI
-must show the consequences and obtain a final confirmation. The policy is frozen
-inside the same atomic command that ends the assignment; a retry cannot reinterpret
-the choice. Suspension is read-only and does not silently end or withdraw tenure.
-
-## Body storage and deletion
-
-Plaintext does not live in D1, logs, events, or the public catalog. Each prose or
-Tags body uses a random AES-256-GCM data key. The data key is wrapped by a
-versioned server secret; authenticated encryption binds revision, gene, plaintext
-hash, and byte length. The encrypted object is read back, hash checked, and
-decrypted before its metadata becomes authoritative.
-
-Object locators are independent random secrets and never appear in browser or
-replica payloads. Upload-before-commit orphans are recorded/reconciled. Withdrawal
-preserves revision history and ciphertext. Every admitted byte is counted against a bounded quota.
-Bodies live only in the dedicated private `iconoplasm-authoring` Bunny Storage
-zone. It has no connected Pull Zone, and the code must fail closed when its
-authoring-specific zone or credential is missing; portrait storage is never a
-fallback.
-
-Withdrawal immediately removes the lineage from public view and canonical
-eligibility; it is never purged. There is no hard purge, retention sweep or
-legal hold (B-859): comparable open-contribution sites promise no more than
-removal from public view, not from backups (iNaturalist). An erasure request
-arrives by email; the operator fulfils it with the account erase command in
-`docs/ICONOPLASM_OPERATIONS.md`.
-
-Production uses `iconoplasm-authoring`; staging uses the credential-isolated
-`iconoplasm-authoring-staging`. Both are private Storage zones with
-no Pull Zone. Staging never receives the production zone password.
-
-## Exact generation contract
-
-Every Image API and Free queue request captures an immutable source envelope at
-acceptance:
-
-- gene ID and symbol projection;
-- canonical selection ID, manifestation ID, and manifestation revision ID;
-- plaintext SHA-256 and byte length;
-- accepted Tags derivative ID/hash when Tags are used;
-- generation request/idempotency ID;
-- prompt recipe ID/version/hash, provider, exact model, and effective settings.
-
-Workers consume that envelope. A canonical change, caretaker departure, rename,
-or new revision after enqueue does not alter it. A revoked or purged source causes
-an explicit terminal/refusal result according to policy; no `latest_sample`, newest
-row, or current-head fallback is permitted.
-
-## Workstation replica contract
-
-Replication is at-least-once and event application is idempotent. Cursors are
-opaque at the HTTP boundary. Events apply in the authoritative order supplied by
-the Website. A gap, expired cursor, or authority epoch change forces an immutable
-watermarked snapshot; it never edits local rows until the snapshot validates and
-swaps atomically.
-
-Snapshot transport v2 streams directly from a pinned authority
-epoch, event watermark and baseline rowid ceiling. GET pages are
-read-only and contain at most 250 parts; no per-consumer D1 payload copy or build
-poller exists. Each signed continuation binds the cumulative part count and SHA-256
-chain. `total_parts` and `manifest_sha256` describe the prefix through that page;
-only a terminal signed `completion_cursor` can complete the lease. The event
-`resume_cursor` always names the original watermark. Leases expire within one hour.
-Database triggers forbid baseline updates and deletion. VACUUM and table rebuilds
-are unsupported while any lease is open: maintenance must first expire all leases
-and prevent new leases until it finishes. There is no automatic VACUUM path.
-
-The workstation durably caches validated metadata pages and revalidates them after
-restart, downloading only the missing suffix. It verifies the completion receipt
-before atomically replacing the replica, then deletes its download cache. An empty
-replica reports `initializing`, and an unfinished download reports `snapshot_staging`.
-The first sync always downloads the complete baseline before reading incremental
-events. An invalidated lease clears only its download cache so the next attempt
-can obtain a fresh lease; it never advances the last verified replica.
-Private prose and Tags are fetched only when opening the selected gene, with at
-most 128 revisions and 128 derivatives held in process memory. Sync never fetches
-the catalogue's private bodies.
-
-Offline edits remain drafts. Reconnection submits each durable command with its
-original command ID and expected entity version. Conflict preserves the draft,
-shows the remote head, and requires a human rebase/retry. Local candidates without
-an exact source binding remain `legacy_unbound`; nothing guesses a binding by gene
-or timestamp.
-
-The Website never prunes events. Cold history moves to the sealed event archive
-(`iconoplasm-event-archive`), which snapshot and event pages read as one ordered
-source; a fresh replica receives the baselines followed by every event after
-them. Nothing raises the event retention floor; if it is ever above zero, a new
-snapshot refuses with `SNAPSHOT_SOURCE_HISTORY_UNAVAILABLE` instead of streaming
-an incomplete history.
-
-Full command response receipts are kept and stay replayable; they are not
-compacted (see above).
-
-## Hostile acceptance matrix
-
-Each item needs a behavior test at the owning layer and an end-to-end certification
-case where it crosses Website/workstation boundaries.
-
-| Case                                                 | Required result                                                                           |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Duplicate save/select/withdraw delivery              | Same receipt and one event; no duplicate revision or selection                            |
-| Same command ID arrives with different bytes         | Refused as replay tampering; original receipt remains authoritative                       |
-| Concurrent saves from two tabs                       | One wins CAS; loser keeps text and gets a refreshable conflict                            |
-| Two accounts simultaneously claim one gene           | One active assignment is committed; the loser gets a conflict                             |
-| One account simultaneously claims two genes          | One active assignment is committed; the loser gets a conflict                             |
-| Self-claim targets a gene without a verified seed    | Refused; claim never invents source prose                                                 |
-| Comment arrives while caretaker assignment ends      | Comment persists; queued DM revalidates tenure and is suppressed if no longer active      |
-| Caretaker comments on their own gene                 | Comment persists and appears unread nowhere; no self-DM is queued                         |
-| Discord is unavailable after a comment               | Comment succeeds; durable outbox retries without duplicate ambiguous POSTs                |
-| Canonical changes after generation enqueue           | Job uses the captured revision and hashes                                                 |
-| Queued source is withdrawn                           | Fulfilment fails closed; cache/current-canon text is never substituted                    |
-| Caretaker withdraws the canonical lineage            | Atomic withdrawal plus deterministic fallback                                             |
-| Former caretaker or stranger attempts a withdraw     | `403 ACTIVE_ASSIGNMENT_REQUIRED`; no state, event, or object change                       |
-| Caretaker attempts to withdraw the system seed       | Refused; seed stays eligible                                                              |
-| Caretaker restores any withdrawn lineage on the gene | New lifecycle and selection events restore it without rewriting history                   |
-| Leave with `retain`                                  | Tenure ends; lineage remains eligible and readable                                        |
-| Repeated leave request with a different policy       | Original receipt wins; policy cannot flip                                                 |
-| Suspension during an open editor                     | New save is refused; local draft survives                                                 |
-| Assignment ends between save and select              | Select is refused without changing the head                                               |
-| Gene symbol renamed                                  | Stable gene ID retains assignment, history, and queued sources                            |
-| Gene merge                                           | Explicit merge event and deterministic head policy; no orphan assignment                  |
-| Old alias is opened after merge                      | Read-only dossier resolves the stable gene and names the surviving record                 |
-| Browser sends another account ID                     | Session actor wins; body identity is never authority                                      |
-| Cross-origin or ambiguous browser mutation           | Refused before parsing a command; no permissive missing-Origin path                       |
-| Disabled/erased account presents an old session      | Session is invalidated and every caretaker mutation is refused                            |
-| Provider identity is unlinked then relinked          | Stable account ownership survives; link history prevents identity theft                   |
-| Erased former author is displayed                    | Stable anonymous attribution appears; provider subject never leaks                        |
-| Missing/corrupt encrypted object                     | Revision is ineligible and an integrity alert is emitted                                  |
-| D1 fails after object upload                         | No revision commits; orphan is recoverable and later deleted                              |
-| Event delivered twice/out of order                   | Replica converges once without rewinding a gene                                           |
-| Cursor expired or event gap                          | Replica replaces state from a validated watermarked snapshot                              |
-| Malformed/foreign snapshot or cursor                 | Replica rejects it and preserves its last verified local state                            |
-| Offline save conflicts on reconnect                  | Draft remains readable; no silent overwrite or auto-merge                                 |
-| Legacy candidate lacks a revision                    | Mark `legacy_unbound`; never bind it to current canonical                                 |
-| Accepted Tags arrive for an old revision             | Attach to that revision only; do not move canonical                                       |
-| Account provider rename/token expiry                 | Ownership remains on the same stable account                                              |
-| Account erasure request                              | Tenure ends by explicit policy; audit tombstones remain bounded                           |
-| Quota exhausted                                      | Command refuses before metadata commit and preserves the draft                            |
-| Very long history is paged                           | Opaque cursor yields stable event order with no duplicate or missing rows                 |
-| HTML/script text in prose                            | Rendered as text under CSP; never interpreted as markup                                   |
-| 4,001 code points or more than 16 KiB                | Validation refuses consistently in browser and authority                                  |
-| Public/anonymous gene view                           | Zero caretaker-authority requests and no private metadata                                 |
-| Workstation admin credential                         | Can replicate/service commands; cannot forge caretaker actor                              |
-| Write to the frozen legacy manifestation columns     | Primary trigger and route both refuse it; authority mode never rewinds                    |
-| Staging authoring storage is compromised             | The distinct staging zone and environment secrets grant no production-zone access         |
-| Recovery mode is entered                             | Reads/repair continue while all authority mutations remain disabled                       |
-| Signed caretaker 10x vote is replayed or tenure ends | Separate receipt/outbox stays idempotent; ranking recomputes without FIT mutation         |
-| Caretaker moves +10 to -10 or another candidate      | One CAS head transfers atomically; no ordinary FIT/MISFIT row is rewritten                |
-| Preferred +10 candidate loses canon                  | One transition-keyed Discord DM is queued; stale preference or ended tenure suppresses it |
-
-## Release verification
-
-Deployment is not proof. Fresh logged-in browser tests must cover edit, version
-rollback, own-only deletion, both leave policies, exact generation, and one
-conflict/retry path on two gene pages.
+An image request captures its source at acceptance: gene, canonical selection, manifestation and
+revision IDs, plaintext SHA-256 and length, accepted Tags derivative, recipe and model. A later
+canonical change, departure or new revision does not alter it, and a withdrawn source fails closed;
+no newest-row fallback exists. Replication is at-least-once and idempotent; a gap or expired cursor
+forces a validated snapshot swap. Offline edits stay drafts, resubmit with their command ID and
+expected versions, and on conflict keep the draft beside the remote head. Deployment is not
+proof: fresh logged-in browser tests cover edit, rollback, a handover (hide and restore the
+predecessor's text), leaving, an exact image source and a conflict retry, on two genes.

@@ -50,16 +50,6 @@ async function readReceipt(db, commandId) {
   )
 }
 
-async function readCommandTombstone(db, commandId) {
-  return first(
-    db,
-    `SELECT command_id, request_sha256, actor_kind, actor_account_id,
-            accepted_event_sequence, accepted_event_uuid AS event_uuid
-       FROM icono_authoring_command_tombstones WHERE command_id = ?`,
-    commandId,
-  )
-}
-
 function receiptResult(row, replayed) {
   return Object.freeze({
     ...parseReceiptResponse(row),
@@ -71,7 +61,7 @@ function receiptResult(row, replayed) {
 }
 
 async function findReplay(db, commandId, requestSha256, actorKind, actorAccountId) {
-  const row = (await readReceipt(db, commandId)) || (await readCommandTombstone(db, commandId))
+  const row = await readReceipt(db, commandId)
   if (!row) return null
   if (String(row.request_sha256 || "").toLowerCase() !== requestSha256) {
     throw authorityError(
@@ -85,13 +75,6 @@ async function findReplay(db, commandId, requestSha256, actorKind, actorAccountI
       "IDEMPOTENCY_ACTOR_MISMATCH",
       "This command ID belongs to another authority actor",
       403,
-    )
-  }
-  if (row.response_json == null) {
-    throw authorityError(
-      "IDEMPOTENCY_RECEIPT_EXPIRED",
-      "This accepted command is outside the replay-response window; refresh authority state",
-      409,
     )
   }
   return receiptResult(row, true)
