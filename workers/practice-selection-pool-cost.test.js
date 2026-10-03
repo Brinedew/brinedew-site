@@ -778,7 +778,19 @@ test("P10: the triggers watch every column the practice SQL reads, and the SQL i
 
 // ---- P11: end to end on the Worker ----------------------------------------
 
-function workerEnv(metered, { unreachable = () => false } = {}) {
+// A structure file every format's availability check accepts.
+const PROBE_BODY = "data_structure\nHEADER    MODEL\nATOM  1\n"
+
+// The providers, as the availability probe meets them: RCSB (the `pdb` structures) answers
+// 404 when `rcsbReachable` is false, the others answer with a usable file.
+function providerFetch({ rcsbReachable = true } = {}) {
+  return async (url) =>
+    !rcsbReachable && String(url).includes("models.rcsb.org")
+      ? new Response("not found", { status: 404 })
+      : new Response(PROBE_BODY, { status: 200, headers: { "Content-Type": "chemical/x-cif" } })
+}
+
+function workerEnv(metered) {
   const kv = new Map()
   const sessions = new Map()
   return {
@@ -795,11 +807,6 @@ function workerEnv(metered, { unreachable = () => false } = {}) {
         },
         async delete(key) {
           kv.delete(key)
-        },
-      },
-      STRUCTURES_BUCKET: {
-        async head(key) {
-          return unreachable(key) ? null : { size: 1200 }
         },
       },
       GAME_SESSIONS: {
@@ -835,6 +842,8 @@ test("P11: a practice bootstrap on the Worker reads a constant number of rows, h
   await freshCatalog()
   mock.method(console, "log", () => {})
   mock.method(console, "warn", () => {})
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = providerFetch()
   try {
     // The first start builds the pool; every later one finds it stored.
     const building = meteredDb(db)
@@ -865,6 +874,7 @@ test("P11: a practice bootstrap on the Worker reads a constant number of rows, h
     assert.ok(Math.max(...slowest) <= 3, `a statement read ${Math.max(...slowest)} rows`)
     assert.ok(Math.max(...perStart) <= 8, `a practice start read ${Math.max(...perStart)} rows`)
   } finally {
+    globalThis.fetch = originalFetch
     mock.restoreAll()
   }
 })
@@ -875,10 +885,9 @@ test("P11: when the first pick's structure is unreachable the start moves to ano
   mock.method(console, "warn", () => {})
   mock.method(console, "error", () => {})
   const originalFetch = globalThis.fetch
-  globalThis.fetch = async () => new Response("not found", { status: 404 })
+  globalThis.fetch = providerFetch({ rcsbReachable: false })
   mock.method(Math, "random", seededRandom(20261002))
   try {
-    const unreachable = (key) => key.startsWith("pdb/")
     const source = new Map(
       (
         await db.prepare("SELECT uniprot, structure_source, gene_surname, id FROM proteins").all()
@@ -894,7 +903,7 @@ test("P11: when the first pick's structure is unreachable the start moves to ano
     let walked = 0
     for (let index = 0; index < 40; index += 1) {
       const known = await failedIds()
-      const { env, sessions } = workerEnv(meteredDb(db), { unreachable })
+      const { env, sessions } = workerEnv(meteredDb(db))
       const response = await practiceBootstrap(env)
       assert.equal(response.status, 200, `start ${index}`)
       const [state] = sessions.values()

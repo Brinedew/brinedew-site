@@ -22,7 +22,6 @@
 //       or chain is followed without a bound; a redirect inside the providers breaks
 //   H4  the response's Content-Type comes from the upstream, so hostile HTML is
 //       served as HTML; nothing stops the browser sniffing the body
-//   H5  with an R2 bucket bound, hostile bytes are cached under the real key
 //   H6  one of the three real providers stops being served
 import assert from "node:assert/strict"
 import test, { mock } from "node:test"
@@ -120,14 +119,13 @@ function installNetwork(routes = {}) {
 }
 
 // One request through the real Worker with the given stored rows and network routes.
-async function getStructure(query, { rows = STORED_ROWS, routes = {}, bucket = null } = {}) {
+async function getStructure(query, { rows = STORED_ROWS, routes = {} } = {}) {
   const network = installNetwork(routes)
   const waits = []
   mock.method(console, "log", () => {})
   mock.method(console, "warn", () => {})
   try {
     const env = { DB: createDb(rows) }
-    if (bucket) env.STRUCTURES_BUCKET = bucket
     const response = await worker.fetch(
       new Request(`https://geneguessr.brinedew.bio/api/structure-cached?${query}`),
       env,
@@ -247,9 +245,9 @@ test("H1: a repeated and an empty upstream parameter change nothing either", asy
   }
 })
 
-// A stored value is data we wrote, but it is the last free-form input left, and it
-// can also come from a third party's JSON on the discovery path. Whatever resolves,
-// the fetch refuses it unless it is https on one of the three provider hosts.
+// A stored value is data we wrote, but it is the last free-form input left.
+// Whatever resolves, the fetch refuses it unless it is https on one of the three
+// provider hosts.
 const REFUSED_STORED_URLS = HOSTILE_URLS.filter(Boolean)
   .filter((url) => !/^https:\/\/(alphafold\.ebi\.ac\.uk|models\.rcsb\.org)\/[^@]*$/.test(url))
   .map((url) => (/\.(pdb|cif)\b/.test(url) ? url : `${url}.pdb`))
@@ -385,30 +383,4 @@ test("H4: the Content-Type comes from the key, never from the upstream, and the 
     routes: { [AF_CIF_URL]: { headers: {}, body: PROVIDER_BYTES } },
   })
   assert.equal(missing.response.headers.get("content-type"), "chemical/x-cif")
-})
-
-test("H5: an R2 bucket never receives bytes from a URL the caller named", async () => {
-  const puts = []
-  const bucket = {
-    async get() {
-      return null
-    },
-    async put(key, body, options) {
-      puts.push({
-        key,
-        text: new TextDecoder().decode(body),
-        contentType: options?.httpMetadata?.contentType,
-      })
-    },
-  }
-  const { response, urls } = await getStructure(
-    hintedQuery(AF_CIF_KEY, "https://evil.example/a.cif"),
-    {
-      bucket,
-      routes: { [AF_CIF_URL]: { headers: { "Content-Type": "text/html" }, body: PROVIDER_BYTES } },
-    },
-  )
-  assert.equal(response.status, 200)
-  assert.deepEqual(urls, [AF_CIF_URL])
-  assert.deepEqual(puts, [{ key: AF_CIF_KEY, text: PROVIDER_BYTES, contentType: "chemical/x-cif" }])
 })
