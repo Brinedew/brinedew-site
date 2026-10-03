@@ -6,8 +6,8 @@ import { DatabaseSync } from "node:sqlite"
 import {
   brinedewFormerAuthorLabel,
   eraseBrinedewAccount,
-  eraseBrinedewAccountOnRequest,
   hydrateBrinedewSessionAccountIdentity,
+  requestBrinedewAccountErasure,
   resolveBrinedewAccountIdentity,
   setBrinedewAccountStatus,
 } from "./lib/brinedew-account-identity.js"
@@ -197,20 +197,16 @@ test("erasure removes active provider links and public credit but preserves immu
       .get(accountId).count,
     0,
   )
-  const publicProfile = database
-    .prepare(
-      `SELECT username, email, avatar_url, leaderboard_opt_in
-       FROM users WHERE account_id = ?`,
-    )
-    .get(accountId)
-  assert.deepEqual(
-    { ...publicProfile },
-    {
-      username: expectedLabel,
-      email: null,
-      avatar_url: null,
-      leaderboard_opt_in: 0,
-    },
+  // The `users` row is the last place the raw Discord id lived: it is deleted, not anonymised.
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count FROM users WHERE account_id = ?`).get(accountId)
+      .count,
+    0,
+  )
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count FROM users WHERE discord_id = 'discord-one'`).get()
+      .count,
+    0,
   )
   const authorityProjection = database
     .prepare(
@@ -256,30 +252,82 @@ test("erasure removes active provider links and public credit but preserves immu
        WHERE account_id = ? AND event_type = 'identity_erasure_unlinked'`,
     )
     .get(accountId)
-  assert.match(erasureLinkEvent.provider_subject_fingerprint, /^sha256:[0-9a-f]{64}$/)
-  assert.equal(erasureLinkEvent.provider_subject_fingerprint.includes("discord-one"), false)
+  // No fingerprint of the subject survives, in any event or in the command ids built from it.
+  assert.match(
+    erasureLinkEvent.provider_subject_fingerprint,
+    /^erased:identity_event_[0-9a-f]{32}$/,
+  )
+  const remaining = [
+    ...database
+      .prepare(
+        `SELECT provider_subject_fingerprint AS value FROM brinedew_account_identity_events
+         WHERE account_id = ?
+         UNION ALL SELECT command_id FROM brinedew_account_identity_events WHERE account_id = ?
+         UNION ALL SELECT command_id FROM brinedew_account_lifecycle_events WHERE account_id = ?`,
+      )
+      .all(accountId, accountId, accountId),
+  ].map((entry) => entry.value)
+  assert.equal(
+    remaining.some((value) => value.includes("sha256:")),
+    false,
+  )
+  // The history stays append-only for everyone: the guards erasure lifted are back.
+  assert.throws(
+    () => database.exec(`UPDATE brinedew_account_identity_events SET occurred_at = 0`),
+    /append-only/,
+  )
+  assert.throws(
+    () => database.exec(`UPDATE brinedew_account_lifecycle_events SET occurred_at = 0`),
+    /append-only/,
+  )
+  // Another person's first-login fingerprint is untouched.
+  assert.equal(
+    database
+      .prepare(
+        `SELECT count(*) AS count FROM brinedew_account_identity_events
+         WHERE account_id <> ? AND provider_subject_fingerprint NOT LIKE 'erased:%'`,
+      )
+      .get(accountId).count > 0,
+    true,
+  )
 })
 
-// B-871 (26 Sep 2026): the privacy page promises that an erased account loses
-// its provider identity while retained authorship shows a stable anonymous
-// label, but nothing in production could perform an erasure. Failure modes:
+// B-871 (26 Sep 2026), B-987: the privacy page promises that an erased account loses its provider
+// identity while retained authorship shows a stable anonymous label. Failure modes:
 // 1. an erasure request needs two hand-typed commands and can stop halfway;
 // 2. replaying the same request double-applies or errors;
-// 3. an unknown account, or a second request under a different command after
-//    erasure, looks like success;
-// 4. the request leaves the caretaker withdraw policy (not implemented
-//    downstream) reachable, contradicting the promised retained history.
-test("one erasure request completes the promised erasure and replays idempotently (B-871)", async () => {
+// 3. an unknown account, or a second request under a different command after erasure, looks like
+//    success;
+// 4. the request leaves the caretaker withdraw policy (not implemented downstream) reachable,
+//    contradicting the promised retained history;
+// 5. the Discord id survives in `users`, so the erased person is locked out forever by an account
+//    that no longer holds anything of theirs.
+test("a requested erasure completes once, replays idempotently and frees the Discord id (B-987)", async () => {
   const database = migratedDatabase()
   const db = new SqliteD1(database)
   const accountId = database
     .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-one'`)
     .get().account_id
 
-  const erased = await eraseBrinedewAccountOnRequest(db, {
+  await assert.rejects(
+    eraseBrinedewAccount(db, { accountId, commandId: "erasure-request-6", now: 40 }),
+    (error) => error?.code === "ERASURE_NOT_PENDING",
+  )
+  const pending = await requestBrinedewAccountErasure(db, {
     accountId,
     commandId: "erasure-request-7",
     now: 50,
+  })
+  assert.equal(pending.status, "erasure_pending")
+  // Asking again (a resumed erasure) changes nothing.
+  assert.deepEqual(
+    await requestBrinedewAccountErasure(db, { accountId, commandId: "erasure-request-7", now: 51 }),
+    pending,
+  )
+  const erased = await eraseBrinedewAccount(db, {
+    accountId,
+    commandId: "erasure-request-7",
+    now: 52,
   })
   assert.equal(erased.status, "erased")
   assert.equal(erased.author_label, await brinedewFormerAuthorLabel(accountId))
@@ -289,15 +337,15 @@ test("one erasure request completes the promised erasure and replays idempotentl
       .get(accountId).count,
     0,
   )
-  const pending = database
+  const requested = database
     .prepare(
       `SELECT final_leave_policy FROM brinedew_account_lifecycle_events
         WHERE account_id = ? AND to_status = 'erasure_pending'`,
     )
     .get(accountId)
-  assert.equal(pending.final_leave_policy, "retain")
+  assert.equal(requested.final_leave_policy, "retain")
 
-  const replay = await eraseBrinedewAccountOnRequest(db, {
+  const replay = await eraseBrinedewAccount(db, {
     accountId,
     commandId: "erasure-request-7",
     now: 60,
@@ -306,19 +354,26 @@ test("one erasure request completes the promised erasure and replays idempotentl
   assert.equal(replay.status, "erased")
 
   await assert.rejects(
-    eraseBrinedewAccountOnRequest(db, { accountId, commandId: "erasure-request-8", now: 70 }),
-    /already erased/,
+    eraseBrinedewAccount(db, { accountId, commandId: "erasure-request-8", now: 70 }),
+    (error) => error?.code === "ACCOUNT_COMMAND_REUSED" || error?.code === "ACCOUNT_ERASED",
   )
   await assert.rejects(
-    eraseBrinedewAccountOnRequest(db, {
+    requestBrinedewAccountErasure(db, {
       accountId: "acct_" + "0".repeat(32),
       commandId: "erasure-request-9",
     }),
     (error) => error?.code === "ACCOUNT_NOT_FOUND",
   )
 
-  // The erased person's Discord login gets the erased account back (the callback refuses
-  // it), never a fresh one, and a session they already hold stops being active.
+  // A session the person still holds stops being active. Their next Discord login is not blocked:
+  // nothing is left to resolve the id to, so it opens a brand-new account, and the erased one keeps
+  // its anonymous label.
+  const held = await hydrateBrinedewSessionAccountIdentity(db, {
+    user_id: "discord-one",
+    account_id: accountId,
+  })
+  assert.equal(held.active, false)
+  assert.equal(held.session.account_status, "erased")
   const accountsBefore = database
     .prepare(`SELECT count(*) AS count FROM brinedew_accounts`)
     .get().count
@@ -327,18 +382,17 @@ test("one erasure request completes the promised erasure and replays idempotentl
     providerSubject: "discord-one",
     now: 80,
   })
-  assert.equal(signIn.account_id, accountId)
-  assert.equal(signIn.status, "erased")
+  assert.notEqual(signIn.account_id, accountId)
+  assert.equal(signIn.status, "active")
   assert.equal(
     database.prepare(`SELECT count(*) AS count FROM brinedew_accounts`).get().count,
-    accountsBefore,
+    accountsBefore + 1,
   )
-  const held = await hydrateBrinedewSessionAccountIdentity(db, {
-    user_id: "discord-one",
-    account_id: accountId,
-  })
-  assert.equal(held.active, false)
-  assert.equal(held.session.account_status, "erased")
+  assert.equal(
+    database.prepare(`SELECT status FROM brinedew_accounts WHERE account_id = ?`).get(accountId)
+      .status,
+    "erased",
+  )
 })
 
 test("a provider identity cannot be reassigned to another account", () => {

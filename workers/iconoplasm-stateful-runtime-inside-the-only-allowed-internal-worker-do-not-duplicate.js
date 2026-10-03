@@ -206,9 +206,9 @@ import {
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
+import { eraseBrinedewAccountOnRequest } from "./iconoplasm/account-erasure/erase-account-data.js"
 import {
   BrinedewAccountIdentityError,
-  eraseBrinedewAccountOnRequest,
   readBrinedewAccount,
 } from "./lib/brinedew-account-identity.js"
 import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
@@ -7365,15 +7365,28 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
 //                 twice yields the same Krea image_url)
 // We store the imageUrl + assetId so the next call can skip the multipart
 // upload subrequest and go straight to the Krea create-job POST.
+function kreaAssetUploadCachePrefix(userId) {
+  return "iconoplasm:krea-asset-upload:v1:" + normalizeUserId(userId) + ":"
+}
 function kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha) {
   return (
-    "iconoplasm:krea-asset-upload:v1:" +
-    normalizeUserId(userId) +
-    ":" +
+    kreaAssetUploadCachePrefix(userId) +
     sanitizeText(keyFingerprint || "", 64) +
     ":" +
     sanitizeText(sourceSha || "", 64)
   )
+}
+
+// B-987: every KV key whose name embeds a user's Discord id, for the account erasure command
+// (workers/iconoplasm/account-erasure). A new per-user KV key belongs here: the erasure test
+// fails on a user-keyed key it does not delete.
+export function iconoplasmUserKvKeyScopes(userId) {
+  return {
+    exact: ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.map((operation) =>
+      imageEditLastUsedKvKey(userId, operation),
+    ),
+    prefixes: [kreaAssetUploadCachePrefix(userId)],
+  }
 }
 
 async function getCachedKreaAssetUpload(env, { userId, keyFingerprint, sourceSha }) {
@@ -27393,26 +27406,41 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
   manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
-  // B-871: fulfil an erasure request. The account projection outbox carries
-  // the result into the caretaker authority (assignments end, credit shows the
-  // anonymous label) on its scheduled drain.
+  // B-871, B-987: fulfil an erasure request. One bounded slice per request: the same request is
+  // sent again until `erasure.complete` is true (workers/iconoplasm/account-erasure). The
+  // account projection outbox carries the result into the caretaker authority (assignments end,
+  // credit shows the anonymous label) on its scheduled drain.
   "admin_account.erase": async ({ request, env, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done("admin_account_erase_403", json({ error: "Unauthorized" }, 403))
-    if (!env.DB)
-      return done("admin_account_erase_503", json({ error: "Account database unavailable" }, 503))
+    if (!env.DB || !env.ICONOPLASM_DB || !env.ICONOPLASM_AUTHORING_DB || !env.GAME_SESSIONS)
+      return done(
+        "admin_account_erase_503",
+        json(
+          { error: "Account, Iconoplasm, caretaker authority or game session storage unavailable" },
+          503,
+        ),
+      )
     const payload = await request.json().catch(() => ({}))
     try {
-      const account = await eraseBrinedewAccountOnRequest(env.DB, {
-        accountId: payload?.account_id,
-        commandId: payload?.command_id,
-        reasonCode: payload?.reason_code || "erasure_request",
-      })
+      const { account, erasure } = await eraseBrinedewAccountOnRequest(
+        env,
+        {
+          accountId: payload?.account_id,
+          commandId: payload?.command_id,
+          reasonCode: payload?.reason_code || "erasure_request",
+          maxRowsWritten: payload?.max_rows_written,
+        },
+        { geneCommentsCacheKey, userKvKeyScopes: iconoplasmUserKvKeyScopes },
+      )
       return done(
         "admin_account_erase",
-        json({ ok: true, account }, 200, { "Cache-Control": "no-store" }),
+        json({ ok: true, account, erasure }, 200, { "Cache-Control": "no-store" }),
       )
     } catch (error) {
+      // A spent daily budget refuses the slice, not the erasure: the top-level handler turns
+      // it into the standard 503 and the same request resumes later.
+      if (isIconoplasmDailyBudgetError(error)) throw error
       const status =
         error instanceof BrinedewAccountIdentityError
           ? error.status || 409

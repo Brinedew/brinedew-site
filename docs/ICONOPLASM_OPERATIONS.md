@@ -316,17 +316,90 @@ do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path.
 ## account erasure request
 
 The privacy pages promise erasure. Fulfil a verified request with one command
-(B-871):
+(B-871, B-987):
 
 `POST /api/iconoplasm/admin/accounts/erase` with
 `{"account_id": "...", "command_id": "<unique per request>", "reason_code": "user_request"}`
-and the admin token.
+and the admin token. The account id is the opaque `acct_...` id of
+`brinedew_accounts`; `brinedew_account_identities` maps the person's Discord id to it.
 
-It requests erasure with the `retain` caretaker policy and completes it: provider
-identities are removed, the public name becomes the stable "Former caretaker"
-label, and retained history keeps the account id. The account projection outbox
-then ends caretaker assignments on its scheduled drain. Re-sending the same
-`command_id` replays; a different `command_id` on an erased account refuses.
+The response carries `erasure.complete`. One request does a bounded slice of the work, so send
+the same request again until it is `true`; every request resumes from the rows that are left,
+and a request that fails or is refused (a spent daily D1 budget answers 503) changes nothing it
+cannot repeat. The first request marks the account `erasure_pending`: from then on every session
+of the person is refused and wiped on its next request, so nothing new is written under their
+Discord id while the data goes. Only when nothing keyed by the Discord id is left does the
+account complete: `erased`, provider link deleted, the `users` row deleted, the fingerprints
+scrubbed. A repeat of the completing `command_id` replays; a different `command_id` on an
+erased account refuses with `ACCOUNT_ERASED`.
+
+**What it does.** The rule (owner decision, 3 Oct 2026, as comparable sites handle a deleted
+account): keep the content, cut the person off it, delete the personal records that have no
+public value (`workers/iconoplasm/account-erasure/erasure-steps.js` lists every table and column).
+
+| Kind                          | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deleted                       | discoveries and discovery state (compact and legacy tables, the delivery outbox and its receipts, the migration cursor), favourites, user emulsions and their picker rollup rows, image-provider API keys, the request inbox and Discord delivery rows, requests with no output, unpublished or pending generation and edit jobs, comments the author had already removed, the caretaker's own delivery outbox, GeneGuessr stats, the leaderboard row, game state and results waiting for the stats row (the `user_<id>` and `practice_user_<id>` Durable Objects), the KV keys that embed the Discord id, the `users` row and the provider link |
+| Kept, cut off from the person | votes and vote events (the user id becomes the erased account's id, so every count and every election is unchanged), public gene comments (shown under the anonymous label, no avatar), requests that produced a published image, published generation and edit jobs, the creator of a published portrait, publish event actors (also in the audit database), emulsion labels on published portraits and jobs, caretaker manifestations (the caretaker authority, retained under the label)                                                                                                                                                      |
+| Rewritten                     | the provider-subject fingerprint in identity events and in the command ids built from it, to an opaque `erased:` marker (the append-only guards are lifted and restored in the same transaction)                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+Everything cut off from the person points at the erased account's opaque id or its label
+(`Former caretaker · XXXXXXXXXX`, `brinedewFormerAuthorLabel`). Nothing links that id to a Discord id
+once the account completes. The `users` row is deleted, not kept: nothing reads it for an
+erased account, and keeping it made a returning person resolve to the erased account and be
+refused sign-in for good. A person who signs in again with the same Discord id gets a brand-new
+account with no history. Before erasing a `disabled` account to fulfil a request, decide the
+abuse case: erasure ends the disabling.
+
+**What it leaves, and why.**
+
+- Public counts of the shared discovery window (first seen, latest seen, encounter totals) still
+  include the person's discoveries. They are small and not personal. `POST
+/api/iconoplasm/admin/read-models/shared-discoveries` (`rebuildSharedGeneDiscoveryRollup`)
+  recomputes them from the remaining users' chronology; its cost grows with the number of users,
+  so run it only after erasing someone with a large collection, and late in the UTC day.
+- `daily_guess_aggregate` is a count per day and protein with no player in it.
+- The published leaderboard object follows the stats row within the ten minute publisher interval
+  and the pull zone's 60 second cache. Published stable gene objects keep the emulsion label they
+  were last published with until the gene is next republished.
+- A login session the person never uses again is not enumerable (session objects are named by a
+  random id); it expires on its own after at most 30 days.
+- Discord holds the DMs we sent, the comment mirror in the public channel (username and body; the
+  message id is not stored) and the person's own side of the conversation. Nothing deletes them.
+- The caretaker authority, the archive and the cold backups (the nightly local dumps, kept 30
+  days, and D1 Time Travel, 7 days) are retained by design or expire on their own.
+- The workstation's vote mirror (`remote_asset_votes`) holds the raw Discord id on the operator's
+  own machine until it is rebuilt.
+- Result images of deleted unpublished jobs stay in Bunny storage as unreferenced objects.
+
+**Cost.** Each request writes at most `erasure.rows_written` <= 5,000 D1 rows (every pass
+reserves the worst case of what it sends before sending it) and makes at most 20 D1 calls for the
+data plus about 16 for the account lifecycle and the caretaker authority; `max_rows_written` in
+the request lowers the 5,000 (minimum 100). A small erasure is one request. The largest per-person
+row counts in production on 2026-10-03 (2,287 requests, 2,280 notifications, 2,092 legacy discovery
+rows, 874 votes, 835 vote events, each the maximum of a different table, probably one account)
+add up, at the steps' worst-case weights, to at most about 76,000 rows written in all: 76% of the
+100,000 a day the whole account may write, over at least 16 requests. A heavy account therefore belongs in
+the last hours of the UTC day (00:00 UTC resets the meters), and a daily budget refusal is a
+reason to wait, not to retry in a loop. The unindexed steps (portrait creators, publish event
+actors) scan their tables once when everything else is gone: about 80,000 rows read. Repeat the
+request until complete, for example:
+
+```powershell
+do {
+  $r = Invoke-RestMethod -Method Post -Uri https://iconoplasm.brinedew.bio/api/iconoplasm/admin/accounts/erase `
+    -Headers @{ Authorization = "Bearer $env:ICONOPLASM_ADMIN_TOKEN" } -ContentType 'application/json' `
+    -Body (@{ account_id = $accountId; command_id = $commandId; reason_code = 'user_request' } | ConvertTo-Json)
+  "{0} rows written, complete: {1}" -f $r.erasure.rows_written, $r.erasure.complete
+} until ($r.erasure.complete)
+```
+
+**Adding a table that holds a person.** `workers/iconoplasm.admin-account-erase.test.js` reads the
+migrated schemas and fails on any column that looks like a person (a user id, Discord id, username,
+avatar, email, creator or actor) that is neither covered by a step nor listed with a reason as
+exempt. Add the step, with a weight that covers the rows one changed row writes (the same test
+checks it against the schema), and seed the person in the fixture
+(`workers/test-helpers/account-erasure-fixture.js`).
 
 ## authoring D1 residue cleanup
 
