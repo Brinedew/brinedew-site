@@ -10,13 +10,14 @@ const readWorkflow = (name) =>
 
 test("maintenance containment uploads retain cron work and activation restores the owned schedule", () => {
   const workflow = parse(readWorkflow("deploy-quartz.yml"))
-  // A normal release applies a pending Durable Object migration with
-  // `wrangler deploy` and the config's own triggers; it is not containment.
+  // A normal release applies a pending Durable Object migration, or a cron
+  // trigger drift from the config, with `wrangler deploy` and the config's own
+  // triggers; it is not containment.
   const migrationDeploy = workflow.jobs["deploy-production"].steps.find(
     (step) => step.name === "Deploy the compatible stateful Worker",
   )
   assert.equal(migrationDeploy.if, "inputs.data_maintenance != true")
-  assert.match(migrationDeploy.run, /steps\.do_migration\.outputs\.pending/)
+  assert.match(migrationDeploy.run, /steps\.deploy_mode\.outputs\.needs_wrangler_deploy/)
   assert.doesNotMatch(migrationDeploy.run, /--triggers/)
   const uploads = workflow.jobs["deploy-production"].steps.filter(
     (step) =>

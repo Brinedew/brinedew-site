@@ -196,7 +196,7 @@ tag = "v7"
 deleted_classes = ["IconoplasmManifestationCutoverCoordinator"]
 
 # v8 removes the card-publication coordinator class. Applied by the normal
-# release through wrangler deploy (scripts/stateful-worker-do-migration.mjs
+# release through wrangler deploy (scripts/stateful-worker-deploy-mode.mjs
 # detects the pending tag).
 [[migrations]]
 tag = "v8"
@@ -204,7 +204,7 @@ deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 
 # v9 removes the vote coordinator class. A migration that deletes a class is
 # applied by the normal release through wrangler deploy
-# (scripts/stateful-worker-do-migration.mjs detects the pending tag), which also
+# (scripts/stateful-worker-deploy-mode.mjs detects the pending tag), which also
 # installs this file's cron triggers.
 [[migrations]]
 tag = "v9"
@@ -277,8 +277,10 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # owns the minute map, and its test checks that this expression lists exactly
 # the job minutes, each once. Five jobs retain quarter-hour recovery; account
 # and manifestation recovery run every 12 minutes, as does supervote delivery
-# with five 16-message batches/hour. A normal push never changes the installed
-# trigger; only a release that runs `wrangler deploy` does. Nightly archive,
+# with five 16-message batches/hour. A Worker version upload never changes the
+# installed trigger. The release compares this list with the installed one
+# (scripts/stateful-worker-deploy-mode.mjs), runs `wrangler deploy` when they
+# differ, and fails if they still differ afterwards. Nightly archive,
 # canon repair and gallery run at 23:56/58/59 in separate invocations.
 # GeneGuessr's three triggers stay independent.
 crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,5,6,7,8,10,11,14,15,16,17,18,19,20,23,26,27,28,29,30,31,32,33,35,38,39,41,42,43,44,46,47,48,50,51,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
