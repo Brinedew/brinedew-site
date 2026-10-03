@@ -83,7 +83,9 @@ test("legacy publication remains unchanged before authority cutover", async () =
   assert.equal(reads, 0)
 })
 
-test("authoritative publication carries exact public body identity and compound Tags", async () => {
+test("authoritative publication carries exact public body identity and never Tags", async () => {
+  // The material here still carries a Tags derivative: the public projection is
+  // an allowlist, so Tags cannot reach the record even from a careless reader.
   const output = await hydrateOne(
     {
       ICONOPLASM_DB: database("authoritative"),
@@ -93,9 +95,13 @@ test("authoritative publication carries exact public body identity and compound 
     { readMaterial: async () => material() },
   )
   assert.equal(output.canonical_manifestation.prose, "TP53 exact canonical prose")
-  assert.equal(output.canonical_manifestation.accepted_tags_derivative.tags_text, "exact tags")
   assert.equal(output.canonical_manifestation.manifestation_revision_id, "revision_tp53")
   assert.equal(output.canonical_manifestation.body_sha256, "a".repeat(64))
+  assert.equal("accepted_tags_derivative" in output.canonical_manifestation, false)
+  const published = JSON.stringify(output)
+  for (const needle of ["exact tags", '"state":', "tags_text", "fields_json", "derivative_tp53"]) {
+    assert.equal(published.includes(needle), false, `the record must not contain "${needle}"`)
+  }
 })
 
 test("hidden canonical manifestations expose no prose to the public gene payload", async () => {

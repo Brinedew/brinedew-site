@@ -34,9 +34,10 @@ async function authorityMode(primaryDb) {
   return String(row.mode || "").trim()
 }
 
+// The public record is an allowlist of prose-side fields. Tags are not on it:
+// the caretaker panel promises they stay private (B-859).
 function publicProjection(material) {
   if (!material.canonical) return null
-  const derivative = material.accepted_tags_derivative
   return Object.freeze({
     schema_version: Number(material.schema_version),
     gene_id: material.gene_id,
@@ -51,26 +52,6 @@ function publicProjection(material) {
     body_bytes: Number(material.canonical.body_bytes),
     public_page_visible: material.canonical.public_page_visible === true,
     prose: material.canonical.public_page_visible === true ? material.canonical.prose : null,
-    accepted_tags_derivative: derivative
-      ? Object.freeze({
-          manifestation_derivative_id: derivative.manifestation_derivative_id,
-          derivative_head_version: Number(derivative.derivative_head_version),
-          body_sha256: derivative.body_sha256,
-          body_bytes: Number(derivative.body_bytes),
-          tags_sha256: derivative.tags_sha256,
-          tags_bytes: Number(derivative.tags_bytes),
-          fields_sha256: derivative.fields_sha256,
-          fields_bytes: Number(derivative.fields_bytes),
-          recipe_id: derivative.recipe_id,
-          recipe_version: derivative.recipe_version,
-          provider_id: derivative.provider_id,
-          model_id: derivative.model_id,
-          tagger_config_sha256: derivative.tagger_config_sha256,
-          provenance_status: derivative.provenance_status,
-          tags_text: derivative.tags_text,
-          fields_json: derivative.fields_json,
-        })
-      : null,
   })
 }
 
