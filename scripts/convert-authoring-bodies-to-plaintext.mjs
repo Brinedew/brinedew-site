@@ -33,8 +33,6 @@ import path from "node:path"
 import process from "node:process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-import { PLAINTEXT_CONVERSION_MAX_BODIES } from "../workers/iconoplasm/caretaker/manifestation-plaintext-conversion.js"
-
 export const LATE_UTC_HOUR = 20
 export const ORIGIN = "https://iconoplasm.brinedew.bio"
 export const ROUTE = "/api/iconoplasm/admin/caretakers/plaintext-bodies"

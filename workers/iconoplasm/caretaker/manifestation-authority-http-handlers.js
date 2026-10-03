@@ -422,7 +422,7 @@ function createCaretakerManifestationHttpHandler({
       }
 
       if (save) {
-        const { gene, assignment } = await requireRouteCurrentAssignment(
+        const { assignment } = await requireRouteCurrentAssignment(
           db,
           segment(save[1]),
           session.accountId,

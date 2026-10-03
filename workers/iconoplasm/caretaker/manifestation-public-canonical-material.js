@@ -5,9 +5,8 @@
 // image tags): the caretaker panel promises they stay private, so the one public
 // object is built from the prose alone. Tags travel only through the
 // authenticated caretaker and replica routes.
-import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { readManifestationProse } from "../../lib/iconoplasm-manifestation-body-reader.js"
-import { all, first, requireDatabase } from "./manifestation-authority-repository.js"
+import { first, requireDatabase } from "./manifestation-authority-repository.js"
 import { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
 
 const PUBLIC_SCHEMA_VERSION = 1
