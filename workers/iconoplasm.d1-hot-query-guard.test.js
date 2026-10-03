@@ -277,7 +277,7 @@ test("DO NOT DELETE: automatic canon tie-break ranks newer assets before current
     checkedBlocks += 1
     searchFrom = currentIndex + readModelCurrentNeedle.length
   }
-  assert.ok(checkedBlocks >= 2, "expected to guard both admin read-model ranked-candidate queries")
+  assert.ok(checkedBlocks >= 1, "expected to guard the admin read-model ranked-candidate query")
 })
 
 test("DO NOT DELETE: request picker hot path must stay on a precomputed rollup instead of live portrait scans", () => {

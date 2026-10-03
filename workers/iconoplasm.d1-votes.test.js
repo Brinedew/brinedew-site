@@ -48,6 +48,11 @@
 // 21. The publisher's print-copy fingerprint is not the fingerprint of what
 //     the queue consumer reads back from storage, so the consumer finds its
 //     own card superseded and the gene never materializes (or renders twice).
+// 23. A read-model sync empties the vote summaries elections read, whatever
+//     the request body asks for: a vote that lands before the table is refilled
+//     elects from zero votes everywhere.
+// 24. The vote projection job table survives the migrations, or Worker or
+//     release source still names it.
 import assert from "node:assert/strict"
 import { readdirSync, readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
@@ -1674,4 +1679,69 @@ test("22: nothing addresses the deleted vote coordinator, its compare route, its
       /^(?:new_sqlite_classes|deleted_classes) = /,
       `the toml names the class outside a migration: ${line}`,
     )
+})
+
+// 23. A scoped read-model sync syncs its own scope and empties nothing, even
+//     when its body asks for a full rebuild; and no source file holds a
+//     statement that deletes every row of the summary table elections read.
+function sourcesUnder(directory) {
+  const root = new URL(`../${directory}/`, import.meta.url)
+  return readdirSync(root, { recursive: true })
+    .map((name) => String(name).replaceAll("\\", "/"))
+    .filter(
+      (name) => /\.m?js$/.test(name) && !/\.test\.js$/.test(name) && !name.startsWith("generated/"),
+    )
+    .map((name) => ({
+      name: `${directory}/${name}`,
+      text: readFileSync(new URL(name, root), "utf8"),
+    }))
+}
+const workerSources = () => sourcesUnder("workers")
+
+test("23: a read-model sync that asks for a full rebuild syncs only its scope and nothing empties the vote summaries", async (t) => {
+  t.mock.method(console, "warn", () => {})
+  const db = new SqliteD1()
+  for (const symbol of ["AAA1", "ZZZ9"]) {
+    db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)", symbol, symbol)
+    seedAsset(db, symbol, sha("a"))
+    seedPublished(db, symbol, sha("a"))
+    for (const user of ["u1", "u2"]) await vote(db, symbol, sha("a"), user, 1)
+  }
+  const mark = db.mark()
+  const result = await callApi(
+    db,
+    "/api/iconoplasm/admin/read-models/sync",
+    { symbols: ["AAA1"], full_rebuild: true },
+    { env: { admin: true } },
+  )
+  assert.equal(result.status, 200, JSON.stringify(result.payload))
+  const emptying = db.since(mark).filter(({ sql }) => /^\s*DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(sql))
+  assert.deepEqual(emptying, [], "no statement deletes every row of a table")
+  for (const symbol of ["AAA1", "ZZZ9"])
+    assert.deepEqual(summary(db, symbol, sha("a")), recount(db, symbol, sha("a")), symbol)
+
+  const offenders = workerSources()
+    .filter(
+      ({ text }) =>
+        /bulkRebuildAdminReadModels/.test(text) ||
+        /DELETE\s+FROM\s+icono_vote_asset_summary\s*(?:`|"|')/.test(text),
+    )
+    .map(({ name }) => name)
+  assert.deepEqual(offenders, [], "no source can empty the summary table")
+})
+
+// 24. After every checked-in migration the vote projection job table is gone,
+//     and no Worker or release source reads or writes it.
+test("24: the vote projection job table does not survive the migrations or the source", () => {
+  const table = "icono_vote_projection_refresh_jobs"
+  const db = new SqliteD1()
+  assert.deepEqual(
+    db.rows("SELECT type, name FROM sqlite_schema WHERE instr(sql, ?) > 0", table),
+    [],
+    "no schema object names the vote projection job table",
+  )
+  const offenders = [...workerSources(), ...sourcesUnder("scripts")]
+    .filter(({ text }) => text.includes(table))
+    .map(({ name }) => name)
+  assert.deepEqual(offenders, [], "no Worker or release script names the vote projection job table")
 })
