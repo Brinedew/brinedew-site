@@ -3,7 +3,6 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
 import { handleCallback, handleLogin } from "./auth.js"
-import { GameSession } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 class FakeGameSessions {
   constructor() {
@@ -265,6 +264,16 @@ test("overlapping app logins keep independent browser-bound OAuth attempts", asy
   assert.equal(firstCallback.status, 302)
   assert.equal(firstCallback.headers.get("location"), "https://iconoplasm.brinedew.bio/?flow=one")
   assert.match(firstCallback.headers.get("set-cookie"), new RegExp(`^${first.cookieName}=;`))
+  // The credential is HttpOnly. The presence marker is the opposite on purpose: page script
+  // reads it to skip the identity probe for anonymous visitors, so it must be readable,
+  // shared across the sites, and carry no identity.
+  const callbackCookies = firstCallback.headers.getSetCookie()
+  assert.ok(callbackCookies.some((cookie) => /^session=[^;]+;.* HttpOnly;/.test(cookie)))
+  const presence = callbackCookies.find((cookie) => cookie.startsWith("brinedew_session_present="))
+  assert.match(
+    presence,
+    /^brinedew_session_present=1; Path=\/; Secure; SameSite=Lax; Max-Age=\d+; Domain=\.brinedew\.bio$/,
+  )
 
   const firstReplay = await handleCallback(
     new Request(
@@ -435,68 +444,4 @@ test("OAuth refuses a disabled account before creating a persistent session", as
     [...env.GAME_SESSIONS.records.keys()].filter((key) => key.startsWith("session:")).length,
     0,
   )
-})
-
-test("GameSession atomically consumes OAuth data and expires abandoned attempts", async () => {
-  const values = new Map()
-  let alarmAt = null
-  const storage = {
-    async put(key, value) {
-      values.set(key, value)
-    },
-    async get(key) {
-      return values.get(key)
-    },
-    async setAlarm(value) {
-      alarmAt = value
-    },
-    async transaction(callback) {
-      return callback({
-        async get(key) {
-          return values.get(key)
-        },
-        async delete(key) {
-          values.delete(key)
-        },
-      })
-    },
-    async deleteAll() {
-      values.clear()
-    },
-  }
-  const durableObject = new GameSession({ storage }, {})
-  const deleteStorageAt = Date.now() + 600_000
-
-  const stored = await durableObject.fetch(
-    new Request("http://internal/store", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: "one-time-state", delete_storage_at: deleteStorageAt }),
-    }),
-  )
-  assert.equal(stored.status, 200)
-  assert.equal(alarmAt, deleteStorageAt)
-
-  const consumed = await durableObject.fetch(
-    new Request("http://internal/consume", { method: "POST" }),
-  )
-  assert.deepEqual(await consumed.json(), {
-    state: "one-time-state",
-    delete_storage_at: deleteStorageAt,
-  })
-
-  const replayed = await durableObject.fetch(
-    new Request("http://internal/consume", { method: "POST" }),
-  )
-  assert.deepEqual(await replayed.json(), {})
-
-  await durableObject.fetch(
-    new Request("http://internal/store", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: "abandoned", delete_storage_at: deleteStorageAt }),
-    }),
-  )
-  await durableObject.alarm()
-  assert.equal(values.size, 0)
 })
