@@ -1,3 +1,18 @@
+// THE ONLY RECORD OF FAILED GAMESESSION WRITES: DO NOT DUPLICATE.
+//
+// A Durable Object session write that fails (a code update resets the object, the free tier's
+// write cap is spent, the platform answers "internal error") is recorded here: one row per
+// minute, operation, session kind and error text, counting repeats, and one sample row with the
+// request path. `GET /api/admin/status` returns them as `game_session_write_evidence`.
+//
+// A write that succeeds records nothing (B-960). The success count used to be written too, one
+// D1 row per session write: 5 of the 11 rows a 3-guess visit wrote, read by no page. The
+// provider's own Durable Object meter (`durableObjectsPeriodicGroups.rowsWritten`) says how many
+// writes there were. The tables are created by this code on the first failure or the first
+// status read, and the retention prune runs on a failure, so a day with no failure costs no D1
+// statement. The `outcome` column stays so the table is unchanged; it only ever receives
+// `failure`, and the reader ignores any other value (the rows an earlier version wrote age out
+// with the 14-day prune).
 const OBSERVATION_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS game_session_write_observations_do_not_delete (
     observed_day TEXT NOT NULL,
@@ -79,19 +94,18 @@ const INSERT_FAILURE_SAMPLE_SQL = `
   VALUES (?, ?, ?, ?, ?, ?)
 `
 
-const SELECT_OBSERVATIONS_FOR_DAY_SQL = `
+const SELECT_FAILURES_FOR_DAY_SQL = `
   SELECT
     observed_day,
     minute_bucket,
     operation,
     session_kind,
-    outcome,
     error_fingerprint,
     count,
     first_seen_at,
     last_seen_at
   FROM game_session_write_observations_do_not_delete
-  WHERE observed_day = ?
+  WHERE observed_day = ? AND outcome = 'failure'
   ORDER BY minute_bucket ASC, operation ASC, session_kind ASC
 `
 
@@ -189,7 +203,7 @@ async function pruneOldEvidence(db, cutoffDay) {
   lastPrunedCutoffDay = cutoffDay
 }
 
-export async function recordGameSessionWriteObservation(db, details) {
+async function recordGameSessionWriteFailure(db, details) {
   if (!db) {
     return false
   }
@@ -199,9 +213,7 @@ export async function recordGameSessionWriteObservation(db, details) {
   const minuteBucket = toUtcMinuteBucket(occurredAt)
   const operation = normalizeOperation(details?.operation)
   const sessionKind = classifySessionKind(details?.sessionId)
-  const outcome = details?.outcome === "failure" ? "failure" : "success"
-  const errorFingerprint =
-    outcome === "failure" ? normalizeErrorFingerprint(details?.errorMessage) : ""
+  const errorFingerprint = normalizeErrorFingerprint(details?.errorMessage)
   const requestPath = normalizeRequestPath(details?.requestPath)
   const cutoffDay = addUtcDays(observedDay, -EVIDENCE_RETENTION_DAYS)
 
@@ -214,49 +226,41 @@ export async function recordGameSessionWriteObservation(db, details) {
       minuteBucket,
       operation,
       sessionKind,
-      outcome,
+      "failure",
       errorFingerprint,
       occurredAt,
       occurredAt,
     )
     .run()
-
-  if (outcome === "failure") {
-    await db
-      .prepare(INSERT_FAILURE_SAMPLE_SQL)
-      .bind(
-        observedDay,
-        occurredAt,
-        operation,
-        sessionKind,
-        requestPath,
-        normalizeErrorFingerprint(details?.errorMessage) || "Unknown GameSession write error",
-      )
-      .run()
-  }
+  await db
+    .prepare(INSERT_FAILURE_SAMPLE_SQL)
+    .bind(
+      observedDay,
+      occurredAt,
+      operation,
+      sessionKind,
+      requestPath,
+      errorFingerprint || "Unknown GameSession write error",
+    )
+    .run()
 
   return true
 }
 
-async function safeRecordGameSessionWriteObservation(db, details) {
+async function safeRecordGameSessionWriteFailure(db, details) {
   try {
-    await recordGameSessionWriteObservation(db, details)
+    await recordGameSessionWriteFailure(db, details)
   } catch (err) {
     console.warn("GameSession write evidence recording failed", err?.message || err)
   }
 }
 
+// Runs a Durable Object session write. A failure is recorded and rethrown; a success returns
+// the result and touches nothing.
 export async function withObservedGameSessionWrite(env, details, writeOperation) {
-  const db = env?.DB
   const occurredAt = Date.now()
   try {
-    const result = await writeOperation()
-    await safeRecordGameSessionWriteObservation(db, {
-      ...details,
-      occurredAt,
-      outcome: "success",
-    })
-    return result
+    return await writeOperation()
   } catch (err) {
     const errorMessage = err?.message || String(err || "Unknown GameSession write error")
     console.warn("GameSession write failed", {
@@ -265,201 +269,91 @@ export async function withObservedGameSessionWrite(env, details, writeOperation)
       request_path: normalizeRequestPath(details?.requestPath),
       error: errorMessage,
     })
-    await safeRecordGameSessionWriteObservation(db, {
+    await safeRecordGameSessionWriteFailure(env?.DB, {
       ...details,
       occurredAt,
-      outcome: "failure",
       errorMessage,
     })
     throw err
   }
 }
 
-function aggregateObservationRows(rows) {
-  const safeRows = Array.isArray(rows) ? rows : []
-  const summary = {
-    attempts: 0,
-    successes: 0,
-    failures: 0,
-    first_success_at: null,
-    first_failure_at: null,
-    last_success_at: null,
-    last_failure_at: null,
-    successes_before_first_failure: 0,
-    attempts_before_first_failure: 0,
-  }
+const earliest = (current, candidate) =>
+  current == null || (candidate != null && candidate < current) ? candidate : current
+const latest = (current, candidate) =>
+  current == null || (candidate != null && candidate > current) ? candidate : current
+
+function aggregateFailureRows(rows) {
+  const summary = { failures: 0, first_failure_at: null, last_failure_at: null }
   const byOperation = new Map()
-  const byFailureFingerprint = new Map()
+  const byFingerprint = new Map()
   const byMinute = new Map()
 
-  for (const row of safeRows) {
+  const add = (map, key, fresh, count, firstSeenAt, lastSeenAt) => {
+    const current = map.get(key) || {
+      ...fresh,
+      failures: 0,
+      first_failure_at: null,
+      last_failure_at: null,
+    }
+    current.failures += count
+    current.first_failure_at = earliest(current.first_failure_at, firstSeenAt)
+    current.last_failure_at = latest(current.last_failure_at, lastSeenAt)
+    map.set(key, current)
+  }
+
+  for (const row of Array.isArray(rows) ? rows : []) {
     const count = Number(row?.count) || 0
-    const outcome = row?.outcome === "failure" ? "failure" : "success"
     const firstSeenAt = Number(row?.first_seen_at) || null
     const lastSeenAt = Number(row?.last_seen_at) || null
     const operation = normalizeOperation(row?.operation)
     const sessionKind = String(row?.session_kind || "unknown")
     const errorFingerprint = normalizeErrorFingerprint(row?.error_fingerprint)
-
-    summary.attempts += count
-    if (outcome === "failure") {
-      summary.failures += count
-      summary.first_failure_at =
-        summary.first_failure_at == null ||
-        (firstSeenAt != null && firstSeenAt < summary.first_failure_at)
-          ? firstSeenAt
-          : summary.first_failure_at
-      summary.last_failure_at =
-        summary.last_failure_at == null ||
-        (lastSeenAt != null && lastSeenAt > summary.last_failure_at)
-          ? lastSeenAt
-          : summary.last_failure_at
-      if (errorFingerprint) {
-        const currentFingerprint = byFailureFingerprint.get(errorFingerprint) || {
-          error_fingerprint: errorFingerprint,
-          count: 0,
-          first_seen_at: null,
-          last_seen_at: null,
-        }
-        currentFingerprint.count += count
-        currentFingerprint.first_seen_at =
-          currentFingerprint.first_seen_at == null ||
-          (firstSeenAt != null && firstSeenAt < currentFingerprint.first_seen_at)
-            ? firstSeenAt
-            : currentFingerprint.first_seen_at
-        currentFingerprint.last_seen_at =
-          currentFingerprint.last_seen_at == null ||
-          (lastSeenAt != null && lastSeenAt > currentFingerprint.last_seen_at)
-            ? lastSeenAt
-            : currentFingerprint.last_seen_at
-        byFailureFingerprint.set(errorFingerprint, currentFingerprint)
-      }
-    } else {
-      summary.successes += count
-      summary.first_success_at =
-        summary.first_success_at == null ||
-        (firstSeenAt != null && firstSeenAt < summary.first_success_at)
-          ? firstSeenAt
-          : summary.first_success_at
-      summary.last_success_at =
-        summary.last_success_at == null ||
-        (lastSeenAt != null && lastSeenAt > summary.last_success_at)
-          ? lastSeenAt
-          : summary.last_success_at
-    }
-
-    const operationKey = `${operation}::${sessionKind}`
-    const currentOperation = byOperation.get(operationKey) || {
-      operation,
-      session_kind: sessionKind,
-      attempts: 0,
-      successes: 0,
-      failures: 0,
-      first_success_at: null,
-      first_failure_at: null,
-      last_success_at: null,
-      last_failure_at: null,
-    }
-    currentOperation.attempts += count
-    if (outcome === "failure") {
-      currentOperation.failures += count
-      currentOperation.first_failure_at =
-        currentOperation.first_failure_at == null ||
-        (firstSeenAt != null && firstSeenAt < currentOperation.first_failure_at)
-          ? firstSeenAt
-          : currentOperation.first_failure_at
-      currentOperation.last_failure_at =
-        currentOperation.last_failure_at == null ||
-        (lastSeenAt != null && lastSeenAt > currentOperation.last_failure_at)
-          ? lastSeenAt
-          : currentOperation.last_failure_at
-    } else {
-      currentOperation.successes += count
-      currentOperation.first_success_at =
-        currentOperation.first_success_at == null ||
-        (firstSeenAt != null && firstSeenAt < currentOperation.first_success_at)
-          ? firstSeenAt
-          : currentOperation.first_success_at
-      currentOperation.last_success_at =
-        currentOperation.last_success_at == null ||
-        (lastSeenAt != null && lastSeenAt > currentOperation.last_success_at)
-          ? lastSeenAt
-          : currentOperation.last_success_at
-    }
-    byOperation.set(operationKey, currentOperation)
-
     const minuteBucket = String(row?.minute_bucket || "")
-    const currentMinute = byMinute.get(minuteBucket) || {
-      minute_bucket: minuteBucket,
-      attempts: 0,
-      successes: 0,
-      failures: 0,
-      first_success_at: null,
-      first_failure_at: null,
-      last_success_at: null,
-      last_failure_at: null,
-    }
-    currentMinute.attempts += count
-    if (outcome === "failure") {
-      currentMinute.failures += count
-      currentMinute.first_failure_at =
-        currentMinute.first_failure_at == null ||
-        (firstSeenAt != null && firstSeenAt < currentMinute.first_failure_at)
-          ? firstSeenAt
-          : currentMinute.first_failure_at
-      currentMinute.last_failure_at =
-        currentMinute.last_failure_at == null ||
-        (lastSeenAt != null && lastSeenAt > currentMinute.last_failure_at)
-          ? lastSeenAt
-          : currentMinute.last_failure_at
-    } else {
-      currentMinute.successes += count
-      currentMinute.first_success_at =
-        currentMinute.first_success_at == null ||
-        (firstSeenAt != null && firstSeenAt < currentMinute.first_success_at)
-          ? firstSeenAt
-          : currentMinute.first_success_at
-      currentMinute.last_success_at =
-        currentMinute.last_success_at == null ||
-        (lastSeenAt != null && lastSeenAt > currentMinute.last_success_at)
-          ? lastSeenAt
-          : currentMinute.last_success_at
-    }
-    byMinute.set(minuteBucket, currentMinute)
-  }
 
-  if (summary.first_failure_at == null) {
-    summary.successes_before_first_failure = summary.successes
-    summary.attempts_before_first_failure = summary.attempts
-  } else {
-    for (const row of safeRows) {
-      const count = Number(row?.count) || 0
-      const outcome = row?.outcome === "failure" ? "failure" : "success"
-      const lastSeenAt = Number(row?.last_seen_at) || null
-      if (lastSeenAt == null || lastSeenAt >= summary.first_failure_at) {
-        continue
-      }
-      summary.attempts_before_first_failure += count
-      if (outcome === "success") {
-        summary.successes_before_first_failure += count
-      }
+    summary.failures += count
+    summary.first_failure_at = earliest(summary.first_failure_at, firstSeenAt)
+    summary.last_failure_at = latest(summary.last_failure_at, lastSeenAt)
+    add(
+      byOperation,
+      `${operation}::${sessionKind}`,
+      { operation, session_kind: sessionKind },
+      count,
+      firstSeenAt,
+      lastSeenAt,
+    )
+    add(byMinute, minuteBucket, { minute_bucket: minuteBucket }, count, firstSeenAt, lastSeenAt)
+    if (errorFingerprint) {
+      add(
+        byFingerprint,
+        errorFingerprint,
+        { error_fingerprint: errorFingerprint },
+        count,
+        firstSeenAt,
+        lastSeenAt,
+      )
     }
   }
 
   return {
     summary,
-    by_operation: Array.from(byOperation.values()).sort((left, right) => {
-      return (
+    by_operation: Array.from(byOperation.values()).sort(
+      (left, right) =>
         right.failures - left.failures ||
-        right.attempts - left.attempts ||
-        left.operation.localeCompare(right.operation)
-      )
-    }),
-    failure_fingerprints: Array.from(byFailureFingerprint.values()).sort((left, right) => {
-      return (
-        right.count - left.count || left.error_fingerprint.localeCompare(right.error_fingerprint)
-      )
-    }),
+        left.operation.localeCompare(right.operation) ||
+        left.session_kind.localeCompare(right.session_kind),
+    ),
+    failure_fingerprints: Array.from(byFingerprint.values())
+      .map((entry) => ({
+        error_fingerprint: entry.error_fingerprint,
+        count: entry.failures,
+        first_seen_at: entry.first_failure_at,
+        last_seen_at: entry.last_failure_at,
+      }))
+      .sort(
+        (left, right) =>
+          right.count - left.count || left.error_fingerprint.localeCompare(right.error_fingerprint),
+      ),
     minute_buckets: Array.from(byMinute.values()).sort((left, right) =>
       left.minute_bucket.localeCompare(right.minute_bucket),
     ),
@@ -482,14 +376,14 @@ export async function getGameSessionWriteEvidence(db, options = {}) {
   const minuteLimit = Math.max(1, Math.min(Number(options?.minuteLimit) || 180, 1440))
 
   await ensureGameSessionWriteEvidenceSchema(db)
-  const observationRows = await db.prepare(SELECT_OBSERVATIONS_FOR_DAY_SQL).bind(observedDay).all()
-  const failureRows = await db
+  const failureRows = await db.prepare(SELECT_FAILURES_FOR_DAY_SQL).bind(observedDay).all()
+  const sampleRows = await db
     .prepare(SELECT_FAILURE_SAMPLES_FOR_DAY_SQL)
     .bind(observedDay, sampleLimit)
     .all()
 
-  const aggregated = aggregateObservationRows(
-    Array.isArray(observationRows?.results) ? observationRows.results : [],
+  const aggregated = aggregateFailureRows(
+    Array.isArray(failureRows?.results) ? failureRows.results : [],
   )
   const resetStartedAt = `${observedDay}T00:00:00.000Z`
   const nextResetDay = addUtcDays(observedDay, 1)
@@ -504,15 +398,13 @@ export async function getGameSessionWriteEvidence(db, options = {}) {
     by_operation: aggregated.by_operation,
     failure_fingerprints: aggregated.failure_fingerprints,
     recent_minute_buckets: aggregated.minute_buckets.slice(-minuteLimit),
-    recent_failures: (Array.isArray(failureRows?.results) ? failureRows.results : []).map(
-      (row) => ({
-        occurred_at: Number(row?.occurred_at) || 0,
-        operation: normalizeOperation(row?.operation),
-        session_kind: String(row?.session_kind || "unknown"),
-        request_path: normalizeRequestPath(row?.request_path),
-        error_message:
-          normalizeErrorFingerprint(row?.error_message) || "Unknown GameSession write error",
-      }),
-    ),
+    recent_failures: (Array.isArray(sampleRows?.results) ? sampleRows.results : []).map((row) => ({
+      occurred_at: Number(row?.occurred_at) || 0,
+      operation: normalizeOperation(row?.operation),
+      session_kind: String(row?.session_kind || "unknown"),
+      request_path: normalizeRequestPath(row?.request_path),
+      error_message:
+        normalizeErrorFingerprint(row?.error_message) || "Unknown GameSession write error",
+    })),
   }
 }

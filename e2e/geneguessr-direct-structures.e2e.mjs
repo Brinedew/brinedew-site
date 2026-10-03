@@ -47,6 +47,16 @@
 // variables.scss): three columns from 1200 px with a sticky 100vh right sidebar, the sidebar
 // below the game under that.
 //
+// B-960 and B-959 add the D1 rows of a visit, from the statements' own receipts: a successful
+// session write records nothing, so a visit writes only the per-guess aggregate (2 rows a guess
+// once the protein has been guessed today), and the leaderboard read costs a handful of rows
+// however many accounts exist (workers/leaderboard-streaks.test.js proves that at 1,000, 10,000
+// and 100,000 accounts). Failure modes, written before the code:
+// 12. a visit writes a row to the session-write evidence tables, or any D1 row other than the
+//     aggregates;
+// 13. the leaderboard read at the end of a desktop visit costs more than a few dozen rows.
+// The rows land in geneguessr-request-budget.json with the counts.
+//
 // Playwright disables the HTTP cache while a route is installed, so a repeat view's cost is
 // not measured here. Against the real providers (Chrome 154, 2026-10-03) a repeat view with
 // `cache: "force-cache"` took 1 to 2 ms for all three, while a default repeat took 270 to 424 ms
@@ -385,6 +395,30 @@ before(async () => {
     ...guessRows(target, 6).map((row) => row.gene),
   ])
   await seedLeaderboard(db, LEADERBOARD)
+  // The measured visits start from a day that is already under way: the board is built (the
+  // first read builds it), and a visitor has guessed every protein a visit guesses, so each
+  // guess's aggregate row exists and costs 2 rows to bump instead of 3 to create.
+  const call = (path, init = {}) =>
+    worker.fetch(
+      new Request(`${origin}${path}`, {
+        headers: {
+          Cookie: "geneguessr_session=e2e-day-underway",
+          "Content-Type": "application/json",
+        },
+        ...init,
+      }),
+      harness.env,
+      { waitUntil() {} },
+    )
+  assert.equal((await call("/api/stats/leaderboard?limit=5")).status, 200)
+  await call("/api/game/bootstrap")
+  for (const row of guessRows(target, 6)) {
+    const answer = await call("/api/game/guess", {
+      method: "POST",
+      body: JSON.stringify({ uniprot: row.uniprot }),
+    })
+    assert.equal(answer.status, 200)
+  }
 })
 
 after(async () => {
@@ -462,6 +496,11 @@ const readMeters = () => ({
   kvPuts: harness.kvPuts.length,
   d1RowsRead: metered.totalRead(),
   d1RowsWritten: metered.totalWritten(),
+  d1Receipts: metered.receipts.map((receipt) => ({
+    sql: receipt.sql.slice(0, 400),
+    rowsRead: receipt.rows_read,
+    rowsWritten: receipt.rows_written,
+  })),
   d1Statements: metered.receipts
     .filter((receipt) => receipt.rows_written || receipt.rows_read > 1)
     .map(
@@ -1139,6 +1178,26 @@ for (const [layout, viewport] of [
         assert.equal(c.leaderboard, layout === "desktop" ? 1 : 0, "the leaderboard")
         assert.equal(c.total, expectedTotal, `${result.requests}`)
         assert.equal(marks, 0, "a score never shows as pending")
+        // D1 rows (B-960, B-959): the receipts of every statement the visit ran.
+        const receipts = result.meters.d1Receipts
+        assert.deepEqual(
+          receipts.filter((receipt) => /game_session_write_/.test(receipt.sql)),
+          [],
+          "a successful session write records nothing",
+        )
+        assert.deepEqual(
+          receipts
+            .filter((receipt) => receipt.rowsWritten && !/daily_guess_aggregate/.test(receipt.sql))
+            .map((receipt) => receipt.sql),
+          [],
+          "the only rows a visit writes are the aggregates",
+        )
+        assert.equal(result.meters.d1RowsWritten, 2 * guesses, "2 rows a guess")
+        const board = receipts.filter((receipt) => /leaderboard_streaks/.test(receipt.sql))
+        assert.equal(board.length, layout === "desktop" ? 1 : 0, "one board read on a desktop")
+        for (const read of board) {
+          assert.ok(read.rowsRead <= 28 && read.rowsWritten === 0, `${read.rowsRead} rows read`)
+        }
         assert.deepEqual(result.failed, [], "no viewer failed")
         assert.equal(result.complete.length, 1 + guesses, `rendered viewers: ${result.complete}`)
         assert.deepEqual(tracker.cspViolations, [])

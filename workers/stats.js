@@ -6,6 +6,7 @@
 import { resolveAuthenticatedSession } from "./auth.js"
 import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
+import { readLeaderboard } from "./lib/leaderboard-streaks.js"
 
 const LEADERBOARD_DEFAULT_LIMIT = 5
 const LEADERBOARD_MAX_LIMIT = 25
@@ -290,39 +291,15 @@ export async function handleUpdateStats(request, env) {
 }
 /**
  * GET /api/stats/leaderboard?limit=5
- * Public current streak leaderboard (opt-in users only).
+ * Public current streak leaderboard (opt-in users only). It reads `leaderboard_streaks`, which
+ * costs the same few rows however many accounts exist (workers/lib/leaderboard-streaks.js).
  */
 export async function handleGetLeaderboard(request, env) {
   try {
     const url = new URL(request.url)
     const limit = parseLeaderboardLimit(url.searchParams.get("limit"))
 
-    const query = await env.DB.prepare(
-      `
-      SELECT
-        users.discord_id AS user_id,
-        users.username AS username,
-        users.avatar_url AS avatar_url,
-        stats.current_streak AS current_streak,
-        stats.total_wins AS total_wins,
-        stats.last_played_date AS last_played_date
-      FROM stats
-      INNER JOIN users ON users.discord_id = stats.user_id
-      WHERE COALESCE(users.leaderboard_opt_in, 0) = 1
-        AND COALESCE(stats.current_streak, 0) > 0
-        AND date(stats.last_played_date) >= date('now', '-1 day')
-      ORDER BY
-        stats.current_streak DESC,
-        stats.total_wins DESC,
-        COALESCE(stats.last_played_date, '9999-12-31') ASC,
-        users.discord_id ASC
-      LIMIT ?
-    `,
-    )
-      .bind(limit)
-      .all()
-
-    const rows = Array.isArray(query?.results) ? query.results : []
+    const rows = await readLeaderboard(env.DB, limit)
     const entries = rows.map((row, idx) => ({
       rank: idx + 1,
       username: String(row?.username || "Player"),
