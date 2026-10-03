@@ -249,3 +249,57 @@ export function meteredDb(db, { before, after } = {}) {
     totalWritten: () => receipts.reduce((sum, receipt) => sum + receipt.rows_written, 0),
   }
 }
+
+// A Worker env for end-to-end requests, as production runs them: the given D1, a
+// KV that remembers every key it was asked to put, and a GameSession stub that
+// keeps each session's state in `sessions` (pass the same map to a second env to
+// replay a returning player). No R2 bucket is bound, because the binding is
+// commented out in the Worker's wrangler config, so every structure the Worker
+// verifies or serves goes to its upstream. `failSessionReads` makes every session
+// read answer 500, and `sessionReads` counts them. `kvEntries` pre-loads KV.
+export function geneguessrWorkerEnv(
+  db,
+  { sessions = new Map(), failSessionReads = false, kvEntries = {} } = {},
+) {
+  const kv = new Map(Object.entries(kvEntries))
+  const kvPuts = []
+  const sessionReads = []
+  return {
+    sessions,
+    kv,
+    kvPuts,
+    sessionReads,
+    env: {
+      DB: db,
+      KV: {
+        async get(key, options) {
+          const value = kv.get(key) ?? null
+          return options?.type === "json" && value ? JSON.parse(value) : value
+        },
+        async put(key, value) {
+          kvPuts.push(key)
+          kv.set(key, value)
+        },
+        async delete(key) {
+          kv.delete(key)
+        },
+      },
+      GAME_SESSIONS: {
+        idFromName: (name) => name,
+        get(id) {
+          return {
+            async fetch(_url, init = {}) {
+              if (init.method === "POST") {
+                sessions.set(id, JSON.parse(init.body))
+                return Response.json({ ok: true })
+              }
+              sessionReads.push(id)
+              if (failSessionReads) return new Response("unavailable", { status: 500 })
+              return Response.json(sessions.get(id) ?? null)
+            },
+          }
+        },
+      },
+    },
+  }
+}

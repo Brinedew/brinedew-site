@@ -133,6 +133,16 @@ GeneGuessr D1 table `practice_selection_pool`. A practice start never scans
   another family and never the next row of the protein table.
 - A start therefore reads two rows for the pool, one row per failed candidate and
   one row per protein it loads. Nothing about it grows with the catalog.
+- A pick happens only when nothing names a target. `/api/game/bootstrap?practice=1`
+  reads the session first. A same-day session without `restart=1`, a restart
+  that has a stored `practicePool`, `date=YYYY-MM-DD` and `same_target=1` each
+  name the target, and when that protein loads there is no pick, no structure
+  probe, no `structure_failures` write and no pool read. The pick runs for a
+  first-time player, a restart with no pool, yesterday's session, and a named
+  protein the catalog lacks. A browser with no session cookie has no session by
+  construction, so it skips the session read and picks at once. Daily mode keeps
+  its parallel session read and pick. Because R2 is unbound, a pick costs one
+  outbound probe and one KV put, which is why a returning player must not pay it.
 
 ## Schedule and release behavior
 
@@ -206,6 +216,23 @@ from the real migrations at production shape (19,110 proteins, 10,312 playable,
   (golden values and a differential check), so availability pins stay valid;
 - a missing table, a missing row, a corrupt row, a D1 error on read and on
   persist, an empty catalog, and simultaneous requests are each handled.
+
+`workers/practice-bootstrap-returning-session.test.js` must prove, through the real
+Worker on the same production-shaped local D1 with R2 unbound and `fetch` counted:
+
+- a returning same-day bootstrap makes no pick statement, no structure probe and
+  at most one KV put, and on a cold isolate reads one protein row;
+- a first-time bootstrap, a restart with no pool, yesterday's session, an unknown
+  `same_target` and a failed session read still pick;
+- a restart with a stored pool, `same_target=1` and `date=` name the target with no
+  pick;
+- a browser with no session cookie reads no session.
+
+`workers/structure-cached-key-lookup-cost.test.js` must prove that a hint-less
+`/api/structure-cached?key=` request for a SWISS-MODEL or AlphaFold structure
+reads at most one row of `proteins` through an index search, finds the row the
+old `upper(uniprot)` statement found, and keeps its answers for a missing row, a
+key with no accession, a D1 error, a hinted request and a PDB key.
 
 `workers/admin-schedule-year.test.js` must prove that the first uncached annual
 request returns 365 complete, unique protein and surname identities using bulk
