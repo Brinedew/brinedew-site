@@ -17,25 +17,16 @@ export async function verifyIconoplasmReaderRecovery({
     evidence.push({ path, method, status: response.status })
     return response
   }
-  // Since B-809 every /gene/{SYMBOL} is a static per-gene document served by
-  // Workers static assets before the Worker runs, so in production the page never
-  // carries the Worker's recovery header; the card is drawn in the browser from
-  // /api/iconoplasm/site/genes (checked strictly below). Accept either the
-  // Worker-rendered recovery page or the static document for that exact symbol.
-  // (2026-09-25: the header-only check blocked every maintenance release while
-  // the public API sat in schema transition.)
+  // Every /gene/{SYMBOL} is a static per-gene document the asset layer serves
+  // before the Worker runs, in production and in the containment deploy, which
+  // keeps those asset bytes. The reader API below stays strict: it is the one
+  // route this containment Worker answers for a gene.
   const canonicalLink = (symbol) =>
     `<link rel="canonical" href="https://iconoplasm.brinedew.bio/gene/${symbol}">`
   for (const symbol of ["TP53", "BRCA1"]) {
     const page = await probe(`/gene/${symbol}`)
     const html = await page.text()
-    const workerRendered =
-      page.headers.get("X-Iconoplasm-Reader-Recovery") === "published-card-only" &&
-      html.includes(`data-icono-gene-symbol="${symbol}"`) &&
-      html.includes('class="icono-card-semantic-profile"') &&
-      html.includes('id="iconoplasm-card-bootstrap"')
-    const staticDocument = html.includes(canonicalLink(symbol))
-    if (page.status !== 200 || (!workerRendered && !staticDocument))
+    if (page.status !== 200 || !html.includes(canonicalLink(symbol)))
       throw new Error(`COST_READER_RECOVERY_PAGE_INVALID: ${symbol}`)
     const api = await probe(`/api/iconoplasm/site/genes/${symbol}`)
     const card = await api.json()
@@ -62,9 +53,8 @@ export async function verifyIconoplasmReaderRecovery({
     )
       throw new Error(`COST_READER_RECOVERY_PORTRAIT_UNAVAILABLE: ${symbol}`)
   }
-  // The unknown gene's API must 404. Its page may be a 404 or the static app
-  // shell (the SPA fallback answers unknown paths), but never a per-gene
-  // document claiming that symbol.
+  // The unknown gene's API must 404. Its page is a 404 (or, from another
+  // topology, the app shell), but never a per-gene document claiming that symbol.
   const unknownPage = await probe("/gene/NOT_A_REAL_GENE_B742")
   const unknownHtml = await unknownPage.text()
   if (

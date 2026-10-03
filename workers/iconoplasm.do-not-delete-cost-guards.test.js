@@ -257,7 +257,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.match(
     internalWrangler,
-    /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "single-page-application"[\s\S]*run_worker_first = \[[\s\S]*"\/api\/\*"[\s\S]*\]/,
+    /\[assets\][\s\S]*directory = "\.\/public-iconoplasm-edge"[\s\S]*not_found_handling = "404-page"[\s\S]*run_worker_first = \[[\s\S]*"\/api\/\*"[\s\S]*\]/,
     "matching Iconoplasm files must bypass Worker execution through the asset-first binding",
   )
   const workerFirstBlock =

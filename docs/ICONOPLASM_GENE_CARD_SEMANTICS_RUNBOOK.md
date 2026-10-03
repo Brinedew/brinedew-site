@@ -34,19 +34,18 @@ mapping.
 The semantic profile is rendered by
 `shared/iconoplasm-card/shared-card-runtime.js` and styled with the standard
 visually-hidden, accessibility-tree-preserving rule in
-`shared/iconoplasm-card/shared-card-label.css`. The same renderer supplies both
-the Worker-generated first HTML and the hydrated client card; do not create a
-second server-only or client-only fact mapper.
+`shared/iconoplasm-card/shared-card-label.css`. The same renderer supplies the
+website's client-rendered card and the extension's hover card; do not create a
+second fact mapper.
 
-IPD-003 supersedes IPD-002's obsolete blanket-noindex premise. A current
-canonical catalog record with a full name and published lead portrait is
-eligible only when the shared renderer also emits its labelled semantic
-profile. Eligible pages omit both robots directives. Aliases redirect
-permanently, known incomplete records remain noindex, and unknown symbols return
-a real 404 instead of the application shell.
-
-The same predicate owns response headers, HTML metadata, and tests. Never
-update just one of those surfaces.
+IPD-003 supersedes IPD-002's obsolete blanket-noindex premise. Eligibility is
+catalog membership: a gene in `catalog/v3/index.json` gets a static document
+(canonical URL, no robots directive) and a sitemap entry on the next deploy.
+Anything else under `/gene/` (an unpublished symbol, a lowercase symbol, an
+alias) answers a real 404 from the asset layer: `not_found_handling = "404-page"`
+serves `404.html`, which says `noindex` and boots the app in place, so a
+browser still resolves the symbol client-side while a crawler gets a 404. The
+Worker serves no gene page and reads no gene route table for one.
 
 A gene has one public name: its HGNC approved name, which is
 `icono_gene_catalog.full_name`, with the symbol standing in when that is empty.
@@ -89,35 +88,20 @@ the image route. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
 to overwrite or wait for; its long-lived CDN cache stalled real publication on
 2026-09-24 while the first-party route already worked.
 
-When a complete, indexable gene page has an exact ready blot, that blot must be
-present consistently in all of these projections:
-
-- a server-rendered `<img>` with gene-specific alt text inside the initially
-  hidden print-copy surface; the existing `request print copy` action reveals
-  it, while the default gene-page layout contains neither a visible duplicate
-  blot nor explanatory caption copy. Its actual `src` is the stable first-party
-  `/blot/{SYMBOL}.webp` URL, with `data-iconoplasm-role="canonical-blot"` and
-  `data-gene-symbol` identifying it unambiguously in the DOM;
-- gene-specific `og:image`, `og:image:url`, `og:image:alt`, `twitter:image`,
-  and `twitter:image:alt` metadata, alongside gene-specific social title and
-  description fields;
-- one linked JSON-LD graph in which `WebPage.primaryImageOfPage` and
-  `Gene.image` reference the same `ImageObject`, whose `contentUrl` is that
-  first-party semantic blot URL.
-
-Use the same exact card payload for blot readiness, interactive page, metadata, and
-structured data. JSON-LD must be escaped for an HTML script context and omitted
-for incomplete/noindex pages. Route/catalog records establish identity and
-membership only. If the requested card projection is unavailable or malformed,
-the whole document fails closed as uncached `503`. A valid complete card with no
-matching ready blot stays indexable and listed in the sitemap; only its blot
-image metadata and `ImageObject` are absent. The raw portrait may remain
-visible in the interactive dossier as subordinate source material, but it is
-never `primaryImageOfPage`, `Gene.image`, or the social image. Visible
-source-portrait and candidate-blot `<img>` elements
-carry `data-iconoplasm-role="source-portrait"` or `"candidate-blot"` plus the
-same normalized `data-gene-symbol`, so machine readers do not have to infer the
-page's image hierarchy from layout or alt text alone.
+A gene's blot reaches machine readers through two surfaces. The static gene
+document names it as the page's share image: `og:image` and the JSON-LD
+`image` carry the stable first-party `/blot/{SYMBOL}.webp` URL. The client app
+renders it as an `<img>` inside the initially hidden print-copy surface, which
+the existing `request print copy` action reveals; the default gene-page layout
+contains neither a visible duplicate blot nor explanatory caption copy. That
+`<img>` carries `data-iconoplasm-role="canonical-blot"` and `data-gene-symbol`.
+Route and catalog records establish identity and membership only. The raw
+portrait may remain visible in the interactive dossier as subordinate source
+material, but it is never the social image. Visible source-portrait and
+candidate-blot `<img>` elements carry `data-iconoplasm-role="source-portrait"`
+or `"candidate-blot"` plus the same normalized `data-gene-symbol`, so machine
+readers do not have to infer the page's image hierarchy from layout or alt text
+alone.
 
 On any healthy network, the tab-scoped IPD-001 probe may select Bunny's
 byte-equivalent immutable URL for delivery. A failed probe selects first-party
@@ -137,9 +121,9 @@ Published gene portraits and published gene blots are the only two Iconoplasm
 asset classes dedicated under CC0 1.0 Universal. Every returned image envelope
 states `rights`, `license_url`, `usage_url`, `embedding_permitted`,
 `hotlinking_permitted`, `modification_permitted`, `commercial_use_permitted`,
-and `attribution_required` explicitly. The gene page links to `/license`, a
-ready blot's `ImageObject` carries `license` and `usageInfo`, and raw portrait
-and blot responses expose standard HTTP `rel="license"` plus the usage page.
+and `attribution_required` explicitly. The gene page links to `/license`, its
+JSON-LD carries `license`, and raw portrait and blot responses expose standard
+HTTP `rel="license"` plus the usage page.
 Do not broaden that dedication to catalog data, metadata, prose, software,
 prompts, unpublished images, services, or any other Brinedew asset.
 
@@ -233,6 +217,14 @@ every production deploy:
   description, canonical URL, `og:image` and licence, which boots the shared
   app shell in place and writes its own `<title>` into that shell, so the tab
   shows the gene's title from first paint until the card loads;
+- `404.html`, the page the asset layer serves, with a real 404, for any path that
+  has no document, and `clans.html` and `studio.html`, the 200 documents of the
+  two in-app routes. All three say `noindex,follow` and boot the shared app shell
+  in place exactly as a gene document does; none is in the sitemap. A browser
+  that opens an alias or lowercase gene link (`/gene/tp53`) gets the 404 page,
+  which hands over to the app, and the app resolves the symbol client-side. A
+  crawler gets a 404. The home page's own `index,follow` and canonical are
+  untouched;
 - `_redirects`, which sends `/genes` and `/genes/*` to the Archive (`/`) with
   a 301, so old links and search results land on the one public catalog.
 
@@ -242,13 +234,15 @@ not when the catalog object is republished. The asset layer answers every one
 of them before the Worker runs, so a crawler request costs no Worker request
 and reads no KV, D1, Durable Object, Queue or storage object. The containment
 deploy (`scripts/prepare-iconoplasm-schema-transition-config.mjs`) keeps the
-same asset bytes and routes only gene pages into the Worker, so robots,
-sitemap and llms.txt stay identical during a maintenance window.
+same asset bytes and routes only the Worker's own paths into the Worker, so
+gene pages, robots, sitemap and llms.txt stay identical during a maintenance
+window.
 
 The bundle counts toward Cloudflare's 20,000-file limit per Worker version. A
 real build on 2026-10-03 produced 19,535 files (19,023 gene documents, 478
 under `static/` and 34 others, 68 MiB), 465 under the limit, and the build
-refuses a bundle above 20,000. Anything that adds a file per gene or per range
+refuses a bundle above 20,000. (The 404 page and the two route documents add
+three files to that count.) Anything that adds a file per gene or per range
 must show its count against that headroom first. Tests are not assets: the
 Quartz `Static` emitter (`quartz/plugins/emitters/static.ts`) leaves every
 `*.test.*` and `*.spec.*` file under `quartz/static` out of `public/static`,

@@ -3,7 +3,10 @@ import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "nod
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
-import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
+import {
+  iconoplasmGenePageTitle,
+  iconoplasmPageTitle,
+} from "../quartz/static/iconoplasm/page-title.js"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -163,8 +166,8 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 // B-818: this host has one URL convention, clean lowercase paths (a gene page
 // keeps its HGNC symbol's case). Each older shape that something once linked
 // (a store listing, the Quartz nav, a page built for the main site) answers a
-// 301 to where it lives now. The static asset layer answers these before the
-// SPA fallback, so they cost no Worker request; matching is case-sensitive and
+// 301 to where it lives now. The static asset layer answers these before any
+// 404, so they cost no Worker request; matching is case-sensitive and
 // keeps the query string (measured in workerd). The same table rewrites those
 // links inside the Quartz pages below, so a page never links through a redirect.
 const MAIN_SITE_ORIGIN = "https://brinedew.bio"
@@ -214,8 +217,9 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
 }
 
-// B-836: the per-gene document exists for crawlers and link unfurlers. A reader
-// must never see its plain text: paint the site background at once (same theme
+// B-836: a stub document (a per-gene document, or one of the route and
+// not-found stubs below) exists for crawlers and link unfurlers. A reader must
+// never see its plain text: paint the site background at once (same theme
 // rule as the shell: saved choice, else light on this host), keep the body
 // hidden, and start the shell request from <head>. The crawler copy is shown
 // only if the shell cannot be fetched.
@@ -225,7 +229,7 @@ function escapeHtml(value) {
 // writes its own title into the shell it hands over to. The app keeps a title
 // that is already this gene's (isIconoplasmGenePageTitle) and sets the loaded
 // card's name once, so the tab shows one title from first paint to the card.
-const GENE_PAGE_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-theme="dark"]{background:oklch(16% 0.01 45)}body{visibility:hidden}html.icono-stub-failed body{visibility:visible}</style>
+const SHELL_STUB_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-theme="dark"]{background:oklch(16% 0.01 45)}body{visibility:hidden}html.icono-stub-failed body{visibility:visible}</style>
 <script>(function(){try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){var n=document.title,a=html.indexOf("<title>"),b=html.indexOf("</title>");if(a>-1&&b>a)html=html.slice(0,a+7)+n.replace(/&/g,"&amp;").replace(/</g,"&lt;")+html.slice(b);document.open();document.write(html);document.close()}).catch(function(){document.documentElement.classList.add("icono-stub-failed")})})()</script>`
 
 export function iconoplasmGenePageHtml({ symbol, fullName }) {
@@ -262,7 +266,7 @@ export function iconoplasmGenePageHtml({ symbol, fullName }) {
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:domain" content="iconoplasm.brinedew.bio">
 <script type="application/ld+json">${jsonLd}</script>
-${GENE_PAGE_BOOT}
+${SHELL_STUB_BOOT}
 </head>
 <body>
 <main>
@@ -296,6 +300,62 @@ export async function writeIconoplasmGenePages({ outputRoot, publishedGenes = []
     )
   }
   return { genePages: genes.length }
+}
+
+// B-980: this host has no SPA fallback. A path with no document answers a real
+// 404 (not_found_handling = "404-page" serves /404.html), so a crawler never
+// indexes the shell under an address nobody published, and the shell's own
+// "index,follow" and canonical stay the home page's. A browser still gets the
+// app: the stub boots the shell in place, so an alias or lowercase gene link
+// (/gene/tp53) renders the card client-side, as the app resolves the symbol.
+// The two in-app routes that are not genes get a 200 stub of their own. None of
+// the three is in the sitemap, and each says noindex until the shell takes over.
+const ICONOPLASM_STUB_PAGES = Object.freeze([
+  {
+    file: "404.html",
+    title: iconoplasmPageTitle("Page not found"),
+    heading: "Page not found",
+    text: "This address is not a page in the Iconoplasm archive.",
+  },
+  {
+    file: "clans.html",
+    title: iconoplasmPageTitle("Clans"),
+    heading: "Clans",
+    text: "Protein clans in the Iconoplasm archive.",
+  },
+  {
+    file: "studio.html",
+    title: iconoplasmPageTitle("Diagram Studio"),
+    heading: "Diagram Studio",
+    text: "The Iconoplasm diagram studio.",
+  },
+])
+
+export function iconoplasmStubPageHtml({ title, heading, text }) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<meta name="robots" content="noindex,follow">
+${SHELL_STUB_BOOT}
+</head>
+<body>
+<main>
+<h1>${escapeHtml(heading)}</h1>
+<p>${escapeHtml(text)}</p>
+<p><a href="/">Iconoplasm gene character cards</a></p>
+</main>
+</body>
+</html>
+`
+}
+
+export async function writeIconoplasmStubPages({ outputRoot }) {
+  for (const page of ICONOPLASM_STUB_PAGES)
+    await writeFile(path.join(outputRoot, page.file), iconoplasmStubPageHtml(page), "utf8")
+  return { stubPages: ICONOPLASM_STUB_PAGES.length }
 }
 
 async function fetchVerifiedJson(url, expectedSha256 = "") {
@@ -399,10 +459,9 @@ async function inspectTree(directory, bundleRoot) {
 
 // B-812: the Iconoplasm documents are Quartz pages emitted for the main site.
 // On iconoplasm.brinedew.bio their main-site links (About, posts) and
-// app-relative legal links resolved to paths this host does not serve, so the
-// SPA fallback answered with the Iconoplasm homepage. Point each at its real
-// owner (the moved-path table above, exact paths before prefixes), then refuse
-// a build that still links to a local path nobody serves.
+// app-relative legal links resolve to paths this host does not serve. Point each
+// at its real owner (the moved-path table above, exact paths before prefixes),
+// then refuse a build that still links to a local path nobody serves.
 const ICONOPLASM_LINK_REWRITES = Object.freeze([
   ["../../apps/iconoplasm/privacy", "/privacy"],
   ["../../apps/iconoplasm/license", "/license"],
@@ -510,6 +569,7 @@ export async function prepareIconoplasmEdgeAssets({
     publishedGenes,
   })
   await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publishedGenes })
+  await writeIconoplasmStubPages({ outputRoot: resolvedOutput })
   const sourceSha = String(
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
   ).trim()
