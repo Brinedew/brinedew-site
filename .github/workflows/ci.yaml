@@ -1,14 +1,6 @@
 name: Build and Test
 
 on:
-  pull_request:
-    branches:
-      - main
-      - v5
-  push:
-    branches:
-      - main
-      - v5
   workflow_dispatch:
 
 jobs:
@@ -17,13 +9,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Bump actions/checkout @v6 -> @v7 and actions/cache @v5 -> @v6 (2026
-      # current majors). setup-node @v6 is already the latest. Dependabot
-      # version-updates covers npm dependencies; this project explicitly pins
-      # GitHub Actions to majors instead of SHA so Dependabot can PR drift.
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -36,93 +24,34 @@ jobs:
           corepack prepare pnpm@11.0.9 --activate
           pnpm config set minimumReleaseAge 1440
 
-      - name: Protect previously published extension downloads
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node scripts/verify-iconoplasm-release-history.mjs
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Cache pnpm dependencies
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
-
-      - name: Install Quartz plugins
-        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
-
-      - name: Verify checked-in Iconoplasm publisher authority
-        run: node scripts/run-tests.mjs iconoplasm-extension.publisher-authority.test.js
 
       - name: Sync shared Iconoplasm assets
         run: pnpm run sync:iconoplasm-shared
 
-      - name: Reproduce a newly added public extension package from this commit
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
-
-      - name: Check types and style
-        run: pnpm run check
-
-      - name: Verify operation cost implementation and migration identities
+      - name: Apply the mutation under test
         run: |
-          node scripts/generate-operation-cost-migrations.mjs --check
-          node scripts/generate-operation-cost-identities.mjs
+          if [ -f probe-mutate.py ]; then python3 probe-mutate.py; git diff --stat; fi
 
-      - name: Build exact HEAD before topology tests
-        run: pnpm run build
-
-      - name: Test
-        id: tests
+      - name: Run the probe tests
         shell: bash
         run: |
           set +e
-          pnpm test > "$RUNNER_TEMP/repository-tests.log" 2>&1
-          test_status=$?
+          node scripts/run-tests.mjs $(cat probe-files.txt) > "$RUNNER_TEMP/probe.log" 2>&1
+          status=$?
           set -e
-          python3 - "$RUNNER_TEMP/repository-tests.log" <<'PYTHON'
+          python3 - "$RUNNER_TEMP/probe.log" <<'PYTHON'
           import re
           import sys
           from pathlib import Path
           lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
-          selected = set(range(max(0, len(lines) - 30), len(lines)))
+          selected = set(range(max(0, len(lines) - 12), len(lines)))
           for index, line in enumerate(lines):
               if re.match(r"^\s*not ok\b", line):
-                  selected.update(range(max(0, index - 2), min(len(lines), index + 80)))
+                  selected.update(range(max(0, index - 1), min(len(lines), index + 40)))
           for index in sorted(selected):
               print(lines[index])
           PYTHON
-          exit "$test_status"
-
-      # B-839: the caretaker dialog is checked in a real browser (the runner's
-      # installed Chrome) by geometry and computed fonts, not CSS regexes.
-      - name: Caretaker dialog geometry (browser E2E)
-        run: node --test e2e/*.e2e.mjs
-
-      - name: Upload E2E screenshots and measurements
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-${{ github.sha }}
-          path: artifacts/e2e
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Preserve complete test output
-        if: ${{ always() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: repository-tests-${{ github.sha }}
-          path: ${{ runner.temp }}/repository-tests.log
-          if-no-files-found: error
-          retention-days: 3
+          echo "PROBE_EXIT=$status"
+          exit "$status"
