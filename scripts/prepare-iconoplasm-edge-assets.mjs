@@ -21,6 +21,11 @@ const maxAssetFiles = 20_000
 // in the bundle is one of its 20,000 files and public test code, so the build
 // refuses it instead of shipping it.
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/
+// B-932: the site offers one manual-install extension package, the one
+// extension-release.json names. The Quartz Static emitter publishes only that
+// package; the bundle build refuses one that is missing and any other that arrives.
+const EXTENSION_DOWNLOADS = "static/iconoplasm/downloads/"
+const EXTENSION_RELEASE = "static/iconoplasm/extension-release.json"
 const maxAssetBytes = 25 * 1024 * 1024
 
 const iconoplasmCsp = [
@@ -529,6 +534,32 @@ export async function prepareIconoplasmEdgeAssets({
   const testFiles = bundleFiles.filter((file) => TEST_FILE.test(file)).sort()
   if (testFiles.length) {
     throw new Error(`Iconoplasm asset bundle contains test files: ${testFiles.join(", ")}`)
+  }
+  const packages = bundleFiles
+    .filter((file) => file.startsWith(EXTENSION_DOWNLOADS) && file.endsWith(".zip"))
+    .sort()
+  if (packages.length || bundleFiles.includes(EXTENSION_RELEASE)) {
+    let url
+    try {
+      url = JSON.parse(
+        await readFile(path.join(resolvedOutput, EXTENSION_RELEASE), "utf8"),
+      ).chromeDeveloperPackageUrl
+    } catch (error) {
+      throw new Error(`Iconoplasm asset bundle cannot read ${EXTENSION_RELEASE}: ${error.message}`)
+    }
+    const named = `${EXTENSION_DOWNLOADS}${path.posix.basename(String(url))}`
+    if (path.posix.dirname(String(url)) !== `/${path.posix.dirname(named)}`) {
+      throw new Error(`${EXTENSION_RELEASE} names ${url}, which is not in /${EXTENSION_DOWNLOADS}`)
+    }
+    if (!packages.includes(named)) {
+      throw new Error(`${EXTENSION_RELEASE} names ${named}, which the bundle does not hold`)
+    }
+    const unreferenced = packages.filter((file) => file !== named)
+    if (unreferenced.length) {
+      throw new Error(
+        `Iconoplasm asset bundle holds unreferenced extension packages: ${unreferenced.join(", ")}`,
+      )
+    }
   }
   if (report.fileCount > maxAssetFiles) {
     throw new Error(

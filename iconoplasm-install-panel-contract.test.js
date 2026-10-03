@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 import assert from "node:assert/strict"
@@ -54,6 +55,10 @@ test("public release metadata points Chrome developer installs at the current pa
     metadata.chromeDeveloperPackageUrl,
     `/static/iconoplasm/downloads/iconoplasm-extension-v${version}.zip`,
   )
+  assert.ok(
+    existsSync(new URL(`./quartz${metadata.chromeDeveloperPackageUrl}`, import.meta.url)),
+    "the package the metadata names is in the tree",
+  )
   assert.equal(
     metadata.firefoxListingUrl,
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/",
@@ -72,10 +77,32 @@ test("public release metadata points Chrome developer installs at the current pa
   )
 })
 
+// B-932: the site publishes only the package extension-release.json names, so
+// app.js must not carry a version of its own. A literal there is a link to a file
+// the bundle no longer holds, and it is what a visitor gets when the panel opens
+// before the metadata fetch returns or the fetch fails.
+// Failure modes, written before the change:
+// 1. an inline default or a string fallback names a version (0.4.7, 0.4.3);
+// 2. the download button points anywhere but the loaded metadata's package;
+// 3. with no metadata the panel shows a button that goes nowhere.
+test("the install panel links the Chrome package only from the loaded release metadata", async () => {
+  const app = await readFile(appPath, "utf8")
+
+  assert.doesNotMatch(app, /iconoplasm-extension-v\d/, "no versioned package name in app.js")
+  assert.doesNotMatch(app, /\/static\/iconoplasm\/downloads/, "no downloads path in app.js")
+  assert.doesNotMatch(app, /"0\.4\.\d+"/, "no inline version fallback")
+  assert.match(
+    app,
+    /release:\s*\{\s*version:\s*"",\s*chromeDeveloperPackageUrl:\s*"",/,
+    "the inline default names no version and no package",
+  )
+  assert.match(app, /The download link has not loaded/, "the panel says so when it has no package")
+})
+
 test("manual Chromium install steps derive the package name from release metadata", async () => {
   const app = await readFile(appPath, "utf8")
 
-  assert.doesNotMatch(app, /iconoplasm-extension-v0\.4\.2/)
+  assert.doesNotMatch(app, /iconoplasm-extension-v\d/)
   assert.match(app, /function chromeDeveloperPackageName\(url\)/)
   assert.match(app, /Tap the button above to download the extension zip/)
   assert.match(app, /Your browser will save it to your Downloads folder/)
