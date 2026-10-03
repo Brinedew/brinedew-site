@@ -10,9 +10,6 @@ import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifest
 
 const SOURCE_SHA = "a".repeat(64)
 const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
-const GENERATED_BYTES = new TextEncoder().encode("generated-webp-bytes")
-const REFERENCE_SHA_1 = "b".repeat(64)
-const REFERENCE_SHA_2 = "c".repeat(64)
 
 function base64(bytes) {
   return Buffer.from(bytes).toString("base64")
@@ -49,9 +46,6 @@ class FakeAuthoringStatement {
   }
 
   async first() {
-    if (this.sql.includes("FROM icono_portrait_generation_provenance")) {
-      return this.db.generationReceipts.get(String(this.args[0] || "")) || null
-    }
     const row = await this.authority.row()
     if (this.sql.includes("WHERE g.canonical_symbol")) {
       return String(this.args[0] || "").toUpperCase() === row.canonical_symbol ? row : null
@@ -176,22 +170,8 @@ class FakeStatement {
   }
 
   async first() {
-    if (
-      this.sql.includes("FROM iconoplasm_user_emulsion_versions") &&
-      this.sql.includes("public_id = ?")
-    ) {
-      const publicId = String(this.args[0] || "")
-      return this.db.userEmulsionVersions.get(publicId) || null
-    }
     if (this.sql.includes("FROM users") && this.sql.includes("discord_id = ?")) {
       return this.db.users.get(this.args[0]) || null
-    }
-    if (this.sql.includes("FROM users") && this.sql.includes("iconoplasm_emulsion_public_id = ?")) {
-      const publicId = String(this.args[0] || "")
-      for (const row of this.db.users.values()) {
-        if (String(row.iconoplasm_emulsion_public_id || "") === publicId) return row
-      }
-      return null
     }
     if (
       this.sql.includes("FROM icono_user_image_provider_keys") &&
@@ -238,63 +218,11 @@ class FakeStatement {
     }
     if (
       this.sql.includes("FROM icono_candidate_generation_jobs") &&
-      this.sql.includes("generation_request_id = ?")
-    ) {
-      return (
-        Array.from(this.db.candidateGenerationJobs.values()).find(
-          (row) => row.user_id === this.args[0] && row.generation_request_id === this.args[1],
-        ) || null
-      )
-    }
-    if (
-      this.sql.includes("FROM icono_candidate_generation_jobs") &&
       this.sql.includes("WHERE id = ?")
     ) {
       const row = this.db.candidateGenerationJobs.get(this.args[0]) || null
       if (row && this.sql.includes("user_id = ?") && row.user_id !== this.args[1]) return null
       return row
-    }
-    if (this.sql.includes("FROM icono_generation_request_vision_option_rollup")) {
-      return {
-        vision_id: "anima-v1-3001",
-        emulsion_id: "A1-93-19",
-        artist_tag: "@anima",
-        artist_name: "Anima Archive",
-        workflow_id: "A1",
-        workflow_label: "Anima v1",
-        prompt_version: "93",
-        variant_slot: "19",
-        image_count: 8,
-        live_count: 6,
-        score: 5,
-        vote_h_index: 4,
-        preview_assets_json: JSON.stringify([
-          {
-            gene_symbol: "INS",
-            asset_sha256: REFERENCE_SHA_1,
-            is_current: true,
-            preview_rank: 1,
-          },
-          {
-            gene_symbol: "RHO",
-            asset_sha256: REFERENCE_SHA_2,
-            is_current: false,
-            preview_rank: 2,
-          },
-        ]),
-      }
-    }
-    if (
-      this.sql.includes("FROM icono_gene_comments") &&
-      this.sql.includes("COUNT(*)") &&
-      this.sql.includes("user_id = ?")
-    ) {
-      const userId = String(this.args[0] || "")
-      const sinceIso = String(this.args[1] || "")
-      const n = this.db.geneComments.filter(
-        (row) => String(row.user_id || "") === userId && String(row.created_at || "") > sinceIso,
-      ).length
-      return { n }
     }
     if (this.sql.includes("FROM icono_gene_catalog gc")) {
       return this.db.geneContext || defaultGeneContext()
@@ -303,55 +231,6 @@ class FakeStatement {
   }
 
   async all() {
-    if (this.sql.includes("CROSS JOIN icono_portrait_assets AS pa")) {
-      const pairs = JSON.parse(String(this.args[0] || "[]"))
-      this.db.voteImportPayload = {
-        items: pairs.map(([symbol, asset, user]) => ({
-          symbol,
-          asset_sha256: asset,
-          user_id: user,
-        })),
-      }
-      return {
-        results: pairs.map(([symbol, asset]) => ({
-          gene_symbol: symbol,
-          asset_sha256: asset,
-          vision_id: "",
-          candidate_image_id: null,
-        })),
-      }
-    }
-    if (
-      this.sql.includes("FROM iconoplasm_user_emulsion_versions") &&
-      this.sql.includes("user_id = ?")
-    ) {
-      const userId = String(this.args[0] || "")
-      return {
-        results: Array.from(this.db.userEmulsionVersions.values())
-          .filter((row) => row.user_id === userId)
-          .sort((a, b) => Number(b.revision || 0) - Number(a.revision || 0)),
-      }
-    }
-    if (
-      this.sql.includes("FROM iconoplasm_user_emulsion_versions") &&
-      this.sql.includes("revision > 0")
-    ) {
-      return {
-        results: Array.from(this.db.userEmulsionVersions.values()).filter((row) =>
-          String(row.emulsion_text || "").trim(),
-        ),
-      }
-    }
-    if (this.sql.includes("FROM users") && this.sql.includes("iconoplasm_emulsion_revision")) {
-      const revision = Number(this.args[0] || 0) || 0
-      return {
-        results: Array.from(this.db.users.values()).filter(
-          (row) =>
-            Number(row.iconoplasm_emulsion_revision || 0) === revision &&
-            String(row.iconoplasm_emulsion_text || "").trim(),
-        ),
-      }
-    }
     if (this.sql.includes("FROM icono_user_image_provider_keys")) {
       const userId = this.args[0]
       return {
@@ -391,58 +270,10 @@ class FakeStatement {
         }))
       return { results }
     }
-    if (this.sql.includes("FROM icono_gene_catalog gc")) {
-      return {
-        results: [
-          {
-            gene_symbol: "A1BG",
-            catalog_full_name: "Alpha-1-B Glycoprotein",
-            color_hex: "#8fb7c8",
-            tmh: 0,
-            asset_sha256: this.db.publishedAsset?.asset_sha256 || SOURCE_SHA,
-            width: 1024,
-            height: 1280,
-            vision_id: "anima-v1-3001",
-            candidate_image_id: 123,
-          },
-        ],
-      }
-    }
     return { results: [] }
   }
 
   async run() {
-    if (this.db.runFailureSqlFragment && this.sql.includes(String(this.db.runFailureSqlFragment))) {
-      throw new Error(this.db.runFailureMessage || "Synthetic D1 write failure")
-    }
-    if (this.sql.includes("INSERT OR IGNORE INTO iconoplasm_user_emulsion_versions")) {
-      const row = {
-        user_id: this.args[0],
-        username: this.args[1],
-        public_id: this.args[2],
-        revision: this.args[3],
-        emulsion_text: this.args[4],
-        created_at: this.args[5],
-      }
-      if (!this.db.userEmulsionVersions.has(row.public_id)) {
-        this.db.userEmulsionVersions.set(row.public_id, row)
-      }
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO users") && this.sql.includes("iconoplasm_emulsion_text")) {
-      const row = this.db.users.get(this.args[0]) || {
-        discord_id: this.args[0],
-        username: this.args[1],
-        iconoplasm_emulsion_text: "",
-        iconoplasm_emulsion_revision: 0,
-      }
-      row.username = this.args[1]
-      row.iconoplasm_emulsion_text = this.args[4]
-      row.iconoplasm_emulsion_revision = this.args[5]
-      row.iconoplasm_emulsion_public_id = this.args[6]
-      this.db.users.set(row.discord_id, row)
-      return { meta: { changes: 1 } }
-    }
     if (this.sql.includes("INSERT INTO icono_user_image_provider_keys")) {
       const row = {
         user_id: this.args[0],
@@ -454,21 +285,6 @@ class FakeStatement {
         model: this.args[6],
       }
       this.db.providerRows.set(`${row.user_id}|${row.provider_id}`, row)
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_image_edit_prompt_templates")) {
-      const existing = this.db.promptTemplates.get(this.args[0]) || {
-        kind: this.args[0],
-        created_at: "2026-05-16T00:00:00.000Z",
-      }
-      const row = {
-        ...existing,
-        kind: this.args[0],
-        prompt_template: this.args[1],
-        updated_by: this.args[2],
-        updated_at: "2026-05-16T00:00:01.000Z",
-      }
-      this.db.promptTemplates.set(row.kind, row)
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_image_edit_jobs")) {
@@ -510,14 +326,6 @@ class FakeStatement {
         result_bytes: this.args[7],
         completed_at: "2026-05-16T00:00:01.000Z",
       })
-      return { meta: { changes: 1 } }
-    }
-    if (
-      this.sql.includes("UPDATE icono_image_edit_jobs") &&
-      this.sql.includes("status = 'failed'")
-    ) {
-      const row = this.db.jobs.get(this.args[1])
-      Object.assign(row, { status: "failed", error: this.args[0] })
       return { meta: { changes: 1 } }
     }
     if (this.sql.includes("INSERT INTO icono_candidate_generation_jobs")) {
@@ -584,46 +392,6 @@ class FakeStatement {
       this.db.candidateGenerationJobs.set(row.id, row)
       return { meta: { changes: 1 } }
     }
-    if (this.sql.includes("INSERT INTO icono_portrait_generation_provenance")) {
-      const fields = [
-        "generation_request_id",
-        "generation_attempt_id",
-        "gene_symbol",
-        "asset_sha256",
-        "source_gene_id",
-        "source_manifestation_id",
-        "source_manifestation_revision_id",
-        "source_manifestation_body_sha256",
-        "source_manifestation_derivative_id",
-        "source_manifestation_derivative_sha256",
-        "source_manifestation_derivative_tags_sha256",
-        "source_manifestation_derivative_tags_bytes",
-        "source_manifestation_derivative_fields_sha256",
-        "source_manifestation_derivative_fields_bytes",
-        "source_manifestation_derivative_recipe_id",
-        "source_manifestation_derivative_recipe_version",
-        "source_manifestation_derivative_provider_id",
-        "source_manifestation_derivative_model_id",
-        "source_manifestation_derivative_tagger_config_sha256",
-        "source_canonical_selection_id",
-        "source_canonical_head_version",
-        "source_gene_revision",
-        "source_snapshot_sha256",
-        "provider_id",
-        "model_id",
-        "prompt_sha256",
-        "generation_config_sha256",
-        "sample_label",
-        "sample_number",
-        "sample_text_sha256",
-      ]
-      const receipt = Object.fromEntries(fields.map((field, index) => [field, this.args[index]]))
-      if (this.db.generationReceipts.has(receipt.generation_request_id)) {
-        return { meta: { changes: 0 } }
-      }
-      this.db.generationReceipts.set(receipt.generation_request_id, receipt)
-      return { meta: { changes: 1 } }
-    }
     if (
       this.sql.includes("UPDATE icono_candidate_generation_jobs") &&
       this.sql.includes("status = 'succeeded'")
@@ -641,148 +409,6 @@ class FakeStatement {
         result_bytes: this.args[7],
         completed_at: "2026-05-16T00:00:01.000Z",
       })
-      return { meta: { changes: 1 } }
-    }
-    if (
-      this.sql.includes("UPDATE icono_candidate_generation_jobs") &&
-      this.sql.includes("status = 'failed'")
-    ) {
-      const row = this.db.candidateGenerationJobs.get(this.args[1])
-      Object.assign(row, { status: "failed", error: this.args[0] })
-      return { meta: { changes: 1 } }
-    }
-    if (
-      this.sql.includes("UPDATE icono_candidate_generation_jobs") &&
-      this.sql.includes("published_at")
-    ) {
-      const row = this.db.candidateGenerationJobs.get(this.args[0])
-      row.published_at = "2026-05-16T00:00:02.000Z"
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("UPDATE icono_image_edit_jobs") && this.sql.includes("published_at")) {
-      const row = this.db.jobs.get(this.args[0])
-      row.published_at = "2026-05-16T00:00:02.000Z"
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_portrait_assets")) {
-      const isImageEdit = this.sql.includes("'image-edit'")
-      this.db.publishedAsset = {
-        gene_symbol: this.args[0],
-        asset_sha256: this.args[1],
-        r2_key_full: this.args[2],
-        r2_key_medium: this.args[3],
-        r2_key_thumb: this.args[4],
-        vision_id: this.args[9],
-        emulsion_id: this.args[10] ?? null,
-        sample_label: isImageEdit
-          ? (this.args[11] ?? null)
-          : this.sql.includes("'image-gen'")
-            ? (this.args[11] ?? null)
-            : null,
-        sample_number: isImageEdit
-          ? (this.args[12] ?? null)
-          : this.sql.includes("'image-gen'")
-            ? (this.args[12] ?? null)
-            : null,
-        sample_text_hash: isImageEdit
-          ? (this.args[13] ?? null)
-          : this.sql.includes("'image-gen'")
-            ? (this.args[13] ?? null)
-            : null,
-        created_by: isImageEdit ? this.args[this.args.length - 1] : this.args[14],
-      }
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_publish_events")) {
-      const imageEdit = this.sql.includes("'edit_candidate'")
-      const event = imageEdit
-        ? {
-            gene_symbol: this.args[0],
-            to_asset_sha256: this.args[2],
-            actor: this.args[3],
-            reason: this.args[4],
-          }
-        : {
-            gene_symbol: this.args[0],
-            to_asset_sha256: this.args[1],
-            actor: this.args[2],
-            reason: this.args[3],
-          }
-      const duplicate = this.db.publishEvents.some(
-        (existing) =>
-          existing.gene_symbol === event.gene_symbol && existing.reason === event.reason,
-      )
-      if (duplicate) return { meta: { changes: 0 } }
-      this.db.publishEvent = event
-      this.db.publishEvents.push(event)
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_image_votes")) {
-      this.db.voteProjectionRows.push({
-        user_id: this.args[5],
-        vote_value: this.args[6],
-      })
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_vote_events")) {
-      this.db.voteEvents.push({
-        user_id: this.args[4],
-        vote_value: this.args[5],
-      })
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.trim().startsWith("DELETE FROM icono_image_votes")) {
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("INSERT INTO icono_gene_comments")) {
-      const id = ++this.db.geneCommentsLastId
-      this.db.geneComments.push({
-        id,
-        gene_symbol: this.args[0],
-        user_id: this.args[1],
-        username: this.args[2],
-        avatar_url: this.args[3],
-        body: this.args[4],
-        status: "visible",
-        created_at: new Date().toISOString(),
-        updated_at: "",
-      })
-      return { meta: { changes: 1, last_row_id: id } }
-    }
-    if (
-      this.sql.includes("UPDATE icono_gene_comments") &&
-      this.sql.includes("status = 'deleted'")
-    ) {
-      // Soft delete: SET status='deleted', updated_at=? WHERE id=? AND user_id=? AND status='visible'
-      const updatedAt = this.args[0]
-      const commentId = Number(this.args[1] || 0)
-      const userId = String(this.args[2] || "")
-      const row = this.db.geneComments.find(
-        (r) =>
-          Number(r.id) === commentId &&
-          String(r.user_id || "") === userId &&
-          String(r.status || "") === "visible",
-      )
-      if (!row) return { meta: { changes: 0 } }
-      row.status = "deleted"
-      row.updated_at = updatedAt
-      return { meta: { changes: 1 } }
-    }
-    if (this.sql.includes("UPDATE icono_gene_comments") && this.sql.includes("SET body = ?")) {
-      // Edit: SET body=?, updated_at=? WHERE id=? AND user_id=? AND gene_symbol=? AND status='visible'
-      const newBody = this.args[0]
-      const updatedAt = this.args[1]
-      const commentId = Number(this.args[2] || 0)
-      const userId = String(this.args[3] || "")
-      const row = this.db.geneComments.find(
-        (r) =>
-          Number(r.id) === commentId &&
-          String(r.user_id || "") === userId &&
-          String(r.status || "") === "visible",
-      )
-      if (!row) return { meta: { changes: 0 } }
-      row.body = newBody
-      row.updated_at = updatedAt
       return { meta: { changes: 1 } }
     }
     return { meta: { changes: 0 } }
@@ -822,11 +448,6 @@ class FakeDb {
   }
 
   async batch(statements) {
-    if (
-      this.voteImportFailure &&
-      statements.some((statement) => statement.sql.includes("INSERT INTO icono_image_votes"))
-    )
-      throw new Error(this.voteImportFailure)
     const results = []
     for (const statement of statements)
       results.push(
@@ -1504,12 +1125,6 @@ function fakeOpenAiFetch(fetchCalls, env) {
         headers: { "Content-Type": "application/json" },
       })
     }
-    if (url === "https://api.openai.com/v1/images/generations") {
-      return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
     if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
     if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
     throw new Error(`Unexpected fetch ${url}`)
@@ -1810,9 +1425,6 @@ function recordingProviderFetch(env, recorded) {
         status: 200,
         headers: { "Content-Type": "image/webp" },
       })
-    }
-    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
-      return new Response(EDITED_BYTES, { status: 200, headers: { "Content-Type": "image/webp" } })
     }
     if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
     if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })

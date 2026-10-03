@@ -77,7 +77,6 @@ function fakeClock(startIso = "2026-10-03T14:00:00.000Z") {
         const due = [...timers.entries()]
           .filter(([, timer]) => timer.at <= target)
           .sort((a, b) => a[1].at - b[1].at)[0]
-        if (!due) break
         timers.delete(due[0])
         now = Math.max(now, due[1].at)
         due[1].callback()
