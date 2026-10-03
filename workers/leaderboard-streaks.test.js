@@ -348,14 +348,11 @@ test("L4: after every kind of writer, the board is still the join", async () => 
     await finish("new1", today, true) // its first game: a stats row is inserted
     await check("a first game")
 
-    // Account erasure (brinedew-account-identity.js).
-    await db
-      .prepare(
-        `UPDATE users SET username = 'erased', email = NULL, avatar_url = NULL, tier = 'registered',
-           premium_until = NULL, leaderboard_opt_in = 0, updated_at = 1 WHERE discord_id = ?`,
-      )
-      .bind("a3")
-      .run()
+    // Account erasure (workers/iconoplasm/account-erasure, B-987): the person's stats row goes
+    // first (the trigger on `stats` takes the board row with it), the `users` row last
+    // (brinedew-account-identity.js).
+    await db.prepare("DELETE FROM stats WHERE user_id = ?").bind("a3").run()
+    await db.prepare("DELETE FROM users WHERE discord_id = ?").bind("a3").run()
     await check("an erased account")
 
     // The one-time import of a browser's stats (stats.js) is an insert with a streak of its own.
