@@ -31021,8 +31021,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           vote_value: voteValue,
         })
       }
-      // One Worker invocation allows 50 D1 queries on the free plan; a request
-      // past the bounds is refused before anything is written.
+      // The bounds keep one import to 32 D1 calls (a batch is one call), inside
+      // the 50 the D1 limits page lists for the free plan; vote-guards.js
+      // records the measured limit. A request past the bounds is refused
+      // before anything is written.
       const boundsError = voteImportBoundsError({
         items: items.length,
         genes: new Set(valid.map((item) => item.symbol)).size,
