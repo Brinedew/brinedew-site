@@ -41,9 +41,10 @@ need distinct output directories when they target the same browser.
    same tag/commit; it cannot move the tag. Both workflows dispatch from this tag
    with the same expected SHA, never from a moving `main` branch.
 3. The shared preparation workflow waits for successful CI on that exact commit.
-   CI rejects changes/deletions to previously published downloads and reproduces
-   any newly added Chrome package from the committed source. Website deployment
-   waits for the same CI result before exposing the download.
+   CI rejects any change to the bytes of a committed download, rejects adding any
+   version but the newly authorized one, and reproduces that new Chrome package
+   from the committed source. Website deployment waits for the same CI result
+   before exposing the download.
 4. Preparation builds Firefox, Edge and Firefox reviewer source once. It verifies
    the reviewer rebuild and compares every Chrome payload file against the
    GUI-approved ZIP. ZIP timestamps may differ; uploaded Chrome bytes are the
@@ -64,12 +65,35 @@ disables repository immutability, the GUI refuses dispatch and CI's postconditio
 refuses store consumption of a mutable release. Store jobs do not receive an
 administration token merely to read that admin-only setting.
 
+## What the public site publishes
+
+The site offers one manual-install Chrome download: the package that
+`quartz/static/iconoplasm/extension-release.json` names in
+`chromeDeveloperPackageUrl`. The Quartz `Static` emitter publishes only that
+package from `quartz/static/iconoplasm/downloads/`, so the Iconoplasm asset
+bundle and the main site each carry one zip. The bundle build
+(`scripts/prepare-iconoplasm-edge-assets.mjs`) refuses a bundle that lacks the
+named package or holds any other, and the build fails when the metadata cannot
+name a package that is in the tree. The install panel in
+`quartz/static/iconoplasm/app.js` carries no version of its own: it links the
+package only after the metadata has loaded, and says the link has not loaded
+when it has not.
+
+Every other version lives in git history and, for versions released through the
+immutable path, in the GitHub release `iconoplasm-v<version>`. Removing a
+superseded package from the tree is allowed; changing the bytes of a committed
+one is not (`scripts/verify-iconoplasm-release-history.mjs`). The compatibility
+floor in `publisher-release.json` is an API window, not a download: no public
+file backs it.
+
 ## Verification and boundaries
 
 Tests cover source/tag mismatch, changed bytes under one version, interrupted
 drafts, failed upload digests, corrupt downloads, missing assets, development
-packages, public-file replacement/deletion, and exact reviewer reproduction.
-Local mocked GitHub tests do not certify live store submission.
+packages, public-file replacement, removal of a superseded package, a retired
+version added back, an unreferenced package reaching the bundle, and exact
+reviewer reproduction. Local mocked GitHub tests do not certify live store
+submission.
 
 Published ZIPs are never replaced. Immutable releases certify only the releases
 made through this path. No earlier version may be republished from current

@@ -9,18 +9,20 @@ const requested = process.env.BASE_SHA || ""
 if (requested && !/^[a-f0-9]{40}$/.test(requested))
   throw new Error("Invalid release-history base SHA")
 const base = requested && !/^0+$/.test(requested) ? requested : git(["rev-parse", "HEAD^"])
+// The bytes behind a published version never change. Removing a superseded public
+// copy is allowed (B-932): the immutable GitHub release and git history keep it,
+// and the site publishes only the package extension-release.json names.
 const changes = git([
   "diff",
   "--name-status",
   "--no-renames",
-  "--diff-filter=MDT",
+  "--diff-filter=MT",
   base,
   "HEAD",
   "--",
   "quartz/static/iconoplasm/downloads/*.zip",
 ])
-if (changes)
-  throw new Error(`Published extension downloads must never be modified or deleted:\n${changes}`)
+if (changes) throw new Error(`Published extension downloads must never be modified:\n${changes}`)
 if (process.argv.includes("--verify-new-package")) {
   const added = git([
     "diff",
@@ -58,4 +60,4 @@ if (process.argv.includes("--verify-new-package")) {
     }
   }
 }
-console.log("Published extension downloads are unchanged; new versions must use new files.")
+console.log("No published extension download was modified; new versions must use new files.")

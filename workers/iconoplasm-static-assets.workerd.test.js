@@ -21,12 +21,21 @@ async function makeAssetFixture() {
   await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
   await mkdir(path.join(sourceRoot, "static"), { recursive: true })
   // What the Quartz Static emitter publishes: the modules without their tests
-  // (B-905). The bundle build refuses a test file.
-  await cp(
-    path.join(repoRoot, "quartz", "static", "iconoplasm"),
-    path.join(sourceRoot, "static", "iconoplasm"),
-    { recursive: true, filter: (source) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(source) },
+  // (B-905) and the one extension package the release metadata names (B-932).
+  // The bundle build refuses a test file and an unreferenced package.
+  const staticRoot = path.join(repoRoot, "quartz", "static", "iconoplasm")
+  const release = JSON.parse(
+    await readFile(path.join(staticRoot, "extension-release.json"), "utf8"),
   )
+  const packageName = path.basename(release.chromeDeveloperPackageUrl)
+  await cp(staticRoot, path.join(sourceRoot, "static", "iconoplasm"), {
+    recursive: true,
+    filter: (source) =>
+      !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(source) &&
+      !(
+        path.basename(path.dirname(source)) === "downloads" && path.basename(source) !== packageName
+      ),
+  })
   const shell = `<!doctype html><script type="module" src="/static/iconoplasm/app.js"></script>`
   for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
     await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)

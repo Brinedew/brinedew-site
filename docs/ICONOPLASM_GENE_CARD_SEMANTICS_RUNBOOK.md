@@ -246,14 +246,17 @@ same asset bytes and routes only gene pages into the Worker, so robots,
 sitemap and llms.txt stay identical during a maintenance window.
 
 The bundle counts toward Cloudflare's 20,000-file limit per Worker version. A
-local build of `main` on 2026-10-03 shipped 19,559 files (19,023 gene documents
-and 502 under `static/`), 441 under the limit, and the build refuses a bundle
-above 20,000. Anything that adds a file per gene or per range must show its
-count against that headroom first. Tests are not assets: the Quartz `Static`
-emitter (`quartz/plugins/emitters/static.ts`) leaves every `*.test.*` and
-`*.spec.*` file under `quartz/static` out of `public/static`, which both this
-bundle and the main site are copied from, and the bundle build refuses one that
-gets through.
+real build on 2026-10-03 produced 19,535 files (19,023 gene documents, 478
+under `static/` and 34 others, 68 MiB), 465 under the limit, and the build
+refuses a bundle above 20,000. Anything that adds a file per gene or per range
+must show its count against that headroom first. Tests are not assets: the
+Quartz `Static` emitter (`quartz/plugins/emitters/static.ts`) leaves every
+`*.test.*` and `*.spec.*` file under `quartz/static` out of `public/static`,
+which both this bundle and the main site are copied from, and the bundle build
+refuses one that gets through. The same holds for old extension packages: the
+site publishes the one package `extension-release.json` names, and the bundle
+build refuses a missing one and any other (see
+`docs/ICONOPLASM_RELEASE_INTEGRITY.md`).
 
 ## Workstation-materialized gene blots
 

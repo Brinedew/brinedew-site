@@ -196,9 +196,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     installed: false,
     version: "",
     installTab: "",
+    // extension-release.json names the one package the site publishes. Until it
+    // loads there is no package to link, and nothing here may name one.
     release: {
-      version: "0.4.7",
-      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.4.7.zip",
+      version: "",
+      chromeDeveloperPackageUrl: "",
       firefoxListingUrl: ICONO_EXTENSION_FIREFOX_LISTING_URL,
       edgeListingUrl: ICONO_EXTENSION_EDGE_LISTING_URL,
       edgeListingStatus: "live",
@@ -3220,8 +3222,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         renderHomeInstallCta()
       })
       .catch(function () {
-        // The inline fallback above keeps install instructions usable if the static
-        // metadata file misses a deploy or is cached badly.
+        // The Chrome and Brave steps say the download link has not loaded, and the
+        // next home render asks again.
+        iconoInstallState.releaseLoaded = false
       })
   }
 
@@ -3302,22 +3305,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function chromeDeveloperPackageName(url) {
     var value = String(url || "").trim()
     var path = value.split("?")[0].split("#")[0]
-    var lastSegment = path.slice(path.lastIndexOf("/") + 1)
-    return (
-      lastSegment ||
-      "iconoplasm-extension-v" + String(iconoInstallState.release.version || "0.4.3") + ".zip"
-    )
+    return path.slice(path.lastIndexOf("/") + 1) || "iconoplasm-extension.zip"
   }
 
   function buildInstallBrowserPanels(browser, faqUrl) {
     var release = iconoInstallState.release || {}
-    var chromePackageUrl =
-      String(release.chromeDeveloperPackageUrl || "").trim() ||
-      "/static/iconoplasm/downloads/iconoplasm-extension-v" +
-        String(release.version || "0.4.3").trim() +
-        ".zip"
+    var chromePackageUrl = String(release.chromeDeveloperPackageUrl || "").trim()
     var chromePackageName = chromeDeveloperPackageName(chromePackageUrl)
     var chromePackageBaseName = chromePackageName.replace(/\.zip$/i, "")
+    // The button exists only once the release metadata has named the package.
+    var chromeDownloadStep = chromePackageUrl
+      ? {
+          text: "Tap the button above to download the extension zip. Your browser will save it to your Downloads folder:",
+          action: {
+            href: chromePackageUrl,
+            label: "Download extension file",
+            subtle: false,
+          },
+        }
+      : "The download link has not loaded. Reload this page to get it."
     var firefoxListingUrl =
       String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
     var edgeListingUrl =
@@ -3331,14 +3337,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
         managerUrl: "chrome://extensions",
         steps: [
-          {
-            text: "Tap the button above to download the extension zip. Your browser will save it to your Downloads folder:",
-            action: {
-              href: chromePackageUrl,
-              label: "Download extension file",
-              subtle: false,
-            },
-          },
+          chromeDownloadStep,
           'In your Downloads folder, extract "' + chromePackageName + '".',
           "In Chrome, click the address bar, type chrome://extensions, and press Enter.",
           'In the top-right corner of chrome://extensions, click the "Developer mode" switch so it is on.',
@@ -3390,14 +3389,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
         managerUrl: "brave://extensions",
         steps: [
-          {
-            text: "Tap the button above to download the extension zip. Your browser will save it to your Downloads folder:",
-            action: {
-              href: chromePackageUrl,
-              label: "Download extension file",
-              subtle: false,
-            },
-          },
+          chromeDownloadStep,
           'In your Downloads folder, extract "' + chromePackageName + '".',
           "In Brave, click the address bar, type brave://extensions, and press Enter.",
           'In the top-right corner of brave://extensions, click the "Developer mode" switch so it is on.',
