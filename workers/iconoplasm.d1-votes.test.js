@@ -2044,8 +2044,8 @@ test("30: the request picker lists at most 120 styles, four medium previews each
   const db = new SqliteD1()
   const previews = JSON.stringify(
     [1, 2, 3, 4, 5, 6].map((rank) => ({
-      gene_symbol: "INS",
-      asset_sha256: sha("a"),
+      gene_symbol: `GENE${rank}`,
+      asset_sha256: sha(String(rank)),
       is_current: rank === 1,
       preview_rank: rank,
     })),
@@ -2074,7 +2074,7 @@ test("30: the request picker lists at most 120 styles, four medium previews each
   assert.ok(options.length > 0 && options.length <= 120, `${options.length} styles in one answer`)
   assert.doesNotMatch(JSON.stringify(signedIn.payload), /secretartist|secret artist/i)
   for (const option of options) {
-    assert.ok(option.preview_assets.length <= 4, "a card shows at most four previews")
+    assert.equal(option.preview_assets.length, 4, "a card shows four of its six previews")
     for (const preview of option.preview_assets) {
       assert.match(String(preview.medium_url || ""), /medium\.webp$/)
       assert.equal("thumb_url" in preview, false)
