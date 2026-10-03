@@ -119,6 +119,96 @@ test(
   },
 )
 
+// B-980: an address with no document answers a real 404, never the shell as a
+// 200 that a crawler can index. Ways this can fail:
+//  1. /gene/<unpublished> or another unknown path answers 200 with the home page's
+//     "index,follow" robots meta and canonical "/" (measured live on 2026-10-03:
+//     /gene/NOTAREALGENE1 answered exactly that).
+//  2. The 404 reaches the stateful Worker, a metered request per probe.
+//  3. A browser opening an alias or lowercase gene link (/gene/tp53) no longer
+//     gets the app: the 404 page must boot the shell in place, as a gene document does.
+//  4. A published gene's document, the home page or an in-app route (/clans,
+//     /studio) turns into a 404 or gains noindex.
+// Asked both ways a crawler and a browser ask (no Fetch metadata, then a navigation).
+test(
+  "an address with no document answers a real 404 that still boots the app",
+  { timeout: 30_000 },
+  async () => {
+    const { temporaryRoot, outputRoot } = await makeAssetFixture()
+    let runtime
+    try {
+      const config = parseToml(
+        await readFile(
+          path.join(
+            repoRoot,
+            "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          ),
+          "utf8",
+        ),
+      )
+      runtime = new Miniflare(
+        convertV4MiniflareOptions({
+          name: "iconoplasm-not-found-test",
+          modules: true,
+          script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+          compatibilityDate: "2026-08-01",
+          assets: {
+            directory: outputRoot,
+            run_worker_first: config.assets.run_worker_first,
+            routerConfig: { has_user_worker: true },
+            assetConfig: { not_found_handling: config.assets.not_found_handling },
+          },
+        }),
+      )
+      const noindex = /<meta name="robots" content="noindex,follow">/
+      const boots = /fetch\("\/",\{credentials:"same-origin"\}\)/
+      const asked = [
+        {},
+        { "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document", Accept: "text/html" },
+      ]
+      for (const headers of asked) {
+        const label = Object.keys(headers).length ? "navigation" : "crawler"
+        for (const pathname of [
+          "/gene/NOTAREALGENE1",
+          "/gene/tp53",
+          "/gene/",
+          "/gene",
+          "/search",
+          "/no/such/page",
+        ]) {
+          const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+            headers,
+          })
+          const html = await response.text()
+          // 404 is not 599, so this also proves the Worker was not invoked.
+          assert.equal(response.status, 404, `${label} ${pathname}`)
+          assert.match(html, noindex, `${label} ${pathname}`)
+          assert.doesNotMatch(html, /rel="canonical"/, `${label} ${pathname}`)
+          assert.match(html, boots, `${label} ${pathname} must still boot the app`)
+        }
+        const gene = await runtime.dispatchFetch("https://iconoplasm.test/gene/TP53", { headers })
+        const geneHtml = await gene.text()
+        assert.equal(gene.status, 200, label)
+        assert.match(geneHtml, /<link rel="canonical" href="[^"]*\/gene\/TP53">/, label)
+        assert.doesNotMatch(geneHtml, /noindex/, label)
+        for (const pathname of ["/clans", "/studio"]) {
+          const route = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+            headers,
+          })
+          assert.equal(route.status, 200, `${label} ${pathname}`)
+          assert.match(await route.text(), boots, `${label} ${pathname} boots the app`)
+        }
+        const home = await runtime.dispatchFetch("https://iconoplasm.test/", { headers })
+        assert.equal(home.status, 200, label)
+        assert.doesNotMatch(await home.text(), /noindex/, `${label} the home page stays indexable`)
+      }
+    } finally {
+      await runtime?.dispose()
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
+  },
+)
+
 test(
   "real workerd preparation topology is exactly the retained pre-cutover route contract",
   { timeout: 30_000 },
@@ -164,12 +254,17 @@ test(
         })
         assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
       }
-      for (const pathname of ["/search?q=TP53", "/gene/TP53", "/api/auth/me"])
+      for (const pathname of ["/search?q=TP53", "/api/auth/me"])
         assert.equal(
           (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
           599,
           pathname,
         )
+      // The retained bytes hold the per-gene documents, so a containment deploy
+      // serves a gene page from the asset layer at no Worker request.
+      const genePage = await runtime.dispatchFetch("https://iconoplasm.test/gene/TP53")
+      assert.equal(genePage.status, 200)
+      assert.match(await genePage.text(), /<link rel="canonical" href="[^"]*\/gene\/TP53">/)
     } finally {
       await runtime?.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
@@ -487,8 +582,7 @@ test(
               redirect: "manual",
             })
             await response.text()
-            if (topology === "production" || pathname !== "/gene/TP53")
-              assert.equal(response.status, 200, `${topology} ${pathname}`)
+            assert.equal(response.status, 200, `${topology} ${pathname}`)
           }
           for (const pathname of ["/api/auth/me", "/blot/TP53.webp"]) {
             const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {

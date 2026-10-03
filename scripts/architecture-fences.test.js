@@ -476,7 +476,6 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
   )
   assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
   assert.match(runtime, /FROM icono_published_gene_routes/)
-  assert.match(runtime, /source: "published_gene_route_d1"/)
   assert.match(runtime, /ICONOPLASM PUBLICATION \(B-898\)\. Two published objects/)
   assert.match(runtime, /export async function publishIconoplasmGeneStableObject\(/)
 

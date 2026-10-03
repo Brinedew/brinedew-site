@@ -34,12 +34,15 @@ routes = [{ pattern = "iconoplasm.brinedew.bio/*", zone_name = "brinedew.bio" }]
 
 [assets]
 directory = "./public-iconoplasm-edge"
-not_found_handling = "single-page-application"
+# A path with no document answers /404.html with a real 404 (B-980). The 404 page
+# boots the app shell in place, so a browser still reaches the app on an alias or
+# lowercase gene link, while a crawler gets a 404 it will not index.
+not_found_handling = "404-page"
 run_worker_first = [
   "/api/*",
   "/blot/*",
   # The public resolver hands out immutable_url = /blots/v1/<key>. Without this
-  # entry the SPA fallback answered it with the HTML shell (200 text/html).
+  # entry the asset layer would answer it with the 404 page.
   "/blots/*",
   "/portraits/*",
   "/admin*",

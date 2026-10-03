@@ -2,7 +2,6 @@ import baseRuntime, {
   GameSession,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
-  serveIconoplasmReaderRecoveryGenePage,
   applySecurityHeaders,
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import {
@@ -18,18 +17,6 @@ export { GameSession, IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate, Iconoplas
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const READER_RECOVERY_MODE = "reader-recovery"
-
-function geneSymbolFromPath(pathname) {
-  const match = /^\/gene\/([^/?#]+)\/?$/.exec(String(pathname || ""))
-  if (!match) return ""
-  try {
-    return decodeURIComponent(match[1]).trim().toUpperCase()
-  } catch {
-    return String(match[1] || "")
-      .trim()
-      .toUpperCase()
-  }
-}
 
 function readerRecoveryEnabled(env) {
   return (
@@ -52,14 +39,13 @@ function readerRecoveryResponse(response) {
 async function serveReaderRecoveryRoute(request, env, ctx, url) {
   if (url.hostname !== ICONOPLASM_HOST || !readerRecoveryEnabled(env)) return null
   if (request.method !== "GET" && request.method !== "HEAD") return null
-  const genePage = Boolean(geneSymbolFromPath(url.pathname))
   const geneDetail = /^\/api\/iconoplasm\/site\/genes\/[^/]+$/.test(url.pathname)
   const portraitMatch =
     /^\/portraits\/v1\/([a-f0-9]{2})\/([a-f0-9]{64})\/(?:full|medium|thumb)\.webp$/.exec(
       url.pathname,
     )
   const portrait = portraitMatch && portraitMatch[1] === portraitMatch[2].slice(0, 2)
-  if (!genePage && !geneDetail && !portrait) return null
+  if (!geneDetail && !portrait) return null
 
   const rateLimit = await enforceIconoplasmRateLimit(request, env)
   if (rateLimit.response) return readerRecoveryResponse(rateLimit.response)
@@ -71,15 +57,6 @@ async function serveReaderRecoveryRoute(request, env, ctx, url) {
     return readerRecoveryResponse(
       withIconoplasmRateLimitHeaders(
         await handlePublishedImageAssetRoute(request, env, ctx, url.pathname),
-        rateLimit.headers,
-      ),
-    )
-  }
-
-  if (genePage) {
-    return readerRecoveryResponse(
-      withIconoplasmRateLimitHeaders(
-        await serveIconoplasmReaderRecoveryGenePage(request, env, ctx),
         rateLimit.headers,
       ),
     )
