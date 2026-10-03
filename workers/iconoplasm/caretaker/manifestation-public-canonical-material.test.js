@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
+import { hydratePublicCanonicalGeneRecords } from "../../iconoplasm-public-canonical-runtime.js"
 import {
   encryptManifestationProse,
   sha256Hex,
 } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { composeStableGeneObject } from "../../lib/iconoplasm-stable-gene-object.js"
 import { encryptManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import {
   PublicCanonicalMaterialError,
@@ -344,7 +346,46 @@ function closeFixture(value) {
   value.primaryRaw.close()
 }
 
-test("public canonical material exact-reads encrypted prose and compound Tags without secrets", async () => {
+// Every string a reader of the public object could see, keys included.
+function everyString(value, found = []) {
+  if (typeof value === "string") found.push(value)
+  else if (Array.isArray(value)) for (const entry of value) everyString(entry, found)
+  else if (value && typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) {
+      found.push(key)
+      everyString(entry, found)
+    }
+  }
+  return found
+}
+
+// The fixture's Tags are `dense chromatin, guarded checkpoint` with the fields
+// {posture: "guarded", texture: ["dense", "quiet"]}. None of these words may
+// appear anywhere in anything published, as a value or as a key.
+function assertNoTagContent(published, fixtureTags) {
+  const needles = [
+    fixtureTags.tags_text,
+    ...fixtureTags.tags_text.split(",").map((tag) => tag.trim()),
+    "chromatin",
+    "checkpoint",
+    "guarded",
+    "dense",
+    "quiet",
+    "tags_text",
+    "fields_json",
+    "accepted_tags",
+  ]
+  const strings = everyString(published)
+  for (const needle of needles) {
+    assert.equal(
+      strings.some((text) => text.includes(needle)),
+      false,
+      `the published object must not contain "${needle}"`,
+    )
+  }
+}
+
+test("public canonical material exact-reads the encrypted prose and never touches the Tags body", async () => {
   const value = await fixture()
   const storage = installStorageFetch(value.objects)
   try {
@@ -355,11 +396,10 @@ test("public canonical material exact-reads encrypted prose and compound Tags wi
       canonicalSymbol: "tp53",
     })
     assert.equal(material.canonical.prose, "The exact public canonical manifestation.")
-    assert.equal(material.accepted_tags_derivative.tags_text, value.preparedTags.tags_text)
-    assert.deepEqual(material.accepted_tags_derivative.fields_json, value.preparedTags.fields_json)
     assert.equal(material.canonical.body_sha256, value.proseEncrypted.body_sha256)
-    assert.equal(material.accepted_tags_derivative.body_sha256, value.tagsEncrypted.body_sha256)
-    assert.equal(storage.reads(), 2)
+    assert.equal("accepted_tags_derivative" in material, false)
+    assert.equal(storage.reads(), 1, "only the prose object is read; the Tags object never is")
+    assertNoTagContent(material, value.preparedTags)
     assert.equal(JSON.stringify(material).includes("object_key"), false)
     assert.equal(JSON.stringify(material).includes("wrapped_dek"), false)
     assert.equal(JSON.stringify(material).includes("ciphertext"), false)
@@ -368,6 +408,51 @@ test("public canonical material exact-reads encrypted prose and compound Tags wi
     closeFixture(value)
   }
 })
+
+// B-859: the caretaker panel promises "Tags always stay private". This runs the
+// whole publication path against the real schemas: authoring D1 and the private
+// object zone -> public material -> hydration -> the composed stable object
+// that is written to genes/v3/<SYMBOL>.json. The gene has an accepted Tags
+// derivative; the object it publishes must not carry a trace of it.
+for (const visible of [false, true]) {
+  test(`the stable object of a gene with accepted Tags publishes no Tags (prose shown: ${visible})`, async () => {
+    const value = await fixture()
+    const storage = installStorageFetch(value.objects)
+    try {
+      if (visible) {
+        value.authoringRaw.exec("UPDATE icono_manifestations SET public_page_visible = 1")
+        value.primaryRaw.exec("DROP TRIGGER icono_projection_epoch_guard_update")
+        value.primaryRaw.exec(
+          "UPDATE icono_manifestation_canonical_projection SET canonical_public_page_visible = 1",
+        )
+      }
+      const [hydrated] = await hydratePublicCanonicalGeneRecords(
+        {
+          ...ENV,
+          ICONOPLASM_DB: value.primaryDb,
+          ICONOPLASM_AUTHORING_DB: value.authoringDb,
+        },
+        [{ symbol: "TP53", full_name: "tumor protein p53" }],
+      )
+      const published = composeStableGeneObject(hydrated, {
+        voteVersion: 3,
+        now: () => "2026-10-03T06:00:00.000Z",
+      })
+      assertNoTagContent(published, value.preparedTags)
+      assert.equal(published.canonical_manifestation.public_page_visible, visible)
+      assert.equal(
+        published.canonical_manifestation.prose,
+        visible ? "The exact public canonical manifestation." : null,
+      )
+      assert.equal(published.canonical_manifestation.manifestation_revision_id, "revision_0001")
+      assert.equal(published.canonical_manifestation.body_sha256, value.proseEncrypted.body_sha256)
+      assert.equal(storage.reads(), 1)
+    } finally {
+      storage.restore()
+      closeFixture(value)
+    }
+  })
+}
 
 test("public canonical material rejects primary/authoring drift before reading storage", async () => {
   const value = await fixture()

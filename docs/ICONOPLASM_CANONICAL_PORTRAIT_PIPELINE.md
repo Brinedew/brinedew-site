@@ -15,8 +15,10 @@ Iconoplasm publishes two objects on Bunny:
 
 - `genes/v3/<SYMBOL>.json` is the whole published card for one gene: the
   projected record, the winning portrait, the complete candidate pool and
-  `published_at`. `publishIconoplasmGeneStableObject` in the stateful runtime
-  rewrites it in place and purges its CDN URL (about five subrequests, no
+  `published_at`. The record carries the shown manifestation prose and never
+  the Tags (the caretaker panel promises they stay private).
+  `publishIconoplasmGeneStableObject` in the stateful runtime
+  rewrites it in place and purges its CDN URL (about four subrequests, no
   Durable Object). Every vote and supervote calls it after the response; an
   upload or reconcile that touches at most eight genes, `/admin/publish` and
   `/admin/reject` call it in process; the admin republish route
@@ -46,6 +48,14 @@ verified GET and purge are three subrequests per gene. Without the account key
 the write still succeeds and reports `purged: false`; a refused purge throws so
 the caller retries the gene. Readers fetch with `cache: "no-cache"`, so a
 browser revalidates instead of keeping a rewritten gene for the CDN's 30 days.
+
+A change to what the object carries reaches the CDN only when each gene is
+rewritten. The Actions publisher rewrites only the genes whose winner or
+candidates changed, so a change of shape needs a sweep of every gene through the
+republish route, eight genes a call, started in the last hours of the UTC day.
+`scripts/republish-iconoplasm-gene-objects.mjs` is that sweep (dry run by
+default, resumable, its first batch read back from the CDN before it goes on);
+`--verify` reads every public object.
 
 Bounded race: two publications of one gene can overlap (two votes a second
 apart, or a vote while the Actions publisher republishes the same gene). Each

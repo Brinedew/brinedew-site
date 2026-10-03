@@ -549,24 +549,6 @@ function buildPublishedCardReadKv({
       body_sha256: "a".repeat(64),
       body_bytes: 39,
       prose: "The exact public A1BG manifestation.",
-      accepted_tags_derivative: {
-        manifestation_derivative_id: "derivative_a1bg_0001",
-        derivative_head_version: 1,
-        body_sha256: "b".repeat(64),
-        body_bytes: 26,
-        tags_sha256: "c".repeat(64),
-        tags_bytes: 12,
-        fields_sha256: "d".repeat(64),
-        fields_bytes: 13,
-        recipe_id: "tagger",
-        recipe_version: "1",
-        provider_id: "provider",
-        model_id: "model",
-        tagger_config_sha256: "e".repeat(64),
-        provenance_status: "generated",
-        tags_text: "measured, exact",
-        fields_json: { posture: "measured" },
-      },
     },
     portrait: {
       status: "published",
@@ -753,10 +735,7 @@ test("site gene payload includes published portrait dimensions for first-party b
   assert.equal(typeof payload?.essence, "object")
   assert.ok(Array.isArray(payload?.portrait_candidates))
   assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
-  assert.equal(
-    payload?.canonical_manifestation?.accepted_tags_derivative?.tags_text,
-    "measured, exact",
-  )
+  assert.equal("accepted_tags_derivative" in payload.canonical_manifestation, false)
   assert.equal("manifestation" in payload, false)
   assert.equal("description" in payload, false)
 })
