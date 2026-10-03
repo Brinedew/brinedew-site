@@ -21,7 +21,17 @@ import {
 
 const identity = releaseIdentity("0.5.4", "a".repeat(40))
 
-test("CI rejects edits and deletion of published downloads but allows a new version", (t) => {
+// B-932: the public site carries one extension package, the current one. The
+// immutable GitHub release and git history keep every earlier version, so
+// removing a superseded public copy is allowed. What stays forbidden is changing
+// the bytes behind a version, and publishing any version but the next
+// authorized one.
+// Failure modes, written before the change:
+// 1. a deletion still fails CI, so the old packages can never leave the tree;
+// 2. with deletion allowed, a modified package stops failing;
+// 3. with deletion allowed, a deleted old version can be added back, or an
+//    unauthorized version can be added next to the authorized one.
+test("CI rejects edits of published downloads, allows removing superseded ones and adding the next", (t) => {
   const root = mkdtempSync(join(tmpdir(), "iconoplasm-release-history-"))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const git = (args) =>
@@ -47,27 +57,65 @@ test("CI rejects edits and deletion of published downloads but allows a new vers
   writeFileSync(old, "published")
   git(["add", "."])
   git(["commit", "-m", "Original release"])
-  const base = git(["rev-parse", "HEAD"])
+  const head = () => git(["rev-parse", "HEAD"])
+  const commit = (message) => {
+    git(["add", "-A"])
+    git(["commit", "-m", message])
+  }
+  const base = head()
   const script = fileURLToPath(new URL("./verify-iconoplasm-release-history.mjs", import.meta.url))
-  const check = () =>
-    spawnSync(process.execPath, [script], {
+  const check = (since, ...flags) =>
+    spawnSync(process.execPath, [script, ...flags], {
       cwd: root,
-      env: { ...process.env, BASE_SHA: base },
+      env: { ...process.env, BASE_SHA: since },
       timeout: 15_000,
       encoding: "utf8",
     })
-  writeFileSync(join(folder, "iconoplasm-extension-v0.5.4.zip"), "new")
-  git(["add", "."])
-  git(["commit", "-m", "Next release"])
-  assert.equal(check().status, 0)
-  writeFileSync(old, "replaced")
-  git(["add", "."])
-  git(["commit", "-m", "Invalid replacement"])
-  assert.match(check().stderr, /must never be modified or deleted/)
+  const current = join(folder, "iconoplasm-extension-v0.5.4.zip")
+
+  writeFileSync(current, "new")
+  commit("Next release")
+  assert.equal(check(base).status, 0, "a new version is allowed")
+
+  const afterRelease = head()
   unlinkSync(old)
-  git(["add", "."])
-  git(["commit", "-m", "Invalid deletion"])
-  assert.notEqual(check().status, 0)
+  commit("Retire the superseded package")
+  assert.equal(check(afterRelease).status, 0, "removing the superseded package is allowed")
+  assert.equal(check(base).status, 0, "the whole release, add plus removal, is allowed")
+
+  const afterRetire = head()
+  writeFileSync(current, "replaced")
+  commit("Replace the bytes behind a published version")
+  const edited = check(afterRetire)
+  assert.notEqual(edited.status, 0)
+  assert.match(edited.stderr, /must never be modified/)
+
+  // The additions check runs before any packager, so this fixture needs only the
+  // authority file that names the version being released.
+  mkdirSync(join(root, "iconoplasm-extension"), { recursive: true })
+  writeFileSync(
+    join(root, "iconoplasm-extension/publisher-release.json"),
+    JSON.stringify({ version: "0.5.4" }),
+  )
+  commit("Publisher authority")
+  const afterEdit = head()
+  writeFileSync(old, "published")
+  commit("Add a retired version back")
+  const readded = check(afterEdit, "--verify-new-package")
+  assert.notEqual(readded.status, 0)
+  assert.match(
+    readded.stderr,
+    /Only the newly authorized version may add a public extension package/,
+  )
+
+  unlinkSync(old)
+  commit("Remove it again")
+  const beforeExtra = head()
+  writeFileSync(join(folder, "iconoplasm-extension-v0.9.9.zip"), "unauthorized")
+  commit("Add an unauthorized version")
+  const extra = check(beforeExtra, "--verify-new-package")
+  assert.notEqual(extra.status, 0)
+  assert.match(extra.stderr, /Only the newly authorized version may add a public extension package/)
 })
 
 async function fixture(t) {
