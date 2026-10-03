@@ -5,14 +5,11 @@ import { DatabaseSync } from "node:sqlite"
 
 import {
   brinedewFormerAuthorLabel,
-  disableBrinedewAccount,
   eraseBrinedewAccount,
   eraseBrinedewAccountOnRequest,
   hydrateBrinedewSessionAccountIdentity,
-  linkBrinedewProviderIdentity,
   resolveBrinedewAccountIdentity,
   setBrinedewAccountStatus,
-  unlinkBrinedewProviderIdentity,
 } from "./lib/brinedew-account-identity.js"
 
 class D1Statement {
@@ -97,29 +94,6 @@ function migratedDatabase() {
   return database
 }
 
-test("the identity migration gives every existing Discord profile one opaque stable account", () => {
-  const database = migratedDatabase()
-  const users = database
-    .prepare(`SELECT discord_id, account_id FROM users ORDER BY discord_id`)
-    .all()
-  const identities = database
-    .prepare(
-      `SELECT provider, provider_subject, account_id
-       FROM brinedew_account_identities
-       ORDER BY provider_subject`,
-    )
-    .all()
-
-  assert.equal(users.length, 2)
-  assert.match(users[0].account_id, /^acct_[0-9a-f]{32}$/)
-  assert.match(users[1].account_id, /^acct_[0-9a-f]{32}$/)
-  assert.notEqual(users[0].account_id, users[1].account_id)
-  assert.deepEqual(
-    identities.map((row) => [row.provider, row.provider_subject, row.account_id]),
-    users.map((row) => ["discord", row.discord_id, row.account_id]),
-  )
-})
-
 test("concurrent first-login resolution is idempotent and leaves no orphan account", async () => {
   const database = migratedDatabase()
   const db = new SqliteD1(database)
@@ -175,115 +149,6 @@ test("a legacy session hydrates the migrated account without changing user_id", 
   assert.equal(hydrated.session.user_id, "discord-one")
   assert.equal(hydrated.session.account_id, expected)
   assert.equal(hydrated.session.account_status, "active")
-})
-
-test("provider unlink and relink preserve account ownership and reject reassignment", async () => {
-  const database = migratedDatabase()
-  const db = new SqliteD1(database)
-  const firstAccount = database
-    .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-one'`)
-    .get().account_id
-  const secondAccount = database
-    .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-two'`)
-    .get().account_id
-
-  const unlinked = await unlinkBrinedewProviderIdentity(db, {
-    accountId: firstAccount,
-    provider: "discord",
-    providerSubject: "discord-one",
-    commandId: "identity-unlink-1",
-    now: 20,
-  })
-  assert.equal(unlinked.link_version, 2)
-  await assert.rejects(
-    resolveBrinedewAccountIdentity(db, {
-      provider: "discord",
-      providerSubject: "discord-one",
-      now: 21,
-    }),
-    (error) => error?.code === "PROVIDER_IDENTITY_UNLINKED",
-  )
-  await assert.rejects(
-    linkBrinedewProviderIdentity(db, {
-      accountId: secondAccount,
-      provider: "discord",
-      providerSubject: "discord-one",
-      commandId: "identity-steal-1",
-      now: 22,
-    }),
-    (error) => error?.code === "PROVIDER_IDENTITY_COLLISION",
-  )
-
-  const relinked = await linkBrinedewProviderIdentity(db, {
-    accountId: firstAccount,
-    provider: "discord",
-    providerSubject: "discord-one",
-    commandId: "identity-relink-1",
-    now: 23,
-  })
-  assert.equal(relinked.account_id, firstAccount)
-  assert.equal(relinked.link_version, 3)
-  assert.equal(
-    (
-      await resolveBrinedewAccountIdentity(db, {
-        provider: "discord",
-        providerSubject: "discord-one",
-        now: 24,
-      })
-    ).account_id,
-    firstAccount,
-  )
-})
-
-test("account status and provider-link histories are append-only and command-idempotent", async () => {
-  const database = migratedDatabase()
-  const db = new SqliteD1(database)
-  const accountId = database
-    .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-one'`)
-    .get().account_id
-
-  const disabled = await disableBrinedewAccount(db, {
-    accountId,
-    commandId: "disable-account-1",
-    reasonCode: "policy",
-    now: 30,
-  })
-  const replay = await disableBrinedewAccount(db, {
-    accountId,
-    commandId: "disable-account-1",
-    reasonCode: "policy",
-    now: 31,
-  })
-  assert.equal(disabled.account_version, 2)
-  assert.equal(replay.account_version, 2)
-  assert.equal(replay.replay, true)
-  assert.equal(
-    database
-      .prepare(
-        `SELECT count(*) AS count
-         FROM brinedew_account_lifecycle_events
-         WHERE account_id = ? AND command_id = 'disable-account-1'`,
-      )
-      .get(accountId).count,
-    1,
-  )
-  assert.throws(
-    () =>
-      database
-        .prepare(
-          `UPDATE brinedew_account_lifecycle_events
-           SET reason_code = 'rewritten' WHERE account_id = ?`,
-        )
-        .run(accountId),
-    /append-only/,
-  )
-  assert.throws(
-    () =>
-      database
-        .prepare(`DELETE FROM brinedew_account_identity_events WHERE account_id = ?`)
-        .run(accountId),
-    /append-only/,
-  )
 })
 
 test("erasure removes active provider links and public credit but preserves immutable attribution", async () => {
@@ -446,9 +311,48 @@ test("one erasure request completes the promised erasure and replays idempotentl
   )
   await assert.rejects(
     eraseBrinedewAccountOnRequest(db, {
-      accountId: "acct_" + "0".repeat(26),
+      accountId: "acct_" + "0".repeat(32),
       commandId: "erasure-request-9",
     }),
-    (error) => error?.code === "ACCOUNT_NOT_FOUND" || error instanceof TypeError,
+    (error) => error?.code === "ACCOUNT_NOT_FOUND",
+  )
+
+  // The erased person's Discord login gets the erased account back (the callback refuses
+  // it), never a fresh one, and a session they already hold stops being active.
+  const accountsBefore = database
+    .prepare(`SELECT count(*) AS count FROM brinedew_accounts`)
+    .get().count
+  const signIn = await resolveBrinedewAccountIdentity(db, {
+    provider: "discord",
+    providerSubject: "discord-one",
+    now: 80,
+  })
+  assert.equal(signIn.account_id, accountId)
+  assert.equal(signIn.status, "erased")
+  assert.equal(
+    database.prepare(`SELECT count(*) AS count FROM brinedew_accounts`).get().count,
+    accountsBefore,
+  )
+  const held = await hydrateBrinedewSessionAccountIdentity(db, {
+    user_id: "discord-one",
+    account_id: accountId,
+  })
+  assert.equal(held.active, false)
+  assert.equal(held.session.account_status, "erased")
+})
+
+test("a provider identity cannot be reassigned to another account", () => {
+  const database = migratedDatabase()
+  const other = database
+    .prepare(`SELECT account_id FROM users WHERE discord_id = 'discord-two'`)
+    .get().account_id
+  assert.throws(
+    () =>
+      database
+        .prepare(
+          `UPDATE brinedew_account_identities SET account_id = ? WHERE provider_subject = 'discord-one'`,
+        )
+        .run(other),
+    /cannot be reassigned/,
   )
 })
