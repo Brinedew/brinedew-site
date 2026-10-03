@@ -817,6 +817,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
     budgetFamily: "admin_caretaker_mutation",
   }),
+  // B-859: one slice of the one-shot rewrite of legacy envelope body objects as
+  // plain text, driven by scripts/convert-authoring-bodies-to-plaintext.mjs.
+  iconoplasmApiContract({
+    apiHandler: "caretaker_admin.plaintext_bodies",
+    id: "caretaker_admin_plaintext_bodies",
+    match: exact("/api/iconoplasm/admin/caretakers/plaintext-bodies"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_plaintext_bodies",
+  }),
   // B-871: one operator command fulfils an erasure request (privacy page).
   iconoplasmApiContract({
     apiHandler: "admin_account.erase",

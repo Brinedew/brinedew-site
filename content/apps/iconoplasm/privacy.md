@@ -1,7 +1,7 @@
 ---
 title: "Privacy Policy"
 description: "How Iconoplasm handles your data"
-date: 2026-09-25
+date: 2026-10-03
 dateLabel: "Last updated"
 draft: false
 schemaType: WebPage
@@ -35,7 +35,7 @@ If you sign in on the Iconoplasm website, we store your Discord user ID, usernam
 
 ### Caretaker manifestations (website only)
 
-If you accept a gene caretaker invitation, we store the assignment, the exact terms version you accepted, manifestation versions you write, and canonical-selection history. Manifestation and generated Tags bodies are encrypted before they enter private object storage. The authority database stores stable IDs, hashes, byte counts, wrapped encryption keys, lifecycle state, and bounded audit events rather than plaintext bodies.
+If you accept a gene caretaker invitation, we store the assignment, the exact terms version you accepted, manifestation versions you write, and canonical-selection history. We use a variety of physical and technical measures, policies, and procedures to help protect your information from unauthorized access, use, or disclosure.
 
 Every save creates an immutable version. Withdrawing a manifestation will remove it from public view on the site, though it will not remove it from backups. If your account is erased while history must remain, provider identity is removed and retained authorship uses a stable anonymous label.
 
@@ -95,7 +95,7 @@ The extension's content script runs on all web pages (except `iconoplasm.brinede
 | Signed-in discoveries | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you request deletion |
 | Discord account link | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you request deletion |
 | Caretaker assignment, accepted terms, and bounded authority audit history | Private Cloudflare D1 database | While needed to operate the version record, resolve disputes, or meet legal obligations |
-| Encrypted manifestation and Tags bodies | Dedicated private Bunny Storage zone with no public Pull Zone | While needed to operate the version record |
+| Manifestation and Tags bodies | Dedicated private Bunny Storage zone with no public Pull Zone | While needed to operate the version record |
 | User emulsion | Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you change it or request deletion |
 | Image provider API keys | Encrypted in Cloudflare D1 database at `iconoplasm.brinedew.bio` | Until you remove them or request deletion |
 | Generation and edit jobs | Cloudflare D1 database and image storage | Until removed by site maintenance or deletion request |

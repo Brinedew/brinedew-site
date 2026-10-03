@@ -5,12 +5,13 @@ import test from "node:test"
 
 import { hydratePublicCanonicalGeneRecords } from "../../iconoplasm-public-canonical-runtime.js"
 import {
-  encryptManifestationProse,
-  sha256Hex,
-} from "../../lib/iconoplasm-manifestation-body-crypto.js"
+  encryptLegacyProse,
+  encryptLegacyTags,
+  plainBodyObject,
+} from "../../lib/iconoplasm-body-object-test-support.js"
 import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { composeStableGeneObject } from "../../lib/iconoplasm-stable-gene-object.js"
-import { encryptManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import {
   PublicCanonicalMaterialError,
   readPublicCanonicalMaterial,
@@ -43,7 +44,6 @@ const PRIMARY_VISIBILITY_MIGRATION = readFileSync(
   "utf8",
 )
 const ENV = Object.freeze({
-  ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
   ICONOPLASM_AUTHORING_BODY_KEK_V1: Buffer.from(new Uint8Array(32).fill(19)).toString("base64"),
   ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
   ICONOPLASM_AUTHORING_STORAGE_ZONE: "public-material-test",
@@ -114,7 +114,10 @@ function installStorageFetch(objects) {
   }
 }
 
-async function fixture({ mode = "authoritative" } = {}) {
+// `plain: true` stores both bodies as plain text, as every save since B-859 does;
+// the default stores the envelope objects production wrote before it. The public
+// object must come out the same either way.
+async function fixture({ mode = "authoritative", plain = false } = {}) {
   const authoringRaw = new DatabaseSync(":memory:")
   authoringRaw.exec(AUTHORING_MIGRATION)
   authoringRaw.exec(AUTHORING_VISIBILITY_MIGRATION)
@@ -158,11 +161,13 @@ async function fixture({ mode = "authoritative" } = {}) {
     .run()
 
   const objects = new Map()
-  const proseEncrypted = await encryptManifestationProse(ENV, {
-    revisionId: "revision_0001",
-    geneId: "gene_tp53",
-    prose: "The exact public canonical manifestation.",
-  })
+  const proseEncrypted = plain
+    ? await plainStored("The exact public canonical manifestation.")
+    : await encryptLegacyProse(ENV, {
+        revisionId: "revision_0001",
+        geneId: "gene_tp53",
+        prose: "The exact public canonical manifestation.",
+      })
   const proseObjectKey = await createManifestationBodyObjectKey()
   authoringRaw
     .prepare(
@@ -216,12 +221,14 @@ async function fixture({ mode = "authoritative" } = {}) {
     tagsSha256: await sha256Hex(tagsText),
     fieldsSha256: await sha256Hex(JSON.stringify(fieldsJson)),
   })
-  const tagsEncrypted = await encryptManifestationTags(ENV, {
-    derivativeId: "derivative_0001",
-    revisionId: "revision_0001",
-    sourceBodySha256: proseEncrypted.body_sha256,
-    tags: preparedTags.output_plain,
-  })
+  const tagsEncrypted = plain
+    ? await plainStored(preparedTags.output_plain)
+    : await encryptLegacyTags(ENV, {
+        derivativeId: "derivative_0001",
+        revisionId: "revision_0001",
+        sourceBodySha256: proseEncrypted.body_sha256,
+        tags: preparedTags.output_plain,
+      })
   const tagsObjectKey = await createManifestationBodyObjectKey()
   authoringRaw
     .prepare(
@@ -341,6 +348,11 @@ async function fixture({ mode = "authoritative" } = {}) {
   }
 }
 
+async function plainStored(text) {
+  const body = await plainBodyObject(text)
+  return { ...body, prose: body.text, ciphertext: body.bytes }
+}
+
 function closeFixture(value) {
   value.authoringRaw.close()
   value.primaryRaw.close()
@@ -385,38 +397,45 @@ function assertNoTagContent(published, fixtureTags) {
   }
 }
 
-test("public canonical material exact-reads the encrypted prose and never touches the Tags body", async () => {
-  const value = await fixture()
-  const storage = installStorageFetch(value.objects)
-  try {
-    const material = await readPublicCanonicalMaterial({
-      primaryDb: value.primaryDb,
-      authoringDb: value.authoringDb,
-      env: ENV,
-      canonicalSymbol: "tp53",
-    })
-    assert.equal(material.canonical.prose, "The exact public canonical manifestation.")
-    assert.equal(material.canonical.body_sha256, value.proseEncrypted.body_sha256)
-    assert.equal("accepted_tags_derivative" in material, false)
-    assert.equal(storage.reads(), 1, "only the prose object is read; the Tags object never is")
-    assertNoTagContent(material, value.preparedTags)
-    assert.equal(JSON.stringify(material).includes("object_key"), false)
-    assert.equal(JSON.stringify(material).includes("wrapped_dek"), false)
-    assert.equal(JSON.stringify(material).includes("ciphertext"), false)
-  } finally {
-    storage.restore()
-    closeFixture(value)
-  }
-})
+for (const plain of [false, true]) {
+  test(`public canonical material exact-reads the ${plain ? "plain" : "legacy encrypted"} prose and never touches the Tags body`, async () => {
+    const value = await fixture({ plain })
+    const storage = installStorageFetch(value.objects)
+    try {
+      const material = await readPublicCanonicalMaterial({
+        primaryDb: value.primaryDb,
+        authoringDb: value.authoringDb,
+        env: ENV,
+        canonicalSymbol: "tp53",
+      })
+      assert.equal(material.canonical.prose, "The exact public canonical manifestation.")
+      assert.equal(material.canonical.body_sha256, value.proseEncrypted.body_sha256)
+      assert.equal("accepted_tags_derivative" in material, false)
+      assert.equal(storage.reads(), 1, "only the prose object is read; the Tags object never is")
+      assertNoTagContent(material, value.preparedTags)
+      assert.equal(JSON.stringify(material).includes("object_key"), false)
+      assert.equal(JSON.stringify(material).includes("wrapped_dek"), false)
+      assert.equal(JSON.stringify(material).includes("ciphertext"), false)
+    } finally {
+      storage.restore()
+      closeFixture(value)
+    }
+  })
+}
 
 // B-859: the caretaker panel promises "Tags always stay private". This runs the
 // whole publication path against the real schemas: authoring D1 and the private
 // object zone -> public material -> hydration -> the composed stable object
 // that is written to genes/v3/<SYMBOL>.json. The gene has an accepted Tags
 // derivative; the object it publishes must not carry a trace of it.
-for (const visible of [false, true]) {
-  test(`the stable object of a gene with accepted Tags publishes no Tags (prose shown: ${visible})`, async () => {
-    const value = await fixture()
+for (const [plain, visible] of [
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+]) {
+  test(`the stable object of a gene with accepted Tags publishes no Tags (${plain ? "plain" : "legacy"} bodies, prose shown: ${visible})`, async () => {
+    const value = await fixture({ plain })
     const storage = installStorageFetch(value.objects)
     try {
       if (visible) {
@@ -480,7 +499,7 @@ test("public canonical material rejects primary/authoring drift before reading s
   }
 })
 
-test("missing exact ciphertext fails closed and never falls back to legacy plaintext", async () => {
+test("a missing body object fails closed and never falls back to legacy plaintext", async () => {
   const value = await fixture()
   value.objects.delete(value.proseObjectKey)
   const storage = installStorageFetch(value.objects)

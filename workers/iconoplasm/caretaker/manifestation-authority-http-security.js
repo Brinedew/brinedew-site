@@ -1,4 +1,4 @@
-import { sha256Hex } from "../../lib/iconoplasm-manifestation-body-crypto.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { ManifestationAuthorityError, authorityError } from "./manifestation-authority-contract.js"
 import { first, requireDatabase } from "./manifestation-authority-repository.js"
 import { IconoplasmSessionUnavailableError } from "../session-user.js"

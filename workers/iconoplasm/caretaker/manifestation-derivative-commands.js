@@ -77,7 +77,7 @@ function derivativeStorage(raw) {
     throw authorityError("INVALID_KEY_VERSION", "Tags key version is invalid")
   }
   for (const field of ["body_iv_base64", "wrapped_dek_base64", "wrap_iv_base64"]) {
-    if (!/^[A-Za-z0-9_-]{12,256}$/.test(String(value[field] || ""))) {
+    if (!/^[A-Za-z0-9_-]{0,256}$/.test(String(value[field] ?? ""))) {
       throw authorityError("INVALID_ENCRYPTION_METADATA", `${field} is invalid`)
     }
   }
@@ -87,9 +87,9 @@ function derivativeStorage(raw) {
     object_key: objectKey,
     ciphertext_sha256: normalizeSha256(value.ciphertext_sha256, "ciphertext_sha256"),
     ciphertext_bytes: ciphertextBytes,
-    body_iv_base64: String(value.body_iv_base64),
-    wrapped_dek_base64: String(value.wrapped_dek_base64),
-    wrap_iv_base64: String(value.wrap_iv_base64),
+    body_iv_base64: String(value.body_iv_base64 ?? ""),
+    wrapped_dek_base64: String(value.wrapped_dek_base64 ?? ""),
+    wrap_iv_base64: String(value.wrap_iv_base64 ?? ""),
     key_version: keyVersion,
     aad_version: 1,
     object_etag: String(value.object_etag || "").trim() || null,

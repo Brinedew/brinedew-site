@@ -79,7 +79,7 @@ migrations_dir = "migrations-iconoplasm"
 
 # ARCHITECTURE FENCE [IPD-012]: caretaker assignments, immutable manifestation
 # lineage, canonical selection, command receipts, and replication events share
-# one private transactional authority. Large encrypted bodies live in Bunny;
+# one private transactional authority. Large bodies live in Bunny;
 # neither history nor competing mutable prose belongs in the primary D1.
 [[d1_databases]]
 binding = "ICONOPLASM_AUTHORING_DB"
@@ -246,7 +246,7 @@ ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.n
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 # ARCHITECTURE FENCE [IPD-012]: authoring reads use authenticated Storage only.
-# The dedicated private zone has no Pull Zone and contains only ciphertext under
+# The dedicated private zone has no Pull Zone and contains only body objects under
 # opaque private locators; portrait credentials are never an authoring fallback.
 ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
@@ -255,7 +255,6 @@ ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
 # generic service token:
 #   ICONOPLASM_AUTHORITY_REPLICA_TOKEN      events, snapshots, exact material, Tags
 #   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
-ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
 # Temporary no-R2 hotfix: Cloudflare is currently rejecting worker version
@@ -454,7 +453,6 @@ ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"
-ICONOPLASM_AUTHORING_BODY_KEY_VERSION = "1"
 # Staging has no recap cron and must never post into the production feed.
 DISCORD_FEED_CHANNEL_ID = ""
 

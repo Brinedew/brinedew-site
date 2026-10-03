@@ -3,11 +3,12 @@ import test from "node:test"
 
 import {
   createManifestationBodyObjectKey,
-  deleteEncryptedManifestationBody,
-  putEncryptedManifestationBody,
-  readEncryptedManifestationBody,
+  deleteManifestationBodyObject,
+  putManifestationBodyObject,
+  readManifestationBodyObject,
+  writeManifestationBodyObject,
 } from "./lib/iconoplasm-manifestation-body-storage.js"
-import { sha256Hex } from "./lib/iconoplasm-manifestation-body-crypto.js"
+import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 
 const env = {
   ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.bunnycdn.com",
@@ -40,19 +41,13 @@ test("private body storage PUT verifies exact authenticated bytes without using 
       locatorId: "mbody_12345678123442348234123456789abc",
     })
     assert.doesNotMatch(key, /mrev_|revision/i)
-    const ciphertext = new Uint8Array(32).fill(41)
-    let verified = false
-    const result = await putEncryptedManifestationBody(env, key, ciphertext, {
-      expectedSha256: await sha256Hex(ciphertext),
-      verifyPlaintext: async (stored) => {
-        verified = true
-        assert.deepEqual(stored, ciphertext)
-      },
+    const body = new TextEncoder().encode("A plain manifestation body.")
+    const result = await putManifestationBodyObject(env, key, body, {
+      expectedSha256: await sha256Hex(body),
     })
     assert.equal(result.ok, true)
     assert.equal(result.etag, '"cipher-etag"')
-    assert.equal(verified, true)
-    assert.deepEqual((await readEncryptedManifestationBody(env, key)).bytes, ciphertext)
+    assert.deepEqual((await readManifestationBodyObject(env, key)).bytes, body)
     assert.ok(calls.every((call) => !call.url.includes("b-cdn.net")))
   } finally {
     globalThis.fetch = originalFetch
@@ -73,7 +68,7 @@ test("private body storage waits through Bunny's measured read-after-write windo
     const key = await createManifestationBodyObjectKey({
       locatorId: "mbody_cccccccc123442348234123456789abc",
     })
-    const result = await putEncryptedManifestationBody(env, key, ciphertext, {
+    const result = await putManifestationBodyObject(env, key, ciphertext, {
       expectedSha256: await sha256Hex(ciphertext),
     })
     assert.equal(result.etag, '"eventual-etag"')
@@ -100,7 +95,7 @@ test("private body deletion is confirmed by an authenticated missing read", asyn
     const key = await createManifestationBodyObjectKey({
       locatorId: "mbody_aaaaaaaa123442348234123456789abc",
     })
-    assert.deepEqual(await deleteEncryptedManifestationBody(env, key), {
+    assert.deepEqual(await deleteManifestationBodyObject(env, key), {
       ok: true,
       already_missing: false,
     })
@@ -123,7 +118,7 @@ test("private body deletion waits for Bunny to stop serving the deleted object",
     const key = await createManifestationBodyObjectKey({
       locatorId: "mbody_dddddddd123442348234123456789abc",
     })
-    assert.deepEqual(await deleteEncryptedManifestationBody(env, key), {
+    assert.deepEqual(await deleteManifestationBodyObject(env, key), {
       ok: true,
       already_missing: false,
     })
@@ -151,7 +146,40 @@ test("authoring storage never falls back to portrait credentials or zone", async
     locatorId: "mbody_bbbbbbbb123442348234123456789abc",
   })
   await assert.rejects(
-    readEncryptedManifestationBody(portraitOnly, key),
+    readManifestationBodyObject(portraitOnly, key),
     /Private manifestation body storage is not configured/,
   )
+})
+
+// B-859: the plain bodies are as short as one byte; the old 17-byte floor was
+// the envelope's, and the conversion spends exactly one request per call.
+test("a one-byte body is a valid object, and one write or read is one request", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (_url, init = {}) => {
+    calls.push(init.method)
+    if (init.method === "PUT") return new Response(null, { status: 503 })
+    return new Response(new Uint8Array([65]), { status: 200 })
+  }
+  try {
+    const key = await createManifestationBodyObjectKey({
+      locatorId: "mbody_eeeeeeee123442348234123456789abc",
+    })
+    assert.deepEqual(
+      (await readManifestationBodyObject(env, key, { maxAttempts: 1 })).bytes,
+      new Uint8Array([65]),
+    )
+    await assert.rejects(
+      writeManifestationBodyObject(env, key, new Uint8Array([65]), { maxAttempts: 1 }),
+      /PUT failed \(503\)|request failed \(503\)/,
+    )
+    assert.deepEqual(calls, ["GET", "PUT"], "maxAttempts: 1 never retries")
+    await assert.rejects(writeManifestationBodyObject(env, key, new Uint8Array(0)), TypeError)
+    await assert.rejects(
+      writeManifestationBodyObject(env, key, new Uint8Array(64 * 1024 + 1)),
+      TypeError,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

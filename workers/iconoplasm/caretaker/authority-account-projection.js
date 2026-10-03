@@ -1,4 +1,4 @@
-import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import {
   authorityError,
   createId,

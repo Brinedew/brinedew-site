@@ -10,6 +10,10 @@ import {
 } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { deliverAcceptedAuthorityEvent } from "./iconoplasm/caretaker/manifestation-authority-projection-delivery.js"
 import {
+  PLAINTEXT_CONVERSION_DEFAULT_BODIES,
+  convertManifestationBodies,
+} from "./iconoplasm/caretaker/manifestation-plaintext-conversion.js"
+import {
   commandEnvelope,
   readBoundedJson,
   requireAuthoritativeMode,
@@ -417,7 +421,31 @@ export function createIconoplasmCaretakerAdminHandlers(services) {
     }
   }
 
+  // B-859: one slice of the one-shot rewrite of legacy envelope body objects as
+  // plain text. The operator script scripts/convert-authoring-bodies-to-plaintext.mjs
+  // calls it; both go away once every body object reads as plain text.
+  async function convertPlaintextBodies({ request, env, done }) {
+    const routeName = "caretaker_admin_plaintext_bodies"
+    if (!(await authorize(request, env))) {
+      return done(`${routeName}_403`, json({ error: "Unauthorized" }, 403, NO_STORE))
+    }
+    try {
+      const payload = await request.json().catch(() => null)
+      const value = await convertManifestationBodies(requireAuthoringDb(env), env, {
+        kind: payload?.kind,
+        after: payload?.after ?? "",
+        limit: payload?.limit ?? PLAINTEXT_CONVERSION_DEFAULT_BODIES,
+        execute: payload?.execute === true,
+      })
+      return done(routeName, json({ ok: true, ...value }, 200, NO_STORE))
+    } catch (error) {
+      const response = errorResponse(error, json)
+      return done(`${routeName}_${response.status}`, response)
+    }
+  }
+
   return Object.freeze({
+    "caretaker_admin.plaintext_bodies": convertPlaintextBodies,
     "caretaker_admin.registry": read("caretaker_admin_registry", (db, params) =>
       readCaretakerAdminRegistry(db, {
         query: params.get("query"),

@@ -16,11 +16,8 @@ import {
 import { storage, command, sha } from "./caretaker/manifestation-authority-test-support.js"
 import { drainManifestationAuthorityProjectionOutbox } from "../lib/iconoplasm-manifestation-authority-projection.js"
 import { drainManifestationPublicCardPublicationWakes } from "../iconoplasm-manifestation-publication-wake.js"
-import {
-  encryptManifestationProse,
-  sha256Hex,
-} from "../lib/iconoplasm-manifestation-body-crypto.js"
-import { encryptManifestationTags } from "../lib/iconoplasm-manifestation-tags-crypto.js"
+import { plainBodyObject } from "../lib/iconoplasm-body-object-test-support.js"
+import { sha256Hex } from "../lib/iconoplasm-sha256.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -355,32 +352,13 @@ test(
         canonicalSymbol: "COSTSELECT",
       })
       const bodyEnv = {
-        ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
-        ICONOPLASM_AUTHORING_BODY_KEK_V1: Buffer.from(new Uint8Array(32).fill(11)).toString(
-          "base64",
-        ),
         ICONOPLASM_AUTHORING_STORAGE_ZONE: "cost-test",
         ICONOPLASM_AUTHORING_STORAGE_HOST: "cost-storage.invalid",
         ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "local-test",
       }
       const prose = "文".repeat(4000)
-      const revisionStorage = {
-        ...storage(1),
-        ...(await encryptManifestationProse(bodyEnv, {
-          geneId: "gene_cost_select",
-          revisionId: "revision_cost_select",
-          prose,
-        })),
-      }
-      const derivativeStorage = {
-        ...storage(2),
-        ...(await encryptManifestationTags(bodyEnv, {
-          derivativeId: "derivative_cost_select",
-          revisionId: "revision_cost_select",
-          sourceBodySha256: revisionStorage.body_sha256,
-          tags: "tagged!\n{}",
-        })),
-      }
+      const revisionStorage = { ...storage(1), ...(await plainBodyObject(prose)) }
+      const derivativeStorage = { ...storage(2), ...(await plainBodyObject("tagged!\n{}")) }
       for (const [entityKind, entityId, envelope] of [
         ["revision", "revision_cost_select", revisionStorage],
         ["derivative", "derivative_cost_select", derivativeStorage],
@@ -580,7 +558,7 @@ test(
           (item) => url.pathname === `/cost-test/${item.object_key}`,
         )
         assert.ok(item, "unexpected private object request")
-        return new Response(item.ciphertext)
+        return new Response(item.bytes)
       }
       t.after(() => {
         globalThis.fetch = nativeFetch

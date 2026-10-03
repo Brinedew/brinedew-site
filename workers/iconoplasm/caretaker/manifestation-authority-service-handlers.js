@@ -1,12 +1,10 @@
-import { decryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import {
-  decryptManifestationTags,
-  encryptManifestationTags,
-} from "../../lib/iconoplasm-manifestation-tags-crypto.js"
+  readManifestationProse,
+  readManifestationTags,
+} from "../../lib/iconoplasm-manifestation-body-reader.js"
 import {
   createManifestationBodyObjectKey,
-  putEncryptedManifestationBody,
-  readEncryptedManifestationBody,
+  putManifestationBodyObject,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { defaultIdFactory, authorityError } from "./manifestation-authority-contract.js"
 import {
@@ -26,6 +24,7 @@ import {
   admitManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
+import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
 import {
   prepareManifestationTagsPayload,
   splitManifestationTagsPayload,
@@ -46,37 +45,6 @@ function requireJson(request) {
     .toLowerCase()
   if (type !== "application/json") {
     throw authorityError("JSON_CONTENT_TYPE_REQUIRED", "JSON request body required", 415)
-  }
-}
-
-function base64UrlToBytes(raw) {
-  const value = String(raw || "")
-  if (!value || value.length > 96_000 || !/^[A-Za-z0-9_-]+$/.test(value)) {
-    throw authorityError("BACKUP_CIPHERTEXT_INVALID", "Backup ciphertext encoding is invalid")
-  }
-  try {
-    const standard = value.replace(/-/g, "+").replace(/_/g, "/")
-    const binary = atob(standard.padEnd(Math.ceil(standard.length / 4) * 4, "="))
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
-  } catch {
-    throw authorityError("BACKUP_CIPHERTEXT_INVALID", "Backup ciphertext encoding is invalid")
-  }
-}
-
-function storageDescriptor(encrypted, objectKey, upload) {
-  return {
-    body_sha256: encrypted.body_sha256,
-    body_bytes: encrypted.body_bytes,
-    object_key: objectKey,
-    ciphertext_sha256: encrypted.ciphertext_sha256,
-    ciphertext_bytes: encrypted.ciphertext_bytes,
-    body_iv_base64: encrypted.body_iv_base64,
-    wrapped_dek_base64: encrypted.wrapped_dek_base64,
-    wrap_iv_base64: encrypted.wrap_iv_base64,
-    key_version: encrypted.key_version,
-    aad_version: encrypted.aad_version,
-    object_etag: upload.etag,
-    verified_at: new Date().toISOString(),
   }
 }
 
@@ -153,22 +121,14 @@ async function exactRevisionMaterial(db, env, row, onIntegrityFailure) {
   )
   try {
     if (!secret) throw new Error("revision_storage_missing")
-    const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-    if (!encrypted) throw new Error("revision_ciphertext_missing")
-    return decryptManifestationProse(env, {
+    const prose = await readManifestationProse(env, secret, {
       revisionId: row.manifestation_revision_id,
       geneId: row.gene_id,
-      ciphertext: encrypted.bytes,
-      ciphertextSha256: secret.ciphertext_sha256,
-      ciphertextBytes: Number(secret.ciphertext_bytes),
       bodySha256: row.body_sha256,
       bodyBytes: Number(row.body_bytes),
-      bodyIvBase64: secret.body_iv_base64,
-      wrappedDekBase64: secret.wrapped_dek_base64,
-      wrapIvBase64: secret.wrap_iv_base64,
-      keyVersion: Number(secret.key_version),
-      aadVersion: Number(secret.aad_version),
     })
+    if (prose === null) throw new Error("revision_body_missing")
+    return prose
   } catch (error) {
     if (typeof onIntegrityFailure === "function") {
       await onIntegrityFailure({
@@ -201,23 +161,14 @@ async function exactDerivativeMaterial(db, env, row, onIntegrityFailure) {
   )
   try {
     if (!secret) throw new Error("derivative_storage_missing")
-    const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-    if (!encrypted) throw new Error("derivative_ciphertext_missing")
-    const outputPlain = await decryptManifestationTags(env, {
+    const outputPlain = await readManifestationTags(env, secret, {
       derivativeId: row.manifestation_derivative_id,
       revisionId: row.manifestation_revision_id,
       sourceBodySha256: row.source_body_sha256,
-      ciphertext: encrypted.bytes,
-      ciphertextSha256: secret.ciphertext_sha256,
-      ciphertextBytes: Number(secret.ciphertext_bytes),
       bodySha256: row.body_sha256,
       bodyBytes: Number(row.body_bytes),
-      bodyIvBase64: secret.body_iv_base64,
-      wrappedDekBase64: secret.wrapped_dek_base64,
-      wrapIvBase64: secret.wrap_iv_base64,
-      keyVersion: Number(secret.key_version),
-      aadVersion: Number(secret.aad_version),
     })
+    if (outputPlain === null) throw new Error("derivative_body_missing")
     return splitManifestationTagsPayload(outputPlain, {
       tagsBytes: row.tags_bytes,
       tagsSha256: row.tags_sha256,
@@ -358,54 +309,26 @@ export function createManifestationAuthorityServiceHandler({
           fieldsJson: body.fields_json,
           fieldsSha256: body.fields_sha256,
         })
-        const encrypted = await encryptManifestationTags(env, {
-          derivativeId,
-          revisionId,
-          sourceBodySha256: body.source_body_sha256,
-          tags: output.output_plain,
-        })
-        if (
-          encrypted.body_sha256 !== output.output_plain_sha256 ||
-          encrypted.body_bytes !== output.output_plain_bytes
-        ) {
-          throw authorityError(
-            "TAGS_OUTPUT_INVALID",
-            "Encrypted Tags output changed during normalization",
-            500,
-          )
-        }
         const objectKey = await createManifestationBodyObjectKey()
         await admitManifestationUploadIntent(db, env, {
           entityKind: "derivative",
           entityId: derivativeId,
           assignmentId: revision.caretaker_assignment_id || null,
           objectKey,
-          ciphertextSha256: encrypted.ciphertext_sha256,
-          bodyBytes: encrypted.body_bytes,
+          ciphertextSha256: output.output_plain_sha256,
+          bodyBytes: output.output_plain_bytes,
           actorKind: actor.actorKind,
           actorAccountId: actor.actorAccountId,
           idFactory,
         })
-        const upload = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
-          expectedSha256: encrypted.ciphertext_sha256,
-          verifyPlaintext: (stored) =>
-            decryptManifestationTags(env, {
-              derivativeId,
-              revisionId,
-              sourceBodySha256: body.source_body_sha256,
-              ciphertext: stored,
-              ciphertextSha256: encrypted.ciphertext_sha256,
-              ciphertextBytes: encrypted.ciphertext_bytes,
-              bodySha256: encrypted.body_sha256,
-              bodyBytes: encrypted.body_bytes,
-              bodyIvBase64: encrypted.body_iv_base64,
-              wrappedDekBase64: encrypted.wrapped_dek_base64,
-              wrapIvBase64: encrypted.wrap_iv_base64,
-              keyVersion: encrypted.key_version,
-              aadVersion: encrypted.aad_version,
-            }),
+        const upload = await putManifestationBodyObject(env, objectKey, output.output_bytes, {
+          expectedSha256: output.output_plain_sha256,
         })
-        descriptor = storageDescriptor(encrypted, objectKey, upload)
+        descriptor = plainStorageDescriptor(
+          { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
+          objectKey,
+          upload,
+        )
       }
       const value = await submitTagsDerivative(db, {
         revisionId,

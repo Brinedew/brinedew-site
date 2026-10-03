@@ -4,8 +4,8 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { encryptManifestationProse, sha256Hex } from "./lib/iconoplasm-manifestation-body-crypto.js"
-import { encryptManifestationTags } from "./lib/iconoplasm-manifestation-tags-crypto.js"
+import { plainBodyObject } from "./lib/iconoplasm-body-object-test-support.js"
+import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
 import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT } from "./iconoplasm/votes/vote-guards.js"
 
@@ -19,11 +19,11 @@ function base64(bytes) {
   return Buffer.from(bytes).toString("base64")
 }
 
-const AUTHORING_BODY_KEK = new Uint8Array(32).fill(7)
-const AUTHORING_CRYPTO_ENV = Object.freeze({
-  ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
-  ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(AUTHORING_BODY_KEK),
-})
+// Bodies are stored as plain text (B-859), so the Worker under test has no key.
+async function plainStored(text) {
+  const body = await plainBodyObject(text)
+  return { ...body, prose: body.text, ciphertext: body.bytes }
+}
 
 function defaultGeneContext() {
   return {
@@ -80,11 +80,7 @@ class FakeAuthoringDb {
     const manifestationId = `manifestation_${symbol.toLowerCase()}_0001`
     const revisionId = `revision_${symbol.toLowerCase()}_0001`
     const derivativeId = `derivative_${symbol.toLowerCase()}_0001`
-    const revision = await encryptManifestationProse(AUTHORING_CRYPTO_ENV, {
-      revisionId,
-      geneId,
-      prose: context.manifestation || "A manifestation body.",
-    })
+    const revision = await plainStored(context.manifestation || "A manifestation body.")
     const tags = String(context.manifestation_tags || "")
     const preparedTags = tags
       ? await prepareManifestationTagsPayload({
@@ -94,14 +90,7 @@ class FakeAuthoringDb {
           fieldsSha256: await sha256Hex("{}"),
         })
       : null
-    const derivative = tags
-      ? await encryptManifestationTags(AUTHORING_CRYPTO_ENV, {
-          derivativeId,
-          revisionId,
-          sourceBodySha256: revision.body_sha256,
-          tags: preparedTags.output_plain,
-        })
-      : null
+    const derivative = tags ? await plainStored(preparedTags.output_plain) : null
     const revisionObjectKey =
       "private/manifestations/v1/aa/mbody_11111111111111111111111111111111.bin"
     const derivativeObjectKey =
@@ -1055,8 +1044,6 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
     DB: db,
     ICONOPLASM_DB: db,
     ICONOPLASM_AUTHORING_DB: new FakeAuthoringDb(db, authoringObjects),
-    ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
-    ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(AUTHORING_BODY_KEK),
     ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
     ICONOPLASM_AUTHORING_STORAGE_ZONE: "authoring-test-zone",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authoring-test-password",
