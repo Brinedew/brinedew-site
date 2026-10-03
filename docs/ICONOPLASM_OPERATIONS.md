@@ -273,7 +273,7 @@ fallback. Check the original scope and repeat/restart receipts for the same
 logical operation.
 
 The ordinary `/api/iconoplasm/admin/read-models/sync` handler rejects
-missing/empty scope and the `full_vision` flag. The publication wake
+missing/empty scope. The publication wake
 processes dirty canonical events under its watermark; it does not use the
 caller's scope as a catalog-wide publication instruction. If a scoped operation
 is materially charged for unrelated backlog, record its original scope,

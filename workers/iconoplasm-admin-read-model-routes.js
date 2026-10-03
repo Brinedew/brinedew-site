@@ -91,12 +91,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
         "admin_read_models_sync_400",
         json({ error: "Scoped read-model sync requires at least one symbol or vision_id" }, 400),
       )
-    const fullVision = coerceBoolean(payload?.full_vision ?? payload?.fullVision, false)
-    if (fullVision)
-      return done(
-        "admin_read_models_sync_400",
-        json({ error: "Scoped read-model sync does not allow full_vision" }, 400, NO_STORE),
-      )
     const skipVoteSummaries = coerceBoolean(
       payload?.skip_vote_summaries ?? payload?.skipVoteSummaries,
       false,
@@ -113,7 +107,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     const options = {
       symbols,
       visionIds,
-      fullVision,
       skipVoteSummaries,
       skipGeneRollups,
       skipVisionRollups,
@@ -136,10 +129,7 @@ export function createIconoplasmAdminReadModelHandlers(services) {
             result?.deferred && typeof result.deferred === "object"
               ? {
                   symbols: Math.max(0, Number(result.deferred.symbols || 0) || 0),
-                  visions:
-                    result.deferred.visions === null || result.deferred.visions === undefined
-                      ? null
-                      : Math.max(0, Number(result.deferred.visions || 0) || 0),
+                  visions: Math.max(0, Number(result.deferred.visions || 0) || 0),
                   dashboard: Boolean(result.deferred.dashboard),
                 }
               : { symbols: 0, visions: 0, dashboard: false },
@@ -148,7 +138,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
             result?.target_daily_percent === null || result?.target_daily_percent === undefined
               ? null
               : Number(result.target_daily_percent || 0) || null,
-          full_vision: fullVision,
           skip_vote_summaries: skipVoteSummaries,
           skip_gene_rollups: skipGeneRollups,
           skip_vision_rollups: skipVisionRollups,

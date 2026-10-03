@@ -18451,169 +18451,11 @@ async function assertAdminCountSummary(env) {
   return true
 }
 
-async function rebuildVisionRollups(env, rawVisionIds, { full = false } = {}) {
-  if (!env.ICONOPLASM_DB) return 0
-  let visionIds = []
-  if (full) {
-    const allResp = await env.ICONOPLASM_DB.prepare(
-      `SELECT DISTINCT vision_id
-       FROM icono_portrait_assets
-       WHERE COALESCE(vision_id, '') <> ''
-         AND lower(COALESCE(vision_id, '')) NOT LIKE 'artist-random-%'`,
-    ).all()
-    visionIds = Array.from(
-      new Set(
-        (Array.isArray(allResp?.results) ? allResp.results : [])
-          .map((row) => validAdminRollupVisionId(row?.vision_id || ""))
-          .filter(Boolean),
-      ),
-    )
-  } else {
-    visionIds = Array.from(
-      new Set(rawVisionIds.map((value) => validAdminRollupVisionId(value)).filter(Boolean)),
-    )
-  }
-
-  let rebuilt = 0
-  for (const visionId of visionIds) {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT
-         pa.vision_id,
-        MAX(NULLIF(pa.emulsion_id, '')) AS emulsion_id,
-        MAX(NULLIF(pa.workflow_id, '')) AS workflow_id,
-        MAX(NULLIF(pa.workflow_label, '')) AS workflow_label,
-        MAX(NULLIF(pa.prompt_version, '')) AS prompt_version,
-        MAX(NULLIF(pa.variant_slot, '')) AS variant_slot,
-         MAX(NULLIF(pa.artist_tag, '')) AS artist_tag,
-         MAX(NULLIF(pa.artist_name, '')) AS artist_name,
-         COUNT(*) AS image_count,
-         COALESCE(AVG(
-           CASE
-             WHEN COALESCE(vs.vote_count, 0) > 0 THEN 1.0 * COALESCE(vs.score, 0) / vs.vote_count
-             ELSE NULL
-           END
-         ), 0) AS avg_vote,
-         COALESCE(SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected_count,
-         COALESCE(SUM(CASE WHEN lower(COALESCE(pa.status, '')) = 'rejected' THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(*), 0), 0) AS rejection_rate,
-         COALESCE(SUM(COALESCE(vs.upvotes, 0)), 0) AS upvotes,
-         COALESCE(SUM(COALESCE(vs.downvotes, 0)), 0) AS downvotes,
-         COALESCE(SUM(COALESCE(vs.score, 0)), 0) AS score,
-         COALESCE(SUM(
-           CASE
-            WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
-             ELSE 0
-           END
-         ), 0) AS live_count,
-         MAX(CASE WHEN bl.artist_tag IS NOT NULL THEN 1 ELSE 0 END) AS blacklisted,
-         MAX(NULLIF(bl.reason, '')) AS blacklist_reason,
-         MAX(NULLIF(bl.updated_at, '')) AS blacklist_updated_at
-       FROM icono_portrait_assets pa
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-       LEFT JOIN icono_publish_state ps
-         ON ps.gene_symbol = pa.gene_symbol
-       LEFT JOIN icono_artist_style_blacklist bl INDEXED BY idx_icono_artist_blacklist_normalized_tag
-         ON lower(COALESCE(bl.artist_tag, '')) = lower(COALESCE(pa.artist_tag, ''))
-       WHERE pa.vision_id = ?
-       GROUP BY pa.vision_id`,
-    )
-      .bind(visionId)
-      .first()
-
-    if (!row) {
-      await env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup WHERE vision_id = ?`)
-        .bind(visionId)
-        .run()
-      await env.ICONOPLASM_DB.prepare(
-        `DELETE FROM icono_generation_request_vision_option_rollup WHERE vision_id = ?`,
-      )
-        .bind(visionId)
-        .run()
-      continue
-    }
-
-    await env.ICONOPLASM_DB.prepare(
-      `INSERT INTO icono_admin_vision_rollup (
-         vision_id,
-        emulsion_id,
-        workflow_id,
-        workflow_label,
-        prompt_version,
-        variant_slot,
-         artist_tag,
-         artist_name,
-         image_count,
-         avg_vote,
-         rejected_count,
-         rejection_rate,
-         upvotes,
-         downvotes,
-         score,
-         live_count,
-         blacklisted,
-         blacklist_reason,
-         blacklist_updated_at,
-         updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(vision_id) DO UPDATE SET
-         emulsion_id = excluded.emulsion_id,
-         workflow_id = excluded.workflow_id,
-         workflow_label = excluded.workflow_label,
-         prompt_version = excluded.prompt_version,
-         variant_slot = excluded.variant_slot,
-         artist_tag = excluded.artist_tag,
-         artist_name = excluded.artist_name,
-         image_count = excluded.image_count,
-         avg_vote = excluded.avg_vote,
-         rejected_count = excluded.rejected_count,
-         rejection_rate = excluded.rejection_rate,
-         upvotes = excluded.upvotes,
-         downvotes = excluded.downvotes,
-         score = excluded.score,
-         live_count = excluded.live_count,
-         blacklisted = excluded.blacklisted,
-         blacklist_reason = excluded.blacklist_reason,
-         blacklist_updated_at = excluded.blacklist_updated_at,
-         updated_at = CURRENT_TIMESTAMP`,
-    )
-      .bind(
-        visionId,
-        unqualifiedEmulsionDisplayCode(row?.emulsion_id || ""),
-        sanitizeText(row?.workflow_id || "", 32) || "",
-        sanitizeText(row?.workflow_label || "", 255) || "",
-        sanitizeText(row?.prompt_version || "", 16) || "",
-        sanitizeText(row?.variant_slot || "", 32) || "",
-        sanitizeText(row?.artist_tag || "", 255) || "",
-        sanitizeText(row?.artist_name || "", 255) || "",
-        Number(row?.image_count || 0),
-        Number(row?.avg_vote || 0),
-        Number(row?.rejected_count || 0),
-        Number(row?.rejection_rate || 0),
-        Number(row?.upvotes || 0),
-        Number(row?.downvotes || 0),
-        Number(row?.score || 0),
-        Number(row?.live_count || 0),
-        Number(row?.blacklisted || 0) > 0 ? 1 : 0,
-        sanitizeText(row?.blacklist_reason || "", 2000) || "",
-        sanitizeText(row?.blacklist_updated_at || "", 64) || "",
-      )
-      .run()
-    rebuilt += 1
-  }
-  if (visionIds.length > 0) {
-    await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds)
-    await rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds)
-  }
-  return rebuilt
-}
-
 async function syncAdminReadModels(
   env,
   {
     symbols = [],
     visionIds = [],
-    fullVision = false,
     skipVoteSummaries = false,
     skipGeneRollups = false,
     skipVisionRollups = false,
@@ -18705,62 +18547,54 @@ async function syncAdminReadModels(
   }
   const finalVisionIds = skipVisionRollups ? [] : Array.from(finalVisionIdSet)
   if (!partial && !skipVisionRollups) {
-    if (fullVision) {
-      // This path is not part of the workstation sync contract. Keep the old
-      // behavior for explicit operator rebuilds until there is a separately
-      // durable full-rebuild resume story.
-      await rebuildVisionRollups(env, [], { full: true })
-      processedVisions = -1
-    } else {
-      const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
-      while (visionIndex < finalVisionIds.length) {
-        const requestedVisionUnits = Math.min(visionBatchSize, finalVisionIds.length - visionIndex)
-        const allowedVisionUnits = budgetState
-          ? iconoplasmMutationLimiterSuggestedChunkUnits(budgetState, {
-              requestedUnits: requestedVisionUnits,
-              observedRowsWrittenPerUnit: observedRowsWrittenPerVision,
-            })
-          : requestedVisionUnits
-        if (allowedVisionUnits <= 0) {
+    const visionBatchSize = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT
+    while (visionIndex < finalVisionIds.length) {
+      const requestedVisionUnits = Math.min(visionBatchSize, finalVisionIds.length - visionIndex)
+      const allowedVisionUnits = budgetState
+        ? iconoplasmMutationLimiterSuggestedChunkUnits(budgetState, {
+            requestedUnits: requestedVisionUnits,
+            observedRowsWrittenPerUnit: observedRowsWrittenPerVision,
+          })
+        : requestedVisionUnits
+      if (allowedVisionUnits <= 0) {
+        partial = true
+        stopReason = "rows_written_target_cap_reached_before_vision_chunk"
+        break
+      }
+      const visionChunk = finalVisionIds.slice(visionIndex, visionIndex + allowedVisionUnits)
+      if (!visionChunk.length) break
+      const beforeRowsWritten = Math.max(
+        0,
+        Number(budgetState?.lastSnapshot?.rows_written || 0) || 0,
+      )
+      await rebuildVisionRollupsBatch(env, visionChunk)
+      processedVisions += visionChunk.length
+      visionIndex += visionChunk.length
+      if (budgetState) {
+        const flushedSnapshot = await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
+        const afterRowsWritten = Math.max(0, Number(flushedSnapshot?.rows_written || 0) || 0)
+        const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
+        if (chunkRowsWritten > 0) {
+          observedRowsWrittenPerVision =
+            (observedRowsWrittenPerVision * sampledVisionUnits + chunkRowsWritten) /
+            (sampledVisionUnits + visionChunk.length)
+          sampledVisionUnits += visionChunk.length
+        }
+        const budgetStatus = iconoplasmMutationLimiterBudgetStatus(budgetState, flushedSnapshot)
+        if (
+          budgetStatus.rows_written_target_remaining !== null &&
+          budgetStatus.rows_written_target_remaining <= 0 &&
+          visionIndex < finalVisionIds.length
+        ) {
           partial = true
-          stopReason = "rows_written_target_cap_reached_before_vision_chunk"
+          stopReason = "rows_written_target_cap_reached_after_vision_chunk"
           break
         }
-        const visionChunk = finalVisionIds.slice(visionIndex, visionIndex + allowedVisionUnits)
-        if (!visionChunk.length) break
-        const beforeRowsWritten = Math.max(
-          0,
-          Number(budgetState?.lastSnapshot?.rows_written || 0) || 0,
-        )
-        await rebuildVisionRollupsBatch(env, visionChunk)
-        processedVisions += visionChunk.length
-        visionIndex += visionChunk.length
-        if (budgetState) {
-          const flushedSnapshot = await flushIconoplasmD1DailyBudgetPendingUsage(budgetState)
-          const afterRowsWritten = Math.max(0, Number(flushedSnapshot?.rows_written || 0) || 0)
-          const chunkRowsWritten = Math.max(0, afterRowsWritten - beforeRowsWritten)
-          if (chunkRowsWritten > 0) {
-            observedRowsWrittenPerVision =
-              (observedRowsWrittenPerVision * sampledVisionUnits + chunkRowsWritten) /
-              (sampledVisionUnits + visionChunk.length)
-            sampledVisionUnits += visionChunk.length
-          }
-          const budgetStatus = iconoplasmMutationLimiterBudgetStatus(budgetState, flushedSnapshot)
-          if (
-            budgetStatus.rows_written_target_remaining !== null &&
-            budgetStatus.rows_written_target_remaining <= 0 &&
-            visionIndex < finalVisionIds.length
-          ) {
-            partial = true
-            stopReason = "rows_written_target_cap_reached_after_vision_chunk"
-            break
-          }
-        }
-        if (visionChunk.length < requestedVisionUnits) {
-          partial = true
-          stopReason = "rows_written_target_cap_reached_mid_vision_window"
-          break
-        }
+      }
+      if (visionChunk.length < requestedVisionUnits) {
+        partial = true
+        stopReason = "rows_written_target_cap_reached_mid_vision_window"
+        break
       }
     }
   }
@@ -18788,13 +18622,13 @@ async function syncAdminReadModels(
   const budgetStatus = budgetState ? iconoplasmMutationLimiterBudgetStatus(budgetState) : null
   return {
     symbols: processedSymbols,
-    visions: fullVision ? processedVisions : processedVisions,
+    visions: processedVisions,
     partial,
     stop_reason: partial ? stopReason || "rows_written_target_cap_reached" : null,
     deferred: partial
       ? {
           symbols: Math.max(0, symbolList.length - symbolIndex),
-          visions: fullVision ? null : Math.max(0, finalVisionIds.length - visionIndex),
+          visions: Math.max(0, finalVisionIds.length - visionIndex),
           dashboard: Boolean(!skipDashboard),
         }
       : { symbols: 0, visions: 0, dashboard: false },
