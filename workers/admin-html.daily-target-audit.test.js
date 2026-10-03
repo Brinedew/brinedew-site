@@ -148,9 +148,8 @@ test("annual recap fill replaces only failed automatic targets outside the full 
   assert.match(ADMIN_HTML, /days\.map\(\(horizonDay\) => \(\{/)
   assert.match(ADMIN_HTML, /row\?\.source !== 'override'/)
   assert.match(ADMIN_HTML, /availability_replacement/)
-  assert.match(ADMIN_HTML, /\/api\/admin\/schedule\/availability-replacement\/pin-structure/)
-  assert.ok(
-    ADMIN_HTML.indexOf("await renderAndUploadDayImage(firstDay") <
-      ADMIN_HTML.indexOf("await pinAvailabilityReplacementStructure(firstDay"),
-  )
+  // A replacement is accepted once its image renders and uploads; there is no R2
+  // object to pin, so no second call follows the render.
+  assert.doesNotMatch(ADMIN_HTML, /pin-structure|pinAvailabilityReplacementStructure/)
+  assert.match(ADMIN_HTML, /await renderAndUploadDayImage\(firstDay/)
 })

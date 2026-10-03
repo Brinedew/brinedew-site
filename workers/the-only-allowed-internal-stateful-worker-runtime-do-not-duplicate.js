@@ -66,13 +66,6 @@ function getCorsHeaders(origin, requestHost = "") {
 
 // Backward compatibility - default CORS headers for main domain
 const JSON_HEADERS = { "Content-Type": "application/json" }
-const BYTES_PER_GB = 1024 * 1024 * 1024
-const STRUCTURE_BUCKET_CAP_BYTES = Math.floor(9.5 * BYTES_PER_GB)
-// Safety cap: refuse to stream/cache extremely large structure files.
-// Mol* can choke on multi-10MB models and Workers memory is not infinite.
-const MAX_STRUCTURE_FILE_BYTES = 20 * 1024 * 1024
-const STRUCTURE_CACHE_META_PREFIX = "structure_meta:"
-const STRUCTURE_CACHE_TARGET_RATIO = 0.9
 const DAILY_TARGET_SALT = "geneguessr-v2-939b5a0b"
 const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
 const DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS = 5 * 60 * 1000
@@ -1408,9 +1401,11 @@ import {
 } from "./lib/protein-store.js"
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 import {
+  ANONYMOUS_PDB_HEADER,
   StructureUpstreamRefusedError,
   fetchStructureUpstream,
   isAllowedStructureUpstreamUrl,
+  limitStructureBody,
   structureContentType,
   structureFormatFromKey,
 } from "./lib/structure-upstream.js"
@@ -2996,17 +2991,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
-    if (
-      url.pathname === "/api/admin/schedule/availability-replacement/pin-structure" &&
-      request.method === "POST"
-    ) {
-      const response = await handleAdminAvailabilityReplacementStructurePin(request, env)
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      })
-    }
-
     if (url.pathname === "/api/admin/cards" && request.method === "GET") {
       const response = await handleAdminCards(request, env)
       return new Response(response.body, {
@@ -3031,43 +3015,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
-    // Maintenance: purge orphaned structure objects from R2.
-    // Orphan = object exists in R2 but KV has no structure_meta:<key> record.
-    // Cursor-based so it can be run repeatedly without timing out.
-    if (url.pathname === "/api/admin/purge-orphan-structures" && request.method === "POST") {
-      return handleAdminPurgeOrphanStructures(request, env, corsHeaders)
-    }
-
-    // Maintenance: delete a specific structure object from R2 by key.
-    // This is for removing large or problematic cached blobs even when they are not orphans.
-    if (url.pathname === "/api/admin/delete-structure" && request.method === "POST") {
-      return handleAdminDeleteStructure(request, env, corsHeaders)
-    }
-
-    // Maintenance: purge any structure objects that are no longer referenced by the current DB.
-    // This cleans up blobs that became obsolete after reseeding/rebuilding structure columns.
-    if (url.pathname === "/api/admin/purge-unreferenced-structures" && request.method === "POST") {
-      return handleAdminPurgeUnreferencedStructures(request, env, corsHeaders)
-    }
-
-    // Debug endpoint for cache stats (no sensitive data)
-    if (url.pathname === "/api/debug/cache-stats" && request.method === "GET") {
-      if (!(await isAdmin(request, env))) {
-        return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders })
-      }
-      const usage = await getStructureBucketUsage(env)
-      return Response.json(
-        {
-          structures: usage.objects,
-          bytes: usage.bytes,
-          megabytes: Math.round(usage.bytes / 1024 / 1024),
-          capMegabytes: Math.round(STRUCTURE_BUCKET_CAP_BYTES / 1024 / 1024),
-          percentFull: Math.round((usage.bytes / STRUCTURE_BUCKET_CAP_BYTES) * 100),
-        },
-        { headers: corsHeaders },
-      )
-    }
-
     if (url.pathname === "/api/structure-token" && request.method === "GET") {
       return handleStructureToken(request, env, corsHeaders)
     }
@@ -3079,7 +3026,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       url.pathname === "/api/structure-cached" &&
       (request.method === "GET" || request.method === "HEAD")
     ) {
-      return handleCachedStructureFetch(request, env, ctx, corsHeaders)
+      return handleCachedStructureFetch(request, env, corsHeaders)
     }
 
     if (url.pathname === "/api/game/bootstrap" && request.method === "GET") {
@@ -3213,7 +3160,7 @@ export default {
   /**
    * Scheduled handler:
    * - 23:55 UTC: pre-warm next day's target structure/bootstrap cache
-   * - 00:03 UTC: post Discord recap for yesterday using pre-rendered day image from R2 cache
+   * - 00:03 UTC: post Discord recap for yesterday using the pre-rendered day image (Bunny)
    */
   async scheduled(event, env, ctx) {
     const cronExprRaw = event?.cron || ""
@@ -3392,9 +3339,9 @@ export default {
         eligibleIds: availabilityIds,
         startIndex: 0,
         loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
-        resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein, env),
+        resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein),
         isStructureAvailable: (structureMeta, protein) =>
-          verifyDailyTargetStructure(env, structureMeta, protein, { pinUntil: tomorrowStr }),
+          verifyDailyTargetStructure(env, structureMeta, protein),
         isCandidateIneligible:
           source === "admin_override"
             ? () => false
@@ -3414,7 +3361,7 @@ export default {
         return
       }
 
-      console.log(`[CRON] Structure verified: ${structureMeta.r2Key}, pinned until ${tomorrowStr}`)
+      console.log(`[CRON] Structure verified: ${structureMeta.r2Key} for ${tomorrowStr}`)
 
       // 4. Pre-warm bootstrap KV cache for tomorrow (for all public origins)
       const origins = [
@@ -3423,7 +3370,7 @@ export default {
         "https://iconoplasm.brinedew.bio",
       ]
       for (const origin of origins) {
-        const structureSelection = await buildTargetStructureSelection(targetProtein, env, {
+        const structureSelection = await buildTargetStructureSelection(targetProtein, {
           practiceMode: false,
           origin,
         })
@@ -3931,7 +3878,6 @@ function buildTargetStructureTokenFromMeta(meta, { practiceMode, origin }) {
     displayLabel: `Source: ${meta.shortLabel}`,
     format: meta.format || "cif",
     url: structureUrl,
-    sizeBytes: 0,
     targetChainHints: null,
     totalChainCount: 0,
   }
@@ -3948,20 +3894,6 @@ function sameStructureMeta(a, b) {
   )
 }
 
-function getExplicitStoredStructureMeta(protein) {
-  const explicitSource = String(protein?.structure_source || "")
-    .trim()
-    .toLowerCase()
-  if (!explicitSource) {
-    return null
-  }
-  return (
-    buildStoredStructureCandidates(protein).find(
-      (candidate) => candidate.source === explicitSource,
-    ) || null
-  )
-}
-
 function isSessionTargetStructureMetaStillValid(protein, meta) {
   // General stale-state rule, learned the hard way on 2026-05-19:
   // a browser reload is not a state reset.
@@ -3972,7 +3904,6 @@ function isSessionTargetStructureMetaStillValid(protein, meta) {
   // - Durable Object session state
   // - KV entries
   // - D1 rows
-  // - R2 objects
   // - IndexedDB / localStorage / sessionStorage in every browser profile
   //
   // The Edge recurrence of the Mol* `transform` crash happened because Edge had
@@ -3990,7 +3921,7 @@ function isSessionTargetStructureMetaStillValid(protein, meta) {
     return false
   }
 
-  const explicitMeta = getExplicitStoredStructureMeta(protein)
+  const explicitMeta = getCanonicalStructureMeta(protein)
   if (!explicitMeta) {
     return true
   }
@@ -3998,10 +3929,10 @@ function isSessionTargetStructureMetaStillValid(protein, meta) {
   return sameStructureMeta(meta, explicitMeta)
 }
 
-async function buildTargetStructureSelection(protein, env, { practiceMode, origin }) {
+async function buildTargetStructureSelection(protein, { practiceMode, origin }) {
   if (!protein) return null
 
-  const meta = await getCanonicalStructureMeta(protein, env)
+  const meta = getCanonicalStructureMeta(protein)
   if (!meta) {
     console.warn("GeneGuessr: buildTargetStructureToken - no structure meta for", protein.uniprot)
     return null
@@ -4021,19 +3952,10 @@ async function buildTargetStructureSelection(protein, env, { practiceMode, origi
   // The permanent invariant is: if a player is shown a token, the session must
   // store the exact metadata that the target endpoint will use for bytes.
 
-  // ⚠️ LAZY LOADING: Don't pre-cache structure on bootstrap.
-  // Structure bytes are fetched and cached on first /api/structure-cached request.
-  // This avoids adding a multi-second upstream fetch to every bootstrap, but it
-  // does NOT mean bootstrap and structure fetch may make separate source choices.
-
-  // Get file size if already cached (fast R2 head operation)
-  let sizeBytes = 0
-  try {
-    const head = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-    sizeBytes = head?.size || 0
-  } catch {
-    /* ignore - not cached yet */
-  }
+  // ⚠️ LAZY LOADING: Don't fetch structure bytes on bootstrap.
+  // Bytes are fetched from the provider on the /api/structure-cached request. This
+  // avoids adding a multi-second upstream fetch to every bootstrap, but it does NOT
+  // mean bootstrap and structure fetch may make separate source choices.
 
   // Parse chain labels to create redacted hints for the target. These hints must
   // describe the same source as `meta`; mixing PDB hints with SWISS-MODEL bytes
@@ -4062,46 +3984,33 @@ async function buildTargetStructureSelection(protein, env, { practiceMode, origi
     meta,
     token: {
       ...buildTargetStructureTokenFromMeta(meta, { practiceMode, origin }),
-      sizeBytes,
       targetChainHints,
       totalChainCount,
     },
   }
 }
 
-async function buildTargetStructureToken(protein, env, options) {
-  const selection = await buildTargetStructureSelection(protein, env, options)
+async function buildTargetStructureToken(protein, options) {
+  const selection = await buildTargetStructureSelection(protein, options)
   return selection?.token || null
 }
 
 /**
- * Build structure token for a guess protein.
- * Returns data suitable for client-side IndexedDB caching.
- * Returns null if structure unavailable.
+ * Build structure token for a guess protein: the key and URL the browser loads
+ * the structure by, and its labels. Fetches nothing.
+ * Returns null if the protein has no stored structure.
  */
-async function buildGuessStructureToken(protein, env, { origin }) {
+async function buildGuessStructureToken(protein, { origin }) {
   if (!protein) return null
 
-  const meta = await getCanonicalStructureMeta(protein, env)
+  const meta = getCanonicalStructureMeta(protein)
   if (!meta) {
     console.warn("GeneGuessr: buildGuessStructureToken - no structure meta for", protein.uniprot)
     return null
   }
 
-  // ⚡ LAZY STRUCTURE: Don't block on structure caching during guess submission
-  // Just check if it exists in R2 - if not, client will trigger caching via /api/structure-cached
-  // This saves 2-4 seconds when structure isn't cached yet
-  let sizeBytes = 0
-  let cached = false
-  try {
-    const head = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-    if (head) {
-      cached = true
-      sizeBytes = head.size || 0
-    }
-  } catch {
-    /* ignore */
-  }
+  // ⚡ LAZY STRUCTURE: Don't fetch the structure during guess submission; the client
+  // asks /api/structure-cached for the bytes. This saves 2-4 seconds per guess.
 
   // The key is all the browser sends. The route finds the upstream itself: RCSB for
   // a PDB id, and the protein's stored row for SWISS-MODEL and AlphaFold, whose
@@ -4130,8 +4039,6 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     format: meta.format || "cif",
     url: structureUrl,
     cacheKey: meta.r2Key,
-    sizeBytes,
-    cached, // Tell client whether it needs to trigger caching
     chainLabels,
     linkUrl: meta.linkUrl,
   }
@@ -4170,7 +4077,7 @@ async function handleStructureToken(request, env, corsHeaders) {
         "GeneGuessr: handleStructureToken (fallback) - building token for",
         protein.uniprot,
       )
-      const token = await buildTargetStructureToken(protein, env, {
+      const token = await buildTargetStructureToken(protein, {
         practiceMode,
         origin: url.origin,
       })
@@ -4192,38 +4099,16 @@ async function handleStructureToken(request, env, corsHeaders) {
         { status: 400, headers: corsHeaders },
       )
     }
-    // Only a protein in the catalog gets a structure. Discovery (three outbound API
-    // calls and a KV write) must never be reachable through an accession a caller
-    // made up: each distinct string would spend one of the 1,000 free KV writes a day.
+    // A structure exists only for a protein in the catalog that has a stored
+    // structure source. The row is the whole decision: nothing is fetched, probed
+    // or written here, whatever accession a caller makes up.
     const protein = await fetchProteinByUniprot(env.DB, uniprot)
-    if (!protein) {
-      return Response.json(
-        { error: "Structure unavailable" },
-        { status: 404, headers: corsHeaders },
-      )
-    }
-    const meta = await getCanonicalStructureMeta(protein, env)
+    const meta = protein ? getCanonicalStructureMeta(protein) : null
     if (!meta) {
       return Response.json(
         { error: "Structure unavailable" },
         { status: 404, headers: corsHeaders },
       )
-    }
-    const cached = await ensureStructureCached(env, meta, { proteinId: uniprot })
-    if (!cached) {
-      return Response.json(
-        { error: "Structure unavailable" },
-        { status: 404, headers: corsHeaders },
-      )
-    }
-
-    // Get file size for client-side cache decisions
-    let sizeBytes = 0
-    try {
-      const head = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-      sizeBytes = head?.size || 0
-    } catch {
-      /* ignore */
     }
 
     const structureUrl = `${url.origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`
@@ -4252,7 +4137,6 @@ async function handleStructureToken(request, env, corsHeaders) {
         format: meta.format || "cif",
         url: structureUrl,
         cacheKey: meta.r2Key,
-        sizeBytes,
         chainLabels,
         linkUrl: meta.linkUrl,
       },
@@ -4267,32 +4151,12 @@ async function handleStructureToken(request, env, corsHeaders) {
   }
 }
 
-function prependAnonymousPdbHeader(data) {
-  const original = data instanceof Uint8Array ? data : new Uint8Array(data)
-  const header = new TextEncoder().encode(
-    "HEADER    MODEL                                   01-JAN-00   0000\n",
-  )
-  const combined = new Uint8Array(header.byteLength + original.byteLength)
-  combined.set(header, 0)
-  combined.set(original, header.byteLength)
-  return combined
-}
-
 /**
- * Direct structure fetch by cacheKey (r2Key).
- * Returns structure with long cache headers since the URL is stable.
- */
-/**
- * Serves structure files from R2 cache with lazy upstream fetching.
+ * Serves structure files by streaming them from the provider.
  *
  * CRITICAL ARCHITECTURE DECISIONS (do not revert without understanding):
  *
- * 1. Function signature must include `ctx` (execution context) - NOT just `env`.
- *    The `ctx.waitUntil()` API is on the execution context, not environment bindings.
- *    Using `env.waitUntil()` causes "waitUntil is not a function" crashes.
- *    See: https://developers.cloudflare.com/workers/runtime-apis/context/
- *
- * 2. The upstream URL is never taken from the caller. A key-based request
+ * 1. The upstream URL is never taken from the caller. A key-based request
  *    learns it from the key: RCSB for `pdb/` keys, the stored `proteins` row for
  *    `alphafold/` and `swissmodel/` keys, and the derived AlphaFold file as the
  *    last resort. A caller-chosen URL would make this public GET an open relay
@@ -4301,17 +4165,24 @@ function prependAnonymousPdbHeader(data) {
  *    provider hosts and checks each redirect hop. The response's Content-Type is
  *    set from the key's format, never copied from the upstream.
  *
- * 3. Lazy caching via ctx.waitUntil() is intentional for performance.
- *    Structure files are cached to R2 in the background AFTER the response is sent.
- *    This saves 2-4 seconds on first load vs blocking on R2 write.
+ * 2. The body is streamed and never buffered, and it is capped at
+ *    MAX_STRUCTURE_FILE_BYTES counted as it arrives (`limitStructureBody`).
+ *    Do not trust an upstream `Content-Length`: RCSB sends none, AlphaFold's is the
+ *    gzip size (workerd drops it on decompression) and SWISS-MODEL's depends on the
+ *    encoding it negotiates. Past the cap the upstream is cancelled and
+ *    the response errors. A SWISS-MODEL PDB gets its anonymous HEADER line
+ *    streamed ahead of the body, not prepended to a buffered copy: one 5.5 MB
+ *    model buffered twice is 11 MB of a 128 MB isolate that serves many requests.
+ *    There is no R2 cache in front of this route (R2 is not enabled on the
+ *    account), so every view is one Worker request and one provider fetch.
  *
- * 4. `type=target` must prefer the session-pinned `targetStructureMeta`.
+ * 3. `type=target` must prefer the session-pinned `targetStructureMeta`.
  *    The target structure endpoint is not a general "pick the best structure
  *    again" endpoint. Bootstrap already picked the structure and told the
- *    browser its format. If this endpoint reconsiders the source from DB/KV/R2
+ *    browser its format. If this endpoint reconsiders the source from the DB
  *    independently, it can serve bytes that disagree with the token. That exact
  *    split caused the live P24534 incident on 2026-05-19: bootstrap advertised
- *    RCSB BCIF while a stale KV structure-source entry routed bytes to a
+ *    RCSB BCIF while a stale cached structure source routed bytes to a
  *    SWISS-MODEL PDB file. Mol* then failed deep inside its transform pipeline.
  *
  *    The order below is therefore deliberate:
@@ -4322,18 +4193,18 @@ function prependAnonymousPdbHeader(data) {
  *       a stale pre-migration pin.
  *    d. Save the backfill so subsequent requests stop re-deciding.
  *
- *    Do not move KV ahead of the session pin. Do not make `type=target` depend
- *    on a browser-provided upstream hint. Do not silently fall back to a
- *    different source after the token has already reached the player.
+ *    Do not make `type=target` depend on a browser-provided upstream hint. Do
+ *    not silently fall back to a different source after the token has already
+ *    reached the player.
  *
- * 5. Treat Durable Object state as persistent migration data.
+ * 4. Treat Durable Object state as persistent migration data.
  *    If one browser keeps failing while another works, do not stop at "clear
  *    cache" advice. Browsers can share the same deployment and different server
  *    sessions. A hard reload bypasses static assets; it does not erase the DO
  *    record selected by that browser's cookie. Any stored session field that can
  *    outlive a deploy needs a compatibility check before it is trusted.
  */
-async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
+async function handleCachedStructureFetch(request, env, corsHeaders) {
   const fetchStart = Date.now()
   const url = new URL(request.url)
   let cacheKey = url.searchParams.get("key")
@@ -4430,7 +4301,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
         // source. Backfill once from the canonical source and persist it. This is
         // not a convenience fallback; it is a migration path that moves stale
         // browser sessions onto the same invariant as new sessions.
-        targetStructureMeta = await getCanonicalStructureMeta(protein, env)
+        targetStructureMeta = getCanonicalStructureMeta(protein)
         if (
           targetStructureMeta?.r2Key &&
           state?.targetId &&
@@ -4509,8 +4380,8 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     // accession is already upper-case (19,110 of 19,110 on 2026-10-03; the other
     // reader, fetchProteinByUniprot, relies on the same contract). Wrapping the
     // column in a function defeats the index and reads the whole table: 19,110 rows
-    // for each view of a guess structure. With R2 unbound, every SWISS-MODEL or
-    // AlphaFold key reaches this lookup, so that cost grows with players. A test
+    // for each view of a guess structure. Every SWISS-MODEL or AlphaFold key reaches
+    // this lookup (nothing caches the bytes), so that cost grows with players. A test
     // pins one row read per request at production shape.
     const structureRowSql = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
       FROM proteins
@@ -4553,212 +4424,73 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     return null
   }
 
-  let object = null
+  // The target's pinned structure, or the structure the key names.
+  const meta =
+    type === "target" && protein
+      ? targetStructureMeta || getCanonicalStructureMeta(protein)
+      : await resolveMetaFromCacheKey()
+
+  if (!meta?.upstreamUrl || !isAllowedStructureUpstreamUrl(meta.upstreamUrl)) {
+    if (meta?.upstreamUrl) {
+      console.warn("GeneGuessr: structure upstream is not on a provider host", cacheKey)
+    }
+    return Response.json({ error: "Structure unavailable" }, { status: 404, headers: corsHeaders })
+  }
+
+  console.log(`[STRUCTURE] Fetching ${cacheKey} from ${meta.upstreamUrl}`)
+  let upstreamResp
   try {
-    object = (await env?.STRUCTURES_BUCKET?.get?.(cacheKey)) || null
+    upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
+      method: "GET",
+      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
+    })
   } catch (err) {
-    console.warn(
-      "GeneGuessr: structure cache read failed, falling back to upstream",
-      cacheKey,
-      err?.message || err,
+    if (!(err instanceof StructureUpstreamRefusedError)) throw err
+    console.warn("GeneGuessr: structure upstream redirect refused", cacheKey, err.message)
+    return Response.json(
+      { error: "Upstream structure unavailable" },
+      { status: 502, headers: corsHeaders },
     )
   }
 
-  // ⚠️ LAZY CACHING: If not in R2, fetch from upstream and cache
-  // This happens on first request after bootstrap (which no longer pre-caches)
-  if (!object) {
-    // We need the protein to get upstream URL - for type=target we already have it
-    // For key-based requests, derive source from the key prefix
-    let meta = null
-    if (type === "target" && protein) {
-      meta = targetStructureMeta || (await getCanonicalStructureMeta(protein, env))
-    } else {
-      meta = await resolveMetaFromCacheKey()
-    }
-
-    if (!meta?.upstreamUrl || !isAllowedStructureUpstreamUrl(meta.upstreamUrl)) {
-      if (meta?.upstreamUrl) {
-        console.warn("GeneGuessr: structure upstream is not on a provider host", cacheKey)
-      }
-      return Response.json(
-        { error: "Structure not cached and no upstream available" },
-        { status: 404, headers: corsHeaders },
-      )
-    }
-
-    // Fetch from upstream and stream to client while caching in background
-    console.log(`[LAZY-CACHE] Fetching ${cacheKey} from ${meta.upstreamUrl}`)
-    let upstreamResp
-    try {
-      upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
-        method: "GET",
-        headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-      })
-    } catch (err) {
-      if (!(err instanceof StructureUpstreamRefusedError)) throw err
-      console.warn("GeneGuessr: structure upstream redirect refused", cacheKey, err.message)
-      return Response.json(
-        { error: "Upstream structure unavailable" },
-        { status: 502, headers: corsHeaders },
-      )
-    }
-
-    if (!upstreamResp.ok || !upstreamResp.body) {
-      console.warn(
-        "GeneGuessr: upstream structure fetch failed",
-        meta.upstreamUrl,
-        upstreamResp.status,
-      )
-      return Response.json(
-        { error: "Upstream structure unavailable" },
-        { status: 502, headers: corsHeaders },
-      )
-    }
-
-    const contentLengthHeader = upstreamResp.headers.get("Content-Length")
-    const contentLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : NaN
-    if (Number.isFinite(contentLength) && contentLength > MAX_STRUCTURE_FILE_BYTES) {
-      console.warn(
-        "GeneGuessr: upstream structure too large",
-        meta.upstreamUrl,
-        `${contentLength} bytes`,
-      )
-      return Response.json(
-        { error: "Structure too large", sizeBytes: contentLength },
-        { status: 413, headers: corsHeaders },
-      )
-    }
-
-    const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
-    if (isSwissModelPdb) {
-      // SWISS-MODEL PDB responses commonly omit HEADER, which Mol* requires.
-      // Buffer this bounded response so both cached and uncached delivery paths
-      // apply the same parser-safe normalization. This matters while R2 is
-      // disabled: every request is an upstream delivery.
-      const originalData = new Uint8Array(await upstreamResp.arrayBuffer())
-      if (originalData.byteLength > MAX_STRUCTURE_FILE_BYTES) {
-        return Response.json(
-          { error: "Structure too large", sizeBytes: originalData.byteLength },
-          { status: 413, headers: corsHeaders },
-        )
-      }
-
-      if (env?.STRUCTURES_BUCKET?.put) {
-        ctx.waitUntil(
-          env.STRUCTURES_BUCKET.put(cacheKey, originalData, {
-            httpMetadata: { contentType },
-          }).catch((err) => console.warn("[LAZY-CACHE] Background cache failed:", err)),
-        )
-      }
-
-      const responseHeaders = {
-        ...corsHeaders,
-        ...bodyTypeHeaders,
-        "Cache-Control":
-          type === "target"
-            ? "private, no-store, must-revalidate"
-            : "public, max-age=604800, immutable",
-      }
-      if (type !== "target") {
-        responseHeaders["X-Cache"] = "UPSTREAM"
-        responseHeaders["X-Source"] = "swissmodel"
-        responseHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
-      }
-      return new Response(prependAnonymousPdbHeader(originalData), { headers: responseHeaders })
-    }
-
-    // Clone the response - one for client, one for R2 cache
-    const [clientStream, cacheStream] = upstreamResp.body.tee()
-
-    // CRITICAL: Must use ctx.waitUntil(), NOT env.waitUntil()
-    // `ctx` = execution context (has waitUntil), `env` = environment bindings (does not)
-    // Using env.waitUntil() causes \"waitUntil is not a function\" error and 500 response
-    if (env?.STRUCTURES_BUCKET?.put) {
-      ctx.waitUntil(
-        (async () => {
-          try {
-            const arrayBuffer = await new Response(cacheStream).arrayBuffer()
-            await env.STRUCTURES_BUCKET.put(cacheKey, arrayBuffer, {
-              httpMetadata: { contentType },
-            })
-            // FIFO eviction uses R2's built-in uploaded timestamp - no KV tracking needed
-            console.log(
-              `[LAZY-CACHE] Cached ${cacheKey} (${Math.round(arrayBuffer.byteLength / 1024)}KB)`,
-            )
-          } catch (e) {
-            console.warn("[LAZY-CACHE] Background cache failed:", e)
-          }
-        })(),
-      )
-    } else {
-      cacheStream.cancel().catch(() => {})
-    }
-
-    // Only add timing headers for non-target requests (target headers could leak puzzle info)
-    const responseHeaders = {
-      ...corsHeaders,
-      ...bodyTypeHeaders,
-      "Cache-Control":
-        type === "target"
-          ? "private, no-store, must-revalidate"
-          : "public, max-age=604800, immutable",
-    }
-    if (type !== "target") {
-      const [upstreamSource] = cacheKey.split("/")
-      responseHeaders["X-Cache"] = "UPSTREAM"
-      responseHeaders["X-Source"] = upstreamSource
-      responseHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
-    }
-    return new Response(clientStream, { headers: responseHeaders })
+  if (!upstreamResp.ok || !upstreamResp.body) {
+    console.warn(
+      "GeneGuessr: upstream structure fetch failed",
+      meta.upstreamUrl,
+      upstreamResp.status,
+    )
+    return Response.json(
+      { error: "Upstream structure unavailable" },
+      { status: 502, headers: corsHeaders },
+    )
   }
 
-  // REMOVED: touchStructureCacheEntry - no longer tracking lastAccess in KV
-  // Using FIFO eviction based on R2's uploaded timestamp instead of LRU
-
-  // For type=target, don't cache at edge - the "target" changes daily but URL is static
-  // For key-based requests, cache 7 days - the key includes the structure ID so it's stable
-  const cacheControl =
-    type === "target" ? "private, no-store, must-revalidate" : "public, max-age=604800, immutable"
-
-  // Timing headers for monitoring (only for non-target requests - target headers could leak puzzle info)
-  const timingHeaders = {}
-  if (type !== "target") {
-    const [r2Source] = cacheKey.split("/")
-    timingHeaders["X-Cache"] = "R2"
-    timingHeaders["X-Source"] = r2Source
-    timingHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
-    timingHeaders["X-Size"] = String(object.size)
-  }
-
-  // SWISS-MODEL PDB files lack the HEADER record that Mol* requires for parsing.
-  // Mol*'s PDB parser needs a HEADER to create an "entry" object; without it,
-  // we get "Cannot read properties of undefined (reading 'entry')" errors.
-  // We prepend a minimal anonymous HEADER that doesn't leak protein identity.
+  // Stream the body to the browser, never buffer it, and cut it off past
+  // MAX_STRUCTURE_FILE_BYTES however the upstream announced (or did not announce)
+  // its size. SWISS-MODEL PDB responses commonly omit the HEADER record Mol*
+  // requires, so that one anonymous line is streamed ahead of the body.
   const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
-  if (isSwissModelPdb) {
-    const originalData = await object.arrayBuffer()
-    const combinedBuffer = prependAnonymousPdbHeader(originalData)
-
-    const swissHeaders = {
-      ...corsHeaders,
-      ...timingHeaders,
-      ...bodyTypeHeaders,
-      "Cache-Control": cacheControl,
-    }
-    if (type !== "target") {
-      swissHeaders["X-Size"] = String(combinedBuffer.byteLength) // Override with actual size after header prepend
-    }
-    return new Response(combinedBuffer, { headers: swissHeaders })
-  }
-
-  return new Response(object.body, {
-    headers: {
-      ...corsHeaders,
-      ...timingHeaders,
-      ...bodyTypeHeaders,
-      "Cache-Control": cacheControl,
-    },
+  const body = limitStructureBody(upstreamResp.body, {
+    prefix: isSwissModelPdb ? ANONYMOUS_PDB_HEADER : null,
+    onTooLarge: (bytes) =>
+      console.warn("GeneGuessr: upstream structure over the size cap", cacheKey, `${bytes} bytes`),
   })
+
+  const responseHeaders = {
+    ...corsHeaders,
+    ...bodyTypeHeaders,
+    // The target changes daily but its URL is static, so it is never stored. A key
+    // names one structure, so the browser keeps it a week.
+    "Cache-Control":
+      type === "target"
+        ? "private, no-store, must-revalidate"
+        : "public, max-age=604800, immutable",
+  }
+  // Timing only for key-based requests: a target's headers could leak puzzle info.
+  if (type !== "target") {
+    responseHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
+  }
+  return new Response(body, { headers: responseHeaders })
 }
 
 /**
@@ -4768,7 +4500,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
  * - Target protein metadata
  * - Structure token (source, URL, chain hints, etc.)
  *
- * This eliminates D1 queries + R2 head calls for repeat visitors on the same day.
+ * This eliminates D1 queries for repeat visitors on the same day.
  * KV lookup: ~1-5ms vs full computation: ~500-2000ms
  */
 async function getDailyBootstrapCache(env, date, origin) {
@@ -4837,7 +4569,7 @@ async function validateDailyBootstrapCache(env, date, origin, cached) {
   const cacheKey = buildDailyBootstrapCacheKey(date, origin)
   const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot)
   const sourceWasExplicitOverride = cached?.audit?.source === "override"
-  const currentMeta = currentProtein ? await getCanonicalStructureMeta(currentProtein, env) : null
+  const currentMeta = currentProtein ? getCanonicalStructureMeta(currentProtein) : null
   const canonicalStillMatches = sameStructureMeta(currentMeta, cached.structureMeta)
   const automaticSourceStillEligible =
     sourceWasExplicitOverride || (currentProtein && !isAlphaFoldOnlyProtein(currentProtein))
@@ -4954,7 +4686,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const today = new Date().toISOString().slice(0, 10)
 
     // ⚠️ DAILY MODE: CHECK KV CACHE FIRST ⚠️
-    // Eliminates D1 + R2 queries for repeat visitors (~500-2000ms savings)
+    // Eliminates D1 queries for repeat visitors (~500-2000ms savings)
     let cachedDaily = null
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin)
@@ -5222,7 +4954,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const [_, freshStructureSelection] = await Promise.all([
       hydrateGuessProteins(env, sessionId, state, targetProtein),
       needsStructureToken
-        ? buildTargetStructureSelection(targetProtein, env, {
+        ? buildTargetStructureSelection(targetProtein, {
             practiceMode,
             origin: url.origin,
           }).catch((err) => {
@@ -5513,7 +5245,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
         operation: "guess_submission",
         requestPath: "/api/game/guess",
       }),
-      buildGuessStructureToken(guessProtein, env, { origin: url.origin }),
+      buildGuessStructureToken(guessProtein, { origin: url.origin }),
     ])
 
     const payload = buildGamePayload(state, targetProtein, { includeProteins: true })
@@ -5983,7 +5715,7 @@ async function getDailyTargetProtein(env, options = {}) {
         eligibleIds: ids,
         startIndex: options.practice ? startIdx : 0,
         loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
-        resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate, env),
+        resolveStructureMeta: (candidate) => getCanonicalStructureMeta(candidate),
         isStructureAvailable: (structureMeta, candidate) =>
           verifyDailyTargetStructure(env, structureMeta, candidate),
         isCandidateIneligible:
@@ -6627,7 +6359,7 @@ async function handlePracticeStart(request, env, ctx, corsHeaders) {
 
     let structureToken = null
     try {
-      const structureSelection = await buildTargetStructureSelection(targetProtein, env, {
+      const structureSelection = await buildTargetStructureSelection(targetProtein, {
         practiceMode: true,
         origin: url.origin,
       })
@@ -6664,386 +6396,6 @@ async function safeJson(request) {
     return null
   }
 }
-
-function parseBoolParam(raw, fallback = false) {
-  if (raw === null || raw === undefined) {
-    return fallback
-  }
-  const value = String(raw).trim().toLowerCase()
-  if (value === "1" || value === "true" || value === "yes" || value === "y") return true
-  if (value === "0" || value === "false" || value === "no" || value === "n") return false
-  return fallback
-}
-
-function clampInt(value, min, max, fallback) {
-  const numeric = Number.parseInt(String(value), 10)
-  if (!Number.isFinite(numeric)) {
-    return fallback
-  }
-  return Math.min(max, Math.max(min, numeric))
-}
-
-async function handleAdminPurgeOrphanStructures(request, env, corsHeaders) {
-  if (!(await isAdmin(request, env))) {
-    return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-  }
-  if (!env?.STRUCTURES_BUCKET || !env?.KV) {
-    return Response.json(
-      { error: "Missing STRUCTURES_BUCKET or KV binding" },
-      { status: 500, headers: corsHeaders },
-    )
-  }
-
-  const url = new URL(request.url)
-  const cursorIn = url.searchParams.get("cursor") || undefined
-  const prefixRaw = (url.searchParams.get("prefix") || "").trim()
-  const prefix = prefixRaw === "" ? undefined : prefixRaw
-  const dryRun = parseBoolParam(url.searchParams.get("dryRun"), true)
-  const limit = clampInt(url.searchParams.get("limit"), 1, 1000, 250)
-
-  // Safety: only allow the known structure prefixes.
-  const allowedPrefixes = new Set(["pdb/", "alphafold/", "swissmodel/"])
-  if (prefix && !allowedPrefixes.has(prefix)) {
-    return Response.json(
-      {
-        error: "Invalid prefix. Allowed: pdb/, alphafold/, swissmodel/",
-        prefix,
-      },
-      { status: 400, headers: corsHeaders },
-    )
-  }
-
-  const listResp = await env.STRUCTURES_BUCKET.list({ cursor: cursorIn, limit, prefix })
-  const objects = listResp?.objects || []
-
-  let scanned = 0
-  let orphaned = 0
-  let deleted = 0
-  let errors = 0
-  const sampleOrphans = []
-
-  for (const obj of objects) {
-    const key = obj?.key || obj?.name
-    if (!key) {
-      continue
-    }
-    scanned += 1
-    let metaRaw = null
-    try {
-      metaRaw = await env.KV.get(`${STRUCTURE_CACHE_META_PREFIX}${key}`)
-    } catch {
-      // If KV read fails, don't delete blindly.
-      errors += 1
-      continue
-    }
-
-    if (metaRaw) {
-      continue
-    }
-
-    orphaned += 1
-    if (sampleOrphans.length < 25) {
-      sampleOrphans.push({ key, size: obj?.size || 0, uploaded: obj?.uploaded || null })
-    }
-
-    if (dryRun) {
-      continue
-    }
-
-    try {
-      await env.STRUCTURES_BUCKET.delete(key)
-      deleted += 1
-    } catch {
-      errors += 1
-    }
-  }
-
-  const nextCursor = listResp?.truncated ? listResp?.cursor || null : null
-
-  return Response.json(
-    {
-      dryRun,
-      limit,
-      prefix: prefix || null,
-      cursorIn: cursorIn || null,
-      nextCursor,
-      scanned,
-      orphaned,
-      deleted,
-      errors,
-      sampleOrphans,
-    },
-    { headers: corsHeaders },
-  )
-}
-
-async function handleAdminDeleteStructure(request, env, corsHeaders) {
-  if (!(await isAdmin(request, env))) {
-    return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-  }
-  if (!env?.STRUCTURES_BUCKET || !env?.KV) {
-    return Response.json(
-      { error: "Missing STRUCTURES_BUCKET or KV binding" },
-      { status: 500, headers: corsHeaders },
-    )
-  }
-
-  const url = new URL(request.url)
-  const key = (url.searchParams.get("key") || "").trim()
-  const dryRun = parseBoolParam(url.searchParams.get("dryRun"), true)
-  const deleteMeta = parseBoolParam(url.searchParams.get("deleteMeta"), true)
-
-  if (!key) {
-    return Response.json({ error: "Missing key" }, { status: 400, headers: corsHeaders })
-  }
-  if (key.startsWith("/") || key.includes("..")) {
-    return Response.json({ error: "Invalid key" }, { status: 400, headers: corsHeaders })
-  }
-
-  const allowedPrefixes = new Set(["pdb/", "alphafold/", "swissmodel/"])
-  const keyPrefix = [...allowedPrefixes].find((p) => key.startsWith(p)) || null
-  if (!keyPrefix) {
-    return Response.json(
-      {
-        error: "Invalid key prefix. Allowed: pdb/, alphafold/, swissmodel/",
-        key,
-      },
-      { status: 400, headers: corsHeaders },
-    )
-  }
-
-  let exists = false
-  let size = null
-  try {
-    const head = await env.STRUCTURES_BUCKET.head(key)
-    exists = Boolean(head)
-    size = head?.size ?? null
-  } catch {
-    // If head fails, don't delete blindly.
-    return Response.json(
-      { error: "Failed to read object metadata", key },
-      { status: 500, headers: corsHeaders },
-    )
-  }
-
-  let deletedObject = false
-  let deletedMeta = false
-
-  if (!dryRun && exists) {
-    try {
-      await env.STRUCTURES_BUCKET.delete(key)
-      deletedObject = true
-    } catch {
-      return Response.json(
-        { error: "Failed to delete object", key },
-        { status: 500, headers: corsHeaders },
-      )
-    }
-  }
-
-  if (!dryRun && deleteMeta) {
-    try {
-      await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${key}`)
-      deletedMeta = true
-    } catch {
-      // Non-fatal. Meta is best-effort.
-      deletedMeta = false
-    }
-  }
-
-  return Response.json(
-    {
-      dryRun,
-      key,
-      keyPrefix,
-      exists,
-      size,
-      deleteMeta,
-      deletedObject,
-      deletedMeta,
-    },
-    { headers: corsHeaders },
-  )
-}
-
-async function listReferencedStructureKeys(env) {
-  const keys = new Set()
-  const stats = {
-    rows: 0,
-    referenced: 0,
-    referencedBySource: {
-      pdb: 0,
-      alphafold: 0,
-      swissmodel: 0,
-      other: 0,
-    },
-    nullMetaRows: 0,
-  }
-
-  if (!env?.DB) {
-    return { keys, stats }
-  }
-
-  const PAGE = 1000
-  let offset = 0
-  while (true) {
-    const resp = await env.DB.prepare(
-      `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
-         FROM proteins
-         WHERE structure_source IS NOT NULL
-         LIMIT ? OFFSET ?`,
-    )
-      .bind(PAGE, offset)
-      .all()
-
-    const rows = resp?.results || []
-    stats.rows += rows.length
-    if (rows.length === 0) {
-      break
-    }
-
-    for (const row of rows) {
-      const meta = buildMetaFromStoredStructure(row)
-      if (!meta?.r2Key) {
-        stats.nullMetaRows += 1
-        continue
-      }
-      keys.add(meta.r2Key)
-      stats.referenced += 1
-      const source = meta.source || row.structure_source
-      if (source === "pdb") stats.referencedBySource.pdb += 1
-      else if (source === "alphafold") stats.referencedBySource.alphafold += 1
-      else if (source === "swissmodel") stats.referencedBySource.swissmodel += 1
-      else stats.referencedBySource.other += 1
-    }
-
-    if (rows.length < PAGE) {
-      break
-    }
-    offset += PAGE
-  }
-
-  return { keys, stats }
-}
-
-async function handleAdminPurgeUnreferencedStructures(request, env, corsHeaders) {
-  if (!(await isAdmin(request, env))) {
-    return Response.json({ error: "Unauthorized" }, { status: 403, headers: corsHeaders })
-  }
-  if (!env?.STRUCTURES_BUCKET || !env?.KV || !env?.DB) {
-    return Response.json(
-      { error: "Missing STRUCTURES_BUCKET, KV, or DB binding" },
-      { status: 500, headers: corsHeaders },
-    )
-  }
-
-  const url = new URL(request.url)
-  const cursorIn = url.searchParams.get("cursor") || undefined
-  const prefixRaw = (url.searchParams.get("prefix") || "").trim()
-  const prefix = prefixRaw === "" ? undefined : prefixRaw
-  const dryRun = parseBoolParam(url.searchParams.get("dryRun"), true)
-  const limit = clampInt(url.searchParams.get("limit"), 1, 1000, 250)
-  const deleteMeta = parseBoolParam(url.searchParams.get("deleteMeta"), true)
-
-  const allowedPrefixes = new Set(["pdb/", "alphafold/", "swissmodel/"])
-  if (prefix && !allowedPrefixes.has(prefix)) {
-    return Response.json(
-      {
-        error: "Invalid prefix. Allowed: pdb/, alphafold/, swissmodel/",
-        prefix,
-      },
-      { status: 400, headers: corsHeaders },
-    )
-  }
-
-  // Build the referenced set from the current DB.
-  const { keys: referencedKeys, stats: referenceStats } = await listReferencedStructureKeys(env)
-
-  const listResp = await env.STRUCTURES_BUCKET.list({ cursor: cursorIn, limit, prefix })
-  const objects = listResp?.objects || []
-
-  let scanned = 0
-  let unreferenced = 0
-  let deleted = 0
-  let deletedBytes = 0
-  let errors = 0
-  const sampleUnreferenced = []
-
-  for (const obj of objects) {
-    const key = obj?.key || obj?.name
-    if (!key) {
-      continue
-    }
-    scanned += 1
-    if (referencedKeys.has(key)) {
-      continue
-    }
-
-    unreferenced += 1
-    if (sampleUnreferenced.length < 25) {
-      sampleUnreferenced.push({ key, size: obj?.size || 0, uploaded: obj?.uploaded || null })
-    }
-
-    if (dryRun) {
-      continue
-    }
-
-    try {
-      await env.STRUCTURES_BUCKET.delete(key)
-      deleted += 1
-      deletedBytes += obj?.size || 0
-    } catch {
-      errors += 1
-      continue
-    }
-
-    if (deleteMeta) {
-      try {
-        await env.KV.delete(`${STRUCTURE_CACHE_META_PREFIX}${key}`)
-      } catch {
-        // Best-effort.
-      }
-    }
-  }
-
-  const nextCursor = listResp?.truncated ? listResp?.cursor || null : null
-
-  return Response.json(
-    {
-      dryRun,
-      limit,
-      prefix: prefix || null,
-      cursorIn: cursorIn || null,
-      nextCursor,
-      deleteMeta,
-      scanned,
-      unreferenced,
-      deleted,
-      deletedBytes,
-      errors,
-      sampleUnreferenced,
-      referenceStats,
-      referencedKeyCount: referencedKeys.size,
-    },
-    { headers: corsHeaders },
-  )
-}
-
-/**
- * Build structure metadata from flat protein columns.
- * Returns null if structure data is missing or incomplete.
- */
-function buildMetaFromStoredStructure(protein) {
-  return buildStructureMetaFromStoredSource(protein)
-}
-
-// KV remembers only what discovery found for a protein that has no stored source
-// (749 of 19,110 proteins on 2026-10-03; none is in the autocomplete index or a
-// target pool). A protein with a stored source never reads or writes this key. A
-// hit is probed before it is trusted, so the long TTL costs nothing in staleness
-// and bounds the writes: at most one per such protein per month.
-const STRUCTURE_SOURCE_CACHE_PREFIX = "structure_source:"
-const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24 * 30 // 30 days
 
 function hasStoredStructureSource(protein, source) {
   if (!protein || !source) {
@@ -7092,25 +6444,12 @@ function buildStoredStructureCandidates(protein) {
   return candidates
 }
 
-// Cache index metadata (KV).
-//
-// We keep an index of R2 objects in KV (size + lastAccess) so we can evict old
-// structures when the bucket hits a cap.
-//
-// These entries have NO TTL - they persist until explicitly deleted by evictStructureCache().
-// This prevents orphaning: if KV expired but R2 didn't, eviction couldn't find/delete the R2 object.
-
-async function isStructureMetaAvailable(env, meta) {
-  if (!meta?.r2Key) {
-    return false
-  }
-  if (!env) {
-    return true
-  }
-  if (await structureObjectExists(env, meta.r2Key)) {
-    return true
-  }
-  if (!meta.upstreamUrl) {
+// Whether a structure's upstream answers with usable bytes, for the daily-target
+// availability check: tomorrow's puzzle is committed only if its exact structure
+// loads (the 2026-07-17 IMMP2L target had a well-formed SWISS-MODEL URL that
+// returned 404). One bounded ranged GET, five seconds at most.
+async function isStructureMetaAvailable(meta) {
+  if (!meta?.r2Key || !meta.upstreamUrl) {
     return false
   }
 
@@ -7152,7 +6491,7 @@ async function isStructureMetaAvailable(env, meta) {
   }
 }
 
-async function verifyDailyTargetStructure(env, structureMeta, protein, options = {}) {
+async function verifyDailyTargetStructure(env, structureMeta, protein) {
   const uniprot = String(protein?.uniprot || "")
     .trim()
     .toUpperCase()
@@ -7160,11 +6499,7 @@ async function verifyDailyTargetStructure(env, structureMeta, protein, options =
     return false
   }
 
-  const reachable = await isStructureMetaAvailable(env, structureMeta)
-  const ready =
-    reachable && options.pinUntil
-      ? await ensureStructureCachedWithPin(env, structureMeta, options.pinUntil)
-      : reachable
+  const ready = await isStructureMetaAvailable(structureMeta)
 
   try {
     if (ready) {
@@ -7182,773 +6517,23 @@ async function verifyDailyTargetStructure(env, structureMeta, protein, options =
   return ready
 }
 
-async function resolveStoredStructureMeta(protein, env) {
-  const candidates = buildStoredStructureCandidates(protein)
-  if (!candidates.length) {
-    return null
-  }
-
-  // The explicit `proteins.structure_source` value is the curated database
-  // decision. Return it without probing and without trying "better-looking"
-  // alternatives first.
-  //
-  // This looks counterintuitive because `isStructureMetaAvailable()` exists just
-  // below. The important distinction is whether the database made an explicit
-  // choice:
-  //
-  // - Explicit source present: respect it. A short network probe is not allowed
-  //   to overrule the row. On 2026-05-19 Cloudflare-to-RCSB aborted a 5-second
-  //   availability probe for `pdb/1B64.bcif`, and the old code treated that
-  //   transient probe failure as permission to fall back to SWISS-MODEL. That
-  //   made bootstrap and structure bytes disagree.
-  // - No explicit source: probe candidates, because there is no curated source
-  //   to protect and a reachable fallback is better than no structure.
-  //
-  // Do not move the probe above this block. Availability probes are advisory for
-  // fallback discovery; they are not a source-of-truth mechanism.
-  const explicitSource = String(protein.structure_source || "")
+// The stored `proteins.structure_source` is the canonical structure decision, and
+// the only one. A protein with no stored source has no structure: nothing is
+// discovered, probed or cached for it, whatever else its row holds (production, on
+// 2026-10-03: 749 of 19,110 proteins have no source and none of the three structure
+// columns; the other 18,361 each have the column their source needs). The row is
+// returned without probing and without trying "better-looking" alternatives: a
+// short network probe is not allowed to overrule it. On 2026-05-19 a stale cached
+// source and an aborted five-second probe each made bootstrap and structure bytes
+// disagree, and Mol* crashed on the mismatch.
+function getCanonicalStructureMeta(protein) {
+  const source = String(protein?.structure_source || "")
     .trim()
     .toLowerCase()
-  const explicitMeta = candidates.find((candidate) => candidate.source === explicitSource)
-  if (explicitMeta) {
-    return explicitMeta
-  }
-
-  if (!env) {
-    return candidates[0]
-  }
-
-  for (const candidate of candidates) {
-    if (await isStructureMetaAvailable(env, candidate)) {
-      if (candidate.source !== protein.structure_source) {
-        console.warn(
-          `GeneGuessr: falling back from stored ${protein.structure_source || "unknown"} to ${candidate.source} for ${protein.uniprot}`,
-        )
-      }
-      return candidate
-    }
-  }
-
-  return null
-}
-
-async function getCanonicalStructureMeta(protein, env) {
-  if (!protein) {
+  if (!source) {
     return null
   }
-
-  const cacheKey = `${STRUCTURE_SOURCE_CACHE_PREFIX}${protein.uniprot}`
-
-  // The database row is the canonical structure decision. KV only remembers what
-  // discovery found for proteins whose stored source is missing; a stored row is
-  // never written to KV, because the row is already one indexed read and always
-  // wins (a write nothing reads costs one of the 1,000 free KV writes a day).
-  //
-  // This ordering is a regression guard, not a style preference. A stale
-  // `structure_source:P24534` KV value once pointed to:
-  //
-  //   swissmodel/P24534_5dqs.pdb
-  //
-  // while the current DB row correctly said:
-  //
-  //   structure_source = "pdb", pdb_id = "1B64"
-  //
-  // Bootstrap used the DB-backed RCSB metadata and emitted `format: "bcif"`.
-  // The target structure endpoint separately trusted the stale KV value and
-  // streamed PDB `ATOM...` text. Mol* then crashed with a misleading
-  // `Cannot read properties of undefined (reading 'transform')` error because
-  // the real bug was a server-side format/source mismatch.
-  //
-  // Future rule: never read KV before current stored DB metadata for proteins
-  // that have a stored source. KV is a performance cache; it is not allowed to
-  // contradict the curated row.
-  const storedMeta = await resolveStoredStructureMeta(protein, env)
-  if (storedMeta) {
-    console.log(
-      `GeneGuessr: using stored structure metadata for ${protein.uniprot} (${storedMeta.source})`,
-    )
-    return storedMeta
-  }
-
-  // Check KV after stored metadata so stale cache entries cannot override the
-  // current database source selection. This branch is for proteins without a
-  // usable stored source or for discovered external metadata, not for replacing
-  // curated rows.
-  try {
-    const cached = await env.KV?.get(cacheKey, { type: "json" })
-    if (cached) {
-      if (await isStructureMetaAvailable(env, cached)) {
-        console.log(`GeneGuessr: structure source cache hit for ${protein.uniprot}`)
-        return cached
-      }
-      console.warn(`GeneGuessr: cached structure source stale for ${protein.uniprot}, refreshing`)
-      await env.KV?.delete(cacheKey)
-    }
-  } catch (err) {
-    console.warn("GeneGuessr: failed to read structure source cache", err)
-  }
-
-  // SLOW PATH: Discover structure from external APIs (for proteins not in our database)
-  console.log(
-    `GeneGuessr: structure source cache miss for ${protein.uniprot}, discovering from APIs...`,
-  )
-
-  // Selection thresholds (match seeder)
-  const COVERAGE_THRESHOLD = 0.6
-  const PDB_RESOLUTION_MAX = 4.0
-  const AF_PLDDT_MIN = 50
-
-  // Source preference order: PDB -> SWISS-MODEL -> AlphaFold
-  const SOURCE_PREFERENCE = ["pdb", "swissmodel", "alphafold"]
-
-  // Discover candidates
-  const candidates = []
-
-  // PDB candidates
-  try {
-    const pdbUrl = `https://www.ebi.ac.uk/pdbe/api/mappings/best_structures/${protein.uniprot}`
-    const pdbResp = await fetch(pdbUrl, { timeout: 20000 })
-    if (pdbResp.ok) {
-      const pdbData = await pdbResp.json()
-      const pdbMappings = pdbData[protein.uniprot] || []
-      for (const m of pdbMappings) {
-        const pdbId = (m.pdb_id || "").toUpperCase()
-        if (!pdbId) continue
-        const coverage = m.coverage || 0.0
-        const resolution = m.resolution
-        const chainCount = m.chain_id ? m.chain_id.split(",").length : 1 // Count chains in structure
-        // Only include X-ray diffraction structures with reasonable resolution
-        if (
-          m.experimental_method === "X-ray diffraction" &&
-          resolution &&
-          resolution <= PDB_RESOLUTION_MAX
-        ) {
-          candidates.push({
-            source: "pdb",
-            id: pdbId,
-            // Use RCSB ModelServer with BCIF encoding - much smaller than raw CIF
-            upstreamUrl: `https://models.rcsb.org/v1/${pdbId}/full?encoding=bcif&copy_all_categories=false`,
-            format: "bcif",
-            coverage,
-            chainCount, // Number of chains (prefer fewer for simpler structures)
-            raw: m,
-          })
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("GeneGuessr: failed to fetch PDB mappings for", protein.uniprot, err)
-  }
-
-  // AlphaFold candidate
-  try {
-    const afUrl = `https://alphafold.ebi.ac.uk/api/prediction/${protein.uniprot}`
-    const afResp = await fetch(afUrl, { timeout: 10000 })
-    let afAdded = false
-    if (afResp.ok) {
-      const afData = await afResp.json()
-      if (Array.isArray(afData) && afData.length > 0) {
-        // Pick the best model (highest globalMetricValue)
-        const best = afData.reduce((a, b) => (a.globalMetricValue > b.globalMetricValue ? a : b))
-        if (best.cifUrl) {
-          candidates.push({
-            source: "alphafold",
-            id: protein.uniprot,
-            upstreamUrl: best.cifUrl,
-            coverage: 1.0,
-            quality: best.globalMetricValue,
-          })
-          afAdded = true
-        }
-      }
-    }
-    // Fallback: if API returned empty/invalid, construct v6 URL directly
-    // AlphaFold has predictions for virtually all human proteins, so worth trying
-    if (!afAdded) {
-      const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`
-      candidates.push({
-        source: "alphafold",
-        id: protein.uniprot,
-        upstreamUrl: fallbackCifUrl,
-        coverage: 1.0,
-        quality: 70, // Default reasonable pLDDT assumption
-      })
-    }
-  } catch (err) {
-    console.warn("GeneGuessr: failed to fetch AlphaFold for", protein.uniprot, err)
-    // Fallback on error: try constructed v6 URL anyway
-    const fallbackCifUrl = `https://alphafold.ebi.ac.uk/files/AF-${protein.uniprot}-F1-model_v6.cif`
-    candidates.push({
-      source: "alphafold",
-      id: protein.uniprot,
-      upstreamUrl: fallbackCifUrl,
-      coverage: 1.0,
-      quality: 70,
-    })
-  }
-
-  // SWISS-MODEL candidates
-  try {
-    const swissUrl = `https://swissmodel.expasy.org/repository/uniprot/${protein.uniprot}.json`
-    const swissResp = await fetch(swissUrl, { timeout: 20000 })
-    if (swissResp.ok) {
-      const swissData = await swissResp.json()
-      const structures = swissData.result?.structures || []
-      for (const s of structures) {
-        if (s.provider === "SWISSMODEL" && s.method === "HOMOLOGY MODELLING") {
-          const coverage = s.coverage || 0.0
-          const gmqe = s.gmqe
-          const cifUrl = s.modelcif
-          if (cifUrl && coverage >= COVERAGE_THRESHOLD && gmqe && gmqe >= 0.6) {
-            candidates.push({
-              source: "swissmodel",
-              id: `${protein.uniprot}_swissmodel_${s.template || "unknown"}`,
-              upstreamUrl: cifUrl,
-              coverage,
-              quality: gmqe,
-              raw: s,
-            })
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("GeneGuessr: failed to fetch SWISS-MODEL for", protein.uniprot, err)
-  }
-
-  // Select best candidate following SOURCE_PREFERENCE
-  let selected = null
-  for (const source of SOURCE_PREFERENCE) {
-    if (source === "pdb") {
-      const pdbs = candidates.filter((c) => c.source === "pdb" && c.coverage >= COVERAGE_THRESHOLD)
-      if (pdbs.length > 0) {
-        pdbs.sort(
-          (a, b) =>
-            b.coverage - a.coverage || (a.chainCount || Infinity) - (b.chainCount || Infinity),
-        ) // Higher coverage, fewer chains better
-        selected = pdbs[0]
-        break
-      }
-    } else if (source === "swissmodel") {
-      const swiss = candidates.filter(
-        (c) =>
-          c.source === "swissmodel" && c.coverage >= COVERAGE_THRESHOLD && (c.quality || 0) >= 0.6,
-      )
-      if (swiss.length > 0) {
-        swiss.sort((a, b) => b.coverage - a.coverage || b.quality - a.quality) // Higher coverage, higher GMQE better
-        selected = swiss[0]
-        break
-      }
-    } else if (source === "alphafold") {
-      const af = candidates.filter((c) => c.source === "alphafold")
-      if (af.length > 0) {
-        af.sort((a, b) => (b.quality || 0) - (a.quality || 0)) // Higher pLDDT better
-        selected = af[0]
-        break
-      }
-    }
-  }
-
-  if (!selected) {
-    if (env?.DB && protein?.uniprot) {
-      await markStructureFailure(env.DB, protein.uniprot)
-    }
-    return null
-  }
-
-  // Build meta for selected candidate
-  let meta = null
-  if (selected.source === "pdb") {
-    // Use BCIF format from ModelServer
-    const ext = selected.format === "bcif" ? "bcif" : "cif"
-    meta = {
-      source: "pdb",
-      r2Key: `pdb/${selected.id}.${ext}`,
-      upstreamUrl: selected.upstreamUrl,
-      shortLabel: "RCSB PDB",
-      displayLabel: `RCSB PDB (${selected.id})`,
-      format: ext,
-      linkUrl: `https://www.rcsb.org/structure/${selected.id}`,
-    }
-  } else if (selected.source === "swissmodel") {
-    const ext = getFileExtensionFromUrl(selected.upstreamUrl)
-    const normalizedFormat = ext === "pdb" ? "pdb" : ext === "bcif" ? "bcif" : "cif"
-    meta = {
-      source: "swissmodel",
-      r2Key: `swissmodel/${sanitizeKeySegment(selected.id)}.${ext}`,
-      upstreamUrl: selected.upstreamUrl,
-      shortLabel: "SWISS-MODEL",
-      displayLabel: `SWISS-MODEL (${selected.id})`,
-      format: normalizedFormat,
-      linkUrl: null, // SWISS-MODEL URLs are direct downloads, not webpages
-    }
-  } else if (selected.source === "alphafold") {
-    meta = {
-      source: "alphafold",
-      r2Key: `alphafold/${sanitizeKeySegment(selected.id)}.cif`,
-      upstreamUrl: selected.upstreamUrl,
-      shortLabel: "AlphaFold",
-      displayLabel: `AlphaFold (${selected.id})`,
-      format: "cif",
-    }
-  }
-
-  if (!meta) {
-    if (env?.DB && protein?.uniprot) {
-      await markStructureFailure(env.DB, protein.uniprot)
-    }
-    return null
-  }
-  if (env?.DB && protein?.uniprot) {
-    await clearStructureFailure(env.DB, protein.uniprot)
-  }
-
-  // Cache the discovered structure source
-  try {
-    await env.KV?.put(cacheKey, JSON.stringify(meta), { expirationTtl: STRUCTURE_SOURCE_CACHE_TTL })
-    console.log(`GeneGuessr: cached structure source for ${protein.uniprot}`)
-  } catch (err) {
-    console.warn("GeneGuessr: failed to cache structure source", err)
-  }
-
-  return meta
-}
-
-async function structureObjectExists(env, key) {
-  if (!env?.STRUCTURES_BUCKET || !key) {
-    return false
-  }
-  try {
-    if (typeof env.STRUCTURES_BUCKET.head === "function") {
-      const head = await env.STRUCTURES_BUCKET.head(key)
-      return Boolean(head)
-    }
-    const existing = await env.STRUCTURES_BUCKET.get(key)
-    if (existing?.body && typeof existing.body.cancel === "function") {
-      try {
-        await existing.body.cancel()
-      } catch {
-        // ignore
-      }
-    }
-    return Boolean(existing)
-  } catch {
-    return false
-  }
-}
-
-// Threshold for switching to multipart upload (10MB)
-// Worker memory limit is 128MB, multipart keeps memory bounded to ~8MB chunks
-const MULTIPART_THRESHOLD_BYTES = 10 * 1024 * 1024
-const MULTIPART_PART_SIZE = 8 * 1024 * 1024 // 8MB parts (minimum is 5MB)
-
-async function ensureStructureCached(env, meta, options = {}) {
-  if (!meta?.r2Key) {
-    return false
-  }
-  if (!env?.STRUCTURES_BUCKET) {
-    // Temporary no-R2 deploy mode: we still want structure tokens and
-    // /api/structure-cached upstream fallback to work, we just cannot persist
-    // anything into the disabled bucket right now.
-    return Boolean(meta.upstreamUrl)
-  }
-  const exists = await structureObjectExists(env, meta.r2Key)
-  if (exists) {
-    return true
-  }
-  if (!meta.upstreamUrl) {
-    if (options?.proteinId && env?.DB) {
-      await markStructureFailure(env.DB, options.proteinId)
-    }
-    return false
-  }
-  let usage = await getStructureBucketUsage(env)
-  if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-    const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO)
-    const eviction = await evictStructureCache(env, targetBytes)
-    if (eviction.removed > 0) {
-      console.warn("GeneGuessr: structure cache eviction", eviction)
-    }
-    usage = { bytes: eviction.afterBytes }
-    if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-      console.error("GeneGuessr: structure cache still full after eviction")
-      return false
-    }
-  }
-  let upstreamResp
-  try {
-    upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
-      method: "GET",
-      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-    })
-  } catch (err) {
-    if (!(err instanceof StructureUpstreamRefusedError)) throw err
-    console.warn("GeneGuessr: structure upstream refused", meta.r2Key, err.message)
-    return false
-  }
-  if (!upstreamResp.ok || !upstreamResp.body) {
-    console.warn(
-      "GeneGuessr: upstream structure fetch failed",
-      meta.upstreamUrl,
-      upstreamResp.status,
-    )
-    return false
-  }
-
-  const contentType = structureContentType(structureFormatFromKey(meta.r2Key))
-
-  // Check if we need multipart upload (Content-Length may be missing for chunked responses)
-  const contentLength = upstreamResp.headers.get("Content-Length")
-  const estimatedSize = contentLength ? parseInt(contentLength, 10) : MULTIPART_THRESHOLD_BYTES + 1
-
-  if (estimatedSize <= MULTIPART_THRESHOLD_BYTES) {
-    // Small file: simple put (streams directly, low memory)
-    await env.STRUCTURES_BUCKET.put(meta.r2Key, upstreamResp.body, {
-      httpMetadata: { contentType },
-    })
-  } else {
-    // Large file: use multipart upload to keep memory bounded
-    // This handles files up to 5TB in ~8MB chunks without exceeding Worker memory
-    console.log(
-      `GeneGuessr: using multipart upload for ${meta.r2Key} (estimated ${Math.round(estimatedSize / 1024 / 1024)}MB)`,
-    )
-    await multipartUploadFromStream(env, meta.r2Key, upstreamResp.body, contentType)
-  }
-
-  // FIFO eviction uses R2's built-in uploaded timestamp - no KV tracking needed
-  if (options?.proteinId && env?.DB) {
-    await clearStructureFailure(env.DB, options.proteinId)
-  }
-  return true
-}
-
-async function handleAdminAvailabilityReplacementStructurePin(request, env) {
-  if (!(await isAdmin(request, env))) {
-    return Response.json({ error: "Unauthorized" }, { status: 403 })
-  }
-  try {
-    const body = await request.json()
-    const date = String(body?.date || "").trim()
-    const uniprot = String(body?.uniprot || "")
-      .trim()
-      .toUpperCase()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !uniprot) {
-      return Response.json({ error: "Date and UniProt ID are required" }, { status: 400 })
-    }
-
-    const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-    const selection = await pickDailyTarget(env.DB, salt, date)
-    const availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
-      date,
-      salt,
-      selectionPoolFingerprint: selection?.poolFingerprint,
-    })
-    if (!availabilityPin || availabilityPin.uniprot_id !== uniprot) {
-      return Response.json({ error: "Availability replacement pin changed" }, { status: 409 })
-    }
-
-    const protein = await fetchProteinByUniprot(env.DB, uniprot)
-    if (!protein || isAlphaFoldOnlyProtein(protein)) {
-      return Response.json(
-        { error: "Replacement is not a playable curated structure" },
-        { status: 409 },
-      )
-    }
-    const structureMeta = await getCanonicalStructureMeta(protein, env)
-    const cached = await ensureStructureCachedWithPin(env, structureMeta, date)
-    if (!cached) {
-      return Response.json({ error: "Replacement structure could not be pinned" }, { status: 502 })
-    }
-    return Response.json({
-      ok: true,
-      date,
-      uniprot,
-      structure_key: structureMeta.r2Key,
-      pinned_until: date,
-    })
-  } catch (err) {
-    console.error("Admin availability replacement structure pin failed", err)
-    return Response.json({ error: "Internal server error", details: err.message }, { status: 500 })
-  }
-}
-
-/**
- * Cache a structure with pinning metadata for daily target protection.
- * Pinned structures are skipped during FIFO eviction until pinnedUntil date passes.
- * @param {Object} env - Worker environment bindings
- * @param {Object} meta - Structure metadata with r2Key, upstreamUrl, format, source
- * @param {string} pinnedUntil - Date string (YYYY-MM-DD) until which the structure is protected
- * @returns {boolean} True if structure was cached successfully
- */
-async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
-  if (!meta?.r2Key) {
-    return false
-  }
-  if (!env?.STRUCTURES_BUCKET) {
-    // Temporary no-R2 deploy mode: skip prewarming/pinning entirely. The live
-    // structure route can still fetch directly from upstream when needed.
-    return Boolean(meta.upstreamUrl)
-  }
-
-  // Check if already cached
-  const existing = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-  if (existing) {
-    // Already cached - check if pin needs update
-    const currentPin = existing.customMetadata?.pinnedUntil
-    if (currentPin && currentPin >= pinnedUntil) {
-      // Already pinned for same or later date
-      console.log(`[PIN] ${meta.r2Key} already pinned until ${currentPin}`)
-      return true
-    }
-    // R2 has no metadata-only update. Stream the cached object back into the
-    // same key with merged metadata, then verify the durable pin. Merely
-    // accepting an unpinned cache entry lets FIFO eviction remove a future
-    // mystery target after its recap image has already been generated.
-    const cachedObject = await env.STRUCTURES_BUCKET.get(meta.r2Key)
-    if (!cachedObject?.body) {
-      console.warn(`[PIN] ${meta.r2Key} disappeared before metadata refresh`)
-      return false
-    }
-    await env.STRUCTURES_BUCKET.put(meta.r2Key, cachedObject.body, {
-      httpMetadata: cachedObject.httpMetadata || existing.httpMetadata,
-      customMetadata: {
-        ...(existing.customMetadata || {}),
-        pinnedUntil,
-        source: meta.source || existing.customMetadata?.source || "unknown",
-      },
-    })
-    const refreshed = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-    const refreshedPin = refreshed?.customMetadata?.pinnedUntil
-    if (!refreshed || !refreshedPin || refreshedPin < pinnedUntil) {
-      console.warn(`[PIN] ${meta.r2Key} metadata refresh did not persist`)
-      return false
-    }
-    console.log(`[PIN] ${meta.r2Key} metadata refreshed through ${refreshedPin}`)
-    return true
-  }
-
-  if (!meta.upstreamUrl) {
-    console.warn(`[PIN] ${meta.r2Key} has no upstream URL`)
-    return false
-  }
-
-  // Check bucket capacity and evict if needed
-  let usage = await getStructureBucketUsage(env)
-  if (usage.bytes >= STRUCTURE_BUCKET_CAP_BYTES) {
-    const targetBytes = Math.floor(STRUCTURE_BUCKET_CAP_BYTES * STRUCTURE_CACHE_TARGET_RATIO)
-    const eviction = await evictStructureCache(env, targetBytes)
-    if (eviction.removed > 0) {
-      console.warn("[PIN] Structure cache eviction before caching daily target", eviction)
-    }
-  }
-
-  // Fetch from upstream
-  let upstreamResp
-  try {
-    upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
-      method: "GET",
-      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-    })
-  } catch (err) {
-    if (!(err instanceof StructureUpstreamRefusedError)) throw err
-    console.warn(`[PIN] Upstream refused for ${meta.r2Key}:`, err.message)
-    return false
-  }
-
-  if (!upstreamResp.ok || !upstreamResp.body) {
-    console.warn(`[PIN] Upstream fetch failed for ${meta.r2Key}:`, upstreamResp.status)
-    return false
-  }
-
-  const contentType = structureContentType(structureFormatFromKey(meta.r2Key))
-
-  // Read entire body for simple put (daily targets are usually small)
-  const data = await upstreamResp.arrayBuffer()
-
-  // Store with pinning metadata
-  await env.STRUCTURES_BUCKET.put(meta.r2Key, data, {
-    httpMetadata: { contentType },
-    customMetadata: {
-      pinnedUntil, // "2025-12-27" - protects from eviction until this date
-      source: meta.source || "unknown",
-    },
-  })
-
-  const stored = await env.STRUCTURES_BUCKET.head(meta.r2Key)
-  if (!stored || stored.customMetadata?.pinnedUntil !== pinnedUntil) {
-    console.warn(`[PIN] ${meta.r2Key} upload did not retain the requested pin`)
-    return false
-  }
-
-  console.log(
-    `[PIN] Cached ${meta.r2Key} (${Math.round(data.byteLength / 1024)}KB) pinned until ${pinnedUntil}`,
-  )
-  return true
-}
-
-/**
- * Upload a stream to R2 using multipart upload.
- * Keeps memory bounded by processing in MULTIPART_PART_SIZE chunks.
- * See: https://developers.cloudflare.com/r2/api/workers/workers-multipart-usage/
- */
-async function multipartUploadFromStream(env, r2Key, stream, contentType) {
-  const mpu = await env.STRUCTURES_BUCKET.createMultipartUpload(r2Key, {
-    httpMetadata: { contentType },
-  })
-
-  const reader = stream.getReader()
-  const uploadedParts = []
-  let partNumber = 1
-  let buffer = new Uint8Array(MULTIPART_PART_SIZE)
-  let filled = 0
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read()
-
-      if (done) {
-        // Upload remaining data as final part
-        if (filled > 0) {
-          const chunk = buffer.subarray(0, filled)
-          const part = await mpu.uploadPart(partNumber, chunk)
-          uploadedParts.push(part)
-        }
-        break
-      }
-
-      // Copy incoming data into buffer, uploading when full
-      let offset = 0
-      while (offset < value.length) {
-        const toCopy = Math.min(MULTIPART_PART_SIZE - filled, value.length - offset)
-        buffer.set(value.subarray(offset, offset + toCopy), filled)
-        filled += toCopy
-        offset += toCopy
-
-        if (filled === MULTIPART_PART_SIZE) {
-          const part = await mpu.uploadPart(partNumber, buffer)
-          uploadedParts.push(part)
-          partNumber++
-          buffer = new Uint8Array(MULTIPART_PART_SIZE)
-          filled = 0
-        }
-      }
-    }
-
-    // Complete the multipart upload
-    await mpu.complete(uploadedParts)
-    console.log(`GeneGuessr: multipart upload complete for ${r2Key}, ${uploadedParts.length} parts`)
-  } catch (err) {
-    // Abort on failure to clean up partial upload
-    console.error(`GeneGuessr: multipart upload failed for ${r2Key}`, err)
-    try {
-      await mpu.abort()
-    } catch (abortErr) {
-      console.warn("GeneGuessr: failed to abort multipart upload", abortErr)
-    }
-    throw err
-  }
-}
-
-async function getStructureBucketUsage(env) {
-  if (!env?.STRUCTURES_BUCKET) {
-    return { bytes: 0, objects: 0 }
-  }
-  let cursor = undefined
-  let bytes = 0
-  let objects = 0
-  do {
-    const listResp = await env.STRUCTURES_BUCKET.list({ cursor, limit: 1000 })
-    const currentObjects = listResp?.objects || []
-    currentObjects.forEach((obj) => {
-      bytes += obj.size || 0
-      objects += 1
-    })
-    cursor = listResp?.truncated ? listResp?.cursor : undefined
-  } while (cursor)
-  return { bytes, objects }
-}
-
-/**
- * List all R2 objects in the structure cache bucket.
- * Returns objects with key, size, uploaded timestamp, and customMetadata for FIFO eviction.
- * customMetadata includes pinnedUntil for daily target protection.
- */
-async function listStructureCacheObjects(env) {
-  if (!env?.STRUCTURES_BUCKET) {
-    return []
-  }
-  const objects = []
-  let cursor = undefined
-  do {
-    const resp = await env.STRUCTURES_BUCKET.list({ cursor, include: ["customMetadata"] })
-    for (const obj of resp.objects || []) {
-      objects.push({
-        key: obj.key,
-        size: obj.size,
-        uploaded: obj.uploaded, // Date object from R2
-        customMetadata: obj.customMetadata || {},
-      })
-    }
-    cursor = resp.truncated ? resp.cursor : undefined
-  } while (cursor)
-  return objects
-}
-
-/**
- * FIFO eviction: delete oldest objects (by R2 uploaded timestamp) until under target.
- * No KV tracking needed - R2 provides the uploaded timestamp natively.
- * Skips objects with pinnedUntil metadata that haven't expired (protects daily targets).
- */
-async function evictStructureCache(env, targetBytes) {
-  const usage = await getStructureBucketUsage(env)
-  if (usage.bytes <= targetBytes) {
-    return { beforeBytes: usage.bytes, afterBytes: usage.bytes, removed: 0, skippedPinned: 0 }
-  }
-  const objects = await listStructureCacheObjects(env)
-  // FIFO: sort by uploaded timestamp, oldest first
-  objects.sort((a, b) => (a.uploaded?.getTime() || 0) - (b.uploaded?.getTime() || 0))
-
-  const today = new Date().toISOString().slice(0, 10)
-  let currentBytes = usage.bytes
-  let removed = 0
-  let skippedPinned = 0
-
-  for (const obj of objects) {
-    if (!obj?.key) {
-      continue
-    }
-
-    // Skip pinned objects that haven't expired (daily target protection)
-    const pinnedUntil = obj.customMetadata?.pinnedUntil
-    if (pinnedUntil && pinnedUntil >= today) {
-      console.log(`[EVICT] Skipping pinned: ${obj.key} (until ${pinnedUntil})`)
-      skippedPinned += 1
-      continue
-    }
-
-    try {
-      await env.STRUCTURES_BUCKET.delete(obj.key)
-    } catch (err) {
-      console.warn("GeneGuessr: failed to delete R2 object during eviction", obj.key, err)
-    }
-    currentBytes -= Number(obj.size) || 0
-    removed += 1
-    if (currentBytes <= targetBytes) {
-      break
-    }
-  }
-  return { beforeBytes: usage.bytes, afterBytes: currentBytes, removed, skippedPinned }
-}
-
-function sanitizeKeySegment(value) {
-  return (value || "unknown").toString().replace(/[^A-Za-z0-9_\-]/g, "_")
-}
-
-function getFileExtensionFromUrl(url) {
-  const lower = url.toLowerCase()
-  if (lower.includes(".bcif")) return "bcif"
-  if (lower.includes(".pdb")) return "pdb"
-  return "cif"
+  return buildStructureMetaFromStoredSource({ ...protein, structure_source: source })
 }
 
 function isAlphaFoldOnlyProtein(protein) {

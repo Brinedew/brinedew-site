@@ -141,8 +141,8 @@ GeneGuessr D1 table `practice_selection_pool`. A practice start never scans
   first-time player, a restart with no pool, yesterday's session, and a named
   protein the catalog lacks. A browser with no session cookie has no session by
   construction, so it skips the session read and picks at once. Daily mode keeps
-  its parallel session read and pick. Because R2 is unbound, a pick costs one
-  outbound probe and one KV put, which is why a returning player must not pay it.
+  its parallel session read and pick. Nothing caches structure bytes, so a pick costs one
+  outbound availability probe, which is why a returning player must not pay it.
 
 ## Schedule and release behavior
 
@@ -168,13 +168,11 @@ horizon exclusions if the pinned structure later becomes unavailable.
 Pins live in D1, not KV: they must remain writable after unrelated traffic has
 exhausted Cloudflare's daily KV write allowance.
 
-Successful browser rendering alone is not enough for a future replacement.
-When the `STRUCTURES_BUCKET` R2 binding is configured, the canonical curated
-structure is cached in R2, its `pinnedUntil` metadata is extended through the
-play date (including rewriting metadata on an existing cached object), and the
-metadata is read back before reconciliation accepts the replacement. The binding
-is commented out in the Wrangler configs; without it, pinning is skipped and the
-replacement needs an upstream structure URL.
+A future replacement is a curated (non-AlphaFold) structure the server chose and the
+browser has just rendered through `/api/structure-cached`, so the render is the
+availability check. Nothing stores structure bytes (R2 is not enabled on the account),
+so there is nothing to pin: the admin yearly fill accepts a replacement once its image
+has rendered and uploaded.
 
 Recap images are not date-only schedule state. Their immutable storage identity
 contains the day, selected UniProt ID, and `DISCORD_RECAP_RENDER_CONTRACT`.
@@ -196,8 +194,8 @@ After deployment:
 fetches. The upstream comes from the key: RCSB for a `pdb/` key, the stored
 `proteins` row for an `alphafold/` or `swissmodel/` key (one indexed row), and
 the AlphaFold file derived from the accession when no row matches. No query
-parameter names an upstream. Every structure fetch (the route, the availability
-probe, the R2 cache fill and the daily pin) goes through
+parameter names an upstream. Every structure fetch (the route and the daily
+availability probe) goes through
 `fetchStructureUpstream` in `workers/lib/structure-upstream.js`: https only, no
 userinfo, no port, and exactly `models.rcsb.org`, `alphafold.ebi.ac.uk` and
 `swissmodel.expasy.org`, with redirects followed by hand (three at most) and
@@ -205,15 +203,30 @@ each hop checked. The response's `Content-Type` follows the key's format
 (`bcif` octet-stream, `cif` chemical/x-cif, `pdb` chemical/x-pdb) with
 `X-Content-Type-Options: nosniff`. A fourth provider is one entry in that file.
 
-A protein with a stored structure source never touches KV: the row is the
-decision and always wins. KV key `structure_source:<uniprot>` holds only what
-discovery found for a protein that has no stored source (749 of 19,110 on
-2026-10-03; none is in the autocomplete index or a target pool). It is written on
-a miss with a 30-day TTL, so the worst case is one write per such protein per
-month, and `/api/structure-token` refuses an accession that is not in the
-catalog before discovery runs. The free plan allows 1,000 KV writes a day and the
-recorded daily answer shares that allowance, so a lookup that a reader can repeat
-must not write.
+The route streams the provider's body and never buffers it, and cuts it off at 20 MiB
+(`MAX_STRUCTURE_FILE_BYTES` in the same file), counted as the bytes arrive, because no
+upstream header is a reliable size. Live on 2026-10-03: RCSB sends no `Content-Length`
+(chunked); AlphaFold's is the gzip size on the wire (62,578 for a 279,449 byte file) and
+workerd drops it when it decompresses; SWISS-MODEL sent a chunked gzip body with no
+`Content-Length` to curl and a plain one to workerd (one TP53 file is 5.55 MB). Past
+the cap the upstream is cancelled and the response errors. A SWISS-MODEL PDB gets its
+anonymous `HEADER` line streamed ahead of the body, which Mol* needs and the provider
+omits. There is no R2 structure cache: R2 is not enabled on the account, so every view
+is one Worker request and one provider fetch, and the browser HTTP cache (`public,
+max-age=604800, immutable` for a key) serves repeat views. A structure token carries
+no `cached` or `sizeBytes`, and `STRUCTURES_BUCKET` is read only by the Discord recap
+image store (`workers/lib/discord-recap-images.js`).
+
+The stored `proteins.structure_source` is the whole structure decision. A protein with
+one resolves from its row (one indexed read) and never touches KV. A protein with none
+has no structure: 749 of 19,110 on 2026-10-03, and none of them has any of `pdb_id`,
+`swissmodel_url` or `alphafold_url`; none is in the autocomplete index or a target pool.
+`/api/structure-token` and a guess card answer "Structure unavailable" for it with no
+outbound fetch and no KV key, and `/api/structure-token` refuses an accession that is
+not in the catalog the same way. Nothing discovers, probes or caches a structure for
+it, so an importer must write `structure_source` for every protein that should be
+playable. The free plan allows 1,000 KV writes a day and the recorded daily answer
+shares that allowance, so a lookup that a reader can repeat must not write.
 
 ## Required tests
 
@@ -275,15 +288,37 @@ with a network stub that follows redirects as Workers does, that no
 localhost, odd ports, http and other schemes), that a stored upstream off the
 three provider hosts is refused without a fetch, that a redirect off the
 providers is not followed and a loop stops after three hops, that the
-`Content-Type` comes from the key, that an R2 bucket never receives a caller's
-bytes, and that the three providers are still served.
+`Content-Type` comes from the key, and that the three providers are still served.
+
+`workers/structure-byte-cap.test.js` must prove, through the real Worker with a stub
+upstream that sends no `Content-Length`, for an RCSB, an AlphaFold and a SWISS-MODEL
+key, that a body past 20 MiB is cut off (the response errors, the upstream is
+cancelled and no more than the cap plus two chunks is read from it), that a
+`Content-Length` that understates the body is not believed, that a body of exactly the
+cap is served whole and one byte more is not, that a body streams (one chunk read pulls
+a few chunks, not the file), and that a SWISS-MODEL body starts with the anonymous
+`HEADER` line, which the cap does not count.
+
+`workers/structure-no-discovery.test.js` must prove, on the production-shaped local D1
+with `fetch` counted and every KV operation recorded, that a structure token for a
+protein with no stored source is 404 with no fetch and no KV operation, that a guess
+naming one is accepted without a structure card, a fetch or a KV write, that candidate
+columns without a stored source buy no probe, that no `structure_source:` key is read,
+written or deleted whatever KV holds, and that a protein with a stored source still
+resolves from its row with no fetch.
+
+`workers/structure-no-r2-layer.test.js` must prove that a bucket bound under
+`STRUCTURES_BUCKET` anyway is never touched by a structure token, a structure fetch, a
+bootstrap or a guess, that no structure token carries `cached` or `sizeBytes`, that the
+deleted R2 admin and debug routes answer 404, that `STRUCTURES_BUCKET` appears in
+`workers/` only in the Discord recap image fallback, and that the admin yearly fill no
+longer calls a pin step.
 
 `workers/structure-kv-writes.test.js` must prove, on the production-shaped local
 D1 with R2 unbound, that a structure token, a first and a returning practice
 bootstrap and a guess make no KV put for a protein with a stored source, that an
-accession outside the catalog is refused with no fetch and no put, that discovery
-writes once per protein with a 30-day TTL, and that a stale KV entry never beats
-the stored row.
+accession outside the catalog and a protein with no stored source are refused with no
+fetch and no put, and that a stale KV entry never beats the stored row.
 
 `workers/admin-schedule-year.test.js` must prove that the first uncached annual
 request returns 365 complete, unique protein and surname identities using bulk

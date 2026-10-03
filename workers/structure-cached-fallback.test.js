@@ -51,10 +51,9 @@ function createGameSessions(state) {
   }
 }
 
-test("structure-cached falls back to stored AlphaFold upstream when R2 reads fail", async () => {
+test("structure-cached streams the stored AlphaFold upstream", async () => {
   const waits = []
   const upstreamRequests = []
-  const puts = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {
     upstreamRequests.push({ url: String(input), method: init?.method || "GET" })
@@ -78,19 +77,6 @@ test("structure-cached falls back to stored AlphaFold upstream when R2 reads fai
             swissmodel_template: null,
           },
         }),
-        STRUCTURES_BUCKET: {
-          async get(key) {
-            assert.equal(key, "alphafold/P11532.cif")
-            throw new Error("Please enable R2 through the Cloudflare Dashboard. (10042)")
-          },
-          async put(key, body, options) {
-            puts.push({
-              key,
-              byteLength: body?.byteLength || 0,
-              contentType: options?.httpMetadata?.contentType || "",
-            })
-          },
-        },
       },
       createCtx(waits),
     )
@@ -106,9 +92,6 @@ test("structure-cached falls back to stored AlphaFold upstream when R2 reads fai
     ])
 
     await Promise.allSettled(waits)
-    assert.equal(puts.length, 1)
-    assert.equal(puts[0]?.key, "alphafold/P11532.cif")
-    assert.equal(puts[0]?.contentType, "chemical/x-cif")
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -142,13 +125,6 @@ test("structure-cached recovers SWISS-MODEL upstream from stored metadata withou
             swissmodel_template: "tpl/A",
           },
         }),
-        STRUCTURES_BUCKET: {
-          async get(key) {
-            assert.equal(key, "swissmodel/Q9TEST_tpl_A.cif")
-            throw new Error("Please enable R2 through the Cloudflare Dashboard. (10042)")
-          },
-          async put() {},
-        },
       },
       createCtx(waits),
     )
@@ -168,9 +144,8 @@ test("structure-cached recovers SWISS-MODEL upstream from stored metadata withou
   }
 })
 
-test("uncached SWISS-MODEL PDB delivery adds the parser-required anonymous header", async () => {
+test("SWISS-MODEL PDB delivery adds the parser-required anonymous header", async () => {
   const waits = []
-  const puts = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () =>
     new Response("ATOM      1  N   GLY A   1      10.000  10.000  10.000\nEND\n", {
@@ -194,14 +169,6 @@ test("uncached SWISS-MODEL PDB delivery adds the parser-required anonymous heade
             swissmodel_template: "tpl/A",
           },
         }),
-        STRUCTURES_BUCKET: {
-          async get() {
-            throw new Error("Please enable R2 through the Cloudflare Dashboard. (10042)")
-          },
-          async put(key, bytes, options) {
-            puts.push({ key, bytes: new Uint8Array(bytes), options })
-          },
-        },
       },
       createCtx(waits),
     )
@@ -213,9 +180,6 @@ test("uncached SWISS-MODEL PDB delivery adds the parser-required anonymous heade
     assert.match(body, /\nATOM      1/)
 
     await Promise.allSettled(waits)
-    assert.equal(puts.length, 1)
-    assert.equal(puts[0].key, "swissmodel/Q9PDB_tpl_A.pdb")
-    assert.match(new TextDecoder().decode(puts[0].bytes), /^ATOM/)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -297,8 +261,9 @@ test("target structure endpoint uses the session-pinned target structure selecti
   }
 })
 
-test("target structure endpoint ignores stale KV structure-source overrides when DB has a current stored source", async () => {
-  // Regression guard for stale KV winning over the current database row.
+test("target structure endpoint serves the stored source whatever KV holds under a structure_source key", async () => {
+  // Regression guard for a cached structure source winning over the current
+  // database row.
   //
   // Live failure details:
   // - UniProt P24534 had a stale KV entry at `structure_source:P24534` pointing
@@ -310,10 +275,11 @@ test("target structure endpoint ignores stale KV structure-source overrides when
   // This test uses a synthetic UniProt ID to avoid pollution from the in-memory
   // protein cache shared by this worker module during the test process. The
   // scenario is the same: DB says PDB, KV lies and says SWISS-MODEL. The DB must
-  // win, KV is neither read nor written for a protein with a stored source, and
-  // no availability probe may fall back to SWISS-MODEL before the real fetch.
+  // win, no `structure_source:` key is read or written, and no availability probe
+  // may fall back to SWISS-MODEL before the real fetch.
   const waits = []
   const upstreamRequests = []
+  const kvReads = []
   const kvWrites = []
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input, init = {}) => {
@@ -352,7 +318,8 @@ test("target structure endpoint ignores stale KV structure-source overrides when
           },
         }),
         KV: {
-          async get() {
+          async get(key) {
+            kvReads.push(String(key))
             return {
               source: "swissmodel",
               r2Key: "swissmodel/P9KVST_5dqs.pdb",
@@ -383,6 +350,11 @@ test("target structure endpoint ignores stale KV structure-source overrides when
     ])
     assert.equal(gameSessions.savedState.targetStructureMeta.r2Key, "pdb/1B64.bcif")
     assert.deepEqual(kvWrites, [], "a stored source is never written to KV")
+    assert.deepEqual(
+      kvReads.filter((key) => key.startsWith("structure_source:")),
+      [],
+      "no structure_source key is read",
+    )
   } finally {
     globalThis.fetch = originalFetch
   }
