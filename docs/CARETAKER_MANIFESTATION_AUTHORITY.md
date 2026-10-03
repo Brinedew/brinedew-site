@@ -14,8 +14,9 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
 
 - No one owns a manifestation. The active caretaker of a gene may edit, show or hide, withdraw,
   restore and select any lineage on it, whoever wrote it. History names each version's writer.
-- A former caretaker has no say over text they left, and a stranger has none: both get
-  `403 ACTIVE_ASSIGNMENT_REQUIRED` and nothing changes. Leaving always keeps what was written.
+- A former caretaker has no say over text they left, and a stranger has none: both are refused
+  (`403 ACTIVE_ASSIGNMENT_REQUIRED` on withdraw and restore) and nothing changes. Leaving always
+  keeps what was written.
 - The system seed is the gene's first lineage. It cannot be withdrawn and is the last fallback.
 - Any active Brinedew account signed in through Discord may claim an available gene (server
   membership is no gate); an account holds one active or suspended gene and a gene has one
