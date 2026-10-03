@@ -1508,7 +1508,7 @@ function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
     family === "admin_blots_upload" ||
-    // B-898: about five subrequests and a few D1 rows per gene, bounded per call.
+    // B-898: about four subrequests and a few D1 rows per gene, bounded per call.
     family === "admin_publication_republish" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
@@ -22377,7 +22377,7 @@ function republishGeneAfterResponse(env, ctx, symbol) {
 }
 
 // Uploads and reconcile republish their touched genes in process when they
-// touch at most REPUBLISH_MAX_SYMBOLS of them (about five external
+// touch at most REPUBLISH_MAX_SYMBOLS of them (about four external
 // subrequests each), so a new candidate reaches readers within seconds.
 // Larger batches rely on their publication-affecting events and the Actions
 // publisher, which works through them eight genes per call.
@@ -26069,9 +26069,9 @@ async function handleSiteGeneDetail(request, env, path) {
     }),
     url.searchParams.get("fields"),
   )
-  // Manifestation prose and Tags are served only from the exact immutable card
+  // Manifestation prose is served only from the exact immutable card
   // artifact selected by the public barrier. The live primary essence row is
-  // never a fallback after plaintext retirement.
+  // never a fallback after plaintext retirement. Tags are never published.
   payload.canonical_manifestation = publishedCard.payload.canonical_manifestation ?? null
   const caretakers = await readPublicCaretakers(env.ICONOPLASM_DB, env.DB, [resolved.symbol])
   payload.caretaker = caretakers[resolved.symbol] || null

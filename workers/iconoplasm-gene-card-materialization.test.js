@@ -96,6 +96,57 @@ test("gene-card identity ignores publication wrappers but changes with visible c
 //    superseded advance and a render. That is proven end to end, through the
 //    real queue consumer, in iconoplasm.d1-votes.test.js (failure mode 21).
 // 4. A change the picture does show (portrait, name) keeps the fingerprint.
+// 5. The picture shows nothing of the caretaker's manifestation record, but the
+//    object that publishes it is fingerprinted whole. Every caretaker command
+//    on an enrolled gene moves its event and head numbers and queues a browser
+//    render of an unchanged picture, at eight launches a day. Withdrawing the
+//    Tags from every published object (B-859) would do the same to all of them.
+test("gene-card identity ignores the manifestation record, which the picture never shows", () => {
+  const manifestation = (overrides = {}) =>
+    card({
+      canonical_manifestation: {
+        manifestation_id: "m_1",
+        manifestation_revision_id: "r_1",
+        head_version: 4,
+        gene_revision: 9,
+        authority_event_sequence: 77,
+        public_page_visible: true,
+        prose: "A guarded archivist in a red coat.",
+        accepted_tags_derivative: { tags_text: "red coat", fields_json: { outfit: ["coat"] } },
+        ...overrides,
+      },
+    })
+  const baseline = iconoplasmGeneCardFingerprint(manifestation())
+  assert.equal(
+    iconoplasmGeneCardFingerprint(
+      card({ canonical_manifestation: { manifestation_id: "m_1", prose: null } }),
+    ),
+    baseline,
+    "a published object with its Tags removed keeps the same print copy",
+  )
+  assert.equal(
+    iconoplasmGeneCardFingerprint(
+      manifestation({ head_version: 5, gene_revision: 10, authority_event_sequence: 78 }),
+    ),
+    baseline,
+    "a caretaker command moves the manifestation numbers, not the picture",
+  )
+  assert.equal(iconoplasmGeneCardFingerprint(card()), baseline, "even a gene with no record")
+  assert.notEqual(
+    iconoplasmGeneCardFingerprint({ ...manifestation(), full_name: "renamed" }),
+    baseline,
+    "what the picture shows still changes it",
+  )
+  assert.notEqual(
+    iconoplasmGeneCardFingerprint({
+      ...manifestation(),
+      portrait: { asset_sha256: "cd".repeat(32) },
+    }),
+    baseline,
+    "a new winner changes it",
+  )
+})
+
 test("gene-card identity ignores votes and the stable object envelope", async () => {
   const { composeStableGeneObject } = await import("./lib/iconoplasm-stable-gene-object.js")
   const pool = (upvotes) => [

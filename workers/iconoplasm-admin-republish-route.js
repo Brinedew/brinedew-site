@@ -1,6 +1,6 @@
 // B-898 (deletion stage, step A): the Actions publisher rewrites the stable
 // object of every gene that changed by calling this route in small batches.
-// Each gene costs about five subrequests inside the Worker, so one call takes
+// Each gene costs about four subrequests inside the Worker, so one call takes
 // at most REPUBLISH_MAX_SYMBOLS genes and stays under the 50-subrequest ceiling.
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/

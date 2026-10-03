@@ -1,13 +1,15 @@
 // ARCHITECTURE FENCE [IPD-012]: public manifestation text is decrypted from the
 // exact authoring authority object selected by the compact primary head. This
 // module never reads legacy plaintext and never exposes object locators or keys.
+// It also never reads, decrypts or returns the gene's Tags (the generated image
+// tags): the caretaker panel promises they stay private, so the one public
+// object is built from the prose alone. Tags travel only through the
+// authenticated caretaker and replica routes.
 import { sha256Hex } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import { decryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
 import { readEncryptedManifestationBody } from "../../lib/iconoplasm-manifestation-body-storage.js"
-import { decryptManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
 import { all, first, requireDatabase } from "./manifestation-authority-repository.js"
 import { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
-import { splitManifestationTagsPayload } from "./manifestation-tags-payload.js"
 
 const PUBLIC_SCHEMA_VERSION = 1
 const PROOF_NAMESPACE = "iconoplasm.public-canonical-material-proof.v1"
@@ -259,81 +261,6 @@ async function revisionMaterial(authoringDb, env, record, onIntegrityFailure) {
   }
 }
 
-async function derivativeMaterial(authoringDb, env, record, onIntegrityFailure) {
-  const derivative = record.accepted_tags_derivative
-  const secret = await first(
-    authoringDb,
-    `SELECT object_key, ciphertext_sha256, ciphertext_bytes, body_iv_base64,
-            wrapped_dek_base64, wrap_iv_base64, key_version, aad_version
-       FROM icono_manifestation_derivative_storage_secrets
-      WHERE manifestation_derivative_id = ?`,
-    derivative.manifestation_derivative_id,
-  )
-  try {
-    if (derivative.status !== "complete") throw new Error("derivative_not_complete")
-    if (!secret) throw new Error("derivative_storage_missing")
-    const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-    if (!encrypted) throw new Error("derivative_ciphertext_missing")
-    const outputPlain = await decryptManifestationTags(env, {
-      derivativeId: derivative.manifestation_derivative_id,
-      revisionId: record.canonical.manifestation_revision_id,
-      sourceBodySha256: derivative.source_body_sha256,
-      ciphertext: encrypted.bytes,
-      ciphertextSha256: secret.ciphertext_sha256,
-      ciphertextBytes: Number(secret.ciphertext_bytes),
-      bodySha256: derivative.body_sha256,
-      bodyBytes: Number(derivative.body_bytes),
-      bodyIvBase64: secret.body_iv_base64,
-      wrappedDekBase64: secret.wrapped_dek_base64,
-      wrapIvBase64: secret.wrap_iv_base64,
-      keyVersion: Number(secret.key_version),
-      aadVersion: Number(secret.aad_version),
-    })
-    return await splitManifestationTagsPayload(outputPlain, {
-      tagsBytes: derivative.tags_bytes,
-      tagsSha256: derivative.tags_sha256,
-      fieldsBytes: derivative.fields_bytes,
-      fieldsSha256: derivative.fields_sha256,
-    })
-  } catch (error) {
-    await notifyIntegrityFailure(onIntegrityFailure, {
-      entity_kind: "derivative",
-      entity_id: derivative.manifestation_derivative_id,
-      gene_id: record.gene_id,
-      reason: text(error?.message || "derivative_body_corrupt").slice(0, 120),
-    })
-    throw publicError(
-      "PUBLIC_CANONICAL_TAGS_BODY_UNAVAILABLE",
-      "Canonical Tags body failed integrity verification",
-      503,
-      error,
-    )
-  }
-}
-
-function publicDerivative(record, material) {
-  const derivative = record.accepted_tags_derivative
-  if (!derivative) return null
-  return Object.freeze({
-    manifestation_derivative_id: derivative.manifestation_derivative_id,
-    derivative_head_version: Number(derivative.derivative_head_version),
-    body_sha256: derivative.body_sha256,
-    body_bytes: Number(derivative.body_bytes),
-    tags_sha256: derivative.tags_sha256,
-    tags_bytes: Number(derivative.tags_bytes),
-    fields_sha256: derivative.fields_sha256,
-    fields_bytes: Number(derivative.fields_bytes),
-    recipe_id: derivative.recipe_id,
-    recipe_version: derivative.recipe_version,
-    provider_id: derivative.provider_id,
-    model_id: derivative.model_id,
-    tagger_config_sha256: derivative.tagger_config_sha256,
-    provenance_status: derivative.provenance_status,
-    tags_text: material.tags_text,
-    fields_json: material.fields_json,
-  })
-}
-
 export async function readPublicCanonicalMaterial({
   primaryDb,
   authoringDb,
@@ -377,13 +304,9 @@ export async function readPublicCanonicalMaterial({
       authority_event_id: record.last_event_id,
       authority_event_sequence: Number(record.last_event_sequence),
       canonical: null,
-      accepted_tags_derivative: null,
     })
   }
   const prose = await revisionMaterial(authoringDb, env, record, onIntegrityFailure)
-  const tagsMaterial = record.accepted_tags_derivative
-    ? await derivativeMaterial(authoringDb, env, record, onIntegrityFailure)
-    : null
   return Object.freeze({
     schema_version: PUBLIC_SCHEMA_VERSION,
     gene_id: record.gene_id,
@@ -401,7 +324,6 @@ export async function readPublicCanonicalMaterial({
       public_page_visible: canonical.public_page_visible === true,
       prose,
     }),
-    accepted_tags_derivative: tagsMaterial ? publicDerivative(record, tagsMaterial) : null,
   })
 }
 

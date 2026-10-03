@@ -40,7 +40,8 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
   explicit selection that is still eligible and outside that lineage; the seed ends the walk. If
   nothing is eligible the command fails before changing anything.
 - Prose shows under the gene card only while its manifestation is shown on the page (hidden by
-  default) and renders as text under CSP, never as markup.
+  default) and renders as text under CSP, never as markup. Tags are never published; the
+  caretaker's editor and the workstation's replica read them through authenticated routes.
 
 ## Conflicts are compare-and-swap; the actor comes from the session
 

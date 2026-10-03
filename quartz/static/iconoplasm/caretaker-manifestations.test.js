@@ -375,6 +375,59 @@ test("signed-out mounting performs zero caretaker requests", async () => {
   assert.equal(host.hidden, true)
 })
 
+// B-859: Tags are not published, so the editor has nowhere public to read them.
+// It prefills through the signed-in caretaker route, which checks the caller's
+// assignment on the gene, and through nothing else.
+test("the editor prefills Tags only through the authenticated caretaker route", async () => {
+  const { document } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const requests = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = function () {
+    throw new Error("the editor must not fetch outside its fetchJSON")
+  }
+  try {
+    const panel = createCaretakerManifestationPanel({
+      fetchJSON: async function (path, init) {
+        requests.push({ path, credentials: init?.credentials })
+        if (!path.endsWith("/body")) {
+          const current = dossier()
+          current.manifestations[0].manifestation_head_revision_id = "revision_2"
+          current.manifestations[0].revisions[0].derivative = {
+            manifestation_derivative_id: "derivative_revision_2",
+            body_available: true,
+          }
+          return current
+        }
+        return { tags: { tags_text: "rose seal, archive plate", fields_json: {} } }
+      },
+      escapeHtml,
+      storage: null,
+    })
+    const host = document.getElementById("host")
+    await panel.mount(host, {
+      symbol: "TP53",
+      currentUser: { id: "account_1" },
+      authResolved: true,
+    })
+    assert.equal(
+      host.querySelector("[data-icono-caretaker-tags]").value,
+      "rose seal, archive plate",
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+  const bodyReads = requests.filter((request) => request.path.endsWith("/body"))
+  assert.deepEqual(
+    bodyReads.map((request) => request.path),
+    ["/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_revision_2/body"],
+  )
+  for (const request of requests) {
+    assert.match(request.path, /^\/api\/iconoplasm\/caretaker\/genes\/TP53/)
+    assert.equal(request.credentials, "include", "every read carries the caretaker's session")
+  }
+})
+
 test("a failed Tags body read pauses editing until an explicit retry restores the exact Tags", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
