@@ -1,5 +1,5 @@
-import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
-import { normalizeManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
+import { normalizeManifestationTags } from "../../lib/iconoplasm-manifestation-tags.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { authorityError, normalizeSha256 } from "./manifestation-authority-contract.js"
 
 const ENCODER = new TextEncoder()
@@ -81,6 +81,7 @@ export async function prepareManifestationTagsPayload(input = {}) {
   }
   return Object.freeze({
     output_plain: outputPlain,
+    output_bytes: outputBytes,
     output_plain_sha256: await sha256Hex(outputBytes),
     output_plain_bytes: outputBytes.byteLength,
     tags_text: normalized.tags,

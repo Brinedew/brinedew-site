@@ -1,4 +1,4 @@
-import { deleteEncryptedManifestationBody } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { deleteManifestationBodyObject } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import {
   authorityError,
   createId,
@@ -34,7 +34,7 @@ function entityKind(raw) {
 function objectKey(raw) {
   const value = String(raw || "").trim()
   if (!/^private\/manifestations\/v1\/[a-f0-9]{2}\/[A-Za-z0-9_-]{8,128}\.bin$/.test(value)) {
-    throw authorityError("INVALID_OBJECT_KEY", "Encrypted object locator is invalid")
+    throw authorityError("INVALID_OBJECT_KEY", "Body object locator is invalid")
   }
   return value
 }
@@ -109,7 +109,7 @@ export async function createManifestationUploadIntent(db, input = {}) {
   const bodyBytes = Number(input.bodyBytes)
   const maximum = kind === "revision" ? 16 * 1024 : 32 * 1024
   if (!Number.isSafeInteger(bodyBytes) || bodyBytes < 1 || bodyBytes > maximum) {
-    throw authorityError("INVALID_BODY_BYTES", `Encrypted ${kind} body size is invalid`)
+    throw authorityError("INVALID_BODY_BYTES", `Upload ${kind} body size is invalid`)
   }
   const timestamp = normalizeTimestamp(input.now)
   const idFactory = input.idFactory || defaultIdFactory
@@ -121,6 +121,8 @@ export async function createManifestationUploadIntent(db, input = {}) {
   )
   const leaseToken = createId(input.leaseToken, "lease_token", "upload_lease", idFactory)
   const locator = objectKey(input.objectKey)
+  // The object's SHA-256: for a plain body, the text's own hash. The column and
+  // this field keep the name they had when every body was an envelope.
   const ciphertextSha256 = normalizeSha256(input.ciphertextSha256)
   const resumableStorage = input.storageDescriptor ? storageFields(input.storageDescriptor) : null
   if (
@@ -268,9 +270,9 @@ export async function recycleUnverifiedManifestationUploadIntent(
   if (Number(claim?.meta?.changes || 0) !== 1) return false
   try {
     // The intent was never adopted, but a late-visible object may still exist.
-    // Delete and prove absence before allowing a new random ciphertext envelope
-    // for the same immutable entity.
-    await deleteEncryptedManifestationBody(env, locator)
+    // Delete and prove absence before allowing a new random object for the same
+    // immutable entity.
+    await deleteManifestationBodyObject(env, locator)
     await prepared(
       db,
       `UPDATE icono_manifestation_upload_intents
@@ -376,7 +378,7 @@ export async function sweepExpiredManifestationUploadIntents(
     const leaseToken = createId(null, "lease_token", "upload_sweep", idFactory)
     if (!(await claimExpiredIntent(db, row, timestamp, leaseToken))) continue
     try {
-      await deleteEncryptedManifestationBody(env, row.object_key)
+      await deleteManifestationBodyObject(env, row.object_key)
       await prepared(
         db,
         `UPDATE icono_manifestation_upload_intents

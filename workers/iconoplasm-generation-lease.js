@@ -269,7 +269,7 @@ export async function readExactGenerationLeaseMaterial({
   if (!row)
     leaseError("GENERATION_LEASE_CAS_MISMATCH", "The generation lease expired or changed", 409)
   // Resolve only persisted lease inputs. This rechecks active Website lineage,
-  // immutable selection and encrypted byte hashes without a full replica bootstrap.
+  // immutable selection and stored byte hashes without a full replica bootstrap.
   return readSource(env, row)
 }
 

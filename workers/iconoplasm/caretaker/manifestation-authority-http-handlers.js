@@ -1,15 +1,8 @@
-import {
-  decryptManifestationProse,
-  encryptManifestationProse,
-} from "../../lib/iconoplasm-manifestation-body-crypto.js"
-import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
-import {
-  decryptManifestationTags,
-  encryptManifestationTags,
-} from "../../lib/iconoplasm-manifestation-tags-crypto.js"
+import { prepareManifestationProse } from "../../lib/iconoplasm-manifestation-prose.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import {
   createManifestationBodyObjectKey,
-  putEncryptedManifestationBody,
+  putManifestationBodyObject,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
@@ -44,6 +37,7 @@ import {
   admitManifestationUploadIntent,
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
+import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
 import { selectManifestationRevision } from "./manifestation-selection-commands.js"
 import {
   restoreOwnManifestation,
@@ -119,23 +113,6 @@ async function requireRouteEntity(db, geneLocator, table, idColumn, entityId) {
     throw authorityError("MANIFESTATION_NOT_FOUND", "Manifestation was not found", 404)
   }
   return { gene, row }
-}
-
-function storageDescriptor(encrypted, objectKey, upload) {
-  return {
-    body_sha256: encrypted.body_sha256,
-    body_bytes: encrypted.body_bytes,
-    object_key: objectKey,
-    ciphertext_sha256: encrypted.ciphertext_sha256,
-    ciphertext_bytes: encrypted.ciphertext_bytes,
-    body_iv_base64: encrypted.body_iv_base64,
-    wrapped_dek_base64: encrypted.wrapped_dek_base64,
-    wrap_iv_base64: encrypted.wrap_iv_base64,
-    key_version: encrypted.key_version,
-    aad_version: encrypted.aad_version,
-    object_etag: upload.etag,
-    verified_at: new Date().toISOString(),
-  }
 }
 
 async function mutationResponse(db, callbacks, result) {
@@ -445,7 +422,7 @@ function createCaretakerManifestationHttpHandler({
       }
 
       if (save) {
-        const { gene, assignment } = await requireRouteCurrentAssignment(
+        const { assignment } = await requireRouteCurrentAssignment(
           db,
           segment(save[1]),
           session.accountId,
@@ -469,40 +446,21 @@ function createCaretakerManifestationHttpHandler({
           )
         }
         const revisionId = idFactory("revision")
-        const encrypted = await encryptManifestationProse(env, {
-          revisionId,
-          geneId: gene.gene_id,
-          prose: body.prose,
-        })
+        const prose = await prepareManifestationProse(body.prose)
         const objectKey = await createManifestationBodyObjectKey()
         await admitManifestationUploadIntent(db, env, {
           entityKind: "revision",
           entityId: revisionId,
           assignmentId,
           objectKey,
-          ciphertextSha256: encrypted.ciphertext_sha256,
-          bodyBytes: encrypted.body_bytes,
+          ciphertextSha256: prose.body_sha256,
+          bodyBytes: prose.body_bytes,
           actorKind: "account",
           actorAccountId: session.accountId,
           idFactory,
         })
-        const upload = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
-          expectedSha256: encrypted.ciphertext_sha256,
-          verifyPlaintext: (stored) =>
-            decryptManifestationProse(env, {
-              revisionId,
-              geneId: gene.gene_id,
-              ciphertext: stored,
-              ciphertextSha256: encrypted.ciphertext_sha256,
-              ciphertextBytes: encrypted.ciphertext_bytes,
-              bodySha256: encrypted.body_sha256,
-              bodyBytes: encrypted.body_bytes,
-              bodyIvBase64: encrypted.body_iv_base64,
-              wrappedDekBase64: encrypted.wrapped_dek_base64,
-              wrapIvBase64: encrypted.wrap_iv_base64,
-              keyVersion: encrypted.key_version,
-              aadVersion: encrypted.aad_version,
-            }),
+        const upload = await putManifestationBodyObject(env, objectKey, prose.bytes, {
+          expectedSha256: prose.body_sha256,
         })
         result = await saveManifestationRevision(db, {
           assignmentId,
@@ -511,7 +469,7 @@ function createCaretakerManifestationHttpHandler({
           sourceRevisionId: body.based_on_revision_id,
           revisionId,
           eventUuid: body.event_id,
-          storage: storageDescriptor(encrypted, objectKey, upload),
+          storage: plainStorageDescriptor(prose, objectKey, upload),
           idFactory,
           ...command,
         })
@@ -571,42 +529,20 @@ function createCaretakerManifestationHttpHandler({
         const replay = await resolveCommandReplay(db, command, command)
         if (replay) return jsonResponse(replay)
         const derivativeId = idFactory("derivative")
-        const encrypted = await encryptManifestationTags(env, {
-          derivativeId,
-          revisionId,
-          sourceBodySha256: revision.body_sha256,
-          tags: output.output_plain,
-        })
         const objectKey = await createManifestationBodyObjectKey()
         await admitManifestationUploadIntent(db, env, {
           entityKind: "derivative",
           entityId: derivativeId,
           assignmentId: assignment.caretaker_assignment_id,
           objectKey,
-          ciphertextSha256: encrypted.ciphertext_sha256,
-          bodyBytes: encrypted.body_bytes,
+          ciphertextSha256: output.output_plain_sha256,
+          bodyBytes: output.output_plain_bytes,
           actorKind: "account",
           actorAccountId: session.accountId,
           idFactory,
         })
-        const upload = await putEncryptedManifestationBody(env, objectKey, encrypted.ciphertext, {
-          expectedSha256: encrypted.ciphertext_sha256,
-          verifyPlaintext: (stored) =>
-            decryptManifestationTags(env, {
-              derivativeId,
-              revisionId,
-              sourceBodySha256: revision.body_sha256,
-              ciphertext: stored,
-              ciphertextSha256: encrypted.ciphertext_sha256,
-              ciphertextBytes: encrypted.ciphertext_bytes,
-              bodySha256: encrypted.body_sha256,
-              bodyBytes: encrypted.body_bytes,
-              bodyIvBase64: encrypted.body_iv_base64,
-              wrappedDekBase64: encrypted.wrapped_dek_base64,
-              wrapIvBase64: encrypted.wrap_iv_base64,
-              keyVersion: encrypted.key_version,
-              aadVersion: encrypted.aad_version,
-            }),
+        const upload = await putManifestationBodyObject(env, objectKey, output.output_bytes, {
+          expectedSha256: output.output_plain_sha256,
         })
         result = await submitTagsDerivative(db, {
           revisionId,
@@ -617,7 +553,11 @@ function createCaretakerManifestationHttpHandler({
           tagsBytes: output.tags_bytes,
           fieldsSha256: output.fields_sha256,
           fieldsBytes: output.fields_bytes,
-          storage: storageDescriptor(encrypted, objectKey, upload),
+          storage: plainStorageDescriptor(
+            { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
+            objectKey,
+            upload,
+          ),
           recipeId: "caretaker-manual-tags",
           recipeVersion: "1",
           providerId: "caretaker",
