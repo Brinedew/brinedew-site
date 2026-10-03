@@ -288,6 +288,13 @@ test("default production path builds and ships both Worker owners and Pages with
     assert.match(steps[index].run, /wrangler versions deploy/)
     assert.doesNotMatch(steps[index].run, /wrangler triggers deploy|--triggers/)
   }
+  const readers = steps.findIndex(
+    (step) => step.name === "Refresh published readers during existing schema maintenance",
+  )
+  const headroom = steps.findIndex(
+    (step) => step.name === "Require account-wide D1 and Worker headroom before migrations",
+  )
+  assert.ok(readers >= 0 && readers < headroom, "readers recover before the D1 headroom gate")
   for (const name of [
     "Check account capacity before release mutations",
     "Stage migration admission in the existing state owner",

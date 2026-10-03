@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 import {
   earlyReleaseCapacitySentinel,
   readEarlyReleaseCapacity,
@@ -200,3 +202,21 @@ for (const body of ["not json", "x".repeat(65_537)]) {
     )
   })
 }
+
+test("real sentinel imports load and missing credentials refuse before provider traffic", () => {
+  const root = new URL("../", import.meta.url)
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("scripts/early-release-capacity-sentinel.mjs", root))],
+    {
+      cwd: fileURLToPath(root),
+      env: { PATH: process.env.PATH || "", SystemRoot: process.env.SystemRoot || "" },
+      encoding: "utf8",
+      timeout: 10_000,
+    },
+  )
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /^COST_RELEASE_STATE_CREDENTIALS_REQUIRED\s*$/)
+  assert.equal(result.stdout, "")
+})
