@@ -1821,3 +1821,25 @@ test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header a
   assert.equal(taken.headers.get("Retry-After"), null)
   assert.equal("retry_after_seconds" in taken.payload, false)
 })
+
+// 26. Every click on "print copy" enrolls the same card again. The ledger must count that request
+//     on the one row (an upsert) and never add a row per click, or a viral gene page grows the
+//     table, and the D1 write meter, with every visitor.
+test("26: asking for the same print copy again counts one more request on the one ledger row", async () => {
+  const db = new SqliteD1()
+  const env = { ICONOPLASM_DB: db }
+  db.exec(
+    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
+  )
+  for (let click = 0; click < 3; click += 1) {
+    await enrollIconoplasmGeneCardMaterialization(env, {
+      symbol: "TP53",
+      cardFingerprint: "0".repeat(32),
+      assetSha256: sha("a"),
+    })
+  }
+  const row = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(row.request_count, 3)
+  const rows = db.sqlite.prepare("SELECT COUNT(*) AS n FROM icono_gene_card_materializations").get()
+  assert.equal(rows.n, 1)
+})

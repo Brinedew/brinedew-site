@@ -99,10 +99,17 @@ This is intentionally stricter than a normal cache hit. The right behavior is:
 
 Do not add a cache-first, stale-while-revalidate, "all symbols are already in IndexedDB", or old-version fill-in path for gallery cards. Those designs recreate the Edge stale-canonical failure mode.
 
-The protected contract is `quartz/static/iconoplasm/home-performance-contract.test.js`:
+Three real tests exercise this path. `e2e/home-collection-sorts.e2e.mjs` runs the
+signed-in home collection in Chrome and records, in order, the symbols the page
+asks the manifest endpoint for. `workers/iconoplasm.mobile-card-manifest.test.js`
+runs the manifest route, and `workers/iconoplasm.account-gallery-window.test.js`
+runs the account window route. No automated check forbids a cache-first path in
+the client, so a reviewer must.
 
-- `account gallery first window is discovery-fresh and does not use a stale ordered-window cache`
-- `mobile home collection refreshes card VMs from the manifest before painting`
+The anonymous reader's side of the same rule (no Worker request, no identity
+probe) is `e2e/anonymous-reader-requests.e2e.mjs`: it loads the home page and a
+gene page without the signed-in cookie and fails if any request matches the
+stateful config's `run_worker_first` list.
 
 Global authority is additionally protected by the site-detail/public-media,
 range HTML, gene HTML, and sitemap concordance tests under `workers/`. Those
