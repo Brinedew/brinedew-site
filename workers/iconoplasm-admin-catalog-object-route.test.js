@@ -12,14 +12,12 @@ import {
 // written before the code:
 // 1. not an administrator -> 403, nothing written;
 // 2. a well-formed upload is stored at the fixed key with the stable
-//    Cache-Control, then its exact CDN URL is purged, and the reply carries the
-//    byte count and purge result;
+//    Cache-Control, and the reply carries the byte count;
 // 3. an empty body or a body over the limit -> 4xx, nothing written;
 // 4. a body that is not a JSON object -> 400, nothing written;
-// 5. a storage failure -> 503 no-store, no purge.
-function harness({ admin = true, putError = null, purged = true } = {}) {
+// 5. a storage failure -> 503 no-store.
+function harness({ admin = true, putError = null } = {}) {
   const writes = []
-  const purges = []
   const handlers = createIconoplasmAdminCatalogObjectHandlers({
     isAdmin: async () => admin,
     json: (body, status = 200, headers = {}) =>
@@ -30,10 +28,6 @@ function harness({ admin = true, putError = null, purged = true } = {}) {
     putObject: async (env, key, bytes, options) => {
       if (putError) throw putError
       writes.push({ key, bytes, options })
-    },
-    purgeObject: async (env, key) => {
-      purges.push(key)
-      return purged
     },
   })
   const put = handlers["admin_publication.catalog_object_put"]
@@ -50,7 +44,7 @@ function harness({ admin = true, putError = null, purged = true } = {}) {
         },
       ),
     })
-  return { call, writes, purges }
+  return { call, writes }
 }
 
 test("a non-administrator is refused and nothing is written", async () => {
@@ -58,10 +52,9 @@ test("a non-administrator is refused and nothing is written", async () => {
   const response = await h.call('{"schema":3}')
   assert.equal(response.status, 403)
   assert.equal(h.writes.length, 0)
-  assert.equal(h.purges.length, 0)
 })
 
-test("a well-formed upload is stored at the fixed key, purged, and reported", async () => {
+test("a well-formed upload is stored at the fixed key and reported", async () => {
   const h = harness()
   const body = '{"schema":3,"rows":[["A1BG","alpha-1-B glycoprotein"]]}'
   const response = await h.call(body)
@@ -70,7 +63,6 @@ test("a well-formed upload is stored at the fixed key, purged, and reported", as
   assert.equal(reply.ok, true)
   assert.equal(reply.key, STABLE_CATALOG_OBJECT_KEY)
   assert.equal(reply.bytes, body.length)
-  assert.equal(reply.purged, true)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
   assert.equal(h.writes.length, 1)
   assert.equal(h.writes[0].key, "catalog/v3/index.json")
@@ -80,7 +72,6 @@ test("a well-formed upload is stored at the fixed key, purged, and reported", as
     h.writes[0].options.cacheControl,
     "public, max-age=300, stale-while-revalidate=86400",
   )
-  assert.deepEqual(h.purges, ["catalog/v3/index.json"])
 })
 
 test("an empty body is refused and nothing is written", async () => {
@@ -104,10 +95,9 @@ test("a body that is not a JSON object is refused", async () => {
   assert.equal(h.writes.length, 0)
 })
 
-test("a storage failure is a 503 with no purge", async () => {
+test("a storage failure is a 503", async () => {
   const h = harness({ putError: new Error("Bunny PUT failed (500)") })
   const response = await h.call('{"schema":3}')
   assert.equal(response.status, 503)
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(h.purges.length, 0)
 })

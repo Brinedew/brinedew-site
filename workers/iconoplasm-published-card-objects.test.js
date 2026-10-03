@@ -142,23 +142,18 @@ test("the stable gene object rejects foreign keys, oversized bodies and unreadab
   )
 })
 
-// B-898: the pull zone ignores our Cache-Control (measured max-age=2592000), so
-// every rewrite of a stable object must purge its exact CDN URL.
-function purgeFixture(envOverrides = {}) {
+// A rewrite talks to storage only: the PUT and its verifying read. Bunny's purge
+// API answered 429 for 19 of the first 80 genes of a bulk republish (2026-10-03),
+// and the pull zone's 60 s edge rule already bounds staleness, so even with an
+// account key configured nothing is purged.
+test("a stable object rewrite sends only the PUT and its verifying GET, never a purge", async () => {
   const objects = new Map()
   const calls = []
   const store = createPublishedCardObjectStore(
-    {
-      ...env,
-      ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://cdn.example.test",
-      ...envOverrides,
-    },
+    { ...env, BUNNY_ACCOUNT_API_KEY: "account-key" },
     {
       request: async (url, init, key) => {
-        calls.push({ method: init.method, url, headers: init.headers, key })
-        if (url.startsWith("https://api.bunny.net/purge")) {
-          return new Response(null, { status: envOverrides.__purgeStatus || 200 })
-        }
+        calls.push({ method: init.method, url })
         if (init.method === "PUT") {
           objects.set(key, init.body.slice())
           return new Response(null, { status: 201 })
@@ -169,47 +164,13 @@ function purgeFixture(envOverrides = {}) {
       },
     },
   )
-  return { store, calls }
-}
-
-test("a stable object rewrite purges its exact CDN URL with the account key after verification", async () => {
-  const { store, calls } = purgeFixture({ BUNNY_ACCOUNT_API_KEY: "account-key" })
-  const result = await store.writeStable("genes/v3/TP53.json", { symbol: "TP53" })
-  assert.equal(result.purged, true)
+  await store.writeStable("genes/v3/TP53.json", { symbol: "TP53" })
   assert.deepEqual(
     calls.map((c) => c.method),
-    ["PUT", "GET", "POST"],
-  )
-  assert.equal(
-    calls[2].url,
-    "https://api.bunny.net/purge?url=" +
-      encodeURIComponent("https://cdn.example.test/genes/v3/TP53.json") +
-      "&async=true",
-  )
-  assert.equal(
-    calls[2].headers.AccessKey,
-    "account-key",
-    "the account key, never the storage password",
-  )
-})
-
-test("without an account key the write still succeeds and reports no purge; a refused purge throws", async () => {
-  const noKey = purgeFixture()
-  const result = await noKey.store.writeStable("genes/v3/TP53.json", { symbol: "TP53" })
-  assert.equal(result.purged, false)
-  assert.deepEqual(
-    noKey.calls.map((c) => c.method),
     ["PUT", "GET"],
   )
-  const skipped = purgeFixture({ BUNNY_ACCOUNT_API_KEY: "account-key" })
-  await skipped.store.writeStable("genes/v3/TP53.json", { symbol: "TP53" }, { purge: false })
-  assert.deepEqual(
-    skipped.calls.map((c) => c.method),
-    ["PUT", "GET"],
-  )
-  const refused = purgeFixture({ BUNNY_ACCOUNT_API_KEY: "account-key", __purgeStatus: 500 })
-  await assert.rejects(
-    refused.store.writeStable("genes/v3/TP53.json", { symbol: "TP53" }),
-    /CDN purge failed \(500\)/,
+  assert.equal(
+    calls.some((c) => c.url.includes("api.bunny.net")),
+    false,
   )
 })
