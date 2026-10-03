@@ -281,10 +281,6 @@ class FakeStatement {
       }
       return { meta: { changes: 1 } }
     }
-    if (this.sql.includes("icono_vote_projection_refresh_jobs")) {
-      this.db.voteRefreshTouched = true
-      return { meta: { changes: 1 } }
-    }
     if (this.sql.trim().startsWith("DELETE FROM icono_image_votes")) {
       return { meta: { changes: 1 } }
     }

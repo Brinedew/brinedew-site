@@ -165,7 +165,7 @@ and refuses a larger one with a 400 that names the limits, before writing
 anything. When any named gene's election fails it answers 502 with the
 `failed_symbols` (the votes are committed); running the same import again
 elects every named gene afresh. Callers split their imports by the same
-bounds; the workstation's vote baseline import sends requests of that size.
+bounds.
 
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.

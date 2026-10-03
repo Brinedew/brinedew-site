@@ -9,7 +9,11 @@ import {
   drainCompletedFinalization,
 } from "./sync-finalization-publication.js"
 import { createFinalizationPublicationMigrationCostAdapter } from "./operation-cost-finalization-publication-migration-adapter.js"
-import { createFinalizationHandoffRetirementMigrationCostAdapter } from "./operation-cost-finalization-handoff-retirement-migration-adapter.js"
+import { createSchemaDropMigrationCostAdapter } from "./operation-cost-schema-drop-migration-adapter.js"
+import {
+  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
+  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
+} from "../generated/operation-cost-migrations.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -215,8 +219,10 @@ test("retiring the finalization handoff removes only its table and triggers", as
       ).meta.rows_written
     const writesWithHandoff = await flipWrites("T1")
 
-    const retirement = createFinalizationHandoffRetirementMigrationCostAdapter({
+    const retirement = createSchemaDropMigrationCostAdapter({
       db,
+      name: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
+      statements: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
       ...identities,
     })
     await assert.rejects(

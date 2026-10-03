@@ -527,8 +527,8 @@ export async function setGeneVote(db, raw = {}) {
 export const GENE_VOTE_IMPORT_CHUNK = 50
 
 /**
- * Applies many votes (the workstation's baseline import, an image edit's
- * inherited upvotes, a generated candidate's first upvote). Same rule and
+ * Applies many votes (an administrator's import, an image edit's inherited
+ * upvotes, a generated candidate's first upvote). Same rule and
  * statements as setGeneVote; a later item for the same user and asset wins,
  * like replaying the commands in order.
  *
