@@ -18,9 +18,10 @@
 //     "No thanks", or never loads for a visitor who accepted or lives outside the consent
 //     countries (the prompt decision is made in the page, from /cdn-cgi/trace).
 //
-// What is real: Chrome, the built public-iconoplasm-edge site, and the published CDN objects.
-// What is stubbed: every /api/* answer (404, recorded), the /cdn-cgi/trace country, and the
-// analytics beacon script (recorded, never fetched).
+// What is real: Chrome, the built public-iconoplasm-edge site, and the published catalog and gene
+// objects (read from the live CDN, with retries, so a slow runner network cannot make the reader
+// hedge to the Worker). What is stubbed: every /api/* answer (404, recorded), the portrait images,
+// the /cdn-cgi/trace country, and the analytics beacon script (recorded, never fetched).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome. The measured request
 // lists land in artifacts/e2e/anonymous-reader-requests.json.
@@ -58,6 +59,60 @@ assert.ok(
   "an exclusion rule in run_worker_first needs this test taught about it",
 )
 
+const TINY_WEBP = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64")
+const STARTERS = ["INS", "RHO", "PRL", "CD4"]
+
+// The reader hedges to the Worker (/api/public/v1/stable-catalog.json, ...) when the CDN does not
+// answer in time. That is the designed answer to a failed accelerator, and a slow runner network
+// triggers it, so this test must not depend on the CDN's speed. The two kinds of CDN answer the
+// readers use are made reliable: the published JSON is read once, from the live CDN, with retries
+// in this process and served to the page from memory; the portrait images are a tiny stub.
+const CDN_OBJECTS = new Map()
+function cdnObject(pathname) {
+  if (!CDN_OBJECTS.has(pathname)) {
+    CDN_OBJECTS.set(
+      pathname,
+      (async () => {
+        let last = ""
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          try {
+            const response = await fetch(`https://${CDN_HOST}${pathname}`, {
+              signal: AbortSignal.timeout(45_000),
+            })
+            if (response.ok) {
+              return {
+                status: 200,
+                contentType: response.headers.get("content-type") || "application/json",
+                body: Buffer.from(await response.arrayBuffer()),
+              }
+            }
+            // A 404 is an answer (no object for this gene), and the reader never hedges it.
+            if (response.status === 404) return { status: 404, contentType: "text/plain", body: "" }
+            last = `HTTP ${response.status}`
+          } catch (error) {
+            last = String(error?.message || error)
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt))
+        }
+        throw new Error(`the live CDN did not answer for ${pathname} after 5 tries: ${last}`)
+      })(),
+    )
+  }
+  return CDN_OBJECTS.get(pathname)
+}
+
+async function routeCdn(context) {
+  const cors = { "access-control-allow-origin": "*" }
+  await context.route(`https://${CDN_HOST}/**`, async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (/^\/(?:catalog|genes)\/v3\//.test(pathname)) {
+      const object = await cdnObject(pathname)
+      return route.fulfill({ ...object, headers: cors })
+    }
+    return route.fulfill({ status: 200, contentType: "image/webp", headers: cors, body: TINY_WEBP })
+  })
+}
+
 function reachesWorker(url) {
   const { host, pathname } = new URL(url)
   if (host !== new URL(HOST).host) return false
@@ -73,12 +128,21 @@ test("an anonymous reader on the home page and on a gene page sends the Worker n
   mkdirSync(OUT, { recursive: true })
   const report = []
   try {
+    // Read the published objects before any page asks for them.
+    await Promise.all(
+      [
+        "/catalog/v3/index.json",
+        "/genes/v3/TP53.json",
+        ...STARTERS.map((s) => `/genes/v3/${s}.json`),
+      ].map(cdnObject),
+    )
     for (const [width, height, label] of VIEWPORTS) {
       for (const pagePath of ["/", "/gene/TP53"]) {
         const where = `${label} ${pagePath}`
         const context = await browser.newContext({ viewport: { width, height } })
         // Anything that does reach /api/* is answered 404 so it never touches production.
         await routeProduction(context, origin, () => new HttpStatus(404), { session: false })
+        await routeCdn(context)
         const page = await context.newPage()
         const workerBound = []
         const cdn = []
@@ -147,6 +211,7 @@ async function openWithCountry(browser, origin, country, beacon) {
     beacon.push(route.request().url())
     return route.fulfill({ status: 200, contentType: "text/javascript", body: "" })
   })
+  await routeCdn(context)
   const page = await context.newPage()
   await page.goto(`${HOST}/`)
   return { context, page }
