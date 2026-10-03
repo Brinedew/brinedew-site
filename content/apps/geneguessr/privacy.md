@@ -1,13 +1,13 @@
 ---
 title: "Privacy Policy"
 description: "How GeneGuessr handles your data"
-date: 2026-02-10
+date: 2026-10-03
 draft: false
 ---
 
 # Privacy Policy
 
-**Last updated:** May 23, 2026
+**Last updated:** October 3, 2026
 
 This Privacy Policy describes how GeneGuessr ("we", "us", or "our") collects, uses, and protects your information when you use our website at geneguessr.brinedew.bio.
 
@@ -91,8 +91,9 @@ We share data only with:
 - **Cloudflare Web Analytics**: Used only after analytics consent, for aggregate traffic measurement.
 - **Public leaderboard viewers**: If you opt in, your Discord username, avatar, and best streak are visible to visitors in the in-app leaderboard.
 - **Discord CDN (server-side only)**: Avatar images may be fetched by our backend and served via our own domain. Visitors do not request avatar images directly from Discord.
+- **Structure providers (RCSB PDB, AlphaFold DB, SWISS-MODEL)**: When you look at the 3D structure of a protein you have already guessed, your web browser establishes a direct connection to the respective provider, so that the provider – technically unavoidable – learns your IP address and other data about your browser, which it automatically sends along.
 
-We do not share your data with advertisers, data brokers, or other third parties.
+We do not share your data with advertisers or data brokers.
 
 ## Where Data Is Stored
 
@@ -102,7 +103,6 @@ All data is processed and stored on Cloudflare infrastructure:
 - **Cloudflare D1**: Database (user accounts, game history, statistics)
 - **Cloudflare KV**: Caching layer
 - **Cloudflare Durable Objects**: Session management
-- **Cloudflare R2**: Protein structure files (no personal data)
 
 Cloudflare operates data centers globally. For EU users, this may involve data transfer outside the EEA. Cloudflare maintains appropriate safeguards including Standard Contractual Clauses.
 

@@ -6,6 +6,13 @@ import {
   mountSidebarStack,
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
+import {
+  ANONYMOUS_PDB_HEADER,
+  StructureTooLargeError,
+  isStructureProviderUrl,
+  limitStructureBody,
+  structureNeedsAnonymousHeader,
+} from "./structure-bytes.js?v=14316e269d498942"
 // ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
 var NAVIGATION_START = performance.now()
 console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
@@ -779,89 +786,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     return Number.isFinite(num) ? num : null
   }
 
-  function buildMolstarOptionsFromRepresentation(representation, overrides = {}) {
-    if (!representation) {
-      return null
-    }
-    if (representation.source === "pdb" && representation.pdb && representation.pdb.id) {
-      // If we have a chain ID, use PDBe Model Server to extract just that chain
-      // This avoids showing massive complexes when we only want the target protein
-      const pdbId = representation.pdb.id.toLowerCase()
-      const chainId = representation.pdb.chain_id
-
-      let url
-      if (chainId) {
-        // PDBe Model Server can filter to specific chain
-        url = `https://www.ebi.ac.uk/pdbe/model-server/v1/${pdbId}/atoms?auth_asym_id=${chainId}&encoding=cif`
-      } else {
-        // Fall back to full structure
-        url = `${RCSB_PDB_DOWNLOAD_URL}${representation.pdb.id}.cif`
-      }
-
-      const obj = {
-        moleculeId: representation.pdb.id,
-        customData: {
-          url: url,
-          format: "cif",
-        },
-      }
-      applyStructureOverrides(obj, overrides)
-      return obj
-    }
-    if (
-      representation.source === "alphafold" &&
-      representation.alphafold &&
-      representation.alphafold.model_url
-    ) {
-      const obj = {
-        moleculeId: representation.alphafold.id || representation.structureId || "structure",
-        customData: {
-          url: representation.alphafold.model_url,
-          format: "cif",
-        },
-      }
-      applyStructureOverrides(obj, overrides)
-      return obj
-    }
-    if (representation.source === "swissmodel" && representation.swissModel) {
-      const swissUrl =
-        representation.swissModel.coordinates_url ||
-        representation.swissModel.coordinatesUrl ||
-        representation.swissModel.model_url ||
-        representation.swissModel.modelcif
-      if (!swissUrl) {
-        return null
-      }
-      const obj = {
-        moleculeId:
-          representation.swissModel.model_id ||
-          representation.swissModel.template ||
-          representation.structureId ||
-          "SWISS",
-        assemblyId: "1",
-        customData: {
-          url: swissUrl,
-          format: detectStructureFormat(swissUrl, representation.swissModel.format),
-        },
-      }
-      applyStructureOverrides(obj, overrides)
-      return obj
-    }
-    return null
-  }
-
-  function applyStructureOverrides(option, overrides) {
-    if (!option || !option.customData || !overrides) {
-      return
-    }
-    if (overrides.structureToken) {
-      option.customData.url = `${API_BASE}/api/structure?token=${overrides.structureToken}`
-      if (overrides.format) {
-        option.customData.format = overrides.format
-      }
-    }
-  }
-
   function detectStructureFormat(url, explicitFormat) {
     if (explicitFormat) {
       return explicitFormat
@@ -932,9 +856,73 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       displayLabel: token.displayLabel || token.sourceLabel || "Source unavailable",
       format: token.format || "cif",
       url: token.url,
+      directUrl: token.directUrl || null,
       cacheKey: token.cacheKey || null,
       chainLabels: token.chainLabels || null,
       linkUrl: token.linkUrl || null,
+    }
+  }
+
+  // A provider that sends nothing for this long counts as failed, and the viewer falls back
+  // to the Worker route. RCSB builds a file in 2 to 5 seconds (measured 2026-10-03).
+  const PROVIDER_STALL_MS = 15000
+
+  // A guess's structure straight from its provider, which costs no Worker request: the
+  // token's `directUrl` is a URL the server derived from its stored row, checked against
+  // the provider allowlist here again before the browser asks for it, and the Content
+  // Security Policy is the third check. The bytes are bounded and prefixed exactly as the
+  // Worker route bounds them (structure-bytes.js), then handed to Mol* as a blob.
+  //
+  // `cache: "force-cache"` matters: RCSB and SWISS-MODEL send no Cache-Control, so a default
+  // repeat view costs a provider request (270 to 424 ms in Chrome, 2026-10-03), while a
+  // forced one is served from the browser's HTTP cache in 1 to 2 ms. No credentials and no
+  // referrer go to a provider.
+  //
+  // Rejects with StructureTooLargeError for an oversize body (the Worker route would cut it
+  // off too, so the caller does not retry there) and with any other error for a failed or
+  // stalled provider (the caller falls back to the Worker route).
+  async function fetchStructureFromProvider(structureInfo) {
+    const directUrl = structureInfo.directUrl
+    if (!isStructureProviderUrl(directUrl)) {
+      throw new Error("Structure URL is not on a structure provider")
+    }
+    const controller = new AbortController()
+    let stall = null
+    const armStall = () => {
+      clearTimeout(stall)
+      stall = setTimeout(() => controller.abort(), PROVIDER_STALL_MS)
+    }
+    armStall()
+    try {
+      const response = await fetch(directUrl, {
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        cache: "force-cache",
+        signal: controller.signal,
+      })
+      if (!response.ok || !response.body) {
+        throw new Error(`Structure provider answered ${response.status}`)
+      }
+      const prefix = structureNeedsAnonymousHeader(structureInfo.cacheKey)
+        ? ANONYMOUS_PDB_HEADER
+        : null
+      const reader = limitStructureBody(response.body, { prefix }).getReader()
+      const chunks = []
+      let bytes = 0
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        armStall()
+        chunks.push(value)
+        bytes += value.byteLength
+      }
+      // The provider's own bytes, not the HEADER line this page put in front of them.
+      if (bytes <= (prefix ? prefix.byteLength : 0)) {
+        throw new Error("Structure provider sent an empty body")
+      }
+      return new Blob(chunks, { type: "application/octet-stream" })
+    } finally {
+      clearTimeout(stall)
     }
   }
 
@@ -2258,12 +2246,33 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       moleculeId = "unknown"
     }
 
-    // A guess's structure loads by its URL: the route answers `Cache-Control: public,
-    // max-age=604800, immutable` for a key, so the browser's HTTP cache serves a repeat
-    // view with no request. A target token has no cacheKey and is never cached.
+    // A guess's structure loads straight from its provider (B-943) and costs no Worker
+    // request; if the provider fails for this visitor it loads through the Worker route
+    // (`url`, `Cache-Control: public, max-age=604800, immutable`). A target token has no
+    // cacheKey and no directUrl: it is fetched through the Worker, never cached, because a
+    // provider URL would name the answer.
     const cacheKey = structureInfo.cacheKey
     let finalStructureUrl = structureUrl
     let blobUrlToRevoke = null
+
+    if (cacheKey && structureInfo.directUrl) {
+      timing("loading guess structure from its provider")
+      try {
+        const blob = await fetchStructureFromProvider(structureInfo)
+        finalStructureUrl = URL.createObjectURL(blob)
+        blobUrlToRevoke = finalStructureUrl
+        timing("guess structure loaded from its provider")
+      } catch (err) {
+        if (err instanceof StructureTooLargeError) {
+          console.warn("Geneguessr: guess structure is over the size cap", err)
+          showStructureError(
+            "Could not load the 3D structure. You can still play using the clues below.",
+          )
+          return
+        }
+        console.warn("Geneguessr: provider failed for a guess structure; using the Worker", err)
+      }
+    }
 
     if (!cacheKey) {
       // Target tokens intentionally omit the storage key. Fetch the bytes before
@@ -2492,7 +2501,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const STATIC_BASE = resolveStaticBase()
 
   // Constants
-  const RCSB_PDB_DOWNLOAD_URL = "https://files.rcsb.org/download/"
   const DEFAULT_HINT_COST = 1
   const HINT_REWARD_ON_INCORRECT = 1
   // MAX_GUESSES: read from gameStatus.maxGuesses (server is single source of truth)

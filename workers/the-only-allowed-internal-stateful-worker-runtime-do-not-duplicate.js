@@ -1400,10 +1400,13 @@ import {
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 import {
   ANONYMOUS_PDB_HEADER,
+  isStructureProviderUrl,
+  limitStructureBody,
+  structureNeedsAnonymousHeader,
+} from "../quartz/static/geneguessr/structure-bytes.js"
+import {
   StructureUpstreamRefusedError,
   fetchStructureUpstream,
-  isAllowedStructureUpstreamUrl,
-  limitStructureBody,
   structureContentType,
   structureFormatFromKey,
 } from "./lib/structure-upstream.js"
@@ -4014,11 +4017,21 @@ async function buildTargetStructureToken(protein, options) {
 }
 
 /**
- * Build structure token for a guess protein: the key and URL the browser loads
- * the structure by, and its labels. Fetches nothing, so it can be derived from a row
- * that is already loaded: the guess response, the bootstrap's guess entries and
+ * Build structure token for a guess protein: where the browser loads the structure
+ * from, and its labels. Fetches nothing, so it can be derived from a row that is
+ * already loaded: the guess response, the bootstrap's guess entries and
  * `/api/structure-token?uniprot=` all return exactly this object.
  * Returns null if the protein has no stored structure.
+ *
+ * A guess is not a secret (the player typed it), so its structure loads straight from
+ * the provider: `directUrl` is the stored upstream URL the Worker route would have
+ * fetched, and a view of it costs no Worker request. `url` is the same structure
+ * through the Worker route, which the page uses only if the provider fails for that
+ * visitor. `directUrl` appears only if it passes the provider allowlist.
+ *
+ * NEVER build a target token with this function. The target's structure stays behind
+ * `buildTargetStructureTokenFromMeta`'s opaque `type=target` URL, because a provider
+ * URL or a structure key would name the answer.
  */
 function buildGuessStructureToken(protein, { origin }) {
   if (!protein) return null
@@ -4029,12 +4042,12 @@ function buildGuessStructureToken(protein, { origin }) {
     return null
   }
 
-  // ⚡ LAZY STRUCTURE: Don't fetch the structure during guess submission; the client
-  // asks /api/structure-cached for the bytes. This saves 2-4 seconds per guess.
+  // ⚡ LAZY STRUCTURE: Don't fetch the structure during guess submission; the browser
+  // loads the bytes itself. This saves 2-4 seconds per guess.
 
-  // The key is all the browser sends. The route finds the upstream itself: RCSB for
-  // a PDB id, and the protein's stored row for SWISS-MODEL and AlphaFold, whose
-  // URLs carry templates, ranges and isoform numbers that the key does not.
+  // The fallback route takes only the key. It finds the upstream itself: RCSB for a
+  // PDB id, and the protein's stored row for SWISS-MODEL and AlphaFold, whose URLs
+  // carry templates, ranges and isoform numbers that the key does not.
   const structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`
 
   // Parse chain labels if present
@@ -4058,6 +4071,7 @@ function buildGuessStructureToken(protein, { origin }) {
     displayLabel: meta.displayLabel,
     format: meta.format || "cif",
     url: structureUrl,
+    ...(isStructureProviderUrl(meta.upstreamUrl) ? { directUrl: meta.upstreamUrl } : {}),
     cacheKey: meta.r2Key,
     chainLabels,
     linkUrl: meta.linkUrl,
@@ -4146,6 +4160,12 @@ async function handleStructureToken(request, env, corsHeaders) {
 /**
  * Serves structure files by streaming them from the provider.
  *
+ * Callers: the page for the daily target (`type=target`, never stored anywhere), the
+ * page for a guess whose provider failed for that visitor (the guess token's `url`),
+ * the Discord recap render page and the admin preview. A guess's ordinary view does
+ * not come here: the page loads it from the provider named by the token's `directUrl`
+ * (B-943), so it costs no Worker request.
+ *
  * CRITICAL ARCHITECTURE DECISIONS (do not revert without understanding):
  *
  * 1. The upstream URL is never taken from the caller. A key-based request
@@ -4197,7 +4217,6 @@ async function handleStructureToken(request, env, corsHeaders) {
  *    outlive a deploy needs a compatibility check before it is trusted.
  */
 async function handleCachedStructureFetch(request, env, corsHeaders) {
-  const fetchStart = Date.now()
   const url = new URL(request.url)
   let cacheKey = url.searchParams.get("key")
   let protein = null // Hoist to function scope for lazy loading
@@ -4422,7 +4441,7 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
       ? targetStructureMeta || getCanonicalStructureMeta(protein)
       : await resolveMetaFromCacheKey()
 
-  if (!meta?.upstreamUrl || !isAllowedStructureUpstreamUrl(meta.upstreamUrl)) {
+  if (!meta?.upstreamUrl || !isStructureProviderUrl(meta.upstreamUrl)) {
     if (meta?.upstreamUrl) {
       console.warn("GeneGuessr: structure upstream is not on a provider host", cacheKey)
     }
@@ -4461,9 +4480,8 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
   // MAX_STRUCTURE_FILE_BYTES however the upstream announced (or did not announce)
   // its size. SWISS-MODEL PDB responses commonly omit the HEADER record Mol*
   // requires, so that one anonymous line is streamed ahead of the body.
-  const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
   const body = limitStructureBody(upstreamResp.body, {
-    prefix: isSwissModelPdb ? ANONYMOUS_PDB_HEADER : null,
+    prefix: structureNeedsAnonymousHeader(cacheKey) ? ANONYMOUS_PDB_HEADER : null,
     onTooLarge: (bytes) =>
       console.warn("GeneGuessr: upstream structure over the size cap", cacheKey, `${bytes} bytes`),
   })
@@ -4477,10 +4495,6 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
       type === "target"
         ? "private, no-store, must-revalidate"
         : "public, max-age=604800, immutable",
-  }
-  // Timing only for key-based requests: a target's headers could leak puzzle info.
-  if (type !== "target") {
-    responseHeaders["X-Fetch-Ms"] = String(Date.now() - fetchStart)
   }
   return new Response(body, { headers: responseHeaders })
 }
