@@ -47,7 +47,7 @@ const SIGNED_IN = (pathname) => {
         {
           provider_id: "openai",
           label: "OpenAI",
-          model_options: [{ model: "gpt-image-1", label: "GPT Image 1" }],
+          model_options: [{ model: "gpt-image-2.5-sunburst", label: "GPT Image 2.5 Sunburst" }],
         },
       ],
       last_used: null,
