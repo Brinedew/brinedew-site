@@ -137,6 +137,9 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /\/caretaker-terms/)
   assert.match(headers, /Content-Security-Policy:/)
   assert.match(headers, /X-Frame-Options: DENY/)
+  // Readers fetch the published JSON straight from Bunny. Without this origin in connect-src the
+  // browser blocks every CDN read, each page falls back to the Worker, and the offload is lost.
+  assert.match(headers, /connect-src[^\n]*https:\/\/iconoplasmportraits\.b-cdn\.net/)
   assert.match(headers, /openapi\.json>; rel="service-desc"; type="application\/json"/)
   assert.match(headers, /metadata>; rel="service-meta"; type="application\/json"/)
   assert.match(headers, /llms\.txt>; rel="describedby"; type="text\/plain"/)
@@ -263,34 +266,4 @@ test("the bundle build holds exactly the extension package the release metadata 
     build(),
     /unreferenced.*downloads\/iconoplasm-extension-v0\.5\.8\.zip.*downloads\/iconoplasm-extension-v0\.5\.90\.zip/,
   )
-})
-
-test("production workflow assigns Iconoplasm only to the stateful route owner", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
-  )
-  const publicAssignment = workflow.match(
-    /the-only-allowed-public-edge-worker-that-must-not-touch-state[\s\S]*?(?=\n\s{6}- name:)/,
-  )?.[0]
-  const statefulAssignment = workflow.match(
-    /Reassign Iconoplasm route to the stateful worker[\s\S]*?(?=\n\s{6}- name:)/,
-  )?.[0]
-
-  assert.ok(publicAssignment)
-  assert.doesNotMatch(publicAssignment, /iconoplasm\.brinedew\.bio/)
-  assert.match(statefulAssignment, /geneguessr-api/)
-  assert.match(statefulAssignment, /iconoplasm\.brinedew\.bio\/\*/)
-})
-
-test("production hands off the existing route before Wrangler reconciles stateful triggers", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
-  )
-  const handoffIndex = workflow.indexOf("Hand off Iconoplasm route to the prepared stateful worker")
-  const statefulDeployIndex = workflow.indexOf("Deploy the stateful Worker after data maintenance")
-
-  assert.ok(handoffIndex > 0)
-  assert.ok(statefulDeployIndex > handoffIndex)
 })

@@ -196,3 +196,80 @@ test("iconoplasm admin gallery mutation routes reach the admin gate instead of 4
     assert.match(await response.text(), /Unauthorized/)
   }
 })
+
+// B-972: the operator pages' own policy. Scripts and styles on /admin come only from the
+// site itself, so an injected inline script or style cannot run with the admin's cookie.
+test("the Iconoplasm admin page has no unsafe-inline or unsafe-eval in script-src and style-src", async () => {
+  const policyFor = async (url) => {
+    const response = await worker.fetch(new Request(url), {}, { waitUntil() {} })
+    return response.headers.get("Content-Security-Policy") || ""
+  }
+  const admin = await policyFor("https://iconoplasm.brinedew.bio/admin")
+  assert.match(admin, /script-src /)
+  assert.match(admin, /style-src /)
+  assert.doesNotMatch(admin, /(?:script|style)-src[^;]*'unsafe-(?:inline|eval)'/)
+  // The control: the host's other responses keep inline scripts, so the check above can fail.
+  const publicPolicy = await policyFor("https://iconoplasm.brinedew.bio/.well-known/ai")
+  assert.match(publicPolicy, /script-src[^;]*'unsafe-inline'/)
+  // Shoelace loads its checkbox, select and dialog icons from data: URLs; without this the
+  // Iconoplasm dialogs lose their icons in production.
+  assert.match(publicPolicy, /connect-src 'self' data: https:\/\/brinedew\.bio/)
+})
+
+// B-972: a logged-in admin's cookie must not let another site, or a form post, change the
+// recognition policies. The check runs before the admin check and before any binding is read
+// (the env is empty here, so a binding read would throw).
+test("admin policy mutations refuse cross-site, foreign-origin and non-JSON requests first", async () => {
+  const refused = [
+    [
+      "cross_site_request_forbidden",
+      403,
+      {
+        "Content-Type": "text/plain",
+        Origin: "https://evil.example",
+        "Sec-Fetch-Site": "cross-site",
+      },
+    ],
+    [
+      "untrusted_origin",
+      403,
+      { "Content-Type": "application/json", Origin: "https://brinedew.bio.evil.example" },
+    ],
+    [
+      "application_json_required",
+      415,
+      {
+        "Content-Type": "text/plain;charset=UTF-8",
+        Origin: "https://iconoplasm.brinedew.bio",
+        "Sec-Fetch-Site": "same-origin",
+      },
+    ],
+  ]
+  const post = (path, headers) =>
+    worker.fetch(
+      new Request(`https://iconoplasm.brinedew.bio${path}`, {
+        method: "POST",
+        headers: { Cookie: "session=admin", ...headers },
+        body: JSON.stringify({ terms: ["AMID"], expected_revision: 1 }),
+      }),
+      {},
+      { waitUntil() {} },
+    )
+  for (const path of [
+    "/api/iconoplasm/admin/extension-blocklist",
+    "/api/iconoplasm/admin/publication-aliases",
+  ]) {
+    for (const [code, status, headers] of refused) {
+      const response = await post(path, headers)
+      assert.equal(response.status, status, `${path}: ${code}`)
+      assert.equal((await response.json()).code, code, path)
+    }
+    // A well-formed request from the site itself gets past admission and stops at the admin check.
+    const unauthorized = await post(path, {
+      "Content-Type": "application/json",
+      Origin: "https://iconoplasm.brinedew.bio",
+    })
+    assert.equal(unauthorized.status, 403, path)
+    assert.equal((await unauthorized.json()).code, "unauthorized", path)
+  }
+})
