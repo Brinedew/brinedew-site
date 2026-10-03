@@ -190,6 +190,31 @@ After deployment:
 4. inspect at least one public GeneGuessr page;
 5. confirm the live API reports computed picks and overrides accurately.
 
+## Structure bytes and KV
+
+`/api/structure-cached?key=` is a public GET, so the server alone decides what it
+fetches. The upstream comes from the key: RCSB for a `pdb/` key, the stored
+`proteins` row for an `alphafold/` or `swissmodel/` key (one indexed row), and
+the AlphaFold file derived from the accession when no row matches. No query
+parameter names an upstream. Every structure fetch (the route, the availability
+probe, the R2 cache fill and the daily pin) goes through
+`fetchStructureUpstream` in `workers/lib/structure-upstream.js`: https only, no
+userinfo, no port, and exactly `models.rcsb.org`, `alphafold.ebi.ac.uk` and
+`swissmodel.expasy.org`, with redirects followed by hand (three at most) and
+each hop checked. The response's `Content-Type` follows the key's format
+(`bcif` octet-stream, `cif` chemical/x-cif, `pdb` chemical/x-pdb) with
+`X-Content-Type-Options: nosniff`. A fourth provider is one entry in that file.
+
+A protein with a stored structure source never touches KV: the row is the
+decision and always wins. KV key `structure_source:<uniprot>` holds only what
+discovery found for a protein that has no stored source (749 of 19,110 on
+2026-10-03; none is in the autocomplete index or a target pool). It is written on
+a miss with a 30-day TTL, so the worst case is one write per such protein per
+month, and `/api/structure-token` refuses an accession that is not in the
+catalog before discovery runs. The free plan allows 1,000 KV writes a day and the
+recorded daily answer shares that allowance, so a lookup that a reader can repeat
+must not write.
+
 ## Required tests
 
 `workers/lib/daily-selection-pool.test.js` must prove:
@@ -221,18 +246,34 @@ from the real migrations at production shape (19,110 proteins, 10,312 playable,
 Worker on the same production-shaped local D1 with R2 unbound and `fetch` counted:
 
 - a returning same-day bootstrap makes no pick statement, no structure probe and
-  at most one KV put, and on a cold isolate reads one protein row;
+  no KV put, and on a cold isolate reads one protein row;
 - a first-time bootstrap, a restart with no pool, yesterday's session, an unknown
   `same_target` and a failed session read still pick;
 - a restart with a stored pool, `same_target=1` and `date=` name the target with no
   pick;
 - a browser with no session cookie reads no session.
 
-`workers/structure-cached-key-lookup-cost.test.js` must prove that a hint-less
+`workers/structure-cached-key-lookup-cost.test.js` must prove that an
 `/api/structure-cached?key=` request for a SWISS-MODEL or AlphaFold structure
 reads at most one row of `proteins` through an index search, finds the row the
-old `upper(uniprot)` statement found, and keeps its answers for a missing row, a
-key with no accession, a D1 error, a hinted request and a PDB key.
+`upper(uniprot)` statement finds, and keeps its answers for a missing row, a key
+with no accession, a D1 error and a PDB key.
+
+`workers/structure-cached-upstream.test.js` must prove, through the real Worker
+with a network stub that follows redirects as Workers does, that no
+`upstream=` value is ever fetched (another host, userinfo, IP literals,
+localhost, odd ports, http and other schemes), that a stored upstream off the
+three provider hosts is refused without a fetch, that a redirect off the
+providers is not followed and a loop stops after three hops, that the
+`Content-Type` comes from the key, that an R2 bucket never receives a caller's
+bytes, and that the three providers are still served.
+
+`workers/structure-kv-writes.test.js` must prove, on the production-shaped local
+D1 with R2 unbound, that a structure token, a first and a returning practice
+bootstrap and a guess make no KV put for a protein with a stored source, that an
+accession outside the catalog is refused with no fetch and no put, that discovery
+writes once per protein with a 30-day TTL, and that a stale KV entry never beats
+the stored row.
 
 `workers/admin-schedule-year.test.js` must prove that the first uncached annual
 request returns 365 complete, unique protein and surname identities using bulk

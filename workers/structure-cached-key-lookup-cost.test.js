@@ -1,9 +1,8 @@
 // The GeneGuessr structure-bytes route finds a protein by an indexed equality.
 //
-// `/api/structure-cached?key=alphafold/<id>.cif` and
-// `...?key=swissmodel/<id>_<template>.pdb` carry no upstream URL when the browser
-// got the key from `/api/structure-token`. The route then reads the protein's
-// stored structure columns to learn the upstream. With R2 unbound, as in
+// `/api/structure-cached?key=alphafold/<id>.pdb` and
+// `...?key=swissmodel/<id>_<template>.pdb` carry no upstream URL: the route reads
+// the protein's stored structure columns to learn it. With R2 unbound, as in
 // production, every such request is a miss, so this lookup runs once per view of
 // a guess structure and grows with players.
 //
@@ -24,7 +23,8 @@
 //   S2  the indexed lookup resolves a different row than the upper() form does
 //   S3  a missing row, or a key with no accession in it, changes its answer
 //   S4  a D1 error on the lookup throws instead of falling through
-//   S5  a hinted request or a PDB key starts reading the database
+//   S5  a PDB key starts reading the database, or a stray upstream= parameter
+//       changes what is read or fetched
 //   S6  the statement the route runs scans `proteins` (names the scan)
 import assert from "node:assert/strict"
 import test, { after, before, mock } from "node:test"
@@ -113,7 +113,7 @@ test("S1: the upper() form scans this catalog, the 19,110 rows production paid p
   assert.equal(metered.totalRead(), PRODUCTION_SHAPE.proteins)
 })
 
-test("S1: a SWISS-MODEL key with no upstream hint reads at most one row, whichever protein it names", async (t) => {
+test("S1: a SWISS-MODEL key reads at most one row, whichever protein it names", async (t) => {
   const reads = []
   for (const row of sample(bySource("swissmodel"), 12)) {
     const key = `swissmodel/${row.uniprot}_${row.swissmodel_template}.pdb`
@@ -126,10 +126,10 @@ test("S1: a SWISS-MODEL key with no upstream hint reads at most one row, whichev
   assert.ok(Math.max(...reads) <= 1, `a request read ${Math.max(...reads)} rows`)
 })
 
-test("S1: an AlphaFold key with no upstream hint reads at most one row, whichever protein it names", async (t) => {
+test("S1: an AlphaFold key reads at most one row, whichever protein it names", async (t) => {
   const reads = []
   for (const row of sample(bySource("alphafold"), 12)) {
-    const key = `alphafold/${row.uniprot}.cif`
+    const key = `alphafold/${row.uniprot}.pdb`
     const { response, fetched, metered } = await getStructure(keyQuery(key))
     assert.equal(response.status, 200, key)
     assert.deepEqual(fetched, [row.alphafold_url], `${key} resolves its own stored upstream`)
@@ -141,7 +141,7 @@ test("S1: an AlphaFold key with no upstream hint reads at most one row, whicheve
 
 test("S1: the row is found however the key spells the accession", async () => {
   const [row] = sample(bySource("alphafold"), 1)
-  const { metered } = await getStructure(keyQuery(`alphafold/${row.uniprot.toLowerCase()}.cif`))
+  const { metered } = await getStructure(keyQuery(`alphafold/${row.uniprot.toLowerCase()}.pdb`))
   assert.equal(metered.totalRead(), 1, "a lower-case key still matches the stored accession")
 })
 
@@ -153,7 +153,7 @@ test("S2: the statement the route runs returns the row the upper() form returns,
     for (const spelling of [row.uniprot, row.uniprot.toLowerCase()]) {
       const key =
         row.structure_source === "alphafold"
-          ? `alphafold/${spelling}.cif`
+          ? `alphafold/${spelling}.pdb`
           : `swissmodel/${spelling}_${row.swissmodel_template}.pdb`
       const { statements } = await getStructure(keyQuery(key))
       const lookup = statements.find((entry) => /FROM proteins/i.test(entry.sql))
@@ -222,14 +222,14 @@ test("S4: a D1 error on the lookup is survived: AlphaFold derives its upstream, 
   assert.deepEqual(missing.fetched, [])
 })
 
-test("S5: a hinted request and a PDB key never read the database", async () => {
+test("S5: a PDB key never reads the database, and a stray upstream= parameter changes nothing", async () => {
   const [row] = sample(bySource("alphafold"), 1)
-  const hinted = await getStructure(
-    `${keyQuery(`alphafold/${row.uniprot}.cif`)}&upstream=${encodeURIComponent("https://example.test/a.cif")}`,
+  const stray = await getStructure(
+    `${keyQuery(`alphafold/${row.uniprot}.pdb`)}&upstream=${encodeURIComponent("https://example.test/a.cif")}`,
   )
-  assert.equal(hinted.response.status, 200)
-  assert.deepEqual(hinted.fetched, ["https://example.test/a.cif"])
-  assert.equal(hinted.metered.totalRead(), 0)
+  assert.equal(stray.response.status, 200)
+  assert.deepEqual(stray.fetched, [row.alphafold_url], "the stored upstream, not the parameter")
+  assert.equal(stray.metered.totalRead(), 1, "one indexed row, as without the parameter")
 
   const pdb = await getStructure(keyQuery("pdb/1ABC23.bcif"))
   assert.equal(pdb.response.status, 200)
@@ -243,7 +243,7 @@ test("S6: every statement the route runs on proteins is an index search, never a
   const [alphafold] = sample(bySource("alphafold"), 1)
   const [swissmodel] = sample(bySource("swissmodel"), 1)
   const runs = [
-    await getStructure(keyQuery(`alphafold/${alphafold.uniprot}.cif`)),
+    await getStructure(keyQuery(`alphafold/${alphafold.uniprot}.pdb`)),
     await getStructure(
       keyQuery(`swissmodel/${swissmodel.uniprot}_${swissmodel.swissmodel_template}.pdb`),
     ),

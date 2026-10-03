@@ -71,7 +71,9 @@ export async function openCatalogDb() {
 // the stored link its source needs, so the Worker can resolve its structure.
 // `quirks` adds rows whose raw values need the normalization the pool applies:
 // padded and lower-case surnames, an empty surname, a missing surname, and a
-// lower-case accession.
+// lower-case accession. Stored URLs have the shape production stores (AlphaFold
+// `.pdb` files on alphafold.ebi.ac.uk, SWISS-MODEL `.pdb` models with a range and
+// template on swissmodel.expasy.org), because the Worker fetches only provider hosts.
 export const PRODUCTION_SHAPE = Object.freeze({
   proteins: 19110,
   playable: 10312,
@@ -133,9 +135,15 @@ export function productionShapedCatalogRows({ quirks = false } = {}) {
         structure_source: source,
         gene_summary: hasSummary ? `Summary of protein ${id}` : null,
         pdb_id: source === "pdb" ? `1${String(id).padStart(5, "0")}` : null,
-        swissmodel_url: source === "swissmodel" ? `https://swissmodel.test/${accession}.pdb` : null,
+        swissmodel_url:
+          source === "swissmodel"
+            ? `https://swissmodel.expasy.org/repository/uniprot/${accession}.pdb?range=8-148&template=tmpl&provider=swissmodel`
+            : null,
         swissmodel_template: source === "swissmodel" ? "tmpl" : null,
-        alphafold_url: source === "alphafold" ? `https://alphafold.test/${accession}.cif` : null,
+        alphafold_url:
+          source === "alphafold"
+            ? `https://alphafold.ebi.ac.uk/files/AF-${accession}-F1-model_v6.pdb`
+            : null,
       })
     }
   }

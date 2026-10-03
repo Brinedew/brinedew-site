@@ -73,7 +73,7 @@ test("structure-cached falls back to stored AlphaFold upstream when R2 reads fai
             uniprot: "P11532",
             structure_source: "alphafold",
             pdb_id: null,
-            alphafold_url: "https://alphafold.example/files/AF-P11532-3-F1-model_v4.cif",
+            alphafold_url: "https://alphafold.ebi.ac.uk/files/AF-P11532-3-F1-model_v4.cif",
             swissmodel_url: null,
             swissmodel_template: null,
           },
@@ -100,7 +100,7 @@ test("structure-cached falls back to stored AlphaFold upstream when R2 reads fai
     assert.equal(await response.text(), "alphafold-cif")
     assert.deepEqual(upstreamRequests, [
       {
-        url: "https://alphafold.example/files/AF-P11532-3-F1-model_v4.cif",
+        url: "https://alphafold.ebi.ac.uk/files/AF-P11532-3-F1-model_v4.cif",
         method: "GET",
       },
     ])
@@ -138,7 +138,7 @@ test("structure-cached recovers SWISS-MODEL upstream from stored metadata withou
             structure_source: "pdb",
             pdb_id: null,
             alphafold_url: null,
-            swissmodel_url: "https://swissmodel.example/download/model.cif",
+            swissmodel_url: "https://swissmodel.expasy.org/download/model.cif",
             swissmodel_template: "tpl/A",
           },
         }),
@@ -157,7 +157,7 @@ test("structure-cached recovers SWISS-MODEL upstream from stored metadata withou
     assert.equal(await response.text(), "swissmodel-cif")
     assert.deepEqual(upstreamRequests, [
       {
-        url: "https://swissmodel.example/download/model.cif",
+        url: "https://swissmodel.expasy.org/download/model.cif",
         method: "GET",
       },
     ])
@@ -190,7 +190,7 @@ test("uncached SWISS-MODEL PDB delivery adds the parser-required anonymous heade
             structure_source: "swissmodel",
             pdb_id: null,
             alphafold_url: null,
-            swissmodel_url: "https://swissmodel.example/Q9PDB.pdb",
+            swissmodel_url: "https://swissmodel.expasy.org/repository/uniprot/Q9PDB.pdb",
             swissmodel_template: "tpl/A",
           },
         }),
@@ -310,8 +310,8 @@ test("target structure endpoint ignores stale KV structure-source overrides when
   // This test uses a synthetic UniProt ID to avoid pollution from the in-memory
   // protein cache shared by this worker module during the test process. The
   // scenario is the same: DB says PDB, KV lies and says SWISS-MODEL. The DB must
-  // win, the stale KV value must be overwritten, and no availability probe may
-  // fall back to SWISS-MODEL before the real fetch.
+  // win, KV is neither read nor written for a protein with a stored source, and
+  // no availability probe may fall back to SWISS-MODEL before the real fetch.
   const waits = []
   const upstreamRequests = []
   const kvWrites = []
@@ -382,8 +382,7 @@ test("target structure endpoint ignores stale KV structure-source overrides when
       },
     ])
     assert.equal(gameSessions.savedState.targetStructureMeta.r2Key, "pdb/1B64.bcif")
-    assert.equal(kvWrites[0]?.key, "structure_source:P9KVST")
-    assert.equal(kvWrites[0]?.value.r2Key, "pdb/1B64.bcif")
+    assert.deepEqual(kvWrites, [], "a stored source is never written to KV")
   } finally {
     globalThis.fetch = originalFetch
   }

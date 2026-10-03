@@ -1407,6 +1407,13 @@ import {
   clearStructureFailure,
 } from "./lib/protein-store.js"
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
+import {
+  StructureUpstreamRefusedError,
+  fetchStructureUpstream,
+  isAllowedStructureUpstreamUrl,
+  structureContentType,
+  structureFormatFromKey,
+} from "./lib/structure-upstream.js"
 import { getDailyGuessAggregates, recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
@@ -4096,20 +4103,10 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     /* ignore */
   }
 
-  let structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`
-  // CRITICAL: For SWISS-MODEL and AlphaFold, we MUST include the upstream URL in the request.
-  // SWISS-MODEL URLs are custom per-protein (e.g., with template/range params).
-  // AlphaFold URLs include isoform numbers (e.g., AF-P11532-3-F1 not AF-P11532-F1).
-  // The worker cannot derive these from the r2Key pattern alone.
-  // Without this, guess cards for multi-isoform proteins return 404/502.
-  // Only needed when not cached - if already in R2, worker serves directly.
-  if (
-    !cached &&
-    (meta.source === "swissmodel" || meta.source === "alphafold") &&
-    meta.upstreamUrl
-  ) {
-    structureUrl += `&upstream=${encodeURIComponent(meta.upstreamUrl)}`
-  }
+  // The key is all the browser sends. The route finds the upstream itself: RCSB for
+  // a PDB id, and the protein's stored row for SWISS-MODEL and AlphaFold, whose
+  // URLs carry templates, ranges and isoform numbers that the key does not.
+  const structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`
 
   // Parse chain labels if present
   let chainLabels = null
@@ -4135,10 +4132,6 @@ async function buildGuessStructureToken(protein, env, { origin }) {
     cacheKey: meta.r2Key,
     sizeBytes,
     cached, // Tell client whether it needs to trigger caching
-    // ALWAYS send upstreamUrl so client can store it in IndexedDB.
-    // The client needs this if local blob is evicted and R2 cache expires later.
-    // Only matters for SWISS-MODEL and AlphaFold - PDB has predictable URLs.
-    upstreamUrl: meta.upstreamUrl || undefined,
     chainLabels,
     linkUrl: meta.linkUrl,
   }
@@ -4199,11 +4192,15 @@ async function handleStructureToken(request, env, corsHeaders) {
         { status: 400, headers: corsHeaders },
       )
     }
-    // Try to fetch full protein from database first (has pre-seeded structure metadata)
-    // Falls back to minimal object for API discovery if not in database
-    let protein = await fetchProteinByUniprot(env.DB, uniprot)
+    // Only a protein in the catalog gets a structure. Discovery (three outbound API
+    // calls and a KV write) must never be reachable through an accession a caller
+    // made up: each distinct string would spend one of the 1,000 free KV writes a day.
+    const protein = await fetchProteinByUniprot(env.DB, uniprot)
     if (!protein) {
-      protein = { uniprot } // Minimal object - will trigger slow API discovery path
+      return Response.json(
+        { error: "Structure unavailable" },
+        { status: 404, headers: corsHeaders },
+      )
     }
     const meta = await getCanonicalStructureMeta(protein, env)
     if (!meta) {
@@ -4295,10 +4292,14 @@ function prependAnonymousPdbHeader(data) {
  *    Using `env.waitUntil()` causes "waitUntil is not a function" crashes.
  *    See: https://developers.cloudflare.com/workers/runtime-apis/context/
  *
- * 2. The `upstream` query parameter is only a hint, not a hard dependency.
- *    The worker should recover upstream URLs server-side from stored metadata
- *    whenever possible, because old clients, cached URLs, or damaged R2 access
- *    should not turn "file not in cache" into "structure permanently broken".
+ * 2. The upstream URL is never taken from the caller. A key-based request
+ *    learns it from the key: RCSB for `pdb/` keys, the stored `proteins` row for
+ *    `alphafold/` and `swissmodel/` keys, and the derived AlphaFold file as the
+ *    last resort. A caller-chosen URL would make this public GET an open relay
+ *    that serves the caller's own bytes from our origin. Every fetch also goes
+ *    through `fetchStructureUpstream`, which allows https on exactly three
+ *    provider hosts and checks each redirect hop. The response's Content-Type is
+ *    set from the key's format, never copied from the upstream.
  *
  * 3. Lazy caching via ctx.waitUntil() is intentional for performance.
  *    Structure files are cached to R2 in the background AFTER the response is sent.
@@ -4475,6 +4476,12 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     return Response.json({ error: "Invalid key format" }, { status: 400, headers: corsHeaders })
   }
 
+  // The media type follows the key's format, never the upstream's header, and the
+  // browser may not sniff it into anything else: these bytes are served from our
+  // API origin.
+  const contentType = structureContentType(structureFormatFromKey(cacheKey))
+  const bodyTypeHeaders = { "Content-Type": contentType, "X-Content-Type-Options": "nosniff" }
+
   const derivePdbUpstreamUrl = (id, format) => {
     if (format === "bcif") {
       return `https://models.rcsb.org/v1/${id}/full?encoding=bcif&copy_all_categories=false`
@@ -4486,11 +4493,6 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     const [source, filename] = cacheKey.split("/")
     const format = filename.endsWith(".bcif") ? "bcif" : filename.endsWith(".pdb") ? "pdb" : "cif"
     const id = filename.replace(/\.(bcif|cif|pdb)$/, "")
-    const hintedUpstreamUrl = url.searchParams.get("upstream")
-
-    if (hintedUpstreamUrl) {
-      return { r2Key: cacheKey, upstreamUrl: hintedUpstreamUrl, format, source }
-    }
 
     if (source === "pdb") {
       return {
@@ -4507,9 +4509,9 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     // accession is already upper-case (19,110 of 19,110 on 2026-10-03; the other
     // reader, fetchProteinByUniprot, relies on the same contract). Wrapping the
     // column in a function defeats the index and reads the whole table: 19,110 rows
-    // for each view of a guess structure. With R2 unbound, every hint-less
-    // SWISS-MODEL or AlphaFold key reaches this lookup, so that cost grows with
-    // players. A test pins one row read per request at production shape.
+    // for each view of a guess structure. With R2 unbound, every SWISS-MODEL or
+    // AlphaFold key reaches this lookup, so that cost grows with players. A test
+    // pins one row read per request at production shape.
     const structureRowSql = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
       FROM proteins
       WHERE uniprot = ?`
@@ -4574,7 +4576,10 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       meta = await resolveMetaFromCacheKey()
     }
 
-    if (!meta?.upstreamUrl) {
+    if (!meta?.upstreamUrl || !isAllowedStructureUpstreamUrl(meta.upstreamUrl)) {
+      if (meta?.upstreamUrl) {
+        console.warn("GeneGuessr: structure upstream is not on a provider host", cacheKey)
+      }
       return Response.json(
         { error: "Structure not cached and no upstream available" },
         { status: 404, headers: corsHeaders },
@@ -4583,10 +4588,20 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
 
     // Fetch from upstream and stream to client while caching in background
     console.log(`[LAZY-CACHE] Fetching ${cacheKey} from ${meta.upstreamUrl}`)
-    const upstreamResp = await fetch(meta.upstreamUrl, {
-      method: "GET",
-      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-    })
+    let upstreamResp
+    try {
+      upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
+        method: "GET",
+        headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
+      })
+    } catch (err) {
+      if (!(err instanceof StructureUpstreamRefusedError)) throw err
+      console.warn("GeneGuessr: structure upstream redirect refused", cacheKey, err.message)
+      return Response.json(
+        { error: "Upstream structure unavailable" },
+        { status: 502, headers: corsHeaders },
+      )
+    }
 
     if (!upstreamResp.ok || !upstreamResp.body) {
       console.warn(
@@ -4614,11 +4629,6 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       )
     }
 
-    const contentType =
-      meta.format === "bcif"
-        ? "application/octet-stream"
-        : upstreamResp.headers.get("Content-Type") || "chemical/x-cif"
-
     const isSwissModelPdb = cacheKey.startsWith("swissmodel/") && cacheKey.endsWith(".pdb")
     if (isSwissModelPdb) {
       // SWISS-MODEL PDB responses commonly omit HEADER, which Mol* requires.
@@ -4636,14 +4646,14 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
       if (env?.STRUCTURES_BUCKET?.put) {
         ctx.waitUntil(
           env.STRUCTURES_BUCKET.put(cacheKey, originalData, {
-            httpMetadata: { contentType: "chemical/x-pdb" },
+            httpMetadata: { contentType },
           }).catch((err) => console.warn("[LAZY-CACHE] Background cache failed:", err)),
         )
       }
 
       const responseHeaders = {
         ...corsHeaders,
-        "Content-Type": "chemical/x-pdb",
+        ...bodyTypeHeaders,
         "Cache-Control":
           type === "target"
             ? "private, no-store, must-revalidate"
@@ -4687,7 +4697,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     // Only add timing headers for non-target requests (target headers could leak puzzle info)
     const responseHeaders = {
       ...corsHeaders,
-      "Content-Type": contentType,
+      ...bodyTypeHeaders,
       "Cache-Control":
         type === "target"
           ? "private, no-store, must-revalidate"
@@ -4732,7 +4742,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     const swissHeaders = {
       ...corsHeaders,
       ...timingHeaders,
-      "Content-Type": "chemical/x-pdb",
+      ...bodyTypeHeaders,
       "Cache-Control": cacheControl,
     }
     if (type !== "target") {
@@ -4745,7 +4755,7 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     headers: {
       ...corsHeaders,
       ...timingHeaders,
-      "Content-Type": object.httpMetadata?.contentType || "application/octet-stream",
+      ...bodyTypeHeaders,
       "Cache-Control": cacheControl,
     },
   })
@@ -7016,8 +7026,13 @@ function buildMetaFromStoredStructure(protein) {
   return buildStructureMetaFromStoredSource(protein)
 }
 
+// KV remembers only what discovery found for a protein that has no stored source
+// (749 of 19,110 proteins on 2026-10-03; none is in the autocomplete index or a
+// target pool). A protein with a stored source never reads or writes this key. A
+// hit is probed before it is trusted, so the long TTL costs nothing in staleness
+// and bounds the writes: at most one per such protein per month.
 const STRUCTURE_SOURCE_CACHE_PREFIX = "structure_source:"
-const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24 // 24 hours
+const STRUCTURE_SOURCE_CACHE_TTL = 60 * 60 * 24 * 30 // 30 days
 
 function hasStoredStructureSource(protein, source) {
   if (!protein || !source) {
@@ -7091,7 +7106,7 @@ async function isStructureMetaAvailable(env, meta) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)
   try {
-    const upstreamResp = await fetch(meta.upstreamUrl, {
+    const upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
       method: "GET",
       headers: {
         "User-Agent": "GeneGuessr-Worker/1.0",
@@ -7213,8 +7228,10 @@ async function getCanonicalStructureMeta(protein, env) {
 
   const cacheKey = `${STRUCTURE_SOURCE_CACHE_PREFIX}${protein.uniprot}`
 
-  // The database row is the canonical structure decision. KV is only a cache of
-  // that decision or a fallback for proteins whose stored source is missing.
+  // The database row is the canonical structure decision. KV only remembers what
+  // discovery found for proteins whose stored source is missing; a stored row is
+  // never written to KV, because the row is already one indexed read and always
+  // wins (a write nothing reads costs one of the 1,000 free KV writes a day).
   //
   // This ordering is a regression guard, not a style preference. A stale
   // `structure_source:P24534` KV value once pointed to:
@@ -7239,13 +7256,6 @@ async function getCanonicalStructureMeta(protein, env) {
     console.log(
       `GeneGuessr: using stored structure metadata for ${protein.uniprot} (${storedMeta.source})`,
     )
-    try {
-      await env.KV?.put(cacheKey, JSON.stringify(storedMeta), {
-        expirationTtl: STRUCTURE_SOURCE_CACHE_TTL,
-      })
-    } catch (err) {
-      console.warn("GeneGuessr: failed to cache stored structure source", err)
-    }
     return storedMeta
   }
 
@@ -7554,10 +7564,17 @@ async function ensureStructureCached(env, meta, options = {}) {
       return false
     }
   }
-  const upstreamResp = await fetch(meta.upstreamUrl, {
-    method: "GET",
-    headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-  })
+  let upstreamResp
+  try {
+    upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
+      method: "GET",
+      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
+    })
+  } catch (err) {
+    if (!(err instanceof StructureUpstreamRefusedError)) throw err
+    console.warn("GeneGuessr: structure upstream refused", meta.r2Key, err.message)
+    return false
+  }
   if (!upstreamResp.ok || !upstreamResp.body) {
     console.warn(
       "GeneGuessr: upstream structure fetch failed",
@@ -7567,11 +7584,7 @@ async function ensureStructureCached(env, meta, options = {}) {
     return false
   }
 
-  // Determine content type based on format
-  const contentType =
-    meta.format === "bcif"
-      ? "application/octet-stream"
-      : upstreamResp.headers.get("Content-Type") || "chemical/x-cif"
+  const contentType = structureContentType(structureFormatFromKey(meta.r2Key))
 
   // Check if we need multipart upload (Content-Length may be missing for chunked responses)
   const contentLength = upstreamResp.headers.get("Content-Length")
@@ -7719,20 +7732,24 @@ async function ensureStructureCachedWithPin(env, meta, pinnedUntil) {
   }
 
   // Fetch from upstream
-  const upstreamResp = await fetch(meta.upstreamUrl, {
-    method: "GET",
-    headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
-  })
+  let upstreamResp
+  try {
+    upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
+      method: "GET",
+      headers: { "User-Agent": "GeneGuessr-Worker/1.0" },
+    })
+  } catch (err) {
+    if (!(err instanceof StructureUpstreamRefusedError)) throw err
+    console.warn(`[PIN] Upstream refused for ${meta.r2Key}:`, err.message)
+    return false
+  }
 
   if (!upstreamResp.ok || !upstreamResp.body) {
     console.warn(`[PIN] Upstream fetch failed for ${meta.r2Key}:`, upstreamResp.status)
     return false
   }
 
-  const contentType =
-    meta.format === "bcif"
-      ? "application/octet-stream"
-      : upstreamResp.headers.get("Content-Type") || "chemical/x-cif"
+  const contentType = structureContentType(structureFormatFromKey(meta.r2Key))
 
   // Read entire body for simple put (daily targets are usually small)
   const data = await upstreamResp.arrayBuffer()

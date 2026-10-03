@@ -14,7 +14,7 @@ that historical table by assuming the first migration is the current schema.
   index search. Never write `upper(uniprot) = ?` or `lower(uniprot) = ?`: the
   function defeats the index and reads the whole table. The structure-bytes
   route (`/api/structure-cached?key=`) looks a protein up this way on every
-  hint-less SWISS-MODEL or AlphaFold request, and
+  SWISS-MODEL or AlphaFold request, and
   `workers/structure-cached-key-lookup-cost.test.js` pins one row read per
   request. A new importer must write accessions upper-case.
 - **Embeddings:** D1 `protein_embeddings` is independent of the search tables.
