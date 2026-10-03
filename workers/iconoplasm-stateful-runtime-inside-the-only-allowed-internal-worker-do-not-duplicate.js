@@ -11160,6 +11160,12 @@ export async function fulfillGenerationRequests(
     )
   }
 
+  // Writes a row only when the notification's state moves: it is not yet on this
+  // publication and group size, or it failed before Discord and goes back to retry.
+  // The workstation sends the identical completion until every Discord group is
+  // delivered (one group per call), so most calls find every request already
+  // bound. The last clause is what makes that a no-op instead of a rewrite of
+  // the row, its indexes and the delivery-ready projection it triggers (B-962).
   async function bindNotificationToPublication(requestId, fulfillmentGroupSize) {
     await env.ICONOPLASM_DB.prepare(
       `UPDATE icono_request_notifications
@@ -11174,9 +11180,21 @@ export async function fulfillGenerationRequests(
            fulfillment_publication_id = ''
            OR fulfillment_publication_id = 'legacy-request:' || request_id
            OR fulfillment_publication_id = ?
+         )
+         AND (
+           fulfillment_publication_id IS NOT ?
+           OR fulfillment_group_size IS NOT ?
+           OR discord_status = 'failed'
          )`,
     )
-      .bind(publicationIdNorm, fulfillmentGroupSize, requestId, publicationIdNorm)
+      .bind(
+        publicationIdNorm,
+        fulfillmentGroupSize,
+        requestId,
+        publicationIdNorm,
+        publicationIdNorm,
+        fulfillmentGroupSize,
+      )
       .run()
   }
 
@@ -11455,25 +11473,37 @@ export async function fulfillGenerationRequests(
         })
         continue
       }
-      const resumeResp = await env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_generation_requests
-         SET updated_at = CURRENT_TIMESTAMP,
-             fulfillment_publication_id = ?,
-             fulfillment_group_size = ?
-         WHERE id = ?
-           AND status = 'delivery_pending'
-           AND fulfilled_asset_sha256 = ?
-           AND fulfilled_vision_id = ?`,
-      )
-        .bind(
-          publicationIdNorm,
-          fulfillmentGroupSize,
-          intent.requestId,
-          intent.fulfilledAssetSha,
-          intent.fulfilledVisionId,
+      // A request already on this publication and group size has nothing to
+      // rewrite. Only a request on an older binding is moved, so a pass writes
+      // for what changed and a settle loop's cost does not grow with the number
+      // of requests still pending (B-962). The notification is bound on its own
+      // state below, not on this row's: a pass that stopped between the two
+      // leaves the request bound and the notification not.
+      let resumed =
+        currentRow.fulfillment_publication_id === publicationIdNorm &&
+        Number(currentRow.fulfillment_group_size) === fulfillmentGroupSize
+      if (!resumed) {
+        const resumeResp = await env.ICONOPLASM_DB.prepare(
+          `UPDATE icono_generation_requests
+           SET updated_at = CURRENT_TIMESTAMP,
+               fulfillment_publication_id = ?,
+               fulfillment_group_size = ?
+           WHERE id = ?
+             AND status = 'delivery_pending'
+             AND fulfilled_asset_sha256 = ?
+             AND fulfilled_vision_id = ?`,
         )
-        .run()
-      if (Number(resumeResp?.meta?.changes || 0) > 0) {
+          .bind(
+            publicationIdNorm,
+            fulfillmentGroupSize,
+            intent.requestId,
+            intent.fulfilledAssetSha,
+            intent.fulfilledVisionId,
+          )
+          .run()
+        resumed = Number(resumeResp?.meta?.changes || 0) > 0
+      }
+      if (resumed) {
         await bindNotificationToPublication(intent.requestId, fulfillmentGroupSize)
         deliveryRequestIds.add(intent.requestId)
         continue
