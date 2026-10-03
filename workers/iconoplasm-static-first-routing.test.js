@@ -70,7 +70,9 @@ test("Iconoplasm route has exactly one owner and that owner is asset-first", () 
   assert.equal(publicPatterns.includes("iconoplasm.brinedew.bio/*"), false)
   assert.deepEqual(statefulPatterns, ["iconoplasm.brinedew.bio/*"])
   assert.equal(statefulConfig.assets.directory, "./public-iconoplasm-edge")
-  assert.equal(statefulConfig.assets.not_found_handling, "single-page-application")
+  // B-980: a path with no document is a real 404 (the 404 page boots the app in a
+  // browser), so a crawler never indexes the shell under an unpublished address.
+  assert.equal(statefulConfig.assets.not_found_handling, "404-page")
   assert.ok(statefulConfig.assets.run_worker_first.includes("/api/*"))
   assert.ok(statefulConfig.assets.run_worker_first.includes("/blot/*"))
   assert.equal(statefulConfig.assets.run_worker_first.includes("/gene/*"), false)

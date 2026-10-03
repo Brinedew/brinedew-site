@@ -8,6 +8,7 @@ import {
   iconoplasmGenePageHtml,
   publishedGeneEntries,
   writeIconoplasmGenePages,
+  writeIconoplasmStubPages,
 } from "./prepare-iconoplasm-edge-assets.mjs"
 
 // B-809: every published gene gets a static document whose raw HTML names that
@@ -83,6 +84,33 @@ test("one static file per gene is written under gene/", async () => {
     assert.match(await readFile(path.join(dir, "gene", "TP53.html"), "utf8"), /gene\/TP53"/)
     const none = await writeIconoplasmGenePages({ outputRoot: dir, publishedGenes: [] })
     assert.equal(none.genePages, 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+// B-980: the 404 page and the two in-app route pages are stubs that say noindex
+// until the shell takes over, and boot the shell exactly as a gene document does.
+test("the not-found and in-app route stubs are noindex and boot the shell", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "stub-pages-"))
+  try {
+    assert.equal((await writeIconoplasmStubPages({ outputRoot: dir })).stubPages, 3)
+    assert.deepEqual((await readdir(dir)).sort(), ["404.html", "clans.html", "studio.html"])
+    const titles = {
+      "404.html": "Page not found | Iconoplasm",
+      "clans.html": "Clans | Iconoplasm",
+      "studio.html": "Diagram Studio | Iconoplasm",
+    }
+    for (const [file, title] of Object.entries(titles)) {
+      const html = await readFile(path.join(dir, file), "utf8")
+      assert.ok(html.includes("<title>" + title + "</title>"), file)
+      assert.match(html, /<meta name="robots" content="noindex,follow">/, file)
+      assert.doesNotMatch(html, /rel="canonical"/, file)
+      assert.match(html, /fetch\("\/",\{credentials:"same-origin"\}\)/, file)
+      const boot = html.match(/<script>\(function\(\)[\s\S]*?<\/script>/)?.[0] || ""
+      assert.ok(html.indexOf(boot) < html.indexOf("</head>"), file)
+      new Function(boot.replace(/<\/?script>/g, ""))
+    }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

@@ -11,12 +11,12 @@ const canonicalMain =
 const transitionMain =
   'main = "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js"'
 
-// A containment deploy keeps the exact asset bytes already serving production
-// and routes gene pages into the Worker so the quarantine shell can answer
-// them. The crawler documents (robots.txt, sitemap.xml, llms.txt and the
-// /genes redirects) stay with those static bytes, exactly as in production.
-// This explicit list is not a broad `run_worker_first = true`. The
-// reader-recovery containment deploy is its one user.
+// A containment deploy keeps the exact asset bytes already serving production,
+// so the per-gene documents, the crawler documents (robots.txt, sitemap.xml,
+// llms.txt) and the /genes redirects are served by the asset layer exactly as in
+// production, at no Worker request. Only the Worker's own routes enter the
+// quarantine shell. This explicit list is not a broad `run_worker_first = true`.
+// The reader-recovery containment deploy is its one user.
 export function prepareRetainedAssetsConfig(source) {
   let output = String(source)
   if (!/^routes = \[\{ pattern = "iconoplasm\.brinedew\.bio\/\*"/m.test(output))
@@ -25,7 +25,7 @@ export function prepareRetainedAssetsConfig(source) {
   if (!assets) throw new Error("Canonical Iconoplasm asset routing is missing")
   output = output.replace(
     assets[0],
-    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/admin*", "/blocklist*", "/artist-styles*", "/health", "/gene/*"] } }\n\n`,
+    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/admin*", "/blocklist*", "/artist-styles*", "/health"] } }\n\n`,
   )
   return output
 }
