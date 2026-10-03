@@ -84,6 +84,7 @@
         deferSnapshot: true,
         onAuthRequired: options.onAuthRequired,
         onError: options.onError,
+        onVoteFailed: options.onVoteFailed,
       }),
     )
   }

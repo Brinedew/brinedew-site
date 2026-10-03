@@ -135,6 +135,21 @@ allowance of 1,750 admitted vote changes per UTC day
 refused whole (nothing is written) and the reader gets a 429: "Voting is
 paused until 00:00 UTC to protect the site's daily database allowance." The
 administrator's vote and import routes are not admitted and never refused.
+The `votes/set` 429 also says when voting is back: the seconds to 00:00:00 UTC
+(`secondsUntilCloudflareDailyReset` with no margin, the day the budget row is keyed on), as a
+`Retry-After` header and as `retry_after_seconds` in the body. The body is the
+copy the page reads, because `fetchJSON` keeps only the body and the
+extension's fetch proxy drops headers. The vote box (`wireVoteBox` in
+`shared/iconoplasm-card/shared-card-runtime.js`, one source that
+`scripts/sync-iconoplasm-shared.mjs` copies into the site and the extension
+bundle) restores the vote, shows the server's sentence through its
+`onVoteFailed` callback, and then stops sending: the box is dimmed and
+`aria-disabled`, and a tap shows the sentence again instead of asking the
+Worker. The pause ends at the stated time, checked against the wall clock on
+each tap, or at the next page load when a 429 carries no usable number. Other
+refusals (400, 404, 409, 5xx) never pause a box. The candidate-copy, edit-publish,
+generated-candidate and supervote routes answer the same code without a reset
+time, because nothing on those routes waits for it.
 Measured on the full migrated schema
 (`workers/iconoplasm/vote-asset-summary-cost.test.js`): a first vote on an
 asset nobody voted on writes 21 D1 rows, a first vote on a voted asset 17, a

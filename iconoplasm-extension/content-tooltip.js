@@ -46,6 +46,26 @@
     return toast
   }
 
+  const TOAST_TEXT_MAX = 300
+
+  // The one writer of the page's transient notice: the login prompt and a refused vote's
+  // sentence both come through here, so the element has one timer and a newer notice is never
+  // cut short by an older one's. The text is set as text (a refusal's sentence comes from the
+  // server's JSON), bounded, and a message that is not text opens no notice at all.
+  function showToast(toast, message, options = {}) {
+    if (!toast || typeof message !== "string" || !message.trim()) return
+    const windowRef = options.windowRef || root
+    const durationMs = Math.max(0, Number(options.durationMs) || 2600)
+    toast.textContent = message.length > TOAST_TEXT_MAX ? message.slice(0, TOAST_TEXT_MAX) : message
+    toast.classList.add("iconoplasm-auth-toast-visible")
+    windowRef.clearTimeout(Number(toast.dataset.hideTimer || 0))
+    const hideTimerId = windowRef.setTimeout(() => {
+      toast.classList.remove("iconoplasm-auth-toast-visible")
+      toast.dataset.hideTimer = ""
+    }, durationMs)
+    toast.dataset.hideTimer = String(hideTimerId)
+  }
+
   function postBackgroundTask(task, options = {}) {
     const windowRef = options.windowRef || root
     const signal = options.signal || null
@@ -324,6 +344,7 @@
   root.IconoplasmContentTooltip = {
     createTooltipShell,
     createAuthToast,
+    showToast,
     postBackgroundTask,
     isFrameRequestCurrent,
     createAdapterOwnedPortraitState,
