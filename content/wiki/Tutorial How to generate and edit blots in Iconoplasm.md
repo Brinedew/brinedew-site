@@ -149,7 +149,7 @@ You must add a card and top up your balance before making requests to Luma API.
 8. A **Save your key** dialog appears showing the key once. Copy it now — you can't see it again.
 **Adding funds:**
 
-GPT Image 2 has no free tier. Without billing, Iconoplasm shows: **"Billing hard limit has been reached."** You need a credit card on file. OpenAI bills you monthly for what you use.
+GPT Image 2.5 has no free tier. Without billing, Iconoplasm shows: **"Billing hard limit has been reached."** You need a credit card on file. OpenAI bills you monthly for what you use.
 
 9. Go to [Billing overview](https://platform.openai.com/settings/organization/billing/overview).
 10. Click **Add payment details**.
@@ -252,9 +252,10 @@ Each provider sets its own rates. Iconoplasm's dropdown shows rough estimates �
 
 | Iconoplasm provider | Models in dropdown | Per-image estimate (dropdown) | Official pricing page |
 |---|---|---|---|
-| **Krea API** | Flux, Seedream 4, Krea 2 Large, GPT Image 2, Nano Banana Pro | ~\$0.002 – \$0.16 | [krea.ai/features/api](https://www.krea.ai/features/api) |
-| **Gemini API** | 3.1 Flash Image, 3 Pro Image | ~\$0.067 – \$0.134 | [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing) |
+| **Krea API** | Ideogram 4.5, GPT Image 2.5, Nano Banana 2, Nano Banana Pro, Krea 2 Large, Seedream 5 Lite | ~\$0.003 – \$0.30 | [krea.ai/features/api](https://www.krea.ai/features/api) |
+| **Gemini API** | 3.1 Flash Lite Image, 3.1 Flash Image, 3 Pro Image | ~\$0.034 – \$0.134 | [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing) |
 | **Luma Uni API** | Uni 1.1, Uni 1.1 Max | \$0.043 – \$0.103 | [lumalabs.ai/pricing](https://lumalabs.ai/pricing) |
-| **OpenAI API** | GPT Image 2 | ~$0.21 | [openai.com/api/pricing](https://openai.com/api/pricing) |
+| **OpenAI API** | GPT Image 2.5 Sunburst, GPT Image 2.5 Flare | Billed per token (\$30 per million image output tokens) | [openai.com/api/pricing](https://openai.com/api/pricing) |
+| **Fal.ai** | Flux 3, Ideogram 4.5, GPT Image 2.5, Nano Banana Pro, Seedream 5 | ~\$0.012 – \$0.15 | [fal.ai/pricing](https://fal.ai/pricing) |
 
 All costs are billed directly by the provider, not by Iconoplasm.
