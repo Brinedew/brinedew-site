@@ -264,18 +264,21 @@ export function meteredDb(db, { before, after } = {}) {
 // replay a returning player). No R2 bucket is bound, because the binding is
 // commented out in the Worker's wrangler config, so every structure the Worker
 // verifies or serves goes to its upstream. `failSessionReads` makes every session
-// read answer 500, and `sessionReads` counts them. `kvEntries` pre-loads KV.
+// read answer 500, and `sessionReads` counts them. `kvEntries` pre-loads KV;
+// `kvPuts` and `kvDeletes` list every key written or deleted, in order.
 export function geneguessrWorkerEnv(
   db,
   { sessions = new Map(), failSessionReads = false, kvEntries = {} } = {},
 ) {
   const kv = new Map(Object.entries(kvEntries))
   const kvPuts = []
+  const kvDeletes = []
   const sessionReads = []
   return {
     sessions,
     kv,
     kvPuts,
+    kvDeletes,
     sessionReads,
     env: {
       DB: db,
@@ -289,6 +292,7 @@ export function geneguessrWorkerEnv(
           kv.set(key, value)
         },
         async delete(key) {
+          kvDeletes.push(key)
           kv.delete(key)
         },
       },
