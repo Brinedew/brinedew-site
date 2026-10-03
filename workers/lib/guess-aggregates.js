@@ -10,17 +10,23 @@ const CREATE_TABLE_SQL = `
   );
 `
 
-const CREATE_INDEX_SQL = `
-  CREATE INDEX IF NOT EXISTS idx_daily_guess_aggregate_day_count
-  ON daily_guess_aggregate(day, guess_count);
-`
+// A guess bumps one row of this table, and D1 counts every index entry a statement writes as a
+// row written. The primary key (day, guess_uniprot) is the one index the readers need: all four
+// ask for `day = ?` or a range of days, which its leftmost column serves as well as a second index
+// on (day, guess_count) did, and that second index cost one more row on every guess whose count
+// moved (2 rows a guess, 1 now) and one more on the first guess of a protein each day (3, now 2)
+// (B-964). The readers read the same rows through the primary key, and the top 5 of the day sorts
+// them either way (workers/geneguessr-unused-indexes.test.js proves both on plans and receipts).
+// The drop is `IF EXISTS` and writes 0 rows (30 read on a populated table). Delete the statement
+// once production's `sqlite_master` no longer lists the index.
+const DROP_RETIRED_INDEX_SQL = `DROP INDEX IF EXISTS idx_daily_guess_aggregate_day_count`
 
 let schemaEnsured = false
 
 export async function ensureGuessAggregateSchema(db) {
   if (schemaEnsured) return
   await db.prepare(CREATE_TABLE_SQL).run()
-  await db.prepare(CREATE_INDEX_SQL).run()
+  await db.prepare(DROP_RETIRED_INDEX_SQL).run()
   schemaEnsured = true
 }
 

@@ -277,11 +277,13 @@ export async function seedEmbeddings(db, genes, options = {}) {
   }
 }
 
-// The two account tables as production has them (read from `sqlite_master` on 2026-10-03: the
-// `users` columns of migrations 001, 0016, 0019 and 0027 with its five secondary indexes, and
-// `stats` with the `migrated_at` of 002). The indexes are here because D1 counts every index
-// entry a statement writes as a row written, so a statement's receipt is only the production
-// one when the indexes exist.
+// The two account tables as production has them once `retireLeaderboardOptInIndex` has run
+// (B-966): the `users` columns of migrations 001, 0016, 0019 and 0027 with the four secondary
+// indexes the code reads (production's `sqlite_master` on 2026-10-03 also listed
+// `idx_users_leaderboard_opt_in`, which migration 0016 made and no query needs), and `stats`
+// with the `migrated_at` of 002. The indexes are here because D1 counts every index entry a
+// statement writes as a row written, so a statement's receipt is only the production one when
+// the indexes exist.
 export async function ensureAccountTables(db) {
   await db.batch(
     [
@@ -299,7 +301,6 @@ export async function ensureAccountTables(db) {
          ON users (iconoplasm_emulsion_public_id)`,
       `CREATE INDEX IF NOT EXISTS idx_users_iconoplasm_emulsion_recent
          ON users (iconoplasm_emulsion_revision, updated_at DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_users_leaderboard_opt_in ON users (leaderboard_opt_in)`,
       `CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)`,
       `CREATE TABLE IF NOT EXISTS stats (
          user_id TEXT PRIMARY KEY, total_played INTEGER DEFAULT 0, total_wins INTEGER DEFAULT 0,
@@ -309,8 +310,8 @@ export async function ensureAccountTables(db) {
   )
 }
 
-// The accounts the leaderboard reads. Each entry is `{ id, username, streak, wins }`, public and
-// played today.
+// The accounts the leaderboard reads. Each entry is `{ id, username, streak, wins, avatar }`,
+// public and played today; `avatar` is the Discord CDN address stored in `users.avatar_url`.
 export async function seedLeaderboard(db, entries) {
   await ensureAccountTables(db)
   const today = new Date().toISOString().slice(0, 10)
@@ -319,10 +320,10 @@ export async function seedLeaderboard(db, entries) {
     statements.push(
       db
         .prepare(
-          `INSERT OR REPLACE INTO users (discord_id, username, leaderboard_opt_in, created_at, updated_at)
-           VALUES (?, ?, 1, 0, 0)`,
+          `INSERT OR REPLACE INTO users (discord_id, username, avatar_url, leaderboard_opt_in, created_at, updated_at)
+           VALUES (?, ?, ?, 1, 0, 0)`,
         )
-        .bind(entry.id, entry.username),
+        .bind(entry.id, entry.username, entry.avatar ?? null),
       db
         .prepare(
           `INSERT OR REPLACE INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)

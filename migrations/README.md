@@ -48,20 +48,32 @@ that historical table by assuming the first migration is the current schema.
 - **Accounts:** D1 `users` and the existing Worker/auth path own account and
   session state.
 - **Leaderboard:** D1 `leaderboard_streaks` holds exactly the accounts the "Top Streaks"
-  box can show (public, streak above 0), with one covering index that starts with the
-  played day, so `GET /api/stats/leaderboard` reads about 4 x limit + 8 rows whatever the
-  number of accounts (26 at limit 5 on 2026-10-03, against 29,585 for the join over
-  100,000 accounts). Four triggers on `stats` and on `users.leaderboard_opt_in` keep it equal
-  to that join. `workers/lib/leaderboard-streaks.js` creates the table, the index and the
-  triggers on first use and fills it from `stats` and `users`; no migration here creates or
-  changes it. A new writer of `stats` or of `users.leaderboard_opt_in` needs nothing: the
-  triggers see it. A table rebuild that drops `stats` or `users` drops the triggers; drop
-  `leaderboard_streaks` too and the next read rebuilds it.
-- **Failed session writes:** D1 `game_session_write_observations_do_not_delete` and
-  `game_session_write_failure_samples_do_not_delete` hold only failed Durable Object
-  session writes (a counted row a minute and kind, and a sample). A successful write
-  records nothing. `workers/lib/game-session-write-evidence.js` creates both tables on the
-  first failure or the first `GET /api/admin/status` read and prunes them after 14 days.
+  box can show (public, streak above 0), with one covering index that starts with the played
+  day, so a read takes about 4 x limit + 8 rows whatever the number of accounts (26 at limit 5
+  on 2026-10-03, against 29,585 for the join over 100,000 accounts). Four triggers on `stats`
+  and on `users.leaderboard_opt_in` keep it equal to that join.
+  `workers/lib/leaderboard-streaks.js` creates the table, the index and the triggers on first use
+  and fills it from `stats` and `users` (37,428 rows read at 100,000 accounts, once, with the
+  join order pinned); no migration here creates or changes it. A new writer of `stats` or of
+  `users.leaderboard_opt_in` needs nothing: the triggers see it. A table rebuild that drops
+  `stats` or `users` drops the triggers; drop `leaderboard_streaks` too and the next read
+  rebuilds it. The page reads the board from the object `leaderboard/v1/top.json` on the CDN, which
+  `workers/lib/leaderboard-publication.js` rebuilds from this table every ten minutes or so;
+  `GET /api/stats/leaderboard` is its fallback. Migration 0016's index on
+  `users.leaderboard_opt_in` is not part of the schema: nothing reads it, and the publisher drops
+  it once per isolate (`retireLeaderboardOptInIndex`, B-966).
+- **Guess aggregates:** D1 `daily_guess_aggregate` is created on first use by
+  `workers/lib/guess-aggregates.js`, which keeps its primary key `(day, guess_uniprot)` as the
+  only index and drops the second one migration-free (`DROP INDEX IF EXISTS`, B-964); a guess
+  writes 1 row, 2 for a protein's first of the day.
+- **Failed session writes:** D1 `game_session_write_failures_do_not_delete` holds only failed
+  Durable Object session writes: one row for each day, operation, session kind and error class,
+  with a count that is a lower bound and the first message as the example. D1 takes at most one
+  write a key every five minutes, so a day costs a bounded number of rows whatever the number of
+  failures (B-963). A successful write records nothing.
+  `workers/lib/game-session-write-evidence.js` creates the table on the first failure or the first
+  `GET /api/admin/status` read, prunes it after 14 days, and drops the two per-minute tables an
+  earlier version wrote.
 - **Failed structure cache:** `workers/lib/protein-store.js` uses D1
   `structure_failures`.
 

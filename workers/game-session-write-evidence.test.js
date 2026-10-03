@@ -1,42 +1,111 @@
-// The record of failed GameSession writes (B-960). A failed Durable Object session write is
-// recorded in D1 (one counted row a minute and kind, one sample); a successful one records
-// nothing, because a success row cost 1 of every 2 D1 rows a guess wrote and no page read it.
-// Everything runs through the real Worker on a real local D1 (Miniflare) with the Durable Object
-// stubbed to fail the way production's does.
+// The record of failed GameSession writes (B-963). A failed Durable Object session write is
+// recorded in D1; a successful one records nothing (B-960). The D1 allowance a record spends is the
+// one the whole account shares, and a Durable Object write-cap incident fails EVERY session write
+// until 00:00 UTC, so the record must cost the same few rows whether it sees 100 failures or
+// 100,000. Everything runs on a real local D1 (Miniflare), through the real Worker where the
+// visitor is involved and through fresh copies of the module where an isolate is (a copy of the
+// module is an isolate: its memory is its own).
 //
-// Failure modes this file proves, each written before the code that fixes it (the visit that
-// shows a success writes nothing is in geneguessr-row-budget.test.js):
-//   E1  a failed session write is not recorded (no counted row, no sample), or the visitor stops
-//       seeing the failure
-//   E2  repeats of one failure in a minute are not folded into one counted row, or a repeat
-//       loses its sample, or a different error text shares the row
-//   E3  the record failing (D1 refuses the evidence write) changes what the visitor sees, or is
-//       not logged
-//   E4  the status reader counts a success row an earlier version wrote, or drops what the
-//       admin needs from the failures (counts, first and last time, error texts, samples)
-//   E5  the admin status route stops carrying the snapshot
-//   E6  one failed write costs the D1 meter more than 4 rows once its minute's row exists (1 to
-//       bump the counter, 3 for the sample: its row, its index entry, the autoincrement counter)
+// Failure modes this file proves, written from the requirement (a storm costs O(1) rows, not 4 a
+// failure) before the code that meets them:
+//   F1  one isolate's storm costs rows in proportion to the number of failures
+//   F2  many isolates failing at once each write their first failure (a per-isolate throttle
+//       cannot bound this; the bound has to be in D1)
+//   F3  a full day of failures costs more than one row per five minutes for the failing key
+//   F4  a message with a unique reference in it mints a row per failure (the key space is not closed)
+//   F5  the operator loses what he needs: the operation, the session kind, the error class, the
+//       first and last time, an example message and path, or the count of what D1 was told
+//   F6  a refused D1 write loses the failures an isolate had counted, or the record failing changes
+//       what the visitor sees, or is not logged, or a successful write runs a statement
+//   F7  the tables the per-minute record used are left behind, or dropping them costs D1 rows
+//   F8  rows past the retention stay, or preparing costs a statement every time
+//   F9  through the real Worker: a failed write is not recorded, or the visitor stops seeing the
+//       failure, or the admin status stops carrying the record, or a 300-failure storm costs more
+//       than a handful of rows
+//   F10 a failure's class is not stable for the texts the platform really sends
 import assert from "node:assert/strict"
 import test, { after, before, mock } from "node:test"
 
 import { handleAdminStatus } from "./admin.js"
-import { getGameSessionWriteEvidence } from "./lib/game-session-write-evidence.js"
-import { isoDay } from "./daily-selection-pool-test-d1.js"
 import { openVisitHarness } from "./geneguessr-visit-test-harness.js"
 
 const WRITE_CAP = "Exceeded allowed rows written in Durable Objects free tier."
 const RESET = "Durable Object reset because its code was updated."
-const OBSERVATIONS = "game_session_write_observations_do_not_delete"
-const SAMPLES = "game_session_write_failure_samples_do_not_delete"
+const FAILURES = "game_session_write_failures_do_not_delete"
+const LEGACY = [
+  "game_session_write_observations_do_not_delete",
+  "game_session_write_failure_samples_do_not_delete",
+]
+const WINDOW_MS = 5 * 60 * 1000
+// 12:00 UTC on 2026-10-03; every test moves the clock forward from here, inside that day unless it
+// says otherwise (T0 + 144 windows is midnight).
+const T0 = Date.UTC(2026, 9, 3, 12, 0, 0)
 
 let h
+let now = null
 before(async () => {
   h = await openVisitHarness()
+  const real = Date.now
+  mock.method(Date, "now", () => now ?? real())
 })
 after(async () => {
   await h?.dispose()
 })
+const setClock = (time) => {
+  now = time
+}
+
+let copies = 0
+// A new isolate: a copy of the module with its own memory.
+const isolate = () => import(`./lib/game-session-write-evidence.js?isolate=${(copies += 1)}`)
+
+const mine = (receipts, pattern = /./) =>
+  receipts.filter((receipt) => /game_session_write_/.test(receipt.sql) && pattern.test(receipt.sql))
+const rowsOf = (receipts) => receipts.reduce((sum, receipt) => sum + receipt.rows_written, 0)
+
+// What D1 charged for the statements `body` ran.
+async function charged(body) {
+  const from = h.metered.receipts.length
+  await body()
+  const receipts = h.metered.receipts.slice(from)
+  return { receipts, evidence: mine(receipts), rows: rowsOf(mine(receipts)) }
+}
+
+// One failed session write by `details`, as the Worker's call sites do it.
+async function fail(mod, details = {}, message = WRITE_CAP) {
+  await assert.rejects(
+    mod.withObservedGameSessionWrite(
+      { DB: h.metered },
+      {
+        operation: "guess_submission",
+        sessionId: "guest_visitor",
+        requestPath: "/api/game/guess",
+        ...details,
+      },
+      async () => {
+        throw new Error(message)
+      },
+    ),
+    { message },
+  )
+}
+
+const stored = async () =>
+  (
+    await h.db
+      .prepare(
+        `SELECT observed_day, operation, session_kind, error_class, failures, first_seen_at, last_seen_at, request_path, error_message FROM ${FAILURES} ORDER BY first_seen_at, operation, session_kind, error_class`,
+      )
+      .all()
+  ).results
+const clearStored = async () => {
+  await h.db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS ${FAILURES} (observed_day TEXT NOT NULL, operation TEXT NOT NULL, session_kind TEXT NOT NULL, error_class TEXT NOT NULL, failures INTEGER NOT NULL, first_seen_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, request_path TEXT, error_message TEXT NOT NULL, PRIMARY KEY (observed_day, operation, session_kind, error_class)) WITHOUT ROWID`,
+    )
+    .run()
+  await h.db.prepare(`DELETE FROM ${FAILURES}`).run()
+}
 
 // Every Durable Object write fails with `message` until the returned function restores it.
 function failSessionWrites(message) {
@@ -53,228 +122,327 @@ function failSessionWrites(message) {
   }
 }
 
-async function clearEvidence() {
-  for (const table of [OBSERVATIONS, SAMPLES]) {
-    await h.db
-      .prepare(`DELETE FROM ${table}`)
-      .run()
-      .catch(() => {})
-  }
-}
-const observations = async () =>
-  (
-    await h.db
-      .prepare(
-        `SELECT operation, session_kind, outcome, error_fingerprint, count FROM ${OBSERVATIONS} ORDER BY minute_bucket, error_fingerprint`,
-      )
-      .all()
-  ).results
-const samples = async () =>
-  (
-    await h.db
-      .prepare(
-        `SELECT operation, session_kind, request_path, error_message FROM ${SAMPLES} ORDER BY id`,
-      )
-      .all()
-  ).results
+test("F1: a storm of 1,000 failures in one isolate reaches D1 once, and the next window carries the count", async () => {
+  const mod = await isolate()
+  setClock(T0)
+  const first = await charged(async () => {
+    for (let index = 0; index < 1000; index += 1) await fail(mod)
+  })
+  assert.equal(mine(first.receipts, /INSERT INTO/).length, 1, "one statement for 1,000 failures")
+  assert.deepEqual(
+    (await stored()).map((row) => [row.error_class, row.failures]),
+    [["write_cap", 1]],
+    "D1 was told about the first failure",
+  )
+  assert.ok(first.rows <= 4, `${first.rows} rows written, the table's creation included`)
 
-let visitors = 0
-// A visitor with a healthy bootstrap, then a guess whose session write fails.
-async function failingGuess(message) {
-  visitors += 1
-  const cookie = `geneguessr_session=evidence-${visitors}`
-  await h.call("/api/game/bootstrap", { cookie })
-  const restore = failSessionWrites(message)
-  try {
-    return await h.call("/api/game/guess", {
-      method: "POST",
-      cookie,
-      body: { uniprot: h.guessRows(1)[0].uniprot },
-    })
-  } finally {
-    restore()
-  }
-}
+  setClock(T0 + WINDOW_MS)
+  const second = await charged(() => fail(mod))
+  assert.equal(second.rows, 1, "the next window costs one row")
+  assert.deepEqual(
+    (await stored()).map((row) => row.failures),
+    [1001],
+    "and carries the 999 the isolate counted and the new one",
+  )
+})
 
-test("E1: a failed session write is recorded once, with a sample, and the visitor still sees the failure", async () => {
-  await clearEvidence()
-  const { response, payload } = await failingGuess(WRITE_CAP)
-  assert.equal(response.status, 500)
-  assert.equal(payload.error, "Guess submission failed")
-  assert.deepEqual(await observations(), [
+test("F2: 50 isolates failing at the same instant write one row between them", async () => {
+  await clearStored()
+  const isolates = await Promise.all(Array.from({ length: 50 }, () => isolate()))
+  setClock(T0 + 10 * WINDOW_MS)
+  const burst = await charged(async () => {
+    for (const mod of isolates) for (let index = 0; index < 20; index += 1) await fail(mod)
+  })
+  const asks = mine(burst.receipts, /INSERT INTO/)
+  assert.equal(asks.length, 50, "each isolate asked once")
+  assert.equal(rowsOf(asks), 1, "and D1 took one of the 50")
+  assert.equal(
+    asks.filter((receipt) => receipt.rows_read !== 0).length,
+    0,
+    "a refused ask reads nothing",
+  )
+
+  // Every isolate asks again in the next window: one wins, the rest keep what they counted.
+  setClock(T0 + 11 * WINDOW_MS)
+  const next = await charged(async () => {
+    for (const mod of isolates) await fail(mod)
+  })
+  assert.equal(rowsOf(mine(next.receipts, /INSERT INTO/)), 1, "50 asks, one row")
+  const [row] = await stored()
+  assert.equal(row.failures, 1 + 19 + 1, "the winner added what it had counted: a lower bound")
+  assert.ok(row.failures <= 1000 + 50, "never more than what happened")
+})
+
+test("F3: a day of failures, one every 10 seconds, costs one row per five minutes", async (t) => {
+  await clearStored()
+  const mod = await isolate()
+  const failures = 24 * 360
+  const dayStart = Date.UTC(2026, 9, 3, 0, 0, 0)
+  const from = h.metered.receipts.length
+  for (let index = 0; index < failures; index += 1) {
+    setClock(dayStart + index * 10_000)
+    await fail(mod, { operation: "bootstrap_session_ensure" })
+  }
+  const receipts = h.metered.receipts.slice(from)
+  assert.equal(mine(receipts, /INSERT INTO/).length, 288, "288 five-minute windows in a day")
+  const rows = rowsOf(mine(receipts))
+  t.diagnostic(
+    `${failures} failures cost ${rows} rows written (the per-minute record cost 4 a failure: ${4 * failures})`,
+  )
+  assert.ok(rows <= 288 + 4)
+  const [row, ...others] = await stored()
+  assert.equal(others.length, 0, "one row for the whole UTC day")
+  assert.ok(row.failures >= failures - 30 && row.failures <= failures, `${row.failures} counted`)
+})
+
+test("F4: a message with a unique reference in it is one row, not one a failure", async () => {
+  await clearStored()
+  const mod = await isolate()
+  const start = T0 + 40 * WINDOW_MS
+  for (let index = 0; index < 100; index += 1) {
+    setClock(start + index * WINDOW_MS)
+    await fail(mod, {}, `internal error; reference = ${(index * 2654435761).toString(36)}abc`)
+  }
+  const rows = await stored()
+  assert.equal(rows.length, 1, "one row for 100 distinct texts")
+  assert.equal(rows[0].error_class, "internal")
+  assert.match(
+    rows[0].error_message,
+    /^internal error; reference = /,
+    "the first text is the example",
+  )
+  assert.equal(rows[0].failures, 100)
+
+  // The combinations are bounded by the closed sets, not by the traffic.
+  setClock(start + 100 * WINDOW_MS)
+  for (const sessionId of ["guest_a", "user_b", "practice_guest_c", "oauth:d", "session:e"]) {
+    for (const message of [WRITE_CAP, RESET, "x".repeat(900), "Network connection lost."]) {
+      await fail(mod, { sessionId }, message)
+    }
+  }
+  const all = await stored()
+  assert.equal(all.length, 1 + 5 * 3, "5 kinds x the 3 classes these texts fall in")
+  assert.ok(
+    all.every((row) => row.error_message.length <= 220),
+    "an example is cut at 220",
+  )
+  assert.ok(
+    all.some((row) => row.error_message.length === 220),
+    "a 900-character text is kept as 220",
+  )
+})
+
+test("F5: the status says what failed, since when, how it looked, and how much D1 was told", async () => {
+  await clearStored()
+  const mod = await isolate()
+  setClock(T0 + 60 * WINDOW_MS)
+  await fail(mod, { operation: "bootstrap_session_ensure", requestPath: "/api/game/bootstrap" })
+  await fail(mod, { sessionId: "user_account" }, RESET)
+  setClock(T0 + 61 * WINDOW_MS)
+  await fail(mod, { operation: "bootstrap_session_ensure", requestPath: "/api/game/bootstrap" })
+  const evidence = await mod.getGameSessionWriteEvidence(h.db, { day: "2026-10-03" })
+  assert.equal(evidence.ok, true)
+  assert.equal(evidence.observed_day, "2026-10-03")
+  assert.equal(evidence.reset_started_at_utc, "2026-10-03T00:00:00.000Z")
+  assert.equal(evidence.next_reset_at_utc, "2026-10-04T00:00:00.000Z")
+  assert.match(evidence.counts_are_lower_bounds, /five minutes/)
+  assert.deepEqual(evidence.summary, {
+    failures: 3,
+    first_failure_at: T0 + 60 * WINDOW_MS,
+    last_failure_at: T0 + 61 * WINDOW_MS,
+  })
+  assert.deepEqual(evidence.failures, [
     {
-      operation: "guess_submission",
+      operation: "bootstrap_session_ensure",
       session_kind: "guest",
-      outcome: "failure",
-      error_fingerprint: WRITE_CAP,
-      count: 1,
-    },
-  ])
-  assert.deepEqual(await samples(), [
-    {
-      operation: "guess_submission",
-      session_kind: "guest",
-      request_path: "/api/game/guess",
+      error_class: "write_cap",
+      failures: 2,
+      first_seen_at: T0 + 60 * WINDOW_MS,
+      last_seen_at: T0 + 61 * WINDOW_MS,
+      request_path: "/api/game/bootstrap",
       error_message: WRITE_CAP,
     },
+    {
+      operation: "guess_submission",
+      session_kind: "user",
+      error_class: "reset",
+      failures: 1,
+      first_seen_at: T0 + 60 * WINDOW_MS,
+      last_seen_at: T0 + 60 * WINDOW_MS,
+      request_path: "/api/game/guess",
+      error_message: RESET,
+    },
   ])
-})
-
-test("E2: repeats within a minute fold into one counted row and each keeps a sample; another text is its own row", async () => {
-  await clearEvidence()
-  const minute = Date.UTC(2026, 9, 3, 12, 0, 30)
-  const clock = mock.method(Date, "now", () => minute)
-  try {
-    await failingGuess(WRITE_CAP)
-    await failingGuess(WRITE_CAP)
-    await failingGuess(RESET)
-  } finally {
-    clock.mock.restore()
-  }
-  const rows = await observations()
   assert.deepEqual(
-    rows.map((row) => [row.error_fingerprint, row.count]),
-    [
-      [RESET, 1],
-      [WRITE_CAP, 2],
-    ],
+    (await mod.getGameSessionWriteEvidence(h.db, { day: "2026-09-01" })).failures,
+    [],
+    "a day with no failure lists none",
   )
-  assert.equal((await samples()).length, 3, "every failure keeps a sample")
+  assert.deepEqual(await mod.getGameSessionWriteEvidence(null), { ok: false, reason: "missing_db" })
 })
 
-test("E3: a record that cannot be written changes nothing the visitor sees and is logged", async () => {
-  await clearEvidence()
-  const db = h.harness.env.DB
-  h.harness.env.DB = {
-    ...db,
+test("F6: a refused write keeps the isolate's count, a record D1 cannot take changes nothing the visitor sees, and a success runs no statement", async () => {
+  await clearStored()
+  const a = await isolate()
+  const b = await isolate()
+  setClock(T0 + 80 * WINDOW_MS)
+  await fail(a)
+  for (let index = 0; index < 30; index += 1) await fail(b)
+  assert.deepEqual(
+    (await stored()).map((row) => row.failures),
+    [1],
+    "b was refused: a had written in this window",
+  )
+  setClock(T0 + 81 * WINDOW_MS)
+  await fail(b)
+  assert.deepEqual(
+    (await stored()).map((row) => row.failures),
+    [32],
+    "b's next ask carried the 30 it had counted and the new one",
+  )
+
+  // D1 refusing the record: the failure still reaches the caller and is logged.
+  const refusing = {
+    ...h.metered,
     prepare(sql) {
       if (/game_session_write_/.test(sql)) throw new Error("D1 refused the evidence write")
-      return db.prepare(sql)
+      return h.metered.prepare(sql)
     },
   }
   const logged = console.warn.mock.calls.length
-  try {
-    const { response, payload } = await failingGuess(WRITE_CAP)
-    assert.equal(response.status, 500)
-    assert.equal(payload.error, "Guess submission failed")
-    assert.ok(
-      console.warn.mock.calls
-        .slice(logged)
-        .some((call) => call.arguments[0] === "GameSession write evidence recording failed"),
-      "the failed record is logged",
-    )
-  } finally {
-    h.harness.env.DB = db
-  }
-  assert.deepEqual(await observations(), [], "nothing was recorded")
-})
-
-test("E4: the status reader reports the failures and ignores the success rows an earlier version wrote", async () => {
-  await clearEvidence()
-  await getGameSessionWriteEvidence(h.db) // creates the tables
-  const day = isoDay(-3)
-  const insert = h.db.prepare(
-    `INSERT INTO ${OBSERVATIONS} (observed_day, minute_bucket, operation, session_kind, outcome, error_fingerprint, count, first_seen_at, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  setClock(T0 + 90 * WINDOW_MS)
+  const c = await isolate()
+  await assert.rejects(
+    c.withObservedGameSessionWrite(
+      { DB: refusing },
+      { operation: "guess_submission" },
+      async () => {
+        throw new Error(WRITE_CAP)
+      },
+    ),
+    { message: WRITE_CAP },
   )
-  await h.db.batch([
-    // What the code before B-960 wrote for every successful write.
-    insert.bind(
-      day,
-      `${day}T00:02Z`,
-      "bootstrap_session_ensure",
-      "guest",
-      "success",
-      "",
-      3,
-      1000,
-      3000,
-    ),
-    insert.bind(day, `${day}T00:03Z`, "guess_submission", "guest", "success", "", 2, 4000, 5000),
-    insert.bind(
-      day,
-      `${day}T00:04Z`,
-      "bootstrap_session_ensure",
-      "guest",
-      "failure",
-      WRITE_CAP,
-      4,
-      6000,
-      9000,
-    ),
-    insert.bind(
-      day,
-      `${day}T00:05Z`,
-      "bootstrap_session_ensure",
-      "guest",
-      "failure",
-      RESET,
-      1,
-      11000,
-      11000,
-    ),
-    insert.bind(
-      day,
-      `${day}T00:05Z`,
-      "guess_submission",
-      "user",
-      "failure",
-      RESET,
-      2,
-      12000,
-      13000,
-    ),
-    h.db
-      .prepare(
-        `INSERT INTO ${SAMPLES} (observed_day, occurred_at, operation, session_kind, request_path, error_message)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(day, 9000, "bootstrap_session_ensure", "guest", "/api/game/bootstrap", WRITE_CAP),
-  ])
-
-  const evidence = await getGameSessionWriteEvidence(h.db, { day })
-  assert.equal(evidence.ok, true)
-  assert.deepEqual(evidence.summary, {
-    failures: 7,
-    first_failure_at: 6000,
-    last_failure_at: 13000,
+  assert.ok(
+    console.warn.mock.calls
+      .slice(logged)
+      .some((call) => call.arguments[0] === "GameSession write evidence recording failed"),
+    "the failed record is logged",
+  )
+  const quiet = await charged(async () => {
+    const saved = await c.withObservedGameSessionWrite({ DB: h.metered }, {}, async () => "saved")
+    assert.equal(saved, "saved")
   })
-  assert.deepEqual(
-    evidence.by_operation.map((row) => [row.operation, row.session_kind, row.failures]),
-    [
-      ["bootstrap_session_ensure", "guest", 5],
-      ["guess_submission", "user", 2],
-    ],
-  )
-  assert.deepEqual(evidence.failure_fingerprints, [
-    { error_fingerprint: WRITE_CAP, count: 4, first_seen_at: 6000, last_seen_at: 9000 },
-    { error_fingerprint: RESET, count: 3, first_seen_at: 11000, last_seen_at: 13000 },
-  ])
-  assert.deepEqual(
-    evidence.recent_minute_buckets.map((row) => [row.minute_bucket, row.failures]),
-    [
-      [`${day}T00:04Z`, 4],
-      [`${day}T00:05Z`, 3],
-    ],
-    "the minutes that only had successes are not listed",
-  )
-  assert.equal(evidence.recent_failures[0].request_path, "/api/game/bootstrap")
-  assert.equal(evidence.recent_failures[0].error_message, WRITE_CAP)
-  for (const gone of ["successes", "attempts", "successes_before_first_failure"]) {
-    assert.equal(gone in evidence.summary, false, `no ${gone}`)
-  }
+  assert.deepEqual(quiet.receipts, [], "a successful write runs no statement")
 })
 
-test("E5: the admin status carries the failures", async () => {
-  await clearEvidence()
-  await failingGuess(WRITE_CAP)
-  const env = {
+test("F7: the per-minute tables are dropped by the first isolate that records, for no rows", async () => {
+  await clearStored()
+  await h.db.batch(
+    LEGACY.flatMap((table) => [
+      h.db.prepare(
+        `CREATE TABLE IF NOT EXISTS ${table} (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT)`,
+      ),
+      h.db.prepare(`CREATE INDEX IF NOT EXISTS ${table}_a ON ${table}(a)`),
+    ]),
+  )
+  const rows = JSON.stringify(Array.from({ length: 3000 }, (_, index) => `r${index}`))
+  await h.db.batch(
+    LEGACY.map((table) =>
+      h.db.prepare(`INSERT INTO ${table} (a, b) SELECT value, value FROM json_each(?)`).bind(rows),
+    ),
+  )
+  const names = async () =>
+    (await h.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).results.map(
+      (row) => row.name,
+    )
+  for (const table of LEGACY) assert.ok((await names()).includes(table), `${table} is there`)
+
+  const mod = await isolate()
+  setClock(T0 + 100 * WINDOW_MS)
+  const first = await charged(() => fail(mod))
+  for (const table of LEGACY)
+    assert.equal((await names()).includes(table), false, `${table} is gone`)
+  assert.equal(rowsOf(mine(first.receipts, /DROP TABLE/)), 0, "dropping 6,000 rows wrote no D1 row")
+  assert.equal(mine(first.receipts, /DROP TABLE/).length, 2)
+  assert.ok(
+    first.rows <= 1,
+    `${first.rows} rows for the first failure on a database with the table`,
+  )
+})
+
+test("F8: rows past 14 days are pruned when an isolate prepares, and preparing happens once a day", async () => {
+  await clearStored()
+  const insert = h.db.prepare(
+    `INSERT INTO ${FAILURES} (observed_day, operation, session_kind, error_class, failures, first_seen_at, last_seen_at, request_path, error_message) VALUES (?, 'guess_submission', 'guest', 'other', 5, 1, 2, NULL, 'x')`,
+  )
+  await h.db.batch(
+    ["2026-09-03", "2026-09-18", "2026-09-19", "2026-10-02"].map((day) => insert.bind(day)),
+  )
+  const mod = await isolate()
+  setClock(T0 + 120 * WINDOW_MS)
+  await mod.getGameSessionWriteEvidence(h.db)
+  assert.deepEqual(
+    (await stored()).map((row) => row.observed_day),
+    ["2026-09-19", "2026-10-02"],
+    "14 days back from 2026-10-03 is kept, older is gone",
+  )
+  const again = await charged(() => mod.getGameSessionWriteEvidence(h.metered))
+  assert.deepEqual(
+    again.evidence.filter((receipt) => !/SELECT/.test(receipt.sql)),
+    [],
+    "the second read of the day prepares nothing",
+  )
+})
+
+test("F10: the texts the platform sends fall in stable classes", async () => {
+  const { classifyGameSessionWriteError: classify } = await isolate()
+  const golden = [
+    [WRITE_CAP, "write_cap"],
+    ["Exceeded allowed rows read in Durable Objects free tier.", "write_cap"],
+    [RESET, "reset"],
+    ["Durable Object's isolate exceeded its memory limit and was reset.", "reset"],
+    ["Durable Object storage operation exceeded timeout which caused object to be reset.", "reset"],
+    ["Durable Object is overloaded. Requests queued for too long.", "overloaded"],
+    ["internal error; reference = 6mq4e2ahc5f5mm1u4ge2j2d9", "internal"],
+    ["Network connection lost.", "other"],
+    ["", "other"],
+    [undefined, "other"],
+  ]
+  assert.deepEqual(
+    golden.map(([text]) => [text, classify(text)]),
+    golden,
+  )
+})
+
+test("F9: through the real Worker, a failed write is recorded once, the visitor still sees it, the admin status carries it, and a 300-failure storm costs a handful of rows", async () => {
+  await clearStored()
+  setClock(null)
+  const cookie = "geneguessr_session=evidence-worker"
+  await h.call("/api/game/bootstrap", { cookie })
+  const guess = { method: "POST", cookie, body: { uniprot: h.guessRows(1)[0].uniprot } }
+
+  const restore = failSessionWrites(WRITE_CAP)
+  let one
+  try {
+    one = await h.call("/api/game/guess", guess)
+  } finally {
+    restore()
+  }
+  assert.equal(one.response.status, 500)
+  assert.equal(one.payload.error, "Guess submission failed")
+  assert.ok(rowsOf(mine(one.receipts)) <= 4, `${rowsOf(mine(one.receipts))} rows for a failure`)
+  const [row] = await stored()
+  assert.deepEqual(
+    [row.operation, row.session_kind, row.error_class, row.failures, row.request_path],
+    ["guess_submission", "guest", "write_cap", 1, "/api/game/guess"],
+  )
+
+  const adminEnv = {
     ADMIN_DISCORD_USER_ID: "12345",
     DB: h.db,
     KV: {
       async get(key) {
-        if (key === "feature_flags") return JSON.stringify({ liveMolstar: true })
-        return null
+        return key === "feature_flags" ? JSON.stringify({ liveMolstar: true }) : null
       },
       async list() {
         return { keys: [] }
@@ -294,38 +462,31 @@ test("E5: the admin status carries the failures", async () => {
       }),
     },
   }
-  const response = await handleAdminStatus(
+  const status = await handleAdminStatus(
     new Request("https://geneguessr.brinedew.bio/api/admin/status", {
       headers: { Cookie: "session=abc123" },
     }),
-    env,
+    adminEnv,
   )
-  assert.equal(response.status, 200)
-  const payload = await response.json()
+  assert.equal(status.status, 200)
+  const payload = await status.json()
   assert.equal(payload.feature_flags.liveMolstar, true)
   assert.equal(payload.game_session_write_evidence.ok, true)
   assert.equal(payload.game_session_write_evidence.summary.failures, 1)
-  assert.equal(payload.game_session_write_evidence.recent_failures[0].error_message, WRITE_CAP)
-})
+  assert.equal(payload.game_session_write_evidence.failures[0].error_message, WRITE_CAP)
 
-test("E6: once its minute's row exists, a failed write costs the D1 meter at most 4 rows", async (t) => {
-  await clearEvidence()
-  // The first failure of a minute also creates that minute's row.
-  const first = await failingGuess(WRITE_CAP)
-  const rowsOf = (result) =>
-    result.receipts
-      .filter((receipt) => /game_session_write_/.test(receipt.sql))
-      .reduce((sum, receipt) => sum + receipt.rows_written, 0)
-  t.diagnostic(
-    `the first failure of a minute (schema already there): ${rowsOf(first)} rows written`,
-  )
-  const second = await failingGuess(WRITE_CAP)
-  const evidenceStatements = second.receipts.filter((receipt) =>
-    /game_session_write_/.test(receipt.sql),
-  )
-  t.diagnostic(
-    `a repeated failure: ${evidenceStatements.map((receipt) => receipt.rows_written).join(" + ")} rows written`,
-  )
-  const written = evidenceStatements.reduce((sum, receipt) => sum + receipt.rows_written, 0)
-  assert.ok(written <= 4, `${written} rows written`)
+  // The storm: the same text, 300 more failed guesses from one visitor inside the window.
+  const restoreStorm = failSessionWrites(WRITE_CAP)
+  const from = h.metered.receipts.length
+  try {
+    for (let index = 0; index < 300; index += 1) {
+      const answer = await h.call("/api/game/guess", guess)
+      assert.equal(answer.response.status, 500)
+    }
+  } finally {
+    restoreStorm()
+  }
+  const storm = mine(h.metered.receipts.slice(from))
+  assert.ok(rowsOf(storm) <= 4, `${rowsOf(storm)} rows written by 300 failures`)
+  assert.ok(storm.length <= 6, `${storm.length} statements for 300 failures`)
 })

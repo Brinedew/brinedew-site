@@ -5,10 +5,11 @@ import {
   fetchPortraitStorage,
 } from "./iconoplasm-portrait-storage.js"
 
-// THE ONLY writer and first-party reader of the two published Iconoplasm
-// objects on Bunny Storage: one stable object per gene (genes/v3/<SYMBOL>.json)
-// and the catalog object (catalog/v3/index.json). Readers outside the Worker
-// fetch both from the CDN. ARCHITECTURE FENCE [IPD-011].
+// THE ONLY writer and first-party reader of the published objects on Bunny
+// Storage: one stable object per gene (genes/v3/<SYMBOL>.json), the catalog
+// object (catalog/v3/index.json), and GeneGuessr's "Top Streaks" board
+// (leaderboard/v1/top.json, B-965). Readers outside the Worker fetch them from
+// the CDN. ARCHITECTURE FENCE [IPD-011].
 // A deployment without object storage cannot hold any published object.
 // Distinguish that definitive absence from a transient read failure so
 // readers can report an unknown identity instead of a retryable outage.
@@ -48,8 +49,14 @@ export function stableGeneObjectKey(symbol) {
 export const STABLE_CATALOG_OBJECT_KEY = "catalog/v3/index.json"
 export const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
 
+// B-965: the GeneGuessr leaderboard, five entries with their avatars embedded as data: URIs
+// (workers/lib/leaderboard-publication.js builds it; 5 x 8 KiB of avatar at most).
+export const LEADERBOARD_OBJECT_KEY = "leaderboard/v1/top.json"
+export const LEADERBOARD_OBJECT_LIMIT = 128 * 1024
+
 function stableGeneObjectIdentity(key) {
   if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
+  if (key === LEADERBOARD_OBJECT_KEY) return { symbol: "", limit: LEADERBOARD_OBJECT_LIMIT }
   const prefix = `${STABLE_GENE_OBJECT_PREFIX}/`
   if (typeof key !== "string" || !key.startsWith(prefix) || !key.endsWith(".json"))
     throw new Error("Invalid stable gene object key")

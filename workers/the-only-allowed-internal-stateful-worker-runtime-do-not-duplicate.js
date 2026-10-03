@@ -1412,6 +1412,7 @@ import {
   structureFormatFromKey,
 } from "./lib/structure-upstream.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
+import { publishLeaderboardObject } from "./lib/leaderboard-publication.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
   BrinedewAccountIdentityError,
@@ -3162,6 +3163,9 @@ export default {
         sharedDelivery: () => drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env),
         materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         recognition: () => reconcileIconoplasmRecognitionPolicies(env),
+        // B-965: GeneGuessr's "Top Streaks" object on the CDN. Reads the GeneGuessr D1 (26 rows),
+        // not an Iconoplasm one.
+        geneguessrBoard: () => publishLeaderboardObject(env),
         accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),
         manifestations: () => drainIconoplasmManifestationAuthorityProjection(env, 25),
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),

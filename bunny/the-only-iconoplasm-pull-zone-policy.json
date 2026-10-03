@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "pullZoneName": "iconoplasmportraits",
-  "why": "Readers fetch genes/v3/<SYMBOL>.json and catalog/v3/index.json straight from the CDN with fetch(), so Bunny must add Access-Control-Allow-Origin for .json (Bunny applies CORS per file extension). Those two objects are rewritten in place, and Bunny replicates an overwritten storage file to other regions asynchronously: measured 2026-10-02, edges re-pulled a stale replica more than two minutes after a write and purge, then kept it for the pull zone's 30-day cache time. The edge rule gives the mutable objects a 60 s edge cache time, so staleness is bounded by replication lag plus 60 s; immutable portraits and blots keep the zone default. Applied by POST /api/iconoplasm/admin/publication/reconcile-pull-zone with the Worker's own Bunny account key; scripts/reconcile-iconoplasm-pull-zone.mjs sends this file from the deploy.",
+  "why": "Readers fetch genes/v3/<SYMBOL>.json, catalog/v3/index.json and GeneGuessr's leaderboard/v1/top.json straight from the CDN with fetch(), so Bunny must add Access-Control-Allow-Origin for .json (Bunny applies CORS per file extension). Those objects are rewritten in place, and Bunny replicates an overwritten storage file to other regions asynchronously: measured 2026-10-02, edges re-pulled a stale replica more than two minutes after a write and purge, then kept it for the pull zone's 30-day cache time. The edge rule gives the mutable objects a 60 s edge cache time, so staleness is bounded by replication lag plus 60 s; immutable portraits and blots keep the zone default. Applied by POST /api/iconoplasm/admin/publication/reconcile-pull-zone with the Worker's own Bunny account key; scripts/reconcile-iconoplasm-pull-zone.mjs sends this file from the deploy.",
   "settings": {
     "EnableAccessControlOriginHeader": true
   },
@@ -16,10 +16,10 @@
         {
           "type": 0,
           "patternMatchingType": 0,
-          "patternMatches": ["*/genes/v3/*", "*/catalog/v3/*"]
+          "patternMatches": ["*/genes/v3/*", "*/catalog/v3/*", "*/leaderboard/v1/*"]
         }
       ],
-      "purgeOnChange": ["genes/v3/*", "catalog/v3/*"]
+      "purgeOnChange": ["genes/v3/*", "catalog/v3/*", "leaderboard/v1/*"]
     }
   ]
 }

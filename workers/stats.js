@@ -6,7 +6,7 @@
 import { resolveAuthenticatedSession } from "./auth.js"
 import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
-import { readLeaderboard } from "./lib/leaderboard-streaks.js"
+import { boardEntry, readLeaderboard } from "./lib/leaderboard-streaks.js"
 
 const LEADERBOARD_DEFAULT_LIMIT = 5
 const LEADERBOARD_MAX_LIMIT = 25
@@ -293,6 +293,8 @@ export async function handleUpdateStats(request, env) {
  * GET /api/stats/leaderboard?limit=5
  * Public current streak leaderboard (opt-in users only). It reads `leaderboard_streaks`, which
  * costs the same few rows however many accounts exist (workers/lib/leaderboard-streaks.js).
+ * The page reads the same answer from the CDN object workers/lib/leaderboard-publication.js
+ * publishes (B-965); this route is its fallback and the read after a visibility switch.
  */
 export async function handleGetLeaderboard(request, env) {
   try {
@@ -300,12 +302,9 @@ export async function handleGetLeaderboard(request, env) {
     const limit = parseLeaderboardLimit(url.searchParams.get("limit"))
 
     const rows = await readLeaderboard(env.DB, limit)
-    const entries = rows.map((row, idx) => ({
-      rank: idx + 1,
-      username: String(row?.username || "Player"),
-      avatarUrl: buildAvatarProxyPath(row?.avatar_url),
-      currentStreak: Math.max(0, Number.parseInt(row?.current_streak, 10) || 0),
-    }))
+    const entries = rows.map((row, idx) =>
+      boardEntry(row, idx, buildAvatarProxyPath(row?.avatar_url)),
+    )
 
     return Response.json({ entries })
   } catch (err) {

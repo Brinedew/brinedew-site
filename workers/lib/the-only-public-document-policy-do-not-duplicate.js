@@ -27,7 +27,8 @@ export const PUBLIC_SECURITY_HEADERS = Object.freeze({
 // The GeneGuessr game document needs `unsafe-eval` and blob/data connections
 // for the Mol* 3D viewer, and it loads a guess's structure straight from the three
 // structure providers (B-943; the host list is quartz/static/geneguessr/structure-bytes.js,
-// shared with the Worker's fetch allowlist and the page's own check). Every other public
+// shared with the Worker's fetch allowlist and the page's own check), and it reads the "Top
+// Streaks" board from the Bunny CDN (B-965; the Worker route is its fallback). Every other public
 // document needs none of that.
 export function publicContentSecurityPolicy({ geneguessrGame = false } = {}) {
   const scriptSrc = [
@@ -51,6 +52,7 @@ export function publicContentSecurityPolicy({ geneguessrGame = false } = {}) {
     "https://cloudflareinsights.com",
     ...(geneguessrGame ? ["https://cdn.jsdelivr.net"] : []),
     ...(geneguessrGame ? STRUCTURE_PROVIDER_HOSTS.map((host) => `https://${host}`) : []),
+    ...(geneguessrGame ? ["https://iconoplasmportraits.b-cdn.net"] : []),
   ].join(" ")
   return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
