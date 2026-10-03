@@ -1,7 +1,10 @@
 import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js"
 import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
-import { DailyMutationLaneReservations } from "./lib/iconoplasm-mutation-lane-reservations.js"
+import {
+  DailyMutationLaneReservations,
+  mutationRefusalRetryAfterSeconds,
+} from "./lib/iconoplasm-mutation-lane-reservations.js"
 import {
   finalizationCompletionPageWriteUnits,
   finalizationPhaseWriteUnits,
@@ -2020,6 +2023,19 @@ function iconoplasmD1DailyBudgetExceededPayload(snapshot) {
     code: "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED",
     budget: snapshot || null,
   }
+}
+
+// Every daily-budget refusal the gateway answers with a 503 states when the same request
+// is worth sending again, in the standard header and in the body (the workstation's wait
+// reads both; a page cannot read the header cross-origin). Both come from one number:
+// mutationRefusalRetryAfterSeconds, taken from the ledger's own refusal when a mutation
+// lane made it, otherwise the seconds to the UTC reset.
+function iconoplasmBudgetRefusalResponse(payload, laneRefusal = null) {
+  const retryAfter = mutationRefusalRetryAfterSeconds(laneRefusal)
+  return json({ ...payload, retry_after_seconds: retryAfter }, 503, {
+    "Cache-Control": "no-store",
+    "Retry-After": String(retryAfter),
+  })
 }
 
 function iconoplasmD1DailyBudgetConfigurationPayload(message) {
@@ -27014,9 +27030,10 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     handledError = error
     if (error instanceof IconoplasmD1DailyBudgetExceededError) {
       responseStatus = 503
-      return json(iconoplasmD1DailyBudgetExceededPayload(error.snapshot), 503, {
-        "Cache-Control": "no-store",
-      })
+      return iconoplasmBudgetRefusalResponse(
+        iconoplasmD1DailyBudgetExceededPayload(error.snapshot),
+        error.snapshot?.mutation_lane,
+      )
     }
     if (error instanceof IconoplasmD1DailyBudgetConfigurationError) {
       responseStatus = 500
@@ -27026,9 +27043,9 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     }
     if (error instanceof IconoplasmAdminMutationLimiterActiveError) {
       responseStatus = 503
-      return json(iconoplasmAdminMutationLimiterActivePayload(error.detail), 503, {
-        "Cache-Control": "no-store",
-      })
+      return iconoplasmBudgetRefusalResponse(
+        iconoplasmAdminMutationLimiterActivePayload(error.detail),
+      )
     }
     if (error instanceof IconoplasmUnclassifiedHandledRouteError) {
       responseStatus = 500
@@ -27884,6 +27901,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
         }
         if (code === "MUTATION_PROVIDER_HEADROOM_RESERVED") {
+          const retryAfter = mutationRefusalRetryAfterSeconds(error.mutation_lane)
           return done(
             "discoveries_batch_capacity",
             json(
@@ -27895,9 +27913,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 error:
                   "Discovery capacity is reserved for other mutation lanes; keep this exact batch pending and retry later.",
                 batch_id: batchId,
+                retry_after_seconds: retryAfter,
               },
               429,
-              { "Cache-Control": "no-store", "Retry-After": "60" },
+              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
             ),
           )
         }
@@ -28391,6 +28410,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const code = String(error?.code || "")
         const capacityRefusal = code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
         if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
+          // Only a capacity refusal clears at a time the ledger can state; a missing
+          // binding is a configuration fault someone has to fix, so it keeps its 60.
+          const retryAfter = capacityRefusal
+            ? mutationRefusalRetryAfterSeconds(error.mutation_lane)
+            : 60
           return done(
             "discoveries_merge_capacity",
             json(
@@ -28401,9 +28425,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 code,
                 error: "Discovery capacity is unavailable; keep these exact symbols pending.",
                 symbols: requestedSymbols,
+                ...(capacityRefusal ? { retry_after_seconds: retryAfter } : {}),
               },
               capacityRefusal ? 429 : 503,
-              { "Cache-Control": "no-store", "Retry-After": "60" },
+              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
             ),
           )
         }
