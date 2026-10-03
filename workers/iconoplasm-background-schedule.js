@@ -1,6 +1,9 @@
 // One job per scheduled invocation: promises sharing a clock still share the
 // Worker's D1/external-subrequest limits. This clock allocates independent
 // invocations; each job still needs its own work bounds and daily admission.
+// It is also GeneGuessr's: the free plan allows 5 cron triggers an account and
+// the Worker already lists 5 expressions, so the "Top Streaks" refresh takes
+// the free minutes of this one (`geneguessrBoard`, B-965).
 const quarterHours = (minute) => Object.freeze([minute, minute + 15, minute + 30, minute + 45])
 
 export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
@@ -13,6 +16,8 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   gallery: quarterHours(8),
   materialization: quarterHours(11),
   recognition: quarterHours(14),
+  // Every ten minutes or so, on the minutes no other job uses; the gap never exceeds 12.
+  geneguessrBoard: Object.freeze([4, 13, 24, 34, 45, 52]),
   accounts: Object.freeze([6, 18, 30, 42, 54]),
   manifestations: Object.freeze([7, 19, 31, 43, 55]),
 })

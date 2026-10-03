@@ -1,147 +1,104 @@
 // THE ONLY RECORD OF FAILED GAMESESSION WRITES: DO NOT DUPLICATE.
 //
 // A Durable Object session write that fails (a code update resets the object, the free tier's
-// write cap is spent, the platform answers "internal error") is recorded here: one row per
-// minute, operation, session kind and error text, counting repeats, and one sample row with the
-// request path. `GET /api/admin/status` returns them as `game_session_write_evidence`.
+// write cap is spent, the platform answers "internal error") is recorded here, and
+// `GET /api/admin/status` returns the record as `game_session_write_evidence`.
 //
-// A write that succeeds records nothing (B-960). The success count used to be written too, one
-// D1 row per session write: 5 of the 11 rows a 3-guess visit wrote, read by no page. The
-// provider's own Durable Object meter (`durableObjectsPeriodicGroups.rowsWritten`) says how many
-// writes there were. The tables are created by this code on the first failure or the first
-// status read, and the retention prune runs on a failure, so a day with no failure costs no D1
-// statement. The `outcome` column stays so the table is unchanged; it only ever receives
-// `failure`, and the reader ignores any other value (the rows an earlier version wrote age out
-// with the 14-day prune).
-const OBSERVATION_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS game_session_write_observations_do_not_delete (
+// The record is bounded by the day, not by the number of failures (B-963). A Durable Object
+// write-cap incident fails every session write until 00:00 UTC, and the D1 allowance a failure
+// would spend is the one the whole account shares (Iconoplasm's sync, votes and saves), so a
+// record that costs rows per failure turns that incident into a D1 outage. There is one row for
+// each day, operation, session kind and error class, and a D1 statement reaches it at most once
+// every five minutes:
+//
+// - the upsert's `DO UPDATE ... WHERE` refuses a write less than five minutes after the row's last
+//   one. A refused statement writes 0 rows and reads 0, so the bound holds however many isolates
+//   fail at once (a per-isolate throttle would not: a cold isolate always writes its first failure);
+// - an isolate counts its failures in memory and asks D1 once a window, adding what it counted, so
+//   the failing request mostly pays no D1 round trip either.
+//
+// A key therefore costs at most one row for its first failure and one a window after, 288 a day;
+// a Durable Object outage fails about ten keys, so about 2,900 rows (3% of the 100,000 a day the
+// free plan allows) whether it fails 100 writes or 100,000. The cost of that bound is exactness:
+// `failures` is what reached D1, a lower bound (counts held by an isolate that dies, or that lost
+// the window to another isolate, are not recorded). Workers Logs hold every failure (each one is
+// `console.warn`ed below), and the provider's Worker and Durable Object meters give the volume.
+//
+// The error text is classified into a closed set so a message carrying a unique reference cannot
+// mint a row per failure; the first message of a key is kept as its example.
+//
+// The tables the per-minute record used are dropped by the first isolate that records or reads
+// (B-963). `DROP TABLE` of 10,000 rows measured 0 rows written on a local D1; delete these two
+// statements once production's `sqlite_master` no longer lists them.
+const FAILURE_TABLE = "game_session_write_failures_do_not_delete"
+
+const FAILURE_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS ${FAILURE_TABLE} (
     observed_day TEXT NOT NULL,
-    minute_bucket TEXT NOT NULL,
     operation TEXT NOT NULL,
     session_kind TEXT NOT NULL,
-    outcome TEXT NOT NULL,
-    error_fingerprint TEXT NOT NULL DEFAULT '',
-    count INTEGER NOT NULL DEFAULT 0,
+    error_class TEXT NOT NULL,
+    failures INTEGER NOT NULL,
     first_seen_at INTEGER NOT NULL,
     last_seen_at INTEGER NOT NULL,
-    PRIMARY KEY (
-      observed_day,
-      minute_bucket,
-      operation,
-      session_kind,
-      outcome,
-      error_fingerprint
-    )
-  )
-`
-
-const OBSERVATION_DAY_INDEX_SQL = `
-  CREATE INDEX IF NOT EXISTS idx_game_session_write_observations_day
-  ON game_session_write_observations_do_not_delete(observed_day, minute_bucket, outcome)
-`
-
-const FAILURE_SAMPLE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS game_session_write_failure_samples_do_not_delete (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    observed_day TEXT NOT NULL,
-    occurred_at INTEGER NOT NULL,
-    operation TEXT NOT NULL,
-    session_kind TEXT NOT NULL,
     request_path TEXT,
-    error_message TEXT NOT NULL
-  )
+    error_message TEXT NOT NULL,
+    PRIMARY KEY (observed_day, operation, session_kind, error_class)
+  ) WITHOUT ROWID
 `
 
-const FAILURE_SAMPLE_DAY_INDEX_SQL = `
-  CREATE INDEX IF NOT EXISTS idx_game_session_write_failure_samples_day
-  ON game_session_write_failure_samples_do_not_delete(observed_day, occurred_at DESC)
-`
+const RETIRED_TABLES_SQL = [
+  "DROP TABLE IF EXISTS game_session_write_observations_do_not_delete",
+  "DROP TABLE IF EXISTS game_session_write_failure_samples_do_not_delete",
+]
 
-const UPSERT_OBSERVATION_SQL = `
-  INSERT INTO game_session_write_observations_do_not_delete (
+const UPSERT_FAILURE_SQL = `
+  INSERT INTO ${FAILURE_TABLE} (
     observed_day,
-    minute_bucket,
     operation,
     session_kind,
-    outcome,
-    error_fingerprint,
-    count,
+    error_class,
+    failures,
     first_seen_at,
-    last_seen_at
-  )
-  VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-  ON CONFLICT(
-    observed_day,
-    minute_bucket,
-    operation,
-    session_kind,
-    outcome,
-    error_fingerprint
-  ) DO UPDATE SET
-    count = game_session_write_observations_do_not_delete.count + 1,
-    last_seen_at = excluded.last_seen_at
-`
-
-const INSERT_FAILURE_SAMPLE_SQL = `
-  INSERT INTO game_session_write_failure_samples_do_not_delete (
-    observed_day,
-    occurred_at,
-    operation,
-    session_kind,
+    last_seen_at,
     request_path,
     error_message
   )
-  VALUES (?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(observed_day, operation, session_kind, error_class) DO UPDATE SET
+    failures = failures + excluded.failures,
+    last_seen_at = excluded.last_seen_at
+  WHERE excluded.last_seen_at - ${FAILURE_TABLE}.last_seen_at >= ?
 `
 
 const SELECT_FAILURES_FOR_DAY_SQL = `
   SELECT
-    observed_day,
-    minute_bucket,
     operation,
     session_kind,
-    error_fingerprint,
-    count,
+    error_class,
+    failures,
     first_seen_at,
-    last_seen_at
-  FROM game_session_write_observations_do_not_delete
-  WHERE observed_day = ? AND outcome = 'failure'
-  ORDER BY minute_bucket ASC, operation ASC, session_kind ASC
-`
-
-const SELECT_FAILURE_SAMPLES_FOR_DAY_SQL = `
-  SELECT
-    occurred_at,
-    operation,
-    session_kind,
+    last_seen_at,
     request_path,
     error_message
-  FROM game_session_write_failure_samples_do_not_delete
+  FROM ${FAILURE_TABLE}
   WHERE observed_day = ?
-  ORDER BY occurred_at DESC
-  LIMIT ?
+  ORDER BY first_seen_at ASC, operation ASC, session_kind ASC, error_class ASC
+  LIMIT 500
 `
 
-const DELETE_OLD_OBSERVATIONS_SQL = `
-  DELETE FROM game_session_write_observations_do_not_delete
-  WHERE observed_day < ?
-`
-
-const DELETE_OLD_FAILURE_SAMPLES_SQL = `
-  DELETE FROM game_session_write_failure_samples_do_not_delete
-  WHERE observed_day < ?
-`
+const DELETE_OLD_FAILURES_SQL = `DELETE FROM ${FAILURE_TABLE} WHERE observed_day < ?`
 
 const EVIDENCE_RETENTION_DAYS = 14
-let schemaEnsured = false
-let lastPrunedCutoffDay = ""
+export const GAME_SESSION_WRITE_EVIDENCE_WINDOW_MS = 5 * 60 * 1000
+const MAX_PENDING_KEYS = 256
+
+// Per isolate: failures counted but not yet in D1, and when this isolate last asked D1 about a key.
+const pending = new Map()
+let preparedCutoffDay = ""
 
 function toUtcDay(value = Date.now()) {
   return new Date(value).toISOString().slice(0, 10)
-}
-
-function toUtcMinuteBucket(value = Date.now()) {
-  return `${new Date(value).toISOString().slice(0, 16)}Z`
 }
 
 function addUtcDays(day, days) {
@@ -160,14 +117,25 @@ function normalizeRequestPath(value) {
   return normalized || null
 }
 
-function normalizeErrorFingerprint(value) {
+function normalizeErrorMessage(value) {
   const normalized = String(value || "")
     .replace(/\s+/g, " ")
     .trim()
-  if (!normalized) {
-    return ""
-  }
-  return normalized.slice(0, 220)
+  return (normalized || "Unknown GameSession write error").slice(0, 220)
+}
+
+// The closed set of error classes. The first pattern that matches wins.
+const ERROR_CLASSES = [
+  ["write_cap", /exceeded allowed rows (?:written|read)|free tier/i],
+  ["reset", /\breset\b|code was updated/i],
+  ["overloaded", /overloaded|too many (?:requests|concurrent)|exceeded .*(?:cpu|memory)/i],
+  ["internal", /internal error/i],
+]
+
+export function classifyGameSessionWriteError(message) {
+  const text = String(message || "")
+  for (const [name, pattern] of ERROR_CLASSES) if (pattern.test(text)) return name
+  return "other"
 }
 
 function classifySessionKind(sessionId) {
@@ -183,24 +151,16 @@ function classifySessionKind(sessionId) {
   return practiceMode ? "practice_unknown" : "unknown"
 }
 
-async function ensureGameSessionWriteEvidenceSchema(db) {
-  if (!db || schemaEnsured) {
-    return
-  }
-  await db.prepare(OBSERVATION_TABLE_SQL).run()
-  await db.prepare(OBSERVATION_DAY_INDEX_SQL).run()
-  await db.prepare(FAILURE_SAMPLE_TABLE_SQL).run()
-  await db.prepare(FAILURE_SAMPLE_DAY_INDEX_SQL).run()
-  schemaEnsured = true
-}
-
-async function pruneOldEvidence(db, cutoffDay) {
-  if (!db || !cutoffDay || cutoffDay === lastPrunedCutoffDay) {
-    return
-  }
-  await db.prepare(DELETE_OLD_OBSERVATIONS_SQL).bind(cutoffDay).run()
-  await db.prepare(DELETE_OLD_FAILURE_SAMPLES_SQL).bind(cutoffDay).run()
-  lastPrunedCutoffDay = cutoffDay
+// Creates the table, drops the two it replaced, and prunes what is past retention, in one batch.
+// Once an isolate per cutoff day, so a day with no failure and no status read costs no statement.
+async function prepareEvidenceTable(db, cutoffDay) {
+  if (preparedCutoffDay === cutoffDay) return
+  await db.batch([
+    db.prepare(FAILURE_TABLE_SQL),
+    ...RETIRED_TABLES_SQL.map((sql) => db.prepare(sql)),
+    db.prepare(DELETE_OLD_FAILURES_SQL).bind(cutoffDay),
+  ])
+  preparedCutoffDay = cutoffDay
 }
 
 async function recordGameSessionWriteFailure(db, details) {
@@ -210,40 +170,41 @@ async function recordGameSessionWriteFailure(db, details) {
 
   const occurredAt = Number.isFinite(details?.occurredAt) ? details.occurredAt : Date.now()
   const observedDay = toUtcDay(occurredAt)
-  const minuteBucket = toUtcMinuteBucket(occurredAt)
   const operation = normalizeOperation(details?.operation)
   const sessionKind = classifySessionKind(details?.sessionId)
-  const errorFingerprint = normalizeErrorFingerprint(details?.errorMessage)
-  const requestPath = normalizeRequestPath(details?.requestPath)
-  const cutoffDay = addUtcDays(observedDay, -EVIDENCE_RETENTION_DAYS)
+  const errorMessage = normalizeErrorMessage(details?.errorMessage)
+  const errorClass = classifyGameSessionWriteError(errorMessage)
 
-  await ensureGameSessionWriteEvidenceSchema(db)
-  await pruneOldEvidence(db, cutoffDay)
-  await db
-    .prepare(UPSERT_OBSERVATION_SQL)
+  const key = `${observedDay}|${operation}|${sessionKind}|${errorClass}`
+  let entry = pending.get(key)
+  if (!entry) {
+    if (pending.size >= MAX_PENDING_KEYS) pending.clear()
+    entry = { failures: 0, askedAt: Number.NEGATIVE_INFINITY }
+    pending.set(key, entry)
+  }
+  entry.failures += 1
+  if (occurredAt - entry.askedAt < GAME_SESSION_WRITE_EVIDENCE_WINDOW_MS) return false
+  entry.askedAt = occurredAt
+
+  await prepareEvidenceTable(db, addUtcDays(observedDay, -EVIDENCE_RETENTION_DAYS))
+  const result = await db
+    .prepare(UPSERT_FAILURE_SQL)
     .bind(
       observedDay,
-      minuteBucket,
       operation,
       sessionKind,
-      "failure",
-      errorFingerprint,
+      errorClass,
+      entry.failures,
       occurredAt,
       occurredAt,
+      normalizeRequestPath(details?.requestPath),
+      errorMessage,
+      GAME_SESSION_WRITE_EVIDENCE_WINDOW_MS,
     )
     .run()
-  await db
-    .prepare(INSERT_FAILURE_SAMPLE_SQL)
-    .bind(
-      observedDay,
-      occurredAt,
-      operation,
-      sessionKind,
-      requestPath,
-      errorFingerprint || "Unknown GameSession write error",
-    )
-    .run()
-
+  // A refused write (another isolate wrote this key within the window) keeps the count for the
+  // next ask.
+  if (Number(result?.meta?.changes) > 0) entry.failures = 0
   return true
 }
 
@@ -283,83 +244,6 @@ const earliest = (current, candidate) =>
 const latest = (current, candidate) =>
   current == null || (candidate != null && candidate > current) ? candidate : current
 
-function aggregateFailureRows(rows) {
-  const summary = { failures: 0, first_failure_at: null, last_failure_at: null }
-  const byOperation = new Map()
-  const byFingerprint = new Map()
-  const byMinute = new Map()
-
-  const add = (map, key, fresh, count, firstSeenAt, lastSeenAt) => {
-    const current = map.get(key) || {
-      ...fresh,
-      failures: 0,
-      first_failure_at: null,
-      last_failure_at: null,
-    }
-    current.failures += count
-    current.first_failure_at = earliest(current.first_failure_at, firstSeenAt)
-    current.last_failure_at = latest(current.last_failure_at, lastSeenAt)
-    map.set(key, current)
-  }
-
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const count = Number(row?.count) || 0
-    const firstSeenAt = Number(row?.first_seen_at) || null
-    const lastSeenAt = Number(row?.last_seen_at) || null
-    const operation = normalizeOperation(row?.operation)
-    const sessionKind = String(row?.session_kind || "unknown")
-    const errorFingerprint = normalizeErrorFingerprint(row?.error_fingerprint)
-    const minuteBucket = String(row?.minute_bucket || "")
-
-    summary.failures += count
-    summary.first_failure_at = earliest(summary.first_failure_at, firstSeenAt)
-    summary.last_failure_at = latest(summary.last_failure_at, lastSeenAt)
-    add(
-      byOperation,
-      `${operation}::${sessionKind}`,
-      { operation, session_kind: sessionKind },
-      count,
-      firstSeenAt,
-      lastSeenAt,
-    )
-    add(byMinute, minuteBucket, { minute_bucket: minuteBucket }, count, firstSeenAt, lastSeenAt)
-    if (errorFingerprint) {
-      add(
-        byFingerprint,
-        errorFingerprint,
-        { error_fingerprint: errorFingerprint },
-        count,
-        firstSeenAt,
-        lastSeenAt,
-      )
-    }
-  }
-
-  return {
-    summary,
-    by_operation: Array.from(byOperation.values()).sort(
-      (left, right) =>
-        right.failures - left.failures ||
-        left.operation.localeCompare(right.operation) ||
-        left.session_kind.localeCompare(right.session_kind),
-    ),
-    failure_fingerprints: Array.from(byFingerprint.values())
-      .map((entry) => ({
-        error_fingerprint: entry.error_fingerprint,
-        count: entry.failures,
-        first_seen_at: entry.first_failure_at,
-        last_seen_at: entry.last_failure_at,
-      }))
-      .sort(
-        (left, right) =>
-          right.count - left.count || left.error_fingerprint.localeCompare(right.error_fingerprint),
-      ),
-    minute_buckets: Array.from(byMinute.values()).sort((left, right) =>
-      left.minute_bucket.localeCompare(right.minute_bucket),
-    ),
-  }
-}
-
 export async function getGameSessionWriteEvidence(db, options = {}) {
   if (!db) {
     return {
@@ -372,39 +256,38 @@ export async function getGameSessionWriteEvidence(db, options = {}) {
     typeof options?.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(options.day)
       ? options.day
       : toUtcDay()
-  const sampleLimit = Math.max(1, Math.min(Number(options?.sampleLimit) || 20, 100))
-  const minuteLimit = Math.max(1, Math.min(Number(options?.minuteLimit) || 180, 1440))
 
-  await ensureGameSessionWriteEvidenceSchema(db)
-  const failureRows = await db.prepare(SELECT_FAILURES_FOR_DAY_SQL).bind(observedDay).all()
-  const sampleRows = await db
-    .prepare(SELECT_FAILURE_SAMPLES_FOR_DAY_SQL)
-    .bind(observedDay, sampleLimit)
-    .all()
+  await prepareEvidenceTable(db, addUtcDays(toUtcDay(), -EVIDENCE_RETENTION_DAYS))
+  const answer = await db.prepare(SELECT_FAILURES_FOR_DAY_SQL).bind(observedDay).all()
 
-  const aggregated = aggregateFailureRows(
-    Array.isArray(failureRows?.results) ? failureRows.results : [],
-  )
-  const resetStartedAt = `${observedDay}T00:00:00.000Z`
-  const nextResetDay = addUtcDays(observedDay, 1)
-  const nextResetAt = `${nextResetDay}T00:00:00.000Z`
+  const summary = { failures: 0, first_failure_at: null, last_failure_at: null }
+  const failures = (Array.isArray(answer?.results) ? answer.results : []).map((row) => {
+    const count = Number(row?.failures) || 0
+    const firstSeenAt = Number(row?.first_seen_at) || null
+    const lastSeenAt = Number(row?.last_seen_at) || null
+    summary.failures += count
+    summary.first_failure_at = earliest(summary.first_failure_at, firstSeenAt)
+    summary.last_failure_at = latest(summary.last_failure_at, lastSeenAt)
+    return {
+      operation: normalizeOperation(row?.operation),
+      session_kind: String(row?.session_kind || "unknown"),
+      error_class: String(row?.error_class || "other"),
+      failures: count,
+      first_seen_at: firstSeenAt,
+      last_seen_at: lastSeenAt,
+      request_path: normalizeRequestPath(row?.request_path),
+      error_message: normalizeErrorMessage(row?.error_message),
+    }
+  })
 
   return {
     ok: true,
     observed_day: observedDay,
-    reset_started_at_utc: resetStartedAt,
-    next_reset_at_utc: nextResetAt,
-    summary: aggregated.summary,
-    by_operation: aggregated.by_operation,
-    failure_fingerprints: aggregated.failure_fingerprints,
-    recent_minute_buckets: aggregated.minute_buckets.slice(-minuteLimit),
-    recent_failures: (Array.isArray(sampleRows?.results) ? sampleRows.results : []).map((row) => ({
-      occurred_at: Number(row?.occurred_at) || 0,
-      operation: normalizeOperation(row?.operation),
-      session_kind: String(row?.session_kind || "unknown"),
-      request_path: normalizeRequestPath(row?.request_path),
-      error_message:
-        normalizeErrorFingerprint(row?.error_message) || "Unknown GameSession write error",
-    })),
+    reset_started_at_utc: `${observedDay}T00:00:00.000Z`,
+    next_reset_at_utc: `${addUtcDays(observedDay, 1)}T00:00:00.000Z`,
+    counts_are_lower_bounds:
+      "D1 is written at most once every five minutes for each row; Workers Logs hold every failure and the provider's meters give the volume",
+    summary,
+    failures,
   }
 }
