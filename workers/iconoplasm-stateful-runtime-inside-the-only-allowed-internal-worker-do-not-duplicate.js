@@ -156,6 +156,7 @@ import {
   capImageEditInheritedUpvotes,
   imageEditInheritedUpvotes,
   readGeneVoteVersion,
+  voteDailyBudgetResetSeconds,
   voteImportBoundsError,
 } from "./iconoplasm/votes/vote-guards.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
@@ -30900,11 +30901,27 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         reason: "vote_auto_promote",
       })
       if (!vote.ok) {
+        // A spent daily budget says when voting is back: the seconds to 00:00 UTC, in the
+        // standard header and in the body. The body is the copy the page's vote box reads (the
+        // extension's fetch proxy returns no headers, and a page on another origin cannot read
+        // Retry-After without an expose-headers rule); both come from the one number.
+        const retryAfter =
+          vote.code === VOTE_DAILY_BUDGET_EXHAUSTED ? voteDailyBudgetResetSeconds() : 0
         return done(
           `votes_set_${vote.status}`,
-          json({ ok: false, code: vote.code, error: vote.error }, vote.status, {
-            "Cache-Control": "no-store",
-          }),
+          json(
+            {
+              ok: false,
+              code: vote.code,
+              error: vote.error,
+              ...(retryAfter ? { retry_after_seconds: retryAfter } : {}),
+            },
+            vote.status,
+            {
+              "Cache-Control": "no-store",
+              ...(retryAfter ? { "Retry-After": String(retryAfter) } : {}),
+            },
+          ),
         )
       }
       return done(

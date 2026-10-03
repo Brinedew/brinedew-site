@@ -164,3 +164,14 @@ export function voteDailyBudgetRefusal() {
     error: VOTE_DAILY_BUDGET_MESSAGE,
   }
 }
+
+// Seconds until the budget's day rolls over. The budget row's day is D1's date('now'), a UTC
+// date, so the budget resets at 00:00:00 UTC exactly; there is no margin to add. A client that
+// waits this long and is refused again is told the new number. Rounded up, so a client never
+// asks a moment early, and never below 1, so the last instant of the day does not read 0.
+// (secondsUntilCloudflareDailyReset in lib/cloudflare-availability.js answers a different
+// question: it aims 5 s past midnight, for Cloudflare's own meters.)
+const UTC_DAY_MS = 86_400_000
+export function voteDailyBudgetResetSeconds(now = Date.now()) {
+  return Math.max(1, Math.ceil((UTC_DAY_MS - (now % UTC_DAY_MS)) / 1000))
+}

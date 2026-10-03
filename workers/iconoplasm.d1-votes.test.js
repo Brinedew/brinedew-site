@@ -86,6 +86,7 @@ import {
   VOTE_DAILY_LIMIT,
   VOTE_IMPORT_MAX_GENES,
   VOTE_IMPORT_MAX_ITEMS,
+  voteDailyBudgetResetSeconds,
 } from "./iconoplasm/votes/vote-guards.js"
 import {
   ICONOPLASM_GENE_CARD_QUEUE_KIND,
@@ -330,7 +331,7 @@ async function callApi(
   )
   const payload = await response.json()
   await Promise.all(ctx.promises)
-  return { status: response.status, payload, ctx }
+  return { status: response.status, payload, ctx, headers: response.headers }
 }
 
 // --- 1 ------------------------------------------------------------------
@@ -1745,4 +1746,89 @@ test("24: the vote projection job table does not survive the migrations or the s
     .filter(({ text }) => text.includes(table))
     .map(({ name }) => name)
   assert.deepEqual(offenders, [], "no Worker or release script names the vote projection job table")
+})
+
+// --- 25 -----------------------------------------------------------------
+
+// B-912: the budget refusal tells a client when voting is back.
+//
+// Ways this can fail, written before the code:
+//  1. the 429 carries no Retry-After header, or no retry_after_seconds in the body (the body is
+//     the only channel the extension's fetch proxy and a cross-origin page can read);
+//  2. the header and the body disagree;
+//  3. the number is not the seconds to 00:00:00 UTC: it keeps the 00:00:05 margin the Cloudflare
+//     meter helper carries, it is rounded down so a client unlocks a second early, or it reads
+//     0 or a negative at the last instant of the day;
+//  4. a refusal that is not the budget (400) or a vote the server takes carries a Retry-After;
+//  5. the number is not a whole number of seconds from 1 to 86,400.
+test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header and in the body", async () => {
+  // The function, at fixed instants.
+  const at = (iso) => voteDailyBudgetResetSeconds(Date.parse(iso))
+  assert.equal(at("2026-10-03T18:04:31.000Z"), 21_329)
+  assert.equal(at("2026-10-03T12:00:00.000Z"), 43_200)
+  assert.equal(at("2026-10-03T23:59:59.999Z"), 1, "a fraction of a second left is a second")
+  assert.equal(at("2026-10-03T23:59:59.000Z"), 1)
+  assert.equal(at("2026-10-04T00:00:00.000Z"), 86_400, "at midnight the next reset is a day away")
+  assert.equal(at("2026-10-04T00:00:00.001Z"), 86_400)
+  assert.equal(at("2026-12-31T23:59:30.000Z"), 30, "across a year end")
+  assert.equal(at("2028-02-29T12:00:00.000Z"), 43_200, "on a leap day")
+
+  const seed = async (spent) => {
+    const db = new SqliteD1()
+    seedAsset(db, "BRCA1", sha("a"), { createdAt: "2026-01-02 00:00:00" })
+    seedAsset(db, "BRCA1", sha("b"), { createdAt: "2026-01-01 00:00:00" })
+    seedPublished(db, "BRCA1", sha("a"))
+    await seedCaretaker(db, "BRCA1")
+    if (spent) {
+      db.exec(
+        "INSERT INTO icono_vote_daily_budget (day, votes) VALUES (date('now'), ?)",
+        VOTE_DAILY_LIMIT,
+      )
+    }
+    return db
+  }
+  const vote = (db, body = {}) =>
+    callApi(db, "/api/iconoplasm/votes/set", {
+      symbol: "BRCA1",
+      asset_sha256: sha("b"),
+      vote_value: 1,
+      ...body,
+    })
+
+  // The refusal: the number is read before and after the call, because the clock moves.
+  const spent = await seed(true)
+  const before = voteDailyBudgetResetSeconds(Date.now())
+  const refused = await vote(spent)
+  const after = voteDailyBudgetResetSeconds(Date.now())
+  assert.equal(refused.status, 429)
+  assert.equal(refused.payload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
+  assert.equal(refused.payload.error, VOTE_DAILY_BUDGET_MESSAGE, "the sentence is unchanged")
+  const header = refused.headers.get("Retry-After")
+  assert.match(String(header), /^[1-9][0-9]*$/, "a whole number of seconds")
+  assert.equal(
+    Number(header),
+    refused.payload.retry_after_seconds,
+    "the header and the body say the same thing",
+  )
+  assert.ok(Number.isInteger(refused.payload.retry_after_seconds))
+  assert.ok(
+    refused.payload.retry_after_seconds <= before && refused.payload.retry_after_seconds >= after,
+    `retry ${refused.payload.retry_after_seconds} must be the seconds to 00:00 UTC (${after}..${before})`,
+  )
+  assert.ok(
+    refused.payload.retry_after_seconds >= 1 && refused.payload.retry_after_seconds <= 86_400,
+  )
+  assert.equal(refused.headers.get("Cache-Control"), "no-store")
+
+  // A refusal that is not the budget says nothing about the reset.
+  const invalid = await vote(await seed(true), { vote_value: 5 })
+  assert.equal(invalid.status, 400)
+  assert.equal(invalid.headers.get("Retry-After"), null)
+  assert.equal("retry_after_seconds" in invalid.payload, false)
+
+  // A vote the server takes says nothing about it either.
+  const taken = await vote(await seed(false))
+  assert.equal(taken.status, 200, JSON.stringify(taken.payload))
+  assert.equal(taken.headers.get("Retry-After"), null)
+  assert.equal("retry_after_seconds" in taken.payload, false)
 })
