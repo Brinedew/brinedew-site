@@ -136,7 +136,7 @@ refused whole (nothing is written) and the reader gets a 429: "Voting is
 paused until 00:00 UTC to protect the site's daily database allowance." The
 administrator's vote and import routes are not admitted and never refused.
 The `votes/set` 429 also says when voting is back: the seconds to 00:00:00 UTC
-(`voteDailyBudgetResetSeconds`, the day the budget row is keyed on), as a
+(`secondsUntilCloudflareDailyReset` with no margin, the day the budget row is keyed on), as a
 `Retry-After` header and as `retry_after_seconds` in the body. The body is the
 copy the page reads, because `fetchJSON` keeps only the body and the
 extension's fetch proxy drops headers. The vote box (`wireVoteBox` in

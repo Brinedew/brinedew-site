@@ -86,7 +86,6 @@ import {
   VOTE_DAILY_LIMIT,
   VOTE_IMPORT_MAX_GENES,
   VOTE_IMPORT_MAX_ITEMS,
-  voteDailyBudgetResetSeconds,
 } from "./iconoplasm/votes/vote-guards.js"
 import {
   ICONOPLASM_GENE_CARD_QUEUE_KIND,
@@ -96,6 +95,7 @@ import {
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
+import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const VOTE_TABLES = [
@@ -1756,23 +1756,12 @@ test("24: the vote projection job table does not survive the migrations or the s
 //  1. the 429 carries no Retry-After header, or no retry_after_seconds in the body (the body is
 //     the only channel the extension's fetch proxy and a cross-origin page can read);
 //  2. the header and the body disagree;
-//  3. the number is not the seconds to 00:00:00 UTC: it keeps the 00:00:05 margin the Cloudflare
-//     meter helper carries, it is rounded down so a client unlocks a second early, or it reads
-//     0 or a negative at the last instant of the day;
+//  3. the number is not the seconds to 00:00:00 UTC: it keeps the 00:00:05 margin that
+//     secondsUntilCloudflareDailyReset adds by default (the route passes 0; the function's own
+//     table is in cloudflare-d1-availability.test.js);
 //  4. a refusal that is not the budget (400) or a vote the server takes carries a Retry-After;
 //  5. the number is not a whole number of seconds from 1 to 86,400.
 test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header and in the body", async () => {
-  // The function, at fixed instants.
-  const at = (iso) => voteDailyBudgetResetSeconds(Date.parse(iso))
-  assert.equal(at("2026-10-03T18:04:31.000Z"), 21_329)
-  assert.equal(at("2026-10-03T12:00:00.000Z"), 43_200)
-  assert.equal(at("2026-10-03T23:59:59.999Z"), 1, "a fraction of a second left is a second")
-  assert.equal(at("2026-10-03T23:59:59.000Z"), 1)
-  assert.equal(at("2026-10-04T00:00:00.000Z"), 86_400, "at midnight the next reset is a day away")
-  assert.equal(at("2026-10-04T00:00:00.001Z"), 86_400)
-  assert.equal(at("2026-12-31T23:59:30.000Z"), 30, "across a year end")
-  assert.equal(at("2028-02-29T12:00:00.000Z"), 43_200, "on a leap day")
-
   const seed = async (spent) => {
     const db = new SqliteD1()
     seedAsset(db, "BRCA1", sha("a"), { createdAt: "2026-01-02 00:00:00" })
@@ -1797,9 +1786,9 @@ test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header a
 
   // The refusal: the number is read before and after the call, because the clock moves.
   const spent = await seed(true)
-  const before = voteDailyBudgetResetSeconds(Date.now())
+  const before = secondsUntilCloudflareDailyReset(Date.now(), 0)
   const refused = await vote(spent)
-  const after = voteDailyBudgetResetSeconds(Date.now())
+  const after = secondsUntilCloudflareDailyReset(Date.now(), 0)
   assert.equal(refused.status, 429)
   assert.equal(refused.payload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
   assert.equal(refused.payload.error, VOTE_DAILY_BUDGET_MESSAGE, "the sentence is unchanged")
