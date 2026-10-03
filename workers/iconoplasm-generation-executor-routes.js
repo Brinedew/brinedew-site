@@ -7,6 +7,10 @@ import {
 
 import { IconoplasmGenerationSourceError } from "./lib/iconoplasm-generation-provenance.js"
 import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
+import {
+  GENERATION_COMPLETION_MAX_REQUESTS,
+  generationCompletionSize,
+} from "./lib/iconoplasm-mutation-write-bounds.js"
 
 const CACHE_CONTROL = "private, no-store"
 
@@ -79,6 +83,25 @@ async function completeGenerationLeaseBatch({
   inlineDeliveryLimit,
   logger,
 }) {
+  // One claim leases at most GENERATION_COMPLETION_MAX_REQUESTS requests, so a
+  // larger body is not one session's completion. It is refused before any write,
+  // and nothing about the leases or requests changes: send it again in parts.
+  const size = generationCompletionSize(body)
+  if (
+    size.items > GENERATION_COMPLETION_MAX_REQUESTS ||
+    size.requestIds > GENERATION_COMPLETION_MAX_REQUESTS
+  ) {
+    return json(
+      {
+        ok: false,
+        error: {
+          code: "GENERATION_COMPLETION_TOO_LARGE",
+          message: `A completion carries at most ${GENERATION_COMPLETION_MAX_REQUESTS} requests in at most ${GENERATION_COMPLETION_MAX_REQUESTS} items; this one carries ${size.requestIds} requests in ${size.items} items. Nothing was written. Send it again in parts.`,
+        },
+      },
+      400,
+    )
+  }
   const result = await fulfillGenerationRequests(env, {
     items: Array.isArray(body?.items) ? body.items : [],
     resolvedBy: "authority-generation-executor",

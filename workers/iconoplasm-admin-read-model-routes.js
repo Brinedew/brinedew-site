@@ -1,3 +1,5 @@
+import { IconoplasmVisionEmulsionCodeBoundError } from "./iconoplasm/vision-emulsion-code-bound.js"
+
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const REQUIRED_FUNCTIONS = Object.freeze([
   "coerceBoolean",
@@ -115,7 +117,20 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     // A read-model sync is only that. The gene's stable object and the catalog
     // object are published by the per-gene publisher and the Actions catalog
     // publisher.
-    const result = await syncReadModels(env, options)
+    let result
+    try {
+      result = await syncReadModels(env, options)
+    } catch (error) {
+      // A vision above the emulsion-code bound is refused before any write (B-946).
+      // Say so in words: the finalization job keeps this message as its last error.
+      if (error instanceof IconoplasmVisionEmulsionCodeBoundError) {
+        return done(
+          "admin_read_models_sync_409",
+          json({ ok: false, error: { code: error.code, message: error.message } }, 409, NO_STORE),
+        )
+      }
+      throw error
+    }
     return done(
       "admin_read_models_sync",
       json(
