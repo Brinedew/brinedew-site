@@ -263,7 +263,8 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # longer has R2 enabled. That is not just a random toggle state: the current
 # billing/card path is blocked, so "just use R2" is not a live portrait-storage
 # fix right now. Leave these bindings commented out until R2 is actually
-# restored, otherwise even a structure-fallback worker cannot deploy.
+# restored, otherwise the worker cannot deploy. Only the Discord recap image
+# store reads `STRUCTURES_BUCKET` (Bunny when unbound); no structure path does.
 #[[r2_buckets]]
 #binding = "STRUCTURES_BUCKET"
 #bucket_name = "geneguessr-structures"

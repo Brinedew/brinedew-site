@@ -90,11 +90,9 @@ in the `/admin` panel and stored, never rendered at post time.
   UniProt IDs and normalized surnames in the 365-day horizon, then renders and
   uploads that target-bound image. Manual overrides remain authoritative and
   are never replaced automatically.
-- A successful replacement is accepted only after its curated structure is
-  pinned through the play date: with the `STRUCTURES_BUCKET` R2 binding
-  configured, R2 must confirm `pinnedUntil`; without it, pinning is skipped and
-  the structure needs an upstream URL. Availability pins
-  are selector-salt and pool-fingerprint bound D1 records, and are shared by the
+- A successful replacement is a non-AlphaFold curated structure the server chose
+  and the browser rendered; no structure bytes are stored or pinned. Availability
+  pins are selector-salt and pool-fingerprint bound D1 records, and are shared by the
   admin schedule, cards, pre-warm, and request-time paths. D1 ownership is a
   capacity fence: replacement decisions must remain writable after unrelated KV
   traffic reaches Cloudflare's daily write ceiling.

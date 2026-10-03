@@ -5113,23 +5113,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       return data;
     }
 
-    async function pinAvailabilityReplacementStructure(day, uniprot) {
-      const response = await fetch(
-        API_BASE + '/api/admin/schedule/availability-replacement/pin-structure',
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: day, uniprot: uniprot })
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Replacement structure could not be pinned through its play date');
-      }
-      return data;
-    }
-
     async function uploadNextYearImages() {
       // ARCHITECTURE FENCE [GG-002]: this is reconciliation, not bulk overwrite.
       // Existing verified objects are the checkpoint; only missing identities
@@ -5249,7 +5232,6 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     silent: true,
                     bulk: true
                   });
-                  await pinAvailabilityReplacementStructure(firstDay, replacementUniprot);
                   rendered.base64 = null;
                   recapImageExistsByDay[firstDay] = true;
                   uploaded += 1;
