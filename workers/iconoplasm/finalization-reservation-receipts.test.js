@@ -10,6 +10,7 @@ import {
   FINALIZATION_JOB_TRANSITION_ROWS,
   GENE_REPUBLISH_ROWS,
   GENE_ROLLUP_ROWS,
+  MAX_EMULSION_CODES_PER_VISION,
   MUTATION_WRITE_FLOOR_UNITS,
   VISION_ROLLUP_ROWS,
   finalizationCompletionPageWriteUnits,
@@ -17,6 +18,7 @@ import {
   finalizationRecoveryWriteUnits,
   reservationIdentity,
 } from "../lib/iconoplasm-mutation-write-bounds.js"
+import { ICONOPLASM_FACTORY_CATALOG } from "../generated/iconoplasm-factory-catalog.js"
 import { advanceEnrolledIconoplasmGeneCardMaterialization } from "../iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import {
   liveD1Meter,
@@ -248,17 +250,34 @@ test("gene rollups reserve a fixed handful of rows however many assets the gene 
   }
 })
 
+// A vision's emulsion codes as production holds them: the legacy 0-<slot> code,
+// then one code per factory pipeline letter for the same variant slot, then the
+// same letters at an earlier vision revision.
+const PIPELINE_LETTERS = ICONOPLASM_FACTORY_CATALOG.pipelines.map((pipeline) => pipeline.code)
+function emulsionCodes(count, slot, { revisions = [9, 8, 7, 6, 5, 4, 3, 2, 1] } = {}) {
+  const codes = [`0-${slot}`]
+  for (const revision of revisions)
+    for (const letter of PIPELINE_LETTERS) {
+      if (codes.length >= count) return codes
+      codes.push(`${letter}${revision}-${slot}`)
+    }
+  return codes.slice(0, count)
+}
+
 test("vision rollups reserve the worst rewrite of one vision with many genes", async (t) => {
   quiet(t)
   // A vision of its own: assets other tests seeded must not share it.
   const visionId = "anima-v1-77"
   for (let gene = 0; gene < 30; gene += 1) await seedGene(fresh("VIS"), 3, { visionId })
-  // A vision is sized for nine emulsion codes of its own: its body writes nine
-  // rows and three more for each code, which with the claim and the advance is
-  // exactly the 50-unit floor (B-946 tracks the real count).
+  // The vision carries as many emulsion codes as a vision may (B-946), every one
+  // a real factory recipe code, so each code also owns an option rollup row.
   await database.db
     .prepare(
-      "UPDATE icono_portrait_assets SET emulsion_id = 'Z9-' || (rowid % 9) WHERE gene_symbol LIKE 'VIS%'",
+      "UPDATE icono_portrait_assets SET emulsion_id = (SELECT value FROM json_each(?) WHERE key = icono_portrait_assets.rowid % ?) WHERE gene_symbol LIKE 'VIS%'",
+    )
+    .bind(
+      JSON.stringify(emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 30001)),
+      MAX_EMULSION_CODES_PER_VISION,
     )
     .run()
   const first = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VISJOB"))
@@ -303,6 +322,218 @@ test("vision rollups reserve the worst rewrite of one vision with many genes", a
       first: first.entry,
       second: second.entry,
     }),
+  )
+})
+
+// B-946. How a vision could outgrow its reservation (written before the code):
+// 1. A vision carries more emulsion codes than the nine it was sized for: in
+//    production four visions carry 17, two 14, one 10.
+// 2. Every code is a real factory recipe, so each also owns an option rollup row
+//    the nine-code measurement (codes the factory ignores) never wrote.
+// 3. A vision's codes are all replaced at once: its stale pairs are removed and
+//    as many new ones inserted in the same rebuild.
+// 4. A code is shared by other visions and the rebuild rewrites for each of them.
+// 5. A vision above the bound reaches the rebuild: the refusal must come before
+//    any write of the vision, leave the job retryable and repair itself.
+async function seedVisionWithCodes(visionId, codes, { genes = 30 } = {}) {
+  const prefix = fresh("VC")
+  for (let gene = 0; gene < genes; gene += 1) await seedGene(`${prefix}G${gene}`, 3, { visionId })
+  await recodeVision(prefix, visionId, codes)
+  return prefix
+}
+
+async function recodeVision(prefix, visionId, codes) {
+  await database.db
+    .prepare(
+      "UPDATE icono_portrait_assets SET emulsion_id = (SELECT value FROM json_each(?) WHERE key = icono_portrait_assets.rowid % ?) WHERE gene_symbol LIKE ? AND vision_id = ?",
+    )
+    .bind(JSON.stringify(codes), codes.length, `${prefix}G%`, visionId)
+    .run()
+}
+
+test("the code bound is the largest vision in production with room to grow, and covers every pipeline once", () => {
+  // Read-only production count, 2026-10-03: 1,860 visions, 2,245 vision-code
+  // pairs; codes per vision: 1 for 1,605 visions, 2 for 234, up to 17 for four.
+  assert.ok(MAX_EMULSION_CODES_PER_VISION >= 17)
+  // One code per factory pipeline plus the legacy code: a new pipeline fails
+  // here until the bound and the rows behind it are measured again.
+  assert.ok(MAX_EMULSION_CODES_PER_VISION >= PIPELINE_LETTERS.length + 1)
+  const codes = emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 5)
+  assert.equal(codes.length, MAX_EMULSION_CODES_PER_VISION)
+  assert.equal(new Set(codes).size, MAX_EMULSION_CODES_PER_VISION)
+})
+
+test("a vision at the code bound reserves what its first build, a full replacement of its codes and a restore write", async (t) => {
+  quiet(t)
+  const visionId = "anima-v1-29101"
+  const prefix = await seedVisionWithCodes(
+    visionId,
+    emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29101),
+  )
+  const first = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
+  assert.equal(first.result.error, null)
+
+  // Every code replaced at once: the registered pairs go, the new ones come, and
+  // the option rollup of each old and each new code is rewritten or removed.
+  await recodeVision(
+    prefix,
+    visionId,
+    emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29102, { revisions: [8, 7, 6, 5, 4, 3, 2, 1] }),
+  )
+  const replaced = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
+  assert.equal(replaced.result.error, null)
+  // And back again.
+  await recodeVision(prefix, visionId, emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29101))
+  const restored = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
+  const worst = Math.max(first.entry.wrote, replaced.entry.wrote, restored.entry.wrote)
+  t.diagnostic(
+    JSON.stringify({
+      site: "vision-at-bound",
+      codes: MAX_EMULSION_CODES_PER_VISION,
+      first: first.entry.wrote,
+      replaced: replaced.entry.wrote,
+      restored: restored.entry.wrote,
+      units: first.entry.units,
+    }),
+  )
+  assertCovered("vision at bound, first build", first, { tightness: 100 })
+  assertCovered("vision at bound, full replacement", replaced, { tightness: 100 })
+  assertCovered("vision at bound, restored", restored, { tightness: 100 })
+  assert.equal(
+    worst - 2 * FINALIZATION_JOB_TRANSITION_ROWS,
+    VISION_ROLLUP_ROWS,
+    "the vision constant is the worst body measured at the bound, not an estimate",
+  )
+})
+
+test("a typical vision reserves the same as a vision at the bound, because its code count is not known before its phase starts", async (t) => {
+  quiet(t)
+  const visionId = "anima-v1-29103"
+  await seedVisionWithCodes(visionId, emulsionCodes(2, 29103))
+  const run = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
+  assertCovered("two-code vision", run, { tightness: 100 })
+  t.diagnostic(
+    JSON.stringify({ site: "vision-two-codes", wrote: run.entry.wrote, units: run.entry.units }),
+  )
+  assert.equal(run.entry.units, finalizationPhaseWriteUnits({ phase: "vision_rollups" }))
+})
+
+test("codes shared with other visions add no rows to a rebuild beyond its own codes", async (t) => {
+  quiet(t)
+  // Eight codes, first on their own, then shared with five other visions whose
+  // option rollups are already settled.
+  const alone = "anima-v1-29104"
+  await seedVisionWithCodes(alone, emulsionCodes(8, 29104))
+  const aloneRun = await phaseRun("vision_rollups", { visionIds: [alone] }, fresh("VCJOB"))
+  const sharedCodes = emulsionCodes(8, 29105)
+  for (let other = 0; other < 5; other += 1) {
+    const otherVision = `anima-v1-291${10 + other}`
+    await seedVisionWithCodes(otherVision, sharedCodes, { genes: 4 })
+    await phaseRun("vision_rollups", { visionIds: [otherVision] }, fresh("VCJOB"))
+  }
+  const sharer = "anima-v1-29106"
+  await seedVisionWithCodes(sharer, sharedCodes)
+  const sharedRun = await phaseRun("vision_rollups", { visionIds: [sharer] }, fresh("VCJOB"))
+  assertCovered("vision sharing its codes", sharedRun, { tightness: 100 })
+  t.diagnostic(
+    JSON.stringify({
+      site: "vision-shared-codes",
+      alone: aloneRun.entry.wrote,
+      shared: sharedRun.entry.wrote,
+    }),
+  )
+  // Sharing moves rollup rows the vision's own assets already move; it adds none
+  // for each other vision.
+  assert.ok(
+    sharedRun.entry.wrote <= aloneRun.entry.wrote + 3 * sharedCodes.length,
+    JSON.stringify({ alone: aloneRun.entry.wrote, shared: sharedRun.entry.wrote }),
+  )
+})
+
+test("a vision above the code bound is refused before any write, its job stays retryable, and it completes once the excess is removed", async (t) => {
+  quiet(t)
+  const visionId = "anima-v1-29120"
+  const codes = emulsionCodes(MAX_EMULSION_CODES_PER_VISION + 1, 29120)
+  const prefix = await seedVisionWithCodes(visionId, codes)
+  const jobSymbol = fresh("VCREFUSE")
+  await seedJob(jobSymbol, "vision_rollups", { visionIds: [visionId] })
+  const refused = await invoke({ symbols: [jobSymbol] })
+  const count = async (sql, ...args) =>
+    database.db
+      .prepare(sql)
+      .bind(...args)
+      .first("n")
+  // Nothing of the vision was written: no rollup row, no registered pair, no option rollup.
+  assert.equal(
+    await count(
+      "SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?",
+      visionId,
+    ),
+    0,
+  )
+  assert.equal(
+    await count(
+      "SELECT COUNT(*) AS n FROM icono_generation_request_factory_option_sources WHERE vision_id = ?",
+      visionId,
+    ),
+    0,
+  )
+  assert.equal(
+    await count(
+      "SELECT COUNT(*) AS n FROM icono_generation_request_vision_option_rollup WHERE vision_id = ?",
+      visionId,
+    ),
+    0,
+  )
+  // The only rows written are the job's own claim and failure transitions.
+  assert.ok(
+    refused.meter.totals.rows_written <= 2 * FINALIZATION_JOB_TRANSITION_ROWS,
+    `refusal wrote ${refused.meter.totals.rows_written} rows`,
+  )
+  // The job is still in its ledger, retryable, and says why in words.
+  const job = await database.db
+    .prepare(
+      "SELECT status, phase, last_error, vision_ids_json FROM icono_sync_finalization_jobs WHERE gene_symbol = ?",
+    )
+    .bind(jobSymbol)
+    .first()
+  assert.ok(["retrying", "queued"].includes(job.status), JSON.stringify(job))
+  assert.equal(job.phase, "vision_rollups")
+  assert.deepEqual(JSON.parse(job.vision_ids_json), [visionId])
+  assert.match(job.last_error, new RegExp(visionId))
+  assert.match(job.last_error, new RegExp(String(MAX_EMULSION_CODES_PER_VISION + 1)))
+  assert.match(job.last_error, new RegExp(`limit is ${MAX_EMULSION_CODES_PER_VISION}`))
+
+  // Repair: the vision gives back the code it should not have carried.
+  await recodeVision(prefix, visionId, codes.slice(0, MAX_EMULSION_CODES_PER_VISION))
+  await database.db
+    .prepare(
+      "UPDATE icono_sync_finalization_jobs SET status = 'queued', next_attempt_at = ? WHERE gene_symbol = ?",
+    )
+    .bind(NOW, jobSymbol)
+    .run()
+  const repaired = await invoke({ symbols: [jobSymbol] })
+  assert.equal(repaired.error, null)
+  assert.equal(
+    await count(
+      "SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?",
+      visionId,
+    ),
+    1,
+  )
+  assert.equal(
+    await count(
+      "SELECT COUNT(*) AS n FROM icono_generation_request_factory_option_sources WHERE vision_id = ?",
+      visionId,
+    ),
+    MAX_EMULSION_CODES_PER_VISION,
+  )
+  assert.equal(
+    await database.db
+      .prepare("SELECT phase FROM icono_sync_finalization_jobs WHERE gene_symbol = ?")
+      .bind(jobSymbol)
+      .first("phase"),
+    "completed_pending_finalize",
   )
 })
 

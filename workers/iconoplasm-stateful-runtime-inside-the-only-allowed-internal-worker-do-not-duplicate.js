@@ -6,7 +6,8 @@ import {
   finalizationCompletionPageWriteUnits,
   finalizationPhaseWriteUnits,
   finalizationRecoveryWriteUnits,
-  MUTATION_WRITE_FLOOR_UNITS,
+  generationClaimBounds,
+  laptopReservation,
   reservationIdentity,
 } from "./lib/iconoplasm-mutation-write-bounds.js"
 import {
@@ -139,6 +140,7 @@ import {
   authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
+import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { hydratePublicCanonicalGeneRecords } from "./iconoplasm-public-canonical-runtime.js"
 import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
@@ -1448,7 +1450,7 @@ function iconoplasmBudgetRouteFamilyFromPath(path) {
   return "non_iconoplasm"
 }
 
-function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
+export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
   const family = String(routeFamily || "").trim()
   if (!family || family === "non_iconoplasm") return "non_iconoplasm"
   if (family.startsWith("public_")) return "public_read"
@@ -1653,9 +1655,12 @@ function isIconoplasmHighRiskAdminMutationRouteFamily(routeFamily) {
 // is exhausted: on 2026-08-31 this lane burned 13.6 billion read rows through
 // collation-mismatched scans with no admission control (Linear B-734). The
 // route contract names these families authority_workstation_{sync,material,write}.
+// B-944: the generation executor family is the same lane. Its five routes were
+// classed workstation_sync_write but missing from this gate, so none of them
+// reserved capacity and none was metered into the shared ledger.
 function isIconoplasmAuthorityBudgetedRouteFamily(routeFamily) {
   const value = String(routeFamily || "").trim()
-  return value.startsWith("authority_workstation_")
+  return value.startsWith("authority_workstation_") || value === "authority_generation_executor"
 }
 
 // ARCHITECTURE FENCE [RECOVERY-001 / B-745 / B-754]: background queue consumers
@@ -2546,6 +2551,58 @@ function iconoplasmBudgetTelemetryLockedReason() {
   return "Cloudflare is already refusing Durable Objects writes for the shared Iconoplasm budget ledger, so per-request preflight telemetry cannot be trusted right now."
 }
 
+// B-944 / B-945. The six laptop write routes that reach this wrapper reserve rows
+// written in the laptop_delivery lane, sized from their own body by
+// workers/lib/iconoplasm-mutation-write-bounds.js (laptopReservation). The tags
+// head selection is the seventh route classed workstation_sync_write; it never
+// gets here, because the gateway hands it to the operation-cost authority first.
+//
+// The bearer is checked here, before anything else. The hostname is public and
+// the route handlers authenticate later, so a reservation taken first let an
+// anonymous POST with a random body spend laptop capacity, and a snapshot taken
+// first spent a Durable Object request on it. A request the route would turn away
+// touches neither the lane nor the ledger: the handler answers it with a 401
+// before it reads a row.
+const LAPTOP_BEARER_AUTHORIZERS = Object.freeze({
+  "authority-generation-bearer": authorizeIconoplasmAuthorityGenerationBearer,
+  "authority-replica-bearer": authorizeIconoplasmAuthorityReplicaBearer,
+})
+
+async function laptopRouteAdmission(env, request) {
+  if (!request) return { authorized: true, reservation: null }
+  const url = new URL(request.url)
+  const route = matchIconoplasmRouteContract(url.pathname, request.method)?.route
+  if (!route) return { authorized: true, reservation: null }
+  const authorize = LAPTOP_BEARER_AUTHORIZERS[route.auth]
+  if (!authorize) {
+    throw new IconoplasmD1DailyBudgetConfigurationError(
+      `workstation_sync_write route ${route.id} names no bearer audience`,
+    )
+  }
+  if (!(await authorize(request, env)).authorized) return { authorized: false, reservation: null }
+  const text = await request.clone().text()
+  let body = null
+  try {
+    body = JSON.parse(text)
+  } catch {
+    body = null
+  }
+  const { units, perCall } = laptopReservation(route.id, body)
+  if (units <= 0) return { authorized: true, reservation: null }
+  // An exact command (a lease token and version, a command id) is the same
+  // operation when it is sent again, so its identity is its body. A claim takes
+  // new leases every time it is sent, so each call is its own operation.
+  const identity = perCall
+    ? `laptop:call:${crypto.randomUUID()}`
+    : `laptop:${await sha256Hex(`${request.method || "POST"}
+${url.pathname}
+${text}`)}`
+  return {
+    authorized: true,
+    reservation: { units, operationId: reservationIdentity(identity, units) },
+  }
+}
+
 async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   env,
   request,
@@ -2558,38 +2615,35 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   if (!isIconoplasmBudgetedRouteFamily(attribution?.route_family)) {
     return env
   }
+  let laptopReservationPlan = null
+  if (attribution?.budget_class === "workstation_sync_write") {
+    laptopReservationPlan = await laptopRouteAdmission(env, request)
+    if (!laptopReservationPlan.authorized) return env
+  }
   const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
   if (!stub) {
     throw new IconoplasmD1DailyBudgetConfigurationError(
       "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
   }
-  if (attribution?.budget_class === "workstation_sync_write") {
-    const body = request ? await request.clone().text() : ""
-    const requestIdentity = await sha256Hex(
-      `${request?.method || "POST"}\n${request ? new URL(request.url).pathname : attribution.route_family}\n${body}`,
-    )
-    const operationId = `laptop:${requestIdentity}`
-    const admission = await reserveIconoplasmMutationWrites(env, {
-      lane: "laptop_delivery",
-      operationId,
-      // Only the two authority_workstation_write routes (tags-derivative submit
-      // and select) reach this reservation: the generation executor routes are
-      // classed workstation_sync_write but are not budgeted routes
-      // (isIconoplasmBudgetedRouteFamily), so they never reserve (B-944). A
-      // tags command's worst case is not yet pinned to a measurement, so it
-      // keeps the 50-unit floor (B-945). Retain the full amount on timeout.
-      units: MUTATION_WRITE_FLOOR_UNITS,
-      dayKey: budgets.cycleInfo.dayKey,
-    })
-    if (admission?.ok !== true) {
-      throw new IconoplasmD1DailyBudgetExceededError({
-        exhausted: true,
-        exhausted_by: "laptop_delivery_mutation_lane",
-        mutation_lane: admission,
+  if (laptopReservationPlan) {
+    const reservation = laptopReservationPlan.reservation
+    if (reservation) {
+      const admission = await reserveIconoplasmMutationWrites(env, {
+        lane: "laptop_delivery",
+        operationId: reservation.operationId,
+        units: reservation.units,
+        dayKey: budgets.cycleInfo.dayKey,
       })
+      if (admission?.ok !== true) {
+        throw new IconoplasmD1DailyBudgetExceededError({
+          exhausted: true,
+          exhausted_by: "laptop_delivery_mutation_lane",
+          mutation_lane: admission,
+        })
+      }
+      env = { ...env, __iconoplasmMutationReservationOperationId: reservation.operationId }
     }
-    env = { ...env, __iconoplasmMutationReservationOperationId: operationId }
   }
   let snapshot
   try {
@@ -4485,12 +4539,16 @@ function generationRequestSelectionFilters(env, { geneSymbol = "" } = {}) {
   return { policy, openFilters, eligibleFilters }
 }
 
+// The limit and the scan are the ones the claim's write reservation is sized from
+// (generationClaimBounds in workers/lib/iconoplasm-mutation-write-bounds.js).
+// `dependencies` is the injection seam claimValidatedGenerationRequests already
+// offers; the receipts test uses it to stand in for the authority source check.
 export async function generationRequestLeaseClaim(
   env,
   { limit = 10, leaseOwnerId, leaseSeconds = 900 } = {},
+  dependencies = {},
 ) {
-  const claimLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
-  const scanLimit = Math.min(200, Math.max(20, claimLimit * 4))
+  const { claimLimit, scanLimit } = generationClaimBounds(limit)
   const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env)
   const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
     countOpenGenerationRequests(env, openFilters),
@@ -4501,14 +4559,17 @@ export async function generationRequestLeaseClaim(
       ...eligibleFilters,
     }),
   ])
-  const { validated, quarantine, claimed } = await claimValidatedGenerationRequests({
-    env,
-    db: env.ICONOPLASM_DB,
-    rows: eligibleRows,
-    leaseOwnerId,
-    limit: claimLimit,
-    leaseSeconds,
-  })
+  const { validated, quarantine, claimed } = await claimValidatedGenerationRequests(
+    {
+      env,
+      db: env.ICONOPLASM_DB,
+      rows: eligibleRows,
+      leaseOwnerId,
+      limit: claimLimit,
+      leaseSeconds,
+    },
+    dependencies,
+  )
   return {
     schema_version: 1,
     delivery_mode: policy.mode,
@@ -9620,7 +9681,47 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   return rows.length
 }
 
-export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds = []) {
+// The codes a vision rebuild touches: the pairs the registry holds for the
+// vision and the codes its assets carry now, read once. A vision carrying more
+// codes than MAX_EMULSION_CODES_PER_VISION is refused here, before the caller
+// writes anything (B-946); the codes returned are the factory recipe codes whose
+// option rollups the rebuild rewrites.
+async function readVisionEmulsionCodes(env, visionIdsJson) {
+  const response = await env.ICONOPLASM_DB.prepare(
+    `WITH incoming AS (
+       SELECT value AS vision_id FROM json_each(?)
+     )
+     SELECT sources.public_emulsion_code AS public_emulsion_code,
+            sources.vision_id AS vision_id, 0 AS from_assets
+     FROM icono_generation_request_factory_option_sources sources
+     JOIN incoming ON incoming.vision_id = sources.vision_id
+     UNION
+     SELECT upper(trim(pa.emulsion_id)) AS public_emulsion_code,
+            pa.vision_id AS vision_id, 1 AS from_assets
+     FROM icono_portrait_assets pa
+     JOIN incoming ON incoming.vision_id = pa.vision_id
+     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
+  )
+    .bind(visionIdsJson)
+    .all()
+  const rows = Array.isArray(response?.results) ? response.results : []
+  assertVisionEmulsionCodeBound(rows)
+  return Array.from(
+    new Set(
+      rows
+        .map(
+          (row) => iconoplasmFactoryRecipeFromPublicEmulsionId(row?.public_emulsion_code)?.publicId,
+        )
+        .filter(Boolean),
+    ),
+  )
+}
+
+export async function rebuildGenerationRequestFactoryOptionRollupsBatch(
+  env,
+  visionIds = [],
+  { affectedCodes: knownAffectedCodes = null } = {},
+) {
   if (!env.ICONOPLASM_DB) return 0
   const cleanedVisionIds = Array.from(
     new Set(
@@ -9632,30 +9733,7 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(env, vis
   if (!cleanedVisionIds.length) return 0
 
   const visionIdsJson = JSON.stringify(cleanedVisionIds)
-  const affectedResponse = await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id FROM json_each(?)
-     )
-     SELECT sources.public_emulsion_code
-     FROM icono_generation_request_factory_option_sources sources
-     JOIN incoming ON incoming.vision_id = sources.vision_id
-     UNION
-     SELECT upper(trim(pa.emulsion_id)) AS public_emulsion_code
-     FROM icono_portrait_assets pa
-     JOIN incoming ON incoming.vision_id = pa.vision_id
-     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
-  )
-    .bind(visionIdsJson)
-    .all()
-  const affectedCodes = Array.from(
-    new Set(
-      (Array.isArray(affectedResponse?.results) ? affectedResponse.results : [])
-        .map(
-          (row) => iconoplasmFactoryRecipeFromPublicEmulsionId(row?.public_emulsion_code)?.publicId,
-        )
-        .filter(Boolean),
-    ),
-  )
+  const affectedCodes = knownAffectedCodes ?? (await readVisionEmulsionCodes(env, visionIdsJson))
 
   await env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -10862,6 +10940,7 @@ async function generationRequestDiagnostics(env, url, request, symbol) {
 export async function fulfillGenerationRequests(
   env,
   { items = [], resolvedBy = "workstation_sync", publicationId = "" } = {},
+  { validateSource = validateExactGenerationSource } = {},
 ) {
   if (!env.ICONOPLASM_DB)
     return { ok: false, fulfilled: 0, request_ids: [], error: "ICONOPLASM_DB binding missing" }
@@ -11120,7 +11199,7 @@ export async function fulfillGenerationRequests(
           leaseOwnerId: intent.generationLeaseOwnerId,
           expectedLeaseVersion: intent.generationLeaseVersion,
         })
-        const exactSource = await validateExactGenerationSource(env, row)
+        const exactSource = await validateSource(env, row)
         if (
           sanitizeText(row.generation_request_id || "", 180) !== intent.generationRequestId ||
           normalizeSha256(row.generation_request_contract_sha256 || "") !==
@@ -18046,6 +18125,9 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   )
   if (!visionIds.length) return 0
   const visionIdsJson = JSON.stringify(visionIds)
+  // The vision's codes are read first, once: a vision above the code bound is
+  // refused before this rebuild writes a row (B-946).
+  const affectedCodes = await readVisionEmulsionCodes(env, visionIdsJson)
 
   const deleteStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -18185,7 +18267,7 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   // the same awaited mutation boundary so a completed job means both
   // projections are current, including deletion of vanished visions.
   await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds)
-  await rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds)
+  await rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds, { affectedCodes })
 
   return visionIds.length
 }
