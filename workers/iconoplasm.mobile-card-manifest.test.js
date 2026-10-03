@@ -776,3 +776,126 @@ test("print-copy renders the HGNC gene name from the stable gene object", async 
   assert.match(printCopyHtml, /phosphatase and tensin homolog/)
   assert.doesNotMatch(printCopyHtml, /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/)
 })
+
+// A crawler, a prefetch or a broken image tag can only GET or HEAD a print copy. That must cost
+// nothing: no D1 write, no KV write, no queue message, no Browser Rendering launch. Enrolling
+// (the POST) is the only way to start a render.
+test("a print-copy GET or HEAD never writes D1 or KV, never enqueues, and never reaches Browser Rendering", async () => {
+  const db = new FakeIconoplasmDb()
+  const statements = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    statements.push(String(sql))
+    return prepare(sql)
+  }
+  const kvWrites = []
+  let wakeups = 0
+  let browserReads = 0
+  const env = buildEnv({
+    db,
+    cardArtifact: null,
+    onKvPut: (key) => kvWrites.push(key),
+    extraEnv: {
+      ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE: {
+        async send() {
+          wakeups += 1
+        },
+      },
+    },
+  })
+  Object.defineProperty(env, "ICONOPLASM_PRINT_COPY_BROWSER", {
+    get() {
+      browserReads += 1
+    },
+  })
+
+  for (const method of ["GET", "HEAD"]) {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy/ERBB2.png?asset=${"7b".repeat(32)}`,
+          { method },
+        ),
+        env,
+      )
+    assert.equal(response.status, 404, method)
+  }
+
+  assert.equal(wakeups, 0)
+  assert.equal(browserReads, 0)
+  assert.deepEqual(kvWrites, [])
+  assert.deepEqual(
+    statements.filter((sql) => !/^\s*SELECT/i.test(sql)),
+    [],
+  )
+})
+
+// A guest who asks for a print copy proves they are a person with a Turnstile token minted for
+// this action. A token minted for another form, or none, is refused before anything is written
+// or queued: the render is the free plan's scarcest meter (8 Browser launches a day).
+test("a guest's print-copy request needs a Turnstile token minted for this action", async () => {
+  const db = new FakeIconoplasmDb()
+  const statements = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    statements.push(String(sql))
+    return prepare(sql)
+  }
+  let wakeups = 0
+  const env = buildEnv({
+    db,
+    cardArtifact: null,
+    extraEnv: {
+      ICONOPLASM_TURNSTILE_SECRET_KEY: "turnstile-secret",
+      ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE: {
+        async send() {
+          wakeups += 1
+        },
+      },
+    },
+  })
+  const previousFetch = globalThis.fetch
+  let siteverify = { success: true, action: "some_other_form" }
+  globalThis.fetch = async (input, init) =>
+    String(input).startsWith("https://challenges.cloudflare.com/")
+      ? Response.json(siteverify)
+      : previousFetch(input, init)
+  const enroll = (body) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        `https://iconoplasm.brinedew.bio/api/iconoplasm/print-copy-requests/ERBB2?asset=${"7b".repeat(32)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: "https://iconoplasm.brinedew.bio",
+          },
+          body: JSON.stringify(body),
+        },
+      ),
+      env,
+    )
+  try {
+    const wrongAction = await enroll({ turnstile_token: "token-for-another-form" })
+    assert.equal(wrongAction.status, 403)
+    assert.equal((await wrongAction.json()).code, "TURNSTILE_REQUIRED")
+    const noToken = await enroll({})
+    assert.equal(noToken.status, 403)
+    assert.equal((await noToken.json()).code, "TURNSTILE_REQUIRED")
+    assert.equal(wakeups, 0)
+    assert.deepEqual(
+      statements.filter((sql) => /^\s*(INSERT|UPDATE|DELETE)/i.test(sql)),
+      [],
+    )
+
+    // A token minted for this action passes the gate. This fake D1 has no materialization
+    // table, so reaching the ledger's INSERT is the proof that nothing refused the request.
+    siteverify = { success: true, action: "gene_card_request" }
+    await assert.rejects(
+      enroll({ turnstile_token: "token-for-this-action" }),
+      /Unexpected SQL in fake DB run\(\): INSERT INTO icono_gene_card_materializations/,
+    )
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
