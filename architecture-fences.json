@@ -476,7 +476,7 @@
         },
         {
           "category": "test",
-          "file": "workers/lib/daily-selection-pool.test.js",
+          "file": "workers/daily-selection-pool-cost.test.js",
           "token": "ARCHITECTURE FENCE [GG-001]"
         }
       ]
@@ -507,7 +507,7 @@
         },
         {
           "category": "test",
-          "file": "workers/discord-recap-image-store.test.js",
+          "file": "workers/discord-recap.test.js",
           "token": "ARCHITECTURE FENCE [GG-002]"
         }
       ]

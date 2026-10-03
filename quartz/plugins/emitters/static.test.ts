@@ -26,7 +26,7 @@ test("the Static emitter publishes assets and never test files", async () => {
     "iconoplasm/contest.css": true,
     "iconoplasm/fonts/a.woff2": true,
     "iconoplasm/vendor/inner/widget.test.mjs": false,
-    "geneguessr/native-dialogs.test.js": false,
+    "geneguessr/dialogs.test.js": false,
     "shared/sidebar.spec.ts": false,
     "shared/sidebar.test.json": true,
     "private/secret.js": false,

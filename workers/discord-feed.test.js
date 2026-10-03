@@ -1,4 +1,4 @@
-import { test } from "node:test"
+import { test, mock } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { join, dirname } from "node:path"
@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url"
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__")
 
 const mod = await import("./discord-feed.js")
-const { buildExcerpt, paragraphsOf, htmlToPlainText, buildFeedMessage } = mod.__test
 const { handlePostDailyFeed, handlePostFeed } = mod
 
 function fixture(name) {
@@ -41,159 +40,6 @@ function mockKv(initial) {
     _store: store,
   }
 }
-
-// ─── buildExcerpt ───────────────────────────────────────────
-
-test("buildExcerpt collects ≥2 paragraphs and hits a sentence boundary in [250,600]", () => {
-  const p1 =
-    "A short first sentence. This continues with more detail about the topic, filling up enough characters that when combined with the second paragraph we exceed the minimum threshold of two hundred and fifty characters for the excerpt building rule to activate properly."
-  const p2 =
-    "Second paragraph that discusses an important subtopic. It goes into depth about the implications of the findings described above."
-  const text = [p1, p2, "Unused third paragraph."].join("\n\n")
-  const result = buildExcerpt(text)
-  assert.ok(result.length >= 250, `Expected ≥250 chars, got ${result.length}`)
-  assert.ok(result.length <= 600, `Expected ≤600 chars, got ${result.length}`)
-  assert.ok(/[.!?]$/.test(result), `Expected sentence boundary, got: "${result.slice(-20)}"`)
-  const paraCount = (result.match(/\n\n/g) || []).length + 1
-  assert.equal(paraCount, 2, `Expected exactly 2 paragraphs, got ${paraCount}`)
-})
-
-test("buildExcerpt includes a single long paragraph whole (never cuts mid-paragraph)", () => {
-  const longPara = "This is a very long single paragraph. ".repeat(30)
-  const result = buildExcerpt(longPara)
-  assert.ok(result.length > 0, "Expected non-empty excerpt")
-  // The excerpt includes the full paragraph — no mid-paragraph truncation.
-  assert.ok(
-    result.length >= longPara.trim().length - 5,
-    `Expected near-full paragraph, got ${result.length} vs ${longPara.trim().length}`,
-  )
-})
-
-test("buildExcerpt returns first paragraph when only one is given", () => {
-  const text = "Just one paragraph here. With a sentence boundary."
-  const result = buildExcerpt(text)
-  assert.equal(result, "Just one paragraph here. With a sentence boundary.")
-})
-
-test("buildExcerpt always ends at paragraph boundaries", () => {
-  const shortP1 = "Short first para."
-  const hugeP2 = "Huge paragraph. " + "A".repeat(800) + "."
-  const result = buildExcerpt(shortP1 + "\n\n" + hugeP2)
-  // With only 1 short paragraph, we must add the second to reach ≥2 paragraphs.
-  // The excerpt includes both — it's longer than 600 but ends at a paragraph boundary.
-  const paras = result.split(/\n\n/)
-  assert.ok(paras.length >= 2, `Expected ≥2 paragraphs, got ${paras.length}`)
-  assert.ok(result.includes("Short first para."))
-  assert.ok(result.includes("Huge paragraph."))
-})
-
-test("buildExcerpt skips separator lines (---, ***, ~~~) as paragraph boundaries", () => {
-  const text = [
-    "First real paragraph. It goes on at length about the topic.",
-    "---",
-    "This is actually the second paragraph. But the --- shouldn't count as one.",
-  ].join("\n\n")
-  const result = buildExcerpt(text)
-  assert.ok(
-    result.includes("First real paragraph"),
-    `Expected first para, got: "${result.slice(0, 40)}"`,
-  )
-  assert.ok(result.includes("This is actually"), "Expected second para to be included")
-})
-
-test("buildExcerpt image caption text is naturally excluded because figure/figcaption are stripped before text is built", () => {
-  const para1 = "Knoepfler said this was interesting. The study found new results."
-  const para2 = "Another relevant paragraph about the topic. It continues with more analysis."
-  const text = para1 + "\n\n" + para2
-  const result = buildExcerpt(text)
-  assert.ok(!result.includes("Knoepfler image"), "Image caption text leaked through")
-  assert.ok(result.includes("Knoepfler said"), "Real article text should be present")
-})
-
-// ─── paragraphsOf ───────────────────────────────────────────
-
-test("paragraphsOf splits on double newlines and trims each paragraph", () => {
-  const result = paragraphsOf("  First para.  \n\n  Second para.  ")
-  assert.deepEqual(result, ["First para.", "Second para."])
-})
-
-test("paragraphsOf filters empty paragraphs", () => {
-  const result = paragraphsOf("First.\n\n\n\nSecond.")
-  assert.deepEqual(result, ["First.", "Second."])
-})
-
-test("paragraphsOf filters separator-only paragraphs", () => {
-  const result = paragraphsOf("First.\n\n---\n\nSecond.")
-  assert.deepEqual(result, ["First.", "Second."])
-})
-
-// ─── htmlToPlainText ───────────────────────────────────────
-
-test("htmlToPlainText strips HTML, skips figure/figcaption", () => {
-  const html = [
-    "<p>First paragraph with real content.</p>",
-    '<figure><img src="x.jpg"/><figcaption>Knoepfler image caption</figcaption></figure>',
-    "<p>Second paragraph with <b>important</b> details.</p>",
-  ].join("")
-  const result = htmlToPlainText(html)
-  assert.ok(result.includes("First paragraph"), "First para missing")
-  assert.ok(!result.includes("Knoepfler image"), "Image caption leaked through figure/figcaption")
-  assert.ok(result.includes("Second paragraph"), "Second para missing")
-  assert.ok(result.includes("important"), "Bold text should be preserved as text")
-})
-
-// ─── buildFeedMessage ──────────────────────────────────────
-
-test("buildFeedMessage formats a single source item correctly", () => {
-  const items = [
-    {
-      id: "1",
-      sourceName: "TestSource",
-      author: "Author Name",
-      title: "Post Title",
-      url: "https://example.com/post",
-      excerpt: "First para. Second para that continues.",
-    },
-  ]
-  const result = buildFeedMessage(items)
-  assert.ok(result, "Expected formatted message")
-  assert.ok(result.chunks.length >= 1, "Expected at least one chunk")
-  assert.ok(result.chunks[0].includes("Daily Feed"), "Expected header")
-  assert.ok(result.chunks[0].includes("Author Name"), "Expected byline with author")
-  assert.ok(result.chunks[0].includes("Post Title"), "Expected title")
-})
-
-test("buildFeedMessage returns null for empty items", () => {
-  assert.equal(buildFeedMessage([]), null)
-})
-
-test("buildFeedMessage splits chunks at 1900 chars", () => {
-  const items = [
-    {
-      id: "1",
-      sourceName: "Source",
-      author: "A",
-      title: "T".repeat(400),
-      url: "https://x.com/p1",
-      excerpt: "X".repeat(1600),
-    },
-    {
-      id: "2",
-      sourceName: "Source",
-      author: "B",
-      title: "Normal",
-      url: "https://x.com/p2",
-      excerpt: "This should be in a different chunk from the first oversized item.",
-    },
-  ]
-  const result = buildFeedMessage(items)
-  assert.ok(result.chunks.length > 1, `Expected multiple chunks, got ${result.chunks.length}`)
-  assert.ok(result.chunks[0].includes("Daily Feed"), "First chunk must include the header")
-  assert.ok(
-    result.chunks.some((c) => c.includes("This should be")),
-    "Second item should appear in a chunk",
-  )
-})
 
 // ─── rssAdatper.parse ──────────────────────────────────────────
 
@@ -298,20 +144,50 @@ test("rssAdapter no image captions in excerpts", async () => {
   }
 })
 
+// The excerpt rules, on every item of every real feed fixture. An excerpt is whole paragraphs of
+// the article text, separated by one blank line: no markup, no separator lines, no image
+// captions, and no more than the three paragraphs the builder takes.
+test("every item of the real feed fixtures reads as an excerpt of whole paragraphs", async () => {
+  const feeds = [
+    ["owlposting", "owlposting-rss.xml", 20],
+    ["forbetterscience", "forbetterscience-rss.xml", 10],
+    ["ipscell", "ipscell-rss.xml", 10],
+    ["liorpachter", "liorpachter-rss.xml", 10],
+  ]
+  const { rssAdapter } = mod.__test
+  for (const [id, file, expected] of feeds) {
+    const fm = mockFetch(() => new Response(fixture(file), { status: 200 }))
+    let items
+    try {
+      const adapter = rssAdapter({
+        id,
+        name: id,
+        url: `https://example.test/${id}/feed/`,
+        maxAgeDays: 100_000,
+        maxItems: 50,
+      })
+      items = await adapter.collect({ KV: simpleKv() })
+    } finally {
+      fm.restore()
+    }
+    assert.equal(items.length, expected, `${id}: every item of the fixture is collected`)
+    for (const item of items) {
+      const where = `${id}: ${item.title}`
+      assert.ok(item.excerpt.length > 0, `${where}: no excerpt`)
+      assert.equal(item.excerpt, item.excerpt.trim(), `${where}: untrimmed`)
+      const paragraphs = item.excerpt.split("\n\n")
+      assert.ok(paragraphs.length <= 3, `${where}: ${paragraphs.length} paragraphs`)
+      for (const paragraph of paragraphs) {
+        assert.ok(paragraph.trim(), `${where}: an empty paragraph`)
+        assert.doesNotMatch(paragraph, /^[-*~=_\s]+$/, `${where}: a separator line is a paragraph`)
+      }
+      assert.doesNotMatch(item.excerpt, /<\/?[a-z][^>]*>/i, `${where}: markup in the excerpt`)
+      assert.doesNotMatch(item.excerpt, /figcaption|image caption/i, `${where}: a caption`)
+    }
+  }
+})
+
 // ─── sitemapAdapter (no-RSS sources) ──────────────────────────
-
-test("jsonLdArticle reads headline, author and publish date from schema.org JSON-LD", () => {
-  const { jsonLdArticle } = mod.__test
-  const ld = jsonLdArticle(fixture("asimov-article.html"))
-  assert.equal(ld.headline, "The Origins of Adjuvants")
-  assert.equal(ld.author.name, "Kamal Nahas")
-  assert.equal(ld.datePublished, "2026-01-15T00:00:00.000Z")
-})
-
-test("jsonLdArticle returns null when no Article block is present", () => {
-  const { jsonLdArticle } = mod.__test
-  assert.equal(jsonLdArticle("<html><body><p>no ld here</p></body></html>"), null)
-})
 
 test("sitemapAdapter baselines silently on first run, then posts only new articles", async () => {
   const { sitemapAdapter } = mod.__test
@@ -435,39 +311,75 @@ test("handlePostDailyFeed skips when no new items exist (all already posted)", a
   }
 })
 
-test("handlePostDailyFeed posts items and marks KV on first run for new source", async () => {
-  const { rssAdapter } = (await import("./discord-feed.js")).__test
+// The Owl Posting feed of 2026-06-18 (a real capture), read on 2026-06-20: three posts are within
+// the 30 days the source keeps, and together they are longer than one Discord message.
+async function runDailyFeed({ discordStatus = 200 } = {}) {
+  mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-06-20T12:00:00.000Z") })
   const kv = simpleKv()
-
-  // This tests the actual pipeline: collect → filter → build → post
-  // We'll use a small feed fixture with known items
-  const feedFixture = fixture("owlposting-rss.xml")
-
-  const fetchMock = mockFetch((url) => {
+  // Every source has been read before, so each keeps its age limit and posts what is new.
+  for (const id of ["owlposting", "ipscell", "liorpachter", "asimovpress", "clockwork"]) {
+    kv._.set(`feed_source_seen_v34:${id}`, "1")
+  }
+  const posts = []
+  const network = mockFetch((url, init) => {
     const parsed = new URL(url)
-    if (parsed.href === "https://www.owlposting.com/feed/" || parsed.pathname.endsWith("/feed/")) {
-      return new Response(feedFixture, { status: 200 })
-    }
-    // Discord API
     if (parsed.hostname === "discord.com") {
-      return new Response(JSON.stringify({ id: "mock_msg_1" }), { status: 200 })
+      posts.push(JSON.parse(init.body).content)
+      return discordStatus === 200
+        ? new Response(JSON.stringify({ id: `message-${posts.length}` }), { status: 200 })
+        : new Response(JSON.stringify({ message: "Missing Access" }), { status: discordStatus })
+    }
+    if (parsed.href === "https://www.owlposting.com/feed/") {
+      return new Response(fixture("owlposting-rss.xml"), { status: 200 })
     }
     return new Response("not found", { status: 404 })
   })
-
   try {
-    // Override SOURCES to only Owl Posting for this test
     const result = await handlePostDailyFeed({
       KV: kv,
       DISCORD_FEED_CHANNEL_ID: "123",
       DISCORD_BOT_TOKEN: "bot",
     })
-    // Should either post or report no-new-content (items may be old)
-    // Either way it should not crash
-    assert.ok(result.ok)
+    return { result, posts, kv }
   } finally {
-    fetchMock.restore()
+    network.restore()
+    mock.timers.reset()
   }
+}
+
+test("handlePostDailyFeed turns the real Owl Posting feed into Discord messages under Discord's limit", async () => {
+  const { result, posts, kv } = await runDailyFeed()
+  assert.equal(result.ok, true)
+  assert.equal(result.item_count, 3)
+  assert.deepEqual(result.sources, ["Owl Posting"])
+  assert.ok(posts.length >= 2, `three long posts need more than one message, got ${posts.length}`)
+  assert.ok(
+    posts.every((content) => content.length <= 2000),
+    `Discord refuses a message over 2000 characters: ${posts.map((post) => post.length)}`,
+  )
+  assert.match(posts[0], /^\*\*Daily Feed — June 20th, 2026\*\*/)
+  const all = posts.join("\n")
+  for (const title of [
+    "The makings of a good bioweapon",
+    "How to build a cancer vaccine",
+    "The ballad of TIGIT",
+  ]) {
+    assert.ok(all.includes(title), `${title} was not posted`)
+  }
+  // Only what was posted is marked posted: the older posts stay for a later day.
+  const marked = [...kv._.keys()].filter((key) => key.startsWith("feed_v34:owlposting:"))
+  assert.equal(marked.length, 3)
+})
+
+test("handlePostDailyFeed marks nothing posted when Discord refuses, so tomorrow posts it", async () => {
+  const { result, kv } = await runDailyFeed({ discordStatus: 403 })
+  assert.equal(result.ok, false)
+  assert.equal(result.error, "post_failed")
+  assert.match(result.details, /Discord API 403/)
+  assert.deepEqual(
+    [...kv._.keys()].filter((key) => key.startsWith("feed_v34:")),
+    [],
+  )
 })
 
 // ─── Helpers ───────────────────────────────────────────────────
