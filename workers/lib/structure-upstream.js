@@ -8,15 +8,11 @@
 // of the three provider hosts, and it follows a redirect only to another URL that
 // passes the same test, at most three times.
 //
-// The three hosts are the ones the stored rows use (every stored AlphaFold URL
-// starts https://alphafold.ebi.ac.uk/files/, every SWISS-MODEL URL starts
-// https://swissmodel.expasy.org/, and PDB URLs are derived on models.rcsb.org;
-// measured on production 2026-10-03). A fourth provider is one entry here.
-const STRUCTURE_UPSTREAM_HOSTS = Object.freeze([
-  "models.rcsb.org",
-  "alphafold.ebi.ac.uk",
-  "swissmodel.expasy.org",
-])
+// The hosts, the byte cap, the SWISS-MODEL HEADER line and the body limiter are not
+// defined here: the page loads a guess's structure from the providers with the same
+// ones, so they live in quartz/static/geneguessr/structure-bytes.js.
+import { isStructureProviderUrl } from "../../quartz/static/geneguessr/structure-bytes.js"
+
 const MAX_STRUCTURE_UPSTREAM_REDIRECTS = 3
 
 export class StructureUpstreamRefusedError extends Error {
@@ -24,22 +20,6 @@ export class StructureUpstreamRefusedError extends Error {
     super(`Structure upstream refused: ${reason}`)
     this.name = "StructureUpstreamRefusedError"
   }
-}
-
-export function isAllowedStructureUpstreamUrl(value) {
-  let url
-  try {
-    url = new URL(String(value))
-  } catch {
-    return false
-  }
-  return (
-    url.protocol === "https:" &&
-    url.username === "" &&
-    url.password === "" &&
-    url.port === "" &&
-    STRUCTURE_UPSTREAM_HOSTS.includes(url.hostname)
-  )
 }
 
 // The response's media type is ours: it follows the file format in the key, never
@@ -58,69 +38,6 @@ export function structureFormatFromKey(cacheKey) {
   return "cif"
 }
 
-// Refuse to deliver an extremely large structure file: Mol* chokes on multi-10 MB
-// models, and a Worker isolate (128 MB) serves many requests at once. The cap counts
-// the bytes that actually stream, after decompression, because no upstream header is
-// a reliable size. Measured 2026-10-03 (curl asking for gzip and br, and a local
-// workerd run): RCSB sends no Content-Length (chunked); AlphaFold's is the gzip size on
-// the wire, and workerd drops it when it decompresses; SWISS-MODEL sent a chunked gzip
-// body with no Content-Length to curl and a plain Content-Length to workerd.
-export const MAX_STRUCTURE_FILE_BYTES = 20 * 1024 * 1024
-
-// SWISS-MODEL PDB files commonly omit the HEADER record Mol* needs to create an
-// "entry" object ("Cannot read properties of undefined (reading 'entry')"). This
-// anonymous line does not leak the protein's identity. It is emitted ahead of the
-// upstream body, so nothing is buffered to prepend it.
-export const ANONYMOUS_PDB_HEADER = new TextEncoder().encode(
-  "HEADER    MODEL                                   01-JAN-00   0000\n",
-)
-
-export class StructureTooLargeError extends Error {
-  constructor(maxBytes) {
-    super(`Structure body is over ${maxBytes} bytes`)
-    this.name = "StructureTooLargeError"
-  }
-}
-
-// Streams `body` to the caller, at most `maxBytes` of it. The next chunk is read only
-// when the caller asks for it, so a large file is never held in memory. Past the cap
-// the upstream is cancelled and the stream errors, so the caller never receives a
-// complete oversize file and the upstream is not drained. `prefix` bytes come first
-// and do not count against the cap. `onTooLarge` is called once, when the cap is hit.
-export function limitStructureBody(
-  body,
-  { maxBytes = MAX_STRUCTURE_FILE_BYTES, prefix = null, onTooLarge = null } = {},
-) {
-  const reader = body.getReader()
-  let received = 0
-  let prefixSent = !prefix
-  return new ReadableStream({
-    async pull(controller) {
-      if (!prefixSent) {
-        prefixSent = true
-        controller.enqueue(prefix)
-        return
-      }
-      const { value, done } = await reader.read()
-      if (done) {
-        controller.close()
-        return
-      }
-      received += value.byteLength
-      if (received > maxBytes) {
-        onTooLarge?.(received)
-        await reader.cancel().catch(() => {})
-        controller.error(new StructureTooLargeError(maxBytes))
-        return
-      }
-      controller.enqueue(value)
-    },
-    cancel(reason) {
-      return reader.cancel(reason)
-    },
-  })
-}
-
 // Fetches `url` and follows redirects itself, so each hop is checked before it is
 // requested. Throws StructureUpstreamRefusedError for a URL or redirect target that
 // fails the check or a chain longer than three redirects; any other failure is the
@@ -128,7 +45,7 @@ export function limitStructureBody(
 export async function fetchStructureUpstream(url, init = {}) {
   let current = String(url)
   for (let redirects = 0; ; redirects += 1) {
-    if (!isAllowedStructureUpstreamUrl(current)) {
+    if (!isStructureProviderUrl(current)) {
       throw new StructureUpstreamRefusedError(redirects === 0 ? "url" : "redirect target")
     }
     const response = await fetch(current, { ...init, redirect: "manual" })

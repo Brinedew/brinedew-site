@@ -233,20 +233,25 @@ After deployment:
 ## Structure bytes and KV
 
 `/api/structure-cached?key=` is a public GET, so the server alone decides what it
-fetches. The upstream comes from the key: RCSB for a `pdb/` key, the stored
+fetches. A guess's ordinary view does not use it: the page loads a guess from its
+provider (see "A guess loads from its provider" below). The route serves the daily
+target (`type=target`), the page's fallback for a guess whose provider failed for that
+visitor, the Discord recap render page and the admin preview. The upstream comes from the key: RCSB for a `pdb/` key, the stored
 `proteins` row for an `alphafold/` or `swissmodel/` key (one indexed row), and
 the AlphaFold file derived from the accession when no row matches. No query
 parameter names an upstream. Every structure fetch (the route and the daily
 availability probe) goes through
 `fetchStructureUpstream` in `workers/lib/structure-upstream.js`: https only, no
 userinfo, no port, and exactly `models.rcsb.org`, `alphafold.ebi.ac.uk` and
-`swissmodel.expasy.org`, with redirects followed by hand (three at most) and
-each hop checked. The response's `Content-Type` follows the key's format
+`swissmodel.expasy.org` (the one list, `STRUCTURE_PROVIDER_HOSTS` in
+`quartz/static/geneguessr/structure-bytes.js`), with redirects followed by hand (three
+at most) and each hop checked. The response's `Content-Type` follows the key's format
 (`bcif` octet-stream, `cif` chemical/x-cif, `pdb` chemical/x-pdb) with
-`X-Content-Type-Options: nosniff`. A fourth provider is one entry in that file.
+`X-Content-Type-Options: nosniff`. A fourth provider is one entry in that list: the Worker's allowlist, the game
+document's `connect-src` and the page's own check all read it.
 
 The route streams the provider's body and never buffers it, and cuts it off at 20 MiB
-(`MAX_STRUCTURE_FILE_BYTES` in the same file), counted as the bytes arrive, because no
+(`MAX_STRUCTURE_FILE_BYTES` in `structure-bytes.js`), counted as the bytes arrive, because no
 upstream header is a reliable size. Live on 2026-10-03: RCSB sends no `Content-Length`
 (chunked); AlphaFold's is the gzip size on the wire (62,578 for a 279,449 byte file) and
 workerd drops it when it decompresses; SWISS-MODEL sent a chunked gzip body with no
@@ -254,11 +259,45 @@ workerd drops it when it decompresses; SWISS-MODEL sent a chunked gzip body with
 the cap the upstream is cancelled and the response errors. A SWISS-MODEL PDB gets its
 anonymous `HEADER` line streamed ahead of the body, which Mol* needs and the provider
 omits. There is no R2 structure cache: R2 is not enabled on the account, so every view
-is one Worker request and one provider fetch, and the browser HTTP cache (`public,
-max-age=604800, immutable` for a key) serves repeat views. The browser keeps nothing
-else: the page has no IndexedDB structure cache. A structure token carries no `cached`
+through the route is one Worker request (two on the account's meter: the public edge
+Worker and the stateful Worker it calls) and one provider fetch, and the browser HTTP
+cache (`public, max-age=604800, immutable` for a key) serves repeat views. The browser
+keeps nothing else: the page has no IndexedDB structure cache. A structure token carries no `cached`
 or `sizeBytes`, and `STRUCTURES_BUCKET` is read only by the Discord recap image store
 (`workers/lib/discord-recap-images.js`).
+
+### A guess loads from its provider (B-943)
+
+A guess is not a secret, so its structure does not need the Worker. A guess token carries
+`directUrl`, the stored upstream URL the route would have fetched (RCSB's ModelServer
+for a PDB id, the stored AlphaFold or SWISS-MODEL URL), and only if it passes the same
+provider check as the route. The page checks it again, then fetches it with
+`credentials: "omit"`, `referrerPolicy: "no-referrer"` and `cache: "force-cache"`,
+bounds the body with `limitStructureBody` (the 20 MiB cap, and the anonymous `HEADER` line
+for a SWISS-MODEL PDB, both from `structure-bytes.js`) and gives Mol* a blob URL. The
+game document's `connect-src` lists the three provider hosts (built from the same list in
+`workers/lib/the-only-public-document-policy-do-not-duplicate.js`, which `_headers`
+carries); a fourth host in the list reaches all three consumers. All three providers
+answered a CORS fetch from `https://geneguessr.brinedew.bio` with
+`Access-Control-Allow-Origin: *` on 2026-10-03 (RCSB ModelServer BCIF, AlphaFold mmCIF,
+SWISS-MODEL PDB; the error answers of SWISS-MODEL and RCSB carry no CORS header, which
+the page treats as a failure like any other).
+
+`force-cache` matters: RCSB and SWISS-MODEL send no `Cache-Control`, so a default repeat
+view costs a provider request (270 to 424 ms in Chrome on 2026-10-03) while a forced one
+is served from the HTTP cache in 1 to 2 ms. The price is that a cached file lives until
+the browser evicts it; a structure file at one URL does not change in practice.
+
+The fallback is per structure. A provider that fails to connect, answers an error or sends
+nothing for 15 seconds (`PROVIDER_STALL_MS` in `app.js`) sends that one guess through the
+Worker route (`url`, the key form). An oversize body does not: the route would cut it off
+too, so the viewer shows its error and nothing is downloaded twice. The fallback rate is
+readable on the account meter as `/api/structure-cached?key=` requests per bootstrap.
+
+The target never takes this path. Its token is built by `buildTargetStructureTokenFromMeta`
+with the opaque `type=target` URL, no `directUrl`, no key, and `private, no-store`: a
+provider URL, a structure key or an accession would name the answer. `buildGuessStructureToken`
+is only for proteins the player has already guessed (and the target after the reveal).
 
 A page load needs a structure token for every guess already made. The bootstrap puts
 each one in its guess entry as `structureToken`, built by `buildGuessStructureToken`
@@ -367,6 +406,32 @@ deleted R2 admin and debug routes answer 404, that `STRUCTURES_BUCKET` appears i
 `workers/` only in the Discord recap image fallback, and that the admin yearly fill no
 longer calls a pin step.
 
+`workers/guess-direct-structure-urls.test.js` must prove, through the real Worker on the
+production-shaped local D1, that a guess token's `directUrl` is the URL the Worker route
+fetches for the same key (a PDB, a SWISS-MODEL and an AlphaFold one), that the bootstrap,
+the guess response and `/api/structure-token?uniprot=` return the same token, that a
+protein with no stored structure or an off-provider stored URL (another host, http,
+userinfo, a port) gets no `directUrl`, that for a target of each source nothing the Worker
+sends before the reveal (practice start, each guess, a reload) names the target's accession,
+structure id or stored URLs and its token has no `directUrl`, key or link, and that the game
+document's `connect-src` lists exactly the three provider hosts while no other document's
+does.
+
+`e2e/geneguessr-direct-structures.e2e.mjs` proves the page's side in a real Chrome with the
+real Mol* build (`public/static/vendor`, which the build produces) and the game document's
+real policy: a visit of page load plus three guesses (a PDB, a SWISS-MODEL and an AlphaFold)
+makes no `/api/structure-cached?key=` request, one request to each provider and one target
+view, renders all four viewers, sends no referrer and no cookie to a provider and hands Mol*
+the provider's bytes whole (the SWISS-MODEL file behind its `HEADER` line); the same visit
+with no `directUrl` in the payloads loads every guess through the Worker as before; a
+returning visitor's load, opened cards and reload make no structure request to the Worker
+for a guess; no payload or provider request names the target; a provider that resets,
+answers 503, answers 404 without CORS or stalls sends that one guess through the Worker; an
+oversize body is cut off and not downloaded again; and a `directUrl` that is off the hosts,
+http, or carries credentials is never requested. Playwright disables the HTTP cache while a
+route is installed, so a repeat view's cost was measured against the real providers instead
+(see "A guess loads from its provider" for the numbers).
+
 `workers/bootstrap-guess-structure-tokens.test.js` must prove, through the real Worker on
 the production-shaped local D1, that every guess entry in the bootstrap carries the
 token `/api/structure-token?uniprot=` returns for that protein (a PDB, a SWISS-MODEL
@@ -378,8 +443,10 @@ each make one bootstrap request and no token request, the page keeps no IndexedD
 database, and without embedded tokens it asks the route once per guess.
 
 `quartz/static/geneguessr/structure-token-hydration.test.js` guards the page source: no
-IndexedDB and no `sizeBytes`, the token cache seeded from the guess entries, and the
-token route as the one fallback.
+IndexedDB and no `sizeBytes`, the token cache seeded from the guess entries, the token route
+as the one fallback, and the provider fetch (checked against the allowlist, no credentials,
+no referrer, `force-cache`, bounded by the shared limiter, no provider host written in the
+page).
 
 `workers/structure-kv-writes.test.js` must prove, on the production-shaped local
 D1 with R2 unbound, that a structure token, a first and a returning practice
