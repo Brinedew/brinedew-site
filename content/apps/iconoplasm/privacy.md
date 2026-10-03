@@ -64,12 +64,14 @@ Your settings — highlight mode, tooltip theme, card variant, and blocklist —
 
 ## Network Requests
 
-The extension makes requests only to `iconoplasm.brinedew.bio`:
+The extension makes requests only to `iconoplasm.brinedew.bio` and to the Bunny CDN at `iconoplasmportraits.b-cdn.net`:
 
 | Request | What's Sent | When |
 |---------|-------------|------|
 | Gene batch lookup | List of gene symbols found on the current page | When you visit a page with gene symbols |
 | Blot fetch | Gene symbol | When a hover card is shown |
+| Gene card fetch (Bunny CDN) | Gene symbol | When a hover card is shown |
+| Gene list and portrait fetch (Bunny CDN) | File name only | When the gene list refreshes and when a portrait is shown |
 | Discovery encounter | Gene symbol | When a gene is first encountered (signed-in users only) |
 | Discovery state sync | Session cookie | On page load (signed-in users only) |
 | Caretaker dossier and changes | Session cookie, gene symbol, explicit command inputs, and manifestation prose when saving | Only on signed-in gene pages for an invited, current, or former caretaker |
@@ -104,6 +106,7 @@ The extension's content script runs on all web pages (except `iconoplasm.brinede
 
 - **Cloudflare**: Infrastructure provider for `iconoplasm.brinedew.bio`. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
 - **Cloudflare Web Analytics**: Used on the website only after analytics consent, for aggregate traffic measurement.
+- **Bunny CDN (BunnyWay d.o.o.)**: Content delivery provider for `iconoplasmportraits.b-cdn.net`. See [Bunny's privacy policy](https://bunny.net/privacy/).
 - **Discord**: Used for website login.
 - **Image API providers you choose**: Used only when you start direct generation or editing.
 - No data is shared with advertisers, analytics providers, or unrelated third parties.
