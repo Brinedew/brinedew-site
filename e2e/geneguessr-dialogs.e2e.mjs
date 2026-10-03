@@ -161,6 +161,11 @@ async function visitor(browser, { seenTutorial = true } = {}) {
 }
 
 // What the visitor can tell about the page right now.
+// Waits up to 5 s for a condition the page reaches a task after a key press (a dialog's "close"
+// event runs after the dialog has closed), then lets the assertion that follows report it.
+const settle = (page, condition) =>
+  page.waitForFunction(condition, null, { timeout: 5000 }).catch(() => {})
+
 const state = (page) =>
   page.evaluate(() => {
     const active = document.activeElement
@@ -210,6 +215,8 @@ test("a first visit opens the first tutorial step by itself; Escape closes it an
     }
 
     await page.keyboard.press("Escape")
+    // The dialog closes at once; the step is written by its "close" event handler, a task later.
+    await settle(page, () => localStorage.getItem("gg_tut") === "1")
     const closed = await state(page)
     assert.equal(closed.openDialogs, 0, "Escape closes it")
     assert.equal(closed.seen, "1", "the step is remembered, so it does not open again")
@@ -329,6 +336,9 @@ test("the practice dialog: label, Validate, Play from the pasted genes, and the 
       [...genes, "ZZZ99"].join("\n"),
     )
     await page.keyboard.press("Escape")
+    await settle(page, () =>
+      document.activeElement?.classList.contains("pg-sidebar-practice-button"),
+    )
     const escaped = await state(page)
     assert.equal(escaped.openDialogs, 0)
     assert.match(escaped.focusedClass, /pg-sidebar-practice-button/, "focus returns to the button")
