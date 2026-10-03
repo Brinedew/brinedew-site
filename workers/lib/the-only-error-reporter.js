@@ -6,7 +6,9 @@
 // 5xx sends one event, after the response, through ctx.waitUntil. The DSN's
 // key is rate-limited in Sentry (300 events/hour) so a storm cannot exhaust
 // the free quota. Nothing identifying leaves the Worker: no query string, no
-// cookies, tokens or client IPs.
+// cookies, tokens or client IPs. A scheduled job that throws is reported the same
+// way, by its cron expression, and rethrown so Cloudflare records the invocation as
+// failed (B-918).
 
 const DROPPED_HEADERS =
   /^(authorization|cookie|set-cookie|x-iconoplasm-|cf-connecting-ip|x-forwarded-for|x-real-ip|true-client-ip)/i
@@ -46,9 +48,9 @@ function scrubbedHeaders(request) {
   return out
 }
 
-function buildEvent({ env, request, worker, error, status }) {
-  const url = new URL(request.url)
-  const route = routeFingerprint(url.pathname)
+function buildEvent({ env, request, worker, error, status, job }) {
+  const url = request ? new URL(request.url) : null
+  const route = url ? routeFingerprint(url.pathname) : `cron ${job}`
   const title = error
     ? String(error?.message || error).slice(0, 500)
     : `HTTP ${status} ${request.method} ${route}`
@@ -61,14 +63,20 @@ function buildEvent({ env, request, worker, error, status }) {
     server_name: worker,
     release: env.SENTRY_RELEASE || undefined,
     environment: env.SENTRY_ENVIRONMENT || "production",
-    transaction: `${request.method} ${route}`,
+    transaction: request ? `${request.method} ${route}` : route,
     fingerprint: error ? ["{{ default }}", route] : [worker, String(status), request.method, route],
-    tags: { worker, status: String(status || 500), host: url.host },
-    request: {
-      method: request.method,
-      url: `${url.origin}${url.pathname}`,
-      headers: scrubbedHeaders(request),
-    },
+    tags: request
+      ? { worker, status: String(status || 500), host: url.host }
+      : { worker, cron: job },
+    ...(request
+      ? {
+          request: {
+            method: request.method,
+            url: `${url.origin}${url.pathname}`,
+            headers: scrubbedHeaders(request),
+          },
+        }
+      : {}),
     ...(error
       ? {
           exception: {
@@ -134,4 +142,22 @@ export async function withErrorReporting(env, ctx, request, worker, run, { fetch
     send(env, ctx, { request, worker, status: response.status }, fetcher)
   }
   return response
+}
+
+// A scheduled job has no request. The job's failure is reported once, in the
+// background, and thrown again so the invocation's status says it failed.
+export async function withScheduledErrorReporting(
+  env,
+  ctx,
+  worker,
+  job,
+  run,
+  { fetcher = fetch } = {},
+) {
+  try {
+    return await run()
+  } catch (error) {
+    send(env, ctx, { worker, job, error }, fetcher)
+    throw error
+  }
 }
