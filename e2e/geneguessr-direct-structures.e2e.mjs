@@ -48,8 +48,8 @@
 // below the game under that.
 //
 // B-960 and B-959 add the D1 rows of a visit, from the statements' own receipts: a successful
-// session write records nothing, so a visit writes only the per-guess aggregate (2 rows a guess
-// once the protein has been guessed today), and the leaderboard read costs a handful of rows
+// session write records nothing, so a visit writes only the per-guess aggregate (1 row a guess
+// once the protein has been guessed today, B-964), and the leaderboard read costs a handful of rows
 // however many accounts exist (workers/leaderboard-streaks.test.js proves that at 1,000, 10,000
 // and 100,000 accounts). Failure modes, written before the code:
 // 12. a visit writes a row to the session-write evidence tables, or any D1 row other than the
@@ -397,7 +397,7 @@ before(async () => {
   await seedLeaderboard(db, LEADERBOARD)
   // The measured visits start from a day that is already under way: the board is built (the
   // first read builds it), and a visitor has guessed every protein a visit guesses, so each
-  // guess's aggregate row exists and costs 2 rows to bump instead of 3 to create.
+  // guess's aggregate row exists and costs 1 row to bump instead of 2 to create.
   const call = (path, init = {}) =>
     worker.fetch(
       new Request(`${origin}${path}`, {
@@ -1192,7 +1192,7 @@ for (const [layout, viewport] of [
           [],
           "the only rows a visit writes are the aggregates",
         )
-        assert.equal(result.meters.d1RowsWritten, 2 * guesses, "2 rows a guess")
+        assert.equal(result.meters.d1RowsWritten, guesses, "1 row a guess")
         const board = receipts.filter((receipt) => /leaderboard_streaks/.test(receipt.sql))
         assert.equal(board.length, layout === "desktop" ? 1 : 0, "one board read on a desktop")
         for (const read of board) {

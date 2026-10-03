@@ -32,11 +32,15 @@ const MEMBER_WHERE = (userId) =>
      AND s.current_streak > 0
      AND date(s.last_played_date) IS NOT NULL`
 
+// `CROSS JOIN` pins the join order: `stats` first, then the primary key of `users`. Left to
+// itself the planner scans `users` for the public choice (the build read 10,216 rows at 10,000
+// accounts, a row an account) when no index on that column exists (B-966), and 3,718 pinned. A
+// one-account refresh plans the same either way (stats primary key, then users primary key).
 const UPSERT_MEMBER_SQL = (userFilter) => `
   INSERT INTO leaderboard_streaks (user_id, last_played_date, current_streak, total_wins)
   SELECT s.user_id, date(s.last_played_date), s.current_streak, s.total_wins
   FROM stats s
-  INNER JOIN users u ON u.discord_id = s.user_id
+  CROSS JOIN users u ON u.discord_id = s.user_id
   WHERE ${userFilter}
   ON CONFLICT(user_id) DO UPDATE SET
     last_played_date = excluded.last_played_date,
@@ -115,6 +119,22 @@ const LEADERBOARD_SQL = `
     board.last_played_date ASC,
     users.discord_id ASC
   LIMIT ?`
+
+// `users.leaderboard_opt_in` has no index of its own (B-966). Migration 0016 made one, and no
+// query needs it: the board read, the trigger refreshes, the visibility switch and the account
+// erasure all go through the primary keys of `users` and `stats`. Only the one-time build above
+// chose it (1,022 rows read at 10,000 accounts); without it, and with its join order pinned, the
+// build reads `stats` and probes `users`: 3,718 rows at 10,000 accounts, once. Keeping the index
+// cost a row written on every new account (6 rows, 5 without) and on every change of the public
+// choice (3 rows, 2 without). The statement writes 0 rows (38 read
+// on a local D1) and the leaderboard publisher runs it once per isolate; delete it together with
+// the one in guess-aggregates.js once production's `sqlite_master` no longer lists the index.
+let optInIndexRetired = false
+export async function retireLeaderboardOptInIndex(db) {
+  if (optInIndexRetired) return
+  await db.prepare("DROP INDEX IF EXISTS idx_users_leaderboard_opt_in").run()
+  optInIndexRetired = true
+}
 
 const selectBoard = async (db, limit) => {
   const answer = await db.prepare(LEADERBOARD_SQL).bind(limit, limit, limit).all()
