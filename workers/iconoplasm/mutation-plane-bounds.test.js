@@ -574,6 +574,10 @@ test("a late projection is refreshed once from the live provider authority", asy
 })
 
 test("a failed live refresh keeps the last good same-day observation", async (t) => {
+  // A stale same-day sample needs a clock at least five minutes past midnight;
+  // the real clock gives none in the first minutes of a UTC day, when the
+  // late-UTC releases this test gates actually run.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-03T12:00:00.000Z") })
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
   let kvReads = 0
