@@ -11,21 +11,23 @@ import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-
 import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
 import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
 import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-snapshot-retirement-adapter.js"
-import { createVoteJobVersionMigrationCostAdapter } from "./operation-cost-vote-job-migration-adapter.js"
 import { createAssetSummaryMigrationCostAdapter } from "./operation-cost-asset-summary-migration-adapter.js"
 import { createBlacklistLookupMigrationCostAdapter } from "./operation-cost-blacklist-migration-adapter.js"
 import { createCompactDiscoveryMigrationCostAdapter } from "./operation-cost-compact-discovery-migration-adapter.js"
-import { createVoteWakeMigrationCostAdapter } from "./operation-cost-vote-wake-migration-adapter.js"
 import { createCompactDiscoveryActivationMigrationCostAdapter } from "./operation-cost-compact-discovery-activation-migration-adapter.js"
 import { createPublishStateIndexMigrationCostAdapter } from "./operation-cost-publish-state-index-migration-adapter.js"
-import { createFinalizationHandoffRetirementMigrationCostAdapter } from "./operation-cost-finalization-handoff-retirement-migration-adapter.js"
+import { createSchemaDropMigrationCostAdapter } from "./operation-cost-schema-drop-migration-adapter.js"
 import { createDiscoveryShelfMigrationCostAdapter } from "./operation-cost-discovery-shelf-migration-adapter.js"
 import { createSchemaTableMigrationCostAdapter } from "./operation-cost-schema-table-migration-adapter.js"
 import {
+  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
+  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
   GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME,
   GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS,
   GENE_VOTE_VERSION_MIGRATION_NAME,
   GENE_VOTE_VERSION_MIGRATION_STATEMENTS,
+  VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_NAME,
+  VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
 import {
@@ -37,6 +39,15 @@ import {
 
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
+    [
+      "iconoplasm-migration-0114",
+      createSchemaDropMigrationCostAdapter({
+        db: env.ICONOPLASM_DB,
+        name: VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_NAME,
+        statements: VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_STATEMENTS,
+        ...identities,
+      }),
+    ],
     [
       "iconoplasm-migration-0113",
       createSchemaTableMigrationCostAdapter({
@@ -57,8 +68,10 @@ export function createMigrationOperationCostAdapters(env, identities) {
     ],
     [
       "iconoplasm-migration-0110",
-      createFinalizationHandoffRetirementMigrationCostAdapter({
+      createSchemaDropMigrationCostAdapter({
         db: env.ICONOPLASM_DB,
+        name: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
+        statements: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
         ...identities,
       }),
     ],
@@ -73,13 +86,6 @@ export function createMigrationOperationCostAdapters(env, identities) {
     [
       "iconoplasm-migration-0108",
       createCompactDiscoveryActivationMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0107",
-      createVoteWakeMigrationCostAdapter({
         db: env.ICONOPLASM_DB,
         ...identities,
       }),
@@ -125,10 +131,6 @@ export function createMigrationOperationCostAdapters(env, identities) {
         db: env.ICONOPLASM_AUTHORING_DB,
         ...identities,
       }),
-    ],
-    [
-      "iconoplasm-migration-0098",
-      createVoteJobVersionMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
     ],
     [
       "iconoplasm-authoring-migration-0016",

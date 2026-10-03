@@ -900,10 +900,6 @@ class FakeStatement {
       })
       return { meta: { changes: 1 } }
     }
-    if (this.sql.includes("icono_vote_projection_refresh_jobs")) {
-      this.db.voteRefreshTouched = true
-      return { meta: { changes: 1 } }
-    }
     if (this.sql.trim().startsWith("DELETE FROM icono_image_votes")) {
       return { meta: { changes: 1 } }
     }
@@ -3761,7 +3757,6 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
     )
     // The inherited votes and the publisher's upvote are D1 vote rows.
     assert.equal(db.voteProjectionRows.length, 7)
-    assert.notEqual(db.voteRefreshTouched, true)
   } finally {
     globalThis.fetch = originalFetch
   }
