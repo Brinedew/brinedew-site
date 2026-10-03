@@ -40,9 +40,10 @@ const recurringJobs = jobsByMinute(ICONOPLASM_BACKGROUND_MINUTES)
 const nightlyJobs = jobsByMinute(ICONOPLASM_NIGHTLY_MINUTES)
 // The trigger fires at exactly the job minutes. A normal push uploads a Worker
 // version with `wrangler versions upload`, which never changes cron triggers,
-// so a change to the minute map reaches production only with a release that
-// runs `wrangler deploy` and installs the toml's trigger; the toml's string and
-// this one must be the same set (workers/iconoplasm-background-schedule.test.js).
+// so the release compares the toml's triggers with the installed ones and runs
+// `wrangler deploy` when they differ (scripts/stateful-worker-deploy-mode.mjs);
+// the toml's string and this one must be the same set
+// (workers/iconoplasm-background-schedule.test.js).
 export const ICONOPLASM_RECURRING_CRON = `${[...recurringJobs.keys()].sort((a, b) => a - b).join(",")} * * * *`
 export const ICONOPLASM_NIGHTLY_CRON = "56,58,59 23 * * *"
 export const ICONOPLASM_BACKGROUND_INVOCATIONS_PER_DAY = recurringJobs.size * 24 + nightlyJobs.size

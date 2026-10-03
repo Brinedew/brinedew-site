@@ -60,10 +60,15 @@ The one production workflow is `.github/workflows/deploy-quartz.yml`. A push to
 `main` releases compatible code and static assets: it checks the installed
 revision, runs the exact-commit CI gate, builds, applies reviewed online D1
 migrations (`scripts/apply-online-d1-migrations.mjs`, B-847), uploads and
-activates Worker versions (a pending Durable Object migration uses
-`wrangler deploy` instead), reconciles the Bunny pull zone policy, then deploys
-Pages. Worker versions preserve the installed routes, Cron triggers, and Queue
-consumers. `scripts/verify-code-release.mjs` refuses the push with
+activates Worker versions, reconciles the Bunny pull zone policy, then deploys
+Pages. Worker versions preserve the installed routes and Queue consumers, and
+cannot change Cron triggers or apply a Durable Object migration, so
+`scripts/stateful-worker-deploy-mode.mjs` asks Cloudflare first and the release
+uses `wrangler deploy` instead of a version upload when a migration tag is
+pending or the toml's `crons` differ from the installed schedules. The same
+script verifies the installed triggers equal the toml's after the last Worker
+deploy and fails the release otherwise. The toml owns the trigger set: record a
+trigger change there, never by hand on the provider. `scripts/verify-code-release.mjs` refuses the push with
 `CODE_RELEASE_REQUIRES_MAINTENANCE` when the changes since the installed
 revision include an unapplied migration that is not reviewed as online, or a
 change to `cloudflare/deployment-topology.json` or
