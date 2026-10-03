@@ -2552,8 +2552,8 @@ img-comparison-slider.rendered [slot="second"] {
 }
 
 /* Source: B-467 — the copy summary is now a circular icon button (see
-   .icono-candidate-action-btn). Keep the legacy selector so existing tests and any external
-   theming keep finding it, but defer all visual styling to the action-btn rules. */
+   .icono-candidate-action-btn). Keep the legacy selector so any external theming keeps
+   finding it, but defer all visual styling to the action-btn rules. */
 .icono-candidate-copy-panel summary {
   display: inline-flex;
   align-items: center;
@@ -4669,10 +4669,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 /* Source: B-467 — compact action rail for candidate blots.
    The remove and copy controls used to be wide pill buttons with text labels. They now share
    a circular icon button shape so they read as a single rail next to the approve/reject vote
-   buttons. The accessible label stays as visually-hidden text inside each button so the
-   public-candidate-actions test and screen readers keep finding "Remove" and "Copy to gene".
-   Do not collapse this back to text-only buttons without updating both the test and the
-   shared vote box visuals — the three controls are intentionally the same diameter. */
+   buttons. The accessible label stays as visually-hidden text inside each button so
+   screen readers keep finding "Remove" and "Copy to gene". Do not collapse this back to
+   text-only buttons without updating the shared vote box visuals — the three controls are
+   intentionally the same diameter. */
 .icono-candidate-action-btn {
   appearance: none;
   display: inline-flex;

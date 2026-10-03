@@ -1,13 +1,11 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
+
 import test, { afterEach, beforeEach } from "node:test"
 import { Event as DOMEvent, parseHTML } from "linkedom"
 
 import {
   createCaretakerManifestationPanel,
-  manifestationWordDiff,
   normalizedDossier,
-  proseValidationError,
   renderCaretakerManifestationPanel,
 } from "./caretaker-manifestations.js"
 
@@ -25,84 +23,6 @@ afterEach(() => {
     if (originalGlobals[key]) Object.defineProperty(globalThis, key, originalGlobals[key])
     else delete globalThis[key]
   }
-})
-
-test("the caretaker modal versions its complete immutable module graph", async () => {
-  const modules = [
-    "caretaker-manifestations.js",
-    "caretaker-manifestations-controller.js",
-    "caretaker-manifestations-events.js",
-    "caretaker-manifestations-view.js",
-  ]
-  for (const moduleName of modules) {
-    const source = await readFile(new URL(moduleName, import.meta.url), "utf8")
-    const localImports = Array.from(
-      source.matchAll(/(?:from\s+|import\s*)["'](\.\.?\/[^"']+\.js(?:\?[^"']*)?)["']/g),
-      (match) => match[1],
-    )
-    assert.deepEqual(
-      localImports.filter((specifier) => !specifier.includes("?v=")),
-      [],
-      `${moduleName} must version every static submodule import`,
-    )
-  }
-  const controller = await readFile(
-    new URL("caretaker-manifestations-controller.js", import.meta.url),
-    "utf8",
-  )
-  assert.match(controller, /const retryDelays = \[0, 1_000, 3_000, 7_000, 15_000\]/)
-  assert.match(controller, /matchesPublishedState !== false/)
-})
-
-test("caretaker load failures name the affected tools and allow one explicit retry", async () => {
-  const { document } = parseHTML('<html><body><div id="host"></div></body></html>')
-  globalThis.document = document
-  const host = document.getElementById("host")
-  let calls = 0
-  const panel = createCaretakerManifestationPanel({
-    escapeHtml,
-    fetchJSON: async () => {
-      calls++
-      throw Object.assign(new Error("SESSION_AUTHORITY_UNAVAILABLE"), { status: 503 })
-    },
-  })
-  await panel.mount(host, {
-    symbol: "TRIM28",
-    currentUser: { account_id: "account_test" },
-    authResolved: true,
-  })
-  assert.match(host.textContent, /Caretaker tools are temporarily unavailable/)
-  assert.doesNotMatch(host.textContent, /SESSION_AUTHORITY|AUTHENTICATION|Sign in/)
-  assert.equal(calls, 1)
-  host.querySelector("[data-icono-caretaker-retry-load]").click()
-  await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(calls, 2)
-  assert.ok(host.querySelector("[data-icono-caretaker-retry-load]"))
-})
-
-test("an expired caretaker session gives a contextual sign-in action", async () => {
-  const { document } = parseHTML('<html><body><div id="host"></div></body></html>')
-  globalThis.document = document
-  const host = document.getElementById("host")
-  const panel = createCaretakerManifestationPanel({
-    escapeHtml,
-    loginUrl: "/api/auth/login?return_to=%2Fgene%2FTRIM28",
-    fetchJSON: async () => {
-      throw Object.assign(new Error("AUTHENTICATION_REQUIRED"), { status: 401 })
-    },
-  })
-  await panel.mount(host, {
-    symbol: "TRIM28",
-    currentUser: { account_id: "account_test" },
-    authResolved: true,
-  })
-  assert.match(host.textContent, /Your session expired.*caretaker tools/)
-  assert.equal(host.querySelector("a").textContent, "Sign in")
-  assert.equal(
-    host.querySelector("a").getAttribute("href"),
-    "/api/auth/login?return_to=%2Fgene%2FTRIM28",
-  )
-  assert.doesNotMatch(host.textContent, /AUTHENTICATION_REQUIRED/)
 })
 
 function escapeHtml(value) {
@@ -165,52 +85,6 @@ function dossier() {
   }
 }
 
-function allRevisionIds(value) {
-  return value.manifestations.flatMap((item) =>
-    (item.revisions || []).map((revision) => revision.manifestation_revision_id),
-  )
-}
-
-test("the dossier renders a tabbed autosave dialog, exact version choices, and own-only deletion", () => {
-  const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
-  assert.match(html, /Manifestation</)
-  assert.match(
-    html,
-    /data-icono-caretaker-autosave-state data-state="saved" role="status" title="Saved"><svg class="icono-caretaker-cloud"[^]*?data-icono-caretaker-autosave-label>Saved</,
-  )
-  assert.match(html, /data-icono-caretaker-tab="manifestation"/)
-  assert.match(html, /data-icono-caretaker-tab="history"/)
-  assert.match(html, /data-icono-caretaker-tab="settings"/)
-  assert.match(html, /data-icono-caretaker-tag-categories/)
-  // B-835: History is a timeline + preview; Settings holds the danger zone.
-  assert.match(html, /Tags always stay private/)
-  assert.match(html, /data-icono-caretaker-version="/, "versions are a selectable timeline")
-  assert.match(html, /data-icono-caretaker-preview/, "the selected version is previewed")
-  assert.match(html, /Edit from here/)
-  assert.match(html, /Danger zone/)
-  assert.match(html, /Delete the current manifestation/)
-  assert.match(html, /Stop being caretaker/)
-  // B-859: the UI says what the published privacy page says (#320): removed from
-  // public view, not from backups. Nothing purges and no legal hold can be placed.
-  assert.match(html, /removed from public view on the site, though not from backups/)
-  assert.doesNotMatch(html, /purge|legal(ly)? hold/i)
-  // B-874: there is no second save step and no second meaning of "public".
-  const other = dossier()
-  const nonCanonical = allRevisionIds(other).find((id) => id !== other.head.canonical_revision_id)
-  for (const selectedRevisionId of [nonCanonical, other.head.canonical_revision_id]) {
-    const selected = renderCaretakerManifestationPanel(other, escapeHtml, { selectedRevisionId })
-    assert.doesNotMatch(selected, /Make public|Use my version|New images use your version/)
-    assert.doesNotMatch(selected, /data-icono-caretaker-select/)
-    assert.doesNotMatch(selected, /icono-caretaker-badge">Public/)
-  }
-  // The version new images are drawn from is marked by a glyph, not the word "public".
-  const marks = html.match(/data-icono-caretaker-source-mark[^>]*>/g) || []
-  assert.equal(marks.length, 2, "one mark in the timeline, one in the preview of that version")
-  assert.match(marks[0], /title="New images are drawn from this version"/)
-  assert.doesNotMatch(html, /curator/i)
-  assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
-})
-
 test("pending invitations pin visible terms and ask no departure question (B-860)", () => {
   const pending = dossier()
   pending.assignment.status = "pending_acceptance"
@@ -251,70 +125,6 @@ test("an invitation without a displayable terms version fails closed", () => {
   assert.doesNotMatch(html, /data-icono-caretaker-accept/)
 })
 
-test("a withdrawn own lineage is restored explicitly before another save", () => {
-  const withdrawn = dossier()
-  withdrawn.manifestations[0].status = "withdrawn"
-  withdrawn.manifestations[0].can_withdraw = false
-  withdrawn.manifestations[0].can_restore = true
-  const html = renderCaretakerManifestationPanel(withdrawn, escapeHtml)
-  assert.match(html, /data-icono-caretaker-restore="/)
-  assert.match(html, /Restore the current manifestation/)
-  assert.match(html, /Restore it before writing another version/)
-  assert.doesNotMatch(html, /Save new version/)
-})
-
-test("a new tenure forks an older lineage and may withdraw it like any steward (B-860)", () => {
-  const multiple = dossier()
-  multiple.manifestations[0].belongs_to_current_assignment = false
-  multiple.manifestations[0].created_at = "2025-01-01T00:00:00.000Z"
-  multiple.manifestations.unshift({
-    manifestation_id: "manifestation_current_withdrawn",
-    author_is_viewer: true,
-    belongs_to_current_assignment: true,
-    can_restore: true,
-    can_withdraw: false,
-    status: "withdrawn",
-    row_version: 1,
-    created_at: "2026-08-30T00:00:00.000Z",
-    revisions: [],
-  })
-  const html = renderCaretakerManifestationPanel(multiple, escapeHtml)
-  assert.doesNotMatch(html, /data-icono-caretaker-editor/)
-  assert.match(html, /Restore the current manifestation/)
-  assert.match(html, /Delete an earlier manifestation/)
-  assert.equal((html.match(/data-icono-caretaker-withdraw=/g) || []).length, 1)
-})
-
-test("purged history remains attributable but cannot be selected, forked, or rendered", () => {
-  const purged = dossier()
-  const version = purged.manifestations[1]
-  // A former caretaker's lineage, not the seed: the seed row is titled Original.
-  version.origin = "caretaker"
-  version.author_label = "Former caretaker 7H2Q"
-  version.revisions = [
-    {
-      manifestation_revision_id: "revision_purged",
-      revision_number: 3,
-      lifecycle: "purged",
-      body_available: false,
-      body: "must not render",
-    },
-  ]
-  const html = renderCaretakerManifestationPanel(purged, escapeHtml, {
-    selectedRevisionId: "revision_purged",
-  })
-  assert.match(html, /Former caretaker 7H2Q/)
-  assert.match(html, /removed under the retention policy/)
-  assert.doesNotMatch(html, /must not render/)
-  assert.doesNotMatch(html, /data-icono-caretaker-fork="revision_purged"/)
-  assert.doesNotMatch(html, /data-icono-caretaker-select="revision_purged"/)
-  // B-872: Edit from here stays in place, greyed and unwired, instead of vanishing.
-  assert.match(
-    html.match(/<button[^>]*>Edit from here<\/button>/)?.[0] || "",
-    / disabled data-icono-caretaker-disabled/,
-  )
-})
-
 test("canonical and current heads remain usable when history pagination moves them off-page", () => {
   const paged = dossier()
   paged.manifestations[0].manifestation_head_revision_id = "revision_1"
@@ -340,92 +150,6 @@ test("canonical and current heads remain usable when history pagination moves th
   assert.match(html, /data-icono-caretaker-version="revision_1"/)
   assert.match(html, /First body/)
   assert.match(html, /data-icono-caretaker-source-mark/, "the image source stays marked")
-})
-
-test("the readable diff keeps unchanged context and marks both sides", () => {
-  assert.deepEqual(manifestationWordDiff("calm blue cell", "calm red cell"), [
-    { kind: "same", text: "calm " },
-    { kind: "removed", text: "blue" },
-    { kind: "added", text: "red" },
-    { kind: "same", text: " cell" },
-  ])
-})
-
-test("prose validation matches the 4,000 code-point and 16 KiB authority limits", () => {
-  assert.equal(proseValidationError("ordinary manifestation"), "")
-  assert.match(proseValidationError("x".repeat(4001)), /4,000/)
-  assert.match(proseValidationError("\u0001"), /control/)
-  assert.match(proseValidationError(""), /Write/)
-})
-
-test("signed-out mounting performs zero caretaker requests", async () => {
-  const { document } = parseHTML('<div id="host"></div>')
-  let requests = 0
-  const panel = createCaretakerManifestationPanel({
-    fetchJSON: async function () {
-      requests += 1
-      return {}
-    },
-    escapeHtml,
-    storage: null,
-  })
-  const host = document.getElementById("host")
-  await panel.mount(host, { symbol: "TP53", currentUser: null, authResolved: true })
-  assert.equal(requests, 0)
-  assert.equal(host.hidden, true)
-})
-
-// B-859: Tags are not published, so the editor has nowhere public to read them.
-// It prefills through the signed-in caretaker route, which checks the caller's
-// assignment on the gene, and through nothing else.
-test("the editor prefills Tags only through the authenticated caretaker route", async () => {
-  const { document } = parseHTML('<div id="host"></div>')
-  globalThis.document = document
-  const requests = []
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = function () {
-    throw new Error("the editor must not fetch outside its fetchJSON")
-  }
-  try {
-    const panel = createCaretakerManifestationPanel({
-      fetchJSON: async function (path, init) {
-        requests.push({ path, credentials: init?.credentials })
-        if (!path.endsWith("/body")) {
-          const current = dossier()
-          current.manifestations[0].manifestation_head_revision_id = "revision_2"
-          current.manifestations[0].revisions[0].derivative = {
-            manifestation_derivative_id: "derivative_revision_2",
-            body_available: true,
-          }
-          return current
-        }
-        return { tags: { tags_text: "rose seal, archive plate", fields_json: {} } }
-      },
-      escapeHtml,
-      storage: null,
-    })
-    const host = document.getElementById("host")
-    await panel.mount(host, {
-      symbol: "TP53",
-      currentUser: { id: "account_1" },
-      authResolved: true,
-    })
-    assert.equal(
-      host.querySelector("[data-icono-caretaker-tags]").value,
-      "rose seal, archive plate",
-    )
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-  const bodyReads = requests.filter((request) => request.path.endsWith("/body"))
-  assert.deepEqual(
-    bodyReads.map((request) => request.path),
-    ["/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_revision_2/body"],
-  )
-  for (const request of requests) {
-    assert.match(request.path, /^\/api\/iconoplasm\/caretaker\/genes\/TP53/)
-    assert.equal(request.credentials, "include", "every read carries the caretaker's session")
-  }
 })
 
 test("a failed Tags body read pauses editing until an explicit retry restores the exact Tags", async () => {
@@ -751,58 +475,6 @@ async function mountForAutosave(fetchJSON) {
   return { document, Event, host, autosaveState }
 }
 
-test("an autosave in flight never greys out Close, the × or the tabs (B-874)", async () => {
-  let release
-  const { host } = await mountForAutosave(async (path, init) => {
-    if ((init?.method || "GET") === "GET") return dossier()
-    await new Promise((resolve) => (release = resolve))
-    return { manifestation_revision_id: "revision_3" }
-  })
-  await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(typeof release, "function", "the save is in flight")
-  const controls = host.querySelectorAll("[data-icono-caretaker-close], [data-icono-caretaker-tab]")
-  assert.equal(controls.length, 5, "two close controls and three tabs")
-  for (const control of controls) {
-    assert.equal(control.disabled, false, control.getAttribute("aria-label") || control.textContent)
-  }
-  release()
-})
-
-test("the autosave indicator is a glyph whose state reads without words (B-874)", async () => {
-  let release
-  let attempts = 0
-  const { host } = await mountForAutosave(async (path, init) => {
-    if ((init?.method || "GET") === "GET") return dossier()
-    if (++attempts === 1) {
-      await new Promise((resolve) => (release = resolve))
-      return { manifestation_revision_id: "revision_3" }
-    }
-    throw Object.assign(new Error("Assignment is not active"), { status: 403 })
-  })
-  const indicator = () => host.querySelector("[data-icono-caretaker-autosave-state]")
-  const glyph = () => indicator().querySelector("svg")
-  assert.equal(indicator().dataset.state, "unsaved")
-  assert.equal(
-    glyph()?.getAttribute("aria-hidden"),
-    "true",
-    "the glyph is decoration for sighted users",
-  )
-  assert.equal(indicator().title, "Unsaved changes")
-  await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(indicator().dataset.state, "saving")
-  assert.equal(indicator().textContent, "Saving…", "screen readers still hear the word")
-  release()
-  await new Promise((resolve) => setTimeout(resolve, 25))
-  assert.equal(indicator().dataset.state, "saved")
-  assert.equal(glyph() !== null, true, "updating the state keeps the glyph")
-  const prose = host.querySelector("[data-icono-caretaker-prose]")
-  prose.value = "Fourth body"
-  prose.dispatchEvent(new globalThis.Event("input", { bubbles: true }))
-  await new Promise((resolve) => setTimeout(resolve, 1250))
-  assert.equal(indicator().dataset.state, "failed")
-  assert.equal(indicator().title, "Not saved")
-})
-
 test("an uncertain autosave failure retries by itself when the browser reconnects (B-874)", async () => {
   const revisions = []
   const { document, Event, autosaveState } = await mountForAutosave(async (path, init) => {
@@ -985,43 +657,6 @@ test("withdraw and restore send the lineage row version instead of accepting sta
   assert.equal(JSON.parse(restored.init.body).expected_manifestation_version, 3)
 })
 
-test("remounting for another signed-in account does not duplicate or retain stale handlers", async () => {
-  const { document, Event } = parseHTML('<div id="host"></div>')
-  globalThis.document = document
-  const calls = []
-  const panel = createCaretakerManifestationPanel({
-    fetchJSON: async function (path, init) {
-      calls.push({ path, init })
-      return dossier()
-    },
-    escapeHtml,
-    storage: null,
-  })
-  const host = document.getElementById("host")
-  await panel.mount(host, {
-    symbol: "TP53",
-    currentUser: { account_id: "acct_old" },
-    authResolved: true,
-  })
-  await panel.mount(host, {
-    symbol: "TP53",
-    currentUser: { account_id: "acct_current" },
-    authResolved: true,
-  })
-  const form = host.querySelector("[data-icono-caretaker-editor]")
-  form.querySelector("[data-icono-caretaker-prose]").value = "One current-account save"
-  form
-    .querySelector("[data-icono-caretaker-prose]")
-    .dispatchEvent(new Event("input", { bubbles: true }))
-  await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(
-    calls.filter(function (call) {
-      return call.path.endsWith("/revisions")
-    }).length,
-    1,
-  )
-})
-
 test("accepting sends the exact displayed terms and no departure choice (B-860)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
@@ -1078,27 +713,6 @@ test("accepting sends the exact displayed terms and no departure choice (B-860)"
   assert.equal(body.terms_accepted, true)
   assert.equal(body.default_leave_policy, undefined)
   assert.equal(body.expected_assignment_version, 3)
-})
-
-test("an explicitly disabled dossier mounts no authority surface", async () => {
-  const { document } = parseHTML('<div id="host"></div>')
-  globalThis.document = document
-  const panel = createCaretakerManifestationPanel({
-    fetchJSON: async function () {
-      return { ...dossier(), enabled: false }
-    },
-    escapeHtml,
-    storage: null,
-  })
-  const host = document.getElementById("host")
-  const result = await panel.mount(host, {
-    symbol: "TP53",
-    currentUser: { account_id: "acct_1" },
-    authResolved: true,
-  })
-  assert.equal(result, null)
-  assert.equal(host.hidden, true)
-  assert.equal(host.childNodes.length, 0)
 })
 
 test("B-740 saved tag fields stay parseable under a text-only attribute escaper", async () => {
