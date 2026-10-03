@@ -13831,33 +13831,6 @@ async function warmCatalogCache(env) {
   catalogCache.symbolByAlias = symbolByAlias
 }
 
-export async function resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier) {
-  await warmCatalogCache(env)
-  if (!catalogCache.hash || catalogCache.bySymbol.size === 0) {
-    return { kind: "unavailable", record: null, canonicalSymbol: "" }
-  }
-  const requestedSymbol = normalizeSymbol(rawIdentifier)
-  if (requestedSymbol && catalogCache.bySymbol.has(requestedSymbol)) {
-    return {
-      kind: "canonical",
-      record: catalogCache.bySymbol.get(requestedSymbol),
-      canonicalSymbol: requestedSymbol,
-      version: catalogCache.hash,
-    }
-  }
-  const aliasKey = normalizeCatalogAliasLookupKey(rawIdentifier)
-  const canonicalSymbol = aliasKey ? catalogCache.symbolByAlias.get(aliasKey) : ""
-  if (canonicalSymbol && catalogCache.bySymbol.has(canonicalSymbol)) {
-    return {
-      kind: "alias",
-      record: catalogCache.bySymbol.get(canonicalSymbol),
-      canonicalSymbol,
-      version: catalogCache.hash,
-    }
-  }
-  return { kind: "unknown", record: null, canonicalSymbol: "", version: catalogCache.hash }
-}
-
 function normalizeCatalogPayloadItem(rawItem) {
   const payload = rawItem && typeof rawItem === "object" ? rawItem : null
   if (!payload) return null
@@ -15752,77 +15725,6 @@ async function fetchCatalogRow(env, symbol, { throwOnUnavailable = false } = {})
     if (throwOnUnavailable) throw error
     return null
   }
-}
-
-// ARCHITECTURE FENCE [IPD-007]
-// A canonical public gene URL must not hydrate the full 19k-record catalog or
-// spend KV reads merely to establish route membership. The tiny publication-
-// owned route table contains identity only. ARCHITECTURE FENCE [IPD-011]: the
-// exact published card artifact and its detail ETag own portrait identity; the
-// route lookup must not read icono_publish_state and become a second portrait
-// authority. Alias and UniProt resolution deliberately retain the immutable
-// artifact fallback below; they must not grow a second alias state store here.
-export async function resolveIconoplasmCanonicalGeneRouteRecordInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate(
-  env,
-  rawIdentifier,
-) {
-  const requestedSymbol = normalizeSymbol(rawIdentifier)
-  if (requestedSymbol && env?.ICONOPLASM_DB) {
-    try {
-      const publishedRoute = await env.ICONOPLASM_DB.prepare(
-        `SELECT r.gene_symbol,
-                c.full_name
-           FROM icono_published_gene_routes r
-           JOIN icono_gene_catalog c
-             ON c.gene_symbol = r.gene_symbol
-          WHERE r.gene_symbol = ?
-          LIMIT 1`,
-      )
-        .bind(requestedSymbol)
-        .first()
-      if (publishedRoute?.gene_symbol) {
-        const canonicalSymbol = normalizeSymbol(publishedRoute.gene_symbol)
-        return {
-          kind: "canonical",
-          canonicalSymbol,
-          record: {
-            s: canonicalSymbol,
-            n: String(publishedRoute.full_name || "").trim(),
-          },
-          source: "published_gene_route_d1",
-        }
-      }
-    } catch {
-      // During the migration rollout, or if D1 is temporarily unavailable,
-      // retain the established immutable-artifact path below. This is a
-      // correctness fallback, not the normal canonical request path.
-    }
-  }
-  if (requestedSymbol) {
-    // B-898: when the route table is unavailable, one stable gene object read
-    // answers canonical membership for this symbol. Storage failure is
-    // "unavailable"; a 404 falls through to alias resolution below.
-    let object
-    try {
-      object = await readStableGeneObject(env, requestedSymbol)
-    } catch {
-      return { kind: "unavailable", record: null, canonicalSymbol: "" }
-    }
-    if (object) {
-      return {
-        kind: "canonical",
-        canonicalSymbol: requestedSymbol,
-        record: {
-          s: requestedSymbol,
-          n: String(object.full_name || "").trim(),
-        },
-        version: stableGeneObjectVersion(object),
-        source: "stable_gene_object",
-      }
-    }
-  }
-
-  return resolveIconoplasmPublishedGeneDiscoveryRecord(env, rawIdentifier)
 }
 
 async function resolveGene(env, rawId, { includeProtein = true, throwOnUnavailable = false } = {}) {

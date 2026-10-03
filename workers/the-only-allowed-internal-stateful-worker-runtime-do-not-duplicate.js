@@ -1,17 +1,6 @@
 import { withErrorReporting, withScheduledErrorReporting } from "./lib/the-only-error-reporter.js"
-import "../shared/iconoplasm-card/shared-card-runtime.js"
-import {
-  iconoplasmPublishedPortraitUrl,
-  normalizeIconoplasmPublishedGeneRecord,
-} from "./iconoplasm-gene-discovery.js"
-import {
-  iconoplasmGeneCanonicalRedirect,
-  iconoplasmGeneDiscoveryStateForPath,
-  iconoplasmGeneUnavailableResponse,
-  iconoplasmGeneNotFoundResponse,
-} from "./iconoplasm-gene-discovery-worker.js"
+import { iconoplasmPageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
-import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 import {
   enforceIconoplasmRateLimit,
@@ -77,580 +66,13 @@ const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 // must not silently repeat Iconoplasm's full maintenance eight minutes later.
 const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
 const KATEX_VENDOR_VERSION = "0.16.21"
-const ICONOPLASM_GENE_FONT_PRELOAD_LINKS = [
-  "</static/iconoplasm/fonts/IBMPlexMono-Regular.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
-  "</static/iconoplasm/fonts/IBMPlexMono-Medium.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
-  "</static/iconoplasm/fonts/LeagueSpartan-800.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
-  "</static/iconoplasm/fonts/SpecialElite-Regular.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
-  "</static/iconoplasm/fonts/Caveat-400.woff2>; rel=preload; as=font; type=font/woff2; crossorigin",
-]
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
 const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-image-license-cc0-v1"
-const ICONOPLASM_IMAGE_LICENSE_URL = "https://creativecommons.org/publicdomain/zero/1.0/"
-const ICONOPLASM_IMAGE_USAGE_URL = `https://${ICONOPLASM_HOST}/license`
-const ICONOPLASM_PUBLIC_NO_VARY_SEARCH =
-  'params=("utm_source" "utm_medium" "utm_campaign" "utm_content" "utm_term" "fbclid" "gclid" "mc_cid" "mc_eid" "codex_verify")'
 
 const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 // Cloudflare D1 enforces a relatively small limit on bound parameters per query.
 // Keep this low enough to avoid `too many SQL variables`-style failures when users paste 100+ symbols.
 const PRACTICE_RESOLVE_SQL_CHUNK = 100
-
-function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}) {
-  // Clone the upstream response before any mutation. Some cache paths receive
-  // immutable platform Headers objects.
-  const next = new Headers(headers)
-  appendIconoplasmServiceDiscoveryLinks(next)
-  if (!String(path || "").startsWith("/gene/")) return next
-  // ARCHITECTURE FENCE [IPD-003]: response headers and HTML metadata must use
-  // the same published-catalog eligibility decision. Never change only one
-  // discovery surface.
-  for (const link of ICONOPLASM_GENE_FONT_PRELOAD_LINKS) next.append("Link", link)
-  next.set("No-Vary-Search", ICONOPLASM_PUBLIC_NO_VARY_SEARCH)
-  if (indexable) next.delete("X-Robots-Tag")
-  else next.set("X-Robots-Tag", "noindex, follow, noarchive")
-  return next
-}
-
-function escapeIconoplasmStaticShellText(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-}
-
-function escapeIconoplasmHtmlAttribute(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-}
-
-function iconoplasmSafeJsonScriptPayload(value) {
-  return JSON.stringify(value)
-    .replace(/</g, "\\u003c")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029")
-}
-
-function iconoplasmStaticGeneSymbolFromPath(path) {
-  const match = /^\/gene\/([^/?#]+)\/?$/.exec(String(path || ""))
-  if (!match) return null
-  try {
-    return decodeURIComponent(match[1] || "")
-      .trim()
-      .toUpperCase()
-  } catch (_) {
-    return String(match[1] || "")
-      .trim()
-      .toUpperCase()
-  }
-}
-
-function iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter) {
-  return `
-  <!-- iconoplasm-static-gene-shell:start -->
-  <div class="icono-nav icono-static-shell-only"><a href="/" data-icono-nav>All genes</a></div>
-  <div id="icono-gene-content" class="icono-static-shell-only">
-    <section class="icono-gene-lead icono-gene-lead--static-shell">
-      <article class="icono-card icono-card--brick icono-card--brick-static icono-gene-lead-card icono-card--variant-lab-label" style="--width:882;--height:1134;--icono-card-accent:#8a6f4d" data-icono-card-variant="lit-archival" data-icono-static-gene-shell="true">
-        <div class="iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing">
-          <div class="icono-label-specimen-viewport">
-            <div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status" aria-hidden="true"></div><div class="iconoplasm-tooltip-portrait-symbol" data-icono-static-symbol>${safeSymbol}</div></div>
-          </div>
-          <div class="icono-label-specimen-footer"><div class="icono-label-specimen-notes"><div class="icono-label-specimen-note">emulsion note / glass plate spectral analysis</div></div><div class="icono-label-specimen-micro"><div class="icono-label-specimen-color-row"><span class="icono-label-specimen-swatch-hex"><span class="icono-label-specimen-swatch"></span><span class="icono-label-specimen-metric-value">UNFILED</span></span></div><div class="icono-label-specimen-decomposition"><span class="icono-label-specimen-cell icono-label-specimen-cell--metric icono-label-specimen-cell--row-1"><span class="icono-label-specimen-metric">letter</span></span><span class="icono-label-specimen-cell icono-label-specimen-cell--value icono-label-specimen-cell--row-1"><span class="icono-label-specimen-metric-value" data-icono-static-letter>${safeLetter}</span></span><span class="icono-label-specimen-cell icono-label-specimen-cell--hand icono-label-specimen-cell--row-1"><span class="icono-label-specimen-hand-analysis">filing</span></span></div></div></div><div class="iconoplasm-tooltip-portrait-fade"></div>
-        </div>
-        <div class="iconoplasm-tooltip-body icono-label-mobile-info-card">
-          <div class="icono-label-sheet-body">
-            <div class="icono-label-header-row"><div class="icono-label-title-block"><div class="icono-label-caption">gene name</div><div class="icono-label-symbol" data-icono-static-symbol>${safeSymbol}</div><div class="icono-label-name"></div><div class="icono-label-registry-line">ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03</div></div><div class="icono-label-header-stack"><div class="icono-label-header-meta"><div class="icono-label-header-meta-cell"><div class="icono-label-caption">emulsion no.</div><div class="icono-label-serial">filing</div></div><div class="icono-label-header-meta-cell"><div class="icono-label-caption">family</div><div class="icono-label-family" data-icono-static-symbol>${safeSymbol}</div></div></div><div class="icono-label-filed-block"><div class="icono-label-caption">family trait</div><div class="icono-label-family-trait-field icono-label-family-trait-field--empty"></div></div></div><div class="icono-label-qc-block"><div class="icono-label-caption">qc</div><div class="icono-label-qc-empty"></div><div class="icono-label-qc-meta"><div class="icono-label-qc-meta-item">inspect. A3</div><div class="icono-label-qc-meta-item">plate 7</div></div><div class="icono-label-qc-note">pending review</div></div></div>
-            <div class="icono-label-band-row"><div class="icono-label-row-label">field notes</div><div class="icono-label-band-grid"><div class="icono-label-band-cell icono-label-band-cell--category"><div class="icono-label-caption">category</div><div class="icono-label-band-primary"><div class="icono-label-category-grid" aria-hidden="true"><div class="icono-label-category-option icono-label-category-option--transmembrane"><span class="icono-label-option icono-label-option--transmembrane"><span class="icono-label-option-copy"></span></span></div><div class="icono-label-category-option icono-label-category-option--soluble"><span class="icono-label-option icono-label-option--soluble"><span class="icono-label-option-copy"></span></span></div></div></div></div><div class="icono-label-band-cell icono-label-band-cell--noted"><div class="icono-label-caption">first noted</div></div><div class="icono-label-band-cell icono-label-band-cell--mass"><div class="icono-label-caption">mass</div><div class="icono-label-band-primary"><div class="icono-label-mass-line"><span class="icono-label-mass-fill"></span><span class="icono-label-mass-unit-stack"><span class="icono-label-typed-value icono-label-typed-value--band icono-label-typed-value--crossed icono-label-typed-value--unit-kda">kDa</span><span class="icono-label-hand-note icono-label-hand-note--unit">kg</span></span></div></div></div></div></div>
-            <div class="icono-label-style-row"><div class="icono-label-row-label">pfam clans</div><div class="icono-label-style-stack"></div></div>
-            <div class="icono-label-alignment-row"><div class="icono-label-row-label">alignment</div><div class="icono-label-alignment-body"><div class="icono-label-selector-row icono-label-selector-row--alignment is-neither" aria-hidden="true"><span class="icono-label-option icono-label-option--oncogene"><span class="icono-label-option-copy"></span></span><span class="icono-label-option icono-label-option--tumor-suppressor"><span class="icono-label-option-copy"></span></span><span class="icono-label-alignment-strike" aria-hidden="true"></span></div></div></div>
-            <div class="icono-label-footer-row"><div class="icono-label-row-label">remarks</div><div class="icono-label-footer-copy"><div class="icono-label-footer-copy-main"><div class="icono-label-footer-line icono-label-footer-line--typed">archive room b / bench 3 / human gene cabinet</div><div class="icono-label-footer-line icono-label-footer-line--typed">stock tone filing / sheet filing / print run 07</div><div class="icono-label-footer-line icono-label-footer-line--caption">seal after review / do not expose to open air</div></div><div class="icono-label-footer-copy-side"><div class="icono-label-footer-line icono-label-footer-line--caption">brinedew institute / internal matter</div><div class="icono-label-footer-line icono-label-footer-line--caption">images under <a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0 license</a></div><div class="icono-label-footer-line icono-label-footer-line--caption">reuse permitted without attribution</div></div></div></div>
-          </div>
-        </div>
-      </article>
-    </section>
-  </div>
-  <!-- iconoplasm-static-gene-shell:end -->`
-}
-
-function personalizeIconoplasmStaticGeneShell(html, path) {
-  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) {
-    return String(html)
-      .replace(
-        /\s*<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->\s*/g,
-        "",
-      )
-      .replace(
-        /(<div\b[^>]*\bid=["']iconoplasm-root["'][^>]*)(>)/,
-        `$1 data-icono-startup-route="home"$2`,
-      )
-  }
-  const safeSymbol = escapeIconoplasmStaticShellText(symbol)
-  const safeLetter = escapeIconoplasmStaticShellText(symbol.charAt(0) || "G")
-  const genericShell = String(html).replace(
-    /\s*<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->\s*/g,
-    "",
-  )
-  let next = genericShell.replace(
-    /(<div\b[^>]*\bid=["']iconoplasm-root["'][^>]*)(>)/,
-    (_match, open, close) => {
-      return `${open} data-icono-startup-route="gene"${close}${iconoplasmStaticGeneShellHtml(safeSymbol, safeLetter)}`
-    },
-  )
-  return next
-}
-
-function iconoplasmCanonicalAssetFromCardPayload(cardPayload) {
-  const value = String(cardPayload?.portrait?.asset_sha256 || "")
-    .trim()
-    .toLowerCase()
-  return /^[a-f0-9]{64}$/.test(value) ? value : ""
-}
-
-function iconoplasmGeneDetailShellVersion(cardPayload, response = null) {
-  const etag = String(response?.headers?.get("ETag") || "")
-    .replace(/^W\//i, "")
-    .replace(/^"|"$/g, "")
-    .trim()
-    .toLowerCase()
-  if (/^[a-z0-9._:-]{8,160}$/.test(etag)) return `site-gene-detail-${etag}`
-  const cardVersion = String(response?.headers?.get("X-Iconoplasm-Card-Version") || "")
-    .trim()
-    .toLowerCase()
-  if (/^[a-z0-9._:-]{1,160}$/.test(cardVersion)) return `site-gene-card-${cardVersion}`
-  const assetSha = iconoplasmCanonicalAssetFromCardPayload(cardPayload)
-  return assetSha ? `site-gene-card-fallback-${assetSha}` : "site-gene-card-fallback-empty"
-}
-
-function iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, preferredSize) {
-  const portrait = cardPayload && cardPayload.portrait
-  const flatHeroUrl = String((cardPayload && cardPayload.ph) || "").trim()
-  const flatMediumUrl = String((cardPayload && cardPayload.pt) || "").trim()
-  const isPublished =
-    (portrait && portrait.status === "published") || Boolean(flatHeroUrl || flatMediumUrl)
-  if (!isPublished) return ""
-  const heroUrl = String((portrait && portrait.hero_url) || flatHeroUrl).trim()
-  const mediumUrl = String((portrait && portrait.medium_url) || flatMediumUrl).trim()
-  const thumbUrl = String((portrait && portrait.thumb_url) || "").trim()
-  if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
-  if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
-  return heroUrl || mediumUrl || thumbUrl
-}
-
-function iconoplasmLabelVoteBoxMarkup(cardPayload) {
-  const shared = globalThis.IconoplasmCardShared
-  const portrait = (cardPayload && cardPayload.portrait) || {}
-  const assetSha = String(portrait.asset_sha256 || "")
-    .trim()
-    .toLowerCase()
-  if (!shared || !assetSha) return ""
-  let attrs = `data-icono-gene-vote-box="${escapeIconoplasmHtmlAttribute(assetSha)}"`
-  const candidateImageId = Number(portrait.candidate_image_id || 0)
-  if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
-    attrs += ` data-icono-candidate-image-id="${escapeIconoplasmHtmlAttribute(String(Math.round(candidateImageId)))}"`
-  }
-  const visionId = String(portrait.vision_id || "").trim()
-  if (visionId) attrs += ` data-icono-vision-id="${escapeIconoplasmHtmlAttribute(visionId)}"`
-  return shared.voteBoxMarkup(attrs, {
-    variant: "label",
-    showScore: false,
-    showArrows: true,
-  })
-}
-
-function iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) {
-  const shared = globalThis.IconoplasmCardShared
-  if (!shared || !cardPayload) return ""
-  const symbol = shared.normalizedSymbol(cardPayload.symbol || cardPayload.canonical_symbol)
-  if (!symbol) return ""
-  const portraitAlt = `${symbol} character portrait used inside the Iconoplasm gene blot`
-  const portraitCaption = `Source portrait for the ${symbol} Iconoplasm gene blot.`
-  const dims = shared.portraitDimensions(cardPayload)
-  const portraitUrl =
-    iconoplasmPublishedPortraitUrl(cardPayload, "medium") ||
-    iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "medium")
-  const portraitFullUrl =
-    iconoplasmPublishedPortraitUrlFromCardPayload(cardPayload, "full") || portraitUrl
-  const portraitAttrs =
-    portraitUrl && portraitFullUrl
-      ? `data-icono-pswp data-icono-pswp-src="${escapeIconoplasmHtmlAttribute(portraitFullUrl)}" data-icono-pswp-alt="${escapeIconoplasmHtmlAttribute(portraitAlt)}" data-pswp-width="${escapeIconoplasmHtmlAttribute(String(dims.width))}" data-pswp-height="${escapeIconoplasmHtmlAttribute(String(dims.height))}"`
-      : ""
-  const portraitMediaHtml = portraitUrl
-    ? shared.renderLabLabelPortraitMediaHtml(symbol, portraitUrl, portraitFullUrl, dims, {
-        buttonAttrs: portraitAttrs,
-        buttonAriaLabel: `Open full-size source portrait for ${symbol}`,
-        captionText: portraitCaption,
-        fetchPriority: "high",
-        portraitAlt,
-      })
-    : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
-      '<div class="iconoplasm-tooltip-portrait-fallback">' +
-      '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
-      '<div class="iconoplasm-tooltip-portrait-symbol">' +
-      escapeIconoplasmStaticShellText(symbol) +
-      "</div>" +
-      "</div>"
-  const portraitStateClass = portraitUrl
-    ? "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait--ready"
-    : "iconoplasm-tooltip-portrait iconoplasm-tooltip-portrait-missing"
-  const portraitMarkup =
-    '<div class="' +
-    portraitStateClass +
-    '"' +
-    (portraitUrl ? " data-icono-lightbox" : "") +
-    ">" +
-    shared.renderLabLabelSpecimenRailHtml(portraitMediaHtml, cardPayload) +
-    "</div>"
-  const bodyHtml =
-    '<div class="iconoplasm-tooltip-body icono-label-mobile-info-card">' +
-    shared.renderLabLabelCardHtml(cardPayload, {
-      mode: "brick",
-      layoutVariant: "lit-archival",
-      mobileReview: true,
-      includeCharacterProfile: true,
-      portraitAlt,
-      portraitSrc: portraitUrl,
-      voteHtml: iconoplasmLabelVoteBoxMarkup(cardPayload),
-    }) +
-    "</div>"
-  return (
-    '<article class="icono-card icono-card--brick icono-gene-lead-card icono-card--variant-lab-label icono-card--variant-lit-archival" style="--width:' +
-    escapeIconoplasmHtmlAttribute(String(dims.width)) +
-    ";--height:" +
-    escapeIconoplasmHtmlAttribute(String(dims.height)) +
-    ";--icono-card-accent:" +
-    escapeIconoplasmHtmlAttribute(cardPayload.color || "#888") +
-    '" data-icono-card-variant="lit-archival" data-icono-static-gene-shell="true">' +
-    '<div class="icono-mobile-card-physical-object" data-icono-mobile-physical-object>' +
-    portraitMarkup +
-    bodyHtml +
-    "</div>" +
-    "</article>"
-  )
-}
-
-function iconoplasmPublishedGeneBlot(cardPayload) {
-  const shared = globalThis.IconoplasmCardShared
-  const symbol = shared?.normalizedSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol)
-  const blot = cardPayload?.blot && typeof cardPayload.blot === "object" ? cardPayload.blot : null
-  if (
-    !symbol ||
-    blot?.status !== "ready" ||
-    !String(blot.image_url || "").startsWith("https://iconoplasmportraits.b-cdn.net/blots/v1/") ||
-    !String(blot.canonical_url || "").startsWith(`https://${ICONOPLASM_HOST}/blots/v1/`)
-  )
-    return null
-  // Published card artifacts are immutable, so cards materialized before the
-  // singular route migration retain a historical /blots/{SYMBOL}.webp field.
-  // Canonicalize that derived semantic URL at the projection boundary without
-  // mutating the exact card or any remote object.
-  return {
-    ...blot,
-    semantic_url: `https://${ICONOPLASM_HOST}/blot/${encodeURIComponent(symbol)}.webp`,
-  }
-}
-
-function iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) {
-  const shared = globalThis.IconoplasmCardShared
-  const symbol = shared?.normalizedSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol)
-  const blot = iconoplasmPublishedGeneBlot(cardPayload)
-  if (!symbol || !blot) return ""
-  // The stable route resolves the current renderer for this exact immutable
-  // card. The embedded canonical_url can legitimately point at an older
-  // renderer and must not win in user-visible markup.
-  const blotUrl = String(blot.semantic_url || "").trim()
-  const fullName = String(cardPayload?.full_name || cardPayload?.name || symbol).trim()
-  const alt = `${symbol} Iconoplasm gene blot — ${fullName}`
-  return (
-    '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden>' +
-    '<img class="icono-canonical-gene-blot-image" src="' +
-    escapeIconoplasmHtmlAttribute(blotUrl) +
-    '" data-iconoplasm-role="canonical-blot" data-gene-symbol="' +
-    escapeIconoplasmHtmlAttribute(symbol) +
-    '" data-iconoplasm-canonical-image-src="' +
-    escapeIconoplasmHtmlAttribute(blotUrl) +
-    '" width="' +
-    escapeIconoplasmHtmlAttribute(String(blot.width || 768)) +
-    '" height="' +
-    escapeIconoplasmHtmlAttribute(String(blot.height || 1024)) +
-    '" loading="lazy" decoding="async" fetchpriority="low" alt="' +
-    escapeIconoplasmHtmlAttribute(alt) +
-    '"></figure>'
-  )
-}
-
-function iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion) {
-  const shared = globalThis.IconoplasmCardShared
-  if (!shared || !cardPayload) return ""
-  const symbol = shared.normalizedSymbol(cardPayload.symbol || cardPayload.canonical_symbol)
-  if (!symbol) return ""
-  const portrait = cardPayload.portrait || {}
-  const emulsionLabel = String(
-    portrait.emulsion_id || portrait.emulsion_label || portrait.artist_id || "",
-  ).trim()
-  const canonicalMeta = emulsionLabel
-    ? '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta"><div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair"><span>Published</span><strong>' +
-      escapeIconoplasmStaticShellText(emulsionLabel) +
-      "</strong></div></div>"
-    : '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta"></div>'
-  const candidateGallery = shared.renderCandidateGalleryHtml(cardPayload)
-  return (
-    "<!-- iconoplasm-static-gene-shell:start -->" +
-    '<div class="icono-nav"><a href="/" data-icono-nav>All genes</a></div>' +
-    '<div id="icono-gene-content" data-icono-server-rendered-gene="true" data-icono-gene-symbol="' +
-    escapeIconoplasmHtmlAttribute(symbol) +
-    '" data-icono-gene-snapshot="' +
-    escapeIconoplasmHtmlAttribute(snapshotVersion) +
-    '">' +
-    '<section class="icono-gene-lead">' +
-    iconoplasmStaticGeneLeadCardHtmlFromPayload(cardPayload) +
-    iconoplasmCanonicalGeneBlotFigureHtml(cardPayload) +
-    '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail" data-icono-canonical-rail><div class="icono-gene-edit-panel" aria-hidden="true"></div><section class="icono-gene-request-surface icono-gene-request-panel">' +
-    canonicalMeta +
-    '<div aria-hidden="true"></div></section></div></section></div>' +
-    "</section>" +
-    candidateGallery +
-    '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>' +
-    '<div data-icono-suggest-island><section class="icono-suggest" data-icono-suggest="' +
-    escapeIconoplasmHtmlAttribute(symbol) +
-    '"><div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div><div class="icono-suggest-list" data-icono-suggest-list></div></section></div>' +
-    '<section class="icono-gene-discord-card" data-icono-discord-island></section>' +
-    "</div>" +
-    "<!-- iconoplasm-static-gene-shell:end -->"
-  )
-}
-
-function replaceIconoplasmStaticGeneShell(html, shellHtml) {
-  if (!shellHtml) return html
-  return String(html).replace(
-    /<!-- iconoplasm-static-gene-shell:start -->[\s\S]*?<!-- iconoplasm-static-gene-shell:end -->/,
-    shellHtml,
-  )
-}
-
-async function iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, path) {
-  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) return null
-  try {
-    const apiUrl = new URL(request.url)
-    apiUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
-    apiUrl.search = ""
-    apiUrl.hash = ""
-    return await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(apiUrl.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }),
-      env,
-      ctx,
-    )
-  } catch (error) {
-    console.warn("Iconoplasm gene detail response for HTML cache failed:", error)
-    return null
-  }
-}
-
-function iconoplasmGeneSnapshotVersionFromDetailResponse(detailResponse) {
-  if (!detailResponse?.ok) return ""
-  return iconoplasmGeneDetailShellVersion(null, detailResponse)
-}
-
-async function iconoplasmGeneCardBootstrapInjection(
-  request,
-  env,
-  ctx,
-  path,
-  preloadedDetailResponse = null,
-) {
-  // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-  // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
-  // public card artifact, KV_GALLERY_VERSION.
-  //
-  // Gene documents use the complete site-detail projection for their rich
-  // first paint. That endpoint reads live D1 detail and candidates, takes its
-  // source portrait and blot only from the exact card selected by
-  // KV_GALLERY_VERSION, and keeps every public image-discovery surface coherent.
-  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) {
-    return {
-      injection: "",
-      shellHtml: "",
-      snapshotVersion: "",
-      cardPayload: null,
-      profileComplete: false,
-      status: 404,
-    }
-  }
-  try {
-    const detailResponse =
-      preloadedDetailResponse ||
-      (await iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, path))
-    if (!detailResponse || !detailResponse.ok) {
-      return {
-        injection: "",
-        shellHtml: "",
-        snapshotVersion: "",
-        cardPayload: null,
-        profileComplete: false,
-        status: detailResponse?.status || 503,
-      }
-    }
-    const cardPayload = await detailResponse.clone().json()
-    if (!cardPayload) {
-      return {
-        injection: "",
-        shellHtml: "",
-        snapshotVersion: "",
-        cardPayload: null,
-        profileComplete: false,
-        status: 503,
-      }
-    }
-    const snapshotVersion = iconoplasmGeneDetailShellVersion(cardPayload, detailResponse)
-    const shellHtml = iconoplasmStaticGenePageHtmlFromPayload(cardPayload, snapshotVersion)
-    const profileComplete =
-      shellHtml.includes('class="icono-card-semantic-profile"') &&
-      shellHtml.includes(
-        `aria-label="Character profile for ${escapeIconoplasmHtmlAttribute(symbol)}"`,
-      )
-    const payload = {
-      contract: "GenePageBootstrapV1",
-      symbol,
-      snapshot_version: snapshotVersion,
-      source: "site_gene_detail",
-      payload: cardPayload,
-    }
-    return {
-      // The inline head bootstrap consumes this canonical payload and performs
-      // the one allowed high-priority Bunny probe only when this tab has not
-      // already chosen a portrait source. A server-injected preload cannot see
-      // sessionStorage and would retry a dead source on every navigation.
-      injection: `<script type="application/json" id="iconoplasm-card-bootstrap">${iconoplasmSafeJsonScriptPayload(payload)}</script>`,
-      shellHtml,
-      snapshotVersion,
-      cardPayload,
-      profileComplete,
-      // A valid published card may intentionally have no portrait yet. That is
-      // an incomplete, non-indexable profile rather than an infrastructure
-      // failure. Transport/card lookup failures return above with their real
-      // retryable status.
-      status: 200,
-    }
-  } catch (error) {
-    console.warn("Iconoplasm gene card bootstrap injection failed:", error)
-    return {
-      injection: "",
-      shellHtml: "",
-      snapshotVersion: "",
-      cardPayload: null,
-      profileComplete: false,
-      status: 503,
-    }
-  }
-}
-
-export async function serveIconoplasmReaderRecoveryGenePage(
-  request,
-  env,
-  ctx = { waitUntil() {} },
-) {
-  const url = new URL(request.url)
-  const symbol = iconoplasmStaticGeneSymbolFromPath(url.pathname)
-  if (!symbol) return iconoplasmGeneNotFoundResponse(request.method)
-
-  const detailUrl = new URL(url)
-  detailUrl.pathname = `/api/iconoplasm/site/genes/${encodeURIComponent(symbol)}`
-  detailUrl.search = ""
-  detailUrl.hash = ""
-
-  let detailResponse
-  try {
-    detailResponse = await handleIconoplasmReaderRecoverySiteGeneDetail(
-      new Request(detailUrl.toString(), {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Referer: `${url.origin}${url.pathname}`,
-        },
-      }),
-      env,
-      detailUrl.pathname,
-    )
-  } catch (error) {
-    console.error("Iconoplasm reader-recovery gene detail failed:", String(error))
-    return iconoplasmGeneUnavailableResponse(request.method)
-  }
-
-  if (detailResponse.status === 404) return iconoplasmGeneNotFoundResponse(request.method)
-  if (!detailResponse.ok) return iconoplasmGeneUnavailableResponse(request.method)
-
-  let bootstrap
-  try {
-    bootstrap = await iconoplasmGeneCardBootstrapInjection(
-      request,
-      env,
-      ctx,
-      url.pathname,
-      detailResponse,
-    )
-  } catch (error) {
-    console.error("Iconoplasm reader-recovery gene bootstrap failed:", String(error))
-    return iconoplasmGeneUnavailableResponse(request.method)
-  }
-  if (bootstrap.status !== 200 || !bootstrap.shellHtml || !bootstrap.cardPayload) {
-    return iconoplasmGeneUnavailableResponse(request.method)
-  }
-
-  const targetUrl = buildStaticSiteUrl(url, "/apps/iconoplasm/index")
-  let upstream
-  try {
-    upstream = await fetch(targetUrl.toString(), {
-      method: "GET",
-      headers: { Accept: "text/html" },
-    })
-  } catch (error) {
-    console.error("Iconoplasm reader-recovery HTML shell fetch failed:", String(error))
-    return iconoplasmGeneUnavailableResponse(request.method)
-  }
-  if (!upstream.ok || !String(upstream.headers.get("content-type") || "").includes("text/html")) {
-    return iconoplasmGeneUnavailableResponse(request.method)
-  }
-
-  const cardPayload = bootstrap.cardPayload
-  const publishedRecord = {
-    s: symbol,
-    n: cardPayload.full_name || cardPayload.name || symbol,
-    p: cardPayload.portrait || {},
-  }
-  return iconoplasmCacheableHtmlShellResponse(
-    await upstream.text(),
-    upstream,
-    request,
-    env,
-    ctx,
-    url.pathname,
-    "READER-RECOVERY",
-    bootstrap,
-    { record: publishedRecord, discoveryCandidate: false },
-    detailResponse,
-  )
-}
-
-function insertIconoplasmGeneCardBootstrap(html, injection) {
-  if (!injection) return html
-  const marker = 'if (typeof window === "undefined" || window.__iconoplasmBootstrap) return'
-  const markerIndex = String(html).indexOf(marker)
-  if (markerIndex >= 0) {
-    const scriptStart = String(html).lastIndexOf("<script", markerIndex)
-    if (scriptStart >= 0) {
-      return `${html.slice(0, scriptStart)}${injection}${html.slice(scriptStart)}`
-    }
-  }
-  return String(html).replace(/<\/head>/i, `${injection}</head>`)
-}
 
 const ANALYTICS_CONSENT_COUNTRIES = new Set([
   "AT",
@@ -727,116 +149,28 @@ function iconoplasmHtmlShellCacheKey(url, env) {
   return new Request(key.toString(), { method: "GET" })
 }
 
-function iconoplasmGeneHtmlCacheKey(url, path, snapshotVersion, env) {
-  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) return null
-  const snapshot = String(snapshotVersion || "").trim()
-  if (!snapshot) return null
-  const key = new URL("https://iconoplasm.brinedew.bio/__edge-cache/iconoplasm-gene-html")
-  key.searchParams.set("version", iconoplasmHtmlShellCacheVersion(env))
-  key.searchParams.set("staticOrigin", buildStaticSiteUrl(url, "/").origin)
-  key.searchParams.set("symbol", symbol)
-  key.searchParams.set("snapshot", snapshot)
-  return new Request(key.toString(), { method: "GET" })
+function iconoplasmGeneNotFoundResponse(method) {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>${iconoplasmPageTitle("Gene not found")}</title></head><body><main><h1>Gene not found</h1><p>This symbol is not in the published Iconoplasm catalog.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
+  return new Response(method === "HEAD" ? null : html, {
+    status: 404,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=60",
+      "X-Robots-Tag": "noindex, follow, noarchive",
+    },
+  })
 }
 
-export { iconoplasmGeneHtmlCacheKey as iconoplasmGeneHtmlCacheKeyForTest }
-
-async function iconoplasmCacheableHtmlShellResponse(
-  html,
-  response,
-  request,
-  env,
-  ctx,
-  path,
-  cacheStatus,
-  preloadedGeneShell = null,
-  geneDiscovery = null,
-  preloadedGeneDetailResponse = null,
-) {
-  const discoveryCandidate = Boolean(geneDiscovery?.discoveryCandidate)
-  let documentIndexable = discoveryCandidate
-  let body = response.status === 204 ? null : personalizeIconoplasmStaticGeneShell(html, path)
-  let geneShell = preloadedGeneShell
-  if (String(path || "").startsWith("/gene/")) {
-    if (!geneShell)
-      geneShell = await iconoplasmGeneCardBootstrapInjection(
-        request,
-        env,
-        ctx,
-        path,
-        preloadedGeneDetailResponse,
-      )
-    if (discoveryCandidate && Number(geneShell?.status || 503) !== 200) {
-      return iconoplasmGeneUnavailableResponse(request.method)
-    }
-    documentIndexable = iconoplasmGeneDocumentProjectionIsIndexable({
-      record: geneDiscovery?.record,
-      cardPayload: geneShell?.cardPayload,
-      indexable: discoveryCandidate,
-      profileComplete: geneShell?.profileComplete,
-    })
-    if (body) {
-      if (geneShell && geneShell.shellHtml) {
-        body = replaceIconoplasmStaticGeneShell(body, geneShell.shellHtml)
-      }
-      if (geneShell && geneShell.injection) {
-        body = insertIconoplasmGeneCardBootstrap(body, geneShell.injection)
-      }
-      body = rewriteIconoplasmGeneDiscoveryMetadata(body, path, {
-        record: geneDiscovery?.record,
-        cardPayload: geneShell?.cardPayload,
-        indexable: documentIndexable,
-      })
-    }
-  }
-  const headers = addIconoplasmGeneShellHeaders(response.headers, path, {
-    indexable: documentIndexable,
-  })
+function iconoplasmCacheableHtmlShellResponse(html, response, request, cacheStatus) {
+  const body = response.status === 204 ? null : markIconoplasmHomeStartup(html)
+  const headers = new Headers(response.headers)
+  appendIconoplasmServiceDiscoveryLinks(headers)
   // The cached object is the generic rewritten shell in caches.default. The response
-  // returned to browsers is route-tailored, so Cloudflare's outer HTTP cache must
-  // not store it and replay a home shell for /gene/* or vice versa.
+  // returned to browsers is tailored per request, so Cloudflare's outer HTTP cache
+  // must not store it.
   headers.set("Cache-Control", "no-store")
   headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
-  if (
-    body &&
-    request.method === "GET" &&
-    String(path || "").startsWith("/gene/") &&
-    typeof caches !== "undefined" &&
-    caches.default
-  ) {
-    // This is only a short-lived HTML snapshot cache. The cache key includes the
-    // ETag of the complete site-detail response. ARCHITECTURE FENCE [IPD-011]:
-    // the response includes the exact published-card version and blot, so its
-    // ETag is also the canonical public-image cache identity. The D1 route
-    // record establishes membership only and must not select a parallel key.
-    // Do not stretch this TTL or turn it into a symbol-only cache.
-    const geneCacheKey = iconoplasmGeneHtmlCacheKey(
-      new URL(request.url),
-      path,
-      geneShell?.snapshotVersion,
-      env,
-    )
-    if (geneCacheKey) {
-      const cacheHeaders = new Headers(headers)
-      cacheHeaders.set(
-        "Cache-Control",
-        `public, max-age=0, s-maxage=${ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS}`,
-      )
-      cacheHeaders.set("X-Iconoplasm-HTML-Shell-Cache", `${cacheStatus}-GENE-STORED`)
-      ctx?.waitUntil(
-        caches.default.put(
-          geneCacheKey,
-          new Response(body, {
-            status: response.status,
-            statusText: response.statusText,
-            headers: cacheHeaders,
-          }),
-        ),
-      )
-    }
-  }
-  body = injectAnalyticsConsentBootstrap(body, request)
+  const consented = injectAnalyticsConsentBootstrap(body, request)
   if (parseCookies(request.headers.get("Cookie") || "").session) {
     // ARCHITECTURE FENCE [IPD-008]: this readable cookie carries presence only.
     // Re-issuing it from a dynamic HTML response repairs browsers whose old
@@ -848,11 +182,18 @@ async function iconoplasmCacheableHtmlShellResponse(
       sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" }),
     )
   }
-  return new Response(request.method === "HEAD" ? null : body, {
+  return new Response(request.method === "HEAD" ? null : consented, {
     status: response.status,
     statusText: response.statusText,
     headers,
   })
+}
+
+function markIconoplasmHomeStartup(html) {
+  return String(html).replace(
+    /(<div[^>]*id=["']iconoplasm-root["'][^>]*)(>)/,
+    `$1 data-icono-startup-route="home"$2`,
+  )
 }
 
 function buildPublicSubdomainRobotsTxt(host) {
@@ -1028,210 +369,6 @@ function rewritePrivacyCanonicalMetadata(html, host) {
   return next
 }
 
-function iconoplasmGeneMetaDescription(record, cardPayload) {
-  const gene = normalizeIconoplasmPublishedGeneRecord(record)
-  const essence =
-    cardPayload?.essence && typeof cardPayload.essence === "object" ? cardPayload.essence : {}
-  const traits = []
-  if (essence.sex) traits.push(String(essence.sex).toLowerCase())
-  if (essence.age || essence.age_years) traits.push(`age ${essence.age || essence.age_years}`)
-  if (essence.weight_kg) traits.push(`${Math.round(Number(essence.weight_kg))} kg`)
-  if (Array.isArray(essence.aesthetics) && essence.aesthetics[0]) {
-    traits.push(`${essence.aesthetics[0]} aesthetic`)
-  }
-  if (essence.politics || essence.faction) {
-    traits.push(`${essence.politics || essence.faction} alignment`)
-  }
-  const identity = gene.fullName ? `${gene.symbol} (${gene.fullName})` : gene.symbol
-  const detail = traits.length ? `: ${traits.join(", ")}` : ""
-  return `${identity} Iconoplasm character profile${detail}.`
-}
-
-function rewriteIconoplasmGeneHeadMetadata(html, replacements, appended) {
-  // The current shell contains more than 300 KB of inline CSS. Repeated
-  // replace-or-insert scans spent milliseconds per gene request on unchanged
-  // bytes. Visit markup once, keeping raw script/style bodies opaque, and
-  // insert absent metadata at the existing head boundary.
-  const pending = new Map(replacements)
-  return String(html || "").replace(
-    /<(?:((?:meta|link))\b[^>]*>|(title|script|style)\b[^>]*>[\s\S]*?<\/\2\s*>|\/head\s*>)/gi,
-    (tag, singleton, block) => {
-      const kind = String(singleton || block || "").toLowerCase()
-      let key = ""
-      if (kind === "style") return tag
-      if (kind === "script") {
-        const opening = tag.slice(0, tag.indexOf(">") + 1)
-        return /\btype\s*=\s*["']application\/ld\+json["']/i.test(opening) ||
-          /\bid\s*=\s*["']iconoplasm-gene-structured-data["']/i.test(opening)
-          ? ""
-          : tag
-      }
-      if (kind === "title") key = "title"
-      if (kind === "link" && /\brel\s*=\s*["']canonical["']/i.test(tag)) key = "canonical"
-      if (kind === "meta") {
-        key = /\b(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]?.toLowerCase() || ""
-        if (
-          /^(?:og:image(?::(?:url|secure_url|alt|type|width|height))?|twitter:(?:card|image|image:alt))$/.test(
-            key,
-          )
-        )
-          return ""
-      }
-      if (replacements.has(key)) {
-        const replacement = pending.get(key) || ""
-        pending.delete(key)
-        return replacement
-      }
-      if (!kind) {
-        const remaining = [...pending.values(), ...appended].filter(Boolean).join("\n")
-        pending.clear()
-        return `${remaining}\n${tag}`
-      }
-      return tag
-    },
-  )
-}
-
-function iconoplasmGenePublishedCardBlotUrl(cardPayload) {
-  return String(iconoplasmPublishedGeneBlot(cardPayload)?.semantic_url || "").trim()
-}
-
-export function iconoplasmGeneDocumentProjectionIsIndexable({
-  record = null,
-  cardPayload = null,
-  indexable = false,
-  profileComplete = false,
-} = {}) {
-  const gene = normalizeIconoplasmPublishedGeneRecord(record)
-  const portrait =
-    cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : null
-  // Page discovery and image discovery are separate contracts. A complete
-  // published gene profile remains indexable while its optional canonical blot
-  // is being materialized. Blot readiness only controls image metadata below.
-  return Boolean(
-    indexable &&
-    gene.symbol &&
-    gene.fullName &&
-    profileComplete &&
-    portrait?.status === "published" &&
-    /^[a-f0-9]{64}$/i.test(String(portrait.asset_sha256 || "").trim()),
-  )
-}
-
-function iconoplasmGeneStructuredData({ gene, geneUrl, title, description, blotUrl }) {
-  const webpageId = `${geneUrl}#webpage`
-  const geneId = `${geneUrl}#gene`
-  const datasetId = `https://${ICONOPLASM_HOST}/genes#dataset`
-  const webpage = {
-    "@type": "WebPage",
-    "@id": webpageId,
-    url: geneUrl,
-    name: title,
-    description,
-    mainEntity: { "@id": geneId },
-  }
-  const geneEntity = {
-    "@type": "Gene",
-    "@id": geneId,
-    name: gene.fullName || gene.symbol,
-    alternateName: gene.symbol,
-    url: geneUrl,
-    identifier: {
-      "@type": "PropertyValue",
-      propertyID: "HGNC approved symbol",
-      value: gene.symbol,
-    },
-    isPartOf: { "@id": datasetId },
-  }
-  const graph = [webpage, geneEntity]
-  if (blotUrl) {
-    const imageId = `${geneUrl}#canonical-blot`
-    const blotAlt = `${gene.symbol} Iconoplasm gene blot — ${gene.fullName || gene.symbol}`
-    const caption = `Canonical Iconoplasm gene blot for human ${gene.symbol} (${gene.fullName || gene.symbol}), with the full gene name and symbol printed over the character portrait.`
-    webpage.primaryImageOfPage = { "@id": imageId }
-    geneEntity.image = { "@id": imageId }
-    graph.push({
-      "@type": "ImageObject",
-      "@id": imageId,
-      contentUrl: blotUrl,
-      url: blotUrl,
-      name: blotAlt,
-      caption,
-      encodingFormat: "image/webp",
-      width: 768,
-      height: 1024,
-      representativeOfPage: true,
-      license: ICONOPLASM_IMAGE_LICENSE_URL,
-      usageInfo: ICONOPLASM_IMAGE_USAGE_URL,
-    })
-  }
-  return {
-    "@context": "https://schema.org",
-    "@graph": graph,
-  }
-}
-
-export function rewriteIconoplasmGeneDiscoveryMetadata(
-  html,
-  path,
-  { record = null, cardPayload = null, indexable = false } = {},
-) {
-  const symbol = iconoplasmStaticGeneSymbolFromPath(path)
-  if (!symbol) return html
-  const gene = normalizeIconoplasmPublishedGeneRecord(record)
-  const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(symbol)}`
-  const title = iconoplasmGenePageTitle(symbol, gene.fullName)
-  const safeTitle = escapeIconoplasmStaticShellText(title)
-  const description = iconoplasmGeneMetaDescription(record, cardPayload)
-  const safeDescription = escapeIconoplasmHtmlAttribute(description)
-  const blotUrl = indexable ? iconoplasmGenePublishedCardBlotUrl(cardPayload) : ""
-  const blotAlt = blotUrl ? `${symbol} Iconoplasm gene blot — ${gene.fullName || symbol}` : ""
-  const replacements = new Map([
-    ["title", `<title>${safeTitle}</title>`],
-    ["description", `<meta name="description" content="${safeDescription}">`],
-    ["robots", indexable ? "" : '<meta name="robots" content="noindex,follow,noarchive">'],
-    ["canonical", `<link rel="canonical" href="${geneUrl}">`],
-    ["og:url", `<meta property="og:url" content="${geneUrl}">`],
-    ["twitter:url", `<meta name="twitter:url" content="${geneUrl}">`],
-    ["og:title", `<meta property="og:title" content="${escapeIconoplasmHtmlAttribute(title)}">`],
-    ["og:description", `<meta property="og:description" content="${safeDescription}">`],
-    [
-      "twitter:title",
-      `<meta name="twitter:title" content="${escapeIconoplasmHtmlAttribute(title)}">`,
-    ],
-    ["twitter:description", `<meta name="twitter:description" content="${safeDescription}">`],
-  ])
-  const appended = []
-  if (blotUrl) {
-    const imageMeta = [
-      `<meta property="og:image" content="${blotUrl}">`,
-      `<meta property="og:image:url" content="${blotUrl}">`,
-      `<meta property="og:image:secure_url" content="${blotUrl}">`,
-      `<meta property="og:image:type" content="image/webp">`,
-      `<meta property="og:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
-      '<meta property="og:image:width" content="768">',
-      '<meta property="og:image:height" content="1024">',
-      '<meta name="twitter:card" content="summary_large_image">',
-      `<meta name="twitter:image" content="${blotUrl}">`,
-      `<meta name="twitter:image:alt" content="${escapeIconoplasmHtmlAttribute(blotAlt)}">`,
-    ].join("\n")
-    appended.push(imageMeta)
-  }
-  if (indexable) {
-    const structuredData = iconoplasmGeneStructuredData({
-      gene: { ...gene, symbol },
-      geneUrl,
-      title,
-      description,
-      blotUrl,
-    })
-    appended.push(
-      `<script type="application/ld+json" id="iconoplasm-gene-structured-data">${iconoplasmSafeJsonScriptPayload(structuredData)}</script>`,
-    )
-  }
-  return rewriteIconoplasmGeneHeadMetadata(html, replacements, appended)
-}
-
 function resolveStaticSiteOrigin(hostname) {
   const host = String(hostname || "").toLowerCase()
   if (
@@ -1296,7 +433,6 @@ import {
 import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmReaderRecoverySiteGeneDetail,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
   drainIconoplasmAuthorityAccountProjection,
@@ -2185,23 +1321,10 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         })
       }
 
-      let geneDiscovery = null
-      if (
-        (request.method === "GET" || request.method === "HEAD") &&
-        url.pathname.startsWith("/gene/")
-      ) {
-        geneDiscovery = await iconoplasmGeneDiscoveryStateForPath(env, url.pathname)
-        if (geneDiscovery.kind === "unavailable") {
-          return iconoplasmGeneUnavailableResponse(request.method)
-        }
-        if (geneDiscovery.kind === "unknown") {
-          return iconoplasmGeneNotFoundResponse(request.method)
-        }
-        const canonicalPath = `/gene/${encodeURIComponent(geneDiscovery.canonicalSymbol)}`
-        if (geneDiscovery.kind === "alias" || url.pathname !== canonicalPath) {
-          return iconoplasmGeneCanonicalRedirect(url, geneDiscovery.canonicalSymbol)
-        }
-      }
+      // Every published gene is a static document the asset layer serves before
+      // this Worker runs, and `/gene/*` is not in run_worker_first. A /gene/ path that
+      // reaches here has no page to give: say so, and never read D1 or the shell.
+      if (url.pathname.startsWith("/gene/")) return iconoplasmGeneNotFoundResponse(request.method)
 
       // Versioned iconoplasm static assets: extend cache aggressively
       if (
@@ -2288,66 +1411,18 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       }
 
       // All non-API, non-static routes serve the same Quartz HTML shell (client-side app handles routing).
-      // For root, /gene/*, or any other path, fetch the iconoplasm content page from Pages.
+      // For root or any other path, fetch the iconoplasm content page from Pages.
       const targetPath = "/apps/iconoplasm/index"
       const targetUrl = buildStaticSiteUrl(url, targetPath)
       const canUseHtmlShellEdgeCache =
         (request.method === "GET" || request.method === "HEAD") &&
         typeof caches !== "undefined" &&
         caches.default
-      // Read only the detail response headers before checking the per-gene HTML
-      // cache. Its ETag covers the exact published-card version plus the rich
-      // detail projection; parsing and rendering JSON belongs exclusively to a
-      // cache miss. This ordering is the cold-isolate CPU fence.
-      const geneDetailResponseForHtmlCache =
-        canUseHtmlShellEdgeCache && String(url.pathname || "").startsWith("/gene/")
-          ? await iconoplasmGeneDetailResponseForHtmlCache(request, env, ctx, url.pathname)
-          : null
-
       if (canUseHtmlShellEdgeCache) {
-        const geneSnapshotVersionForHtmlCache = iconoplasmGeneSnapshotVersionFromDetailResponse(
-          geneDetailResponseForHtmlCache,
-        )
-        const geneHtmlCacheKey =
-          geneSnapshotVersionForHtmlCache && geneDiscovery?.discoveryCandidate
-            ? iconoplasmGeneHtmlCacheKey(url, url.pathname, geneSnapshotVersionForHtmlCache, env)
-            : null
-        if (geneHtmlCacheKey) {
-          const cachedGeneHtml = await caches.default.match(geneHtmlCacheKey)
-          if (cachedGeneHtml) {
-            const cachedGeneIsIndexable = !/\bnoindex\b/i.test(
-              cachedGeneHtml.headers.get("X-Robots-Tag") || "",
-            )
-            const headers = addIconoplasmGeneShellHeaders(cachedGeneHtml.headers, url.pathname, {
-              // The cached response already contains the final card-aware
-              // eligibility decision. The route record supplies membership,
-              // not permission to erase a cached noindex decision.
-              indexable: cachedGeneIsIndexable,
-            })
-            headers.set("Cache-Control", "no-store")
-            headers.set("X-Iconoplasm-HTML-Shell-Cache", "HIT-GENE")
-            return new Response(request.method === "HEAD" ? null : cachedGeneHtml.body, {
-              status: cachedGeneHtml.status,
-              statusText: cachedGeneHtml.statusText,
-              headers,
-            })
-          }
-        }
         const cachedShell = await caches.default.match(iconoplasmHtmlShellCacheKey(url, env))
         if (cachedShell) {
           const cachedHtml = request.method === "HEAD" ? "" : await cachedShell.text()
-          return await iconoplasmCacheableHtmlShellResponse(
-            cachedHtml,
-            cachedShell,
-            request,
-            env,
-            ctx,
-            url.pathname,
-            "HIT",
-            null,
-            geneDiscovery,
-            geneDetailResponseForHtmlCache,
-          )
+          return iconoplasmCacheableHtmlShellResponse(cachedHtml, cachedShell, request, "HIT")
         }
       }
 
@@ -2422,18 +1497,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
             ),
           )
         }
-        return await iconoplasmCacheableHtmlShellResponse(
-          html,
-          response,
-          request,
-          env,
-          ctx,
-          url.pathname,
-          "MISS",
-          null,
-          geneDiscovery,
-          geneDetailResponseForHtmlCache,
-        )
+        return iconoplasmCacheableHtmlShellResponse(html, response, request, "MISS")
       }
 
       return response

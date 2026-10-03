@@ -112,7 +112,6 @@ probe) is `e2e/anonymous-reader-requests.e2e.mjs`: it loads the home page and a
 gene page without the signed-in cookie and fails if any request matches the
 stateful config's `run_worker_first` list.
 
-Global authority is additionally protected by the site-detail/public-media,
-range HTML, gene HTML, and sitemap concordance tests under `workers/`. Those
-tests must keep D1 portrait A and card portrait B intentionally different, then
+Global authority is additionally protected by the public-media test under
+`workers/`. It must keep D1 portrait A and card portrait B intentionally different, then
 prove that only a rewrite of the gene's stable object can move public media.

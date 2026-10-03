@@ -79,14 +79,15 @@ function buildStableGeneObjects(publishedAt = STABLE_PUBLISHED_AT) {
   return new Map(cards)
 }
 
-// Routes authenticated Bunny Storage reads to the seeded stable objects and
-// every other URL (the static HTML shell) to `fallback`. `status` other than
-// 200 makes storage fail for every object, which is the "published reader
-// unavailable" branch.
-function recoveryFetch(objects, { status = 200, fallback, storageReads = [] } = {}) {
-  return async (input, init = {}) => {
+// Routes authenticated Bunny Storage reads to the seeded stable objects. The
+// containment Worker fetches nothing else (no Pages shell), so any other URL
+// fails the test. `status` other than 200 makes storage fail for every object,
+// which is the "published reader unavailable" branch.
+function recoveryFetch(objects, { status = 200, storageReads = [] } = {}) {
+  return async (input) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
-    if (!url.hostname.endsWith(STORAGE_HOST)) return fallback(input, init)
+    if (!url.hostname.endsWith(STORAGE_HOST))
+      throw new Error(`the containment Worker fetched ${url.href}, which is not storage`)
     storageReads.push(url.pathname)
     if (status !== 200) return new Response(null, { status })
     const value = objects.get(url.pathname)
@@ -119,10 +120,6 @@ function buildForbiddenEnv(kv, d1Calls) {
   }
 }
 
-function pageShell() {
-  return '<!doctype html><html><head><title>Iconoplasm</title></head><body><div id="iconoplasm-root"><!-- iconoplasm-static-gene-shell:start --><div id="icono-gene-content">generic</div><!-- iconoplasm-static-gene-shell:end --></div></body></html>'
-}
-
 test.beforeEach(() => resetIconoplasmRuntimeCachesForTest())
 test.after(() => resetIconoplasmRuntimeCachesForTest())
 
@@ -139,14 +136,22 @@ test("the actual release verifier proves the published reader with every D1 bind
       return { body: new Uint8Array([82, 73, 70, 70]), httpMetadata: { contentType: "image/webp" } }
     },
   }
-  globalThis.fetch = recoveryFetch(buildStableGeneObjects(), {
-    storageReads,
-    fallback: async () => new Response(pageShell(), { headers: { "Content-Type": "text/html" } }),
-  })
+  globalThis.fetch = recoveryFetch(buildStableGeneObjects(), { storageReads })
   try {
     const result = await verifyIconoplasmReaderRecovery({
       fetcher: async (url, options) => {
         resetIconoplasmRuntimeCachesForTest()
+        // The asset layer answers a published gene's page before the Worker runs
+        // (its retained bytes hold the document); this stands in for it. The
+        // Worker answers everything else.
+        const symbol = /^\/gene\/(TP53|BRCA1)$/.exec(new URL(url).pathname)?.[1]
+        if (symbol)
+          return new Response(
+            options?.method === "HEAD"
+              ? null
+              : `<link rel="canonical" href="https://iconoplasm.brinedew.bio/gene/${symbol}">`,
+            { status: 200, headers: { "Content-Type": "text/html" } },
+          )
         return runtime.fetch(new Request(url, options), env, { waitUntil() {} })
       },
     })
@@ -159,7 +164,7 @@ test("the actual release verifier proves the published reader with every D1 bind
     ])
     assert.equal(d1Calls.count, 0)
     // The verifier probes TP53 and BRCA1 (page + API + HEAD each) and one
-    // unknown symbol; every gene resolution is one stable-object read and the
+    // unknown symbol; the API's gene resolution is one stable-object read and the
     // retired KV publication tree is never consulted.
     assert.ok(
       storageReads.every((path) => /^\/test-zone\/genes\/v3\/[A-Z0-9_]+\.json$/.test(path)),
@@ -175,43 +180,14 @@ test("the actual release verifier proves the published reader with every D1 bind
   }
 })
 
-test("B-742 reader recovery serves real published gene content and API without D1", async () => {
+test("B-742 reader recovery serves the published card API without D1", async () => {
   const originalFetch = globalThis.fetch
   const d1Calls = { count: 0 }
   const storageReads = []
-  globalThis.fetch = recoveryFetch(buildStableGeneObjects(), {
-    storageReads,
-    fallback: async (input) => {
-      assert.equal(String(input), "https://brinedew-bio.pages.dev/apps/iconoplasm/index")
-      return new Response(pageShell(), {
-        status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      })
-    },
-  })
+  globalThis.fetch = recoveryFetch(buildStableGeneObjects(), { storageReads })
   try {
     const kv = new FakeKV({})
     const env = buildForbiddenEnv(kv, d1Calls)
-    const response = await runtime.fetch(
-      new Request("https://iconoplasm.brinedew.bio/gene/TP53"),
-      env,
-      { waitUntil() {} },
-    )
-    const html = await response.text()
-    assert.equal(response.status, 200)
-    assert.equal(response.headers.get("X-B742-Reader-Recovery"), "published-card-only")
-    assert.ok(response.headers.get("Content-Security-Policy"))
-    assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff")
-    assert.match(response.headers.get("Strict-Transport-Security"), /includeSubDomains/)
-    assert.match(html, /data-icono-server-rendered-gene="true"/)
-    assert.match(html, /tumor protein p53/)
-    assert.match(html, /The published TP53 manifestation\./)
-    assert.match(html, /portraits\/v1\/aa\/a{64}\/full\.webp/)
-    assert.match(html, new RegExp(STABLE_PUBLISHED_AT.replace(/\./g, "\\.")))
-    assert.doesNotMatch(html, /data-b742-d1-free-gene-shell/)
-    // The page render resolved TP53 from its stable object exactly once.
-    assert.deepEqual(storageReads, [stableObjectPath("TP53")])
-
     const apiResponse = await runtime.fetch(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/TP53"),
       env,
@@ -219,6 +195,10 @@ test("B-742 reader recovery serves real published gene content and API without D
     )
     const payload = await apiResponse.json()
     assert.equal(apiResponse.status, 200)
+    assert.equal(apiResponse.headers.get("X-B742-Reader-Recovery"), "published-card-only")
+    assert.ok(apiResponse.headers.get("Content-Security-Policy"))
+    assert.equal(apiResponse.headers.get("X-Content-Type-Options"), "nosniff")
+    assert.match(apiResponse.headers.get("Strict-Transport-Security"), /includeSubDomains/)
     assert.equal(payload.symbol, "TP53")
     assert.equal(payload.full_name, "tumor protein p53")
     assert.equal(payload.canonical_manifestation.prose, "The published TP53 manifestation.")
@@ -227,8 +207,22 @@ test("B-742 reader recovery serves real published gene content and API without D
     assert.equal(payload.detail_availability.live_candidates, "temporarily_unavailable")
     assert.equal("stable_object_version" in payload, false)
     assert.equal("candidate_count" in payload, false)
+    // The API resolved TP53 from its stable object exactly once.
+    assert.deepEqual(storageReads, [stableObjectPath("TP53")])
     assert.equal(d1Calls.count, 0)
     assert.equal(kv.reads, 0)
+
+    // The Worker owns no gene page: a /gene/ path that reaches it is a 404 that
+    // reads no storage, D1 or shell (the asset layer serves the real documents).
+    const page = await runtime.fetch(
+      new Request("https://iconoplasm.brinedew.bio/gene/TP53"),
+      env,
+      { waitUntil() {} },
+    )
+    assert.equal(page.status, 404)
+    assert.match(await page.text(), /Gene not found/)
+    assert.deepEqual(storageReads, [stableObjectPath("TP53")])
+    assert.equal(d1Calls.count, 0)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -237,22 +231,9 @@ test("B-742 reader recovery serves real published gene content and API without D
 test("B-742 reader recovery preserves HEAD and unknown-versus-unavailable semantics", async () => {
   const originalFetch = globalThis.fetch
   const d1Calls = { count: 0 }
-  const shell = async () =>
-    new Response(pageShell(), {
-      status: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    })
-  globalThis.fetch = recoveryFetch(buildStableGeneObjects(), { fallback: shell })
+  globalThis.fetch = recoveryFetch(buildStableGeneObjects())
   try {
     const env = buildForbiddenEnv(new FakeKV({}), d1Calls)
-    const headPage = await runtime.fetch(
-      new Request("https://iconoplasm.brinedew.bio/gene/TP53", { method: "HEAD" }),
-      env,
-      { waitUntil() {} },
-    )
-    assert.equal(headPage.status, 200)
-    assert.equal(await headPage.text(), "")
-
     const headApi = await runtime.fetch(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/TP53", {
         method: "HEAD",
@@ -264,24 +245,24 @@ test("B-742 reader recovery preserves HEAD and unknown-versus-unavailable semant
     assert.equal(await headApi.text(), "")
 
     const unknown = await runtime.fetch(
-      new Request("https://iconoplasm.brinedew.bio/gene/NOT_IN_PUBLISHED_CARD"),
+      new Request(
+        "https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/NOT_IN_PUBLISHED_CARD",
+      ),
       env,
       { waitUntil() {} },
     )
     assert.equal(unknown.status, 404)
-    assert.match(await unknown.text(), /Gene not found/)
 
     // Bunny Storage failing (5xx on every attempt) is "published reader
     // unavailable", not "gene unknown": 503, never a 404.
     resetIconoplasmRuntimeCachesForTest()
-    globalThis.fetch = recoveryFetch(buildStableGeneObjects(), { status: 500, fallback: shell })
+    globalThis.fetch = recoveryFetch(buildStableGeneObjects(), { status: 500 })
     const unavailable = await runtime.fetch(
-      new Request("https://iconoplasm.brinedew.bio/gene/TP53"),
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/TP53"),
       buildForbiddenEnv(new FakeKV({}), d1Calls),
       { waitUntil() {} },
     )
     assert.equal(unavailable.status, 503)
-    assert.match(await unavailable.text(), /temporarily unavailable/i)
     assert.equal(d1Calls.count, 0)
   } finally {
     globalThis.fetch = originalFetch
