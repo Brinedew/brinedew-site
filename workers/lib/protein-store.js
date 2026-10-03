@@ -324,30 +324,37 @@ export async function fetchProteinByGene(db, gene) {
   return protein || null
 }
 
-// Cache for dual embeddings (HiG2Vec + SaProt, with optional legacy ESM2 fallback)
+// Caches for embeddings: HiG2Vec + SaProt per gene, and ESM2 (the legacy sequence signal) per gene.
 const dualEmbeddingCache = new Map()
+const esm2EmbeddingCache = new Map()
 const MAX_DUAL_CACHE_SIZE = 256
 
-function rememberDualEmbedding(key, value) {
+function rememberEmbedding(cache, key, value) {
   if (!key) return
   if (!value) {
-    dualEmbeddingCache.delete(key)
+    cache.delete(key)
     return
   }
-  dualEmbeddingCache.set(key, value)
-  if (dualEmbeddingCache.size > MAX_DUAL_CACHE_SIZE) {
-    const oldestKey = dualEmbeddingCache.keys().next().value
-    dualEmbeddingCache.delete(oldestKey)
+  cache.set(key, value)
+  if (cache.size > MAX_DUAL_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value
+    cache.delete(oldestKey)
   }
 }
 
 /**
- * Fetch HiG2Vec + SaProt embeddings for a gene (with optional legacy ESM2 fallback).
- * Returns { hig2vec: Float32Array|null, saprot: Float32Array|null, esm2: Float32Array|null }
+ * Fetch HiG2Vec + SaProt embeddings for a gene.
+ * Returns { hig2vec: Float32Array|null, saprot: Float32Array|null }
+ *
+ * A row also holds the gene's 5,120-byte ESM2 vector, and D1 hands every BLOB over as an array of
+ * numbers that the Worker parses and decodes, so this read names only the two vectors a score
+ * uses. A gene with no SaProt is scored with ESM2, which `fetchEsm2Embedding` reads then (15% of
+ * the first 3,000 production rows have none). The guess answers with its score (B-957), so this
+ * read is on the guess's own path.
  */
 export async function fetchDualEmbeddings(db, geneSymbol) {
   if (!geneSymbol) {
-    return { hig2vec: null, saprot: null, esm2: null }
+    return { hig2vec: null, saprot: null }
   }
   const key = geneSymbol.toUpperCase()
   if (dualEmbeddingCache.has(key)) {
@@ -355,7 +362,7 @@ export async function fetchDualEmbeddings(db, geneSymbol) {
   }
   const row = await db
     .prepare(
-      `SELECT vector, dim, esm2_vector, esm2_dim, saprot_vector, saprot_dim
+      `SELECT vector, dim, saprot_vector, saprot_dim
      FROM ${DUAL_EMBEDDINGS_TABLE} WHERE gene_symbol = ? LIMIT 1`,
     )
     .bind(key)
@@ -364,10 +371,29 @@ export async function fetchDualEmbeddings(db, geneSymbol) {
   const result = {
     hig2vec: toFloat32Vector(row),
     saprot: row?.saprot_vector ? toFloat16ToFloat32Vector(row.saprot_vector, row.saprot_dim) : null,
-    esm2: row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null,
   }
-  rememberDualEmbedding(key, result)
+  rememberEmbedding(dualEmbeddingCache, key, result)
   return result
+}
+
+/** The legacy ESM2 vector of a gene (Float32Array), or null when its row has none. */
+export async function fetchEsm2Embedding(db, geneSymbol) {
+  if (!geneSymbol) {
+    return null
+  }
+  const key = geneSymbol.toUpperCase()
+  if (esm2EmbeddingCache.has(key)) {
+    return esm2EmbeddingCache.get(key)
+  }
+  const row = await db
+    .prepare(
+      `SELECT esm2_vector, esm2_dim FROM ${DUAL_EMBEDDINGS_TABLE} WHERE gene_symbol = ? LIMIT 1`,
+    )
+    .bind(key)
+    .first()
+  const vector = row?.esm2_vector ? toFloat16ToFloat32Vector(row.esm2_vector, row.esm2_dim) : null
+  rememberEmbedding(esm2EmbeddingCache, key, vector)
+  return vector
 }
 
 async function ensureStructureFailureTable(db) {
@@ -1310,13 +1336,18 @@ export async function getBlendedSimilarity(db, guessId, targetId, options = {}) 
     guessEmbeddings?.saprot && targetEmbeddings?.saprot
       ? cosineSimilarity(guessEmbeddings.saprot, targetEmbeddings.saprot)
       : null
-  const cosE =
-    guessEmbeddings?.esm2 && targetEmbeddings?.esm2
-      ? cosineSimilarity(guessEmbeddings.esm2, targetEmbeddings.esm2)
-      : null
 
-  const cosSeq = Number.isFinite(cosS) ? cosS : cosE
-  const seqKey = Number.isFinite(cosS) ? "saprot" : "esm2"
+  let cosSeq = cosS
+  let seqKey = "saprot"
+  if (!Number.isFinite(cosS)) {
+    // One of the two has no SaProt: ESM2 is the sequence signal, and only now is it read.
+    const [guessEsm2, targetEsm2] = await Promise.all([
+      fetchEsm2Embedding(db, guessKey),
+      fetchEsm2Embedding(db, targetKey),
+    ])
+    cosSeq = guessEsm2 && targetEsm2 ? cosineSimilarity(guessEsm2, targetEsm2) : null
+    seqKey = "esm2"
+  }
   const percent = getSoftOrPercent(cosH, cosSeq, seqKey)
   return { blended: percent, isLadder, ladderRank }
 }

@@ -97,7 +97,7 @@ async function sessionWithGuesses(guessIds, { statements = [] } = {}) {
       uniprot,
       correct: false,
       createdAt: Date.now() + index,
-      similarityPending: true,
+      score: { percent: 40, similarity: 40, isLadder: false, ladderRank: null },
     })),
   })
   return { harness, metered, statements, target: state.targetId }

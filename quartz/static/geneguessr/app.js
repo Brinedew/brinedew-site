@@ -1493,32 +1493,27 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     disableMarking: true,
   }
 
-  // Fetch graphics settings from API and update DEBUG_STYLIZATION
-  fetch(`${API_BASE}/api/graphics-settings`, {
-    credentials: "include",
-  })
-    .then((response) => (response.ok ? response.json() : null))
-    .then((settings) => {
-      if (settings) {
-        GRAPHICS_SETTINGS = settings
-        DEBUG_STYLIZATION.hideAxes = !(settings.extras && settings.extras.hideAxes === false)
-        DEBUG_STYLIZATION.orthographic = settings.camera && settings.camera.mode === "orthographic"
-        DEBUG_STYLIZATION.backgroundColor = true
-        DEBUG_STYLIZATION.lighting = !(settings.lighting && settings.lighting.enabled === false)
-        DEBUG_STYLIZATION.occlusion = !(settings.occlusion && settings.occlusion.enabled === false)
-        DEBUG_STYLIZATION.antialiasing =
-          settings.antialiasing && settings.antialiasing.mode === "fxaa"
-        DEBUG_STYLIZATION.fog = !(settings.fog && settings.fog.enabled === false)
-        DEBUG_STYLIZATION.outline = !(settings.outline && settings.outline.enabled === false)
-        DEBUG_STYLIZATION.disableMarking = !(
-          settings.extras && settings.extras.disableMarking === false
-        )
-        console.info("[GeneGuessr] Loaded graphics settings from admin panel:", settings)
-      }
-    })
-    .catch((err) =>
-      console.warn("[GeneGuessr] Failed to load graphics settings, using defaults:", err),
+  // The admin's graphics settings arrive in the bootstrap response (B-957), before the first
+  // viewer is created, so the page makes no request for them and never styles a viewer with the
+  // defaults while they are on the way. A bootstrap without them leaves the defaults.
+  function applyGraphicsSettings(settings) {
+    if (!settings || typeof settings !== "object") return
+    GRAPHICS_SETTINGS = settings
+    DEBUG_STYLIZATION.hideAxes = !(settings.extras && settings.extras.hideAxes === false)
+    DEBUG_STYLIZATION.orthographic = settings.camera && settings.camera.mode === "orthographic"
+    DEBUG_STYLIZATION.backgroundColor = true
+    DEBUG_STYLIZATION.lighting = !(settings.lighting && settings.lighting.enabled === false)
+    DEBUG_STYLIZATION.occlusion = !(settings.occlusion && settings.occlusion.enabled === false)
+    DEBUG_STYLIZATION.antialiasing = settings.antialiasing && settings.antialiasing.mode === "fxaa"
+    DEBUG_STYLIZATION.fog = !(settings.fog && settings.fog.enabled === false)
+    DEBUG_STYLIZATION.outline = !(settings.outline && settings.outline.enabled === false)
+    DEBUG_STYLIZATION.disableMarking = !(
+      settings.extras && settings.extras.disableMarking === false
     )
+    // The debug flags of the address win over the stored settings.
+    applyDebugViewerParams()
+    console.info("[GeneGuessr] Loaded graphics settings from admin panel:", settings)
+  }
 
   // Parse URL params for debug flags (e.g., ?debug_viewer&no_occlusion&no_outline)
   const urlParams = new URLSearchParams(window.location.search)
@@ -1530,7 +1525,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   const initialPracticeRestart =
     initialPracticeMode && (restartParam === "1" || (restartParam || "").toLowerCase() === "true")
   const initialPracticeDate = initialPracticeMode && dateParam ? dateParam : null
-  if (urlParams.has("debug_viewer")) {
+  function applyDebugViewerParams() {
+    if (!urlParams.has("debug_viewer")) return
     Object.keys(DEBUG_STYLIZATION).forEach((key) => {
       if (urlParams.has(`no_${key}`)) {
         DEBUG_STYLIZATION[key] = false
@@ -1542,6 +1538,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       }
     })
   }
+  applyDebugViewerParams()
 
   function applyViewerThemeColors(viewer, container) {
     window.GeneguessrMolstar?.applyViewerThemeColors?.(viewer, container)
@@ -2669,23 +2666,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     return response.json()
   }
 
-  // Fetch similarity score for a guess (lazy loading)
-  async function fetchGuessSimilarity(guessId) {
-    const t0 = performance.now()
-    const response = await fetch(`${API_BASE}/api/game/guess-similarity${buildPracticeQuery()}`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guessId }),
-    })
-    console.log(`[TIMING] similarity-api-call | ${Math.round(performance.now() - t0)}ms`)
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      throw new Error(error?.error || `Similarity fetch failed with status ${response.status}`)
-    }
-    return response.json()
-  }
-
   async function revealHintRequest(hintId) {
     const response = await fetch(`${API_BASE}/api/game/reveal-hint${buildPracticeQuery()}`, {
       method: "POST",
@@ -2920,6 +2900,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     console.log(
       `[TIMING] bootstrap-api-call (network + worker compute) | ${Math.round(bootstrapDuration)}ms`,
     )
+    applyGraphicsSettings(payload.graphicsSettings)
     hydrateStateFromPayload(payload)
     if (options.practice === true) {
       gameState.practiceMode = true // ensure client-side practice flag for off-record runs
@@ -3566,23 +3547,16 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       highlightMatches = false,
     } = options
 
-    // Handle pending similarity (lazy loading)
-    const isPending = score === null || score?.similarityPending
     const similarityPercent =
-      !isPending && showSimilarity && score && typeof score.percent === "number"
+      showSimilarity && score && typeof score.percent === "number"
         ? Math.round(score.percent)
         : null
     const isLadder = score?.isLadder || false
     const ladderRank = score?.ladderRank ?? score?.ladder_rank ?? null
     const rankLabel = isLadder && ladderRank ? `${ordinal(ladderRank)} closest` : ""
-    const similarityValue = isPending
-      ? ""
-      : similarityPercent === null
-        ? "N/A"
-        : `${similarityPercent}%`
+    const similarityValue = similarityPercent === null ? "N/A" : `${similarityPercent}%`
     const similarityWidth = similarityPercent === null ? 0 : similarityPercent
     const ladderClass = isLadder ? " pg-ladder" : ""
-    const pendingClass = isPending ? " pg-pending" : ""
 
     const sectionMarkup = sections
       .map((section) =>
@@ -3592,18 +3566,15 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       )
       .join("")
 
-    // Show spinner when similarity is pending, otherwise show score
-    const scoreContent = isPending ? '<span class="pg-score-spinner"></span>' : similarityValue
-
     const rankSlotMarkup = `<span class="pg-ladder-rank${rankLabel ? "" : " pg-ladder-rank-empty"}">${rankLabel}</span>`
 
     const similarityMarkup = showSimilarity
       ? `
         ${rankSlotMarkup}
-        <div class="pg-bar${ladderClass}${pendingClass}">
+        <div class="pg-bar${ladderClass}">
           <div class="pg-bar-fill${ladderClass}" style="width: ${similarityWidth}%" data-guess-id="${cardId}"></div>
         </div>
-        <span class="pg-feedback-score${ladderClass}${pendingClass}" data-guess-id="${cardId}">${scoreContent}</span>
+        <span class="pg-feedback-score${ladderClass}" data-guess-id="${cardId}">${similarityValue}</span>
       `
       : ""
 
@@ -3656,11 +3627,9 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       return ""
     }
 
-    // Handle score format: can be null (pending), number, or { percent, isLadder }
+    // Handle score format: a number (legacy) or { percent, isLadder, ladderRank }
     let score = guessEntry.score
-    if (guessEntry.similarityPending) {
-      score = null // Mark as pending
-    } else if (typeof score === "number") {
+    if (typeof score === "number") {
       // Legacy format: convert to object
       score = { percent: score, isLadder: false }
     }
@@ -4173,7 +4142,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       sidebarStatsSyncMessage = ""
       const recorded =
         Boolean(payload.success) && (payload.pendingResults == null || payload.pendingResults === 0)
-      if (recorded) void loadLeaderboardFromAPI()
+      // A finished game changes the streaks; a section nobody has opened is read fresh when it is.
+      if (recorded && leaderboardOpened) void loadLeaderboardFromAPI()
       updateSidebarStats()
       return recorded
     } catch (err) {
@@ -4615,125 +4585,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       )
     }
 
-    // ⚡ LAZY SIMILARITY: Fetch similarity for pending guesses in background
-    // This allows the card to appear instantly while we calculate similarity
-    const pendingGuess = gameState.guesses.find((g) => g.uniprot === uniprot && g.similarityPending)
-    console.log(
-      `[TIMING] similarity check | uniprot=${uniprot}, found=${!!pendingGuess}, similarityPending=${pendingGuess?.similarityPending}, score=${pendingGuess?.score}`,
-    )
-    if (pendingGuess && pendingGuess.guessId) {
-      console.log(`[TIMING] fetching similarity for guessId=${pendingGuess.guessId}`)
-      fetchGuessSimilarity(pendingGuess.guessId)
-        .then((result) => {
-          // API returns { guessId, score: { percent, similarity, isLadder, ... } }
-          const scoreData = result?.score
-          const scorePercent = typeof scoreData === "number" ? scoreData : scoreData?.percent
-          if (typeof scorePercent === "number") {
-            const isLadder = scoreData?.isLadder || false
-            const rawLadderRank =
-              scoreData && typeof scoreData === "object"
-                ? (scoreData.ladderRank ?? scoreData.ladder_rank ?? null)
-                : null
-            let ladderRank = rawLadderRank
-            // Fallback: in ladder mode, percent 91-99 encodes rank as (100 - percent).
-            if (ladderRank == null && isLadder) {
-              const rounded = Math.round(scorePercent)
-              if (rounded >= 91 && rounded <= 99) {
-                ladderRank = 100 - rounded
-              }
-            }
-            // Update game state
-            const guess = gameState.guesses.find((g) => g.guessId === pendingGuess.guessId)
-            if (guess) {
-              if (scoreData && typeof scoreData === "object") {
-                const hydratedScore = { ...scoreData }
-                if (
-                  isLadder &&
-                  ladderRank &&
-                  hydratedScore.ladderRank == null &&
-                  hydratedScore.ladder_rank == null
-                ) {
-                  hydratedScore.ladderRank = ladderRank
-                }
-                guess.score = hydratedScore
-              } else {
-                guess.score = {
-                  percent: scorePercent,
-                  isLadder,
-                  ladderRank: isLadder ? ladderRank : null,
-                }
-              }
-              guess.similarityPending = false
-            }
-            // Update DOM elements
-            const cardId = `guess-card-${pendingGuess.guessId}`
-            const scoreEl = document.querySelector(`.pg-feedback-score[data-guess-id="${cardId}"]`)
-            const barFillEl = document.querySelector(`.pg-bar-fill[data-guess-id="${cardId}"]`)
-            const barEl = scoreEl?.previousElementSibling
-            const headerEl = scoreEl?.closest(".pg-collapse-toggle")
-
-            if (scoreEl) {
-              scoreEl.textContent = `${scorePercent}%`
-              scoreEl.classList.remove("pg-pending")
-              if (isLadder) scoreEl.classList.add("pg-ladder")
-            }
-            if (barFillEl) {
-              barFillEl.style.width = `${scorePercent}%`
-              if (isLadder) barFillEl.classList.add("pg-ladder")
-            }
-            if (barEl) {
-              barEl.classList.remove("pg-pending")
-              if (isLadder) barEl.classList.add("pg-ladder")
-            }
-
-            // Ensure ladder rank label is shown for top-9 matches (fixes missing callout on lazy-loaded similarity).
-            if (headerEl) {
-              const existingRankEl = headerEl.querySelector(".pg-ladder-rank")
-              const rankLabel = isLadder && ladderRank ? `${ordinal(ladderRank)} closest` : ""
-              if (rankLabel) {
-                const rankEl = existingRankEl || document.createElement("span")
-                rankEl.className = "pg-ladder-rank"
-                rankEl.textContent = rankLabel
-                rankEl.classList.remove("pg-ladder-rank-empty")
-                if (!existingRankEl) {
-                  if (barEl && barEl.parentElement === headerEl) {
-                    headerEl.insertBefore(rankEl, barEl)
-                  } else {
-                    headerEl.appendChild(rankEl)
-                  }
-                }
-              } else {
-                // Keep an empty placeholder so the header grid columns don't shift left.
-                const rankEl = existingRankEl || document.createElement("span")
-                rankEl.className = "pg-ladder-rank pg-ladder-rank-empty"
-                rankEl.textContent = ""
-                if (!existingRankEl) {
-                  if (barEl && barEl.parentElement === headerEl) {
-                    headerEl.insertBefore(rankEl, barEl)
-                  } else {
-                    headerEl.appendChild(rankEl)
-                  }
-                }
-              }
-            }
-
-            console.log(`[TIMING] similarity loaded for ${pendingGuess.guessId} | ${scorePercent}%`)
-          } else {
-            console.warn(`[TIMING] similarity returned unexpected format:`, result)
-          }
-        })
-        .catch((err) => {
-          console.warn("Geneguessr: similarity fetch failed", err)
-          // Show N/A on error
-          const cardId = `guess-card-${pendingGuess.guessId}`
-          const scoreEl = document.querySelector(`.pg-feedback-score[data-guess-id="${cardId}"]`)
-          if (scoreEl) {
-            scoreEl.textContent = "N/A"
-            scoreEl.classList.remove("pg-pending")
-          }
-        })
-    }
-
     const reachedEndOfRound = gameState.won || gameState.guesses.length >= gameState.maxGuesses
     if (reachedEndOfRound) {
       await recordStatsOnce(gameState.won)
@@ -4951,7 +4802,11 @@ https://geneguessr.brinedew.bio/`
   let sidebarStatsSnapshot = null
   let sidebarStatsSyncMessage = ""
   let leaderboardEntries = []
-  let leaderboardLoading = false
+  // "Loading leaderboard..." until the first read: the section is read when it nears the screen
+  // (see watchLeaderboardPanel), and until then it must not claim that nobody has a streak.
+  let leaderboardLoading = true
+  let leaderboardOpened = false
+  let leaderboardObserver = null
   const LEADERBOARD_LIMIT = 5
   const LEADERBOARD_CONSENT_STORAGE_KEY = "geneguessr_leaderboard_consent"
   let leaderboardConsentFeedbackTimer = null
@@ -5062,6 +4917,39 @@ https://geneguessr.brinedew.bio/`
     if (stats && typeof stats === "object") {
       sidebarStatsSnapshot = stats
     }
+  }
+
+  // The "Top Streaks" section is read when it nears the screen (B-957), not on every page load: on
+  // a phone or tablet it sits below the whole game and most visitors never scroll that far, and
+  // on a desktop it is on the first screen and is read at once. A browser without
+  // IntersectionObserver reads it at once too.
+  const LEADERBOARD_PREFETCH_MARGIN = "400px 0px"
+
+  function markLeaderboardOpened() {
+    leaderboardOpened = true
+    leaderboardObserver?.disconnect()
+    leaderboardObserver = null
+  }
+
+  function watchLeaderboardPanel() {
+    leaderboardObserver?.disconnect()
+    leaderboardObserver = null
+    const panel = document.getElementById("pg-sidebar-leaderboard")
+    if (leaderboardOpened || !panel) return
+    if (typeof IntersectionObserver !== "function") {
+      markLeaderboardOpened()
+      void loadLeaderboardFromAPI()
+      return
+    }
+    leaderboardObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        markLeaderboardOpened()
+        void loadLeaderboardFromAPI()
+      },
+      { rootMargin: LEADERBOARD_PREFETCH_MARGIN },
+    )
+    leaderboardObserver.observe(panel)
   }
 
   async function loadLeaderboardFromAPI() {
@@ -5224,6 +5112,7 @@ https://geneguessr.brinedew.bio/`
     })
     wireSharedUserPanel(stack, { authBase: API_BASE })
     stack.querySelector("#pg-sidebar-legacy-import")?.addEventListener("click", importLegacyStats)
+    watchLeaderboardPanel()
   }
 
   // Practice-list dialog (B-247)
@@ -5723,6 +5612,7 @@ https://geneguessr.brinedew.bio/`
       const saved = Boolean(payload?.leaderboardOptIn)
       currentUser.leaderboard_opt_in = saved
       setLeaderboardConsentEnabled(saved)
+      markLeaderboardOpened()
       await loadLeaderboardFromAPI()
       updateSidebarStats()
     } catch (err) {
@@ -5892,7 +5782,6 @@ https://geneguessr.brinedew.bio/`
     // account session before stats recover any pending result.
     await refreshSidebarStatsSnapshot()
     injectSidebarStats()
-    void loadLeaderboardFromAPI()
 
     // Render
     render()
