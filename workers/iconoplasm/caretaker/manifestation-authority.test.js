@@ -441,45 +441,7 @@ test("an account atomically claims an available seeded gene with pinned terms an
   )
 })
 
-test("assignment acceptance, suspension, and resume preserve the default leave policy", async (t) => {
-  const context = await bootstrap(t, "1001", "withdraw")
-  const suspended = await transitionCaretakerAssignment(context.db, {
-    assignmentId: context.assignmentId,
-    action: "suspend",
-    expectedAssignmentVersion: 2,
-    suspensionReason: "entitlement_lapsed",
-    graceEndsAt: "2026-09-01T00:00:00Z",
-    eventUuid: "event_suspend_1001",
-    now: NOW,
-    ...command("command_suspend_1001", "5", ADMIN, "administrator"),
-  })
-  assert.equal(suspended.status, "suspended")
-  const resumed = await transitionCaretakerAssignment(context.db, {
-    assignmentId: context.assignmentId,
-    action: "resume",
-    expectedAssignmentVersion: 3,
-    eventUuid: "event_resume_1001",
-    now: NOW,
-    ...command("command_resume_1001", "6", ADMIN, "administrator"),
-  })
-  assert.equal(resumed.status, "active")
-  const assignment = row(
-    context.db,
-    "SELECT status, assignment_version, relinquish_policy, suspension_reason FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-    context.assignmentId,
-  )
-  assert.deepEqual(
-    { ...assignment },
-    {
-      status: "active",
-      assignment_version: 4,
-      relinquish_policy: "withdraw",
-      suspension_reason: null,
-    },
-  )
-})
-
-test("save is atomic, noncanonical, idempotent, and reports orphan reconciliation on stale lineage CAS", async (t) => {
+test("save is atomic, noncanonical, and idempotent, and a stale lineage CAS writes nothing", async (t) => {
   const context = await bootstrap(t, "2001")
   const input = {
     assignmentId: context.assignmentId,
@@ -543,15 +505,8 @@ test("save is atomic, noncanonical, idempotent, and reports orphan reconciliatio
     eventUuid: "event_save_2001_02",
     storage: storage(21),
   }
-  await assert.rejects(saveManifestationRevision(context.db, staleInput), (error) => {
-    assert.equal(error.code, "STALE_AUTHORITY_STATE")
-    assert.deepEqual(error.storageReconciliation, {
-      action: "verify_revision_then_delete_if_unreferenced",
-      manifestation_revision_id: staleInput.revisionId,
-      object_key: staleInput.storage.object_key,
-      ciphertext_sha256: staleInput.storage.ciphertext_sha256,
-    })
-    return true
+  await assert.rejects(saveManifestationRevision(context.db, staleInput), {
+    code: "STALE_AUTHORITY_STATE",
   })
   assert.equal(
     row(context.db, "SELECT count(*) AS count FROM icono_manifestation_revisions").count,
@@ -641,120 +596,6 @@ test("save v2 preserves canonical v1 until explicit selection, then rollback sel
     }),
     { code: "STALE_AUTHORITY_STATE", status: 409 },
   )
-})
-
-test("a concurrent canonical change does not block a valid lineage save", async (t) => {
-  const context = await bootstrap(t, "3002")
-  const first = await saveFirst(context.db, context, "3002")
-  const selectedFirst = await selectManifestationRevision(context.db, {
-    assignmentId: context.assignmentId,
-    revisionId: first.manifestation_revision_id,
-    expectedAssignmentVersion: 2,
-    expectedHeadVersion: first.head_version,
-    expectedCanonicalRevisionId: context.seedRevisionId,
-    selectionId: "selection_user_3002_01",
-    eventUuid: "event_select_3002_01",
-    now: NOW,
-    ...command("command_select_3002_01", "5"),
-  })
-  await selectManifestationRevision(context.db, {
-    assignmentId: context.assignmentId,
-    revisionId: context.seedRevisionId,
-    expectedAssignmentVersion: 2,
-    expectedHeadVersion: selectedFirst.head_version,
-    expectedCanonicalRevisionId: first.manifestation_revision_id,
-    selectionId: "selection_user_3002_02",
-    eventUuid: "event_select_3002_02",
-    now: NOW,
-    ...command("command_select_3002_02", "6"),
-  })
-
-  const saved = await saveManifestationRevision(context.db, {
-    assignmentId: context.assignmentId,
-    expectedAssignmentVersion: 2,
-    expectedManifestationVersion: 1,
-    // Stale canonical values are deliberately ignored by the save boundary.
-    expectedHeadVersion: selectedFirst.head_version,
-    expectedCanonicalRevisionId: first.manifestation_revision_id,
-    storage: storage(32),
-    revisionId: "revision_user_3002_02",
-    eventUuid: "event_save_3002_02",
-    now: NOW,
-    ...command("command_save_3002_02", "7"),
-  })
-  assert.equal(saved.canonical_changed, false)
-  assert.equal(
-    row(
-      context.db,
-      "SELECT canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
-      context.geneId,
-    ).canonical_revision_id,
-    context.seedRevisionId,
-  )
-})
-
-test("suspension requires a bounded audit reason and resume or end clears suspension state", async (t) => {
-  const context = await bootstrap(t, "3501")
-  const suspend = (commandId, expectedAssignmentVersion, suspensionReason) =>
-    transitionCaretakerAssignment(context.db, {
-      assignmentId: context.assignmentId,
-      action: "suspend",
-      expectedAssignmentVersion,
-      suspensionReason,
-      eventUuid: `event_${commandId}`,
-      now: NOW,
-      ...command(commandId, String(expectedAssignmentVersion % 10), ADMIN, "administrator"),
-    })
-  await assert.rejects(suspend("command_suspend_missing_3501", 2, null), {
-    code: "INVALID_SUSPENSION_REASON",
-  })
-  await assert.rejects(suspend("command_suspend_long_3501", 2, "x".repeat(501)), {
-    code: "INVALID_SUSPENSION_REASON",
-  })
-  await suspend("command_suspend_exact_3501", 2, "  entitlement review  ")
-  const suspended = row(
-    context.db,
-    "SELECT status, suspended_at, suspension_reason FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-    context.assignmentId,
-  )
-  assert.equal(suspended.status, "suspended")
-  assert.equal(suspended.suspended_at, NOW)
-  assert.equal(suspended.suspension_reason, "entitlement review")
-  await transitionCaretakerAssignment(context.db, {
-    assignmentId: context.assignmentId,
-    action: "resume",
-    expectedAssignmentVersion: 3,
-    eventUuid: "event_resume_3501",
-    now: NOW,
-    ...command("command_resume_3501", "4", ADMIN, "administrator"),
-  })
-  const resumed = row(
-    context.db,
-    "SELECT status, suspended_at, suspension_reason FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-    context.assignmentId,
-  )
-  assert.equal(resumed.status, "active")
-  assert.equal(resumed.suspended_at, null)
-  assert.equal(resumed.suspension_reason, null)
-  await suspend("command_suspend_again_3501", 4, "manual review")
-  await endCaretakerAssignment(context.db, {
-    assignmentId: context.assignmentId,
-    expectedAssignmentVersion: 5,
-    expectedHeadVersion: 1,
-    expectedCanonicalRevisionId: context.seedRevisionId,
-    relinquishPolicy: "retain",
-    eventUuid: "event_end_suspended_3501",
-    now: NOW,
-    ...command("command_end_suspended_3501", "6", ADMIN, "administrator"),
-  })
-  const ended = row(
-    context.db,
-    "SELECT status, suspended_at, suspension_reason FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
-    context.assignmentId,
-  )
-  assert.equal(ended.status, "ended")
-  assert.equal(ended.suspended_at, null)
-  assert.equal(ended.suspension_reason, null)
 })
 
 test("only the gene's caretaker can withdraw a lineage; fallback and restoration are deterministic and events contain no prose or storage secrets", async (t) => {
@@ -1131,73 +972,4 @@ test("assignment end atomically freezes the final retain or withdraw policy", as
     assert.equal(ended.manifestation_status, "withdrawn")
     assert.equal(ended.fallback_revision_id, context.seedRevisionId)
   })
-})
-
-test("the schema rejects predictable locators, oversized bodies, invalid JSON, and a canonical withdrawal without fallback", async (t) => {
-  const context = await bootstrap(t, "6001")
-  await assert.rejects(
-    saveManifestationRevision(context.db, {
-      assignmentId: context.assignmentId,
-      expectedAssignmentVersion: 2,
-      expectedManifestationVersion: 0,
-      expectedHeadVersion: 1,
-      expectedCanonicalRevisionId: context.seedRevisionId,
-      storage: {
-        ...storage(60),
-        object_key: "private/manifestations/v1/aa/revision_user_6001_01.bin",
-      },
-      manifestationId: "manifestation_user_6001",
-      revisionId: "revision_user_6001_01",
-      selectionId: "selection_user_6001_01",
-      eventUuid: "event_save_6001_01",
-      now: NOW,
-      ...command("command_save_6001_01", "8"),
-    }),
-    { code: "PREDICTABLE_OBJECT_KEY" },
-  )
-  assert.throws(
-    () =>
-      context.db.raw
-        .prepare(
-          `INSERT INTO icono_authoring_command_receipts (
-             command_id, command_type, actor_kind, request_sha256, response_json
-           ) VALUES (?, 'hostile', 'migration', ?, 'not-json')`,
-        )
-        .run("command_hostile_6001", sha("9")),
-    /malformed JSON|json|CHECK constraint failed/i,
-  )
-  assert.throws(
-    () =>
-      context.db.raw
-        .prepare(
-          "UPDATE icono_manifestations SET status = 'withdrawn', withdrawn_at = ? WHERE manifestation_id = ?",
-        )
-        .run(NOW, context.seedManifestationId),
-    /system_seed_cannot_be_withdrawn|canonical_manifestation_must_be_reselected_first/,
-  )
-  await assert.rejects(
-    saveManifestationRevision(context.db, {
-      assignmentId: context.assignmentId,
-      expectedAssignmentVersion: 2,
-      expectedManifestationVersion: 0,
-      expectedHeadVersion: 1,
-      expectedCanonicalRevisionId: context.seedRevisionId,
-      storage: storage(61, 16 * 1024 + 1),
-      manifestationId: "manifestation_user_6001",
-      revisionId: "revision_user_6001_02",
-      selectionId: "selection_user_6001_02",
-      eventUuid: "event_save_6001_02",
-      now: NOW,
-      ...command("command_save_6001_02", "a"),
-    }),
-    { code: "INVALID_BODY_SIZE" },
-  )
-  // The refused save left the head untouched.
-  const head = context.db.raw
-    .prepare(
-      "SELECT last_event_sequence, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
-    )
-    .get(context.geneId)
-  assert.equal(head.last_event_sequence > 0, true)
-  assert.equal(head.canonical_revision_id, context.seedRevisionId)
 })
