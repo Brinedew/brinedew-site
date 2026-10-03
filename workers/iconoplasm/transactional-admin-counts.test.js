@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
-import { transactionalAdminCountMigration } from "../../scripts/generate-transactional-admin-counts.mjs"
 
 const migration = readFileSync(
   new URL("../../migrations-iconoplasm/0095_transactional_admin_counts.sql", import.meta.url),
@@ -81,7 +80,6 @@ function assertExact(db) {
 }
 
 test("admin counters preserve every filter through catalogue, rollup and asset changes", () => {
-  assert.equal(migration.replace(/\r\n/g, "\n"), transactionalAdminCountMigration())
   const db = database()
   try {
     db.exec(

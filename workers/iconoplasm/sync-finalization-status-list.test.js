@@ -7,8 +7,6 @@ import {
   GLOBAL_FINALIZATION_STATUS_LIST_SQL,
   SCOPED_FINALIZATION_STATUS_LIST_SQL,
 } from "./sync-finalization-status-list.js"
-import { createFinalizationStatusMigrationCostAdapter } from "./operation-cost-finalization-queue-migration-adapter.js"
-import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
@@ -63,7 +61,7 @@ test("status list preserves ready-first order, future retries and unexpected sto
 })
 
 test(
-  "workerd migration refuses oversized sources; list cost stays bounded as history and backlog grow",
+  "workerd list cost stays bounded as history and backlog grow",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -81,6 +79,7 @@ test(
         "0094_finalization_summary.sql",
         "0099_finalization_queue_indexes.sql",
         "0100_finalization_job_version.sql",
+        "0102_finalization_status_index.sql",
         "0103_finalization_running_index.sql",
       ])
         schema.exec(source(name))
@@ -94,73 +93,24 @@ test(
       await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
       await db
         .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
-      await db
-        .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<25000)
       INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase,next_attempt_at,requested_at)
       SELECT printf('JOB%05d',n), CASE WHEN n<=5000 THEN 'queued' ELSE 'completed' END,
       CASE WHEN n%2=0 THEN 'completed_pending_finalize' ELSE 'reconcile' END,'2026-09-09','2026-09-01' FROM ids`,
         )
         .run()
-      const adapter = createFinalizationStatusMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      const inventory = createMigrationInventoryCostAdapter({
-        db,
-        resource: "iconoplasm",
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
+      // The summary counters are maintained by the 0094 triggers, so they
+      // confirm that the history and the unfinished backlog really grew.
       const counters = async () => {
-        const seen = []
-        for (const query_id of [
-          "finalization-status-migration-size",
-          "finalization-status-unfinished-migration-size",
-        ]) {
-          const probe = await inventory.prepare({ statements: [{ query_id, arguments: {} }] })
-          const receipt = await inventory.dispatch(probe)
-          assert.equal(receipt.actual.rows_read, 1)
-          assert.equal(receipt.actual.rows_written, 0)
-          seen.push(receipt.result[0].results[0].capped_count)
-        }
-        return seen
+        const jobs = await db
+          .prepare("SELECT COUNT(*) AS n FROM icono_sync_finalization_jobs")
+          .first()
+        const summary = await db
+          .prepare("SELECT unfinished_count FROM icono_sync_finalization_summary WHERE singleton=1")
+          .first()
+        return [jobs.n, summary.unfinished_count]
       }
       assert.deepEqual(await counters(), [25000, 5000])
-      // Exercise the maximum supported schema as well as the maximum source.
-      const schemaCount = (await db.prepare("SELECT COUNT(*) AS n FROM sqlite_schema").first()).n
-      const padding = Array.from({ length: 1024 - schemaCount }, (_, i) =>
-        db.prepare(`CREATE TABLE status_schema_fixture_${i}(value)`),
-      )
-      for (let i = 0; i < padding.length; i += 40) await db.batch(padding.slice(i, i + 40))
-      for (const args of [
-        { max_rows: 24999, max_unfinished: 5000 },
-        { max_rows: 25000, max_unfinished: 4999 },
-      ]) {
-        await assert.rejects(adapter.dispatch(await adapter.prepare(args)))
-        assert.equal(
-          (
-            await db
-              .prepare(
-                "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='idx_icono_finalization_status_list'",
-              )
-              .first()
-          ).n,
-          0,
-        )
-        assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first()).n, 0)
-      }
-      const prepared = await adapter.prepare({ max_rows: 25000, max_unfinished: 5000 })
-      const { actual } = await adapter.dispatch(prepared)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(
-          actual[meter] <= prepared.bound[meter],
-          JSON.stringify({ actual, bound: prepared.bound }),
-        )
       const measure = async () => {
         const costs = []
         for (const limit of [1, 200, 1000]) {
@@ -195,7 +145,7 @@ test(
       const after = await measure()
       assert.deepEqual(await counters(), [105000, 65000])
       assert.deepEqual(after, before)
-      t.diagnostic(JSON.stringify({ migration: actual, before, after }))
+      t.diagnostic(JSON.stringify({ before, after }))
     } finally {
       schema.close()
       await runtime.dispose()

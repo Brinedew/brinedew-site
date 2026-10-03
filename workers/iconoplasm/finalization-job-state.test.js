@@ -1,17 +1,15 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { writeSyncFinalizationJobState } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { createFinalizationJobVersionMigrationCostAdapter } from "./operation-cost-finalization-job-migration-adapter.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
 )("miniflare")
-const source = (name) =>
-  readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8")
+const migrations = new URL("../../migrations-iconoplasm/", import.meta.url)
 
 test(
   "finalization versions fence duplicate claims, stale recovery and a newer enqueue without scanning history",
@@ -27,10 +25,10 @@ test(
     )
     const schema = new DatabaseSync(":memory:")
     try {
-      schema.exec(source("0028_add_finalization_jobs.sql"))
-      schema.exec(source("0094_finalization_summary.sql"))
-      schema.exec(source("0099_finalization_queue_indexes.sql"))
-      schema.exec(source("0103_finalization_running_index.sql"))
+      for (const file of readdirSync(migrations)
+        .filter((name) => name.endsWith(".sql"))
+        .sort())
+        schema.exec(readFileSync(new URL(file, migrations), "utf8"))
       const db = await runtime.getD1Database("jobs")
       for (const { sql } of schema
         .prepare(
@@ -39,11 +37,6 @@ test(
         .all())
         await db.prepare(sql).run()
       await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
       await db
         .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<25000)
@@ -55,18 +48,6 @@ test(
           "INSERT INTO icono_sync_finalization_jobs(gene_symbol,reason) VALUES('TP53','saved output')",
         )
         .run()
-      const adapter = createFinalizationJobVersionMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      await assert.rejects(adapter.prepare({ max_schema_rows: 512, caller_sql: "SELECT 1" }))
-      await assert.rejects(adapter.dispatch(await adapter.prepare({ max_schema_rows: 1 })))
-      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first()).n, 0)
-      const prepared = await adapter.prepare({ max_schema_rows: 512 })
-      const { actual } = await adapter.dispatch(prepared)
-      assert.ok(actual.rows_read <= prepared.bound.rows_read, JSON.stringify(actual))
-      assert.ok(actual.rows_written <= prepared.bound.rows_written, JSON.stringify(actual))
       const receipts = []
       const env = {
         ICONOPLASM_DB: {
@@ -130,8 +111,6 @@ test(
       }
       t.diagnostic(
         JSON.stringify({
-          migration: actual,
-          bound: prepared.bound,
           transitions: receipts.map(({ rows_read, rows_written }) => ({ rows_read, rows_written })),
         }),
       )

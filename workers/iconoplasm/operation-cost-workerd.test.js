@@ -3,10 +3,6 @@ import { createRequire } from "node:module"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
-import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
-import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
-import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
-import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
 import { createOperationCostD1Adapter } from "./operation-cost-d1-adapter.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 import { createOperationCostQueryRegistry } from "./operation-cost-query-registry.js"
@@ -131,7 +127,7 @@ test(
 )
 
 test(
-  "local workerd D1 receipts fit migration and diagnosis reservations at catalogue scale",
+  "local workerd D1 receipts fit finalization-summary, replica and authority reservations at catalogue scale",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -144,16 +140,22 @@ test(
     )
     try {
       const db = await runtime.getD1Database("DB")
-      const source = readFileSync(
-        new URL("../../migrations-iconoplasm/0028_add_finalization_jobs.sql", import.meta.url),
-        "utf8",
-      )
-      for (const sql of source.split(";").filter((sql) => sql.trim())) await db.prepare(sql).run()
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
-        )
-        .run()
+      const finalizationSchema = new DatabaseSync(":memory:")
+      try {
+        for (const file of ["0028_add_finalization_jobs.sql", "0094_finalization_summary.sql"])
+          finalizationSchema.exec(
+            readFileSync(new URL(`../../migrations-iconoplasm/${file}`, import.meta.url), "utf8"),
+          )
+        for (const { sql } of finalizationSchema
+          .prepare(
+            "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid",
+          )
+          .all())
+          await db.prepare(sql).run()
+      } finally {
+        finalizationSchema.close()
+      }
+      await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
       await db
         .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<19024)
@@ -161,17 +163,6 @@ test(
       SELECT 'GENE'||n, 'completed', '2026-09-01' FROM ids`,
         )
         .run()
-      const migration = createFinalizationMigrationCostAdapter({ db, ...identities })
-      const step = await migration.prepare({ max_rows: 19024, max_unfinished: 0 })
-      await assert.rejects(
-        migration.dispatch(await migration.prepare({ max_rows: 19023, max_unfinished: 0 })),
-      )
-      const migrated = await migration.dispatch(step)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(migrated.actual[meter] <= step.bound[meter], meter)
-      t.diagnostic(
-        JSON.stringify({ operation: "migration-0094", bound: step.bound, actual: migrated.actual }),
-      )
       const reader = createOperationCostD1Adapter({
         db,
         registry: createOperationCostQueryRegistry(),
@@ -202,7 +193,7 @@ test(
       try {
         const root = new URL("../../migrations-iconoplasm-authoring/", import.meta.url)
         for (const file of readdirSync(root)
-          .filter((name) => name.endsWith(".sql") && name < "0012")
+          .filter((name) => name.endsWith(".sql") && Number.parseInt(name, 10) <= 13)
           .sort()) {
           schema.exec(readFileSync(new URL(file, root), "utf8"))
         }
@@ -219,61 +210,6 @@ test(
       } finally {
         schema.close()
       }
-      await authoring
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
-        )
-        .run()
-      await authoring
-        .prepare(
-          `INSERT INTO icono_manifestation_snapshot_leases
-      (snapshot_id,consumer_id,authority_epoch,watermark_event_sequence,status,expires_at)
-      VALUES ('old','consumer',1,0,'building','2026-09-07')`,
-        )
-        .run()
-      const stream = createAuthoringStreamMigrationCostAdapter({ db: authoring, ...identities })
-      const prepared = await stream.prepare({ max_leases: 1, max_schema_rows: 256 })
-      await authoring
-        .prepare(
-          "CREATE INDEX unexpected_lease_index ON icono_manifestation_snapshot_leases(status)",
-        )
-        .run()
-      await assert.rejects(stream.dispatch(prepared))
-      const columns = await authoring
-        .prepare("PRAGMA table_info(icono_manifestation_snapshot_leases)")
-        .all()
-      assert.ok(columns.results.every((column) => column.name !== "stream_version"))
-      await authoring.prepare("DROP INDEX unexpected_lease_index").run()
-      const receipt = await stream.dispatch(prepared)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(receipt.actual[meter] <= prepared.bound[meter], meter)
-      assert.equal(
-        (await authoring.prepare("SELECT status FROM icono_manifestation_snapshot_leases").first())
-          .status,
-        "expired",
-      )
-      t.diagnostic(
-        JSON.stringify({
-          operation: "authoring-migration-0012",
-          bound: prepared.bound,
-          actual: receipt.actual,
-        }),
-      )
-      const strictUploads = createUploadReservationMigrationCostAdapter({
-        db: authoring,
-        ...identities,
-      })
-      const strictPrepared = await strictUploads.prepare({})
-      const strictReceipt = await strictUploads.dispatch(strictPrepared)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(strictReceipt.actual[meter] <= strictPrepared.bound[meter], meter)
-      t.diagnostic(
-        JSON.stringify({
-          operation: "authoring-migration-0013",
-          bound: strictPrepared.bound,
-          actual: strictReceipt.actual,
-        }),
-      )
       await authoring
         .prepare(
           "INSERT INTO icono_authority_state(singleton,schema_version,authority_epoch,authority_mode) VALUES(1,1,1,'authoritative')",

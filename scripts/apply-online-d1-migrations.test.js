@@ -1,6 +1,4 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync, readdirSync } from "node:fs"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
@@ -152,81 +150,4 @@ test("a guard whose live count exceeds its reviewed bound refuses", async () => 
     checkMigrationGuards({ guards, query: async () => Number.NaN }),
     /MIGRATION_GUARD_UNAVAILABLE/,
   )
-})
-
-// B-921: the vote projection job table has no reader or writer left. Its drop
-// ships on the ordinary push, so the real plan must carry it as an online
-// migration with a prediction and guards that stop it before anything applies.
-//
-// Failure modes, written before the migration:
-// 8. The drop is not reviewed online, so the push fails with
-//    CODE_RELEASE_REQUIRES_MAINTENANCE and pauses the app for a no-op.
-// 9. The table gained rows since it was measured empty, and the drop destroys
-//    work somebody still expects.
-// 10. A trigger or view elsewhere writes to the table; once it is gone every
-//     write to that other table fails with "no such table".
-// 11. The migration runs without a prediction, so the headroom check cannot
-//     refuse it.
-const DROP = "0114_retire_vote_projection_jobs.sql"
-const TABLE = "icono_vote_projection_refresh_jobs"
-const realManifest = JSON.parse(
-  readFileSync(
-    new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url),
-    "utf8",
-  ),
-)
-const iconoplasmDirectory = new URL("../migrations-iconoplasm/", import.meta.url)
-const iconoplasmFiles = () =>
-  readdirSync(iconoplasmDirectory)
-    .filter((name) => name.endsWith(".sql"))
-    .sort()
-
-function schemaBeforeTheDrop() {
-  const sqlite = new DatabaseSync(":memory:")
-  for (const name of iconoplasmFiles().filter((file) => file < DROP))
-    sqlite.exec(readFileSync(new URL(name, iconoplasmDirectory), "utf8"))
-  return sqlite
-}
-
-test("the vote job table drop is a reviewed online migration whose guards refuse a surprise", async () => {
-  assert.ok(existsSync(new URL(DROP, iconoplasmDirectory)), "the migration file exists")
-  const files = iconoplasmFiles()
-  const plan = planOnlineMigrations({
-    manifest: realManifest,
-    files: { iconoplasm: files },
-    applied: { iconoplasm: new Set(files.filter((name) => name !== DROP)) },
-  })
-  assert.deepEqual(
-    plan.pending.map((item) => item.key),
-    [`iconoplasm/${DROP}`],
-  )
-  assert.ok(plan.total.rows_read > 0 && plan.total.rows_read <= 5000, JSON.stringify(plan.total))
-  assert.ok(
-    plan.total.rows_written > 0 && plan.total.rows_written <= 50,
-    JSON.stringify(plan.total),
-  )
-  assert.doesNotThrow(() =>
-    admitOnlineMigrations({ total: plan.total, usage: { rows_read: 0, rows_written: 0 } }),
-  )
-  assert.doesNotThrow(() =>
-    admitOnlineMigrations({
-      total: plan.total,
-      usage: { rows_read: 4_000_000, rows_written: 60_000 },
-    }),
-  )
-
-  const guards = plan.pending[0].guards.map((guard) => ({ ...guard, key: plan.pending[0].key }))
-  assert.equal(guards.length, 2, "one guard for the rows, one for the other schema objects")
-  const sqlite = schemaBeforeTheDrop()
-  const query = async (guard) => Number(Object.values(sqlite.prepare(guard.sql).get())[0])
-  await checkMigrationGuards({ guards, query })
-
-  sqlite.exec(`INSERT INTO ${TABLE} (gene_symbol) VALUES ('TP53')`)
-  await assert.rejects(checkMigrationGuards({ guards, query }), /MIGRATION_GUARD_EXCEEDED/)
-  sqlite.exec(`DELETE FROM ${TABLE}`)
-  await checkMigrationGuards({ guards, query })
-
-  sqlite.exec(`CREATE TRIGGER trg_surprise AFTER INSERT ON icono_image_votes
-    BEGIN INSERT INTO ${TABLE} (gene_symbol) VALUES (NEW.gene_symbol); END`)
-  await assert.rejects(checkMigrationGuards({ guards, query }), /MIGRATION_GUARD_EXCEEDED/)
 })

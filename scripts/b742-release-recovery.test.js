@@ -136,7 +136,7 @@ test("release reports a refused adapter without secrets or retries", async () =>
     send("/execute", "POST", {
       operation_id: "release-migration",
       step_id: "execute-0",
-      adapter_id: "iconoplasm-migration-0095",
+      adapter_id: "iconoplasm-migration-inventory",
       arguments: { private: "private-argument" },
     }),
     /COST_DATABASE_MIGRATION_GUARD_REFUSED/,
@@ -144,6 +144,6 @@ test("release reports a refused adapter without secrets or retries", async () =>
   assert.equal(calls, 1)
   assert.equal(reports.length, 2)
   assert.equal(reports[1].phase, "refused")
-  assert.equal(reports[1].adapter_id, "iconoplasm-migration-0095")
+  assert.equal(reports[1].adapter_id, "iconoplasm-migration-inventory")
   assert.doesNotMatch(JSON.stringify(reports), /test-secret|private-response|private-argument/)
 })

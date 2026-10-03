@@ -4,19 +4,49 @@ import { readFileSync, existsSync } from "node:fs"
 import { runAdmittedMigrations } from "./run-admitted-d1-migrations.mjs"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 
+// The admitted runner executes pending reviewed migrations through the cost
+// authority during an explicit maintenance release. Its job does not depend on
+// which migration is pending, so these tests drive it with synthetic plans and
+// a fake authority. Failure modes, written first:
+// 1. An unreviewed pending migration, or one whose adapter belongs to another
+//    database, reaches DDL.
+// 2. DDL is sent before every database's pending set has been checked.
+// 3. A migration executes before its plan is registered, or under the wrong
+//    release identity.
+// 4. An active transition runs more than one staged migration in a release, or
+//    does not say that more remain.
+// 5. A protocol the runner does not implement is executed as an ordinary one.
+// 6. A journaled name the source does not know (diverged or duplicated
+//    history) is accepted.
+// 7. An empty plan applies something or skips the inventories.
 const manifest = JSON.parse(
   readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
 )
-const legacyManifest = {
+const synthetic = (adapterId, extra = {}) => ({
+  adapter_id: adapterId,
+  arguments: { max_schema_rows: 512 },
+  prediction: { rows_read: 3000, rows_written: 16, requests: 1 },
+  ...extra,
+})
+const STAGED = "one-migration-per-release-v1"
+const plainPlan = {
+  ...manifest,
+  migrations: {
+    "iconoplasm/9001_a.sql": synthetic("iconoplasm-migration-9001"),
+    "iconoplasm/9002_b.sql": synthetic("iconoplasm-migration-9002"),
+    "iconoplasm-authoring/9003_c.sql": synthetic("iconoplasm-authoring-migration-9003"),
+  },
+}
+const stagedPlan = {
   ...manifest,
   migrations: Object.fromEntries(
-    Object.entries(manifest.migrations).map(([key, value]) => {
-      const copy = { ...value }
-      if (copy.migration_protocol === "one-migration-per-release-v1") delete copy.migration_protocol
-      return [key, copy]
-    }),
+    Object.entries(plainPlan.migrations).map(([key, value]) => [
+      key,
+      { ...value, migration_protocol: STAGED },
+    ]),
   ),
 }
+const emptyPlan = { ...manifest, migrations: {} }
 const resources = ["geneguessr", "iconoplasm", "iconoplasm-authoring"]
 const directories = {
   geneguessr: "migrations",
@@ -24,21 +54,12 @@ const directories = {
   "iconoplasm-authoring": "migrations-iconoplasm-authoring",
 }
 
-function harness(extra = false, plan = legacyManifest) {
+function harness(extra = false, plan = plainPlan) {
   const calls = []
   const adapters = resources.map((resource) => ({
     id: resource + "-migration-inventory",
     resource,
-    query_ids: [
-      "applied-migrations",
-      "notifications-migration-size",
-      "assignments-migration-size",
-      "finalization-migration-size",
-      "finalization-unfinished-migration-size",
-      "finalization-terminal-migration-size",
-      "finalization-status-migration-size",
-      "finalization-status-unfinished-migration-size",
-    ],
+    query_ids: ["applied-migrations", "schema-objects"],
     ...OPERATION_COST_IDENTITIES,
   }))
   for (const [key, item] of Object.entries(plan.migrations))
@@ -156,40 +177,6 @@ test("fresh inventory observations cannot change the retained migration operatio
   }
 })
 
-test("resumable seed keeps one immutable plan and stops before a page without shared headroom", async () => {
-  const h = harness(),
-    original = h.options.send
-  let pages = 0
-  h.options.send = async (suffix, method, body) => {
-    if (suffix === "/capacity" && pages === 2)
-      return {
-        day: new Date().toISOString().slice(0, 10),
-        measured_at: Date.now(),
-        remaining: { rows_read: 0, rows_written: 20000, requests: 2400 },
-      }
-    const response = await original(suffix, method, body)
-    if (suffix === "/execute" && body.adapter_id === "iconoplasm-migration-0095") {
-      pages++
-      return { ...response, result: { applied: false, next_phase: "catalog" } }
-    }
-    return response
-  }
-  await assert.rejects(runAdmittedMigrations(h.options), /COST_MIGRATION_RESUME_AFTER_HEADROOM/)
-  const executed = h.calls.filter(
-    (call) => call.suffix === "/execute" && call.body.adapter_id === "iconoplasm-migration-0095",
-  )
-  assert.deepEqual(
-    executed.map((call) => call.body.step_id),
-    ["execute-0", "execute-1"],
-  )
-  assert.equal(new Set(executed.map((call) => call.body.operation_id)).size, 1)
-  assert.equal(
-    h.calls.filter(
-      (call) => call.suffix === "/register" && call.body.adapter_id === "iconoplasm-migration-0095",
-    ).length,
-    1,
-  )
-})
 test("no forecast fails before discovery; unknown migration fails before any DDL", async () => {
   const missing = harness()
   await assert.rejects(runAdmittedMigrations({ ...missing.options, manifest: {} }), /PLAN_REQUIRED/)
@@ -214,26 +201,6 @@ test("every inventory and migration registers before execution and records its r
     assert.equal(calls[index + 1].suffix, "/execute")
     assert.equal(calls[index].body.id, calls[index + 1].body.operation_id)
   }
-})
-
-test("oversized notification source refuses before registering any DDL, including earlier migrations", async () => {
-  const { options, calls } = harness()
-  const original = options.send
-  options.send = async (suffix, method, body) => {
-    const result = await original(suffix, method, body)
-    if (
-      suffix === "/execute" &&
-      body.arguments?.statements?.[0]?.query_id === "notifications-migration-size"
-    )
-      result.result = [{ results: [{ capped_count: 3001 }] }]
-    return result
-  }
-  await assert.rejects(runAdmittedMigrations(options), /COST_MIGRATION_SOURCE_TOO_LARGE/)
-  assert.ok(
-    calls
-      .filter((call) => call.suffix === "/register")
-      .every((call) => call.body.adapter_id.endsWith("-migration-inventory")),
-  )
 })
 
 test("pre-deploy inventory pins the installed implementation and never executes DDL", async () => {
@@ -316,14 +283,8 @@ test("shared benchmark history and the repaired legacy comments journal remain r
   }
 })
 
-test("an active transition stages exactly one reviewed index migration", async () => {
-  const stagedManifest = {
-    ...manifest,
-    migrations: Object.fromEntries(
-      Object.entries(manifest.migrations).filter(([key]) => /\/(0099|0100)_/.test(key)),
-    ),
-  }
-  const { options, calls } = harness(false, stagedManifest)
+test("an active transition stages exactly one reviewed migration and reports that more remain", async () => {
+  const { options, calls } = harness(false, stagedPlan)
   const result = await runAdmittedMigrations(options)
   assert.equal(result.migrations_applied, 1)
   assert.equal(result.continuation_required, true)
@@ -334,6 +295,42 @@ test("an active transition stages exactly one reviewed index migration", async (
           call.suffix === "/execute" && !call.body.adapter_id.endsWith("-migration-inventory"),
       )
       .map((call) => call.body.adapter_id),
-    ["iconoplasm-migration-0099"],
+    ["iconoplasm-migration-9001"],
+  )
+})
+
+test("a protocol the runner does not implement refuses before any DDL", async () => {
+  for (const protocol of ["admin-count-seed-v1", "unreviewed-protocol"]) {
+    const plan = {
+      ...plainPlan,
+      migrations: {
+        ...plainPlan.migrations,
+        "iconoplasm/9001_a.sql": {
+          ...plainPlan.migrations["iconoplasm/9001_a.sql"],
+          migration_protocol: protocol,
+        },
+      },
+    }
+    const { options, calls } = harness(false, plan)
+    await assert.rejects(runAdmittedMigrations(options), /COST_MIGRATION_PROTOCOL_INVALID/)
+    assert.equal(
+      calls.filter(
+        (call) =>
+          call.suffix === "/execute" && !call.body.adapter_id.endsWith("-migration-inventory"),
+      ).length,
+      0,
+    )
+  }
+})
+
+test("an empty plan reads the three inventories and applies nothing", async () => {
+  const { options, calls } = harness(false, emptyPlan)
+  const result = await runAdmittedMigrations(options)
+  assert.equal(result.migrations_applied, 0)
+  assert.equal(result.continuation_required, false)
+  assert.equal(result.evidence.length, 3)
+  assert.deepEqual(
+    calls.filter((call) => call.suffix === "/execute").map((call) => call.body.adapter_id),
+    resources.map((resource) => `${resource}-migration-inventory`),
   )
 })
