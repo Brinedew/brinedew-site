@@ -8,7 +8,6 @@ import {
 } from "./manifestation-authority.js"
 import { createManifestationUploadIntent } from "./manifestation-authority.js"
 import { TestD1, command, sha, storage } from "./manifestation-authority-test-support.js"
-import { createUploadReservationMigrationCostAdapter } from "../operation-cost-upload-migration-adapter.js"
 
 const migration = readFileSync(
   new URL(
@@ -17,30 +16,6 @@ const migration = readFileSync(
   ),
   "utf8",
 )
-
-test("schema growth refuses the upload migration before replacing guards or writing its receipt", async (t) => {
-  const db = new TestD1()
-  t.after(() => db.close())
-  db.raw.exec("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
-  const before = db.raw.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'").all()
-  for (let n = 0; n < 257; n++) db.raw.exec(`CREATE TABLE extra_schema_${n}(id INTEGER)`)
-  const adapter = createUploadReservationMigrationCostAdapter({
-    db,
-    executable_sha256: sha("a"),
-    schema_sha256: sha("b"),
-  })
-  await assert.rejects(
-    adapter.prepare({ sql: "DROP TABLE d1_migrations" }),
-    /COST_MIGRATION_ARGUMENTS_INVALID/,
-  )
-  const prepared = await adapter.prepare({})
-  await assert.rejects(adapter.dispatch(prepared), /malformed JSON/)
-  assert.deepEqual(
-    db.raw.prepare("SELECT name,sql FROM sqlite_schema WHERE type='trigger'").all(),
-    before,
-  )
-  assert.equal(db.raw.prepare("SELECT COUNT(*) AS n FROM d1_migrations").get().n, 0)
-})
 
 for (const kind of ["revision", "derivative"]) {
   for (const scenario of [

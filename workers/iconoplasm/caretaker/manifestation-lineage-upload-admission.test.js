@@ -14,7 +14,6 @@ import {
   admitManifestationUploadIntent,
 } from "./manifestation-authority.js"
 import { TestD1, command, sha, storage } from "./manifestation-authority-test-support.js"
-import { createLineageAdmissionMigrationCostAdapter } from "../operation-cost-lineage-migration-adapter.js"
 
 const migration = readFileSync(
   new URL(
@@ -108,36 +107,6 @@ test("indexed admission counts concurrent live reservations at the existing line
   for (let n = 0; n < 256; n++) await f.reserve("revision")
   await assert.rejects(f.reserve("revision"), { code: "LINEAGE_REVISION_LIMIT_EXCEEDED" })
   for (let n = 0; n < 512; n++) await f.reserve("derivative")
-  f.db.raw.exec("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
-  const adapter = createLineageAdmissionMigrationCostAdapter({
-    db: f.db,
-    executable_sha256: sha("a"),
-    schema_sha256: sha("b"),
-  })
-  for (const [maxRows, maxIndexed] of [
-    [767, 768],
-    [768, 767],
-  ]) {
-    await assert.rejects(
-      adapter.dispatch(
-        await adapter.prepare({
-          max_rows: maxRows,
-          max_indexed_rows: maxIndexed,
-          max_schema_rows: 256,
-        }),
-      ),
-      /malformed JSON/,
-    )
-    assert.equal(
-      f.db.raw
-        .prepare(
-          "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='idx_icono_revisions_caretaker_quota'",
-        )
-        .get().n,
-      0,
-    )
-    assert.equal(f.db.raw.prepare("SELECT COUNT(*) AS n FROM d1_migrations").get().n, 0)
-  }
   f.migrate()
   await assert.rejects(f.reserve("derivative"), { code: "LINEAGE_DERIVATIVE_LIMIT_EXCEEDED" })
   assert.equal(

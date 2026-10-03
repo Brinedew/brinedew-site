@@ -18,7 +18,6 @@ import {
 } from "../workers/lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "../workers/iconoplasm/operation-cost-catalog-initialization-adapter.js"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
-import { migrationSizePrerequisites } from "./operation-cost-release-prerequisites.mjs"
 
 // Two inventory preflights, schema inspection, migrations, and catalog
 // initialization each own a bounded sender. Budget their cumulative requests.
@@ -58,6 +57,9 @@ export async function preflightOperationCostRelease({
   reader,
   now = Date.now,
   pendingMigrations = Object.keys(manifest?.migrations || {}),
+  // Preparation is pure: these adapters have no database binding here. Use the
+  // server's actual maximum calculation, not a second copy of its formulas.
+  adapters = createMigrationOperationCostAdapters({}, OPERATION_COST_IDENTITIES),
 }) {
   if (manifest?.schema !== "iconoplasm.migrationCostPlan.v1" || !manifest.migrations)
     throw new Error("COST_MIGRATION_PLAN_REQUIRED")
@@ -71,9 +73,7 @@ export async function preflightOperationCostRelease({
     pendingMigrations.map((key) => [key, manifest.migrations[key]]),
   )
   const required = { rows_read: 0, rows_written: 0, requests: 1 }
-  const prerequisites = migrationSizePrerequisites(Object.values(pending))
   const predictions = [
-    ...prerequisites.map((item) => item.prediction),
     ...Array(3).fill(manifest.inventory_prediction),
     ...Array(3).fill({ rows_read: 2050, rows_written: 0, requests: 1 }),
     ...Object.values(pending).map((item) => item.prediction),
@@ -98,14 +98,7 @@ export async function preflightOperationCostRelease({
     required.requests,
     pendingMigrations.length ? RELEASE_CONTROL_REQUESTS : RELEASE_CONTROL_REQUESTS_NO_MIGRATIONS,
   )
-  // Preparation is pure: these adapters have no database binding here. Use the
-  // server's actual maximum calculation, not a second copy of its formulas.
-  const adapters = createMigrationOperationCostAdapters(
-    { ICONOPLASM_SCHEMA_TRANSITION: "1" },
-    OPERATION_COST_IDENTITIES,
-  )
   const steps = [
-    ...prerequisites,
     ...["geneguessr", "iconoplasm", "iconoplasm-authoring"].map((resource) => ({
       adapter_id: `${resource}-migration-inventory`,
       resource,
@@ -135,19 +128,8 @@ export async function preflightOperationCostRelease({
     if (!adapter || adapter.resource !== step.resource)
       throw new Error("COST_MIGRATION_NOT_REVIEWED")
     const { bound } = await adapter.prepare(step.arguments)
-    if (step.migration_protocol) {
-      if (
-        !["admin-count-seed-v1", "one-migration-per-release-v1"].includes(step.migration_protocol)
-      )
-        throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
-      if (step.migration_protocol === "admin-count-seed-v1") {
-        if (step.max_steps !== 100) throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
-        const page = await adapter.prepare({ phase: "assets" })
-        const finish = await adapter.prepare({ phase: "finish" })
-        for (const meter of Object.keys(bound))
-          bound[meter] += (step.max_steps - 2) * page.bound[meter] + finish.bound[meter]
-      }
-    }
+    if (step.migration_protocol && step.migration_protocol !== "one-migration-per-release-v1")
+      throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
     for (const meter of Object.keys(required)) {
       if (bound[meter] > 2 * step.prediction[meter]) throw new Error("COST_TWICE_PREDICTION_LIMIT")
       if (meter !== "requests") maximum[meter] += bound[meter]
@@ -250,6 +232,7 @@ export async function chooseReleaseAdmission({
   capacity,
   readMaintenance,
   now = Date.now(),
+  adapters = createMigrationOperationCostAdapters({}, OPERATION_COST_IDENTITIES),
 }) {
   try {
     requireReleaseSharedCapacity(result.maximum, capacity, now, result.observed)
@@ -260,23 +243,10 @@ export async function chooseReleaseAdmission({
     // Never pause a working site on insufficient capacity. An already-paused
     // site may stage and resume its first bounded migration; the runner admits
     // every page separately and retains all uncertain shared usage.
-    if (
-      !["admin-count-seed-v1", "one-migration-per-release-v1"].includes(
-        first?.migration_protocol,
-      ) ||
-      !(await readMaintenance())
-    )
+    if (first?.migration_protocol !== "one-migration-per-release-v1" || !(await readMaintenance()))
       throw error
-    const adapters = createMigrationOperationCostAdapters(
-      { ICONOPLASM_SCHEMA_TRANSITION: "1" },
-      OPERATION_COST_IDENTITIES,
-    )
     const { bound } = await adapters.get(first.adapter_id).prepare(first.arguments)
     const maximum = { ...bound, requests: RELEASE_CONTROL_REQUESTS }
-    for (const probe of migrationSizePrerequisites([first])) {
-      const prepared = await adapters.get(probe.adapter_id).prepare(probe.arguments)
-      maximum.rows_read += prepared.bound.rows_read
-    }
     for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
       const inventory = adapters.get(`${resource}-migration-inventory`)
       const prepared = await inventory.prepare({

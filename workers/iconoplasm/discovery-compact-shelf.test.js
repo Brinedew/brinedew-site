@@ -10,8 +10,7 @@
 //    first time);
 // 3. a write on a user whose shelf is stale (version mismatch) does not heal it;
 // 4. the shelf is trusted when its version does not match the state version
-//    (the reader must fall back to the chronology; see the window tests);
-// 5. the migration adapter admits a database larger than its reviewed bound.
+//    (the reader must fall back to the chronology; see the window tests).
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
@@ -247,54 +246,4 @@ test("randomized batches keep the shelf equal to the chronology fold (B-887)", a
   const chronology = await readCompactDiscoveryChronology(db, "u2")
   assert.ok(chronology.chunks.length >= 2, "the fixture never sealed a chunk")
   assert.deepEqual(sortedShelf(state.user.shelf), foldOf(chronology))
-})
-
-test("the 0111 cost adapter refuses a database past its reviewed bound (B-887)", async () => {
-  const { createDiscoveryShelfMigrationCostAdapter } =
-    await import("./operation-cost-discovery-shelf-migration-adapter.js")
-  const adapter = createDiscoveryShelfMigrationCostAdapter({
-    db: null,
-    executable_sha256: "a".repeat(64),
-    schema_sha256: "b".repeat(64),
-  })
-  await assert.rejects(() => adapter.prepare({ max_users: 500 }), /ARGUMENTS_INVALID/)
-  // The plan's arguments: measured 38 users / 224 chunks / 15,276 events cost
-  // 69,362 reads on production D1 (2026-09-28); the bound must cover that
-  // rate at the guard limits and stay within 2x the plan's booked prediction.
-  const plan = JSON.parse(
-    readFileSync(
-      new URL("../../cloudflare/operation-cost-migration-plan.json", import.meta.url),
-      "utf8",
-    ),
-  ).migrations["iconoplasm/0111_discovery_user_shelf.sql"]
-  const prepared = await adapter.prepare(plan.arguments)
-  const worstEvents = (plan.arguments.max_chunks + plan.arguments.max_users) * 64
-  assert.ok(
-    prepared.bound.rows_read >= Math.ceil((69_362 / 15_276) * worstEvents),
-    "bound below the measured rate",
-  )
-  assert.ok(prepared.bound.rows_read <= 2 * plan.prediction.rows_read, "bound over 2x prediction")
-  assert.ok(
-    prepared.bound.rows_written <= 2 * plan.prediction.rows_written,
-    "writes over 2x prediction",
-  )
-  assert.ok(
-    plan.arguments.max_users >= 2 * 38 && plan.arguments.max_chunks >= 224 + 100,
-    "no headroom",
-  )
-  assert.equal(prepared.statements.at(-1).parameters[0], "0111_discovery_user_shelf.sql")
-
-  // The guards run first and abort the batch when the data outgrew the bound.
-  const db = new D1Like(preMigrationSchema())
-  const insertChunk = db.raw.prepare(
-    `INSERT INTO icono_discovery_chronology_v2 (user_id, chunk_seq, first_event_seq,
-      last_event_seq, events_json) VALUES ('u', ?, 1, 1, '[]')`,
-  )
-  const small = await adapter.prepare({ max_users: 1, max_chunks: 2 })
-  for (let seq = 1; seq <= 3; seq++) insertChunk.run(seq)
-  const guards = small.statements.filter((s) => /COST_MIGRATION_/.test(s.sql))
-  assert.ok(guards.length >= 2, "missing schema or row guards")
-  assert.throws(() => {
-    for (const guard of guards) db.raw.prepare(guard.sql).all(...guard.parameters)
-  }, /malformed JSON/)
 })

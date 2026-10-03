@@ -1,12 +1,11 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
 import { executeOperationCostD1Batch } from "./operation-cost-d1-meter.js"
 
-// One adapter for the migrations that only create small empty tables: 0112
-// (the blot backlog watermark) and 0113 (the per-gene vote version and the
-// daily vote budget). Schema only: one sqlite_schema row per table and the
-// journal row; no data table is touched and no row is seeded. The CREATE rescans sqlite_schema (about 360 rows on
-// 2026-09-26), so the bound allows a few full passes over the admitted
-// 512-row schema.
+// One adapter for a migration that only creates small empty tables. Schema
+// only: one sqlite_schema row per table and the journal row; no data table is
+// touched and no row is seeded. The CREATE rescans sqlite_schema (about 360
+// rows on 2026-09-26), so the bound allows a few full passes over the admitted
+// 512-row schema. Each statement is one reviewed CREATE TABLE IF NOT EXISTS.
 export function createSchemaTableMigrationCostAdapter({
   db,
   name,
@@ -19,7 +18,9 @@ export function createSchemaTableMigrationCostAdapter({
     !Array.isArray(migrationStatements) ||
     !migrationStatements.length ||
     migrationStatements.length > 4 ||
-    !migrationStatements.every((sql) => /^CREATE TABLE IF NOT EXISTS /.test(sql))
+    !migrationStatements.every((sql) =>
+      /^CREATE TABLE IF NOT EXISTS [A-Za-z_][A-Za-z0-9_]* \([^;]*\);$/.test(sql),
+    )
   )
     throw new TypeError("A schema-table migration is one to four reviewed CREATE TABLE statements")
   return {

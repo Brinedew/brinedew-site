@@ -3,8 +3,8 @@ import { createRequire } from "node:module"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
-import { createCanonicalLifecycleGuardsMigrationCostAdapter } from "./operation-cost-counter-migration-adapters.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { applyMigrationFile } from "../test-helpers/migration-sql-statements.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -51,11 +51,6 @@ test(
             .run()
         }
       }
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
       await db
         .prepare(
           "INSERT INTO icono_authority_accounts(account_id,public_credit_label) VALUES ('account_guard','Guard')",
@@ -127,15 +122,9 @@ test(
       await db
         .prepare("UPDATE icono_manifestations SET status='active' WHERE manifestation_id='other'")
         .run()
-      const adapter = createCanonicalLifecycleGuardsMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      const prepared = await adapter.prepare({ max_schema_rows: 512 })
-      const migration = await adapter.dispatch(prepared)
-      assert.ok(migration.actual.rows_read <= prepared.bound.rows_read)
-      assert.ok(migration.actual.rows_written <= prepared.bound.rows_written)
+      // 0017 replaces the three unkeyed guards with keyed ones; the legacy
+      // guards above scanned every head, and everything below runs with it.
+      await applyMigrationFile(db, directory, "0017_canonical_lifecycle_keyed_guards.sql")
       const measured = createOperationCostD1Meter(db)
       await measured.db.prepare(update).run()
       await measured.db
@@ -182,7 +171,7 @@ test(
           )
           .first(),
       )
-      t.diagnostic(JSON.stringify({ migration: migration.actual, mutations: actual }))
+      t.diagnostic(JSON.stringify({ mutations: actual }))
     } finally {
       schema.close()
       await runtime.dispose()

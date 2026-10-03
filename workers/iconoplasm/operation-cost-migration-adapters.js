@@ -1,182 +1,14 @@
-import { createFinalizationMigrationCostAdapter } from "./operation-cost-migration-adapter.js"
-import { createFinalizationJobVersionMigrationCostAdapter } from "./operation-cost-finalization-job-migration-adapter.js"
-import { createFinalizationPublicationMigrationCostAdapter } from "./operation-cost-finalization-publication-migration-adapter.js"
-import {
-  createFinalizationQueueMigrationCostAdapter,
-  createFinalizationRunningMigrationCostAdapter,
-  createFinalizationStatusMigrationCostAdapter,
-} from "./operation-cost-finalization-queue-migration-adapter.js"
-import { createAuthoringStreamMigrationCostAdapter } from "./operation-cost-authoring-migration-adapter.js"
 import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
-import { createUploadReservationMigrationCostAdapter } from "./operation-cost-upload-migration-adapter.js"
-import { createLineageAdmissionMigrationCostAdapter } from "./operation-cost-lineage-migration-adapter.js"
-import { createSnapshotRetirementMigrationCostAdapter } from "./operation-cost-snapshot-retirement-adapter.js"
-import { createAssetSummaryMigrationCostAdapter } from "./operation-cost-asset-summary-migration-adapter.js"
-import { createBlacklistLookupMigrationCostAdapter } from "./operation-cost-blacklist-migration-adapter.js"
-import { createCompactDiscoveryMigrationCostAdapter } from "./operation-cost-compact-discovery-migration-adapter.js"
-import { createCompactDiscoveryActivationMigrationCostAdapter } from "./operation-cost-compact-discovery-activation-migration-adapter.js"
-import { createPublishStateIndexMigrationCostAdapter } from "./operation-cost-publish-state-index-migration-adapter.js"
-import { createSchemaDropMigrationCostAdapter } from "./operation-cost-schema-drop-migration-adapter.js"
-import { createDiscoveryShelfMigrationCostAdapter } from "./operation-cost-discovery-shelf-migration-adapter.js"
-import { createSchemaTableMigrationCostAdapter } from "./operation-cost-schema-table-migration-adapter.js"
-import {
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
-  GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME,
-  GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS,
-  GENE_VOTE_VERSION_MIGRATION_NAME,
-  GENE_VOTE_VERSION_MIGRATION_STATEMENTS,
-  VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_NAME,
-  VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_STATEMENTS,
-} from "../generated/operation-cost-migrations.js"
-import { createResumableAdminCountsMigrationCostAdapter } from "./operation-cost-admin-seed-adapter.js"
-import {
-  createInboxCountersMigrationCostAdapter,
-  createDeliveryCursorMigrationCostAdapter,
-  createAssignmentLookupMigrationCostAdapter,
-  createCanonicalLifecycleGuardsMigrationCostAdapter,
-} from "./operation-cost-counter-migration-adapters.js"
 
+// The three inventories read each database's migration journal and schema
+// objects for every release. A migration that is pending in production adds its
+// adapter here, next to its plan entry in cloudflare/operation-cost-migration-plan.json
+// and its reviewed statements in scripts/generate-operation-cost-migrations.mjs.
+// All three are deleted in the change after the deploy shows the migration
+// applied; the `.sql` file stays.
 export function createMigrationOperationCostAdapters(env, identities) {
-  return new Map([
+  return new Map(
     [
-      "iconoplasm-migration-0114",
-      createSchemaDropMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        name: VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_NAME,
-        statements: VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_STATEMENTS,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0113",
-      createSchemaTableMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        name: GENE_VOTE_VERSION_MIGRATION_NAME,
-        statements: GENE_VOTE_VERSION_MIGRATION_STATEMENTS,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0112",
-      createSchemaTableMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        name: GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_NAME,
-        statements: GENE_BLOT_BACKLOG_WATERMARK_MIGRATION_STATEMENTS,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0110",
-      createSchemaDropMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        name: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
-        statements: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0111",
-      createDiscoveryShelfMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0109",
-      createPublishStateIndexMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0108",
-      createCompactDiscoveryActivationMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0106",
-      createCompactDiscoveryMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0105",
-      createBlacklistLookupMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0104",
-      createAssetSummaryMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0103",
-      createFinalizationRunningMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0102",
-      createFinalizationStatusMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0101",
-      createFinalizationPublicationMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0100",
-      createFinalizationJobVersionMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-migration-0099",
-      createFinalizationQueueMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0017",
-      createCanonicalLifecycleGuardsMigrationCostAdapter({
-        db: env.ICONOPLASM_AUTHORING_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0016",
-      createAssignmentLookupMigrationCostAdapter({
-        db: env.ICONOPLASM_AUTHORING_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0097",
-      createDeliveryCursorMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0015",
-      createSnapshotRetirementMigrationCostAdapter({
-        db: env.ICONOPLASM_AUTHORING_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0095",
-      createResumableAdminCountsMigrationCostAdapter({
-        db: env.ICONOPLASM_DB,
-        transition: env.ICONOPLASM_SCHEMA_TRANSITION,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-migration-0096",
-      createInboxCountersMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0014",
-      createLineageAdmissionMigrationCostAdapter({
-        db: env.ICONOPLASM_AUTHORING_DB,
-        ...identities,
-      }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0013",
-      createUploadReservationMigrationCostAdapter({
-        db: env.ICONOPLASM_AUTHORING_DB,
-        ...identities,
-      }),
-    ],
-    ...[
       ["geneguessr", env.DB],
       ["iconoplasm", env.ICONOPLASM_DB],
       ["iconoplasm-authoring", env.ICONOPLASM_AUTHORING_DB],
@@ -184,13 +16,5 @@ export function createMigrationOperationCostAdapters(env, identities) {
       `${resource}-migration-inventory`,
       createMigrationInventoryCostAdapter({ db, resource, ...identities }),
     ]),
-    [
-      "iconoplasm-migration-0094",
-      createFinalizationMigrationCostAdapter({ db: env.ICONOPLASM_DB, ...identities }),
-    ],
-    [
-      "iconoplasm-authoring-migration-0012",
-      createAuthoringStreamMigrationCostAdapter({ db: env.ICONOPLASM_AUTHORING_DB, ...identities }),
-    ],
-  ])
+  )
 }

@@ -4,7 +4,6 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { reconcileDeliveryBacklog } from "./request-delivery-reconciliation.js"
-import { createDeliveryCursorMigrationCostAdapter } from "./operation-cost-counter-migration-adapters.js"
 import { reconcileDeliveredRequestFulfillments } from "../iconoplasm-request-notifications.js"
 
 test(
@@ -28,7 +27,7 @@ test(
       const db = await runtime.getD1Database("DB")
       const directory = new URL("../../migrations-iconoplasm/", import.meta.url)
       for (const file of readdirSync(directory)
-        .filter((n) => n.endsWith(".sql") && parseInt(n) < 97)
+        .filter((n) => n.endsWith(".sql"))
         .sort())
         schema.exec(readFileSync(new URL(file, directory), "utf8"))
       const definitions = schema
@@ -50,31 +49,6 @@ test(
             .bind(...Object.values(row))
             .run()
         }
-      await db
-        .prepare("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL)")
-        .run()
-      const adapter = createDeliveryCursorMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      await assert.rejects(
-        adapter.dispatch(await adapter.prepare({ max_schema_rows: 1 })),
-        /malformed JSON/,
-      )
-      assert.equal(
-        await db
-          .prepare(
-            "SELECT name FROM sqlite_schema WHERE name='icono_delivery_reconciliation_cursor'",
-          )
-          .first(),
-        null,
-      )
-      const prepared = await adapter.prepare({ max_schema_rows: 512 })
-      const migrated = await adapter.dispatch(prepared)
-      assert.ok(migrated.actual.rows_read <= prepared.bound.rows_read)
-      assert.ok(migrated.actual.rows_written <= prepared.bound.rows_written)
-      t.diagnostic(`cursor migration ${JSON.stringify(migrated.actual)}`)
       await db
         .prepare(
           "INSERT INTO icono_portrait_assets(gene_symbol,asset_sha256,r2_key_full,r2_key_thumb) VALUES ('G1',printf('%064x',1),'full','thumb')",

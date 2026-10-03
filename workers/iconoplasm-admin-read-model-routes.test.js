@@ -97,7 +97,6 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
     {
       symbols: ["TP53"],
       visionIds: ["vision-one"],
-      fullVision: false,
       skipVoteSummaries: false,
       skipGeneRollups: false,
       skipVisionRollups: false,
@@ -114,6 +113,8 @@ const emptyScopes = [
   ["non-array scope", { symbols: "TP53", vision_ids: "vision-one" }],
   ["scope empty after normalization", { symbols: ["", "  ", null], vision_ids: ["invalid"] }],
   ["camel-case vision scope empty after normalization", { visionIds: ["invalid", null] }],
+  ["full_vision without a scope", { full_vision: true }],
+  ["fullVision without a scope", { fullVision: true }],
 ]
 
 for (const [description, body] of emptyScopes) {
@@ -132,20 +133,33 @@ for (const [description, body] of emptyScopes) {
 }
 
 for (const flag of ["full_vision", "fullVision"]) {
-  test(`scoped sync rejects ${flag}`, async () => {
+  test(`${flag} cannot widen a scoped sync`, async () => {
     const calls = []
     const handlers = createIconoplasmAdminReadModelHandlers(
-      readModelServices({ syncReadModels: async () => calls.push("direct") }),
+      readModelServices({
+        syncReadModels: async (_env, options) => {
+          calls.push(options)
+          return { symbols: 1, visions: 0 }
+        },
+      }),
     )
     const response = await responseFrom(handlers["admin_read_models.sync"], {
       body: { symbols: ["TP53"], [flag]: true },
     })
     const payload = await response.json()
 
-    assert.equal(response.status, 400)
-    assert.equal(response.headers.get("Cache-Control"), "no-store")
-    assert.match(payload.error, /does not allow full_vision/)
-    assert.deepEqual(calls, [])
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls, [
+      {
+        symbols: ["TP53"],
+        visionIds: [],
+        skipVoteSummaries: false,
+        skipGeneRollups: false,
+        skipVisionRollups: false,
+        skipDashboard: false,
+      },
+    ])
+    assert.equal(Object.hasOwn(payload, "full_vision"), false)
   })
 }
 
@@ -162,7 +176,6 @@ test("vision-only sync keeps its explicit scope", async () => {
   const response = await responseFrom(handlers["admin_read_models.sync"], {
     body: {
       visionIds: [" vision-one ", "invalid", "vision-one"],
-      full_vision: false,
     },
   })
   const payload = await response.json()
@@ -172,7 +185,6 @@ test("vision-only sync keeps its explicit scope", async () => {
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].symbols, [])
   assert.deepEqual(calls[0].visionIds, ["vision-one"])
-  assert.equal(calls[0].fullVision, false)
 })
 
 test("bootstrap implements the HEAD method admitted by its route contract", async () => {

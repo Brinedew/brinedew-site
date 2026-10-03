@@ -8,22 +8,18 @@ import {
   SCOPED_READY_FINALIZATION_SQL,
   drainCompletedFinalization,
 } from "./sync-finalization-publication.js"
-import { createFinalizationPublicationMigrationCostAdapter } from "./operation-cost-finalization-publication-migration-adapter.js"
-import { createSchemaDropMigrationCostAdapter } from "./operation-cost-schema-drop-migration-adapter.js"
-import {
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
-} from "../generated/operation-cost-migrations.js"
+import { applyMigrationFile } from "../test-helpers/migration-sql-statements.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
 )("miniflare")
-const source = (name) =>
-  readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8")
+const migrations = new URL("../../migrations-iconoplasm/", import.meta.url)
+const source = (name) => readFileSync(new URL(name, migrations), "utf8")
 const now = "2026-09-09T03:00:00.000Z"
 
-function installFinalizationSchema(sqlite, { handoff = true } = {}) {
+// The finalization job tables as they stand without the 0101 handoff.
+function installFinalizationSchema(sqlite) {
   for (const file of [
     "0028_add_finalization_jobs.sql",
     "0094_finalization_summary.sql",
@@ -32,7 +28,6 @@ function installFinalizationSchema(sqlite, { handoff = true } = {}) {
     "0103_finalization_running_index.sql",
   ])
     sqlite.exec(source(file))
-  if (handoff) sqlite.exec(source("0101_finalization_publication_barrier.sql"))
 }
 
 test(
@@ -49,7 +44,7 @@ test(
     )
     const schema = new DatabaseSync(":memory:")
     try {
-      installFinalizationSchema(schema, { handoff: false })
+      installFinalizationSchema(schema)
       const db = await runtime.getD1Database("jobs")
       for (const { sql } of schema
         .prepare(
@@ -58,11 +53,6 @@ test(
         .all())
         await db.prepare(sql).run()
       await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
       await db
         .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<60000)
@@ -78,33 +68,6 @@ test(
        SELECT 'T'||n,'queued','completed' FROM ids`,
         )
         .run()
-
-      const adapter = createFinalizationPublicationMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      await assert.rejects(
-        adapter.dispatch(await adapter.prepare({ max_terminal: 4999, max_schema_rows: 512 })),
-      )
-      assert.equal(
-        (
-          await db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='icono_sync_finalization_publication'",
-            )
-            .first()
-        ).n,
-        0,
-        "a refused migration must not install the handoff table",
-      )
-      const prepared = await adapter.prepare({ max_terminal: 5000, max_schema_rows: 512 })
-      const migration = await adapter.dispatch(prepared)
-      assert.ok(migration.actual.rows_read <= prepared.bound.rows_read, JSON.stringify(migration))
-      assert.ok(
-        migration.actual.rows_written <= prepared.bound.rows_written,
-        JSON.stringify(migration),
-      )
 
       const selected = await db
         .prepare(SCOPED_READY_FINALIZATION_SQL)
@@ -144,12 +107,7 @@ test(
         60000,
         "unrelated history remains untouched",
       )
-      t.diagnostic(
-        JSON.stringify({
-          migration: migration.actual,
-          selected_rows_read: selected.meta.rows_read,
-        }),
-      )
+      t.diagnostic(JSON.stringify({ selected_rows_read: selected.meta.rows_read }))
     } finally {
       schema.close()
       await runtime.dispose()
@@ -170,9 +128,8 @@ test("retiring the finalization handoff removes only its table and triggers", as
     }),
   )
   const schema = new DatabaseSync(":memory:")
-  const identities = { executable_sha256: "a".repeat(64), schema_sha256: "b".repeat(64) }
   try {
-    installFinalizationSchema(schema, { handoff: false })
+    installFinalizationSchema(schema)
     const db = await runtime.getD1Database("jobs")
     for (const { sql } of schema
       .prepare(
@@ -182,17 +139,13 @@ test("retiring the finalization handoff removes only its table and triggers", as
       await db.prepare(sql).run()
     await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
     await db
-      .prepare("CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)")
-      .run()
-    await db
       .prepare(
         `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<40)
        INSERT INTO icono_sync_finalization_jobs(gene_symbol,status,phase)
        SELECT 'T'||n,'queued','completed' FROM ids`,
       )
       .run()
-    const handoff = createFinalizationPublicationMigrationCostAdapter({ db, ...identities })
-    await handoff.dispatch(await handoff.prepare({ max_terminal: 40, max_schema_rows: 512 }))
+    await applyMigrationFile(db, migrations, "0101_finalization_publication_barrier.sql")
 
     const objects = async () =>
       (
@@ -219,25 +172,7 @@ test("retiring the finalization handoff removes only its table and triggers", as
       ).meta.rows_written
     const writesWithHandoff = await flipWrites("T1")
 
-    const retirement = createSchemaDropMigrationCostAdapter({
-      db,
-      name: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
-      statements: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
-      ...identities,
-    })
-    await assert.rejects(
-      retirement.dispatch(await retirement.prepare({ max_schema_rows: 1 })),
-      "a schema larger than the admitted bound must refuse the whole batch",
-    )
-    assert.deepEqual(await objects(), before, "a refused retirement leaves every object in place")
-
-    const prepared = await retirement.prepare({ max_schema_rows: 512 })
-    const migration = await retirement.dispatch(prepared)
-    assert.ok(migration.actual.rows_read <= prepared.bound.rows_read, JSON.stringify(migration))
-    assert.ok(
-      migration.actual.rows_written <= prepared.bound.rows_written,
-      JSON.stringify(migration),
-    )
+    await applyMigrationFile(db, migrations, "0110_retire_finalization_publication_handoff.sql")
     assert.deepEqual(
       await objects(),
       before.filter((name) => !handoffObjects.includes(name)),
@@ -268,12 +203,7 @@ test("retiring the finalization handoff removes only its table and triggers", as
         })
       ).finalized
     assert.equal(finalized, 38, "the scoped drain finishes every remaining ready job")
-    assert.ok(
-      (await db.prepare("SELECT name FROM d1_migrations").all()).results.some(
-        ({ name }) => name === "0110_retire_finalization_publication_handoff.sql",
-      ),
-    )
-    t.diagnostic(JSON.stringify({ migration: migration.actual, writesWithHandoff }))
+    t.diagnostic(JSON.stringify({ writesWithHandoff }))
   } finally {
     schema.close()
     await runtime.dispose()
