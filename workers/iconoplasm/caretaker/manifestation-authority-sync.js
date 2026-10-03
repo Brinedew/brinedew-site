@@ -5,7 +5,7 @@ import {
   normalizeId,
   normalizeTimestamp,
 } from "./manifestation-authority-contract.js"
-import { sha256Hex } from "../../lib/iconoplasm-envelope-crypto.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { all, first, prepared, requireDatabase } from "./manifestation-authority-repository.js"
 import { decodeCursor, encodeCursor } from "./manifestation-sync-cursor.js"
 import { advanceManifestationSnapshotChain } from "./manifestation-snapshot-hash.js"

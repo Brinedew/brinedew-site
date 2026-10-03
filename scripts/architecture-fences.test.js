@@ -382,11 +382,11 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-012]
-test("IPD-012 keeps one encrypted manifestation command authority", () => {
+test("IPD-012 keeps one manifestation command authority", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-012")
   assert.ok(fence, "IPD-012 must remain registered")
   assert.match(fence.decision, /Website is the sole command authority/)
-  assert.match(fence.decision, /private and encrypted/)
+  assert.match(fence.decision, /plain-text objects in a private storage zone/)
   assert.match(fence.decision, /workstation is a version-bound replica/)
 
   const config = readRepositoryFile(

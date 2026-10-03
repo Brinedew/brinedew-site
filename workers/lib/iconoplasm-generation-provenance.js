@@ -1,6 +1,8 @@
-import { decryptManifestationProse, sha256Hex } from "./iconoplasm-manifestation-body-crypto.js"
-import { readEncryptedManifestationBody } from "./iconoplasm-manifestation-body-storage.js"
-import { decryptManifestationTags } from "./iconoplasm-manifestation-tags-crypto.js"
+import {
+  readManifestationProse,
+  readManifestationTags,
+} from "./iconoplasm-manifestation-body-reader.js"
+import { sha256Hex } from "./iconoplasm-sha256.js"
 import { splitManifestationTagsPayload } from "../iconoplasm/caretaker/manifestation-tags-payload.js"
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
@@ -477,63 +479,28 @@ export function exactGenerationProvenanceValidationKey(raw, options) {
   return JSON.stringify(requireExactGenerationProvenance(raw, options))
 }
 
-async function verifiedCiphertext(env, { objectKey, ciphertextSha256, ciphertextBytes }) {
-  const stored = await readEncryptedManifestationBody(env, objectKey)
-  if (!stored) {
+async function readVerifiedBody(read, env, storage, ids) {
+  let text
+  try {
+    text = await read(env, storage, ids)
+  } catch (error) {
+    throw Object.assign(
+      sourceError(
+        "GENERATION_SOURCE_BODY_CORRUPT",
+        "The exact manifestation source body failed integrity verification.",
+        503,
+      ),
+      { cause: error },
+    )
+  }
+  if (text === null) {
     throw sourceError(
       "GENERATION_SOURCE_BODY_MISSING",
       "The exact manifestation source body is missing from private storage.",
       503,
     )
   }
-  if (
-    stored.bytes.byteLength !== ciphertextBytes ||
-    (await sha256Hex(stored.bytes)) !== ciphertextSha256
-  ) {
-    throw sourceError(
-      "GENERATION_SOURCE_CIPHERTEXT_MISMATCH",
-      "The exact manifestation source body failed ciphertext verification.",
-      503,
-    )
-  }
-  return stored.bytes
-}
-
-async function verifiedProse(env, row, input) {
-  const ciphertext = await verifiedCiphertext(env, input)
-  return decryptManifestationProse(env, {
-    revisionId: input.entityId,
-    geneId: row.gene_id,
-    ciphertext,
-    ciphertextSha256: input.ciphertextSha256,
-    ciphertextBytes: input.ciphertextBytes,
-    bodySha256: input.bodySha256,
-    bodyBytes: input.bodyBytes,
-    bodyIvBase64: input.bodyIvBase64,
-    wrappedDekBase64: input.wrappedDekBase64,
-    wrapIvBase64: input.wrapIvBase64,
-    keyVersion: input.keyVersion,
-    aadVersion: input.aadVersion,
-  })
-}
-
-async function verifiedTags(env, input) {
-  const ciphertext = await verifiedCiphertext(env, input)
-  return decryptManifestationTags(env, {
-    derivativeId: input.entityId,
-    revisionId: input.revisionId,
-    sourceBodySha256: input.sourceBodySha256,
-    ciphertext,
-    ciphertextSha256: input.ciphertextSha256,
-    ciphertextBytes: input.ciphertextBytes,
-    bodySha256: input.bodySha256,
-    bodyBytes: input.bodyBytes,
-    bodyIvBase64: input.bodyIvBase64,
-    wrappedDekBase64: input.wrappedDekBase64,
-    wrapIvBase64: input.wrapIvBase64,
-    keyVersion: input.keyVersion,
-    aadVersion: input.aadVersion,
-  })
+  return text
 }
 
 async function readExactAuthorityRow(env, provenance) {
@@ -607,40 +574,53 @@ export async function readExactGenerationSource(env, rawProvenance) {
     )
   }
 
-  const prose = await verifiedProse(env, row, {
-    entityId: provenance.source_manifestation_revision_id,
-    objectKey: row.revision_object_key,
-    ciphertextSha256: sha256(row.revision_ciphertext_sha256, "revision_ciphertext_sha256"),
-    ciphertextBytes: positiveInteger(row.revision_ciphertext_bytes, "revision_ciphertext_bytes"),
-    bodySha256: provenance.source_manifestation_body_sha256,
-    bodyBytes: positiveInteger(row.body_bytes, "body_bytes"),
-    bodyIvBase64: row.revision_body_iv_base64,
-    wrappedDekBase64: row.revision_wrapped_dek_base64,
-    wrapIvBase64: row.revision_wrap_iv_base64,
-    keyVersion: positiveInteger(row.revision_key_version, "revision_key_version"),
-    aadVersion: positiveInteger(row.revision_aad_version, "revision_aad_version"),
-  })
+  const prose = await readVerifiedBody(
+    readManifestationProse,
+    env,
+    {
+      object_key: row.revision_object_key,
+      ciphertext_sha256: sha256(row.revision_ciphertext_sha256, "revision_ciphertext_sha256"),
+      ciphertext_bytes: positiveInteger(row.revision_ciphertext_bytes, "revision_ciphertext_bytes"),
+      body_iv_base64: row.revision_body_iv_base64,
+      wrapped_dek_base64: row.revision_wrapped_dek_base64,
+      wrap_iv_base64: row.revision_wrap_iv_base64,
+      key_version: positiveInteger(row.revision_key_version, "revision_key_version"),
+      aad_version: positiveInteger(row.revision_aad_version, "revision_aad_version"),
+    },
+    {
+      revisionId: provenance.source_manifestation_revision_id,
+      geneId: row.gene_id,
+      bodySha256: provenance.source_manifestation_body_sha256,
+      bodyBytes: positiveInteger(row.body_bytes, "body_bytes"),
+    },
+  )
   let tags = ""
   let tagsFieldsJson = null
   if (provenance.prompt_body_mode === "taggerizer_prompt") {
-    const compoundTags = await verifiedTags(env, {
-      entityId: provenance.source_manifestation_derivative_id,
-      revisionId: provenance.source_manifestation_revision_id,
-      sourceBodySha256: provenance.source_manifestation_body_sha256,
-      objectKey: row.derivative_object_key,
-      ciphertextSha256: sha256(row.derivative_ciphertext_sha256, "derivative_ciphertext_sha256"),
-      ciphertextBytes: positiveInteger(
-        row.derivative_ciphertext_bytes,
-        "derivative_ciphertext_bytes",
-      ),
-      bodySha256: provenance.source_manifestation_derivative_sha256,
-      bodyBytes: positiveInteger(row.derivative_body_bytes, "derivative_body_bytes"),
-      bodyIvBase64: row.derivative_body_iv_base64,
-      wrappedDekBase64: row.derivative_wrapped_dek_base64,
-      wrapIvBase64: row.derivative_wrap_iv_base64,
-      keyVersion: positiveInteger(row.derivative_key_version, "derivative_key_version"),
-      aadVersion: positiveInteger(row.derivative_aad_version, "derivative_aad_version"),
-    })
+    const compoundTags = await readVerifiedBody(
+      readManifestationTags,
+      env,
+      {
+        object_key: row.derivative_object_key,
+        ciphertext_sha256: sha256(row.derivative_ciphertext_sha256, "derivative_ciphertext_sha256"),
+        ciphertext_bytes: positiveInteger(
+          row.derivative_ciphertext_bytes,
+          "derivative_ciphertext_bytes",
+        ),
+        body_iv_base64: row.derivative_body_iv_base64,
+        wrapped_dek_base64: row.derivative_wrapped_dek_base64,
+        wrap_iv_base64: row.derivative_wrap_iv_base64,
+        key_version: positiveInteger(row.derivative_key_version, "derivative_key_version"),
+        aad_version: positiveInteger(row.derivative_aad_version, "derivative_aad_version"),
+      },
+      {
+        derivativeId: provenance.source_manifestation_derivative_id,
+        revisionId: provenance.source_manifestation_revision_id,
+        sourceBodySha256: provenance.source_manifestation_body_sha256,
+        bodySha256: provenance.source_manifestation_derivative_sha256,
+        bodyBytes: positiveInteger(row.derivative_body_bytes, "derivative_body_bytes"),
+      },
+    )
     const split = await splitManifestationTagsPayload(compoundTags, {
       tagsSha256: provenance.source_manifestation_derivative_tags_sha256,
       tagsBytes: provenance.source_manifestation_derivative_tags_bytes,

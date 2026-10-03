@@ -1,6 +1,7 @@
-import { decryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
-import { decryptManifestationTags } from "../../lib/iconoplasm-manifestation-tags-crypto.js"
-import { readEncryptedManifestationBody } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import {
+  readManifestationProse,
+  readManifestationTags,
+} from "../../lib/iconoplasm-manifestation-body-reader.js"
 import { readActiveCaretakerTerms } from "./caretaker-terms-registry.js"
 import { authorityError, normalizeId } from "./manifestation-authority-contract.js"
 import {
@@ -582,23 +583,14 @@ export async function readAuthorizedManifestationRevisionBody(db, env, input = {
   if (new Set(["purged", "quarantined"]).has(secret.lifecycle_status) || !secret.object_key) {
     throw authorityError("REVISION_BODY_UNAVAILABLE", "Revision body is unavailable", 410)
   }
-  const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-  if (!encrypted)
-    throw authorityError("REVISION_BODY_UNAVAILABLE", "Revision body is unavailable", 503)
-  const prose = await decryptManifestationProse(env, {
+  const prose = await readManifestationProse(env, secret, {
     revisionId,
     geneId: secret.gene_id,
-    ciphertext: encrypted.bytes,
-    ciphertextSha256: secret.ciphertext_sha256,
-    ciphertextBytes: Number(secret.ciphertext_bytes),
     bodySha256: secret.body_sha256,
     bodyBytes: Number(secret.body_bytes),
-    bodyIvBase64: secret.body_iv_base64,
-    wrappedDekBase64: secret.wrapped_dek_base64,
-    wrapIvBase64: secret.wrap_iv_base64,
-    keyVersion: Number(secret.key_version),
-    aadVersion: Number(secret.aad_version),
   })
+  if (prose === null)
+    throw authorityError("REVISION_BODY_UNAVAILABLE", "Revision body is unavailable", 503)
   return Object.freeze({
     manifestation_revision_id: revisionId,
     body_sha256: secret.body_sha256,
@@ -638,24 +630,15 @@ export async function readAuthorizedManifestationDerivativeBody(db, env, input =
   if (secret.status !== "complete" || !secret.object_key) {
     throw authorityError("DERIVATIVE_BODY_UNAVAILABLE", "Derivative body is unavailable", 410)
   }
-  const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-  if (!encrypted)
-    throw authorityError("DERIVATIVE_BODY_UNAVAILABLE", "Derivative body is unavailable", 503)
-  const outputPlain = await decryptManifestationTags(env, {
+  const outputPlain = await readManifestationTags(env, secret, {
     derivativeId,
     revisionId: secret.manifestation_revision_id,
     sourceBodySha256: secret.source_body_sha256,
-    ciphertext: encrypted.bytes,
-    ciphertextSha256: secret.ciphertext_sha256,
-    ciphertextBytes: Number(secret.ciphertext_bytes),
     bodySha256: secret.body_sha256,
     bodyBytes: Number(secret.body_bytes),
-    bodyIvBase64: secret.body_iv_base64,
-    wrappedDekBase64: secret.wrapped_dek_base64,
-    wrapIvBase64: secret.wrap_iv_base64,
-    keyVersion: Number(secret.key_version),
-    aadVersion: Number(secret.aad_version),
   })
+  if (outputPlain === null)
+    throw authorityError("DERIVATIVE_BODY_UNAVAILABLE", "Derivative body is unavailable", 503)
   const tags = await splitManifestationTagsPayload(outputPlain, {
     tagsSha256: secret.tags_sha256,
     tagsBytes: secret.tags_bytes,

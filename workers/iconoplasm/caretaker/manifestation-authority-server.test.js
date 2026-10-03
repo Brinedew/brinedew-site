@@ -21,10 +21,10 @@ import {
 } from "./manifestation-authority.js"
 import { prepareManifestationTagsPayload } from "./manifestation-tags-payload.js"
 import { advanceManifestationSnapshotChain as computeManifestationSnapshotChainHash } from "./manifestation-snapshot-hash.js"
-import { encryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
+import { encryptLegacyProse } from "../../lib/iconoplasm-body-object-test-support.js"
 import {
   createManifestationBodyObjectKey,
-  putEncryptedManifestationBody,
+  putManifestationBodyObject,
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
 import { createD1InvocationBudget } from "../../lib/d1-invocation-budget.js"
@@ -41,7 +41,6 @@ function base64(bytes) {
 
 function serviceEnvironment() {
   return {
-    ICONOPLASM_AUTHORING_BODY_KEY_VERSION: "1",
     ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(new Uint8Array(32).fill(11)),
     ICONOPLASM_AUTHORING_STORAGE_ZONE: "authority-test-zone",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authority-test-password",
@@ -1084,7 +1083,7 @@ test("service material routes round-trip exact prose and structured Tags without
   const objects = installMemoryBodyStorage(t)
   const revisionId = "revision_material_7005"
   const prose = "A caretaker-authored manifestation.\r\nSecond line with café."
-  const encryptedRevision = await encryptManifestationProse(env, {
+  const encryptedRevision = await encryptLegacyProse(env, {
     revisionId,
     geneId: context.geneId,
     prose,
@@ -1103,7 +1102,7 @@ test("service material routes round-trip exact prose and structured Tags without
     leaseToken: "upload_lease_material_7005",
     now: "2099-08-30T00:00:00.000Z",
   })
-  const revisionUpload = await putEncryptedManifestationBody(
+  const revisionUpload = await putManifestationBodyObject(
     env,
     revisionObjectKey,
     encryptedRevision.ciphertext,

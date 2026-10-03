@@ -4,6 +4,34 @@ import {
   normalizeTimestamp,
 } from "./manifestation-authority-contract.js"
 
+// A body object is plain text, so its row records the object's own hash and the
+// envelope columns stay empty. The storage tables are shaped for AES-GCM
+// envelopes (ciphertext_sha256, ciphertext_bytes, body_iv_base64,
+// wrapped_dek_base64, wrap_iv_base64, key_version, aad_version), and the objects
+// not yet converted still are envelopes, so the columns keep those names until
+// the tables are rebuilt. Two schema rules decide what a plain row holds:
+// ciphertext_bytes must be at least 17, and the revision insert trigger requires
+// it to be the text length plus 16. A plain row therefore records that
+// envelope-shaped size, which no reader uses for a plain body, so a one-byte
+// manifestation saves like any other. The key and AAD versions stay 1 because
+// the schema requires a positive value.
+export function plainStorageDescriptor({ body_sha256, body_bytes }, objectKey, upload) {
+  return {
+    body_sha256,
+    body_bytes,
+    object_key: objectKey,
+    ciphertext_sha256: body_sha256,
+    ciphertext_bytes: body_bytes + 16,
+    body_iv_base64: "",
+    wrapped_dek_base64: "",
+    wrap_iv_base64: "",
+    key_version: 1,
+    aad_version: 1,
+    object_etag: upload.etag,
+    verified_at: new Date().toISOString(),
+  }
+}
+
 export function storageFields(raw) {
   const storage = raw && typeof raw === "object" ? raw : {}
   const bodySha256 = normalizeSha256(storage.body_sha256, "body_sha256")
@@ -29,7 +57,7 @@ export function storageFields(raw) {
     throw authorityError("INVALID_OBJECT_KEY", "Manifestation object key is invalid")
   }
   for (const field of ["body_iv_base64", "wrapped_dek_base64", "wrap_iv_base64"]) {
-    if (!/^[A-Za-z0-9_-]{12,256}$/.test(String(storage[field] || ""))) {
+    if (!/^[A-Za-z0-9_-]{0,256}$/.test(String(storage[field] ?? ""))) {
       throw authorityError("INVALID_ENCRYPTION_METADATA", `${field} is invalid`)
     }
   }
@@ -39,9 +67,9 @@ export function storageFields(raw) {
     object_key: objectKey,
     ciphertext_sha256: ciphertextSha256,
     ciphertext_bytes: ciphertextBytes,
-    body_iv_base64: String(storage.body_iv_base64),
-    wrapped_dek_base64: String(storage.wrapped_dek_base64),
-    wrap_iv_base64: String(storage.wrap_iv_base64),
+    body_iv_base64: String(storage.body_iv_base64 ?? ""),
+    wrapped_dek_base64: String(storage.wrapped_dek_base64 ?? ""),
+    wrap_iv_base64: String(storage.wrap_iv_base64 ?? ""),
     key_version: keyVersion,
     aad_version: 1,
     object_etag: String(storage.object_etag || "").trim() || null,

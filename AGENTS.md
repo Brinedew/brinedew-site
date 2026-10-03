@@ -49,7 +49,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-005]** — The primary Iconoplasm D1 is bounded operational state with a 500 MB per-database wall; no history or body payloads. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-012]** — The Website is the sole command authority for caretaker manifestation history and canonical selection; prose bodies live as encrypted Bunny objects with wrapped keys in authoring D1. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-012]** — The Website is the sole command authority for caretaker manifestation history and canonical selection; prose and Tags bodies live as plain-text objects in the private Bunny zone, and authoring D1 holds their hashes. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 Caretaker autosave creates the caretaker's own version; new image requests use the selected canonical version. The caretaker editor shows when those differ and offers the existing canonical-selection action. Do not assume “Saved” means the next image uses that edit, or add a second generation-source path.
 
