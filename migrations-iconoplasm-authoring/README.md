@@ -5,10 +5,18 @@ binding. It stores bounded caretaker, lineage, revision metadata, canonical
 selection, idempotency receipts, and replication events. It must never be
 pointed at the primary `ICONOPLASM_DB`.
 
-Manifestation prose and derived Tags bodies are encrypted before being written
-to the existing Bunny Storage zone. D1 stores plaintext hashes and byte counts
-for integrity and quota enforcement, plus the wrapped per-object data key needed
-to decrypt an eligible revision. Public CDN access can expose only ciphertext.
+Manifestation prose and derived Tags bodies are plain-text objects in the
+existing private Bunny Storage zone, which has no Pull Zone. D1 stores their
+hashes and byte counts for integrity and quota enforcement.
+
+The storage tables keep the columns of an older envelope format
+(`ciphertext_sha256`, `ciphertext_bytes`, `body_iv_base64`, `wrapped_dek_base64`,
+`wrap_iv_base64`, `key_version`, `aad_version`). A plain body fills them like
+this: `ciphertext_sha256` is the object's hash, `ciphertext_bytes` is the text
+length plus 16 (the table's `>= 17` check and the revision insert trigger need
+exactly that), the three key fields are empty, and both versions are 1. Older
+rows hold real envelope values. A reader tells the two apart by hashing the
+object, never by a flag (`workers/lib/iconoplasm-manifestation-body-reader.js`).
 
 The numbered SQL files here are the complete, append-only migration history;
 the production D1 migration journal records what has actually run. Use the

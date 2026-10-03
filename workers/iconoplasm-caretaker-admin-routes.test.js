@@ -19,6 +19,11 @@ import {
   sha,
   storage,
 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import {
+  bodyEnvironment,
+  bootstrap as bootstrapLegacyGene,
+  installBunnyFake,
+} from "./iconoplasm/caretaker/manifestation-plaintext-test-support.js"
 
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const NOW = "2026-08-30T00:00:00.000Z"
@@ -367,4 +372,64 @@ test("admin mutation requires strict same-origin browser metadata", async (t) =>
   })
   assert.equal(response.status, 403)
   assert.equal((await response.json()).error.code, "STRICT_SAME_ORIGIN_REQUIRED")
+})
+
+// B-859: the administrator's one slice of the rewrite of legacy envelope body
+// objects as plain text. The conversion itself is tested in
+// manifestation-plaintext-conversion.test.js; this is the door in front of it.
+test("the plaintext conversion route is administrator-only, bounded, and returns counts, never text", async (t) => {
+  const bunny = installBunnyFake(t)
+  const context = await bootstrapLegacyGene(t, "8301", bunny)
+  const env = { ICONOPLASM_AUTHORING_DB: context.db, ...bodyEnvironment() }
+  const services = (isAdmin) => ({
+    isAdmin: async () => isAdmin,
+    json,
+    resolveActiveAccount: async () => ({ account_id: ADMIN }),
+    wakeAuthorityProjection: async () => ({ ok: true, results: [] }),
+  })
+  const route = (isAdmin, body) =>
+    createIconoplasmCaretakerAdminHandlers(services(isAdmin))["caretaker_admin.plaintext_bodies"]({
+      request: new Request(`${ORIGIN}/api/iconoplasm/admin/caretakers/plaintext-bodies`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      env,
+      done: (_name, response) => response,
+    })
+  const original = Uint8Array.from(bunny.objects.get(context.seedObjectKey))
+
+  const denied = await route(false, { kind: "revision", execute: true })
+  assert.equal(denied.status, 403)
+  assert.equal(bunny.log.length, 0, "an unauthorised call touches no storage")
+
+  for (const body of [
+    {},
+    { kind: "tags" },
+    { kind: "revision", limit: 5 },
+    { kind: "revision", limit: 0 },
+    { kind: "revision", after: "x; DROP TABLE y" },
+  ]) {
+    const refused = await route(true, body)
+    assert.equal(refused.status, 400, JSON.stringify(body))
+  }
+  assert.equal(bunny.log.length, 0, "a refused call touches no storage")
+
+  // Check mode finds the one envelope (the seed) and writes nothing.
+  const checked = await route(true, { kind: "revision" })
+  assert.equal(checked.status, 200)
+  const check = await checked.json()
+  assert.equal(check.ok, true)
+  assert.deepEqual([check.scanned, check.legacy, check.converted, check.done], [1, 1, 0, true])
+  assert.deepEqual(bunny.objects.get(context.seedObjectKey), original)
+
+  // Execute mode rewrites it, and the answer carries no body text.
+  const executed = await route(true, { kind: "revision", execute: true })
+  assert.equal(executed.status, 200)
+  const text = JSON.stringify(await executed.json())
+  assert.equal(text.includes(context.seed.prose), false)
+  assert.equal(
+    new TextDecoder().decode(bunny.objects.get(context.seedObjectKey)),
+    context.seed.prose,
+  )
 })

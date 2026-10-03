@@ -399,16 +399,16 @@
     },
     {
       "id": "IPD-012",
-      "title": "Caretaker manifestation history has one encrypted Website authority",
+      "title": "Caretaker manifestation history has one Website authority",
       "operation_cost_migration": {
         "issue": "B-741",
         "owner": "Existing global IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
         "route": "/api/iconoplasm/admin/cost/operations",
         "contract": "Register an immutable prediction before dispatch; reserve each verified step against both twice the prediction and shared daily headroom. The authority dispatches D1 and settles provider receipts. Unknown outcomes remain charged. Direct API, CI and legacy binding cutover must be complete before claiming mandatory enforcement. No new Worker, DO namespace, or reader coordination hop."
       },
-      "decision": "The Website is the sole command authority for caretaker and manifestation state. Sensitive bodies remain private and encrypted; the workstation is a version-bound replica and executor.",
-      "reason": "Multiple writers or plaintext replicas create conflicting authorship, lost updates, and privacy failures.",
-      "change_control": "A replacement must preserve one writer, immutable revision identity, encryption, idempotency, and rebuildable replication. Database schema, transport, quotas, and storage layout may change.",
+      "decision": "The Website is the sole command authority for caretaker and manifestation state. Bodies are plain-text objects in a private storage zone with no public Pull Zone; the workstation is a version-bound replica and executor.",
+      "reason": "Multiple writers create conflicting authorship and lost updates.",
+      "change_control": "A replacement must preserve one writer, immutable revision identity, idempotency, and rebuildable replication. Database schema, transport, quotas, and storage layout may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-705",
       "additional_required_marker_categories": ["config", "deploy", "migration"],

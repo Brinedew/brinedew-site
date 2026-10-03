@@ -1,13 +1,12 @@
-// ARCHITECTURE FENCE [IPD-012]: public manifestation text is decrypted from the
+// ARCHITECTURE FENCE [IPD-012]: public manifestation text is read from the
 // exact authoring authority object selected by the compact primary head. This
-// module never reads legacy plaintext and never exposes object locators or keys.
-// It also never reads, decrypts or returns the gene's Tags (the generated image
-// tags): the caretaker panel promises they stay private, so the one public
+// module never reads the primary database's old essence text and never exposes
+// object locators. It also never reads or returns the gene's Tags (the generated
+// image tags): the caretaker panel promises they stay private, so the one public
 // object is built from the prose alone. Tags travel only through the
 // authenticated caretaker and replica routes.
-import { sha256Hex } from "../../lib/iconoplasm-manifestation-body-crypto.js"
-import { decryptManifestationProse } from "../../lib/iconoplasm-manifestation-body-crypto.js"
-import { readEncryptedManifestationBody } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
+import { readManifestationProse } from "../../lib/iconoplasm-manifestation-body-reader.js"
 import { all, first, requireDatabase } from "./manifestation-authority-repository.js"
 import { readCanonicalProjectionRecord } from "./manifestation-authority-projection-read.js"
 
@@ -229,22 +228,14 @@ async function revisionMaterial(authoringDb, env, record, onIntegrityFailure) {
   )
   try {
     if (!secret) throw new Error("revision_storage_missing")
-    const encrypted = await readEncryptedManifestationBody(env, secret.object_key)
-    if (!encrypted) throw new Error("revision_ciphertext_missing")
-    return await decryptManifestationProse(env, {
+    const prose = await readManifestationProse(env, secret, {
       revisionId: revision.manifestation_revision_id,
       geneId: record.gene_id,
-      ciphertext: encrypted.bytes,
-      ciphertextSha256: secret.ciphertext_sha256,
-      ciphertextBytes: Number(secret.ciphertext_bytes),
       bodySha256: revision.body_sha256,
       bodyBytes: Number(revision.body_bytes),
-      bodyIvBase64: secret.body_iv_base64,
-      wrappedDekBase64: secret.wrapped_dek_base64,
-      wrapIvBase64: secret.wrap_iv_base64,
-      keyVersion: Number(secret.key_version),
-      aadVersion: Number(secret.aad_version),
     })
+    if (prose === null) throw new Error("revision_body_missing")
+    return prose
   } catch (error) {
     await notifyIntegrityFailure(onIntegrityFailure, {
       entity_kind: "revision",

@@ -1,10 +1,11 @@
-import { sha256Hex } from "./iconoplasm-manifestation-body-crypto.js"
+import { sha256Hex } from "./iconoplasm-sha256.js"
 import {
   BUNNY_READ_AFTER_WRITE_DELAYS_MS,
   putBunnyObjectUntilVerified,
 } from "./bunny-storage-consistency.js"
 
-const MAX_CIPHERTEXT_BYTES = 64 * 1024
+// Prose is at most 16 KiB and Tags 32 KiB.
+const MAX_OBJECT_BYTES = 64 * 1024
 const RETRY_DELAYS_MS = Object.freeze([0, 125, 375, 1000])
 
 function storageSetting(env, authoringName, fallback = "") {
@@ -31,8 +32,8 @@ function normalizeObjectKey(raw) {
 
 export async function createManifestationBodyObjectKey({ locatorId } = {}) {
   // Revision IDs cross the browser and replica boundaries, so deriving an
-  // object path from a revision ID would make the encrypted object address
-  // public too. The locator is independent random authority-only metadata.
+  // object path from a revision ID would make the object's address public too.
+  // The locator is independent random authority-only metadata.
   const generated = `mbody_${crypto.randomUUID().replaceAll("-", "").toLowerCase()}`
   const id = String(locatorId || generated).trim()
   if (!/^mbody_[a-f0-9]{32}$/.test(id)) {
@@ -84,64 +85,78 @@ async function storageFetch(env, objectKey, init, { maxAttempts = 4 } = {}) {
   throw lastError || new Error("Private manifestation storage request failed")
 }
 
-export async function readEncryptedManifestationBody(env, objectKey) {
+// One GET. Returns null for a missing object. `maxAttempts` bounds the
+// requests the call can spend, which a Worker with 50 subrequests must count.
+export async function readManifestationBodyObject(env, objectKey, { maxAttempts = 4 } = {}) {
   const response = await storageFetch(
     env,
     objectKey,
     { method: "GET", headers: { Accept: "application/octet-stream" } },
-    { maxAttempts: 4 },
+    { maxAttempts },
   )
   if (response.status === 404) return null
   if (!response.ok) throw new Error(`Private manifestation storage GET failed (${response.status})`)
   const bytes = new Uint8Array(await response.arrayBuffer())
-  if (bytes.byteLength < 17 || bytes.byteLength > MAX_CIPHERTEXT_BYTES) {
-    throw new Error("Encrypted manifestation body has an invalid byte length")
+  if (bytes.byteLength < 1 || bytes.byteLength > MAX_OBJECT_BYTES) {
+    throw new Error("Manifestation body object has an invalid byte length")
   }
   return { bytes, etag: String(response.headers.get("etag") || "").replace(/^W\//, "") }
 }
 
-export async function putEncryptedManifestationBody(
+// One PUT, no read-back: the caller verifies. Overwrites an existing object.
+export async function writeManifestationBodyObject(
   env,
   objectKey,
-  ciphertext,
-  { expectedSha256, verifyPlaintext } = {},
+  bytes,
+  { maxAttempts = 2 } = {},
 ) {
-  const bytes = ciphertext instanceof Uint8Array ? ciphertext : new Uint8Array(ciphertext)
-  if (bytes.byteLength < 17 || bytes.byteLength > MAX_CIPHERTEXT_BYTES) {
-    throw new TypeError("Encrypted manifestation body has an invalid byte length")
+  const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+  if (body.byteLength < 1 || body.byteLength > MAX_OBJECT_BYTES) {
+    throw new TypeError("Manifestation body object has an invalid byte length")
   }
-  const expectedHash = String(expectedSha256 || (await sha256Hex(bytes))).toLowerCase()
-  if (!/^[a-f0-9]{64}$/.test(expectedHash)) throw new TypeError("Ciphertext SHA-256 is invalid")
+  const response = await storageFetch(
+    env,
+    objectKey,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "private, no-store",
+      },
+      body,
+    },
+    { maxAttempts },
+  )
+  if (!response.ok) {
+    throw new Error(`Private manifestation storage PUT failed (${response.status})`)
+  }
+}
+
+// A new body: PUT until a read shows exactly these bytes. Bunny can take
+// seconds to serve an acknowledged write, so the read-back retries and the PUT
+// repeats (see bunny-storage-consistency.js).
+export async function putManifestationBodyObject(env, objectKey, bytes, { expectedSha256 } = {}) {
+  const body = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+  const expectedHash = String(expectedSha256 || (await sha256Hex(body))).toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(expectedHash)) throw new TypeError("Body SHA-256 is invalid")
 
   let lastError = null
   const putOnce = async () => {
-    const response = await storageFetch(
-      env,
-      objectKey,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/octet-stream",
-          "Cache-Control": "private, no-store",
-        },
-        body: bytes,
-      },
-      { maxAttempts: 2 },
-    )
-    if (!response.ok) {
-      lastError = new Error(`Private manifestation storage PUT failed (${response.status})`)
-      throw lastError
+    try {
+      await writeManifestationBodyObject(env, objectKey, body)
+    } catch (error) {
+      lastError = error
+      throw error
     }
   }
   const verifyAfterPut = async () => {
     for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
       if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
       try {
-        const stored = await readEncryptedManifestationBody(env, objectKey)
-        if (!stored || stored.bytes.byteLength !== bytes.byteLength) continue
+        const stored = await readManifestationBodyObject(env, objectKey)
+        if (!stored || stored.bytes.byteLength !== body.byteLength) continue
         if ((await sha256Hex(stored.bytes)) !== expectedHash) continue
-        if (verifyPlaintext) await verifyPlaintext(stored.bytes)
-        return { ok: true, etag: stored.etag, ciphertext_sha256: expectedHash }
+        return { ok: true, etag: stored.etag, sha256: expectedHash }
       } catch (error) {
         lastError = error
       }
@@ -150,10 +165,10 @@ export async function putEncryptedManifestationBody(
   }
   const verified = await putBunnyObjectUntilVerified({ put: putOnce, verify: verifyAfterPut })
   if (verified) return verified
-  throw lastError || new Error("Encrypted manifestation body could not be verified after PUT")
+  throw lastError || new Error("Manifestation body object could not be verified after PUT")
 }
 
-export async function deleteEncryptedManifestationBody(env, objectKey) {
+export async function deleteManifestationBodyObject(env, objectKey) {
   let initiallyMissing = false
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const response = await storageFetch(env, objectKey, { method: "DELETE" }, { maxAttempts: 4 })
@@ -163,7 +178,7 @@ export async function deleteEncryptedManifestationBody(env, objectKey) {
     if (attempt === 0) initiallyMissing = response.status === 404
     for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
       if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
-      const remaining = await readEncryptedManifestationBody(env, objectKey)
+      const remaining = await readManifestationBodyObject(env, objectKey)
       if (!remaining) return { ok: true, already_missing: initiallyMissing }
     }
   }
