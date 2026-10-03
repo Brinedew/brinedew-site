@@ -30,7 +30,11 @@ export function isDurableObjectDailyDurationLimitError(error) {
   return false
 }
 
-export function secondsUntilCloudflareDailyReset(now = Date.now()) {
+// The one answer to "how many seconds until the UTC day rolls over", plus `marginSeconds`.
+// The default 5 s is slack for Cloudflare's own daily meters to reset. A caller whose day
+// rolls over exactly at 00:00:00 UTC (the vote budget row and the browser-render budget row are
+// keyed on a UTC date) passes 0. Rounded up, so nobody asks a moment early, and never below 1.
+export function secondsUntilCloudflareDailyReset(now = Date.now(), marginSeconds = 5) {
   const current = new Date(now)
   const resetAt = Date.UTC(
     current.getUTCFullYear(),
@@ -38,7 +42,7 @@ export function secondsUntilCloudflareDailyReset(now = Date.now()) {
     current.getUTCDate() + 1,
     0,
     0,
-    5,
+    marginSeconds,
   )
   return Math.max(1, Math.ceil((resetAt - current.getTime()) / 1000))
 }

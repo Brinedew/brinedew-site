@@ -158,13 +158,67 @@ function voteSnapshot(up, down, userVote) {
   }
 }
 
+// A clock the test owns. The runtime under test gets this `Date`, `setTimeout` and
+// `clearTimeout`, so a day-long pause can be crossed without waiting.
+function fakeClock(startIso = "2026-10-03T14:00:00.000Z") {
+  let now = Date.parse(startIso)
+  let nextId = 1
+  const timers = new Map()
+  class ClockDate extends Date {
+    constructor(...args) {
+      if (args.length) super(...args)
+      else super(now)
+    }
+    static now() {
+      return now
+    }
+  }
+  return {
+    Date: ClockDate,
+    setTimeout(callback, delay) {
+      const id = nextId++
+      timers.set(id, { callback, at: now + Math.max(0, Number(delay) || 0) })
+      return id
+    },
+    clearTimeout(id) {
+      timers.delete(id)
+    },
+    // Moves the wall clock and runs every timer that has come due, oldest first.
+    advance(ms) {
+      const target = now + ms
+      for (;;) {
+        const due = [...timers.entries()]
+          .filter(([, timer]) => timer.at <= target)
+          .sort((a, b) => a[1].at - b[1].at)[0]
+        if (!due) break
+        timers.delete(due[0])
+        now = Math.max(now, due[1].at)
+        due[1].callback()
+      }
+      now = target
+    },
+    // Moves the wall clock only: the timers did not run, as on a laptop that slept.
+    jump(ms) {
+      now += ms
+    },
+    pending: () => timers.size,
+  }
+}
+
 // `hold` keeps the vote request in flight until `release()`, so a test can look at the screen
-// before the server answers.
-async function refusalRig({ initial, setResponse, snapshotResponse, hold = false }) {
+// before the server answers. `respondWith` swaps the server's answer between taps.
+async function refusalRig({ initial, setResponse, snapshotResponse, hold = false, onVoteFailed }) {
   const storage = new Map()
+  const clock = fakeClock()
+  let respond = setResponse
   let release = () => {}
   const gate = hold ? new Promise((resolve) => (release = resolve)) : null
-  const sandbox = { console, clearTimeout, setTimeout }
+  const sandbox = {
+    console,
+    Date: clock.Date,
+    clearTimeout: clock.clearTimeout,
+    setTimeout: clock.setTimeout,
+  }
   sandbox.localStorage = {
     getItem: (key) => (storage.has(key) ? storage.get(key) : null),
     setItem: (key, value) => storage.set(key, String(value)),
@@ -178,13 +232,14 @@ async function refusalRig({ initial, setResponse, snapshotResponse, hold = false
   const [box, mirror] = document.querySelectorAll("[data-icono-vote-box]")
   const calls = []
   const messages = []
+  const failures = []
   const errors = []
   let authPrompts = 0
   const fetchImpl = async (url, init) => {
     calls.push(String(url).replace(/^.*\/api\/iconoplasm/, ""))
     if (/\/votes\/set$/.test(url)) {
       if (gate) await gate
-      return setResponse(JSON.parse(init.body))
+      return respond(JSON.parse(init.body))
     }
     if (snapshotResponse) return snapshotResponse()
     throw new Error("unexpected request " + url)
@@ -200,8 +255,10 @@ async function refusalRig({ initial, setResponse, snapshotResponse, hold = false
     onError(phase, error) {
       errors.push({ phase, status: Number((error && error.status) || 0) })
     },
-    onVoteFailed(message) {
+    onVoteFailed(message, error) {
       messages.push(message)
+      failures.push(error)
+      if (onVoteFailed) onVoteFailed(message, error)
     },
     symbol: "PTEN",
   })
@@ -211,15 +268,23 @@ async function refusalRig({ initial, setResponse, snapshotResponse, hold = false
     down: root.querySelector("[data-icono-vote-down]").classList.contains("active"),
     upDisabled: root.querySelector("[data-icono-vote-up]").disabled === true,
     downDisabled: root.querySelector("[data-icono-vote-down]").disabled === true,
+    upAria: root.querySelector("[data-icono-vote-up]").getAttribute("aria-disabled"),
+    downAria: root.querySelector("[data-icono-vote-down]").getAttribute("aria-disabled"),
+    paused: root.hasAttribute("data-icono-vote-paused"),
     score: root.getAttribute("title"),
   })
   return {
     box,
     mirror,
     calls,
+    clock,
     messages,
+    failures,
     errors,
     storage,
+    respondWith: (next) => {
+      respond = next
+    },
     details: (up, down) => shared.voteSummaryDetails(voteSnapshot(up, down, 0)),
     settle: () => new Promise((resolve) => setTimeout(resolve, 0)),
     release: () => release(),
@@ -312,19 +377,245 @@ test("a refused flip restores the earlier vote, not an empty one", async () => {
   assert.equal(JSON.parse([...rig.storage.values()][0]).user_vote, 1)
 })
 
-test("a refusal leaves the buttons live so the reader can try again", async () => {
+// B-912: after the server says "not now" (429) the box stops asking until it said it would work.
+//
+// Ways this can fail, written before the code:
+//  1. after a 429 the next tap still sends a vote request, so a reader who taps three times
+//     costs the Worker three refused requests;
+//  2. a tap on the paused box is silent, which is the original silent snap-back again, on a
+//     phone where a disabled button shows no tooltip;
+//  3. a tap on the paused box lights the tick again, or writes it to storage;
+//  4. the paused box looks live (nothing dimmed, nothing for a screen reader), or it is
+//     really `disabled`, so the tap never arrives and the sentence cannot be shown again;
+//  5. the pause never ends: a tab still open after 00:00 UTC keeps saying "paused until 00:00
+//     UTC", because the box waited for a reload or for a timer that a sleeping laptop never ran;
+//  6. the pause ends early, or the same tap that ends it is swallowed;
+//  7. a 429 with no usable number (absent, zero, negative, text) unlocks itself on a guess
+//     instead of waiting for the reload, or a huge number locks the box for longer than a day;
+//  8. a refusal that is not a 429 (400, 404, 409, 5xx, 401) pauses the box, though those are
+//     about one request, not about the site's allowance;
+//  9. a callback that throws on a paused tap breaks the click handler;
+// 10. a second 429 after the pause ended does not pause the box again.
+const RESET_SECONDS = 3_600
+
+function budgetSpent(extra = {}) {
+  return httpFailure(429, {
+    ok: false,
+    code: "VOTE_DAILY_BUDGET_EXHAUSTED",
+    error: PAUSED_SENTENCE,
+    ...extra,
+  })
+}
+
+test("after a 429 the box sends nothing more and says why on every tap", async () => {
   const rig = await refusalRig({
-    initial: voteSnapshot(0, 0, 0),
-    setResponse: () => httpFailure(429, { error: PAUSED_SENTENCE }),
+    initial: voteSnapshot(3, 1, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: RESET_SECONDS }),
   })
   rig.box.querySelector("[data-icono-vote-up]").click()
   await rig.settle()
-  assert.equal(rig.view(rig.box).upDisabled, false)
-  assert.equal(rig.view(rig.box).downDisabled, false)
+  assert.deepEqual(rig.calls, ["/votes/set"])
+  assert.equal(rig.messages.length, 1)
+
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  rig.box.querySelector("[data-icono-vote-down]").click()
+  rig.mirror.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+
+  assert.deepEqual(rig.calls, ["/votes/set"], "three taps on a paused box send nothing")
+  assert.equal(rig.messages.length, 4, "every tap on the paused box shows the sentence again")
+  for (const message of rig.messages) assert.equal(message === PAUSED_SENTENCE, true)
+  assert.equal(rig.failures[0].status, 429)
+  assert.equal(rig.failures[1], null, "a tap that sent no request has no error to hand over")
+  for (const root of [rig.box, rig.mirror]) {
+    const shown = rig.view(root)
+    assert.equal(shown.up, false)
+    assert.equal(shown.down, false)
+    assert.equal(shown.score === rig.details(3, 1), true)
+  }
+  assert.equal(rig.storage.size, 0, "a tap on the paused box must not write a vote")
+  assert.equal(rig.errors.length, 1, "taps that sent nothing are not errors")
+})
+
+test("a paused box looks paused in every view and still receives the tap", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: RESET_SECONDS }),
+  })
+  for (const root of [rig.box, rig.mirror]) {
+    assert.equal(rig.view(root).paused, false)
+    assert.equal(rig.view(root).upAria, null)
+  }
   rig.box.querySelector("[data-icono-vote-up]").click()
   await rig.settle()
-  assert.equal(rig.calls.length, 2, "the second tap must reach the server again")
-  assert.equal(rig.messages.length, 2)
+  for (const root of [rig.box, rig.mirror]) {
+    const shown = rig.view(root)
+    assert.equal(shown.paused, true)
+    assert.equal(shown.upAria, "true")
+    assert.equal(shown.downAria, "true")
+    assert.equal(shown.upDisabled, false, "a disabled button swallows the tap that shows why")
+    assert.equal(shown.downDisabled, false)
+  }
+})
+
+test("the pause ends at the server's reset, by timer", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: 90 }),
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  rig.clock.advance(89_000)
+  assert.equal(rig.view(rig.box).paused, true, "one second early is still paused")
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 1)
+
+  rig.clock.advance(1_000)
+  for (const root of [rig.box, rig.mirror]) {
+    const shown = rig.view(root)
+    assert.equal(shown.paused, false)
+    assert.equal(shown.upAria, null)
+    assert.equal(shown.downAria, null)
+  }
+  rig.respondWith(snapshotAnswer(voteSnapshot(1, 0, 1)))
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 2, "the first tap after the reset reaches the server")
+  assert.equal(rig.view(rig.box).up, true)
+})
+
+test("a tap after the reset goes through even if the timer never ran", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: 90 }),
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  // A laptop that slept through the reset: the wall clock moved, the timer did not fire.
+  rig.clock.jump(120_000)
+  rig.respondWith(snapshotAnswer(voteSnapshot(1, 0, 1)))
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 2, "the tap that finds the reset passed is not swallowed")
+  assert.equal(rig.view(rig.box).paused, false)
+  assert.equal(rig.view(rig.box).up, true)
+})
+
+test("a 429 that carries no usable number pauses the box until reload", async () => {
+  for (const retry of [undefined, 0, -5, "90", "soon", null]) {
+    const rig = await refusalRig({
+      initial: voteSnapshot(0, 0, 0),
+      setResponse: () => budgetSpent(retry === undefined ? {} : { retry_after_seconds: retry }),
+    })
+    const timersBefore = rig.clock.pending()
+    rig.box.querySelector("[data-icono-vote-up]").click()
+    await rig.settle()
+    assert.equal(
+      rig.clock.pending(),
+      timersBefore,
+      `retry_after_seconds ${JSON.stringify(retry)}: no timer to unlock on a guess`,
+    )
+    rig.clock.advance(48 * 3_600_000)
+    rig.box.querySelector("[data-icono-vote-up]").click()
+    await rig.settle()
+    assert.equal(
+      rig.calls.length,
+      1,
+      `retry_after_seconds ${JSON.stringify(retry)}: still paused two days later`,
+    )
+    assert.equal(rig.view(rig.box).paused, true)
+  }
+})
+
+test("a reset longer than a day is clamped to a day", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: 10_000_000 }),
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  rig.clock.advance(86_399_000)
+  assert.equal(rig.view(rig.box).paused, true)
+  rig.clock.advance(1_000)
+  assert.equal(rig.view(rig.box).paused, false)
+})
+
+for (const status of [400, 404, 409, 500, 503]) {
+  test(`a ${status} refusal does not pause the box`, async () => {
+    const rig = await refusalRig({
+      initial: voteSnapshot(0, 0, 0),
+      setResponse: () => httpFailure(status, { ok: false, error: "Not this time." }),
+      snapshotResponse: snapshotAnswer(voteSnapshot(0, 0, 0)),
+    })
+    rig.box.querySelector("[data-icono-vote-up]").click()
+    await rig.settle()
+    assert.equal(rig.view(rig.box).paused, false)
+    assert.equal(rig.view(rig.box).upAria, null)
+    assert.equal(rig.view(rig.box).upDisabled, false)
+    assert.equal(rig.view(rig.box).downDisabled, false)
+    rig.box.querySelector("[data-icono-vote-up]").click()
+    await rig.settle()
+    assert.equal(
+      rig.calls.filter((call) => call === "/votes/set").length,
+      2,
+      "the second tap reaches the server",
+    )
+  })
+}
+
+test("a 401 does not pause the box", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () =>
+      httpFailure(401, { code: "AUTH_REQUIRED", error: "Please log-in first to vote." }),
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 2)
+  assert.equal(rig.authPrompts(), 2)
+  assert.equal(rig.view(rig.box).paused, false)
+})
+
+test("a callback that throws on a paused tap does not break the click", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: RESET_SECONDS }),
+    onVoteFailed(_message, error) {
+      if (error === null) throw new Error("the host notice failed")
+    },
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.doesNotThrow(() => rig.box.querySelector("[data-icono-vote-up]").click())
+  await rig.settle()
+  assert.equal(rig.errors.at(-1).phase, "vote_failed")
+  assert.equal(rig.calls.length, 1)
+})
+
+test("a second 429 after the pause ended pauses the box again with its own sentence", async () => {
+  const rig = await refusalRig({
+    initial: voteSnapshot(0, 0, 0),
+    setResponse: () => budgetSpent({ retry_after_seconds: 60 }),
+  })
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  rig.clock.advance(60_000)
+  rig.respondWith(() =>
+    httpFailure(429, { ok: false, error: "Still paused.", retry_after_seconds: 30 }),
+  )
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 2)
+  assert.equal(rig.messages.at(-1) === "Still paused.", true)
+  assert.equal(rig.view(rig.box).paused, true)
+  rig.box.querySelector("[data-icono-vote-up]").click()
+  await rig.settle()
+  assert.equal(rig.calls.length, 2, "paused again")
+  rig.clock.advance(30_000)
+  assert.equal(rig.view(rig.box).paused, false)
 })
 
 test("an error page with no JSON shows the generic line, never the status text", async () => {
