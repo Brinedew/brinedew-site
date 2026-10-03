@@ -255,9 +255,20 @@ the cap the upstream is cancelled and the response errors. A SWISS-MODEL PDB get
 anonymous `HEADER` line streamed ahead of the body, which Mol* needs and the provider
 omits. There is no R2 structure cache: R2 is not enabled on the account, so every view
 is one Worker request and one provider fetch, and the browser HTTP cache (`public,
-max-age=604800, immutable` for a key) serves repeat views. A structure token carries
-no `cached` or `sizeBytes`, and `STRUCTURES_BUCKET` is read only by the Discord recap
-image store (`workers/lib/discord-recap-images.js`).
+max-age=604800, immutable` for a key) serves repeat views. The browser keeps nothing
+else: the page has no IndexedDB structure cache. A structure token carries no `cached`
+or `sizeBytes`, and `STRUCTURES_BUCKET` is read only by the Discord recap image store
+(`workers/lib/discord-recap-images.js`).
+
+A page load needs a structure token for every guess already made. The bootstrap puts
+each one in its guess entry as `structureToken`, built by `buildGuessStructureToken`
+from the protein row the Worker loads for that guess anyway (no extra read, and no
+fetch), and the page seeds its token cache from them, so a reload makes one bootstrap
+request and no `/api/structure-token?uniprot=` request. That route returns the same
+object, built by the same function, and stays as the fallback for a guess whose entry
+carries no token (a protein with no stored structure has none). A guess response
+carries its own new guess's token as `guessStructureToken`; the target's token is
+`targetStructureToken`, and a guess entry never carries the target's.
 
 The stored `proteins.structure_source` is the whole structure decision. A protein with
 one resolves from its row (one indexed read) and never touches KV. A protein with none
@@ -355,6 +366,20 @@ bootstrap or a guess, that no structure token carries `cached` or `sizeBytes`, t
 deleted R2 admin and debug routes answer 404, that `STRUCTURES_BUCKET` appears in
 `workers/` only in the Discord recap image fallback, and that the admin yearly fill no
 longer calls a pin step.
+
+`workers/bootstrap-guess-structure-tokens.test.js` must prove, through the real Worker on
+the production-shaped local D1, that every guess entry in the bootstrap carries the
+token `/api/structure-token?uniprot=` returns for that protein (a PDB, a SWISS-MODEL
+and an AlphaFold one), that a guess whose protein has no stored structure carries none
+and its route answers 404, that a reload reads no protein row for the guesses, and that
+no guess token names the target's structure. `e2e/geneguessr-reload-tokens.e2e.mjs`
+proves the page's side in a real browser: with three guesses a first load and a reload
+each make one bootstrap request and no token request, the page keeps no IndexedDB
+database, and without embedded tokens it asks the route once per guess.
+
+`quartz/static/geneguessr/structure-token-hydration.test.js` guards the page source: no
+IndexedDB and no `sizeBytes`, the token cache seeded from the guess entries, and the
+token route as the one fallback.
 
 `workers/structure-kv-writes.test.js` must prove, on the production-shaped local
 D1 with R2 unbound, that a structure token, a first and a returning practice
