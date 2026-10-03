@@ -3,6 +3,13 @@ import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import { DailyMutationLaneReservations } from "./lib/iconoplasm-mutation-lane-reservations.js"
 import {
+  finalizationCompletionPageWriteUnits,
+  finalizationPhaseWriteUnits,
+  finalizationRecoveryWriteUnits,
+  MUTATION_WRITE_FLOOR_UNITS,
+  reservationIdentity,
+} from "./lib/iconoplasm-mutation-write-bounds.js"
+import {
   createDiscoveryOrdinalDictionary,
   discoveryShelfIsCurrent,
   hasDiscoveryOrdinal,
@@ -2564,9 +2571,13 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "laptop_delivery",
       operationId,
-      // One laptop command cannot use more than the provider's existing
-      // 50-statement invocation envelope. Retain the full amount on timeout.
-      units: 50,
+      // Only the two authority_workstation_write routes (tags-derivative submit
+      // and select) reach this reservation: the generation executor routes are
+      // classed workstation_sync_write but are not budgeted routes
+      // (isIconoplasmBudgetedRouteFamily), so they never reserve (B-944). A
+      // tags command's worst case is not yet pinned to a measurement, so it
+      // keeps the 50-unit floor (B-945). Retain the full amount on timeout.
+      units: MUTATION_WRITE_FLOOR_UNITS,
       dayKey: budgets.cycleInfo.dayKey,
     })
     if (admission?.ok !== true) {
@@ -19267,7 +19278,11 @@ async function recoverStaleRunningSyncFinalizationJobs(
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: "finalization_recovery",
       operationId: reservationOperationId,
-      units: 50,
+      // One recovery is one version-fenced UPDATE of one job row: seven D1
+      // rows written (the row, its index entries and the summary counter),
+      // measured by finalization-reservation-receipts.test.js. The 50-unit
+      // floor covers that several times over.
+      units: finalizationRecoveryWriteUnits(),
     })
     if (admission?.ok !== true) {
       throw new IconoplasmD1DailyBudgetExceededError({
@@ -19630,9 +19645,10 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
       error: "Iconoplasm finalization Queue path is disabled; refusing to ack without processing.",
     }
   }
-  // Daily row accounting and the provider's per-invocation statement ceiling
-  // are separate guarantees. No consumer may exempt itself from the latter.
-  // One message, one stale lease and one durable job phase share the envelope.
+  // Daily row accounting (the mutation-write reservations) and our own
+  // per-invocation statement budget are separate guarantees. No consumer may
+  // exempt itself from the latter. One message, one stale lease and one durable
+  // job phase share the budget.
   try {
     env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
       env,
@@ -20161,14 +20177,24 @@ export async function processPendingSyncFinalizationJobs(
   let partialBudget = null
   for (const job of rows) {
     const attemptCount = Math.max(0, Number(job?.attempts || 0) || 0)
-    const reservationOperationId = `finalization:${job.symbol}:${job.job_version}:${job.phase}`
+    // A phase writes its claim, its body and its advance. Its size is the rows
+    // those write for this job's own asset lists, measured by
+    // finalization-reservation-receipts.test.js; a complete phase keeps its
+    // full reservation because indexed and triggered row work can be ambiguous
+    // after a provider timeout.
+    const phaseWriteUnits = finalizationPhaseWriteUnits({
+      phase: job.phase,
+      keepCount: job.keep_assets.length,
+      legacyCount: job.legacy_assets.length,
+    })
+    const reservationOperationId = reservationIdentity(
+      `finalization:${job.symbol}:${job.job_version}:${job.phase}`,
+      phaseWriteUnits,
+    )
     const admission = await reserveIconoplasmMutationWrites(env, {
       lane: mutationLaneForSyncFinalizationRows([job]),
       operationId: reservationOperationId,
-      // The queue invocation is already hard-limited to 50 D1 statements. A
-      // complete phase keeps that full reservation because indexed/triggered
-      // row work can be ambiguous after a provider timeout.
-      units: 50,
+      units: phaseWriteUnits,
     })
     if (admission?.ok !== true) {
       throw new IconoplasmD1DailyBudgetExceededError({
@@ -20308,11 +20334,19 @@ export async function processPendingSyncFinalizationJobs(
           ]),
         ),
       )
-      completionOperationId = `finalization-complete-page:${completionDigest}`
+      // The page statement completes every ready job in one UPDATE, so its
+      // size is the page's own job count times the rows one completed job
+      // writes (finalization-reservation-receipts.test.js): 128 for a full
+      // page of 32.
+      const completionWriteUnits = finalizationCompletionPageWriteUnits(readyFinalizations.length)
+      completionOperationId = reservationIdentity(
+        `finalization-complete-page:${completionDigest}`,
+        completionWriteUnits,
+      )
       const admission = await reserveIconoplasmMutationWrites(env, {
         lane: mutationLaneForSyncFinalizationRows(readyFinalizations),
         operationId: completionOperationId,
-        units: 50,
+        units: completionWriteUnits,
       })
       if (admission?.ok !== true) {
         throw new IconoplasmD1DailyBudgetExceededError({
