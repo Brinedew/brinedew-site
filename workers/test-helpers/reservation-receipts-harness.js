@@ -74,31 +74,35 @@ export async function openMigratedD1(
 
 // A D1 whose running totals can be read at any moment. Unlike the operation-cost
 // meter it never closes, so a reservation can be compared with the rows written
-// between its own reserve and complete calls.
-export function liveD1Meter(database) {
+// between its own reserve and complete calls. With `trace`, every statement that
+// ran is also kept with the rows it wrote (`statements`), so a test can say which
+// statement wrote, not only how many rows a pass wrote.
+export function liveD1Meter(database, { trace = false } = {}) {
   const totals = { rows_read: 0, rows_written: 0, calls: 0 }
+  const statements = []
   const raws = new WeakMap()
-  const count = (receipt) => {
+  const count = (receipt, sql = "") => {
     for (const item of Array.isArray(receipt) ? receipt : [receipt]) {
       totals.rows_read += item?.meta?.rows_read || 0
       totals.rows_written += item?.meta?.rows_written || 0
+      if (trace) statements.push({ sql, rows_written: item?.meta?.rows_written || 0 })
     }
     return receipt
   }
-  function wrap(raw) {
+  function wrap(raw, sql) {
     const statement = {
-      bind: (...args) => wrap(raw.bind(...args)),
+      bind: (...args) => wrap(raw.bind(...args), sql),
       async all() {
         totals.calls += 1
-        return count(await raw.all())
+        return count(await raw.all(), sql)
       },
       async run() {
         totals.calls += 1
-        return count(await raw.run())
+        return count(await raw.run(), sql)
       },
       async first(column) {
         totals.calls += 1
-        const result = count(await raw.all())
+        const result = count(await raw.all(), sql)
         const row = result.results[0] ?? null
         if (column === undefined || row === null) return row
         return row[column]
@@ -109,11 +113,15 @@ export function liveD1Meter(database) {
   }
   return {
     totals,
+    statements,
     db: {
-      prepare: (sql) => wrap(database.prepare(sql)),
-      async batch(statements) {
+      prepare: (sql) => wrap(database.prepare(sql), sql),
+      async batch(batched) {
         totals.calls += 1
-        return count(await database.batch(statements.map((statement) => raws.get(statement))))
+        return count(
+          await database.batch(batched.map((statement) => raws.get(statement))),
+          "<batch>",
+        )
       },
     },
   }

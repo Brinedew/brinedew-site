@@ -170,7 +170,13 @@ own operation, sized for a scan in which every row is quarantined. Renew, fail,
 completion and the tags submission name the exact thing they change, so their
 identity is their body and a retry is the same operation. Reading a lease's
 material writes no row and reserves none. A completion carries at most 50
-requests, the size of one claim, and is refused above that before any write. The
+requests, the size of one claim, and is refused above that before any write. One
+completion call delivers one Discord group, so the workstation sends the identical
+body again until every group is delivered, and a replay is admitted without a new
+reservation: the completion's reservation therefore covers the rows of the whole
+series, sized for the worst grouping (groups of two requests), and a call writes
+only what moves (a request already on the publication is not rewritten), so a call
+after the first costs the group it delivers, not the requests still pending. The
 tags head selection is not in this lane: the gateway hands it to the
 operation-cost authority, which admits it against its own declared bound. The
 numbers are pinned by `workers/iconoplasm/generation-executor-reservation-receipts.test.js`
