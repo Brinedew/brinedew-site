@@ -364,12 +364,16 @@ export async function sweepExpiredManifestationUploadIntents(
         timestamp,
         boundedLimit,
       )
-    : await all(
+    : // B-985: every caretaker at once. The ORDER BY is the due index's own order
+      // (idx_icono_upload_intents_due: status, lease_expires_at, created_at), so
+      // SQLite stops after `limit` rows however many strays exist. Sorting by
+      // lease and id instead needs a temp b-tree that reads every expired row.
+      await all(
         db,
         `SELECT upload_intent_id, object_key
            FROM icono_manifestation_upload_intents
           WHERE status IN ('uploading', 'deleting') AND lease_expires_at <= ?
-          ORDER BY lease_expires_at, upload_intent_id LIMIT ?`,
+          ORDER BY status, lease_expires_at, created_at LIMIT ?`,
         timestamp,
         boundedLimit,
       )
@@ -414,6 +418,36 @@ export async function sweepExpiredManifestationUploadIntents(
 // uploads, and it heals exactly the caretaker who would otherwise be blocked. A
 // storage failure here never blocks the upload: the stray is retried next time.
 const ADMISSION_SWEEP_LIMIT = 3
+
+// B-985: the per-caretaker release above only helps a caretaker who uploads
+// again. One who abandons an upload and never returns would hold the reservation
+// and the stored body for good. The `manifestations` background tick (5 runs an
+// hour, same database) calls the unscoped sweep with a small limit. Cost: one
+// indexed read per run that finds nothing (about 120 a day) and, per stray
+// released, one storage delete and about fifteen rows written (index entries
+// count). A failed delete puts the intent back for the next run; `ok: false`
+// makes the cron log it as pending.
+const SCHEDULED_SWEEP_LIMIT = 3
+
+export async function releaseAbandonedManifestationUploads(env, { now } = {}) {
+  try {
+    const swept = await sweepExpiredManifestationUploadIntents(env?.ICONOPLASM_AUTHORING_DB, env, {
+      limit: SCHEDULED_SWEEP_LIMIT,
+      now,
+    })
+    return Object.freeze({
+      ok: swept.results.every((result) => result.status === "deleted"),
+      ...swept,
+    })
+  } catch (error) {
+    return Object.freeze({
+      ok: false,
+      processed: 0,
+      results: Object.freeze([]),
+      code: String(error?.code || error?.name || "sweep_failed").slice(0, 80),
+    })
+  }
+}
 
 export async function admitManifestationUploadIntent(db, env, input = {}) {
   if (input.assignmentId) {
