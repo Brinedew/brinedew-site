@@ -104,9 +104,11 @@ async function copyInto(target, source) {
 
 async function tracesIn(db, label, needles) {
   const hits = []
-  const { results: tables } = await db
+  const listed = await db
     .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
     .all()
+  // Miniflare keeps its own bookkeeping tables (_cf_...) and forbids reading them.
+  const tables = listed.results.filter(({ name }) => !name.startsWith("_cf_"))
   for (const { name } of tables) {
     const { results } = await db.prepare(`SELECT * FROM ${name}`).all()
     if (results.some((row) => needles.some((needle) => JSON.stringify(row).includes(needle)))) {
