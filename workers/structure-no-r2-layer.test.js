@@ -6,9 +6,8 @@
 // ignored on every target and guess token, so a token's `cached` and `sizeBytes` were
 // always `false` and `0`; the bucket's get/put, eviction, multipart upload and daily
 // pin never ran; three admin purge routes, a cache-stats route and an admin "pin
-// structure" step managed a bucket that does not exist. The browser keeps nothing
-// there either: its IndexedDB cache only fills when `sizeBytes > 0`, which was never
-// true, so repeat views are served by the browser HTTP cache.
+// structure" step managed a bucket that does not exist. Repeat views are served by
+// the browser HTTP cache.
 //
 // Everything runs through the real Worker against a real local D1 built from the real
 // GeneGuessr migrations and seeded with the production shape (19,110 proteins).

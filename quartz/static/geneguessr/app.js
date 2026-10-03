@@ -318,229 +318,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
 
   prunePersistedState()
 
-  // =========================================================================
-  // Structure Cache (IndexedDB)
-  // =========================================================================
-  // Caches structure files and metadata locally to avoid re-downloading.
-  //
-  // Stores:
-  // - 'structures': cacheKey → ArrayBuffer (the actual structure data)
-  // - 'meta': cacheKey → { lastAccess, size } (for LRU eviction)
-  // - 'structureInfo': uniprot → { cacheKey, format, sourceLabel, ... } (skip API calls)
-  //
-  // For guessed proteins, we store by UniProt ID so repeat guesses across
-  // days/months skip the API call entirely.
-  // =========================================================================
-  const STRUCTURE_CACHE_DB = "geneguessr-structures"
-  const STRUCTURE_CACHE_STORE = "structures"
-  const STRUCTURE_CACHE_META_STORE = "meta"
-  const STRUCTURE_INFO_STORE = "structureInfo" // NEW: UniProt → structureInfo mapping
-  const STRUCTURE_CACHE_VERSION = 4 // v4: force cache clear for linkUrl field
-  const STRUCTURE_CACHE_MAX_BYTES = 150 * 1024 * 1024 // 150 MB max cache
-  const STRUCTURE_CACHE_MAX_FILE_SIZE = 15 * 1024 * 1024 // Don't cache files > 15 MB
-
-  let structureCacheDb = null
-
-  async function openStructureCache() {
-    if (structureCacheDb) return structureCacheDb
-
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(STRUCTURE_CACHE_DB, STRUCTURE_CACHE_VERSION)
-
-      request.onerror = () => {
-        console.warn("[Geneguessr] IndexedDB open failed:", request.error)
-        resolve(null)
-      }
-
-      request.onsuccess = () => {
-        structureCacheDb = request.result
-        resolve(structureCacheDb)
-      }
-
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result
-        const oldVersion = event.oldVersion
-
-        if (!db.objectStoreNames.contains(STRUCTURE_CACHE_STORE)) {
-          db.createObjectStore(STRUCTURE_CACHE_STORE) // key = cacheKey
-        }
-        if (!db.objectStoreNames.contains(STRUCTURE_CACHE_META_STORE)) {
-          const metaStore = db.createObjectStore(STRUCTURE_CACHE_META_STORE) // key = cacheKey
-          metaStore.createIndex("lastAccess", "lastAccess")
-        }
-        if (!db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
-          db.createObjectStore(STRUCTURE_INFO_STORE) // key = uniprot
-        }
-
-        // Clear STRUCTURE_INFO_STORE when upgrading to v3+ (added linkUrl field)
-        if (oldVersion < 4 && db.objectStoreNames.contains(STRUCTURE_INFO_STORE)) {
-          const tx = event.target.transaction
-          const store = tx.objectStore(STRUCTURE_INFO_STORE)
-          store.clear()
-          console.log("[GeneGuessr] Cleared structure info cache for v4 upgrade (added linkUrl)")
-        }
-      }
-    })
-  }
-
-  // Get cached structureInfo by UniProt ID (skips API call for repeat guesses)
-  async function getCachedStructureInfo(uniprot) {
-    try {
-      const db = await openStructureCache()
-      if (!db) return null
-
-      return new Promise((resolve) => {
-        const tx = db.transaction(STRUCTURE_INFO_STORE, "readonly")
-        const store = tx.objectStore(STRUCTURE_INFO_STORE)
-        const getReq = store.get(uniprot.toUpperCase())
-        getReq.onsuccess = () => resolve(getReq.result || null)
-        getReq.onerror = () => resolve(null)
-      })
-    } catch (err) {
-      console.warn("[Geneguessr] StructureInfo cache read error:", err)
-      return null
-    }
-  }
-
-  // Store structureInfo by UniProt ID
-  async function putCachedStructureInfo(uniprot, info) {
-    try {
-      const db = await openStructureCache()
-      if (!db) return
-
-      return new Promise((resolve) => {
-        const tx = db.transaction(STRUCTURE_INFO_STORE, "readwrite")
-        const store = tx.objectStore(STRUCTURE_INFO_STORE)
-        store.put(info, uniprot.toUpperCase())
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => resolve()
-      })
-    } catch (err) {
-      console.warn("[Geneguessr] StructureInfo cache write error:", err)
-    }
-  }
-
-  async function getStructureFromCache(cacheKey) {
-    try {
-      const db = await openStructureCache()
-      if (!db) return null
-
-      return new Promise((resolve) => {
-        const tx = db.transaction([STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE], "readwrite")
-        const store = tx.objectStore(STRUCTURE_CACHE_STORE)
-        const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE)
-
-        const getReq = store.get(cacheKey)
-        getReq.onsuccess = () => {
-          const data = getReq.result
-          if (data) {
-            // Update last access time (LRU)
-            metaStore.put(
-              { lastAccess: Date.now(), size: data.byteLength || data.size || 0 },
-              cacheKey,
-            )
-            resolve(data)
-          } else {
-            resolve(null)
-          }
-        }
-        getReq.onerror = () => resolve(null)
-      })
-    } catch (err) {
-      console.warn("[Geneguessr] Cache read error:", err)
-      return null
-    }
-  }
-
-  async function putStructureInCache(cacheKey, data, sizeBytes) {
-    try {
-      // Don't cache files that are too large
-      if (sizeBytes > STRUCTURE_CACHE_MAX_FILE_SIZE) {
-        console.log(
-          `[Geneguessr] Skipping cache for ${cacheKey} (${Math.round(sizeBytes / 1024 / 1024)}MB > ${STRUCTURE_CACHE_MAX_FILE_SIZE / 1024 / 1024}MB limit)`,
-        )
-        return
-      }
-
-      const db = await openStructureCache()
-      if (!db) return
-
-      // Check cache size and evict if needed
-      await evictIfNeeded(db, sizeBytes)
-
-      return new Promise((resolve) => {
-        const tx = db.transaction([STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE], "readwrite")
-        const store = tx.objectStore(STRUCTURE_CACHE_STORE)
-        const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE)
-
-        store.put(data, cacheKey)
-        metaStore.put({ lastAccess: Date.now(), size: sizeBytes }, cacheKey)
-
-        tx.oncomplete = () => {
-          console.log(
-            `[Geneguessr] Cached structure ${cacheKey} (${Math.round(sizeBytes / 1024)}KB)`,
-          )
-          resolve()
-        }
-        tx.onerror = () => resolve()
-      })
-    } catch (err) {
-      console.warn("[Geneguessr] Cache write error:", err)
-    }
-  }
-
-  async function evictIfNeeded(db, incomingSize) {
-    try {
-      const tx = db.transaction(STRUCTURE_CACHE_META_STORE, "readonly")
-      const metaStore = tx.objectStore(STRUCTURE_CACHE_META_STORE)
-      const index = metaStore.index("lastAccess")
-
-      // Calculate current cache size
-      let totalSize = 0
-      const entries = []
-
-      await new Promise((resolve) => {
-        const cursor = index.openCursor()
-        cursor.onsuccess = (event) => {
-          const c = event.target.result
-          if (c) {
-            entries.push({ key: c.primaryKey, ...c.value })
-            totalSize += c.value.size || 0
-            c.continue()
-          } else {
-            resolve()
-          }
-        }
-        cursor.onerror = () => resolve()
-      })
-
-      // Evict oldest entries until we have room
-      if (totalSize + incomingSize > STRUCTURE_CACHE_MAX_BYTES) {
-        const evictTx = db.transaction(
-          [STRUCTURE_CACHE_STORE, STRUCTURE_CACHE_META_STORE],
-          "readwrite",
-        )
-        const evictStore = evictTx.objectStore(STRUCTURE_CACHE_STORE)
-        const evictMetaStore = evictTx.objectStore(STRUCTURE_CACHE_META_STORE)
-
-        // entries are already sorted by lastAccess (oldest first)
-        let freed = 0
-        for (const entry of entries) {
-          if (totalSize - freed + incomingSize <= STRUCTURE_CACHE_MAX_BYTES * 0.8) break // Target 80% after eviction
-          evictStore.delete(entry.key)
-          evictMetaStore.delete(entry.key)
-          freed += entry.size || 0
-          console.log(
-            `[Geneguessr] Evicted ${entry.key} from cache (freed ${Math.round(entry.size / 1024)}KB)`,
-          )
-        }
-      }
-    } catch (err) {
-      console.warn("[Geneguessr] Cache eviction error:", err)
-    }
-  }
-  // =========================================================================
-
   async function parseJsonResponse(resp, context) {
     if (!resp) {
       throw new Error(`No response for ${context}`)
@@ -1133,9 +910,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         displayLabel: data.displayLabel || data.sourceLabel || "Source unavailable",
         format: data.format || "cif",
         url: data.url,
-        // For client-side IndexedDB caching
         cacheKey: data.cacheKey || null,
-        sizeBytes: data.sizeBytes || 0,
         // Convert targetChainHints to chainLabels format for rendering
         // Server sends redacted hints (just chains array), we add is_target=true
         chainLabels: data.targetChainHints?.map((h) => ({ ...h, is_target: true })) || null,
@@ -1150,60 +925,35 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     }
   }
 
+  // The page's shape of a guess's structure token, whichever response carried it.
+  function structureInfoFromToken(token) {
+    return {
+      sourceLabel: token.sourceLabel || "Source unavailable",
+      displayLabel: token.displayLabel || token.sourceLabel || "Source unavailable",
+      format: token.format || "cif",
+      url: token.url,
+      cacheKey: token.cacheKey || null,
+      chainLabels: token.chainLabels || null,
+      linkUrl: token.linkUrl || null,
+    }
+  }
+
   async function ensureStructureTokenForProtein(uniprot) {
     if (!uniprot) {
       return null
     }
     const key = String(uniprot).toUpperCase()
 
-    // 1. Check in-memory cache (same session)
+    // The in-memory cache holds every token the page has seen: the bootstrap's guess
+    // entries and each guess response seed it, so the API below is asked only for a
+    // protein no entry carried.
     const memCached = structureTokenCache.get(key)
     if (memCached && memCached.url) {
       console.log(`[TIMING] structureInfo for ${key} | memory cache hit`)
       return memCached
     }
 
-    // 2. Check IndexedDB structureInfo cache (persists across sessions)
-    //    If we have structureInfo AND the structure blob is cached, skip API entirely
     const t0 = performance.now()
-    try {
-      const cachedInfo = await getCachedStructureInfo(key)
-      // Validate cache has linkUrl field (added in v4) - refetch if null/missing
-      // Old cache entries may have linkUrl: null, so check for truthy value
-      if (cachedInfo && cachedInfo.cacheKey && cachedInfo.linkUrl) {
-        // Verify the structure blob still exists in cache
-        const structureBlob = await getStructureFromCache(cachedInfo.cacheKey)
-        if (structureBlob) {
-          console.log(
-            `[TIMING] token for ${key} | IndexedDB cache hit | ${(performance.now() - t0).toFixed(0)}ms | SKIPPED API`,
-          )
-          // Reconstruct the URL from cacheKey (IndexedDB doesn't store URLs). The
-          // worker finds the upstream from the key alone.
-          const reconstructedUrl = `${API_BASE}/api/structure-cached?key=${encodeURIComponent(cachedInfo.cacheKey)}`
-          const hydratedInfo = {
-            ...cachedInfo,
-            url: reconstructedUrl,
-          }
-          // Store in memory cache too for fast subsequent access
-          structureTokenCache.set(key, hydratedInfo)
-          return hydratedInfo
-        }
-        // Structure blob evicted, need fresh token - fall through to API
-        console.log(
-          `[TIMING] token for ${key} | IndexedDB info found but blob evicted, fetching...`,
-        )
-      } else if (cachedInfo && !cachedInfo.linkUrl) {
-        // Old cache entries with linkUrl: null need to be refreshed
-        console.log(
-          `[TIMING] token for ${key} | stale cache (linkUrl missing/null), fetching fresh...`,
-        )
-      }
-    } catch (err) {
-      console.warn("[Geneguessr] IndexedDB cache check failed:", err)
-      // Fall through to API
-    }
-
-    // 3. Fetch from API
     try {
       console.log(`[TIMING] token for ${key} | fetching from API...`)
       const resp = await fetch(
@@ -1228,34 +978,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         throw new Error("Missing url in response")
       }
       // Security: don't log data - it may contain chainLabels with gene names
-      const info = {
-        sourceLabel: data.sourceLabel || "Source unavailable",
-        displayLabel: data.displayLabel || data.sourceLabel || "Source unavailable",
-        format: data.format || "cif",
-        url: data.url,
-        // For client-side IndexedDB caching
-        cacheKey: data.cacheKey || null,
-        sizeBytes: data.sizeBytes || 0,
-        chainLabels: data.chainLabels || null,
-        linkUrl: data.linkUrl || null,
-      }
+      const info = structureInfoFromToken(data)
       structureTokenCache.set(key, info)
-
-      // 4. Store structureInfo in IndexedDB for future sessions (token-independent fields only)
-      //    When retrieved from cache, we use the blob directly - never need token/url
-      if (info.cacheKey) {
-        const cacheableInfo = {
-          sourceLabel: info.sourceLabel,
-          displayLabel: info.displayLabel,
-          format: info.format,
-          cacheKey: info.cacheKey,
-          sizeBytes: info.sizeBytes,
-          chainLabels: info.chainLabels,
-          linkUrl: info.linkUrl,
-        }
-        putCachedStructureInfo(key, cacheableInfo).catch(() => {})
-      }
-
       return info
     } catch (err) {
       console.warn("Geneguessr: failed to fetch structure token for", key, err)
@@ -2534,46 +2258,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       moleculeId = "unknown"
     }
 
-    // Check IndexedDB cache first (uses cacheKey which is the r2Key, e.g., "pdb/8J07.bcif")
+    // A guess's structure loads by its URL: the route answers `Cache-Control: public,
+    // max-age=604800, immutable` for a key, so the browser's HTTP cache serves a repeat
+    // view with no request. A target token has no cacheKey and is never cached.
     const cacheKey = structureInfo.cacheKey
-    const sizeBytes = structureInfo.sizeBytes || 0
     let finalStructureUrl = structureUrl
     let blobUrlToRevoke = null
 
-    if (cacheKey) {
-      timing("checking IndexedDB cache...")
-      const cachedData = await getStructureFromCache(cacheKey)
-      if (cachedData) {
-        // Cache hit - use blob URL
-        timing("cache HIT - using cached structure")
-        const blob = new Blob([cachedData], { type: "application/octet-stream" })
-        finalStructureUrl = URL.createObjectURL(blob)
-        blobUrlToRevoke = finalStructureUrl
-        console.log(`[Geneguessr] Using cached structure for ${cacheKey}`)
-      } else if (sizeBytes > 0 && sizeBytes <= STRUCTURE_CACHE_MAX_FILE_SIZE) {
-        // Cache miss but file is small enough to cache - fetch and cache first
-        timing("cache MISS - fetching to cache...")
-        try {
-          // Use cache: 'no-store' to bypass browser HTTP cache and always get fresh data from worker
-          const resp = await fetch(structureUrl, { cache: "no-store" })
-          if (resp.ok) {
-            const arrayBuffer = await resp.arrayBuffer()
-            timing("fetched structure, caching...")
-            // Do not block first render on IndexedDB write; fire-and-forget
-            putStructureInCache(cacheKey, arrayBuffer, arrayBuffer.byteLength).catch(() => {})
-            const blob = new Blob([arrayBuffer], { type: "application/octet-stream" })
-            finalStructureUrl = URL.createObjectURL(blob)
-            blobUrlToRevoke = finalStructureUrl
-            timing("cached and ready")
-          }
-        } catch (err) {
-          console.warn("[Geneguessr] Failed to fetch for caching, will use direct URL:", err)
-          // Fall through to use original URL
-        }
-      } else {
-        timing("cache MISS - file too large to cache, using direct URL")
-      }
-    } else {
+    if (!cacheKey) {
       // Target tokens intentionally omit the storage key. Fetch the bytes before
       // handing them to Mol* so an HTTP 404/502 becomes a local viewer error,
       // not an unhandled parser rejection that destroys the whole game.
@@ -2617,9 +2309,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       },
     }
 
-    // If we didn't have a cache hit but the file is small enough, we'll cache it after loading
-    const usedCache = blobUrlToRevoke !== null
-
     // Note: Intentionally not logging options to avoid leaking moleculeId (protein identity)
     console.debug(
       "[Geneguessr] Mol* viewer loading",
@@ -2628,8 +2317,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       detectedFormat,
       "binary:",
       isBinary,
-      "cached:",
-      usedCache,
     )
     if (!options) {
       if (errorEl) {
@@ -3031,6 +2718,14 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       gameState.lockedHintClicks = []
     }
     gameState.guesses = guessEntries
+    // The bootstrap carries each guess's structure token, so a page load asks
+    // /api/structure-token for no guess it already holds one for.
+    for (const entry of guessEntries) {
+      const key = String(entry?.uniprot || "").toUpperCase()
+      if (key && entry.structureToken?.url && !structureTokenCache.get(key)?.url) {
+        structureTokenCache.set(key, structureInfoFromToken(entry.structureToken))
+      }
+    }
     gameState.won = Boolean(gameStatus.won)
     gameState.targetId =
       gameStatus.targetId || targetReveal?.uniprot || targetProtein?.uniprot || null
@@ -3057,7 +2752,6 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
         format: payload.targetStructureToken.format || "cif",
         url: payload.targetStructureToken.url,
         cacheKey: null, // SECURITY: target structures don't expose cacheKey
-        sizeBytes: payload.targetStructureToken.sizeBytes || 0,
         chainLabels:
           payload.targetStructureToken.targetChainHints?.map((h) => ({ ...h, is_target: true })) ||
           null,
@@ -4881,32 +4575,8 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
     // Cache embedded guess structure token if present to skip /api/structure-token
     if (payload.guessStructureToken && payload.guessStructureToken.url) {
       const key = uniprot.toUpperCase()
-      const guessInfo = {
-        sourceLabel: payload.guessStructureToken.sourceLabel || "Source unavailable",
-        displayLabel:
-          payload.guessStructureToken.displayLabel ||
-          payload.guessStructureToken.sourceLabel ||
-          "Source unavailable",
-        format: payload.guessStructureToken.format || "cif",
-        url: payload.guessStructureToken.url,
-        cacheKey: payload.guessStructureToken.cacheKey || null,
-        sizeBytes: payload.guessStructureToken.sizeBytes || 0,
-        chainLabels: payload.guessStructureToken.chainLabels || null,
-        linkUrl: payload.guessStructureToken.linkUrl || null,
-      }
-      structureTokenCache.set(key, guessInfo)
+      structureTokenCache.set(key, structureInfoFromToken(payload.guessStructureToken))
       console.log(`[TIMING] guess-submit | cached embedded guessStructureToken for ${key}`)
-      if (guessInfo.cacheKey) {
-        putCachedStructureInfo(key, {
-          sourceLabel: guessInfo.sourceLabel,
-          displayLabel: guessInfo.displayLabel,
-          format: guessInfo.format,
-          cacheKey: guessInfo.cacheKey,
-          sizeBytes: guessInfo.sizeBytes,
-          chainLabels: guessInfo.chainLabels,
-          linkUrl: guessInfo.linkUrl,
-        }).catch(() => {})
-      }
     }
 
     // Ensure sections are present; otherwise refresh via bootstrap
