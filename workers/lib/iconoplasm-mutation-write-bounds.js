@@ -175,10 +175,22 @@ export function generationClaimWriteUnits(rawLimit) {
 // refused before any write.
 export const GENERATION_COMPLETION_MAX_REQUESTS = GENERATION_CLAIM_LIMIT_CEILING
 
-// Rows written for each request a completion carries, with its notification and
-// the delivery and settlement of the group it belongs to.
-export const GENERATION_COMPLETION_REQUEST_ROWS = 42
+// What the whole settle series of one body writes, not what one call writes. One
+// call delivers one Discord group, so the workstation sends the identical body
+// until every group is delivered, and a replay is admitted without a new
+// reservation: the reservation taken by the first call has to cover every call.
+// Since B-962 a call writes only what moves (a request already on this
+// publication is not rewritten), so the series costs, measured on the complete
+// migrated schema:
+//   3 rows once, 40 rows for each request (its start, its notification, and the
+//   delivery and settlement of its group), 3 rows more for each group after the
+//   first, and four fewer rows for a request that is a group of one.
+// A group of one saves four rows and adds three, so it is never the worst case;
+// the worst grouping is the one with the most groups that each hold at least two
+// requests: floor(n / 2) groups.
+export const GENERATION_COMPLETION_REQUEST_ROWS = 40
 export const GENERATION_COMPLETION_FIXED_ROWS = 3
+export const GENERATION_COMPLETION_GROUP_ROWS = 3
 
 function plainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -204,8 +216,11 @@ export function generationCompletionWriteUnits(requestCount) {
   if (requests > GENERATION_COMPLETION_MAX_REQUESTS)
     throw new RangeError("A completion carries at most one claim's worth of requests")
   if (!requests) return 0
+  const furtherGroups = Math.max(0, Math.floor(requests / 2) - 1)
   return atLeastFloor(
-    GENERATION_COMPLETION_FIXED_ROWS + GENERATION_COMPLETION_REQUEST_ROWS * requests,
+    GENERATION_COMPLETION_FIXED_ROWS +
+      GENERATION_COMPLETION_REQUEST_ROWS * requests +
+      GENERATION_COMPLETION_GROUP_ROWS * furtherGroups,
   )
 }
 

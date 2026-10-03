@@ -493,6 +493,14 @@ class FulfillmentStatement {
         ) {
           continue
         }
+        // The statement writes only when the row's state moves (B-962).
+        if (
+          row.fulfillment_publication_id === String(publicationId || "") &&
+          Number(row.fulfillment_group_size) === Number(groupSize || 1) &&
+          row.discord_status !== "failed"
+        ) {
+          continue
+        }
         row.fulfillment_publication_id = String(publicationId || "")
         row.fulfillment_group_size = Number(groupSize || 1)
         if (row.discord_status === "failed") {

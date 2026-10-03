@@ -24,6 +24,7 @@ import { isReplicaCostRoute } from "./operation-cost-replica-adapter.js"
 import {
   GENERATION_COMPLETION_MAX_REQUESTS,
   GENERATION_COMPLETION_FIXED_ROWS,
+  GENERATION_COMPLETION_GROUP_ROWS,
   GENERATION_COMPLETION_REQUEST_ROWS,
   GENERATION_LEASE_FAIL_ROWS,
   GENERATION_LEASE_NEW_ROWS,
@@ -94,10 +95,9 @@ let counter = 0
 
 // Open bound requests, one SQL statement, every provenance column a real bound
 // request carries so the indexes and triggers bill what production bills.
-async function seedOpenRequests(
-  count,
-  { requester = "user_receipts", distinctRequesters = false } = {},
-) {
+// `groups` spreads the requests over that many requesters, so a completion of
+// them is that many Discord groups (one requester and one gene is one group).
+async function seedOpenRequests(count, { requester = "user_receipts", groups = 1 } = {}) {
   const firstId =
     Number(
       await database.db
@@ -122,7 +122,7 @@ async function seedOpenRequests(
          source_sample_number, source_sample_text_sha256, source_snapshot_sha256,
          generation_request_contract_sha256, generation_config_sha256, prompt_body_mode
        )
-       SELECT i, ?, CASE WHEN ? THEN 'user_' || i ELSE ? END, 'open',
+       SELECT i, ?, CASE WHEN ? > 1 THEN 'user_' || ((i - ?) % ?) ELSE ? END, 'open',
          strftime('%Y-%m-%d %H:%M:%S', '2026-01-01', '+' || i || ' seconds'), 'bound',
          printf('generation_request_%08d', i), 'gene_stable_receipts', 'manifestation_receipts_0001',
          'revision_receipts_00000001', ?, 'derivative_receipts_00000001', ?, ?, 80, ?, 107,
@@ -134,7 +134,9 @@ async function seedOpenRequests(
       firstId,
       firstId + count - 1,
       gene,
-      distinctRequesters ? 1 : 0,
+      groups,
+      firstId,
+      groups,
       requester,
       sha("a"),
       sha("b"),
@@ -411,23 +413,31 @@ const WEBP = new Uint8Array([
   0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 1, 2, 3, 4,
 ])
 
+// `discord.failing = true` makes Discord refuse to open the DM channel (a 500, which
+// the delivery treats as retryable), so a completion starts its requests and
+// delivers nothing.
 function installDiscordAndPortraits(t) {
   const original = globalThis.fetch
+  const discord = { failing: false }
   t.after(() => {
     globalThis.fetch = original
   })
   globalThis.fetch = async (url) => {
     const target = String(url)
-    if (target.endsWith("/users/@me/channels")) return Response.json({ id: "dm_channel_receipts" })
+    if (target.endsWith("/users/@me/channels")) {
+      if (discord.failing) return Response.json({ message: "refused" }, { status: 500 })
+      return Response.json({ id: "dm_channel_receipts" })
+    }
     if (target.includes("/channels/") && target.endsWith("/messages")) {
       return Response.json({ id: `message_${++counter}` })
     }
     throw new Error(`unexpected fetch ${target}`)
   }
+  return discord
 }
 
-async function seedCompletion(count, { distinctRequesters = false } = {}) {
-  const { gene, ids } = await seedOpenRequests(count, { distinctRequesters })
+async function seedCompletion(count, { groups = 1 } = {}) {
+  const { gene, ids } = await seedOpenRequests(count, { groups })
   const items = []
   for (const id of ids) {
     const { row, lease } = await leaseFor(id)
@@ -528,47 +538,267 @@ test("a completion of n requests, delivered to one requester, writes what the re
       point.units >= point.wrote,
       `${point.count} requests under-reserved: ${JSON.stringify(points)}`,
     )
-  // Three rows and 42 for each request (a group of one saves four). The constants are
-  // the worst measured, not an estimate: at the largest completion they are exact.
+  // Three rows once and 40 for each request (a group of one saves four). The
+  // constants are what was measured, not an estimate: at the largest completion,
+  // one group, they are exact. The reservation is larger by the groups it allows
+  // for, which the settle-series test below measures.
   const largest = points.at(-1)
-  assert.equal(largest.units, largest.wrote, JSON.stringify(points))
   assert.equal(
     GENERATION_COMPLETION_FIXED_ROWS + GENERATION_COMPLETION_REQUEST_ROWS * largest.count,
     largest.wrote,
+    JSON.stringify(points),
   )
 })
 
-test("a completion whose requests belong to n different requesters writes what the reservation counts, on every pass of the settle loop", async (t) => {
+// B-962. One call delivers one Discord group, so the workstation sends the
+// identical body again until every group is delivered: a body of n requests to n
+// requesters is n calls. The reservation is taken once, by the first call (a
+// replay of the same body is admitted without a new one), so it has to cover the
+// rows of the whole series, not of one call.
+//
+// How the settle loop could go wrong (written before the fix, B-962):
+// 1. A pass rewrites every request still pending (its resume UPDATE and its
+//    notification bind), so pass k writes about 19 + 3 x pending rows. For 50
+//    requests to 50 requesters that is about 6,000 rows over 51 calls against the
+//    2,103 reserved.
+// 2. The fix leaves a request unrepaired: a notification a crashed pass left on an
+//    older publication, a failed notification that is not requeued, a request row
+//    that still carries an older group size.
+// 3. The fix skips a rewrite the delivery depends on, so a replay delivers nothing
+//    and the loop makes no progress.
+// 4. The series total, not the first pass, exceeds the reservation.
+// 5. A grouping the test did not try is the worst case (one group of n, n groups
+//    of one, something between).
+// 6. The "write only what moves" condition widens the old guard and silently
+//    rebinds a request that belongs to another publication.
+const sqlKind = (sql) => sql.replace(/\s+/g, " ").trim().slice(0, 60)
+
+function writersOf(statements) {
+  const byKind = {}
+  for (const { sql, rows_written } of statements) {
+    if (!rows_written) continue
+    byKind[sqlKind(sql)] = (byKind[sqlKind(sql)] || 0) + rows_written
+  }
+  return byKind
+}
+
+// Sends the identical body until delivery settles, like the workstation does, and
+// records what each call wrote and which statements wrote it.
+async function settleSeries({ count, groups }) {
+  const { items } = await seedCompletion(count, { groups })
+  const meter = liveD1Meter(database.db, { trace: true })
+  const publicationId = `publication-receipts-${++counter}`
+  const passes = []
+  for (let pass = 1; pass <= count + 1; pass += 1) {
+    const from = meter.statements.length
+    const result = await complete({ items, publicationId, meter })
+    passes.push({
+      pass,
+      wrote: result.wrote,
+      ok: result.body.ok === true,
+      status: result.status,
+      writers: writersOf(meter.statements.slice(from)),
+    })
+    if (result.body.ok === true) break
+  }
+  return {
+    passes,
+    total: passes.reduce((sum, pass) => sum + pass.wrote, 0),
+    settled: passes.at(-1).ok,
+  }
+}
+
+// n groups of one is the most calls, groups of two is the most rows (a group of
+// one saves four rows and adds three), one group is the call that writes it all.
+const SETTLE_SERIES = [
+  { count: 5, groups: 5 },
+  { count: 10, groups: 5 },
+  { count: 10, groups: 2 },
+  { count: 10, groups: 1 },
+]
+
+test("a settle pass after the first writes only the group it delivers, and the reservation covers the whole series, whatever the grouping", async (t) => {
   quiet(t)
   installDiscordAndPortraits(t)
-  for (const count of [2, 5]) {
-    const { items } = await seedCompletion(count, { distinctRequesters: true })
-    const meter = liveD1Meter(database.db)
-    const publicationId = `publication-receipts-${++counter}`
+  for (const { count, groups } of SETTLE_SERIES) {
+    const series = await settleSeries({ count, groups })
     const units = generationCompletionWriteUnits(count)
-    let passes = 0
-    let settled = false
-    while (!settled && passes < count + 1) {
-      const pass = await complete({ items, publicationId, meter })
-      passes += 1
-      // The workstation sends the identical body until delivery settles, and the
-      // reservation of the first pass is the only one that body ever takes
-      // (a replay is admitted without a new reservation), so no single pass may
-      // write more than that reservation counts.
-      assert.ok(pass.wrote <= units, `pass ${passes} of ${count}: ${pass.wrote} > ${units}`)
-      settled = pass.body.ok === true
-      t.diagnostic(
-        JSON.stringify({
-          site: "complete-many-groups",
-          count,
-          pass: passes,
-          wrote: pass.wrote,
-          units,
-        }),
+    const label = `${count} requests in ${groups} groups`
+    t.diagnostic(
+      JSON.stringify({
+        site: "settle-series",
+        count,
+        groups,
+        units,
+        total: series.total,
+        passes: series.passes.map((pass) => pass.wrote),
+      }),
+    )
+    assert.ok(series.settled, `${label} did not settle`)
+    assert.equal(series.passes.length, groups, "one group is delivered per call")
+    // Failure mode 1: a pass costs the group it delivers, not the requests still
+    // pending, so every pass after the first writes the same as the last, which
+    // has nothing else pending.
+    const later = series.passes.slice(1)
+    const last = series.passes.at(-1).wrote
+    for (const pass of later) {
+      assert.equal(
+        pass.wrote,
+        last,
+        `${label}, pass ${pass.pass}: wrote ${pass.wrote}, the last pass ${last}; passes ${JSON.stringify(series.passes.map((p) => p.wrote))} ${JSON.stringify(pass.writers)}`,
       )
     }
-    assert.ok(settled, `${count} requests settled in ${passes} passes`)
+    if (later.length) {
+      assert.ok(last <= GENERATION_COMPLETION_REQUEST_ROWS * (count / groups), `last pass ${last}`)
+    }
+    // Failures 4 and 5: the reservation is taken once and covers every pass.
+    assert.ok(
+      series.total <= units,
+      `${label} wrote ${series.total} over ${series.passes.length} passes, the reservation is ${units}: ${JSON.stringify(series.passes.map((pass) => pass.wrote))}`,
+    )
+    // The reservation is the worst grouping's measured series, not a margin on it.
+    if (groups === Math.floor(count / 2)) {
+      assert.equal(series.total, units, `${label} is the worst grouping and pins the reservation`)
+      assert.equal(
+        series.total,
+        GENERATION_COMPLETION_FIXED_ROWS +
+          GENERATION_COMPLETION_REQUEST_ROWS * count +
+          GENERATION_COMPLETION_GROUP_ROWS * (groups - 1),
+      )
+    }
   }
+})
+
+// Failure modes 2, 3 and 6, on the real schema: what the "only what moves"
+// conditions must still do.
+const RESUME_SQL = /SET updated_at = CURRENT_TIMESTAMP/
+const BIND_SQL = /^\s*UPDATE icono_request_notifications\s+SET fulfillment_publication_id/
+
+test("a replay repairs what a crashed pass left unbound or failed, and writes nothing for a request already bound", async (t) => {
+  quiet(t)
+  const discord = installDiscordAndPortraits(t)
+  const { items, ids } = await seedCompletion(3)
+  const [first, second, third] = ids
+  const publicationId = `publication-receipts-${++counter}`
+
+  // Pass 1 starts all three requests (the trigger creates their notifications on
+  // the new publication, group size 3) but Discord refuses the channel.
+  discord.failing = true
+  const started = await complete({
+    items,
+    publicationId,
+    meter: liveD1Meter(database.db),
+  })
+  assert.equal(started.body.ok, false)
+  const startedStatuses = await database.db
+    .prepare(
+      "SELECT status FROM icono_generation_requests WHERE id IN (SELECT value FROM json_each(?))",
+    )
+    .bind(JSON.stringify(ids))
+    .all()
+  assert.deepEqual(
+    startedStatuses.results.map((row) => row.status),
+    ["delivery_pending", "delivery_pending", "delivery_pending"],
+  )
+
+  // The states an older or interrupted pass leaves behind: the first request on
+  // its pre-publication binding (request row and notification), the second
+  // notification failed before Discord, the third untouched.
+  await database.db.batch([
+    database.db
+      .prepare(
+        "UPDATE icono_generation_requests SET fulfillment_publication_id = ?, fulfillment_group_size = 1 WHERE id = ?",
+      )
+      .bind(`legacy-request:${first}`, first),
+    database.db
+      .prepare(
+        "UPDATE icono_request_notifications SET fulfillment_publication_id = ?, fulfillment_group_size = 1, discord_status = 'pending', discord_next_attempt_at = NULL WHERE request_id = ?",
+      )
+      .bind(`legacy-request:${first}`, first),
+    database.db
+      .prepare(
+        "UPDATE icono_request_notifications SET discord_status = 'failed', discord_error = 'Fulfilled portrait download failed (404).', discord_next_attempt_at = NULL WHERE request_id = ?",
+      )
+      .bind(second),
+    database.db
+      .prepare(
+        "UPDATE icono_request_notifications SET discord_status = 'pending', discord_next_attempt_at = NULL WHERE request_id = ?",
+      )
+      .bind(third),
+  ])
+
+  discord.failing = false
+  const meter = liveD1Meter(database.db, { trace: true })
+  const replay = await complete({ items, publicationId, meter })
+  assert.equal(replay.status, 200, JSON.stringify(replay.body))
+  assert.equal(replay.body.ok, true, JSON.stringify(replay.body))
+  const rowsWritten = (pattern) =>
+    meter.statements.filter(({ sql, rows_written }) => pattern.test(sql) && rows_written > 0).length
+  assert.equal(rowsWritten(RESUME_SQL), 1, "only the request on the old binding is rewritten")
+  assert.equal(
+    rowsWritten(BIND_SQL),
+    2,
+    "only the notification on the old binding and the failed one are rebound",
+  )
+  const after = await database.db
+    .prepare(
+      `SELECT r.id, r.status, r.fulfillment_publication_id AS request_publication,
+              r.fulfillment_group_size AS request_size,
+              n.fulfillment_publication_id AS notification_publication,
+              n.fulfillment_group_size AS notification_size, n.discord_status
+         FROM icono_generation_requests r
+         JOIN icono_request_notifications n ON n.request_id = r.id
+        WHERE r.id IN (SELECT value FROM json_each(?)) ORDER BY r.id`,
+    )
+    .bind(JSON.stringify(ids))
+    .all()
+  assert.deepEqual(
+    after.results.map((row) => ({ ...row })),
+    ids.map((id) => ({
+      id,
+      status: "fulfilled",
+      request_publication: publicationId,
+      request_size: 3,
+      notification_publication: publicationId,
+      notification_size: 3,
+      discord_status: "sent",
+    })),
+  )
+
+  // Every request is settled now: another replay of the same body writes nothing.
+  const settledMeter = liveD1Meter(database.db)
+  const settled = await complete({ items, publicationId, meter: settledMeter })
+  assert.equal(settled.status, 200)
+  assert.equal(settled.wrote, 0, "a replay after settlement writes no row")
+})
+
+test("a replay never moves a request that belongs to another publication", async (t) => {
+  quiet(t)
+  const discord = installDiscordAndPortraits(t)
+  const { items, ids } = await seedCompletion(1)
+  const firstPublication = `publication-receipts-${++counter}`
+  discord.failing = true
+  await complete({ items, publicationId: firstPublication, meter: liveD1Meter(database.db) })
+
+  const meter = liveD1Meter(database.db, { trace: true })
+  const other = await complete({
+    items,
+    publicationId: `publication-receipts-${++counter}`,
+    meter,
+  })
+  assert.equal(other.status, 409)
+  assert.equal(other.body.conflicts[0].reason, "request_already_bound_to_different_publication")
+  assert.equal(
+    meter.statements.filter(
+      ({ sql, rows_written }) => (RESUME_SQL.test(sql) || BIND_SQL.test(sql)) && rows_written > 0,
+    ).length,
+    0,
+  )
+  const row = await database.db
+    .prepare("SELECT fulfillment_publication_id AS p FROM icono_generation_requests WHERE id = ?")
+    .bind(ids[0])
+    .first()
+  assert.equal(row.p, firstPublication)
 })
 
 test("a completion that carries more requests than one claim can lease is refused before any write", async () => {
