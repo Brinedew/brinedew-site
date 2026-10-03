@@ -430,6 +430,16 @@ function seedStableGeneObjects(symbols, version = "test-vm-version") {
   }
 }
 
+test.beforeEach(() => {
+  stableStorage = installStableGeneStorage(new Map())
+  seedStableGeneObjects(["ERBB2", "INS"])
+})
+
+test.afterEach(() => {
+  stableStorage?.restore()
+  stableStorage = null
+})
+
 function buildEnv({
   kvStore = new Map(),
   db = new FakeIconoplasmDb(),
