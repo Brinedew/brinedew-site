@@ -61,11 +61,6 @@ for (const source of ["local", "production mirror"]) {
             },
           }
         : {}),
-      STRUCTURES_BUCKET: {
-        async head() {
-          return { size: 1200 }
-        },
-      },
       GAME_SESSIONS: {
         idFromName(name) {
           return name
@@ -84,15 +79,28 @@ for (const source of ["local", "production mirror"]) {
       },
     }
 
-    const response = await worker.fetch(
-      new Request("https://geneguessr.brinedew.bio/api/game/bootstrap"),
-      env,
-      {
-        waitUntil(promise) {
-          waits.push(Promise.resolve(promise))
+    // The target's structure is checked before it is served: the provider answers
+    // with a usable file.
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () =>
+      new Response(new Uint8Array([0x83, 0xa7, 0x65, 0x6e, 0x63]), {
+        status: 200,
+        headers: { "Content-Type": "application/octet-stream" },
+      })
+    let response
+    try {
+      response = await worker.fetch(
+        new Request("https://geneguessr.brinedew.bio/api/game/bootstrap"),
+        env,
+        {
+          waitUntil(promise) {
+            waits.push(Promise.resolve(promise))
+          },
         },
-      },
-    )
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
 
     assert.equal(response.status, 200)
     const payload = await response.json()

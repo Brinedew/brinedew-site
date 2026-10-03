@@ -1,19 +1,17 @@
-// GeneGuessr's structure lookups make no KV writes for a protein with a stored source.
+// GeneGuessr's structure lookups make no KV writes.
 //
 // The free plan allows 1,000 KV writes a day, and the daily answer record
 // (`puzzle_actual:*`), the daily bootstrap cache and the comments cache share that
-// allowance. A lookup that a reader can repeat must not write. The stored row always
-// wins over `structure_source:<uniprot>`, and that key's only reader runs when a
-// protein has no stored source, so a put for a stored row is never read back. A put
-// per practice bootstrap, structure token or guess (two for a first practice visit)
+// allowance. A lookup that a reader can repeat must not write. The stored row is the
+// whole structure decision, so a put for it would never be read back. A put per
+// practice bootstrap, structure token or guess (two for a first practice visit)
 // would reach the cap at a few hundred players a day.
 //
 // Production shape, measured 2026-10-03: 18,361 of 19,110 proteins have a stored
 // structure source and resolve from their row. The other 749 have none, are not in
-// the autocomplete index and are not in a target pool. Only those 749 reach the
-// discovery path, which asks three public APIs and caches the answer in KV. A
-// `/api/structure-token?uniprot=` request for an accession that is not in the
-// catalog must not reach discovery: each distinct string would make a put.
+// the autocomplete index and are not in a target pool; they have no structure, and
+// asking for one fetches and writes nothing. An accession that is not in the catalog
+// is refused the same way.
 //
 // Everything runs through the real Worker against a real local D1 built from the
 // real GeneGuessr migrations and seeded with the production shape (19,110 proteins),
@@ -24,9 +22,8 @@
 //   K1  a structure token for a protein with a stored source writes KV
 //   K2  a first or a returning practice bootstrap writes KV for a stored source
 //   K3  a guess writes KV for the guessed protein's structure
-//   K4  an accession that is not in the catalog runs discovery and writes KV
-//   K5  discovery writes on every lookup instead of once per protein, or its entry
-//       expires after a day instead of a month
+//   K4  an accession that is not in the catalog fetches or writes KV
+//   K5  a protein with no stored source fetches or writes KV instead of answering 404
 //   K6  the stored row stops winning over a stale KV entry
 import assert from "node:assert/strict"
 import test, { after, before, mock } from "node:test"
@@ -42,7 +39,6 @@ import {
 
 // A structure file every format's availability check accepts.
 const PROBE_BODY = "data_structure\nHEADER    MODEL\nATOM  1\n"
-const THIRTY_DAYS = 60 * 60 * 24 * 30
 
 let db
 let dispose
@@ -61,8 +57,8 @@ after(async () => {
 
 const firstWith = (source) => rows.find((row) => row.structure_source === source)
 
-// One request through the real Worker. `fetch` is the network: discovery's three
-// API lookups answer 404, and any structure file answers with a usable body.
+// One request through the real Worker. `fetch` is the network: any API lookup
+// answers 404, and any structure file answers with a usable body.
 async function call(
   path,
   { method = "GET", cookie = null, body = null, sessions = new Map(), kvEntries = {} } = {},
@@ -154,7 +150,7 @@ test("K3: a guess writes no KV, and still returns the guessed protein's structur
   }
 })
 
-test("K4: an accession that is not in the catalog is refused before discovery, with no fetch and no KV write", async () => {
+test("K4: an accession that is not in the catalog is refused with no fetch and no KV write", async () => {
   let puts = 0
   let fetches = 0
   for (let index = 0; index < 40; index += 1) {
@@ -169,21 +165,15 @@ test("K4: an accession that is not in the catalog is refused before discovery, w
   assert.equal(fetches, 0, "outbound fetches for 40 junk accessions")
 })
 
-test("K5: the 749-protein class with no stored source is discovered once, and the answer is kept for a month", async () => {
+test("K5: the 749-protein class with no stored source is 404, with no fetch and no KV write", async () => {
   const row = rows.find((candidate) => candidate.structure_source === null)
-  const first = await call(`/api/structure-token?uniprot=${row.uniprot}`)
-  assert.equal(first.response.status, 200, "discovery still finds the AlphaFold file")
-  assert.ok(first.fetched.length >= 3, `discovery asked ${first.fetched.length} public APIs`)
-  assert.equal(first.putOptions.length, 1, `puts: ${first.putOptions.map((p) => p.key).join(", ")}`)
-  assert.equal(first.putOptions[0].key, `structure_source:${row.uniprot}`)
-  assert.equal(first.putOptions[0].ttl, THIRTY_DAYS)
-
-  // The same protein again: a cache hit, so no discovery and no write.
-  const kvEntries = Object.fromEntries(first.kv)
-  const again = await call(`/api/structure-token?uniprot=${row.uniprot}`, { kvEntries })
-  assert.equal(again.response.status, 200)
-  assert.deepEqual(again.putOptions, [], "a cache hit writes nothing")
-  assert.ok(again.fetched.length <= 1, `a cache hit probes the file at most once: ${again.fetched}`)
+  const { response, payload, fetched, putOptions } = await call(
+    `/api/structure-token?uniprot=${row.uniprot}`,
+  )
+  assert.equal(response.status, 404)
+  assert.deepEqual(payload, { error: "Structure unavailable" })
+  assert.deepEqual(fetched, [], "outbound fetches")
+  assert.deepEqual(putOptions, [], "KV puts")
 })
 
 test("K6: a stale KV entry never beats the stored row, and is not rewritten", async () => {

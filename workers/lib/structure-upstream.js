@@ -58,6 +58,69 @@ export function structureFormatFromKey(cacheKey) {
   return "cif"
 }
 
+// Refuse to deliver an extremely large structure file: Mol* chokes on multi-10 MB
+// models, and a Worker isolate (128 MB) serves many requests at once. The cap counts
+// the bytes that actually stream, after decompression, because no upstream header is
+// a reliable size. Measured 2026-10-03 (curl asking for gzip and br, and a local
+// workerd run): RCSB sends no Content-Length (chunked); AlphaFold's is the gzip size on
+// the wire, and workerd drops it when it decompresses; SWISS-MODEL sent a chunked gzip
+// body with no Content-Length to curl and a plain Content-Length to workerd.
+export const MAX_STRUCTURE_FILE_BYTES = 20 * 1024 * 1024
+
+// SWISS-MODEL PDB files commonly omit the HEADER record Mol* needs to create an
+// "entry" object ("Cannot read properties of undefined (reading 'entry')"). This
+// anonymous line does not leak the protein's identity. It is emitted ahead of the
+// upstream body, so nothing is buffered to prepend it.
+export const ANONYMOUS_PDB_HEADER = new TextEncoder().encode(
+  "HEADER    MODEL                                   01-JAN-00   0000\n",
+)
+
+export class StructureTooLargeError extends Error {
+  constructor(maxBytes) {
+    super(`Structure body is over ${maxBytes} bytes`)
+    this.name = "StructureTooLargeError"
+  }
+}
+
+// Streams `body` to the caller, at most `maxBytes` of it. The next chunk is read only
+// when the caller asks for it, so a large file is never held in memory. Past the cap
+// the upstream is cancelled and the stream errors, so the caller never receives a
+// complete oversize file and the upstream is not drained. `prefix` bytes come first
+// and do not count against the cap. `onTooLarge` is called once, when the cap is hit.
+export function limitStructureBody(
+  body,
+  { maxBytes = MAX_STRUCTURE_FILE_BYTES, prefix = null, onTooLarge = null } = {},
+) {
+  const reader = body.getReader()
+  let received = 0
+  let prefixSent = !prefix
+  return new ReadableStream({
+    async pull(controller) {
+      if (!prefixSent) {
+        prefixSent = true
+        controller.enqueue(prefix)
+        return
+      }
+      const { value, done } = await reader.read()
+      if (done) {
+        controller.close()
+        return
+      }
+      received += value.byteLength
+      if (received > maxBytes) {
+        onTooLarge?.(received)
+        await reader.cancel().catch(() => {})
+        controller.error(new StructureTooLargeError(maxBytes))
+        return
+      }
+      controller.enqueue(value)
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+}
+
 // Fetches `url` and follows redirects itself, so each hop is checked before it is
 // requested. Throws StructureUpstreamRefusedError for a URL or redirect target that
 // fails the check or a chain longer than three redirects; any other failure is the
