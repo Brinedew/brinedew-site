@@ -171,8 +171,8 @@ export async function openVisitHarness({ accounts = LEADERBOARD_ACCOUNTS } = {})
 
   // The first visit creates what a day's first guesses create (the aggregate table, one row for
   // each protein guessed, the minute's row of any per-minute record), so a measured visit is a
-  // steady-state one: a protein already guessed today costs 2 rows to guess again, a protein
-  // nobody guessed today costs 3.
+  // steady-state one: a protein already guessed today costs 1 row to guess again, a protein
+  // nobody guessed today costs 2.
   await visit({ guesses: 6 })
 
   return {

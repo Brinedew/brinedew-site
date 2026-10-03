@@ -332,13 +332,18 @@ number of API requests the page makes. A visit with three guesses makes five:
 | `GET /api/structure-cached?type=target` | the daily target's structure (the only structure that goes through the Worker)                                                      |
 | `POST /api/game/guess`, once a guess    | the guess's score, its clue matches and its structure token                                                                         |
 
-A sixth request, `GET /api/stats/leaderboard?limit=5`, is made when the "Top Streaks" section
-of the right sidebar nears the screen (400 px margin, `IntersectionObserver`; a browser
-without it reads at once). That section sits beside the game from 1200 px, so on a desktop it
-is on the first screen and is read at load; on a tablet or phone it sits below the whole game
-and is read only when the visitor scrolls there. Until the first read it says "Loading
-leaderboard...". A finished game or the visibility switch refreshes it only after it has been
-read.
+The "Top Streaks" section of the right sidebar is read from the CDN, not from the Worker
+(B-965): when the section nears the screen (400 px margin, `IntersectionObserver`; a browser
+without it reads at once) the page fetches `leaderboard/v1/top.json` from the Bunny CDN
+(`cache: "no-cache"`, 4 s timeout), so the board and its five avatars cost no Worker request.
+That section sits beside the game from 1200 px, so on a desktop it is on the first screen and is
+read at load; on a tablet or phone it sits below the whole game and is read only when the
+visitor scrolls there. Until the first read it says "Loading leaderboard...". A finished game
+refreshes it after it has been read. When the CDN cannot be reached, or answers anything that is
+not the board, the page asks the Worker route `GET /api/stats/leaderboard?limit=5` instead, and
+each picture it names goes through `GET /api/avatar`: 1 request for the board and up to 5 for
+the pictures, all metered, which is why the CDN is the first choice. The visibility switch asks
+the route too, so the visitor sees their own change at once instead of after the next publish.
 
 The score is part of the guess answer. `scoreAgainstTarget` in the stateful runtime is the one
 similarity path: HiG2Vec and SaProt cosines, soft-OR blended, the ladder rank when the guess is
@@ -364,6 +369,35 @@ admin preview and the Discord recap, which read the same function. The read star
 the bootstrap and runs beside the session and target reads; an unreadable key leaves the page the
 defaults.
 
+### The Top Streaks object (B-965)
+
+`leaderboard/v1/top.json` is exactly the answer of `GET /api/stats/leaderboard`
+(`entries` of `rank`, `username`, `avatarUrl`, `currentStreak`), built from the same
+`leaderboard_streaks` read model, so it holds only the opted-in names the board may show and
+nothing else about an account. The avatars are `data:` URIs: the Worker fetches each one from
+Discord's CDN itself (`?size=64`, an image type, at most 8 KiB, 3 s, no redirect, only Discord's
+host), so a visitor never contacts Discord (`content/apps/geneguessr/privacy.md` says so),
+nothing piles up in storage when an avatar changes, and an account that goes private is gone
+from the next object. A picture that cannot be embedded leaves its entry with the initial of the
+name, as an account with no picture has always had. The page draws only a `data:` image or the
+route's `/api/avatar` address and ignores any other.
+
+`workers/lib/leaderboard-publication.js` is the only publisher. The job `geneguessrBoard` runs
+at six minutes an hour (4, 13, 24, 34, 45 and 52, 144 invocations a day, never more than 12
+minutes apart) on the Iconoplasm clock (`workers/iconoplasm-background-schedule.js`), because the
+free plan allows 5 cron triggers an account and this Worker already lists 5. A run reads the
+board (16 D1 rows read for five entries, none written), fetches up to five avatars (the edge
+caches them for a day), reads the stored object and writes it, with its read-back, only when its
+bytes changed: at most 10 subrequests of the 50 a free-plan invocation may make, about 1 ms of
+JavaScript in Node for the largest object (55 KB; the 10 ms a free-plan cron may use in workerd
+is not measured). It never purges: a purge re-pulls a replica that may not have the new bytes yet
+and caches it for the zone's 30 days. Freshness is the interval plus Bunny's replica lag plus the
+pull zone's 60 s edge cache time (`bunny/the-only-iconoplasm-pull-zone-policy.json` lists
+`leaderboard/v1/*` in that rule and its purge-on-change list; the zone already adds CORS for
+`.json`): a finished game shows on the board within minutes, not at once. The game document's
+`connect-src` lists the CDN host (`workers/lib/the-only-public-document-policy-do-not-duplicate.js`,
+game document only).
+
 ## A visit's D1 rows (B-960, B-959)
 
 The free plan allows 100,000 D1 rows written and 5,000,000 rows read a day for the whole account
@@ -372,24 +406,39 @@ A visit's statements are read from D1's own receipts (`rows_read`, `rows_written
 with production's tables and indexes.
 
 **A visit writes only the daily guess aggregate.** `daily_guess_aggregate` gets one upsert a
-guess: 2 rows when the protein has been guessed today (the day's row and its index entry), 3 for
-the first guess of a protein that day. That is 6 rows for a visit of 3 guesses and 12 for 6
-(9 and 18 if every protein is new that day). Opening the game, the target's structure, a
-leaderboard read and a successful session write write nothing. The Discord recap and the admin
-guess panel read the aggregate once a day or on a click.
+guess: 1 row when the protein has been guessed today (the day's row), 2 for the first guess of a
+protein that day (the row and its primary-key entry). That is 3 rows for a visit of 3 guesses and
+6 for 6 (6 and 12 if every protein is new that day). Opening the game, the target's structure and
+a successful session write write nothing, and a visit does not read the board. The table keeps
+only its primary key (B-964): a second index on `(day, guess_count)` cost one more row on every
+guess, and every reader asks for `day = ?` or a range of days, which the primary key serves.
+`ensureGuessAggregateSchema` drops that index once per isolate (`DROP INDEX IF EXISTS`, 0 rows
+written, 31 read on a local D1). What the index bought was the early stop of the day's top 5: it
+read 151 rows with it and reads the whole day without it (6,000 rows at 3,000 distinct proteins,
+about 38,000 at most for the whole catalog), once a day for the Discord recap and on an admin
+click, against a row written on every guess. The winners and the range of days read the same rows
+either way.
 
 **Failed session writes are the only session-write record**
-(`workers/lib/game-session-write-evidence.js`). A Durable Object session write that fails is
-recorded in `game_session_write_observations_do_not_delete` (a counted row a minute, operation,
-session kind and error text) and `game_session_write_failure_samples_do_not_delete` (a sample with
-the request path); `GET /api/admin/status` returns them as `game_session_write_evidence`. A write
-that succeeds records nothing, so a day with no failure costs no D1 statement, not even the
-creation of the tables, which the first failure or the first status read creates. How many writes
-there were is the provider's own Durable Object meter
-(`durableObjectsPeriodicGroups.rowsWritten`). A failed write costs 4 rows to record once its
-minute's row exists (1 for the counter, 3 for the sample: its row, its index entry and the
-autoincrement counter), so a Durable Object incident spends the D1 allowance 4 rows a failed
-write (B-963).
+(`workers/lib/game-session-write-evidence.js`), and they cost a bounded number of rows a day
+whatever the number of failures (B-963). A Durable Object session write that fails is recorded in
+`game_session_write_failures_do_not_delete`, one row for each day, operation, session kind and
+error class (write cap, reset, overloaded, internal, other: a closed set, so a message carrying a
+unique reference cannot mint rows), with its first and last time, a count, and the first message
+and request path as the example; `GET /api/admin/status` returns the rows as
+`game_session_write_evidence`. D1 refuses a write less than five minutes after the row's last one
+(0 rows read and 0 written when it refuses), and an isolate counts its failures in memory and asks
+once a window, so a key costs 1 row for its first failure and 1 every five minutes after: at most
+288 a day, and a Durable Object outage fails about ten keys, so about 2,900 rows (3% of the
+allowance) at 100 failures or at 100,000. A day of failures, one every 10 seconds, costs 288 rows.
+The price is exactness: `failures` is what reached D1, a lower bound (counts held by an isolate
+that dies, or that lost the window to another isolate, are not recorded). Workers Logs hold every
+failure (each one is `console.warn`ed) and the provider's Worker and Durable Object meters give the
+volume. A write that succeeds records nothing, so a day with no failure costs no D1 statement. The
+table and its 14-day prune are created and run by the first isolate that records or reads, which
+also drops the two per-minute tables an earlier version wrote (`DROP TABLE` of 6,000 rows wrote 0
+rows on a local D1). How many writes there were is the provider's own Durable Object meter
+(`durableObjectsPeriodicGroups.rowsWritten`).
 
 **The leaderboard reads a handful of rows, whatever the number of accounts**
 (`workers/lib/leaderboard-streaks.js`). "Top Streaks" lists the public accounts whose streak is
@@ -399,41 +448,63 @@ that starts with the played day, so a read takes the first `limit` of today and 
 joins `users` only for the names it returns: 4 x limit + 8 rows at most, 10 to 26 at limit 5 from
 1,000 to 100,000 production-shaped accounts (the join over every account that it replaces read
 293, 2,913 and 29,585 rows) and 19 to 21 on a population whose every long streak is private or
-abandoned. Four triggers keep the table equal to the join: `stats` after an insert, after an
-update of the streak, the wins or the played day, and after a delete, and `users` after
-`leaderboard_opt_in` changes. A stats write for an account that is not public costs no extra row;
-for a public one it costs 2 (the board's row and its index entry). The first read that finds no
-table creates it and fills it from `stats` and `users` in one batch (9,991 rows read and 2,141
-written, once, at 100,000 production-shaped accounts); `migrations/README.md` lists the owner.
+abandoned. Only the publisher of the Top Streaks object and the fallback route read it. Four
+triggers keep the table equal to the join: `stats` after an insert, after an update of the
+streak, the wins or the played day, and after a delete, and `users` after `leaderboard_opt_in`
+changes. A stats write for an account that is not public costs no extra row; for a public one it
+costs 2 (the board's row and its index entry). The first read that finds no table creates it and
+fills it from `stats` and `users` in one batch (37,428 rows read and 2,141 written, once, at
+100,000 production-shaped accounts; 3,718 read at 10,000), with the join order pinned
+(`stats`, then the primary key of `users`) so the fill does not depend on an index.
+`migrations/README.md` lists the owner.
+
+**`users.leaderboard_opt_in` has no index** (B-966). Migration 0016 made one and no query needs
+it: the board read, the trigger refreshes, the visibility switch and the account erasure all plan
+on primary keys (`workers/geneguessr-unused-indexes.test.js` explains each). Keeping it cost a
+row written on every new account (6 rows, 5 without) and on every change of the public choice
+(3 rows, 2 without). `retireLeaderboardOptInIndex` drops it once per isolate from the Top Streaks
+publisher (`DROP INDEX IF EXISTS`, 0 rows written, 38 read on a local D1). The GeneGuessr
+database applies no migration on a normal deploy and has no online migration path, so a
+`migrations/` file would need a reviewed plan entry, an adapter and a paused maintenance release
+for a no-op statement. The one-shot statements for this index, for the aggregate's and for the
+two evidence tables are deleted once production's `sqlite_master` no longer lists the objects.
 
 ### Visitors a day until a meter is spent
 
-One visitor is the 3 or 6 guesses measured above. Workers requests have 8,160 to 26,589 units of
-the 100,000 already on them with nobody playing (best and worst day of 2026-09-27 to 10-02,
-carried from B-935, not re-measured), and a request is 2 units. D1 rows read are for a desktop
-visit with 10,000 accounts.
+One visitor is the 3 or 6 guesses measured above, on a desktop or a phone: neither asks the
+Worker for the board, so the two layouts cost the same. Workers requests have 8,304 to 26,733
+units of the 100,000 already on them with nobody playing (best and worst day of 2026-09-27 to
+10-02, carried from B-935 and not re-measured, plus the 144 invocations a day of the Top Streaks
+job), and a request is 2 units. D1 rows read are the visit's own, the guess and bootstrap protein
+reads, since the board is read by the publisher.
 
-| guesses | visit                                 | Workers requests | Durable Object calls | D1 rows written | D1 rows read |
-| ------- | ------------------------------------- | ---------------- | -------------------- | --------------- | ------------ |
-| 3       | desktop (leaderboard on screen)       | 6,117 to 7,653   | 9,090                | 16,666          | 178,571      |
-| 3       | phone that never scrolls to the board | 7,341 to 9,184   | 9,090                | 16,666          | 1,666,666    |
-| 6       | desktop                               | 4,078 to 5,102   | 5,882                | 8,333           | 161,290      |
-| 6       | phone that never scrolls to the board | 4,588 to 5,740   | 5,882                | 8,333           | 833,333      |
+| guesses | visit (desktop or phone) | Workers requests | Durable Object calls | D1 rows written | D1 rows read |
+| ------- | ------------------------ | ---------------- | -------------------- | --------------- | ------------ |
+| 3       | 5 requests, 3 rows       | 7,326 to 9,169   | 9,090                | 33,333          | 1,666,666    |
+| 6       | 8 requests, 6 rows       | 4,579 to 5,731   | 5,882                | 16,666          | 833,333      |
 
 **Workers requests fail first at every row.** Next come Durable Object calls (9,090 and 5,882; at
-6 guesses on a phone 5,882 is 2.5% above the top of the Workers range) and D1 rows written when
-every guessed protein is new that day (11,111 and 5,555 visitors; 5,555 is inside the Workers range
-for a phone at 6 guesses, 4,588 to 5,740). D1 rows read are not near: the 4 x limit + 8 bound holds
-the leaderboard at about 26 rows however many accounts exist. Levels, with the worst Workers day: 5,000 visitors in an hour
-spend 87% (3 guesses) or 117% (6) of the day's Workers allowance, 10x spends 147% and 207%, 100x
-1,227% and 1,827%, and D1 rows written reach 60% and 120% at 10x. What a visitor sees when a meter
-is spent: Workers requests, the page loads (it is static) but the bootstrap is refused and the
-game does not start, and a player already in the game gets "Guess temporarily unavailable";
-Durable Object calls, the same two refusals; D1 rows written or read, the provider refuses every
-query against D1 for the rest of the day (its documentation: when the account hits the daily read
-and/or write limit it will not run queries against D1), so a protein read fails and the game
-cannot start or take a guess, a signed-in player's finished game waits in their session for the
-next visit, and every other D1 user on the account (Iconoplasm) is refused with them.
+6 guesses 5,882 is 2.6% above the top of the Workers range) and D1 rows written when every guessed
+protein is new that day (16,666 and 8,333 visitors). D1 rows read are not near: the board is read
+by the publisher, 26 rows 144 times a day (3,744 rows), whatever the number of visitors. Levels,
+with the worst Workers day: 5,000 visitors in an hour spend 77% (3 guesses) or 107% (6) of the
+day's Workers allowance, 10x (10,000 visitors a day) spends 127% and 187%, 100x 1,027% and 1,627%,
+and D1 rows written reach 30% and 60% at 10x (60% and 120% when every protein is new that day).
+A desktop visit with a full board of five public streaks cost 11 requests (22 units) for 3 guesses
+before the board came from the CDN, and costs that again whenever the CDN cannot be reached: the
+box was 1 request and each of its 5 pictures another (`e2e/geneguessr-direct-structures.e2e.mjs`
+measures that fallback every run); it is 5 now. The new reader-scaled meter is Bunny bandwidth: the object is at most 55 KB (a
+full board of maximum-size avatars; a conditional request that finds it unchanged is a 304), so
+100,000 desktop visitors a day is at most 5.5 GB of Bunny traffic, and Bunny's price per GB is on
+the owner's account page (not read here). What a visitor sees when a meter is spent: Workers
+requests, the page loads (it is static) and so does the box (the CDN does not count), but the
+bootstrap is refused and the game does not start, and a player already in the game gets "Guess
+temporarily unavailable"; Durable Object calls, the same two refusals; D1 rows written or read,
+the provider refuses every query against D1 for the rest of the day (its documentation: when the
+account hits the daily read and/or write limit it will not run queries against D1), so a protein
+read fails and the game cannot start or take a guess, a signed-in player's finished game waits in
+their session for the next visit, and every other D1 user on the account (Iconoplasm) is refused
+with them.
 
 ## Required tests
 
@@ -550,16 +621,23 @@ route is installed, so a repeat view's cost was measured against the real provid
 The same file counts the requests of a whole visit (see "A visit's Worker requests"), on a
 1280 px desktop and a 390 px phone with the grid and sidebar rules of `quartz/styles`, for
 three and for six guesses: exactly one bootstrap, one target view and one `guess` a guess,
-no similarity, graphics-settings, token or `?key=` request, a leaderboard request at load on
-the desktop and none on the phone until the visitor scrolls to the section (then exactly one,
-however often it is scrolled to), and no spinner or pending mark ever added to the page. Each
-card shows the number the Worker computes, and its bar. A stored graphics setting (an
-orthographic camera) styles the first viewer with no request for it, with the default as the
-control. The leaderboard section's text goes from "Loading leaderboard..." to the rows and never
-says "No public streaks yet." on the way; a browser without `IntersectionObserver` reads it at
-load. The same visits assert the D1 rows from the statements' receipts: no statement against the
-session-write evidence tables, no written row but the aggregates, 2 rows a guess once the day is
-under way, and one leaderboard read of at most 28 rows on a desktop. The counts and meters land in
+no similarity, graphics-settings, token, `?key=`, leaderboard or avatar request, one read of
+`leaderboard/v1/top.json` from the CDN host at load on the desktop and none on the phone until the
+visitor scrolls to the section (then exactly one, however often it is scrolled to), every picture
+a decoded `data:` image, and no spinner or pending mark ever added to the page. Each card shows
+the number the Worker computes, and its bar. A stored graphics setting (an orthographic camera)
+styles the first viewer with no request for it, with the default as the control. The leaderboard
+section's text goes from "Loading leaderboard..." to the rows and never says "No public streaks
+yet." on the way; a browser without `IntersectionObserver` reads it at load. The board object is
+the one the Worker's own scheduled job published (Bunny Storage and Discord's CDN are fixtures),
+served for the CDN host under the game document's real policy (no violation). With the CDN host
+unreachable, or answering a page that is not JSON, the page falls back to the route, and a
+3-guess desktop visit with a full board of five costs 11 requests (the route and a request for
+each picture), which is the measurement of what the board cost before B-965. An object that names a
+picture address other than a `data:` image makes the page request nothing and draw the initial.
+The same visits assert the D1 rows from the statements' receipts: no statement against the
+session-write evidence tables, no written row but the aggregates, 1 row a guess once the day is
+under way, and no statement against `leaderboard_streaks`. The counts and meters land in
 `geneguessr-request-budget.json`.
 
 `workers/geneguessr-request-budget.test.js` must prove, through the real Worker on the
@@ -593,28 +671,56 @@ database, and without embedded tokens it asks the route once per guess.
 `workers/geneguessr-row-budget.test.js` must prove, through the real Worker on the
 production-shaped local D1, that a visit of 3 and of 6 guesses on a desktop and on a phone
 runs no statement against the session-write evidence tables, writes no D1 row but the
-aggregates, and writes exactly 2 rows a guess; the receipts land in
+aggregates, and writes exactly 1 row a guess; the receipts land in
 `artifacts/b-960/geneguessr-d1-rows.json`.
 
-`workers/game-session-write-evidence.test.js` must prove, with the Durable Object failing
-the way production's does, that a failed session write is recorded once with a sample and the
-visitor still sees the failure, that repeats within a minute fold into one counted row and each
-keeps a sample, that a record D1 refuses changes nothing the visitor sees and is logged, that the
-status reader reports the failures and ignores the success rows an earlier version wrote, that
-the admin status carries the snapshot, and that a failed write costs at most 4 rows once its
-minute's row exists.
+`workers/game-session-write-evidence.test.js` must prove, on a real local D1 with the Durable
+Object failing the way production's does and copies of the module standing for isolates, that a
+storm of 1,000 failures in one isolate reaches D1 once and the next window carries the count; that
+50 isolates failing at the same instant write one row between them, each refused ask reading and
+writing nothing; that a day of failures one every 10 seconds costs 288 rows; that a message with
+a unique reference is one row and the combinations stay in the closed sets; that the status says
+what failed, since when, with an example and a count that is a lower bound; that a refused write
+keeps its isolate's count, a record D1 cannot take changes nothing the visitor sees and is logged,
+and a successful write runs no statement; that the two per-minute tables are dropped for no rows;
+that rows past 14 days are pruned once a day; golden classes for the texts the platform sends;
+and, through the real Worker, that a failed write is recorded once, the visitor still sees it, the
+admin status carries it, and 300 failures cost a handful of rows.
 
 `workers/leaderboard-streaks.test.js` must prove, through the real Worker on a local D1 with
-production's account tables, that a leaderboard read costs at most 4 x limit + 8 rows at 1,000,
-10,000 and 100,000 accounts of production's shape and of a shape whose every long streak is
-private or abandoned, with the same entries the join over every account returns; that the board
-is that join's for every limit, with ties, today and yesterday in and the day before out; that
-it stays so after a finished game (a streak extended, restarted, a loss), the visibility switch,
-a Discord login that flips it, an account erasure, the import, a deleted `stats` row and a stale
-streak, and over 160 random writes; that the first read on a database with accounts and no board
-builds it once and survives two reads at once; and that a stats write costs an account that is
-not public no extra row and a public one at most 3. The receipts land in
-`artifacts/b-959/leaderboard-rows-read.json`.
+production's account tables (the four indexes `users` has once the one-shot drop has run), that a
+leaderboard read costs at most 4 x limit + 8 rows at 1,000, 10,000 and 100,000 accounts of
+production's shape and of a shape whose every long streak is private or abandoned, with the same
+entries the join over every account returns; that the board is that join's for every limit, with
+ties, today and yesterday in and the day before out; that it stays so after a finished game (a
+streak extended, restarted, a loss), the visibility switch, a Discord login that flips it, an
+account erasure, the import, a deleted `stats` row and a stale streak, and over 160 random writes;
+that the first read on a database with accounts and no board builds it once and survives two reads
+at once; and that a stats write costs an account that is not public no extra row and a public one
+at most 3. The receipts land in `artifacts/b-959/leaderboard-rows-read.json`.
+
+`workers/geneguessr-unused-indexes.test.js` must prove, on a real local D1 with production's
+tables and indexes, with the index recreated as the control: that the aggregate readers without
+`idx_daily_guess_aggregate_day_count` are index searches on `day` through the primary key, never a
+table scan, and read at most two rows more per guessed protein than with it; that a guess writes 1
+row (2 for a protein's first of the day) against 2 (3) with it; that the code drops it on first use
+for no D1 row and not again in the same isolate; that no statement touching `users` or `stats`
+plans through `idx_users_leaderboard_opt_in`; that the leaderboard build, with its join order
+pinned, reads under half a row an account without the index where the planner's own choice read a
+row an account; that a new account writes 5 rows against 6 and a visibility switch 2 against 3;
+and that `retireLeaderboardOptInIndex` runs once per isolate for no D1 row.
+
+`workers/leaderboard-publication.test.js` must prove, on a real local D1 with a fake Bunny Storage
+and Discord CDN behind `fetch`, that the object holds the board's public live names in the route's
+order and nothing else (no id, no wins, no played day, no private or stale account); that an avatar
+which is not Discord's host, answers 404, is not an image, is over 8 KiB or throws leaves the name
+with no picture and never fails the publication, and that only Discord's host is fetched without
+following a redirect; that it writes when a streak, an order, a name, a picture or a visibility
+changed and not when nothing did, and never purges; that an unchanged run reads 16 rows, writes
+none and makes 6 subrequests; that the Worker's scheduled handler runs it at each of its minutes,
+not during a schema transition, and lets a storage failure fail the invocation; that an
+unconfigured store is reported, not thrown; and that the page, the publisher, the game document's
+policy and the pull zone's 60 s rule name one address.
 
 `quartz/static/geneguessr/structure-token-hydration.test.js` guards the page source: no
 IndexedDB and no `sizeBytes`, the token cache seeded from the guess entries, the token route

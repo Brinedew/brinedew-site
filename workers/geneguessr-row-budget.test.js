@@ -9,8 +9,9 @@
 //   V1  a visit writes a row to the session-write evidence tables, or runs a statement against
 //       them: a successful write is recorded in D1 (5 of the 11 rows a 3-guess visit wrote), or a
 //       cold isolate's first save creates the tables and prunes them
-//   V2  a visit writes any D1 row other than the per-guess daily aggregate (2 rows a guess:
-//       the day's row and its index entry, for a protein already guessed today)
+//   V2  a visit writes any D1 row other than the per-guess daily aggregate (1 row a guess:
+//       the day's row, for a protein already guessed today; a second index entry made it 2
+//       until B-964)
 // The numbers land in artifacts/b-960/geneguessr-d1-rows[.<ROWS_LABEL>].json.
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -101,8 +102,8 @@ for (const [name, options] of [
     )
     assert.equal(
       visit.totals.rowsWritten,
-      2 * options.guesses,
-      "2 rows a guess: the day's aggregate row and its index entry",
+      options.guesses,
+      "1 row a guess: the day's aggregate row",
     )
   })
 }

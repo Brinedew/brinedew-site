@@ -90,19 +90,21 @@ We share data only with:
 - **Cloudflare**: Our infrastructure provider (see "Where Data Is Stored" below). Cloudflare processes data on our behalf under their [privacy policy](https://www.cloudflare.com/privacypolicy/).
 - **Cloudflare Web Analytics**: Used only after analytics consent, for aggregate traffic measurement.
 - **Public leaderboard viewers**: If you opt in, your Discord username, avatar, and best streak are visible to visitors in the in-app leaderboard.
-- **Discord CDN (server-side only)**: Avatar images may be fetched by our backend and served via our own domain. Visitors do not request avatar images directly from Discord.
+- **Discord CDN (server-side only)**: Avatar images may be fetched by our backend and served via our own domain or Bunny CDN. Visitors do not request avatar images directly from Discord.
+- **Bunny CDN (BunnyWay d.o.o.)**: When you open GeneGuessr, your web browser establishes a direct connection to Bunny CDN to load the public leaderboard, so that Bunny – technically unavoidable – learns your IP address and other data about your browser, which it automatically sends along. Bunny processes data on our behalf under their [privacy policy](https://bunny.net/privacy/).
 - **Structure providers (RCSB PDB, AlphaFold DB, SWISS-MODEL)**: When you look at the 3D structure of a protein you have already guessed, your web browser establishes a direct connection to the respective provider, so that the provider – technically unavoidable – learns your IP address and other data about your browser, which it automatically sends along.
 
 We do not share your data with advertisers or data brokers.
 
 ## Where Data Is Stored
 
-All data is processed and stored on Cloudflare infrastructure:
+All data is processed and stored on Cloudflare and Bunny infrastructure:
 
 - **Cloudflare Workers**: Application logic
 - **Cloudflare D1**: Database (user accounts, game history, statistics)
 - **Cloudflare KV**: Caching layer
 - **Cloudflare Durable Objects**: Session management
+- **Bunny Storage and CDN**: Public leaderboard (opted-in players only)
 
 Cloudflare operates data centers globally. For EU users, this may involve data transfer outside the EEA. Cloudflare maintains appropriate safeguards including Standard Contractual Clauses.
 
