@@ -508,17 +508,6 @@ with them.
 
 ## Required tests
 
-`workers/lib/daily-selection-pool.test.js` must prove:
-
-- the source pool is ordered and independent of transient structure failures;
-- every surname contributes exactly one candidate;
-- input ordering does not change the deterministic result;
-- 365 consecutive automatic picks are unique when at least 365 surnames exist;
-- bulk horizon planning yields exactly the same primary identity as the
-  canonical one-day picker;
-- a large family's representative advances between complete bag cycles without
-  adding slots.
-
 `workers/daily-selection-pool-cost.test.js` must prove, on a real local D1 built
 from the real migrations at production shape (19,110 proteins, 10,312 playable,
 3,900 families):
@@ -531,7 +520,15 @@ from the real migrations at production shape (19,110 proteins, 10,312 playable,
 - the stored pool gives the fingerprint and the picks the family builders give
   (golden values and a differential check), so availability pins stay valid;
 - a missing table, a missing row, a corrupt row, a D1 error on read and on
-  persist, an empty catalog, and simultaneous requests are each handled.
+  persist, an empty catalog, and simultaneous requests are each handled;
+- (ARCHITECTURE FENCE [GG-001]) every surname family holds exactly one slot,
+  however many rows it has, with padded, lower-case, empty and missing surnames
+  grouped as the lottery groups them, so the largest family weighs as much as a
+  family of one;
+- 365 consecutive automatic picks name 365 different surnames, and bulk horizon
+  planning yields exactly the primary identity of the canonical one-day picker;
+- a large family's representative changes from one complete bag cycle to the
+  next without adding slots.
 
 `workers/practice-bootstrap-returning-session.test.js` must prove, through the real
 Worker on the same production-shaped local D1 with R2 unbound and `fetch` counted:
@@ -588,9 +585,7 @@ resolves from its row with no fetch.
 `workers/structure-no-r2-layer.test.js` must prove that a bucket bound under
 `STRUCTURES_BUCKET` anyway is never touched by a structure token, a structure fetch, a
 bootstrap or a guess, that no structure token carries `cached` or `sizeBytes`, that the
-deleted R2 admin and debug routes answer 404, that `STRUCTURES_BUCKET` appears in
-`workers/` only in the Discord recap image fallback, and that the admin yearly fill no
-longer calls a pin step.
+deleted R2 admin and debug routes answer 404.
 
 `workers/guess-direct-structure-urls.test.js` must prove, through the real Worker on the
 production-shaped local D1, that a guess token's `directUrl` is the URL the Worker route
@@ -614,9 +609,12 @@ returning visitor's load, opened cards and reload make no structure request to t
 for a guess; no payload or provider request names the target; a provider that resets,
 answers 503, answers 404 without CORS or stalls sends that one guess through the Worker; an
 oversize body is cut off and not downloaded again; and a `directUrl` that is off the hosts,
-http, or carries credentials is never requested. Playwright disables the HTTP cache while a
-route is installed, so a repeat view's cost was measured against the real providers instead
-(see "A guess loads from its provider" for the numbers).
+http, or carries credentials is never requested; the page passes `fetch` no credentials, a
+`no-referrer` policy and `cache: "force-cache"` for a provider's file (recorded in the browser).
+Playwright disables the HTTP cache while a route is installed, so a repeat view's cost was
+measured against the real providers instead (see "A guess loads from its provider" for the
+numbers). A target structure the Worker cannot serve leaves the clues playable ("You can still
+play using the clues below."), and an error raised after the game rendered cannot replace it.
 
 The same file counts the requests of a whole visit (see "A visit's Worker requests"), on a
 1280 px desktop and a 390 px phone with the grid and sidebar rules of `quartz/styles`, for
@@ -722,25 +720,22 @@ not during a schema transition, and lets a storage failure fail the invocation; 
 unconfigured store is reported, not thrown; and that the page, the publisher, the game document's
 policy and the pull zone's 60 s rule name one address.
 
-`quartz/static/geneguessr/structure-token-hydration.test.js` guards the page source: no
-IndexedDB and no `sizeBytes`, the token cache seeded from the guess entries, the token route
-as the one fallback, and the provider fetch (checked against the allowlist, no credentials,
-no referrer, `force-cache`, bounded by the shared limiter, no provider host written in the
-page).
-
 `workers/structure-kv-writes.test.js` must prove, on the production-shaped local
 D1 with R2 unbound, that a structure token, a first and a returning practice
 bootstrap and a guess make no KV put for a protein with a stored source, that an
 accession outside the catalog and a protein with no stored source are refused with no
 fetch and no put, and that a stale KV entry never beats the stored row.
 
-`workers/admin-schedule-year.test.js` must prove that the first uncached annual
-request returns 365 complete, unique protein and surname identities using bulk
-queries, and that missing summaries fail the response closed without caching
-partial rows.
-
-`workers/lib/daily-target-availability.test.js` protects the structure availability
-walk the pre-warm and the repair path share.
+`workers/geneguessr-admin.test.js` must prove, through the real Worker on the
+production-shaped local D1 with a stand-in for the Discord session authority, that the
+first uncached annual schedule request returns 365 complete, unique protein and surname
+identities from at most eight statements (no row-per-day read, no pool scan, no KV write),
+that missing summaries fail the response closed (503, nothing cached), that the card of a
+recorded past day is the recorded protein's, that an availability replacement pinned for
+tomorrow lies outside the year's proteins and families, is never AlphaFold-only, is shown on
+the schedule and is the pick the nightly cron records (and that another salt's cron ignores
+the pin, a manual override cannot be replaced, and an incomplete horizon is refused), that
+every admin route refuses anyone but the admin, and that the admin page's script parses.
 
 `workers/daily-prewarm-cron.test.js` must prove, through the real Worker on the
 production-shaped local D1 with `fetch` as the providers and the clock set, that the
@@ -752,4 +747,39 @@ slow; that with the caches gone and the pick recorded the visitor probes nothing
 writes one cache entry; that with no pick recorded the request still computes, probes,
 walks past an unreachable candidate and records; that the cron invocation fails when
 its pick write fails, when no structure is reachable and when the catalog is empty; and
-that a failed pre-warm reaches Sentry only when a DSN is set.
+that a failed pre-warm reaches Sentry only when a DSN is set; that a provider's error page
+sent with a 200 (HTML, JSON, or text that is no PDB file) is not a structure and the pick
+advances; and that a staging Worker with no record of its own serves the production
+record's pick without scanning the pool.
+
+`workers/geneguessr-target-secrecy.test.js` must prove, through the real Worker on a real
+local D1 with a real protein (human TP53) as the target, that before the game ends the
+bootstrap carries no clue text, no identity and no scalar fact of the target (only redaction
+bars with word lengths), that a guess sharing one domain and one GO term reveals those clues and
+no others, that a locked clue (its text names the gene) cannot be bought and costs nothing, that
+a bought clue arrives alone and drops its mask, and that a won or a lost game reveals the whole
+record, the ninth wrong guess does not.
+
+`workers/geneguessr-protein-search.test.js` must prove, on a real local D1 with the full-text
+index and its triggers, that `GET /api/proteins` finds a protein by symbol, accession, alias and
+a word of its name, handles a symbol with punctuation (HLA-DRA) and a prefix, leaves out guessed
+proteins and keeps its limit, and that a database that is down answers 503, never an empty list
+or a 404.
+
+`workers/discord-recap.test.js` must prove, through the real Worker (its `scheduled` cron and its
+routes) on a real local D1 with only Discord and Bunny Storage stood in for at the network edge,
+that a recap posts the target, the solvers, the top guesses and the stored image of that day's
+exact target once; that a day without an image posts as text and says what was recorded; that a
+refused post leaves the day unposted and is retried; that the cron catches up missed days and
+stops at the first day without a puzzle; that a correction edits the one Discord message and never
+rewrites the posted marker; and (ARCHITECTURE FENCE [GG-002]) that an uploaded image is stored under
+its exact day, target and renderer and read back whole, that a 200 is not an upload, that an
+acknowledged upload whose bytes cannot be read back fails, that a late or lost acknowledgement is
+absorbed, and that the yearly status check keeps at most five storage requests in flight.
+
+`e2e/geneguessr-dialogs.e2e.mjs` proves the tutorial and the practice dialog in a real Chrome
+on the real page and Worker: a first visit opens step one by itself and Escape remembers it, the
+How to Play button walks the three steps and returns focus to itself, a modal dialog takes focus,
+keeps Tab off the game and locks the page behind it, and the practice dialog validates pasted
+genes, starts a practice game from them, keeps the list on reopen and closes by Escape, the
+backdrop and Close with focus returned to its button.

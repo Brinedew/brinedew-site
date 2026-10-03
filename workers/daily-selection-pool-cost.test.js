@@ -20,6 +20,8 @@
 //   F8  the eligibility SQL gains a column the triggers do not watch
 //   F9  trigger cost on bulk catalog writes is unbounded
 //   F10 simultaneous requests in one isolate each pay a rebuild
+//   GG-001 a surname holds two slots (or none), a year repeats a surname, or a large family's
+//       representative never rotates
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import test, { after, before, mock } from "node:test"
@@ -531,6 +533,84 @@ test("F10: simultaneous requests in one isolate share one rebuild", async () => 
     `20 simultaneous requests read ${metered.totalRead()} rows; one scan is ${FULL_SCAN_READS}`,
   )
   assert.equal(metered.receipts.filter((receipt) => isPoolScan(receipt.sql)).length, 1)
+})
+
+// ---- GG-001 ---------------------------------------------------------------
+
+// ARCHITECTURE FENCE [GG-001]: every normalized surname has one lottery slot. The rows are the
+// production shape in a real D1, and the families are grouped by an independent reading of the
+// stored surnames, not by the code under test.
+async function familiesOfStoredRows() {
+  const familyOf = new Map()
+  for (const row of await referenceRows()) {
+    const uniprot = String(row.uniprot).trim().toUpperCase()
+    const surname = String(row.gene_surname || "")
+      .trim()
+      .toUpperCase()
+    familyOf.set(uniprot, surname || `__UNFAMILIED__:${uniprot}`)
+  }
+  return familyOf
+}
+
+test("ARCHITECTURE FENCE [GG-001] every surname family has exactly one slot, however many rows it has", async () => {
+  // The quirks are padded, lower-case, empty and missing surnames: rows a careless grouping
+  // would turn into extra families.
+  await freshCatalog({ quirks: true })
+  const plan = await (await coldIsolate()).planDailyTarget(meteredDb(db), SALT, DAY)
+  const familyOf = await familiesOfStoredRows()
+  const slots = plan.candidateIds.map((id) => familyOf.get(String(id).toUpperCase()))
+
+  assert.ok(slots.every(Boolean), "every candidate is a playable protein of the catalog")
+  assert.equal(new Set(slots).size, plan.candidateIds.length, "no family holds two slots")
+  assert.equal(plan.candidateIds.length, new Set(familyOf.values()).size, "every family holds one")
+  // The largest family is as likely as a family of one: it too has one slot.
+  const sizes = new Map()
+  for (const family of familyOf.values()) sizes.set(family, (sizes.get(family) || 0) + 1)
+  const [largest, members] = [...sizes].sort((a, b) => b[1] - a[1])[0]
+  assert.ok(members > 50, `the catalog has a large family (${largest}: ${members})`)
+  assert.equal(slots.filter((family) => family === largest).length, 1)
+})
+
+test("GG-001: 365 consecutive daily picks name 365 different surnames", async () => {
+  await freshCatalog({ quirks: true })
+  const dates = Array.from({ length: 365 }, (_, offset) => {
+    const date = new Date(`${DAY}T00:00:00.000Z`)
+    date.setUTCDate(date.getUTCDate() + offset)
+    return date.toISOString().slice(0, 10)
+  })
+  const plans = await (await coldIsolate()).planDailyTargets(meteredDb(db), SALT, dates)
+  const familyOf = await familiesOfStoredRows()
+  assert.equal(new Set(plans.map((plan) => familyOf.get(plan.uniprot.toUpperCase()))).size, 365)
+})
+
+test("GG-001: a large family's representative changes from one complete bag cycle to the next", async () => {
+  await dropPoolSchema(db)
+  await db.prepare("DELETE FROM structure_failures").run()
+  await db.prepare("DELETE FROM protein_synonyms").run()
+  const member = (id, uniprot, surname) => ({
+    id,
+    uniprot,
+    gene: `GENE${id}`,
+    gene_surname: surname,
+    structure_source: "pdb",
+    gene_summary: "Summary",
+    pdb_id: `1ABC${id}`,
+  })
+  // Two families make a two-day cycle, so days 0, 2 and 4 open three cycles.
+  await seedCatalog(db, [
+    member(1, "SLC_A", "SLC"),
+    member(2, "SLC_B", "SLC"),
+    member(3, "SLC_C", "SLC"),
+    member(4, "TP53_A", "TP53"),
+  ])
+  const store = await coldIsolate()
+  const representatives = []
+  for (const date of ["2026-07-01", "2026-07-03", "2026-07-05"]) {
+    const { candidateIds } = await store.planDailyTarget(meteredDb(db), "test-salt", date)
+    assert.equal(candidateIds.length, 2, "one slot per family")
+    representatives.push(candidateIds.find((id) => id.startsWith("SLC_")))
+  }
+  assert.equal(new Set(representatives).size, 3, `the family rotates: ${representatives}`)
 })
 
 // ---- size and CPU ---------------------------------------------------------

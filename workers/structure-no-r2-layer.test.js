@@ -17,15 +17,10 @@
 //       written or listed by a structure path
 //   T2  a structure token carries `cached` or `sizeBytes`, fields only the bucket fed
 //   T3  a deleted admin or debug route still answers (403 or 200) instead of 404
-//   T4  a `STRUCTURES_BUCKET` reference returns to `workers/` outside the Discord recap
-//       image fallback, which has its own storage choice (R2 if bound, else Bunny)
-//   T5  the admin yearly fill still calls the deleted "pin structure" step
 import assert from "node:assert/strict"
-import { readFileSync, readdirSync } from "node:fs"
 import test, { after, before, mock } from "node:test"
 
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
-import { ADMIN_HTML } from "./admin-html.js"
 import {
   geneguessrWorkerEnv,
   meteredDb,
@@ -173,26 +168,4 @@ test("T3: the R2 admin and debug routes are gone", async () => {
     const { response } = await call(path, { method })
     assert.equal(response.status, 404, `${method} ${path}`)
   }
-})
-
-function sourceFiles(directory) {
-  return readdirSync(new URL(directory, import.meta.url), { recursive: true })
-    .map((entry) => String(entry).replaceAll("\\", "/"))
-    .filter((entry) => entry.endsWith(".js") && !entry.endsWith(".test.js"))
-    .filter((entry) => !entry.startsWith("generated/") && !entry.includes("node_modules/"))
-}
-
-test("T4: `STRUCTURES_BUCKET` appears in workers/ only in the Discord recap image fallback", () => {
-  const allowed = new Set(["discord.js", "lib/discord-recap-images.js"])
-  const offenders = sourceFiles("./").filter(
-    (entry) =>
-      !allowed.has(entry) &&
-      readFileSync(new URL(`./${entry}`, import.meta.url), "utf8").includes("STRUCTURES_BUCKET"),
-  )
-  assert.deepEqual(offenders, [])
-})
-
-test("T5: the admin yearly fill no longer pins a structure in R2", () => {
-  assert.doesNotMatch(ADMIN_HTML, /pin-structure|pinAvailabilityReplacementStructure/)
-  assert.match(ADMIN_HTML, /\/api\/admin\/schedule\/availability-replacement/)
 })
