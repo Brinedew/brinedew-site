@@ -18,8 +18,7 @@ Iconoplasm publishes two objects on Bunny:
   `published_at`. The record carries the shown manifestation prose and never
   the Tags (the caretaker panel promises they stay private).
   `publishIconoplasmGeneStableObject` in the stateful runtime
-  rewrites it in place and purges its CDN URL (about four subrequests, no
-  Durable Object). Every vote and supervote calls it after the response; an
+  rewrites it in place (about three subrequests, no Durable Object). Every vote and supervote calls it after the response; an
   upload or reconcile that touches at most eight genes, `/admin/publish` and
   `/admin/reject` call it in process; the admin republish route
   (`admin_publication.republish`) calls it for everything else.
@@ -41,13 +40,12 @@ only by `publishIconoplasmGeneStableObject`, writes the object with
 `public, max-age=300, stale-while-revalidate=86400`, and verifies the bytes by
 authenticated read-back before it returns.
 
-The pull zone does not honour that header (measured 2026-09-30: the CDN served
-`genes/v3/A1BG.json` with `max-age=2592000`). So every rewrite also purges its
-exact CDN URL through the Bunny API (`BUNNY_ACCOUNT_API_KEY`, free): PUT,
-verified GET and purge are three subrequests per gene. Without the account key
-the write still succeeds and reports `purged: false`; a refused purge throws so
-the caller retries the gene. Readers fetch with `cache: "no-cache"`, so a
-browser revalidates instead of keeping a rewritten gene for the CDN's 30 days.
+The pull zone does not honour that header; its edge rule for `genes/v3`,
+`catalog/v3` and `leaderboard/v1` (`bunny/the-only-iconoplasm-pull-zone-policy.json`)
+serves them with a 60 s edge and browser cache time. A rewrite therefore shows
+within Bunny's replication lag plus 60 s, and nothing is purged: PUT and the
+verified GET are the two subrequests per gene. Bunny's purge API rate-limits a
+bulk republish (429), so the edge rule, not a purge, bounds staleness.
 
 A change to what the object carries reaches the CDN only when each gene is
 rewritten. The Actions publisher rewrites only the genes whose winner or
@@ -103,8 +101,8 @@ fails with `400` and a valid SHA that differs from the published portrait fails
 with `409`. Print-copy enrollment, status, rendering and download never fall
 back to D1.
 
-Budget: publication writes go to Bunny Storage (one PUT, one verified GET and
-one CDN purge per gene), never to KV, and the catalog object is built outside
+Budget: publication writes go to Bunny Storage (one PUT and one verified GET
+per gene), never to KV, and the catalog object is built outside
 the Worker. Do not fix staleness by bypassing a provider headroom check, and do
 not add a public D1 fallback.
 
@@ -262,8 +260,8 @@ console.log(JSON.stringify({
 
 If D1 is right and the object is stale, republish. With no selection the
 publisher publishes what D1 holds and writes nothing back to D1, so this call
-cannot change a winner. It rewrites `genes/v3/PRL.json`, purges its CDN URL and
-returns the new `published_at`. Up to `REPUBLISH_MAX_SYMBOLS` (8) per call.
+cannot change a winner. It rewrites `genes/v3/PRL.json` and returns the new
+`published_at`; the CDN shows it within about a minute. Up to `REPUBLISH_MAX_SYMBOLS` (8) per call.
 
 ```powershell
 @'
