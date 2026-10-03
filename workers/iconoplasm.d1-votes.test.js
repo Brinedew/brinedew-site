@@ -123,8 +123,9 @@ class SqliteD1 {
     this.log = []
     this.batches = 0
     // Every round trip to D1 the Worker makes: one per first/all/run/raw call
-    // and one per batch(), however many statements the batch carries. The free
-    // plan allows 50 of them per invocation.
+    // and one per batch(), however many statements the batch carries (measured
+    // on the free plan, B-914; vote-guards.js records it). The import bounds
+    // keep the largest import under the 50 calls the D1 limits page lists.
     this.calls = 0
     this.failOn = null
   }
