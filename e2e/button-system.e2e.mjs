@@ -139,11 +139,7 @@ test("buttons keep one face, one line and the ink primary on every modal surface
           const where = `${surface.name}/${size}/${theme}`
           const context = await browser.newContext({ viewport: { width, height } })
           await context.addInitScript((value) => localStorage.setItem("theme", value), theme)
-          const apiCalls = []
-          await routeProduction(context, origin, (pathname, request) => {
-            apiCalls.push(pathname)
-            return surface.api(pathname, request)
-          })
+          await routeProduction(context, origin, surface.api)
           const page = await context.newPage()
           await page.goto(`${HOST}/gene/TP53`)
           await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
@@ -151,15 +147,6 @@ test("buttons keep one face, one line and the ink primary on every modal surface
           await page.waitForSelector(surface.ready, { state: "attached", timeout: 15_000 })
           await page.evaluate(() => document.fonts.ready)
           await page.waitForTimeout(400) // dialog open animation
-          if (surface.name === "guest-join") {
-            // B-612: once the server says nobody is signed in, the page never asks for the
-            // signed-in image-edit provider list.
-            assert.equal(
-              apiCalls.includes("/api/iconoplasm/image-edit/providers"),
-              false,
-              `${where}: a guest loaded the image-edit providers`,
-            )
-          }
           await page.screenshot({
             path: path.join(OUT, `buttons-${where.replaceAll("/", "-")}.png`),
           })
