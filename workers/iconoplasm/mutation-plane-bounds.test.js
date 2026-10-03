@@ -13,6 +13,7 @@ import {
   DailyMutationLaneReservations,
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
+import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
 import { TAGS_DERIVATIVE_SUBMIT_ROWS } from "../lib/iconoplasm-mutation-write-bounds.js"
 
 test("laptop publications spend only the laptop-delivery mutation lane", () => {
@@ -756,11 +757,17 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
         const body = await request.json()
         assert.equal(body.lane, "user_action")
         assert.equal(body.units, 8)
+        // Reservations in flight are the only reason it does not fit (60,000 + 8 would).
         return Response.json(
           {
             ok: false,
             code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
             disposition: "pending_or_retryable_refusal",
+            lane: "user_action",
+            requested_units: 8,
+            provider_rows_written: 60_000,
+            in_flight_units: 40_000,
+            ceiling: 90_000,
           },
           { status: 429 },
         )
@@ -806,10 +813,14 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
   assert.equal(payload.persisted, false)
   assert.equal(payload.batch_id, "device-1:7")
   assert.equal(d1Mutations, 0)
+  // B-968: told when to ask again (15 minutes, in the header and the body), not a made-up 60.
+  assert.equal(response.headers.get("Retry-After"), "900")
+  assert.equal(payload.retry_after_seconds, 900)
 })
 
 test("provider headroom refusal reaches discovery unchanged before D1 dispatch", async () => {
   let d1Mutations = 0
+  const before = secondsUntilCloudflareDailyReset()
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -856,12 +867,16 @@ test("provider headroom refusal reaches discovery unchanged before D1 dispatch",
       },
       { waitUntil() {} },
     )
+  const after = secondsUntilCloudflareDailyReset()
   const payload = await response.json()
   assert.equal(response.status, 429)
   assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
   assert.equal(payload.pending, true)
   assert.equal(payload.persisted, false)
   assert.equal(d1Mutations, 0)
+  // B-968: a refusal that says nothing more clears only at the UTC reset.
+  assert.equal(Number(response.headers.get("Retry-After")), payload.retry_after_seconds)
+  assert.ok(payload.retry_after_seconds <= before && payload.retry_after_seconds >= after)
 })
 
 test("discovery request fails closed before D1 when the shared mutation authority is unbound", async () => {
