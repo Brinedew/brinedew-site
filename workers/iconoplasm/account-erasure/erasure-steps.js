@@ -32,7 +32,8 @@ export const ERASURE_SLICE_ROWS = 100
 //           ERASURE_SLICE_ROWS rows by it, so one statement never touches more.
 //   weight  the most D1 rows one changed row can write: the row, every index entry the statement
 //           touches (an update of an indexed column writes the old and the new entry) and what
-//           the table's triggers write. The test checks it against the real schema.
+//           the table's triggers write. One test checks the index part against the real schema,
+//           another compares the rows D1 reports written with the weights.
 //   scan    the column has no index: slices walk the table once by rowid instead of rescanning
 //           it from the start every time.
 // `?` placeholders in `where` and `set` take the values `whereBinds` and `setBinds` return, in
