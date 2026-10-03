@@ -418,21 +418,87 @@ function resolveProviderPollConfig(env) {
 }
 const MIN_EXTENSION_VERSION = String(ICONOPLASM_PUBLISHER_RELEASE.minimum_supported_version)
 
+// Fixed request fields for fal models, each read off the model's own schema (checked
+// 2026-10-03). The standard set was verified against fal's live OpenAPI schemas on
+// 2026-07-09.
+const FAL_STANDARD_REQUEST_FIELDS = Object.freeze({
+  output_format: "png",
+  num_images: 1,
+  enable_safety_checker: true,
+})
+const FAL_SEEDREAM_REQUEST_FIELDS = Object.freeze({
+  ...FAL_STANDARD_REQUEST_FIELDS,
+  image_size: "auto_2K",
+})
+// The Nano Banana pages list no enable_safety_checker (their moderation control is
+// safety_tolerance), and Seedream 5 Lite lists no output_format, so neither model
+// is sent a field its schema does not document.
+const FAL_NANO_BANANA_REQUEST_FIELDS = Object.freeze({
+  output_format: "png",
+  num_images: 1,
+})
+const FAL_SEEDREAM_LITE_REQUEST_FIELDS = Object.freeze({
+  image_size: "auto_2K",
+  num_images: 1,
+  enable_safety_checker: true,
+})
+// GPT Image 2.5 on fal: "auto" infers the size from the source image; a generation
+// needs a concrete size with both sides a multiple of 16 (1536x2048 is the blot's
+// 3:4 target and inside fal's 655,360 to 8,294,400 pixel range).
+const FAL_GPT_IMAGE_EDIT_REQUEST_FIELDS = Object.freeze({
+  image_size: "auto",
+  quality: "high",
+  num_images: 1,
+  output_format: "png",
+})
+const FAL_GPT_IMAGE_GENERATE_REQUEST_FIELDS = Object.freeze({
+  image_size: Object.freeze({
+    width: ICONOPLASM_BLOT_REQUEST_WIDTH,
+    height: ICONOPLASM_BLOT_REQUEST_HEIGHT,
+  }),
+  quality: "high",
+  num_images: 1,
+  output_format: "png",
+})
+
+// Krea's GPT Image 2.5 schema requires aspect_ratio and resolution (checked
+// 2026-10-03). 3:4 is in its aspect_ratio enum; 2K is the scale nearest 1536x2048.
+const KREA_GPT_IMAGE_25_BODY_FIELDS = Object.freeze({
+  aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+  resolution: "2K",
+  quality: "high",
+})
+
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
+  // Checked against OpenAI's own docs on 2026-10-03
+  // (developers.openai.com/api/docs/guides/image-generation, /models/gpt-image-2.5-*,
+  // /deprecations): the guide's current models are the two GPT Image 2.5 models.
+  // Both bill by token (image output $30 per million tokens) and OpenAI publishes no
+  // per-image estimate for them, so no per-image price is claimed.
   openai: Object.freeze({
     provider_id: "openai",
     label: "OpenAI API",
     default_endpoint_url: "https://api.openai.com/v1",
-    default_model: "gpt-image-2",
+    default_model: "gpt-image-2.5-sunburst",
     capabilities: Object.freeze(["edit", "generate"]),
     model_options: Object.freeze([
       Object.freeze({
-        model: "gpt-image-2",
-        label: "GPT Image 2",
-        pricing_label: "~$0.21/image",
+        model: "gpt-image-2.5-sunburst",
+        label: "GPT Image 2.5 Sunburst",
+        pricing_label: "Per token, $30/M image output",
         image_size: ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
         image_quality: "high",
         estimated_seconds: 180,
+        edit_capable: true,
+        generate_capable: true,
+      }),
+      Object.freeze({
+        model: "gpt-image-2.5-flare",
+        label: "GPT Image 2.5 Flare",
+        pricing_label: "Per token, $30/M image output",
+        image_size: ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
+        image_quality: "high",
+        estimated_seconds: 90,
         edit_capable: true,
         generate_capable: true,
       }),
@@ -442,12 +508,16 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     provider_id: "krea",
     label: "Krea API",
     default_endpoint_url: "https://api.krea.ai",
-    default_model: "bfl/flux-1-kontext-dev",
+    default_model: "google/nano-banana-2",
     capabilities: Object.freeze(["edit", "generate"]),
-    // Source of truth: https://docs.krea.ai/api-reference/image/.
-    // Compiled 2026-06-20 by hand from each model's docs page (--url line + body
-    // schema). When this list drifts from Krea, re-check the docs page for the
+    // Source of truth: https://www.krea.ai/docs/api-reference/image/ and
+    // https://api.krea.ai/openapi.json (docs.krea.ai redirects there). Compiled by
+    // hand from each model's docs page (--url line + body schema), re-checked
+    // 2026-10-03. When this list drifts from Krea, re-check the docs page for the
     // model and update both the model id and the request-shape fields.
+    //
+    // A model stays here only while Krea lists it as current and no vendor label
+    // (deprecated, retired, "legacy", "earlier") applies to it.
     //
     // `requires_krea_asset_upload`: when true, the worker uploads the source
     // image to Krea's /assets endpoint (multipart/form-data) and uses the
@@ -458,40 +528,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     // servers could not reach `iconoplasmportraits.b-cdn.net` and silently
     // generated a fresh image from the prompt alone.
     model_options: Object.freeze([
-      Object.freeze({
-        model: "bfl/flux-1-kontext-dev",
-        label: "Flux Kontext",
-        endpoint_path: "/generate/image/bfl/flux-1-kontext-dev",
-        pricing_label: "$0.013/request",
-        estimated_seconds: 15,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "image_url",
-        edit_strength_param: "strength",
-        // Krea's docs say 1.0 "fully replaces" the source image. The
-        // previous default of 0.85 was effectively "regenerate almost
-        // completely using the source as a faint hint" — every edit came
-        // back as a brand-new image that did not preserve the source's
-        // identity, style, or composition. 0.5 is a real edit: changes
-        // what the prompt asks for, keeps everything else.
-        edit_strength_default: 0.5,
-        edit_image_object_shape: "string",
-        requires_krea_asset_upload: true,
-      }),
-      Object.freeze({
-        model: "bfl/flux-1-dev",
-        label: "Flux",
-        endpoint_path: "/generate/image/bfl/flux-1-dev",
-        pricing_label: "$0.007/request",
-        estimated_seconds: 4,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "image_url",
-        edit_strength_param: "strength",
-        edit_strength_default: 0.5,
-        edit_image_object_shape: "string",
-        requires_krea_asset_upload: true,
-      }),
       Object.freeze({
         model: "google/nano-banana-pro",
         label: "Nano Banana Pro",
@@ -546,11 +582,108 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
-        model: "google/nano-banana",
-        label: "Nano Banana",
-        endpoint_path: "/generate/image/google/nano-banana",
-        pricing_label: "$0.043/request",
-        estimated_seconds: 20,
+        model: "z-image/z-image",
+        label: "Z Image",
+        endpoint_path: "/generate/image/z-image/z-image",
+        pricing_label: "$0.003/request",
+        estimated_seconds: 10,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_url",
+        edit_strength_param: "denoising_strength",
+        // Krea's Z Image default denoising_strength is 0.6. 0.85 was
+        // basically "regenerate, lightly reference the source." 0.5
+        // produces a real edit that preserves the source.
+        edit_strength_default: 0.5,
+        edit_image_object_shape: "string",
+        // B-916: Krea's schema (checked 2026-10-03) requires aspect_ratio and
+        // resolution, offers no width or height, and rejects unknown keys. Its
+        // aspect_ratio enum has no 3:4 and 2:3 is the nearest portrait; resolution
+        // is 1K only.
+        body_fields: Object.freeze({ aspect_ratio: "2:3", resolution: "1K" }),
+        requires_krea_asset_upload: true,
+      }),
+      // B-916: current models added 2026-10-03 from the Krea API reference
+      // (www.krea.ai/docs/api-reference/image/<slug> and api.krea.ai/openapi.json).
+      // Their schemas set additionalProperties: false, so the body is exactly
+      // `prompt`, the source image, and the documented `body_fields` below; an
+      // extra key is a 400. `edit_body_fields` apply only when a source image is
+      // attached.
+      //
+      // Ideogram 4.5: aspect_ratio has no 3:4, and 4:5 is the nearest value.
+      // preserve_source_size keeps the source image's own size on an edit.
+      Object.freeze({
+        model: "ideogram/ideogram-4.5",
+        label: "Ideogram 4.5",
+        endpoint_path: "/generate/image/ideogram/ideogram-4.5",
+        pricing_label: "$0.06/request (medium)",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        body_fields: Object.freeze({
+          aspect_ratio: "4:5",
+          resolution: "2K",
+          quality: "medium",
+          skip_prompt_expansion: true,
+        }),
+        edit_body_fields: Object.freeze({ preserve_source_size: true }),
+        requires_krea_asset_upload: true,
+      }),
+      // Ideogram 4.5 Precise is Krea's edit-only endpoint: it keeps the source
+      // resolution and the surrounding detail. image_url is required.
+      Object.freeze({
+        model: "ideogram/ideogram-4.5-precise",
+        label: "Ideogram 4.5 Precise",
+        endpoint_path: "/generate/image/ideogram/ideogram-4.5-precise",
+        pricing_label: "$0.06/request (medium)",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_url",
+        edit_image_object_shape: "string",
+        edit_requires_image: true,
+        body_fields: Object.freeze({ quality: "medium" }),
+        requires_krea_asset_upload: true,
+      }),
+      // GPT Image 2.5, two tiers (OpenAI's current image models). aspect_ratio and
+      // resolution are required by the schema; 3:4 is in its aspect_ratio enum and
+      // 2K is the scale nearest the blot's 1536x2048 target. Krea shows no price.
+      Object.freeze({
+        model: "openai/gpt-image-2.5-sunburst",
+        label: "GPT Image 2.5 Sunburst",
+        endpoint_path: "/generate/image/openai/gpt-image-2.5-sunburst",
+        pricing_label: "—",
+        estimated_seconds: 180,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        body_fields: KREA_GPT_IMAGE_25_BODY_FIELDS,
+        requires_krea_asset_upload: true,
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2.5-flare",
+        label: "GPT Image 2.5 Flare",
+        endpoint_path: "/generate/image/openai/gpt-image-2.5-flare",
+        pricing_label: "—",
+        estimated_seconds: 90,
+        edit_capable: true,
+        generate_capable: true,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        body_fields: KREA_GPT_IMAGE_25_BODY_FIELDS,
+        requires_krea_asset_upload: true,
+      }),
+      // Nano Banana 2 Lite (Krea's ID is nano-banana-flash-lite). Its aspect_ratio
+      // enum includes 3:4 and it has no resolution field.
+      Object.freeze({
+        model: "google/nano-banana-flash-lite",
+        label: "Nano Banana 2 Lite",
+        endpoint_path: "/generate/image/google/nano-banana-flash-lite",
+        pricing_label: "$0.034/request",
+        estimated_seconds: 15,
         edit_capable: true,
         generate_capable: true,
         edit_image_param: "image_urls",
@@ -568,65 +701,6 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
           "16:9",
           "9:16",
         ]),
-        requires_krea_asset_upload: true,
-      }),
-      Object.freeze({
-        model: "openai/gpt-image",
-        label: "ChatGPT Image",
-        endpoint_path: "/generate/image/openai/gpt-image",
-        pricing_label: "$0.375/request",
-        estimated_seconds: 90,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "image_urls",
-        edit_image_object_shape: "string-array",
-        requires_krea_asset_upload: true,
-      }),
-      Object.freeze({
-        model: "openai/gpt-image-2",
-        label: "ChatGPT 2",
-        endpoint_path: "/generate/image/openai/gpt-image-2",
-        pricing_label: "—",
-        estimated_seconds: 60,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "image_urls",
-        edit_image_object_shape: "string-array",
-        // The Krea docs for gpt-image-2 list width/height as optional, but
-        // the live endpoint 422s with `Required: width, height` whenever the
-        // body omits them, even when aspect_ratio is set. Send both.
-        requires_width_height: true,
-        supports_aspect_ratio: true,
-        aspect_ratio_options: Object.freeze([
-          "16:9",
-          "2:1",
-          "3:2",
-          "4:3",
-          "1:1",
-          "3:4",
-          "2:3",
-          "1:2",
-          "9:16",
-        ]),
-        requires_krea_asset_upload: true,
-      }),
-      Object.freeze({
-        model: "z-image/z-image",
-        label: "Z Image",
-        endpoint_path: "/generate/image/z-image/z-image",
-        pricing_label: "$0.003/request",
-        estimated_seconds: 10,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "image_url",
-        edit_strength_param: "denoising_strength",
-        // Krea's Z Image default denoising_strength is 0.6. 0.85 was
-        // basically "regenerate, lightly reference the source." 0.5
-        // produces a real edit that preserves the source.
-        edit_strength_default: 0.5,
-        edit_image_object_shape: "string",
-        supports_aspect_ratio: true,
-        aspect_ratio_options: Object.freeze(["1:1", "4:3", "2:3", "16:9", "9:16"]),
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
@@ -668,105 +742,10 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         requires_krea_asset_upload: true,
       }),
       Object.freeze({
-        model: "ideogram/ideogram-3",
-        label: "Ideogram 3.0",
-        endpoint_path: "/generate/image/ideogram/ideogram-3",
-        pricing_label: "$0.063–$0.158/request (character ref)",
-        estimated_seconds: 45,
-        edit_capable: true,
-        generate_capable: true,
-        edit_image_param: "character_reference_images",
-        edit_image_object_shape: "string-array",
-        // Ideogram V_3's resolution enum (per
-        // https://developer.ideogram.ai/api-reference/api-reference/generate-v3)
-        // does not include a true 3:4 aspect ratio. 1536x2048 (3:4) is
-        // not in the enum and fails with "Resolution 1536x2048 is not
-        // supported for Ideogram V_3". The KREAbilling body schema only
-        // accepts `width + height` (not Ideogram's `aspect_ratio` field
-        // directly), so we use the closest V_3 resolution to 3:4: 896x1152
-        // (≈ 0.778, very close to 3:4's 0.75). Acceptable trade-off: the
-        // output is slightly wider than the Iconoplasm 3:4 source, but
-        // it's the best we can do with V_3 through KREAbilling.
-        width_height_override: Object.freeze({ width: 896, height: 1152 }),
-        requires_krea_asset_upload: true,
-      }),
-      Object.freeze({
-        model: "bfl/flux-1.1-pro",
-        label: "Flux 1.1 Pro",
-        endpoint_path: "/generate/image/bfl/flux-1.1-pro",
-        pricing_label: "$0.042/request",
-        estimated_seconds: 8,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "bfl/flux-1.1-pro-ultra",
-        label: "Flux 1.1 Pro Ultra",
-        endpoint_path: "/generate/image/bfl/flux-1.1-pro-ultra",
-        pricing_label: "$0.063/request",
-        estimated_seconds: 15,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "ideogram/ideogram-2-turbo",
-        label: "Ideogram 2.0A Turbo",
-        endpoint_path: "/generate/image/ideogram/ideogram-2-turbo",
-        pricing_label: "$0.026/request",
-        estimated_seconds: 12,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "google/imagen-3",
-        label: "Imagen 3",
-        endpoint_path: "/generate/image/google/imagen-3",
-        pricing_label: "$0.042/request",
-        estimated_seconds: 15,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "google/imagen-4",
-        label: "Imagen 4",
-        endpoint_path: "/generate/image/google/imagen-4",
-        pricing_label: "$0.042/request",
-        estimated_seconds: 20,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "google/imagen-4-fast",
-        label: "Imagen 4 Fast",
-        endpoint_path: "/generate/image/google/imagen-4-fast",
-        pricing_label: "$0.021/request",
-        estimated_seconds: 8,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "google/imagen-4-ultra",
-        label: "Imagen 4 Ultra",
-        endpoint_path: "/generate/image/google/imagen-4-ultra",
-        pricing_label: "$0.063/request",
-        estimated_seconds: 30,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
         model: "qwen/2512",
         label: "Qwen 2512",
         endpoint_path: "/generate/image/qwen/2512",
         pricing_label: "$0.019/request",
-        estimated_seconds: 20,
-        edit_capable: false,
-        generate_capable: true,
-      }),
-      Object.freeze({
-        model: "bytedance/seedream-4",
-        label: "Seedream 4",
-        endpoint_path: "/generate/image/bytedance/seedream-4",
-        pricing_label: "$0.032/request",
         estimated_seconds: 20,
         edit_capable: false,
         generate_capable: true,
@@ -851,6 +830,18 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         edit_capable: true,
         generate_capable: true,
       }),
+      // B-916: stable since 2026-06-30 per ai.google.dev/gemini-api/docs/changelog
+      // and /models/gemini-3.1-flash-lite-image (checked 2026-10-03). 1K only,
+      // 3:4 is in its aspect-ratio list, $0.0336 per 1K image on the pricing page.
+      Object.freeze({
+        model: "gemini-3.1-flash-lite-image",
+        label: "Gemini 3.1 Flash Lite Image",
+        pricing_label: "~$0.034/image",
+        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        image_size: "1K",
+        edit_capable: true,
+        generate_capable: true,
+      }),
     ]),
   }),
   luma: Object.freeze({
@@ -860,12 +851,16 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     default_model: "uni-1",
     capabilities: Object.freeze(["edit", "generate"]),
     model_options: Object.freeze([
+      // aspect_ratio is the generation-only value: Luma's image guide lists nine
+      // ratios (3:1, 2:1, 16:9, 3:2, 1:1, 2:3, 9:16, 1:2, 1:3), so 2:3 is the
+      // documented portrait nearest the blot's 3:4. Prices are the edit rates on
+      // docs.agents.lumalabs.ai/guides/pricing (checked 2026-10-03).
       Object.freeze({
         model: "uni-1",
         label: "Uni 1.1",
         pricing_label: "$0.043/image",
         output_format: "png",
-        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        aspect_ratio: "2:3",
         estimated_seconds: 75,
         edit_capable: true,
         generate_capable: true,
@@ -875,7 +870,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         label: "Uni 1.1 Max",
         pricing_label: "$0.103/image",
         output_format: "png",
-        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        aspect_ratio: "2:3",
         estimated_seconds: 95,
         edit_capable: true,
         generate_capable: true,
@@ -888,23 +883,29 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     default_endpoint_url: "https://queue.fal.run",
     default_model: "fal-ai/nano-banana-pro/edit",
     capabilities: Object.freeze(["edit", "generate"]),
-    // Fal models verified against live OpenAPI schemas 2026-07-09.
-    // No fallback versions — only the current best per model family.
+    // Checked 2026-10-03 against each model's own page (fal.ai/models/<id>/llms.txt
+    // and the model's OpenAPI at fal.ai/api/openapi/queue/openapi.json). Every ID
+    // below reports status "active" on api.fal.ai/v1/models. fal publishes no sunset
+    // date or successor for image models, so a model leaves this list when its own
+    // vendor labels it deprecated, retired, "legacy" or "earlier".
     // Gemini excluded: not used through Krea either.
-    // GPT Image 2 excluded: already available through OpenAI direct and Krea.
+    //
+    // `request_fields` is the exact set of fixed fields sent with the prompt and
+    // the source image, so a model's request is read off one place and compared
+    // with its documented schema by the golden tests.
     model_options: Object.freeze([
       // ── Edit (image → image) ──────────────────────────────────────
       Object.freeze({
         model: "fal-ai/nano-banana-pro/edit",
         label: "Nano Banana Pro Edit",
-        pricing_label: "~$0.04/image",
+        pricing_label: "$0.15/image",
         estimated_seconds: 45,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
-        output_format: "png",
+        request_fields: FAL_NANO_BANANA_REQUEST_FIELDS,
         // B-617: Fal's Nano Banana edit models answer the
         // remove_ai_generation_errors operation with no_media_generated /
         // content_policy_violation, so never submit a request that
@@ -914,144 +915,234 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       Object.freeze({
         model: "fal-ai/nano-banana-2/edit",
         label: "Nano Banana 2 Edit",
-        pricing_label: "~$0.02/image",
+        pricing_label: "$0.08/image",
         estimated_seconds: 30,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
         supports_aspect_ratio: true,
-        output_format: "png",
+        request_fields: FAL_NANO_BANANA_REQUEST_FIELDS,
         // B-617: same Nano Banana moderation behavior as the Pro edit model.
         incompatible_adjustments: Object.freeze(["remove_ai_generation_errors"]),
       }),
+      // B-916: google/nano-banana-lite is Nano Banana 2 Lite (Gemini 3.1 Flash Lite
+      // Image). The edit endpoint takes image_urls; output is a fixed 1K, and
+      // aspect_ratio defaults to auto, which follows the source image.
       Object.freeze({
-        model: "fal-ai/flux-pro/kontext",
-        label: "Flux Kontext",
-        pricing_label: "~$0.10/image",
-        estimated_seconds: 15,
-        edit_capable: true,
-        generate_capable: false,
-        edit_image_param: "image_url",
-        edit_image_object_shape: "string",
-        supports_aspect_ratio: true,
-        output_format: "png",
-      }),
-      Object.freeze({
-        model: "fal-ai/flux-2/edit",
-        label: "Flux 2 Edit",
-        pricing_label: "~$0.05/image",
+        model: "google/nano-banana-lite/edit",
+        label: "Nano Banana 2 Lite Edit",
+        pricing_label: "Per token, fixed 1K output",
         estimated_seconds: 15,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
-        output_format: "png",
+        request_fields: Object.freeze({ num_images: 1, output_format: "png" }),
+      }),
+      // B-916: Flux 3 Image, released 2026-10-01 (release notes at docs.bfl.ml).
+      // fal's endpoint takes image_urls (1 to 10) and treats aspect_ratio "auto" as
+      // the first reference image, so an edit keeps the blot's 3:4 frame. "2k" is
+      // the tier nearest the blot's 1536x2048 target. The launch price is 50% off
+      // until 2026-10-08.
+      Object.freeze({
+        model: "blackforestlabs/flux-3/edit-image",
+        label: "Flux 3 Edit",
+        pricing_label: "From $0.0205/image (launch rate to Oct 8)",
+        estimated_seconds: 30,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        request_fields: Object.freeze({ resolution: "2k", output_format: "png" }),
       }),
       Object.freeze({
-        model: "openai/gpt-image-2/edit",
-        label: "GPT Image 2 Edit",
-        pricing_label: "~$0.08/image",
+        model: "fal-ai/flux-2/edit",
+        label: "Flux 2 Edit",
+        pricing_label: "$0.012/MP",
+        estimated_seconds: 15,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        request_fields: FAL_STANDARD_REQUEST_FIELDS,
+      }),
+      // B-916: Ideogram 4.5 edit. edit_precision "high" is fal's Precise Edit, which
+      // restores unchanged pixels, so only the asked-for region moves. The source is
+      // a single image_url string; the output keeps the source size (image_size
+      // auto). Price depends on quality, not size.
+      Object.freeze({
+        model: "ideogram/v4.5/edit",
+        label: "Ideogram 4.5 Edit",
+        pricing_label: "$0.06/image (medium)",
+        estimated_seconds: 45,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_url",
+        edit_image_object_shape: "string",
+        request_fields: Object.freeze({ edit_precision: "high", quality: "medium", num_images: 1 }),
+      }),
+      // B-916: GPT Image 2.5, two tiers, token-billed at the same rates as GPT
+      // Image 2. image_size "auto" infers the size from the source image.
+      Object.freeze({
+        model: "openai/gpt-image-2.5/sunburst/edit",
+        label: "GPT Image 2.5 Sunburst Edit",
+        pricing_label: "Per token, $30/M image output",
         estimated_seconds: 180,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
-        output_format: "png",
+        request_fields: FAL_GPT_IMAGE_EDIT_REQUEST_FIELDS,
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2.5/flare/edit",
+        label: "GPT Image 2.5 Flare Edit",
+        pricing_label: "Per token, $30/M image output",
+        estimated_seconds: 90,
+        edit_capable: true,
+        generate_capable: false,
+        edit_image_param: "image_urls",
+        edit_image_object_shape: "string-array",
+        request_fields: FAL_GPT_IMAGE_EDIT_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "bytedance/seedream/v5/pro/edit",
         label: "Seedream 5 Pro Edit",
-        pricing_label: "~$0.08/image",
+        pricing_label: "~$0.135/image (2K, tentative)",
         estimated_seconds: 45,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
-        image_size: "auto_2K",
-        output_format: "png",
+        request_fields: FAL_SEEDREAM_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "bytedance/seedream/v5/lite/edit",
         label: "Seedream 5 Lite Edit",
-        pricing_label: "~$0.04/image",
+        pricing_label: "$0.035/image",
         estimated_seconds: 25,
         edit_capable: true,
         generate_capable: false,
         edit_image_param: "image_urls",
         edit_image_object_shape: "string-array",
-        image_size: "auto_2K",
-        output_format: "png",
+        request_fields: FAL_SEEDREAM_LITE_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "fal-ai/omnigen-v2",
         label: "OmniGen v2",
-        pricing_label: "~$0.04/image",
+        pricing_label: "$0.15/MP",
         estimated_seconds: 60,
         edit_capable: true,
         generate_capable: true,
         edit_image_param: "input_image_urls",
         edit_image_object_shape: "string-array",
-        output_format: "png",
+        request_fields: FAL_STANDARD_REQUEST_FIELDS,
       }),
       // ── Generate (text → image) ──────────────────────────────────
       Object.freeze({
         model: "fal-ai/nano-banana-pro",
         label: "Nano Banana Pro",
-        pricing_label: "~$0.04/image",
+        pricing_label: "$0.15/image",
         estimated_seconds: 45,
         edit_capable: false,
         generate_capable: true,
         supports_aspect_ratio: true,
-        output_format: "png",
+        request_fields: FAL_NANO_BANANA_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "fal-ai/nano-banana-2",
         label: "Nano Banana 2",
-        pricing_label: "~$0.02/image",
+        pricing_label: "$0.08/image",
         estimated_seconds: 30,
         edit_capable: false,
         generate_capable: true,
         supports_aspect_ratio: true,
-        output_format: "png",
+        request_fields: FAL_NANO_BANANA_REQUEST_FIELDS,
+      }),
+      Object.freeze({
+        model: "google/nano-banana-lite",
+        label: "Nano Banana 2 Lite",
+        pricing_label: "Per token, fixed 1K output",
+        estimated_seconds: 15,
+        edit_capable: false,
+        generate_capable: true,
+        request_fields: Object.freeze({ aspect_ratio: "3:4", num_images: 1, output_format: "png" }),
+      }),
+      Object.freeze({
+        model: "blackforestlabs/flux-3/text-to-image",
+        label: "Flux 3",
+        pricing_label: "From $0.0205/image (launch rate to Oct 8)",
+        estimated_seconds: 30,
+        edit_capable: false,
+        generate_capable: true,
+        request_fields: Object.freeze({
+          aspect_ratio: "3:4",
+          resolution: "2k",
+          output_format: "png",
+        }),
       }),
       Object.freeze({
         model: "fal-ai/flux-2",
         label: "Flux 2",
-        pricing_label: "~$0.05/image",
+        pricing_label: "$0.012/MP",
         estimated_seconds: 15,
         edit_capable: false,
         generate_capable: true,
-        output_format: "png",
+        request_fields: FAL_STANDARD_REQUEST_FIELDS,
+      }),
+      // portrait_4_3 is fal's 864x1152 preset for Ideogram 4.5, the closest the
+      // model offers to 3:4. Prompt expansion is off so the blot prompt is used as
+      // written.
+      Object.freeze({
+        model: "ideogram/v4.5",
+        label: "Ideogram 4.5",
+        pricing_label: "$0.06/image (medium)",
+        estimated_seconds: 45,
+        edit_capable: false,
+        generate_capable: true,
+        request_fields: Object.freeze({
+          image_size: "portrait_4_3",
+          quality: "medium",
+          enable_prompt_expansion: false,
+          num_images: 1,
+        }),
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2.5/sunburst/text-to-image",
+        label: "GPT Image 2.5 Sunburst",
+        pricing_label: "Per token, $30/M image output",
+        estimated_seconds: 180,
+        edit_capable: false,
+        generate_capable: true,
+        request_fields: FAL_GPT_IMAGE_GENERATE_REQUEST_FIELDS,
+      }),
+      Object.freeze({
+        model: "openai/gpt-image-2.5/flare/text-to-image",
+        label: "GPT Image 2.5 Flare",
+        pricing_label: "Per token, $30/M image output",
+        estimated_seconds: 90,
+        edit_capable: false,
+        generate_capable: true,
+        request_fields: FAL_GPT_IMAGE_GENERATE_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "bytedance/seedream/v5/pro/text-to-image",
         label: "Seedream 5 Pro",
-        pricing_label: "~$0.08/image",
+        pricing_label: "~$0.135/image (2K, tentative)",
         estimated_seconds: 45,
         edit_capable: false,
         generate_capable: true,
-        image_size: "auto_2K",
-        output_format: "png",
+        request_fields: FAL_SEEDREAM_REQUEST_FIELDS,
       }),
       Object.freeze({
         model: "bytedance/seedream/v5/lite/text-to-image",
         label: "Seedream 5 Lite",
-        pricing_label: "~$0.04/image",
+        pricing_label: "$0.035/image",
         estimated_seconds: 25,
         edit_capable: false,
         generate_capable: true,
-        image_size: "auto_2K",
-        output_format: "png",
-      }),
-      Object.freeze({
-        model: "openai/gpt-image-2",
-        label: "GPT Image 2",
-        pricing_label: "~$0.08/image",
-        estimated_seconds: 180,
-        edit_capable: false,
-        generate_capable: true,
-        output_format: "png",
+        request_fields: FAL_SEEDREAM_LITE_REQUEST_FIELDS,
       }),
     ]),
   }),
@@ -5186,11 +5277,15 @@ function imageEditLastUsedKvKey(userId, operation) {
     normalizeUserId(userId)
   )
 }
+// B-916: the remembered model goes through the same saved-model rule as the
+// stored provider row, in both directions. A memory written before a model was
+// retired decodes to the provider's current default; nothing retired is written.
 function encodeImageEditLastUsedSelection(providerId, model) {
   const pid = normalizeImageEditProviderId(providerId)
-  const cleanModel = sanitizeText(model || "", 256) || ""
-  if (!pid || !cleanModel) return ""
-  return pid + ":" + cleanModel
+  const rawModel = sanitizeText(model || "", 256) || ""
+  if (!pid || !rawModel) return ""
+  const cleanModel = resolveImageEditProviderModel(rawModel, imageEditProviderDefinition(pid))
+  return cleanModel ? pid + ":" + cleanModel : ""
 }
 function decodeImageEditLastUsedSelection(raw) {
   const value = sanitizeText(raw || "", 320) || ""
@@ -5198,9 +5293,10 @@ function decodeImageEditLastUsedSelection(raw) {
   const idx = value.indexOf(":")
   if (idx <= 0) return null
   const providerId = normalizeImageEditProviderId(value.slice(0, idx))
-  const model = sanitizeText(value.slice(idx + 1), 256) || ""
-  if (!providerId || !model) return null
-  return { provider_id: providerId, model }
+  const rawModel = sanitizeText(value.slice(idx + 1), 256) || ""
+  if (!providerId || !rawModel) return null
+  const model = resolveImageEditProviderModel(rawModel, imageEditProviderDefinition(providerId))
+  return model ? { provider_id: providerId, model } : null
 }
 async function readImageEditLastUsedSelection(env, { userId, operation }) {
   if (!env?.KV) return null
@@ -5221,11 +5317,7 @@ async function recordImageEditLastUsedModel(env, { userId, operation, providerId
   if (!encoded) return
   // Skip the write if the selection is already the last-used one.
   const current = await readImageEditLastUsedSelection(env, { userId, operation: op })
-  if (
-    current &&
-    current.provider_id === normalizeImageEditProviderId(providerId) &&
-    current.model === (sanitizeText(model || "", 256) || "")
-  ) {
+  if (current && current.provider_id + ":" + current.model === encoded) {
     return
   }
   try {
@@ -5273,11 +5365,34 @@ function normalizeImageEditModel(raw, providerDef) {
   return options.some((option) => option?.model === clean) ? clean : ""
 }
 
+// B-916: the one rule for a SAVED model choice (the stored provider row, the
+// last-used memory, a model typed into the save form). A model the registry no
+// longer offers resolves to the provider's current default, on every read and
+// every write, so retiring a model never needs a data migration and a stored
+// row can never reach a provider API with a retired ID.
 function resolveImageEditProviderModel(raw, providerDef) {
   return (
     normalizeImageEditModel(raw || "", providerDef) ||
     normalizeImageEditModel(providerDef?.default_model || "", providerDef)
   )
+}
+
+// B-916: the one rule for a model NAMED BY A JOB REQUEST. It must still be
+// offered. A stale browser tab that still lists a retired model would otherwise
+// be quietly swapped to the provider default and bill the person's own key for a
+// model they did not pick, so the request is refused with a reload instruction.
+// A request that names no model runs the stored selection, resolved as above.
+function resolveImageEditRequestModel({ requestedModel, storedModel, providerDef }) {
+  const requested = sanitizeText(String(requestedModel || "").trim(), 128) || ""
+  if (!requested) {
+    return { ok: true, model: resolveImageEditProviderModel(storedModel || "", providerDef) }
+  }
+  const offered = normalizeImageEditModel(requested, providerDef)
+  if (offered) return { ok: true, model: offered }
+  return {
+    ok: false,
+    error: `The model "${requested}" is no longer offered for ${providerDef?.label || "this provider"}. Reload the page and choose a current model.`,
+  }
 }
 
 function mapImageEditModelOption(option) {
@@ -5308,7 +5423,6 @@ function mapImageEditModelOption(option) {
     edit_reference_tag: sanitizeText(option.edit_reference_tag || "", 32) || "",
     edit_requires_image: option.edit_requires_image === true,
     supports_aspect_ratio: option.supports_aspect_ratio === true,
-    requires_width_height: option.requires_width_height === true,
     // Surface the per-model strength default to the client so the dialog
     // and any future UI can show "low/medium/high preservation" hints and
     // so tests can pin the value. Krea's own docs say strength: 1.0
@@ -5470,8 +5584,9 @@ async function saveImageEditProviderKey(env, { userId, providerId, apiKey, endpo
   if (cleanApiKey.length < 8) return { ok: false, error: "API key is too short" }
   const cleanEndpointUrl = normalizeImageEditEndpointUrl(endpointUrl || "", providerDef)
   if (!cleanEndpointUrl) return { ok: false, error: "Provider endpoint must be an HTTPS URL" }
-  const cleanModel = normalizeImageEditModel(model || "", providerDef)
-  if (!cleanModel) return { ok: false, error: "Provider model is required" }
+  // B-916: a retired or unknown model is saved as the provider's current default
+  // (a stale tab must not fail to save a key), the same rule reads apply.
+  const cleanModel = resolveImageEditProviderModel(model || "", providerDef)
   const encrypted = await encryptImageEditApiKey(env, {
     userId,
     providerId: normalizedProviderId,
@@ -7179,6 +7294,10 @@ async function pollKreaJob({ baseUrl, apiKey, jobId, timeoutMs, env = null }) {
 }
 
 function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
+  // B-916: a model that lists `body_fields` is sent exactly its prompt plus those
+  // documented fields. Krea's current schemas reject unknown keys, so none of the
+  // size logic below (width/height, aspect_ratio guesses) is added to it.
+  if (kreaOption?.body_fields) return { prompt, ...kreaOption.body_fields }
   const isNativeKrea2 = kreaModelIsNativeKrea2(kreaOption?.model || "")
   // Krea 2 Large/Medium/Medium-Turbo: aspect_ratio is required and the enum
   // has no 3:4, so we use the global helper that picks 4:5.
@@ -7189,42 +7308,20 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
       resolution: "1K",
     }
   }
-  // Per-model size overrides. The KREAbilling gateway forwards to
-  // provider-specific backends (Ideogram, Runway, ByteDance SeedEdit, ...)
-  // that each have their own body schema. The pre-existing assumption that
-  // every Krea endpoint accepts `width + height` is wrong — see B-575.
-  // Each of these flags opts one model into the shape its target endpoint
-  // actually accepts.
-  //   width_height_override: { width, height } — KREAbilling accepts the
-  //                            width/height pair, but the downstream
-  //                            provider validates the specific resolution.
-  //                            For Ideogram V_3, the 3:4 aspect is supported
-  //                            only at specific enum values; 1536x2048 is
-  //                            rejected. We pick a valid V_3 resolution.
-  //   body_omits_size:    SeedEdit, where the body schema is exactly
-  //                       {prompt, seed, image_url} and any size key is
-  //                       rejected as an unrecognized key.
-  if (kreaOption?.width_height_override) {
-    return {
-      prompt,
-      width: kreaOption.width_height_override.width,
-      height: kreaOption.width_height_override.height,
-    }
-  }
+  // The KREAbilling gateway forwards to provider-specific backends that each have
+  // their own body schema, so "every Krea endpoint accepts width + height" is wrong
+  // (B-575). A model opts into the shape its endpoint actually accepts:
+  //   body_fields    the exact documented fields (handled above)
+  //   body_omits_size SeedEdit, where the body schema is exactly {prompt, seed,
+  //                  image_url} and any size key is rejected as unrecognized.
   if (kreaOption?.body_omits_size === true) {
     return { prompt }
   }
-  // Default: width + height. Krea's Flux / Z Image / Ideogram / Runway / etc.
-  // documentation lists these as the canonical sizing fields.
-  // When the model exposes an aspect_ratio enum AND 3:4 is in it, we prefer
-  // aspect_ratio (matching Krea's documentation for nano-banana, ideogram-3
-  // variants, and friends) — sending literal pixel dimensions on top of an
-  // aspect_ratio can squash the source image on Flux/Runway paths. The
-  // exception is Krea models documented to require width/height even when
-  // aspect_ratio is also accepted (currently the openai/gpt-image-2 family,
-  // which 422s without them). Those opt in via `requires_width_height:
-  // true` on their model definition.
-  if (kreaOption?.supports_aspect_ratio && !kreaOption?.requires_width_height) {
+  // Default: width + height, the canonical sizing fields in Krea's documentation.
+  // When the model exposes an aspect_ratio enum AND 3:4 is in it, prefer
+  // aspect_ratio: sending literal pixel dimensions on top of an aspect_ratio can
+  // squash the source image.
+  if (kreaOption?.supports_aspect_ratio) {
     const aspectOptions = Array.isArray(kreaOption?.aspect_ratio_options)
       ? kreaOption.aspect_ratio_options
       : []
@@ -7232,14 +7329,6 @@ function kreaRequestBodyShape(kreaOption, prompt, reqWidth, reqHeight) {
       return { prompt, aspect_ratio: "3:4" }
     }
     return { prompt, width: reqWidth, height: reqHeight }
-  }
-  if (kreaOption?.supports_aspect_ratio && kreaOption?.requires_width_height) {
-    return {
-      prompt,
-      width: reqWidth,
-      height: reqHeight,
-      aspect_ratio: "3:4",
-    }
   }
   return { prompt, width: reqWidth, height: reqHeight }
 }
@@ -7494,7 +7583,7 @@ function kreaAttachSourceToBody({
 }
 
 // Synchronous Krea call: build the request body per the model's metadata
-// (requires_width_height / supports_aspect_ratio / requires_krea_asset_upload),
+// (body_fields / supports_aspect_ratio / requires_krea_asset_upload),
 // upload the source asset to Krea's /assets endpoint when the model needs it,
 // POST to the create-job endpoint, and poll Krea to completion — all in one
 // flow. Returns `{ bytes, contentType }` on success, throws on failure or
@@ -7550,6 +7639,8 @@ async function callKreaImageProvider({
       kreaModel,
       timeoutMs,
     })
+    // B-916: fields the model's schema asks for only when a source image is sent.
+    if (kreaOption?.edit_body_fields) body = { ...body, ...kreaOption.edit_body_fields }
   }
 
   const requestUrl = `${baseUrl}${endpointPath}`
@@ -7753,8 +7844,7 @@ function lumaImageRequestOptions(providerRow) {
   return {
     model,
     outputFormat: sanitizeText(option?.output_format || "", 32) || "png",
-    aspectRatio:
-      sanitizeText(option?.aspect_ratio || "", 32) || ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+    aspectRatio: sanitizeText(option?.aspect_ratio || "", 32),
   }
 }
 
@@ -7831,13 +7921,17 @@ async function callLumaImageProvider({
   const baseUrl = lumaApiBaseUrl(providerRow)
   const options = lumaImageRequestOptions(providerRow)
   const source = String(sourceUrl || "").trim()
+  // B-916: per docs.agents.lumalabs.ai (checked 2026-10-03) an image_edit takes its
+  // output size from the source image and ignores aspect_ratio, and a text-to-image
+  // aspect_ratio must be one of nine values that do not include 3:4. So an edit
+  // sends none, and a generation sends the registry's documented value.
   const body = {
     type: source ? "image_edit" : "image",
     model: options.model,
     prompt,
     output_format: options.outputFormat,
-    aspect_ratio: options.aspectRatio,
   }
+  if (!source && options.aspectRatio) body.aspect_ratio = options.aspectRatio
   if (source) {
     // Prefer sending source bytes directly as base64. Luma's servers
     // cannot always reach external CDN URLs (same bug Krea had — see
@@ -7935,11 +8029,10 @@ async function callFalImageProvider({ providerRow, apiKey, prompt, sourceUrl = "
   ).replace(/\/+$/, "")
   const timeoutMs = providerRequestTimeoutMs(providerRow)
 
-  const body = { prompt }
-  if (falOption?.image_size) body.image_size = falOption.image_size
-  if (falOption?.output_format) body.output_format = falOption.output_format
-  body.num_images = 1
-  body.enable_safety_checker = true
+  // B-916: the fixed fields come from the model's own `request_fields`, the exact
+  // set its schema documents. Nothing is added here, so a model that does not
+  // list `num_images` or `enable_safety_checker` (Flux 3, Ideogram 4.5) is not sent them.
+  const body = { prompt, ...(falOption?.request_fields || {}) }
   if (sourceUrl) {
     const editImageParam = sanitizeText(falOption?.edit_image_param || "", 64) || "image_urls"
     // B-618: the model contract decides how the source URL is wrapped.
@@ -29670,15 +29763,21 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
       const providerRow = await getImageEditProviderRow(env, { userId, providerId })
-      if (providerRow && p?.model) {
-        providerRow.model = sanitizeText(String(p.model).trim(), 128) || providerRow.model
-      }
       if (!providerRow?.encrypted_api_key) {
         return done(
           "image_edit_jobs_400",
           json({ ok: false, error: "Selected image edit provider is not configured." }, 400),
         )
       }
+      const chosenModel = resolveImageEditRequestModel({
+        requestedModel: p?.model,
+        storedModel: providerRow.model,
+        providerDef: imageEditProviderDefinition(providerId),
+      })
+      if (!chosenModel.ok) {
+        return done("image_edit_jobs_400", json({ ok: false, error: chosenModel.error }, 400))
+      }
+      providerRow.model = chosenModel.model
       const symbol = normalizeSymbol(p?.source_gene_symbol || p?.symbol || p?.gene_symbol || "")
       const assetSha = normalizeSha256(p?.source_asset_sha256 || p?.asset_sha256 || "")
       if (!symbol) return done("image_edit_jobs_400", json({ error: "Missing source gene" }, 400))
@@ -30042,15 +30141,24 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
       const providerRow = await getImageEditProviderRow(env, { userId, providerId })
-      if (providerRow && p?.model) {
-        providerRow.model = sanitizeText(String(p.model).trim(), 128) || providerRow.model
-      }
       if (!providerRow?.encrypted_api_key) {
         return done(
           "candidate_generation_jobs_400",
           json({ ok: false, error: "Selected image generation provider is not configured." }, 400),
         )
       }
+      const chosenModel = resolveImageEditRequestModel({
+        requestedModel: p?.model,
+        storedModel: providerRow.model,
+        providerDef: imageEditProviderDefinition(providerId),
+      })
+      if (!chosenModel.ok) {
+        return done(
+          "candidate_generation_jobs_400",
+          json({ ok: false, error: chosenModel.error }, 400),
+        )
+      }
+      providerRow.model = chosenModel.model
       const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
       if (!symbol)
         return done("candidate_generation_jobs_400", json({ error: "Missing gene symbol" }, 400))

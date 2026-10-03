@@ -1102,7 +1102,7 @@ function seedSucceededCandidateGenerationJob(db, id = "candidate-publish-test") 
     source_sample_number: 1,
     source_sample_text_sha256: "d".repeat(64),
     source_snapshot_sha256: "9".repeat(64),
-    provider_model_id: "gpt-image-2",
+    provider_model_id: "gpt-image-2.5-sunburst",
     prompt_sha256: "8".repeat(64),
     generation_config_sha256: "7".repeat(64),
     status: "succeeded",
@@ -1370,7 +1370,7 @@ test("image edit provider keys are encrypted and listed without secrets", async 
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -1445,9 +1445,12 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   for (const required of [
     "fal-ai/nano-banana-pro/edit",
     "fal-ai/nano-banana-2/edit",
-    "fal-ai/flux-pro/kontext",
+    "google/nano-banana-lite/edit",
+    "blackforestlabs/flux-3/edit-image",
     "fal-ai/flux-2/edit",
-    "openai/gpt-image-2/edit",
+    "ideogram/v4.5/edit",
+    "openai/gpt-image-2.5/sunburst/edit",
+    "openai/gpt-image-2.5/flare/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
     "fal-ai/omnigen-v2",
@@ -1457,10 +1460,14 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   for (const hidden of [
     "fal-ai/nano-banana-pro",
     "fal-ai/nano-banana-2",
+    "google/nano-banana-lite",
+    "blackforestlabs/flux-3/text-to-image",
     "fal-ai/flux-2",
+    "ideogram/v4.5",
+    "openai/gpt-image-2.5/sunburst/text-to-image",
+    "openai/gpt-image-2.5/flare/text-to-image",
     "bytedance/seedream/v5/pro/text-to-image",
     "bytedance/seedream/v5/lite/text-to-image",
-    "openai/gpt-image-2",
   ]) {
     assert.ok(
       !falEditModels.includes(hidden),
@@ -1479,15 +1486,14 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   // ones (Krea 2 Large, Seedream 4) are absent from the edit dialog.
   const kreaModelNames = (krea.model_options || []).map((option) => option.model)
   for (const required of [
-    "bfl/flux-1-kontext-dev",
-    "bfl/flux-1-dev",
-    "google/nano-banana",
     "google/nano-banana-pro",
     "google/nano-banana-2",
-    "openai/gpt-image",
-    "openai/gpt-image-2",
+    "google/nano-banana-flash-lite",
+    "openai/gpt-image-2.5-sunburst",
+    "openai/gpt-image-2.5-flare",
     "bytedance/seededit",
-    "ideogram/ideogram-3",
+    "ideogram/ideogram-4.5",
+    "ideogram/ideogram-4.5-precise",
     "z-image/z-image",
   ]) {
     assert.ok(kreaModelNames.includes(required), "Krea edit dialog should expose " + required)
@@ -1496,16 +1502,8 @@ test("image edit provider keys are encrypted and listed without secrets", async 
     "krea/krea-2/large",
     "krea/krea-2/medium",
     "krea/krea-2/medium-turbo",
-    "bytedance/seedream-4",
     "bytedance/seedream-5-lite",
     "luma/uni-1",
-    "google/imagen-3",
-    "google/imagen-4",
-    "google/imagen-4-fast",
-    "google/imagen-4-ultra",
-    "bfl/flux-1.1-pro",
-    "bfl/flux-1.1-pro-ultra",
-    "ideogram/ideogram-2-turbo",
     "qwen/2512",
     "runway/gen-4-image",
   ]) {
@@ -1513,17 +1511,15 @@ test("image edit provider keys are encrypted and listed without secrets", async 
   }
   // The edit-capable flag and the source-image field name are preserved on
   // every exposed model so the backend can pick the right body shape.
-  const fluxKontext = krea.model_options.find((option) => option.model === "bfl/flux-1-kontext-dev")
-  assert.equal(fluxKontext.edit_capable, true)
-  assert.equal(fluxKontext.edit_image_param, "image_url")
-  assert.equal(fluxKontext.edit_strength_param, "strength")
-  // Krea's docs say strength: 1.0 "fully replaces the source". The
-  // default here has to be a real-edit value, not a regenerate value —
-  // see the regression test for the "edit returns a new image" bug.
-  assert.equal(fluxKontext.edit_strength_default, 0.5)
-  const fluxDev = krea.model_options.find((option) => option.model === "bfl/flux-1-dev")
-  assert.equal(fluxDev.edit_strength_param, "strength")
-  assert.equal(fluxDev.edit_strength_default, 0.5)
+  assert.equal(krea.default_model, "google/nano-banana-2")
+  const zImage = krea.model_options.find((option) => option.model === "z-image/z-image")
+  assert.equal(zImage.edit_capable, true)
+  assert.equal(zImage.edit_image_param, "image_url")
+  assert.equal(zImage.edit_strength_param, "denoising_strength")
+  // Krea's docs say a strength near 1 effectively ignores the source. The
+  // default here has to be a real-edit value, not a regenerate value; see the
+  // regression test for the "edit returns a new image" bug.
+  assert.equal(zImage.edit_strength_default, 0.5)
   const nanoBananaPro = krea.model_options.find(
     (option) => option.model === "google/nano-banana-pro",
   )
@@ -1549,7 +1545,7 @@ test("OpenAI is a first-class BYOK image provider with model pricing and Image A
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/edits") {
       assert.equal(init.headers.Authorization, "Bearer sk-openai-test-secret")
-      assert.equal(init.body.get("model"), "gpt-image-2")
+      assert.equal(init.body.get("model"), "gpt-image-2.5-sunburst")
       assert.equal(init.body.get("size"), "1536x2048")
       assert.equal(init.body.get("quality"), "high")
       assert.equal(init.body.get("output_format"), "webp")
@@ -1584,13 +1580,18 @@ test("OpenAI is a first-class BYOK image provider with model pricing and Image A
     assert.equal(openaiProvider.default_endpoint_url, "https://api.openai.com/v1")
     assert.ok(
       openaiProvider.model_options.some(
-        (option) => option.model === "gpt-image-2" && option.pricing_label === "~$0.21/image",
+        (option) =>
+          option.model === "gpt-image-2.5-sunburst" &&
+          option.pricing_label === "Per token, $30/M image output",
       ),
     )
+    // B-916: OpenAI's guide lists the two GPT Image 2.5 models as current and files
+    // gpt-image-2 under earlier models, so only the 2.5 pair is selectable.
     assert.deepEqual(
       openaiProvider.model_options.map((option) => option.model),
-      ["gpt-image-2"],
+      ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"],
     )
+    assert.equal(openaiProvider.default_model, "gpt-image-2.5-sunburst")
 
     const saveResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -1602,7 +1603,7 @@ test("OpenAI is a first-class BYOK image provider with model pricing and Image A
             body: JSON.stringify({
               provider_id: "openai",
               api_key: "sk-openai-test-secret",
-              model: "gpt-image-2",
+              model: "gpt-image-2.5-sunburst",
             }),
           },
         ),
@@ -1613,8 +1614,8 @@ test("OpenAI is a first-class BYOK image provider with model pricing and Image A
     assert.equal(saveResponse.status, 200)
     assert.equal(saved.provider.provider_id, "openai")
     assert.equal(saved.provider.endpoint_url, "https://api.openai.com/v1")
-    assert.equal(saved.provider.model, "gpt-image-2")
-    assert.equal(saved.provider.pricing_label, "~$0.21/image")
+    assert.equal(saved.provider.model, "gpt-image-2.5-sunburst")
+    assert.equal(saved.provider.pricing_label, "Per token, $30/M image output")
 
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -1661,93 +1662,6 @@ test("image provider timeout policy does not cap slow providers at two minutes",
   assert.doesNotMatch(source, /Math\.min\(\s*120_000/)
 })
 
-test("OpenAI image provider rejects obsolete GPT Image models", async () => {
-  const originalFetch = globalThis.fetch
-  const db = new FakeDb()
-  const env = buildEnv(db)
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-          body: JSON.stringify({
-            provider_id: "openai",
-            api_key: "sk-openai-test-secret",
-            model: "gpt-image-1.5",
-          }),
-        },
-      ),
-      env,
-      { waitUntil() {} },
-    )
-  const body = await response.json()
-
-  assert.equal(response.status, 400)
-  assert.equal(body.ok, false)
-  assert.match(body.error, /Provider model is required/)
-
-  globalThis.fetch = async (input, init = {}) => {
-    const url = String(input)
-    if (url === "https://api.openai.com/v1/images/edits") {
-      assert.equal(init.body.get("model"), "gpt-image-2")
-      assert.equal(init.body.get("size"), "1536x2048")
-      assert.equal(init.body.get("quality"), "high")
-      return new Response(JSON.stringify({ data: [{ b64_json: base64(EDITED_BYTES) }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
-    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
-    throw new Error(`Unexpected fetch ${url}`)
-  }
-  try {
-    const saveResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "openai",
-              api_key: "sk-openai-test-secret",
-              model: "gpt-image-2",
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    assert.equal(saveResponse.status, 200)
-    db.providerRows.get("user-1|openai").model = "gpt-image-1.5"
-
-    const createResponse =
-      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(
-          "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-            body: JSON.stringify({
-              provider_id: "openai",
-              source_gene_symbol: "A1BG",
-              source_asset_sha256: SOURCE_SHA,
-              adjustments: { remove_ai_generation_errors: true },
-            }),
-          },
-        ),
-        env,
-        { waitUntil() {} },
-      )
-    assert.equal(createResponse.status, 200)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
 test("candidate generation jobs use novel provider generation and publish explicitly", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
@@ -1761,7 +1675,7 @@ test("candidate generation jobs use novel provider generation and publish explic
     if (url === "https://api.openai.com/v1/images/generations") {
       assert.equal(init.headers.Authorization, "Bearer sk-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
-      assert.equal(body.model, "gpt-image-2")
+      assert.equal(body.model, "gpt-image-2.5-sunburst")
       assert.match(String(body.prompt || ""), /Alpha-1-B Glycoprotein/)
       assert.match(String(body.prompt || ""), /calm_archivist, pearl_varnish, measured_posture/)
       assert.doesNotMatch(String(body.prompt || ""), /A1BG appears as a calm archivist/)
@@ -1798,7 +1712,7 @@ test("candidate generation jobs use novel provider generation and publish explic
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -1945,7 +1859,7 @@ test("candidate generation appends the signed-in user's saved emulsion and publi
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2033,7 +1947,7 @@ test("candidate generation rejects another user's selected emulsion", async () =
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2099,7 +2013,7 @@ test("candidate generation stores actual WebP dimensions when provider output ha
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2183,7 +2097,7 @@ test("candidate generation preserves exact sample zero without inventing a sampl
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2294,7 +2208,7 @@ test("candidate generation uses the complete Taggerizer prompt with appended ess
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2494,7 +2408,7 @@ test("candidate generation includes bounded non-hidden community comments and sn
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -2543,7 +2457,7 @@ test("OpenAI candidate generation uses the Image API generation endpoint without
     if (url === "https://api.openai.com/v1/images/generations") {
       assert.equal(init.headers.Authorization, "Bearer sk-openai-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
-      assert.equal(body.model, "gpt-image-2")
+      assert.equal(body.model, "gpt-image-2.5-sunburst")
       assert.equal(body.size, "1536x2048")
       assert.equal(body.quality, "high")
       assert.equal(body.output_format, "webp")
@@ -2572,7 +2486,7 @@ test("OpenAI candidate generation uses the Image API generation endpoint without
             body: JSON.stringify({
               provider_id: "openai",
               api_key: "sk-openai-test-secret",
-              model: "gpt-image-2",
+              model: "gpt-image-2.5-sunburst",
             }),
           },
         ),
@@ -2581,7 +2495,7 @@ test("OpenAI candidate generation uses the Image API generation endpoint without
       )
     const saved = await saveResponse.json()
     assert.equal(saveResponse.status, 200)
-    assert.equal(saved.provider.pricing_label, "~$0.21/image")
+    assert.equal(saved.provider.pricing_label, "Per token, $30/M image output")
 
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -2625,7 +2539,9 @@ test("Luma Uni image edits use the Agents API source field and visible pricing",
       assert.equal(body.type, "image_edit")
       assert.equal(body.model, "uni-1")
       assert.equal(body.output_format, "png")
-      assert.equal(body.aspect_ratio, "3:4")
+      // B-916: Luma's docs say an image_edit takes its size from the source image
+      // and ignores aspect_ratio, so an edit sends none.
+      assert.equal("aspect_ratio" in body, false)
       assert.ok(body.source.data, "source.data should be base64-encoded image bytes")
       assert.equal(body.source.media_type, "image/webp")
       assert.equal(body.prompt.includes("visible AI generation errors"), true)
@@ -2741,7 +2657,9 @@ test("Luma Uni candidate generation does not attach local emulsion references", 
       assert.equal(body.type, "image")
       assert.equal(body.model, "uni-1-max")
       assert.equal(body.output_format, "png")
-      assert.equal(body.aspect_ratio, "3:4")
+      // B-916: a text-to-image aspect_ratio must be one of Luma's nine documented
+      // values, which do not include 3:4. 2:3 is the portrait nearest the blot.
+      assert.equal(body.aspect_ratio, "2:3")
       assert.equal("image_ref" in body, false)
       return new Response(JSON.stringify({ id: "luma-job-2", state: "queued" }), {
         status: 201,
@@ -3028,7 +2946,7 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
     assert.equal(saveResponse.status, 200)
     assert.equal(saved.provider.provider_id, "fal")
     assert.equal(saved.provider.model, "bytedance/seedream/v5/pro/edit")
-    assert.equal(saved.provider.pricing_label, "~$0.08/image")
+    assert.equal(saved.provider.pricing_label, "~$0.135/image (2K, tentative)")
 
     const createResponse =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -3065,23 +2983,23 @@ test("Fal.ai Seedream 5 image edits use queue-based polling and visible pricing"
   }
 })
 
-test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal models keep image_urls", async () => {
+test("Fal Ideogram 4.5 edits send a scalar image_url while array-schema Fal models keep image_urls", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
   const seen = {}
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
-    if (url === "https://queue.fal.run/fal-ai/flux-pro/kontext") {
+    if (url === "https://queue.fal.run/ideogram/v4.5/edit") {
       const body = JSON.parse(String(init.body || "{}"))
-      // Flux Kontext declares edit_image_object_shape "string": the source is
+      // Ideogram 4.5 edit declares edit_image_object_shape "string": the source is
       // a scalar URL. Sending [url] fails provider validation before any
       // generation (B-618).
-      assert.equal(typeof body.image_url, "string", "kontext image_url should be a string")
-      assert.equal(Array.isArray(body.image_url), false, "kontext image_url must not be an array")
+      assert.equal(typeof body.image_url, "string", "ideogram image_url should be a string")
+      assert.equal(Array.isArray(body.image_url), false, "ideogram image_url must not be an array")
       assert.ok(
         body.image_url.includes("/portraits/"),
-        "kontext image_url should be the source URL",
+        "ideogram image_url should be the source URL",
       )
       assert.equal("image_urls" in body, false)
       seen.kontextUrl = body.image_url
@@ -3213,8 +3131,8 @@ test("Fal Flux Kontext edits send a scalar image_url while array-schema Fal mode
   }
 
   try {
-    await saveProvider("fal-ai/flux-pro/kontext")
-    const kontext = await runJob("fal-ai/flux-pro/kontext")
+    await saveProvider("ideogram/v4.5/edit")
+    const kontext = await runJob("ideogram/v4.5/edit")
     assert.equal(kontext.status, 200, "kontext create status: " + JSON.stringify(kontext.body))
     assert.equal(kontext.body.job.status, "succeeded")
     assert.equal(typeof seen.kontextUrl, "string")
@@ -3300,7 +3218,9 @@ test("B-617 Fal Nano Banana edits refuse the remove-AI-errors adjustment before 
     const providers = await providersResponse.json()
     const fal = providers.supported_providers.find((provider) => provider.provider_id === "fal")
     const nano = fal.model_options.find((option) => option.model === "fal-ai/nano-banana-2/edit")
-    const kontext = fal.model_options.find((option) => option.model === "fal-ai/flux-pro/kontext")
+    const kontext = fal.model_options.find(
+      (option) => option.model === "blackforestlabs/flux-3/edit-image",
+    )
     assert.deepEqual(nano.incompatible_adjustments, ["remove_ai_generation_errors"])
     assert.deepEqual(kontext.incompatible_adjustments, [])
     const luma = providers.supported_providers.find((provider) => provider.provider_id === "luma")
@@ -3443,7 +3363,7 @@ test("image edit jobs validate provider and adjustment input before calling prov
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -3514,7 +3434,7 @@ test("image edit jobs accept titan-scale gene mass adjustments from essence data
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -3576,7 +3496,7 @@ test("image edit jobs persist failed provider responses without publishing asset
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -3655,7 +3575,7 @@ test("image edit jobs call the provider, write renditions, and publish with inhe
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -3792,7 +3712,7 @@ async function createImageEditJobFromSource(db, env, sourceUpvotes) {
       provider_id: "openai",
       api_key: "sk-test-secret",
       endpoint_url: "https://api.openai.com/v1",
-      model: "gpt-image-2",
+      model: "gpt-image-2.5-sunburst",
     })
     const response = await call("jobs", {
       provider_id: "openai",
@@ -4014,7 +3934,7 @@ test("admin shared image edit prompt suffix is editable and appended once to edi
           body: JSON.stringify({
             provider_id: "openai",
             api_key: "sk-openai-test-secret",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -4076,7 +3996,7 @@ test("image edit publish is limited to the job owner", async () => {
             provider_id: "openai",
             api_key: "sk-test-secret",
             endpoint_url: "https://api.openai.com/v1",
-            model: "gpt-image-2",
+            model: "gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -4127,7 +4047,7 @@ test("image edit publish is limited to the job owner", async () => {
   }
 })
 
-test("image edit jobs with Krea Flux use image_url + strength in the request body", async () => {
+test("image edit jobs with Krea Z Image use image_url + denoising_strength in the request body", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
@@ -4148,8 +4068,8 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
       assert.ok(fileField.size > 0, "Krea asset upload file must be non-empty")
       return new Response(
         JSON.stringify({
-          id: "krea-asset-flux-1",
-          image_url: "https://krea.example/uploaded/flux-source.png",
+          id: "krea-asset-z-image-1",
+          image_url: "https://krea.example/uploaded/z-image-source.png",
           width: 1024,
           height: 1024,
           size_bytes: fileField.size,
@@ -4158,40 +4078,38 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-dev") {
+    if (url === "https://api.krea.ai/generate/image/z-image/z-image") {
       assert.equal(init.headers.Authorization, "Bearer krea-test-secret")
       const body = JSON.parse(String(init.body || "{}"))
-      // Flux (bfl/flux-1-dev) uses singular image_url, not the image_urls[] array.
+      // Z Image uses singular image_url, not the image_urls[] array.
       assert.equal(typeof body.image_url, "string")
       // The image_url must be the Krea-hosted URL from the /assets upload,
       // not our own CDN URL. This is the key fix for the "edit returns a
       // new image" bug.
-      assert.equal(body.image_url, "https://krea.example/uploaded/flux-source.png")
+      assert.equal(body.image_url, "https://krea.example/uploaded/z-image-source.png")
       assert.equal(Array.isArray(body.image_urls), false)
-      // Krea Flux also takes a strength field for img2img. The worker
-      // uses the per-model edit_strength_default (0.5 for the Flux
-      // family). The previous fixed value of 0.85 was effectively
-      // "regenerate almost completely using the source as a faint hint"
-      // per Krea's own docs (1.0 = "fully replaces the source"); 0.5
-      // produces a real edit.
-      assert.equal(body.strength, 0.5)
-      return new Response(JSON.stringify({ job_id: "flux-job-1", status: "queued" }), {
+      // Z Image takes denoising_strength for img2img. The worker uses the
+      // per-model edit_strength_default (0.5). The previous fixed value of 0.85
+      // was effectively "regenerate almost completely using the source as a
+      // faint hint"; 0.5 produces a real edit.
+      assert.equal(body.denoising_strength, 0.5)
+      return new Response(JSON.stringify({ job_id: "z-image-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })
     }
-    if (url === "https://api.krea.ai/jobs/flux-job-1") {
+    if (url === "https://api.krea.ai/jobs/z-image-job-1") {
       return new Response(
         JSON.stringify({
-          job_id: "flux-job-1",
+          job_id: "z-image-job-1",
           status: "completed",
-          result: { urls: ["https://krea.example/flux.png"] },
+          result: { urls: ["https://krea.example/z-image.png"] },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://krea.example/flux.png") {
-      return new Response("flux-png-bytes", {
+    if (url === "https://krea.example/z-image.png") {
+      return new Response("z-image-png-bytes", {
         status: 200,
         headers: { "Content-Type": "image/png" },
       })
@@ -4218,7 +4136,7 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "bfl/flux-1-dev",
+            model: "z-image/z-image",
           }),
         },
       ),
@@ -4232,7 +4150,7 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
       ctx: createCtx,
       body: {
         provider_id: "krea",
-        model: "bfl/flux-1-dev",
+        model: "z-image/z-image",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -4242,10 +4160,10 @@ test("image edit jobs with Krea Flux use image_url + strength in the request bod
     assert.equal(created.job.status, "succeeded")
     assert.ok(created.job.result_asset_sha256)
     // The Krea job creation call must have been made exactly once.
-    const fluxCalls = fetchCalls.filter(
-      (call) => call.url === "https://api.krea.ai/generate/image/bfl/flux-1-dev",
+    const zImageCalls = fetchCalls.filter(
+      (call) => call.url === "https://api.krea.ai/generate/image/z-image/z-image",
     )
-    assert.equal(fluxCalls.length, 1)
+    assert.equal(zImageCalls.length, 1)
     // The /assets upload must have been made exactly once.
     const assetCalls = fetchCalls.filter((call) => call.url === "https://api.krea.ai/assets")
     assert.equal(assetCalls.length, 1)
@@ -4423,14 +4341,14 @@ test("image edit jobs with Krea Krea-2-Large are rejected because the model cann
     assert.equal(createResponse.status, 502)
     assert.equal(created.job.status, "failed")
     assert.match(created.job.error, /does not support image-to-image editing/i)
-    assert.match(created.job.error, /Flux/)
+    assert.match(created.job.error, /Nano Banana Pro/)
     assert.equal(providerCalled, false)
   } finally {
     globalThis.fetch = originalFetch
   }
 })
 
-test("image edit jobs with Krea Seedream 4 are rejected because the model has no image input field", async () => {
+test("image edit jobs with Krea Seedream 5 Lite are rejected because the model has no image input field", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
@@ -4450,7 +4368,7 @@ test("image edit jobs with Krea Seedream 4 are rejected because the model has no
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "bytedance/seedream-4",
+            model: "bytedance/seedream-5-lite",
           }),
         },
       ),
@@ -4467,7 +4385,7 @@ test("image edit jobs with Krea Seedream 4 are rejected because the model has no
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "bytedance/seedream-4",
+              model: "bytedance/seedream-5-lite",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -4482,101 +4400,6 @@ test("image edit jobs with Krea Seedream 4 are rejected because the model has no
     assert.equal(created.job.status, "failed")
     assert.match(created.job.error, /does not support image-to-image editing/i)
     assert.equal(providerCalled, false)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test("image edit jobs with Krea Flux Kontext use image_url + strength in the request body", async () => {
-  const originalFetch = globalThis.fetch
-  const db = new FakeDb()
-  const env = buildEnv(db)
-  globalThis.fetch = async (input, init = {}) => {
-    const url = String(input)
-    if (url === "https://api.krea.ai/assets") {
-      assert.ok(init.body instanceof FormData, "Krea asset upload must use FormData")
-      return new Response(
-        JSON.stringify({
-          id: "krea-asset-kontext-1",
-          image_url: "https://krea.example/uploaded/kontext-source.png",
-          width: 1024,
-          height: 1024,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev") {
-      const body = JSON.parse(String(init.body || "{}"))
-      assert.equal(typeof body.image_url, "string")
-      // Source must be Krea-hosted, not our CDN URL.
-      assert.equal(body.image_url, "https://krea.example/uploaded/kontext-source.png")
-      assert.equal(Array.isArray(body.image_urls), false)
-      assert.equal(body.strength, 0.5)
-      return new Response(JSON.stringify({ job_id: "kontext-job-1", status: "queued" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-    if (url === "https://api.krea.ai/jobs/kontext-job-1") {
-      return new Response(
-        JSON.stringify({
-          job_id: "kontext-job-1",
-          status: "completed",
-          result: { urls: ["https://krea.example/kontext.png"] },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    if (url === "https://krea.example/kontext.png") {
-      return new Response("kontext-png-bytes", {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      })
-    }
-    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
-      return new Response(EDITED_BYTES, {
-        status: 200,
-        headers: { "Content-Type": "image/webp" },
-      })
-    }
-    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
-    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
-    throw new Error(`Unexpected fetch ${url}`)
-  }
-
-  try {
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
-          body: JSON.stringify({
-            provider_id: "krea",
-            api_key: "krea-test-secret",
-            model: "bfl/flux-1-kontext-dev",
-          }),
-        },
-      ),
-      env,
-      { waitUntil() {} },
-    )
-
-    const createCtx = capturingContext()
-    const { create, created } = await createKreaImageEditJobAndAwait({
-      env,
-      ctx: createCtx,
-      body: {
-        provider_id: "krea",
-        model: "bfl/flux-1-kontext-dev",
-        source_gene_symbol: "A1BG",
-        source_asset_sha256: SOURCE_SHA,
-        adjustments: { remove_ai_generation_errors: true },
-      },
-    })
-    assert.equal(create.status, 200, "create status: " + JSON.stringify(created))
-    assert.equal(created.job.status, "succeeded")
-    assert.ok(created.job.result_asset_sha256)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -4678,11 +4501,10 @@ test("image edit jobs with Krea SeedEdit omit width/height from the body", async
   }
 })
 
-test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-574)", async () => {
-  // Krea's openai/gpt-image-2 endpoint 422s with `Required: width, height`
-  // if the body omits pixel dimensions, even when aspect_ratio is set. The
-  // model definition opts in via requires_width_height: true, so the body
-  // builder must send all three fields.
+test("image edit jobs with Krea GPT Image 2.5 send exactly the documented required aspect_ratio + resolution", async () => {
+  // B-916: Krea's GPT Image 2.5 schema requires aspect_ratio and resolution and
+  // sets additionalProperties: false, so width and height (which the retired
+  // gpt-image-2 endpoint needed, B-574) must NOT be sent.
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
@@ -4699,17 +4521,20 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2") {
+    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2.5-sunburst") {
       const body = JSON.parse(String(init.body || "{}"))
       assert.equal(Array.isArray(body.image_urls), true)
       assert.equal(body.image_urls[0], "https://krea.example/uploaded/gpt2-source.png")
-      // gpt-image-2 requires explicit width + height. Without them Krea
-      // returns 422 'Required: width, height'.
-      assert.equal(body.width, 1536)
-      assert.equal(body.height, 2048)
-      // aspect_ratio is also acceptable to gpt-image-2 and is in its
-      // enum; we send it as a redundant hint.
+      assert.deepEqual(Object.keys(body).sort(), [
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution",
+      ])
       assert.equal(body.aspect_ratio, "3:4")
+      assert.equal(body.resolution, "2K")
+      assert.equal(body.quality, "high")
       return new Response(JSON.stringify({ job_id: "gpt2-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -4753,7 +4578,7 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "openai/gpt-image-2",
+            model: "openai/gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -4767,7 +4592,7 @@ test("image edit jobs with Krea ChatGPT 2 send width + height + aspect_ratio (B-
       ctx: createCtx,
       body: {
         provider_id: "krea",
-        model: "openai/gpt-image-2",
+        model: "openai/gpt-image-2.5-sunburst",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -4877,7 +4702,7 @@ test("image edit jobs with Krea SeedEdit omit width/height from the body", async
   }
 })
 
-test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body shape", async () => {
+test("image edit jobs with Krea Ideogram 4.5 send image_urls with preserve_source_size and no width or height", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
@@ -4895,23 +4720,27 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/ideogram/ideogram-3") {
+    if (url === "https://api.krea.ai/generate/image/ideogram/ideogram-4.5") {
       const body = JSON.parse(String(init.body || "{}"))
-      assert.equal(Array.isArray(body.character_reference_images), true)
-      assert.equal(body.character_reference_images.length, 1)
-      assert.equal(typeof body.character_reference_images[0], "string")
-      // Source must be Krea-hosted, not our CDN URL.
-      assert.equal(
-        body.character_reference_images[0],
-        "https://krea.example/uploaded/ideogram-source.png",
-      )
-      // Ideogram V_3's resolution enum (per developer.ideogram.ai) does
-      // not include a true 3:4 aspect. 1536x2048 (3:4) is rejected with
-      // "Resolution 1536x2048 is not supported for Ideogram V_3". The
-      // closest V_3 resolution is 896x1152 (≈ 0.778, near 3:4's 0.75).
-      // The KREAbilling body schema accepts width/height directly.
-      assert.equal(body.width, 896)
-      assert.equal(body.height, 1152)
+      // B-916: Krea's Ideogram 4.5 schema sets additionalProperties: false, so the
+      // body is exactly the documented fields. The source is a Krea-hosted URL
+      // from /assets (not our CDN URL), preserve_source_size keeps the blot's own
+      // size on an edit, and aspect_ratio has no 3:4 so it carries 4:5.
+      assert.deepEqual(Object.keys(body).sort(), [
+        "aspect_ratio",
+        "image_urls",
+        "preserve_source_size",
+        "prompt",
+        "quality",
+        "resolution",
+        "skip_prompt_expansion",
+      ])
+      assert.deepEqual(body.image_urls, ["https://krea.example/uploaded/ideogram-source.png"])
+      assert.equal(body.preserve_source_size, true)
+      assert.equal(body.aspect_ratio, "4:5")
+      assert.equal(body.resolution, "2K")
+      assert.equal(body.quality, "medium")
+      assert.equal(body.skip_prompt_expansion, true)
       return new Response(JSON.stringify({ job_id: "ideogram-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -4954,7 +4783,7 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "ideogram/ideogram-3",
+            model: "ideogram/ideogram-4.5",
           }),
         },
       ),
@@ -4968,7 +4797,7 @@ test("image edit jobs with Krea Ideogram 3.0 use character_reference_images body
       ctx: createCtx,
       body: {
         provider_id: "krea",
-        model: "ideogram/ideogram-3",
+        model: "ideogram/ideogram-4.5",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -5113,11 +4942,12 @@ test("candidate-generation provider list includes only generate-capable Krea mod
   const kreaModelNames = krea.model_options.map((m) => m.model)
   for (const required of [
     "krea/krea-2/large",
-    "bfl/flux-1-dev",
     "google/nano-banana-pro",
-    "openai/gpt-image-2",
-    "bytedance/seedream-4",
-    "ideogram/ideogram-3",
+    "google/nano-banana-flash-lite",
+    "openai/gpt-image-2.5-sunburst",
+    "openai/gpt-image-2.5-flare",
+    "bytedance/seedream-5-lite",
+    "ideogram/ideogram-4.5",
   ]) {
     assert.ok(
       kreaModelNames.includes(required),
@@ -5134,6 +4964,10 @@ test("candidate-generation provider list includes only generate-capable Krea mod
     !kreaModelNames.includes("runway/gen-4-image"),
     "Runway Gen-4 requires reference images and should not appear in candidate generation",
   )
+  assert.ok(
+    !kreaModelNames.includes("ideogram/ideogram-4.5-precise"),
+    "Ideogram 4.5 Precise is edit-only and should not appear in candidate generation",
+  )
   // Fal now exposes both edit and gen models. Gen models should appear;
   // edit-only models should not.
   const fal = body.supported_providers.find((p) => p.provider_id === "fal")
@@ -5143,9 +4977,13 @@ test("candidate-generation provider list includes only generate-capable Krea mod
     "fal-ai/nano-banana-pro",
     "fal-ai/nano-banana-2",
     "fal-ai/flux-2",
+    "blackforestlabs/flux-3/text-to-image",
+    "ideogram/v4.5",
+    "google/nano-banana-lite",
     "bytedance/seedream/v5/pro/text-to-image",
     "bytedance/seedream/v5/lite/text-to-image",
-    "openai/gpt-image-2",
+    "openai/gpt-image-2.5/sunburst/text-to-image",
+    "openai/gpt-image-2.5/flare/text-to-image",
     "fal-ai/omnigen-v2",
   ]) {
     assert.ok(falGenModels.includes(required), "Fal gen should expose " + required)
@@ -5153,9 +4991,12 @@ test("candidate-generation provider list includes only generate-capable Krea mod
   for (const hidden of [
     "fal-ai/nano-banana-pro/edit",
     "fal-ai/nano-banana-2/edit",
-    "fal-ai/flux-pro/kontext",
+    "blackforestlabs/flux-3/edit-image",
     "fal-ai/flux-2/edit",
-    "openai/gpt-image-2/edit",
+    "ideogram/v4.5/edit",
+    "google/nano-banana-lite/edit",
+    "openai/gpt-image-2.5/sunburst/edit",
+    "openai/gpt-image-2.5/flare/edit",
     "bytedance/seedream/v5/pro/edit",
     "bytedance/seedream/v5/lite/edit",
   ]) {
@@ -5174,7 +5015,7 @@ test("last-used model is remembered without reordering the providers list, but o
   // Pretend the user previously used Krea flux-1-kontext-dev.
   lastUsedStore.set(
     "iconoplasm:image-edit-last-used:image_edit:user-1",
-    "krea:bfl/flux-1-kontext-dev",
+    "krea:google/nano-banana-pro",
   )
   env.KV = {
     async get(k) {
@@ -5202,8 +5043,8 @@ test("last-used model is remembered without reordering the providers list, but o
       )
     }
     if (
-      url === "https://api.krea.ai/generate/image/bfl/flux-1-kontext-dev" ||
-      url === "https://api.krea.ai/generate/image/bfl/flux-1-dev"
+      url === "https://api.krea.ai/generate/image/google/nano-banana-pro" ||
+      url === "https://api.krea.ai/generate/image/google/nano-banana-2"
     ) {
       kreaCalls += 1
       return new Response(JSON.stringify({ job_id: "job-" + kreaCalls, status: "queued" }), {
@@ -5245,7 +5086,7 @@ test("last-used model is remembered without reordering the providers list, but o
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "bfl/flux-1-kontext-dev",
+            model: "google/nano-banana-pro",
           }),
         },
       ),
@@ -5266,16 +5107,16 @@ test("last-used model is remembered without reordering the providers list, but o
     const listed = await listResponse.json()
     const krea = listed.supported_providers.find((p) => p.provider_id === "krea")
     const lastUsedOption = krea.model_options.find((m) => m.last_used === true)
-    assert.equal(lastUsedOption?.model, "bfl/flux-1-kontext-dev")
+    assert.equal(lastUsedOption?.model, "google/nano-banana-pro")
     assert.deepEqual(listed.last_used, {
       provider_id: "krea",
-      model: "bfl/flux-1-kontext-dev",
+      model: "google/nano-banana-pro",
     })
-    // Order stays catalog order: Flux Kontext is first by definition, and
-    // flux-1-dev remains after it. last_used is only a flag, not a reshuffle.
+    // Order stays catalog order: Nano Banana Pro is first by definition, and
+    // Nano Banana 2 remains after it. last_used is only a flag, not a reshuffle.
     const liveOrder = krea.model_options.map((m) => m.model)
-    assert.equal(liveOrder[0], "bfl/flux-1-kontext-dev")
-    assert.ok(liveOrder.indexOf("bfl/flux-1-dev") > 0)
+    assert.equal(liveOrder[0], "google/nano-banana-pro")
+    assert.ok(liveOrder.indexOf("google/nano-banana-2") > 0)
     assert.equal(
       krea.model_options.filter((m) => m.last_used === true).length,
       1,
@@ -5297,7 +5138,7 @@ test("last-used model is remembered without reordering the providers list, but o
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "bfl/flux-1-kontext-dev",
+              model: "google/nano-banana-pro",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -5324,7 +5165,7 @@ test("last-used model is remembered without reordering the providers list, but o
     const newKvPutsBefore = kvPuts.filter(
       (p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1",
     ).length
-    // Switch the saved provider's model to bfl/flux-1-dev by sending the new
+    // Switch the saved provider's model to google/nano-banana-2 by sending the new
     // model in the request body. The route at line 25671 already applies the
     // model override from the body to providerRow.model.
     const secondCtx = capturingContext()
@@ -5337,7 +5178,7 @@ test("last-used model is remembered without reordering the providers list, but o
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "bfl/flux-1-dev",
+              model: "google/nano-banana-2",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -5361,7 +5202,7 @@ test("last-used model is remembered without reordering the providers list, but o
     const lastWrite = kvPuts
       .filter((p) => p.k === "iconoplasm:image-edit-last-used:image_edit:user-1")
       .at(-1)
-    assert.equal(lastWrite?.v, "krea:bfl/flux-1-dev")
+    assert.equal(lastWrite?.v, "krea:google/nano-banana-2")
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -5386,7 +5227,7 @@ test("Krea structured error responses surface a readable message, not [object Ob
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/google/nano-banana") {
+    if (url === "https://api.krea.ai/generate/image/google/nano-banana-2") {
       return new Response(
         JSON.stringify({
           job_id: "krea-err-job-1",
@@ -5422,7 +5263,7 @@ test("Krea structured error responses surface a readable message, not [object Ob
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "google/nano-banana",
+            model: "google/nano-banana-2",
           }),
         },
       ),
@@ -5439,7 +5280,7 @@ test("Krea structured error responses surface a readable message, not [object Ob
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "google/nano-banana",
+              model: "google/nano-banana-2",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -5487,7 +5328,7 @@ test("Krea asset upload failure surfaces a readable error from the Krea error bo
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "google/nano-banana",
+            model: "google/nano-banana-2",
           }),
         },
       ),
@@ -5503,7 +5344,7 @@ test("Krea asset upload failure surfaces a readable error from the Krea error bo
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "google/nano-banana",
+              model: "google/nano-banana-2",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -5541,7 +5382,7 @@ test("Krea 4xx from the create-job POST surfaces 502 with the Krea error text", 
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2") {
+    if (url === "https://api.krea.ai/generate/image/openai/gpt-image-2.5-sunburst") {
       return new Response(JSON.stringify({ error: "This model requires a higher plan." }), {
         status: 402,
         headers: { "Content-Type": "application/json" },
@@ -5559,7 +5400,7 @@ test("Krea 4xx from the create-job POST surfaces 502 with the Krea error text", 
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "openai/gpt-image-2",
+            model: "openai/gpt-image-2.5-sunburst",
           }),
         },
       ),
@@ -5575,7 +5416,7 @@ test("Krea 4xx from the create-job POST surfaces 502 with the Krea error text", 
             headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
             body: JSON.stringify({
               provider_id: "krea",
-              model: "openai/gpt-image-2",
+              model: "openai/gpt-image-2.5-sunburst",
               source_gene_symbol: "A1BG",
               source_asset_sha256: SOURCE_SHA,
               adjustments: { remove_ai_generation_errors: true },
@@ -5792,7 +5633,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
         { status: 200, headers: { "Content-Type": "application/json" } },
       )
     }
-    if (url === "https://api.krea.ai/generate/image/bfl/flux-1-dev") {
+    if (url === "https://api.krea.ai/generate/image/z-image/z-image") {
       return new Response(JSON.stringify({ job_id: "krea-reuse-job-1", status: "queued" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -5839,7 +5680,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
-            model: "bfl/flux-1-dev",
+            model: "z-image/z-image",
           }),
         },
       ),
@@ -5851,7 +5692,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
       ctx: { waitUntil() {} },
       body: {
         provider_id: "krea",
-        model: "bfl/flux-1-dev",
+        model: "z-image/z-image",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -5876,7 +5717,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
       ctx: { waitUntil() {} },
       body: {
         provider_id: "krea",
-        model: "bfl/flux-1-dev",
+        model: "z-image/z-image",
         source_gene_symbol: "A1BG",
         source_asset_sha256: SOURCE_SHA,
         adjustments: { remove_ai_generation_errors: true },
@@ -5891,4 +5732,605 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+// B-916: retiring a model must never need a data migration, and a retired model
+// must never reach a provider API. Every way the stored or requested model can
+// go stale is pinned below through the real Worker routes, with only the
+// provider HTTP faked. The ways it can fail:
+//   1. the stored provider row holds a model the registry no longer offers
+//      (provider list read, a job that names no model, a save)
+//   2. a stale browser tab names the retired model in the job body, which would
+//      bill the person's own key for a model they did not pick
+//   3. the last-used memory holds a retired model (read, and the write-back)
+//   4. a candidate-generation job records which model it ran
+//   5. a provider's default is not one of its own models, so nothing resolves
+// gpt-image-2 is the retired model used here: OpenAI's guide files it under
+// earlier models and the registry no longer offers it.
+const RETIRED_OPENAI_MODEL = "gpt-image-2"
+const WORKER_ORIGIN = "https://the-only-allowed-internal-stateful-worker-do-not-duplicate"
+
+async function workerRequest(env, path, { method = "GET", body } = {}) {
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(`${WORKER_ORIGIN}${path}`, {
+        method,
+        headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+      env,
+      { waitUntil() {} },
+    )
+  return { status: response.status, body: await response.json() }
+}
+
+async function openAiDefaultModel(env) {
+  const listed = await workerRequest(env, "/api/iconoplasm/image-edit/providers")
+  return listed.body.supported_providers.find((provider) => provider.provider_id === "openai")
+    .default_model
+}
+
+function fakeOpenAiFetch(fetchCalls, env) {
+  return async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
+    const url = String(input)
+    fetchCalls.push({ url, init })
+    if (url === "https://api.openai.com/v1/images/edits") {
+      return new Response(JSON.stringify({ data: [{ b64_json: base64(EDITED_BYTES) }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "https://api.openai.com/v1/images/generations") {
+      return new Response(JSON.stringify({ data: [{ b64_json: base64(GENERATED_BYTES) }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${url}`)
+  }
+}
+
+const EDIT_JOB_BODY = {
+  provider_id: "openai",
+  source_gene_symbol: "A1BG",
+  source_asset_sha256: SOURCE_SHA,
+  adjustments: { remove_ai_generation_errors: true },
+}
+
+test("a stored model the registry no longer offers resolves to the provider default on read, on a job and on save", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = fakeOpenAiFetch(fetchCalls, env)
+  try {
+    const defaultModel = await openAiDefaultModel(env)
+    assert.notEqual(defaultModel, RETIRED_OPENAI_MODEL)
+    const saved = await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: { provider_id: "openai", api_key: "sk-openai-test-secret", model: defaultModel },
+    })
+    assert.equal(saved.status, 200)
+    // A row written before the model was retired.
+    db.providerRows.get("user-1|openai").model = RETIRED_OPENAI_MODEL
+
+    // 1a. Read: the provider list shows the default, never the retired model.
+    const listed = await workerRequest(env, "/api/iconoplasm/image-edit/providers")
+    assert.equal(listed.body.providers.length, 1)
+    assert.equal(listed.body.providers[0].model, defaultModel)
+    const offered = listed.body.supported_providers
+      .find((provider) => provider.provider_id === "openai")
+      .model_options.map((option) => option.model)
+    assert.ok(!offered.includes(RETIRED_OPENAI_MODEL), "the retired model is not selectable")
+
+    // 1b. A job that names no model runs the stored selection, resolved.
+    const job = await workerRequest(env, "/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      body: EDIT_JOB_BODY,
+    })
+    assert.equal(job.status, 200, JSON.stringify(job.body))
+    const sent = fetchCalls.find((call) => call.url === "https://api.openai.com/v1/images/edits")
+    assert.equal(sent.init.body.get("model"), defaultModel)
+
+    // 1c. A save that carries the retired model stores the default.
+    const resaved = await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: {
+        provider_id: "openai",
+        api_key: "sk-openai-test-secret",
+        model: RETIRED_OPENAI_MODEL,
+      },
+    })
+    assert.equal(resaved.status, 200)
+    assert.equal(resaved.body.provider.model, defaultModel)
+    assert.equal(db.providerRows.get("user-1|openai").model, defaultModel)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a stale tab that names a retired model is refused before any provider request", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = fakeOpenAiFetch(fetchCalls, env)
+  try {
+    const saved = await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: { provider_id: "openai", api_key: "sk-openai-test-secret" },
+    })
+    assert.equal(saved.status, 200)
+
+    const edit = await workerRequest(env, "/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      body: { ...EDIT_JOB_BODY, model: RETIRED_OPENAI_MODEL },
+    })
+    assert.equal(edit.status, 400)
+    assert.equal(edit.body.ok, false)
+    assert.match(edit.body.error, /no longer offered/)
+    assert.match(edit.body.error, /Reload the page/)
+
+    const generation = await workerRequest(env, "/api/iconoplasm/candidate-generation/jobs", {
+      method: "POST",
+      body: { provider_id: "openai", symbol: "A1BG", model: RETIRED_OPENAI_MODEL },
+    })
+    assert.equal(generation.status, 400)
+    assert.match(generation.body.error, /no longer offered/)
+
+    assert.deepEqual(
+      fetchCalls.map((call) => call.url),
+      [],
+      "no request may leave for a provider",
+    )
+    assert.equal(db.jobs.size, 0, "no edit job row is created for a refused model")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a retired last-used model reads as the provider default and is never written back", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const kvPuts = []
+  const kvStore = new Map([
+    ["iconoplasm:image-edit-last-used:image_edit:user-1", `openai:${RETIRED_OPENAI_MODEL}`],
+  ])
+  env.KV = {
+    async get(key) {
+      return kvStore.has(key) ? kvStore.get(key) : null
+    },
+    async put(key, value) {
+      kvPuts.push({ key, value })
+      kvStore.set(key, value)
+    },
+    async delete() {},
+  }
+  const fetchCalls = []
+  globalThis.fetch = fakeOpenAiFetch(fetchCalls, env)
+  try {
+    const defaultModel = await openAiDefaultModel(env)
+    await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: { provider_id: "openai", api_key: "sk-openai-test-secret", model: defaultModel },
+    })
+    const listed = await workerRequest(env, "/api/iconoplasm/image-edit/providers?op=image_edit")
+    assert.deepEqual(listed.body.last_used, { provider_id: "openai", model: defaultModel })
+    const flagged = listed.body.supported_providers
+      .find((provider) => provider.provider_id === "openai")
+      .model_options.filter((option) => option.last_used === true)
+      .map((option) => option.model)
+    assert.deepEqual(flagged, [defaultModel])
+
+    // Running the default must not rewrite the memory that already resolves to it.
+    const job = await workerRequest(env, "/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      body: EDIT_JOB_BODY,
+    })
+    assert.equal(job.status, 200, JSON.stringify(job.body))
+    assert.ok(
+      kvPuts.every((put) => !put.value.includes(RETIRED_OPENAI_MODEL)),
+      "a retired model is never written to the last-used memory",
+    )
+    assert.equal(kvPuts.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a candidate-generation job records and runs the resolved model, not the retired stored one", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const fetchCalls = []
+  globalThis.fetch = fakeOpenAiFetch(fetchCalls, env)
+  try {
+    const defaultModel = await openAiDefaultModel(env)
+    await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: { provider_id: "openai", api_key: "sk-openai-test-secret", model: defaultModel },
+    })
+    db.providerRows.get("user-1|openai").model = RETIRED_OPENAI_MODEL
+
+    const generation = await workerRequest(env, "/api/iconoplasm/candidate-generation/jobs", {
+      method: "POST",
+      body: { provider_id: "openai", symbol: "A1BG", request_mode: "novel" },
+    })
+    assert.equal(generation.status, 200, JSON.stringify(generation.body))
+    const sent = fetchCalls.find(
+      (call) => call.url === "https://api.openai.com/v1/images/generations",
+    )
+    assert.equal(JSON.parse(String(sent.init.body)).model, defaultModel)
+    const rows = [...db.candidateGenerationJobs.values()]
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].provider_model_id, defaultModel)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("every provider's default model is one of its own offered models", async () => {
+  const env = buildEnv(new FakeDb())
+  const edit = await workerRequest(env, "/api/iconoplasm/image-edit/providers?op=image_edit")
+  const generate = await workerRequest(
+    env,
+    "/api/iconoplasm/image-edit/providers?op=candidate_generation",
+  )
+  const offered = new Map()
+  for (const listed of [edit.body, generate.body]) {
+    for (const provider of listed.supported_providers) {
+      const entry = offered.get(provider.provider_id) || {
+        models: new Set(),
+        default_model: provider.default_model,
+      }
+      for (const option of provider.model_options) entry.models.add(option.model)
+      offered.set(provider.provider_id, entry)
+    }
+  }
+  assert.ok(offered.size >= 5)
+  for (const [providerId, { models, default_model: defaultModel }] of offered) {
+    assert.ok(models.has(defaultModel), `${providerId} default ${defaultModel} must be offered`)
+  }
+})
+
+// B-916: every model the registry offers is sent exactly what its provider's own
+// docs describe. The documented schemas and the exact bodies live in
+// __fixtures__/image-provider-doc-schemas.json (read from each provider's docs on
+// 2026-10-03; the file names the source per entry). Each flow runs through the
+// real Worker route, with only the provider HTTP faked, and the first request
+// that leaves for the provider is captured and checked three ways:
+//   1. the URL, method and auth header are the documented ones
+//   2. the body sends every documented required field, and only documented fields,
+//      with documented enum values (a field the docs do not list is a defect)
+//   3. where the fixture has a golden body, the body matches it exactly
+// A new or changed model without a documented schema fails the coverage test, so
+// a model cannot be added without reading its docs.
+const DOC_FIXTURE = JSON.parse(
+  readFileSync(new URL("./__fixtures__/image-provider-doc-schemas.json", import.meta.url), "utf8"),
+)
+const PROVIDER_AUTH = {
+  openai: { header: "Authorization", prefix: "Bearer " },
+  gemini: { header: "x-goog-api-key", prefix: "" },
+  luma: { header: "Authorization", prefix: "Bearer " },
+  krea: { header: "Authorization", prefix: "Bearer " },
+  fal: { header: "Authorization", prefix: "Key " },
+}
+const KREA_ASSET_URL = "https://krea.example/uploaded/source.png"
+const PROVIDER_OUTPUT_URL = "https://provider.example/out.png"
+
+function docSchemaFor(flow) {
+  return (
+    DOC_FIXTURE.models[`${flow.provider_id}|${flow.model}|${flow.operation}`] ||
+    DOC_FIXTURE.models[`${flow.provider_id}|${flow.model}`] ||
+    null
+  )
+}
+
+function goldenKey(flow) {
+  return `${flow.provider_id}|${flow.model}|${flow.operation}`
+}
+
+async function offeredFlows() {
+  const env = buildEnv(new FakeDb())
+  const flows = []
+  for (const [operation, query] of [
+    ["edit", "image_edit"],
+    ["generate", "candidate_generation"],
+  ]) {
+    const listed = await workerRequest(env, `/api/iconoplasm/image-edit/providers?op=${query}`)
+    for (const provider of listed.body.supported_providers) {
+      for (const option of provider.model_options) {
+        flows.push({
+          provider_id: provider.provider_id,
+          model: option.model,
+          operation,
+          is_default: provider.default_model === option.model,
+        })
+      }
+    }
+  }
+  return flows
+}
+
+// The provider's reply to the first request, so the job completes. Anything the
+// Worker sends that is not a provider request (portrait storage, the image
+// transform) gets the same stand-ins the other tests use.
+function recordingProviderFetch(env, recorded) {
+  const png = () =>
+    new Response("provider-png-bytes", { status: 200, headers: { "Content-Type": "image/png" } })
+  const json = (value) =>
+    new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
+  return async (input, init = {}) => {
+    const authoringBody = authoringStorageResponse(env, input, init)
+    if (authoringBody) return authoringBody
+    const url = String(input)
+    const method = String(init.method || "GET").toUpperCase()
+    const create = (response) => {
+      recorded.push({ url, method, headers: init.headers || {}, body: init.body })
+      return response
+    }
+    if (
+      url === "https://api.openai.com/v1/images/edits" ||
+      url === "https://api.openai.com/v1/images/generations"
+    ) {
+      return create(json({ data: [{ b64_json: base64(EDITED_BYTES) }] }))
+    }
+    if (url.startsWith("https://generativelanguage.googleapis.com/")) {
+      return create(
+        json({
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: "image/png", data: base64(EDITED_BYTES) } }],
+              },
+            },
+          ],
+        }),
+      )
+    }
+    if (url === "https://agents.lumalabs.ai/v1/generations" && method === "POST") {
+      return create(
+        json({
+          id: "luma-1",
+          state: "completed",
+          output: [{ type: "image", url: PROVIDER_OUTPUT_URL }],
+        }),
+      )
+    }
+    if (url === "https://api.krea.ai/assets") {
+      return json({ id: "krea-asset-1", image_url: KREA_ASSET_URL })
+    }
+    if (url.startsWith("https://api.krea.ai/generate/image/")) {
+      return create(json({ job_id: "krea-job-1", status: "queued" }))
+    }
+    if (url === "https://api.krea.ai/jobs/krea-job-1") {
+      return json({
+        job_id: "krea-job-1",
+        status: "completed",
+        result: { urls: [PROVIDER_OUTPUT_URL] },
+      })
+    }
+    if (url.startsWith("https://queue.fal.run/") && method === "POST") {
+      return create(
+        json({
+          request_id: "fal-1",
+          status_url: "https://queue.fal.run/app/requests/fal-1/status",
+          response_url: "https://queue.fal.run/app/requests/fal-1",
+        }),
+      )
+    }
+    if (url === "https://queue.fal.run/app/requests/fal-1/status") {
+      return json({
+        status: "COMPLETED",
+        request_id: "fal-1",
+        response_url: "https://queue.fal.run/app/requests/fal-1",
+      })
+    }
+    if (url === "https://queue.fal.run/app/requests/fal-1") {
+      return json({ images: [{ url: PROVIDER_OUTPUT_URL }] })
+    }
+    if (url === PROVIDER_OUTPUT_URL) return png()
+    if (url.includes("/portraits/") || url.includes("/portrait/")) {
+      return new Response("source-portrait-bytes", {
+        status: 200,
+        headers: { "Content-Type": "image/webp" },
+      })
+    }
+    if (init?.cf?.image?.format === "webp" && !init?.cf?.image?.width) {
+      return new Response(EDITED_BYTES, { status: 200, headers: { "Content-Type": "image/webp" } })
+    }
+    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    throw new Error(`Unexpected fetch ${method} ${url}`)
+  }
+}
+
+async function captureProviderRequest(flow) {
+  const originalFetch = globalThis.fetch
+  const env = buildEnv(new FakeDb())
+  const recorded = []
+  globalThis.fetch = recordingProviderFetch(env, recorded)
+  try {
+    const saved = await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+      method: "POST",
+      body: {
+        provider_id: flow.provider_id,
+        api_key: `test-key-${flow.provider_id}`,
+        model: flow.model,
+      },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.body))
+    const job =
+      flow.operation === "edit"
+        ? await workerRequest(env, "/api/iconoplasm/image-edit/jobs", {
+            method: "POST",
+            body: {
+              provider_id: flow.provider_id,
+              model: flow.model,
+              source_gene_symbol: "A1BG",
+              source_asset_sha256: SOURCE_SHA,
+              adjustments: { age_years: 30 },
+            },
+          })
+        : await workerRequest(env, "/api/iconoplasm/candidate-generation/jobs", {
+            method: "POST",
+            body: {
+              provider_id: flow.provider_id,
+              model: flow.model,
+              symbol: "A1BG",
+              request_mode: "novel",
+            },
+          })
+    assert.equal(job.status, 200, JSON.stringify(job.body).slice(0, 600))
+    assert.equal(recorded.length, 1, "exactly one provider request is created per job")
+    return recorded[0]
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+// Turns the captured body into the golden's vocabulary: the long prompt, the
+// source image in each of its forms, and file parts become placeholders.
+function normalizeCapturedBody(body) {
+  if (body instanceof FormData) {
+    const fields = {}
+    for (const [key, value] of body.entries()) {
+      fields[key] = typeof value === "string" ? value : "$FILE"
+    }
+    return normalizeCapturedBody(fields)
+  }
+  const value = typeof body === "string" ? JSON.parse(body) : body
+  const walk = (node, key = "") => {
+    if (Array.isArray(node)) return node.map((item) => walk(item, key))
+    if (node && typeof node === "object") {
+      return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v, k)]))
+    }
+    if (typeof node !== "string") return node
+    if (node === KREA_ASSET_URL) return "$KREA_ASSET_URL"
+    if (node.includes("/portraits/")) return "$SOURCE_URL"
+    if ((key === "mime_type" || key === "media_type") && node.startsWith("image/")) return "$MIME"
+    if (key === "data" && /^[A-Za-z0-9+/]{8,}={0,2}$/.test(node)) return "$SOURCE_BASE64"
+    if (node.length > 100) return "$PROMPT"
+    return node
+  }
+  return walk(value)
+}
+
+function assertConformsToDocs(schema, body, label) {
+  for (const field of schema.required) {
+    assert.ok(field in body, `${label}: the docs require "${field}" and the request omits it`)
+  }
+  for (const [field, value] of Object.entries(body)) {
+    const documented = schema.properties[field]
+    assert.ok(documented, `${label}: the request sends "${field}", which the docs do not list`)
+    if (Array.isArray(documented.enum) && ["string", "number"].includes(typeof value)) {
+      assert.ok(
+        documented.enum.includes(String(value)),
+        `${label}: "${field}" is ${JSON.stringify(value)}, the docs allow ${documented.enum.join(", ")}`,
+      )
+    }
+  }
+}
+
+test("every offered image model is sent exactly what its provider's docs describe", async (t) => {
+  const flows = await offeredFlows()
+  assert.ok(flows.length > 40, `expected the full registry, saw ${flows.length} flows`)
+  for (const flow of flows) {
+    await t.test(`${flow.provider_id} ${flow.model} ${flow.operation}`, async () => {
+      const label = `${flow.provider_id} ${flow.model} ${flow.operation}`
+      const schema = docSchemaFor(flow)
+      assert.ok(schema, `${label}: no documented schema in the fixture`)
+      const request = await captureProviderRequest(flow)
+      assert.equal(request.method, schema.endpoint.method, `${label}: method`)
+      assert.equal(request.url, schema.endpoint.url, `${label}: documented endpoint`)
+      const auth = PROVIDER_AUTH[flow.provider_id]
+      assert.equal(
+        request.headers[auth.header],
+        `${auth.prefix}test-key-${flow.provider_id}`,
+        `${label}: documented auth header`,
+      )
+      const body = normalizeCapturedBody(request.body)
+      assertConformsToDocs(schema, body, label)
+      const golden = DOC_FIXTURE.golden[goldenKey(flow)]
+      if (golden) assert.deepEqual(body, golden, `${label}: golden body`)
+    })
+  }
+})
+
+test("every new, default and direct-provider flow has a golden body, and no golden is orphaned", async () => {
+  const flows = await offeredFlows()
+  const keys = new Set(flows.map(goldenKey))
+  for (const key of Object.keys(DOC_FIXTURE.golden)) {
+    assert.ok(keys.has(key), `golden ${key} matches no offered flow`)
+  }
+  for (const key of Object.keys(DOC_FIXTURE.models)) {
+    const [providerId, model, operation] = key.split("|")
+    assert.ok(
+      flows.some(
+        (flow) =>
+          flow.provider_id === providerId &&
+          flow.model === model &&
+          (operation === undefined || flow.operation === operation),
+      ),
+      `documented schema ${key} matches no offered flow`,
+    )
+  }
+  const addedByB916 = new Set([
+    "ideogram/ideogram-4.5",
+    "ideogram/ideogram-4.5-precise",
+    "ideogram/v4.5",
+    "ideogram/v4.5/edit",
+    "blackforestlabs/flux-3/edit-image",
+    "blackforestlabs/flux-3/text-to-image",
+    "google/nano-banana-flash-lite",
+    "google/nano-banana-lite",
+    "google/nano-banana-lite/edit",
+    "openai/gpt-image-2.5-sunburst",
+    "openai/gpt-image-2.5-flare",
+    "openai/gpt-image-2.5/sunburst/edit",
+    "openai/gpt-image-2.5/sunburst/text-to-image",
+    "openai/gpt-image-2.5/flare/edit",
+    "openai/gpt-image-2.5/flare/text-to-image",
+  ])
+  for (const flow of flows) {
+    const direct = ["openai", "gemini", "luma"].includes(flow.provider_id)
+    if (direct || flow.is_default || addedByB916.has(flow.model)) {
+      assert.ok(
+        DOC_FIXTURE.golden[goldenKey(flow)],
+        `${goldenKey(flow)} needs a golden body (direct provider, default or added model)`,
+      )
+    }
+  }
+})
+
+test("a model the vendors retired is not offered by any provider", async () => {
+  const retired = [
+    "gpt-image-2",
+    "openai/gpt-image",
+    "openai/gpt-image-2",
+    "openai/gpt-image-2/edit",
+    "google/nano-banana",
+    "google/imagen-3",
+    "google/imagen-4",
+    "google/imagen-4-fast",
+    "google/imagen-4-ultra",
+    "ideogram/ideogram-3",
+    "ideogram/ideogram-2-turbo",
+    "bfl/flux-1-kontext-dev",
+    "bfl/flux-1-dev",
+    "bfl/flux-1.1-pro",
+    "bfl/flux-1.1-pro-ultra",
+    "bytedance/seedream-4",
+    "fal-ai/flux-pro/kontext",
+  ]
+  const offered = new Set((await offeredFlows()).map((flow) => flow.model))
+  for (const model of retired) assert.ok(!offered.has(model), `${model} must not be offered`)
 })

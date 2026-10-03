@@ -1,0 +1,2612 @@
+{
+  "checked": "2026-10-03",
+  "about": "Documented request schema per offered model and the exact request each flow must send. Krea: api.krea.ai/openapi.json. fal: fal.ai/models/<id>/llms.txt. OpenAI, Gemini and Luma: the docs pages listed on each entry. To refresh, re-read the provider docs, update this file and the registry together.",
+  "models": {
+    "fal|blackforestlabs/flux-3/edit-image": {
+      "provider_id": "fal",
+      "model": "blackforestlabs/flux-3/edit-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/blackforestlabs/flux-3/edit-image"
+      },
+      "docs": ["https://fal.ai/models/blackforestlabs/flux-3/edit-image/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "aspect_ratio": {
+          "type": "AspectRatioEnum",
+          "enum": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2"
+          ]
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["512sq", "768sq", "1k", "2k", "4k"]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean"
+        },
+        "safety_tolerance": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "A red fox leaping over a stream in a pine forest, low-angle wildlife photograph.",
+        "image_urls": [
+          "https://storage.googleapis.com/falserverless/example_inputs/flux2_pro_edit_input.png"
+        ]
+      }
+    },
+    "fal|blackforestlabs/flux-3/text-to-image": {
+      "provider_id": "fal",
+      "model": "blackforestlabs/flux-3/text-to-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/blackforestlabs/flux-3/text-to-image"
+      },
+      "docs": ["https://fal.ai/models/blackforestlabs/flux-3/text-to-image/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "aspect_ratio": {
+          "type": "AspectRatioEnum",
+          "enum": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2"
+          ]
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["512sq", "768sq", "1k", "2k", "4k"]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean"
+        },
+        "safety_tolerance": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "A red fox leaping over a stream in a pine forest, low-angle wildlife photograph."
+      }
+    },
+    "fal|bytedance/seedream/v5/lite/edit": {
+      "provider_id": "fal",
+      "model": "bytedance/seedream/v5/lite/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/bytedance/seedream/v5/lite/edit"
+      },
+      "docs": ["https://fal.ai/models/bytedance/seedream/v5/lite/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "max_images": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        }
+      },
+      "documented_example": {
+        "prompt": "Replace the product in Figure 1 with that in Figure 2. Seamlessly render logo in Figure 3 into the product design, in frosted glass texture. Remove any extra text in Figure 1, and design a catchy tagline for the perfume.",
+        "image_urls": [
+          "https://v3b.fal.media/files/b/0a8f9936/KOsb_qPB_W0ZJ0Ee2OsnU_586e2892841d46f09049ee7199b303d3.png",
+          "https://v3b.fal.media/files/b/0a8f994e/JroWTogO6jOTFk9b6B3XM_591ca38cef2f44bbba2843cbf80fb1b2.png",
+          "https://v3b.fal.media/files/b/0a8f9960/Q6pzwXAiFaFPOpSScoE-D_0eca5db19e5242739f127efe49b38922.png"
+        ]
+      }
+    },
+    "fal|bytedance/seedream/v5/lite/text-to-image": {
+      "provider_id": "fal",
+      "model": "bytedance/seedream/v5/lite/text-to-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/bytedance/seedream/v5/lite/text-to-image"
+      },
+      "docs": ["https://fal.ai/models/bytedance/seedream/v5/lite/text-to-image/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "max_images": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "return_byteplus_urls": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "Realistic DSLR photograph of anthropomorphic Penkingese dog enjoying a bowl of ramen on the Great Wall of China with the words \"Seedream 5.0 Lite available on fal\" visible at the top."
+      }
+    },
+    "fal|bytedance/seedream/v5/pro/edit": {
+      "provider_id": "fal",
+      "model": "bytedance/seedream/v5/pro/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/bytedance/seedream/v5/pro/edit"
+      },
+      "docs": ["https://fal.ai/models/bytedance/seedream/v5/pro/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "enhance_prompt_mode": {
+          "type": "EnhancePromptModeEnum",
+          "enum": ["standard", "fast"]
+        },
+        "image_urls": {
+          "type": "list<string>"
+        }
+      },
+      "documented_example": {
+        "prompt": "Replace the product in Figure 1 with that in Figure 2. Seamlessly render the logo in Figure 3 into the product design, in a frosted glass texture.",
+        "image_urls": [
+          "https://storage.googleapis.com/falserverless/example_inputs/seedreamv45/seedream_v45_edit_input_1.png",
+          "https://storage.googleapis.com/falserverless/example_inputs/seedreamv45/seedream_v45_edit_input_2.png",
+          "https://storage.googleapis.com/falserverless/example_inputs/seedreamv45/seedream_v45_edit_input_3.png"
+        ]
+      }
+    },
+    "fal|bytedance/seedream/v5/pro/text-to-image": {
+      "provider_id": "fal",
+      "model": "bytedance/seedream/v5/pro/text-to-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/bytedance/seedream/v5/pro/text-to-image"
+      },
+      "docs": ["https://fal.ai/models/bytedance/seedream/v5/pro/text-to-image/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "enhance_prompt_mode": {
+          "type": "EnhancePromptModeEnum",
+          "enum": ["standard", "fast"]
+        }
+      },
+      "documented_example": {
+        "prompt": "Vibrant editorial of a model in contemporary fashion fused with West African textile patterns and beadwork, Campbell Addy bold aesthetic, saturated palette, dramatic studio lighting, celebratory cultural richness, striking contemporary portraiture"
+      }
+    },
+    "fal|fal-ai/flux-2": {
+      "provider_id": "fal",
+      "model": "fal-ai/flux-2",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/flux-2"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/flux-2/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "guidance_scale": {
+          "type": "float"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "num_inference_steps": {
+          "type": "integer"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "acceleration": {
+          "type": "AccelerationEnum",
+          "enum": ["none", "regular", "high"]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        }
+      },
+      "documented_example": {
+        "prompt": "Dutch angle close-up of a survivor in post-apocalyptic setting, dust-covered face, dramatic harsh sunlight creating deep shadows, happy expression, desaturated dystopian color palette, gritty realism"
+      }
+    },
+    "fal|fal-ai/flux-2/edit": {
+      "provider_id": "fal",
+      "model": "fal-ai/flux-2/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/flux-2/edit"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/flux-2/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "guidance_scale": {
+          "type": "float"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "num_inference_steps": {
+          "type": "integer"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "acceleration": {
+          "type": "AccelerationEnum",
+          "enum": ["none", "regular", "high"]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "image_urls": {
+          "type": "list<string>"
+        }
+      },
+      "documented_example": {
+        "prompt": "Change his clothes to casual suit and tie",
+        "image_urls": [
+          "https://storage.googleapis.com/falserverless/example_inputs/flux2_dev_edit_input.png"
+        ]
+      }
+    },
+    "fal|fal-ai/nano-banana-2": {
+      "provider_id": "fal",
+      "model": "fal-ai/nano-banana-2",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/nano-banana-2"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/nano-banana-2/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": [
+            "auto",
+            "21:9",
+            "16:9",
+            "3:2",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "2:3",
+            "9:16",
+            "4:1",
+            "1:4",
+            "8:1",
+            "1:8"
+          ]
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["0.5K", "1K", "2K", "4K"]
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "enable_web_search": {
+          "type": "boolean"
+        },
+        "thinking_level": {
+          "type": "Enum",
+          "enum": ["minimal", "high"]
+        }
+      },
+      "documented_example": {
+        "prompt": "An action shot of a black lab swimming in an inground suburban swimming pool. The camera is placed meticulously on the water line, dividing the image in half, revealing both the dogs head above water holding a tennis ball in it's mouth, and it's paws paddling underwater."
+      }
+    },
+    "fal|fal-ai/nano-banana-2/edit": {
+      "provider_id": "fal",
+      "model": "fal-ai/nano-banana-2/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/nano-banana-2/edit"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/nano-banana-2/edit/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": [
+            "auto",
+            "21:9",
+            "16:9",
+            "3:2",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "2:3",
+            "9:16",
+            "4:1",
+            "1:4",
+            "8:1",
+            "1:8"
+          ]
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["0.5K", "1K", "2K", "4K"]
+        },
+        "video_url": {
+          "type": "string"
+        },
+        "audio_url": {
+          "type": "string"
+        },
+        "pdf_url": {
+          "type": "string"
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "enable_web_search": {
+          "type": "boolean"
+        },
+        "thinking_level": {
+          "type": "Enum",
+          "enum": ["minimal", "high"]
+        }
+      },
+      "documented_example": {
+        "prompt": "make a photo of the man driving the car down the california coastline"
+      }
+    },
+    "fal|fal-ai/nano-banana-pro": {
+      "provider_id": "fal",
+      "model": "fal-ai/nano-banana-pro",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/nano-banana-pro"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/nano-banana-pro/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"]
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["1K", "2K", "4K"]
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "enable_web_search": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "An action shot of a black lab swimming in an inground suburban swimming pool. The camera is placed meticulously on the water line, dividing the image in half, revealing both the dogs head above water holding a tennis ball in it's mouth, and it's paws paddling underwater."
+      }
+    },
+    "fal|fal-ai/nano-banana-pro/edit": {
+      "provider_id": "fal",
+      "model": "fal-ai/nano-banana-pro/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/nano-banana-pro/edit"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/nano-banana-pro/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": ["auto", "21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"]
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "ResolutionEnum",
+          "enum": ["1K", "2K", "4K"]
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "enable_web_search": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "make a photo of the man driving the car down the california coastline",
+        "image_urls": [
+          "https://storage.googleapis.com/falserverless/example_inputs/nano-banana-edit-input.png",
+          "https://storage.googleapis.com/falserverless/example_inputs/nano-banana-edit-input-2.png"
+        ]
+      }
+    },
+    "fal|fal-ai/omnigen-v2": {
+      "provider_id": "fal",
+      "model": "fal-ai/omnigen-v2",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/fal-ai/omnigen-v2"
+      },
+      "docs": ["https://fal.ai/models/fal-ai/omnigen-v2/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "input_image_urls": {
+          "type": "list<string>"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_inference_steps": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "text_guidance_scale": {
+          "type": "float"
+        },
+        "image_guidance_scale": {
+          "type": "float"
+        },
+        "negative_prompt": {
+          "type": "string"
+        },
+        "cfg_range_start": {
+          "type": "float"
+        },
+        "cfg_range_end": {
+          "type": "float"
+        },
+        "scheduler": {
+          "type": "SchedulerEnum",
+          "enum": ["euler", "dpmsolver"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "enable_safety_checker": {
+          "type": "boolean"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png"]
+        }
+      },
+      "documented_example": {
+        "prompt": "Make the dress blue"
+      }
+    },
+    "fal|google/nano-banana-lite": {
+      "provider_id": "fal",
+      "model": "google/nano-banana-lite",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/google/nano-banana-lite"
+      },
+      "docs": ["https://fal.ai/models/google/nano-banana-lite/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": [
+            "auto",
+            "21:9",
+            "16:9",
+            "3:2",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "2:3",
+            "9:16",
+            "4:1",
+            "1:4",
+            "8:1",
+            "1:8"
+          ]
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "thinking_level": {
+          "type": "Enum",
+          "enum": ["minimal", "high"]
+        }
+      },
+      "documented_example": {
+        "prompt": "An action shot of a black lab swimming in an inground suburban swimming pool. The camera is placed meticulously on the water line, dividing the image in half, revealing both the dogs head above water holding a tennis ball in it's mouth, and it's paws paddling underwater."
+      }
+    },
+    "fal|google/nano-banana-lite/edit": {
+      "provider_id": "fal",
+      "model": "google/nano-banana-lite/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/google/nano-banana-lite/edit"
+      },
+      "docs": ["https://fal.ai/models/google/nano-banana-lite/edit/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "system_prompt": {
+          "type": "string"
+        },
+        "aspect_ratio": {
+          "type": "Enum",
+          "enum": [
+            "auto",
+            "21:9",
+            "16:9",
+            "3:2",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "2:3",
+            "9:16",
+            "4:1",
+            "1:4",
+            "8:1",
+            "1:8"
+          ]
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "safety_tolerance": {
+          "type": "SafetyToleranceEnum",
+          "enum": ["1", "2", "3", "4", "5", "6"]
+        },
+        "sync_mode": {
+          "type": "boolean"
+        },
+        "limit_generations": {
+          "type": "boolean"
+        },
+        "thinking_level": {
+          "type": "Enum",
+          "enum": ["minimal", "high"]
+        }
+      },
+      "documented_example": {
+        "prompt": "make a photo of the man driving the car down the california coastline"
+      }
+    },
+    "fal|ideogram/v4.5": {
+      "provider_id": "fal",
+      "model": "ideogram/v4.5",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/ideogram/v4.5"
+      },
+      "docs": ["https://fal.ai/models/ideogram/v4.5/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["low", "medium", "high"]
+        },
+        "enable_prompt_expansion": {
+          "type": "boolean"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "A colorful storefront with a sign reading hello"
+      }
+    },
+    "fal|ideogram/v4.5/edit": {
+      "provider_id": "fal",
+      "model": "ideogram/v4.5/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/ideogram/v4.5/edit"
+      },
+      "docs": ["https://fal.ai/models/ideogram/v4.5/edit/llms.txt"],
+      "required": ["prompt", "image_url"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_url": {
+          "type": "string"
+        },
+        "reference_image_urls": {
+          "type": "list<string>"
+        },
+        "mask_url": {
+          "type": "string"
+        },
+        "edit_precision": {
+          "type": "EditPrecisionEnum",
+          "enum": ["regular", "high"]
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["very_low", "low", "medium", "high"]
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "A colorful storefront with a sign reading hello",
+        "image_url": ""
+      }
+    },
+    "fal|openai/gpt-image-2.5/flare/edit": {
+      "provider_id": "fal",
+      "model": "openai/gpt-image-2.5/flare/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/openai/gpt-image-2.5/flare/edit"
+      },
+      "docs": ["https://fal.ai/models/openai/gpt-image-2.5/flare/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "mask_url": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "background": {
+          "type": "BackgroundEnum",
+          "enum": ["auto", "transparent", "opaque"]
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["auto", "low", "medium", "high", "xhigh", "max"]
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "output_compression": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "Same workers, same beam, same lunch boxes - but they're all on their phones now. One is taking a selfie. One is on a call looking annoyed. Same danger, new priorities. A hard hat has AirPods.",
+        "image_urls": [
+          "https://v3b.fal.media/files/b/0a8691af/9Se_1_VX1wzTjjTOpWbs9_bb39c2eb-1a41-4749-b1d0-cf134abc8bbf.png"
+        ]
+      }
+    },
+    "fal|openai/gpt-image-2.5/flare/text-to-image": {
+      "provider_id": "fal",
+      "model": "openai/gpt-image-2.5/flare/text-to-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/openai/gpt-image-2.5/flare/text-to-image"
+      },
+      "docs": ["https://fal.ai/models/openai/gpt-image-2.5/flare/text-to-image/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "background": {
+          "type": "BackgroundEnum",
+          "enum": ["auto", "transparent", "opaque"]
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["auto", "low", "medium", "high", "xhigh", "max"]
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "output_compression": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "create a realistic image taken with iphone at these coordinates 41°43′32″N 49°56′49″W 15 April 1912"
+      }
+    },
+    "fal|openai/gpt-image-2.5/sunburst/edit": {
+      "provider_id": "fal",
+      "model": "openai/gpt-image-2.5/sunburst/edit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/openai/gpt-image-2.5/sunburst/edit"
+      },
+      "docs": ["https://fal.ai/models/openai/gpt-image-2.5/sunburst/edit/llms.txt"],
+      "required": ["prompt", "image_urls"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "list<string>"
+        },
+        "mask_url": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "background": {
+          "type": "BackgroundEnum",
+          "enum": ["auto", "transparent", "opaque"]
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["auto", "low", "medium", "high", "xhigh", "max"]
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "output_compression": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "Same workers, same beam, same lunch boxes - but they're all on their phones now. One is taking a selfie. One is on a call looking annoyed. Same danger, new priorities. A hard hat has AirPods.",
+        "image_urls": [
+          "https://v3b.fal.media/files/b/0a8691af/9Se_1_VX1wzTjjTOpWbs9_bb39c2eb-1a41-4749-b1d0-cf134abc8bbf.png"
+        ]
+      }
+    },
+    "fal|openai/gpt-image-2.5/sunburst/text-to-image": {
+      "provider_id": "fal",
+      "model": "openai/gpt-image-2.5/sunburst/text-to-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://queue.fal.run/openai/gpt-image-2.5/sunburst/text-to-image"
+      },
+      "docs": ["https://fal.ai/models/openai/gpt-image-2.5/sunburst/text-to-image/llms.txt"],
+      "required": ["prompt"],
+      "additional_properties": true,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "image_size": {
+          "type": "ImageSize | Enum"
+        },
+        "background": {
+          "type": "BackgroundEnum",
+          "enum": ["auto", "transparent", "opaque"]
+        },
+        "quality": {
+          "type": "QualityEnum",
+          "enum": ["auto", "low", "medium", "high", "xhigh", "max"]
+        },
+        "num_images": {
+          "type": "integer"
+        },
+        "output_format": {
+          "type": "OutputFormatEnum",
+          "enum": ["jpeg", "png", "webp"]
+        },
+        "output_compression": {
+          "type": "integer"
+        },
+        "sync_mode": {
+          "type": "boolean"
+        }
+      },
+      "documented_example": {
+        "prompt": "create a realistic image taken with iphone at these coordinates 41°43′32″N 49°56′49″W 15 April 1912"
+      }
+    },
+    "gemini|gemini-3-pro-image": {
+      "provider_id": "gemini",
+      "docs": [
+        "https://ai.google.dev/gemini-api/docs/generate-content/image-generation.md.txt",
+        "https://ai.google.dev/gemini-api/docs/image-generation.md.txt"
+      ],
+      "required": ["contents"],
+      "additional_properties": true,
+      "properties": {
+        "contents": {},
+        "generationConfig": {},
+        "systemInstruction": {},
+        "safetySettings": {},
+        "tools": {},
+        "toolConfig": {},
+        "cachedContent": {}
+      },
+      "documented_example": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"
+              }
+            ]
+          }
+        ]
+      },
+      "model": "gemini-3-pro-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent"
+      }
+    },
+    "gemini|gemini-3.1-flash-image": {
+      "provider_id": "gemini",
+      "docs": [
+        "https://ai.google.dev/gemini-api/docs/generate-content/image-generation.md.txt",
+        "https://ai.google.dev/gemini-api/docs/image-generation.md.txt"
+      ],
+      "required": ["contents"],
+      "additional_properties": true,
+      "properties": {
+        "contents": {},
+        "generationConfig": {},
+        "systemInstruction": {},
+        "safetySettings": {},
+        "tools": {},
+        "toolConfig": {},
+        "cachedContent": {}
+      },
+      "documented_example": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"
+              }
+            ]
+          }
+        ]
+      },
+      "model": "gemini-3.1-flash-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
+      }
+    },
+    "gemini|gemini-3.1-flash-lite-image": {
+      "provider_id": "gemini",
+      "docs": [
+        "https://ai.google.dev/gemini-api/docs/generate-content/image-generation.md.txt",
+        "https://ai.google.dev/gemini-api/docs/image-generation.md.txt"
+      ],
+      "required": ["contents"],
+      "additional_properties": true,
+      "properties": {
+        "contents": {},
+        "generationConfig": {},
+        "systemInstruction": {},
+        "safetySettings": {},
+        "tools": {},
+        "toolConfig": {},
+        "cachedContent": {}
+      },
+      "documented_example": {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"
+              }
+            ]
+          }
+        ]
+      },
+      "model": "gemini-3.1-flash-lite-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent"
+      }
+    },
+    "krea|bytedance/seededit": {
+      "provider_id": "krea",
+      "model": "bytedance/seededit",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/bytedance/seededit"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/bytedance/seededit)"],
+      "required": ["prompt", "image_url"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "number"
+        },
+        "image_url": {
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Ethereal lakeside, moonlit dance of spirits, reflecting romantic supernatural anime.",
+        "image_url": "https://gen.krea.ai/images/0424f602-2999-4d0c-a46e-39cbf0ef384b.png"
+      }
+    },
+    "krea|bytedance/seedream-5-lite": {
+      "provider_id": "krea",
+      "model": "bytedance/seedream-5-lite",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/bytedance/seedream-5-lite"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/bytedance/seedream-5-lite)"],
+      "required": ["prompt", "width", "height"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "seed": {
+          "type": "number"
+        },
+        "style_images": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Nordic longhouses, intricately carved, as if by forest spirits.",
+        "width": 1024,
+        "height": 1024
+      }
+    },
+    "krea|google/nano-banana-2": {
+      "provider_id": "krea",
+      "model": "google/nano-banana-2",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/google/nano-banana-2"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/google/nano-banana-2)"],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "image_urls": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": [
+            "4:1",
+            "21:9",
+            "1:1",
+            "4:3",
+            "3:2",
+            "2:3",
+            "5:4",
+            "4:5",
+            "3:4",
+            "16:9",
+            "9:16",
+            "1:4",
+            "1:8"
+          ],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K", "2K", "4K"],
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Hobbiton, just as Tolkien sketched, in hues of emerald."
+      }
+    },
+    "krea|google/nano-banana-flash-lite": {
+      "provider_id": "krea",
+      "model": "google/nano-banana-flash-lite",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/google/nano-banana-flash-lite"
+      },
+      "docs": [
+        "https://api.krea.ai/openapi.json (path /generate/image/google/nano-banana-flash-lite)"
+      ],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "image_urls": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16"],
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Lush orchard, fruit granting mystical abilities, akin to magic-infused anime settings."
+      }
+    },
+    "krea|google/nano-banana-pro": {
+      "provider_id": "krea",
+      "model": "google/nano-banana-pro",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/google/nano-banana-pro"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/google/nano-banana-pro)"],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "image_urls": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["21:9", "1:1", "4:3", "3:2", "2:3", "5:4", "4:5", "3:4", "16:9", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K", "2K", "4K"],
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Rolling sand dunes, with the silhouette of a solitary camel caravan at dusk."
+      }
+    },
+    "krea|ideogram/ideogram-4.5": {
+      "provider_id": "krea",
+      "model": "ideogram/ideogram-4.5",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/ideogram/ideogram-4.5"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/ideogram/ideogram-4.5)"],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "quality": {
+          "enum": ["very_low", "low", "medium", "high"],
+          "type": "string"
+        },
+        "preserve_source_size": {
+          "type": "boolean"
+        },
+        "skip_prompt_expansion": {
+          "type": "boolean"
+        },
+        "aspect_ratio": {
+          "enum": ["1:1", "4:3", "3:2", "16:9", "2.4:1", "4:5", "2:3", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["2K"],
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Balinese temples, where stone and spirits commune."
+      }
+    },
+    "krea|ideogram/ideogram-4.5-precise": {
+      "provider_id": "krea",
+      "model": "ideogram/ideogram-4.5-precise",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/ideogram/ideogram-4.5-precise"
+      },
+      "docs": [
+        "https://api.krea.ai/openapi.json (path /generate/image/ideogram/ideogram-4.5-precise)"
+      ],
+      "required": ["prompt", "image_url"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "quality": {
+          "enum": ["low", "medium", "high", "very_high"],
+          "type": "string"
+        },
+        "image_url": {
+          "type": "string"
+        },
+        "mask_url": {
+          "type": "string"
+        },
+        "reference_images": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Tudor houses in England with chimneys like clustered toadstools.",
+        "image_url": "https://gen.krea.ai/images/0424f602-2999-4d0c-a46e-39cbf0ef384b.png"
+      }
+    },
+    "krea|krea/krea-2/large": {
+      "provider_id": "krea",
+      "model": "krea/krea-2/large",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/krea/krea-2/large"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/krea/krea-2/large)"],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": ["number", "null"]
+        },
+        "styles": {
+          "type": "array"
+        },
+        "image_style_references": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["1:1", "4:3", "3:2", "16:9", "2.35:1", "4:5", "3:4", "2:3", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K"],
+          "type": "string"
+        },
+        "creativity": {
+          "enum": ["raw", "low", "medium", "high"],
+          "type": "string"
+        },
+        "intensity": {
+          "type": "integer"
+        },
+        "complexity": {
+          "type": "integer"
+        },
+        "movement": {
+          "type": "integer"
+        },
+        "moodboards": {
+          "type": "array"
+        },
+        "image_url": {},
+        "strength": {
+          "type": "number"
+        }
+      },
+      "documented_example": {
+        "prompt": "A bustling souk in Marrakech, with tapestries and lanterns creating a riot of colors.",
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      }
+    },
+    "krea|krea/krea-2/medium": {
+      "provider_id": "krea",
+      "model": "krea/krea-2/medium",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/krea/krea-2/medium"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/krea/krea-2/medium)"],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": ["number", "null"]
+        },
+        "styles": {
+          "type": "array"
+        },
+        "image_style_references": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["1:1", "4:3", "3:2", "16:9", "2.35:1", "4:5", "3:4", "2:3", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K"],
+          "type": "string"
+        },
+        "creativity": {
+          "enum": ["raw", "low", "medium", "high"],
+          "type": "string"
+        },
+        "intensity": {
+          "type": "integer"
+        },
+        "complexity": {
+          "type": "integer"
+        },
+        "movement": {
+          "type": "integer"
+        },
+        "moodboards": {
+          "type": "array"
+        },
+        "image_url": {},
+        "strength": {
+          "type": "number"
+        }
+      },
+      "documented_example": {
+        "prompt": "Desert caravan, mystical oases and sand sorcerers, channeling adventure anime vibes.",
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      }
+    },
+    "krea|krea/krea-2/medium-turbo": {
+      "provider_id": "krea",
+      "model": "krea/krea-2/medium-turbo",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/krea/krea-2/medium-turbo"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/krea/krea-2/medium-turbo)"],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": ["number", "null"]
+        },
+        "styles": {
+          "type": "array"
+        },
+        "image_style_references": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["1:1", "4:3", "3:2", "16:9", "2.35:1", "4:5", "3:4", "2:3", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K"],
+          "type": "string"
+        },
+        "creativity": {
+          "enum": ["raw", "low", "medium", "high"],
+          "type": "string"
+        },
+        "intensity": {
+          "type": "integer"
+        },
+        "complexity": {
+          "type": "integer"
+        },
+        "movement": {
+          "type": "integer"
+        },
+        "moodboards": {
+          "type": "array"
+        },
+        "image_url": {},
+        "strength": {
+          "type": "number"
+        }
+      },
+      "documented_example": {
+        "prompt": "An old lighthouse on a rugged coastline, waves crashing at its base.",
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      }
+    },
+    "krea|luma/uni-1": {
+      "provider_id": "krea",
+      "model": "luma/uni-1",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/luma/uni-1"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/luma/uni-1)"],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "mode": {
+          "enum": ["standard", "max"],
+          "type": "string"
+        },
+        "style": {
+          "enum": ["auto", "manga"],
+          "type": "string"
+        },
+        "output_format": {},
+        "web_search": {
+          "type": "boolean"
+        },
+        "style_images": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Snow-clad village, its tranquility disrupted by mech battles, in the style of mecha anime."
+      }
+    },
+    "krea|openai/gpt-image-2.5-flare": {
+      "provider_id": "krea",
+      "model": "openai/gpt-image-2.5-flare",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/openai/gpt-image-2.5-flare"
+      },
+      "docs": [
+        "https://api.krea.ai/openapi.json (path /generate/image/openai/gpt-image-2.5-flare)"
+      ],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max"],
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["16:9", "2:1", "3:2", "4:3", "1:1", "3:4", "2:3", "1:2", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K", "2K", "4K"],
+          "type": "string"
+        },
+        "background": {
+          "enum": ["transparent", "opaque", "auto"],
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Ethereal realm with floating islands, bridges connecting clouds, mirroring dreamy anime visuals.",
+        "aspect_ratio": "16:9",
+        "resolution": "1K"
+      }
+    },
+    "krea|openai/gpt-image-2.5-sunburst": {
+      "provider_id": "krea",
+      "model": "openai/gpt-image-2.5-sunburst",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/openai/gpt-image-2.5-sunburst"
+      },
+      "docs": [
+        "https://api.krea.ai/openapi.json (path /generate/image/openai/gpt-image-2.5-sunburst)"
+      ],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max"],
+          "type": "string"
+        },
+        "image_urls": {
+          "type": "array"
+        },
+        "aspect_ratio": {
+          "enum": ["16:9", "2:1", "3:2", "4:3", "1:1", "3:4", "2:3", "1:2", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K", "2K", "4K"],
+          "type": "string"
+        }
+      },
+      "documented_example": {
+        "prompt": "Byzantine chapels, where mosaics gleam with divine tales.",
+        "aspect_ratio": "16:9",
+        "resolution": "1K"
+      }
+    },
+    "krea|qwen/2512": {
+      "provider_id": "krea",
+      "model": "qwen/2512",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/qwen/2512"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/qwen/2512)"],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "negative_prompt": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "num_inference_steps": {
+          "type": "integer"
+        },
+        "cfg_scale": {
+          "type": "number"
+        },
+        "seed": {
+          "type": "number"
+        },
+        "styles": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Samurai training under cherry blossoms, drawing inspiration from historical anime visuals."
+      }
+    },
+    "krea|z-image/z-image": {
+      "provider_id": "krea",
+      "model": "z-image/z-image",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.krea.ai/generate/image/z-image/z-image"
+      },
+      "docs": ["https://api.krea.ai/openapi.json (path /generate/image/z-image/z-image)"],
+      "required": ["prompt", "aspect_ratio", "resolution"],
+      "additional_properties": false,
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "number"
+        },
+        "denoising_strength": {
+          "type": "number"
+        },
+        "styles": {
+          "type": "array"
+        },
+        "skip_prompt_expansion": {
+          "type": "boolean"
+        },
+        "aspect_ratio": {
+          "enum": ["1:1", "4:3", "2:3", "16:9", "9:16"],
+          "type": "string"
+        },
+        "resolution": {
+          "enum": ["1K"],
+          "type": "string"
+        },
+        "image_url": {},
+        "style_images": {
+          "type": "array"
+        }
+      },
+      "documented_example": {
+        "prompt": "Cubist-inspired fishing hamlets on Mediterranean coasts.",
+        "aspect_ratio": "1:1",
+        "resolution": "1K"
+      }
+    },
+    "luma|uni-1-max|edit": {
+      "provider_id": "luma",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://agents.lumalabs.ai/v1/generations"
+      },
+      "docs": [
+        "https://docs.agents.lumalabs.ai/guides/images/generation/index.md",
+        "https://docs.agents.lumalabs.ai/guides/images/editing/index.md"
+      ],
+      "additional_properties": true,
+      "model": "uni-1-max",
+      "required": ["type", "prompt", "source"],
+      "properties": {
+        "type": {
+          "enum": ["image", "image_edit"]
+        },
+        "model": {
+          "enum": ["uni-1", "uni-1-max"]
+        },
+        "prompt": {},
+        "aspect_ratio": {
+          "enum": ["3:1", "2:1", "16:9", "3:2", "1:1", "2:3", "9:16", "1:2", "1:3"]
+        },
+        "style": {
+          "enum": ["auto", "manga"]
+        },
+        "output_format": {
+          "enum": ["png", "jpeg"]
+        },
+        "web_search": {},
+        "image_ref": {},
+        "source": {},
+        "user_id": {}
+      },
+      "documented_example": {
+        "type": "image_edit",
+        "prompt": "Change the sky to a dramatic sunset with orange and purple clouds",
+        "source": {
+          "url": "https://example.com/landscape.jpg"
+        }
+      }
+    },
+    "luma|uni-1-max|generate": {
+      "provider_id": "luma",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://agents.lumalabs.ai/v1/generations"
+      },
+      "docs": [
+        "https://docs.agents.lumalabs.ai/guides/images/generation/index.md",
+        "https://docs.agents.lumalabs.ai/guides/images/editing/index.md"
+      ],
+      "additional_properties": true,
+      "model": "uni-1-max",
+      "required": ["prompt"],
+      "properties": {
+        "type": {
+          "enum": ["image", "image_edit"]
+        },
+        "model": {
+          "enum": ["uni-1", "uni-1-max"]
+        },
+        "prompt": {},
+        "aspect_ratio": {
+          "enum": ["3:1", "2:1", "16:9", "3:2", "1:1", "2:3", "9:16", "1:2", "1:3"]
+        },
+        "style": {
+          "enum": ["auto", "manga"]
+        },
+        "output_format": {
+          "enum": ["png", "jpeg"]
+        },
+        "web_search": {},
+        "image_ref": {},
+        "source": {},
+        "user_id": {}
+      },
+      "documented_example": {
+        "prompt": "A glass of iced coffee on a marble countertop, morning light streaming through a window",
+        "aspect_ratio": "16:9"
+      }
+    },
+    "luma|uni-1|edit": {
+      "provider_id": "luma",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://agents.lumalabs.ai/v1/generations"
+      },
+      "docs": [
+        "https://docs.agents.lumalabs.ai/guides/images/generation/index.md",
+        "https://docs.agents.lumalabs.ai/guides/images/editing/index.md"
+      ],
+      "additional_properties": true,
+      "model": "uni-1",
+      "required": ["type", "prompt", "source"],
+      "properties": {
+        "type": {
+          "enum": ["image", "image_edit"]
+        },
+        "model": {
+          "enum": ["uni-1", "uni-1-max"]
+        },
+        "prompt": {},
+        "aspect_ratio": {
+          "enum": ["3:1", "2:1", "16:9", "3:2", "1:1", "2:3", "9:16", "1:2", "1:3"]
+        },
+        "style": {
+          "enum": ["auto", "manga"]
+        },
+        "output_format": {
+          "enum": ["png", "jpeg"]
+        },
+        "web_search": {},
+        "image_ref": {},
+        "source": {},
+        "user_id": {}
+      },
+      "documented_example": {
+        "type": "image_edit",
+        "prompt": "Change the sky to a dramatic sunset with orange and purple clouds",
+        "source": {
+          "url": "https://example.com/landscape.jpg"
+        }
+      }
+    },
+    "luma|uni-1|generate": {
+      "provider_id": "luma",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://agents.lumalabs.ai/v1/generations"
+      },
+      "docs": [
+        "https://docs.agents.lumalabs.ai/guides/images/generation/index.md",
+        "https://docs.agents.lumalabs.ai/guides/images/editing/index.md"
+      ],
+      "additional_properties": true,
+      "model": "uni-1",
+      "required": ["prompt"],
+      "properties": {
+        "type": {
+          "enum": ["image", "image_edit"]
+        },
+        "model": {
+          "enum": ["uni-1", "uni-1-max"]
+        },
+        "prompt": {},
+        "aspect_ratio": {
+          "enum": ["3:1", "2:1", "16:9", "3:2", "1:1", "2:3", "9:16", "1:2", "1:3"]
+        },
+        "style": {
+          "enum": ["auto", "manga"]
+        },
+        "output_format": {
+          "enum": ["png", "jpeg"]
+        },
+        "web_search": {},
+        "image_ref": {},
+        "source": {},
+        "user_id": {}
+      },
+      "documented_example": {
+        "prompt": "A glass of iced coffee on a marble countertop, morning light streaming through a window",
+        "aspect_ratio": "16:9"
+      }
+    },
+    "openai|gpt-image-2.5-flare|edit": {
+      "provider_id": "openai",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/edits"
+      },
+      "docs": [
+        "https://developers.openai.com/api/reference/resources/images.md",
+        "https://developers.openai.com/api/docs/guides/image-generation.md"
+      ],
+      "required": ["prompt", "image"],
+      "additional_properties": false,
+      "properties": {
+        "model": {},
+        "prompt": {},
+        "image": {},
+        "mask": {},
+        "background": {
+          "enum": ["transparent", "opaque", "auto"]
+        },
+        "input_fidelity": {
+          "enum": ["high", "low"]
+        },
+        "moderation": {
+          "enum": ["low", "auto"]
+        },
+        "n": {},
+        "output_compression": {},
+        "output_format": {
+          "enum": ["png", "jpeg", "webp"]
+        },
+        "partial_images": {},
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max", "auto"]
+        },
+        "size": {},
+        "stream": {},
+        "user": {}
+      },
+      "documented_example": {
+        "model": "gpt-image-2.5-sunburst",
+        "prompt": "...",
+        "image": "(multipart file, image[])"
+      },
+      "model": "gpt-image-2.5-flare"
+    },
+    "openai|gpt-image-2.5-flare|generate": {
+      "provider_id": "openai",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations"
+      },
+      "docs": [
+        "https://developers.openai.com/api/reference/resources/images.md",
+        "https://developers.openai.com/api/docs/guides/image-generation.md"
+      ],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "model": {},
+        "prompt": {},
+        "background": {
+          "enum": ["transparent", "opaque", "auto"]
+        },
+        "moderation": {
+          "enum": ["low", "auto"]
+        },
+        "n": {},
+        "output_compression": {},
+        "output_format": {
+          "enum": ["png", "jpeg", "webp"]
+        },
+        "partial_images": {},
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max", "auto"]
+        },
+        "response_format": {
+          "enum": ["url", "b64_json"]
+        },
+        "size": {},
+        "stream": {},
+        "style": {
+          "enum": ["vivid", "natural"]
+        },
+        "user": {}
+      },
+      "documented_example": {
+        "model": "gpt-image-2.5-sunburst",
+        "prompt": "A children's book drawing of a veterinarian using a stethoscope to listen to the heartbeat of a baby otter."
+      },
+      "model": "gpt-image-2.5-flare"
+    },
+    "openai|gpt-image-2.5-sunburst|edit": {
+      "provider_id": "openai",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/edits"
+      },
+      "docs": [
+        "https://developers.openai.com/api/reference/resources/images.md",
+        "https://developers.openai.com/api/docs/guides/image-generation.md"
+      ],
+      "required": ["prompt", "image"],
+      "additional_properties": false,
+      "properties": {
+        "model": {},
+        "prompt": {},
+        "image": {},
+        "mask": {},
+        "background": {
+          "enum": ["transparent", "opaque", "auto"]
+        },
+        "input_fidelity": {
+          "enum": ["high", "low"]
+        },
+        "moderation": {
+          "enum": ["low", "auto"]
+        },
+        "n": {},
+        "output_compression": {},
+        "output_format": {
+          "enum": ["png", "jpeg", "webp"]
+        },
+        "partial_images": {},
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max", "auto"]
+        },
+        "size": {},
+        "stream": {},
+        "user": {}
+      },
+      "documented_example": {
+        "model": "gpt-image-2.5-sunburst",
+        "prompt": "...",
+        "image": "(multipart file, image[])"
+      },
+      "model": "gpt-image-2.5-sunburst"
+    },
+    "openai|gpt-image-2.5-sunburst|generate": {
+      "provider_id": "openai",
+      "endpoint": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations"
+      },
+      "docs": [
+        "https://developers.openai.com/api/reference/resources/images.md",
+        "https://developers.openai.com/api/docs/guides/image-generation.md"
+      ],
+      "required": ["prompt"],
+      "additional_properties": false,
+      "properties": {
+        "model": {},
+        "prompt": {},
+        "background": {
+          "enum": ["transparent", "opaque", "auto"]
+        },
+        "moderation": {
+          "enum": ["low", "auto"]
+        },
+        "n": {},
+        "output_compression": {},
+        "output_format": {
+          "enum": ["png", "jpeg", "webp"]
+        },
+        "partial_images": {},
+        "quality": {
+          "enum": ["low", "medium", "high", "xhigh", "max", "auto"]
+        },
+        "response_format": {
+          "enum": ["url", "b64_json"]
+        },
+        "size": {},
+        "stream": {},
+        "style": {
+          "enum": ["vivid", "natural"]
+        },
+        "user": {}
+      },
+      "documented_example": {
+        "model": "gpt-image-2.5-sunburst",
+        "prompt": "A children's book drawing of a veterinarian using a stethoscope to listen to the heartbeat of a baby otter."
+      },
+      "model": "gpt-image-2.5-sunburst"
+    }
+  },
+  "golden": {
+    "fal|blackforestlabs/flux-3/edit-image|edit": {
+      "prompt": "$PROMPT",
+      "resolution": "2k",
+      "output_format": "png",
+      "image_urls": ["$SOURCE_URL"]
+    },
+    "fal|blackforestlabs/flux-3/text-to-image|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "resolution": "2k",
+      "output_format": "png"
+    },
+    "fal|fal-ai/nano-banana-pro/edit|edit": {
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "num_images": 1,
+      "image_urls": ["$SOURCE_URL"]
+    },
+    "fal|google/nano-banana-lite/edit|edit": {
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "num_images": 1,
+      "image_urls": ["$SOURCE_URL"]
+    },
+    "fal|google/nano-banana-lite|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "output_format": "png",
+      "num_images": 1
+    },
+    "fal|ideogram/v4.5/edit|edit": {
+      "prompt": "$PROMPT",
+      "edit_precision": "high",
+      "quality": "medium",
+      "num_images": 1,
+      "image_url": "$SOURCE_URL"
+    },
+    "fal|ideogram/v4.5|generate": {
+      "prompt": "$PROMPT",
+      "image_size": "portrait_4_3",
+      "quality": "medium",
+      "enable_prompt_expansion": false,
+      "num_images": 1
+    },
+    "fal|openai/gpt-image-2.5/flare/edit|edit": {
+      "prompt": "$PROMPT",
+      "image_size": "auto",
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png",
+      "image_urls": ["$SOURCE_URL"]
+    },
+    "fal|openai/gpt-image-2.5/flare/text-to-image|generate": {
+      "prompt": "$PROMPT",
+      "image_size": {
+        "width": 1536,
+        "height": 2048
+      },
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png"
+    },
+    "fal|openai/gpt-image-2.5/sunburst/edit|edit": {
+      "prompt": "$PROMPT",
+      "image_size": "auto",
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png",
+      "image_urls": ["$SOURCE_URL"]
+    },
+    "fal|openai/gpt-image-2.5/sunburst/text-to-image|generate": {
+      "prompt": "$PROMPT",
+      "image_size": {
+        "width": 1536,
+        "height": 2048
+      },
+      "quality": "high",
+      "num_images": 1,
+      "output_format": "png"
+    },
+    "gemini|gemini-3-pro-image|edit": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            },
+            {
+              "inline_data": {
+                "mime_type": "$MIME",
+                "data": "$SOURCE_BASE64"
+              }
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "gemini|gemini-3-pro-image|generate": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "gemini|gemini-3.1-flash-image|edit": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            },
+            {
+              "inline_data": {
+                "mime_type": "$MIME",
+                "data": "$SOURCE_BASE64"
+              }
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "gemini|gemini-3.1-flash-image|generate": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "gemini|gemini-3.1-flash-lite-image|edit": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            },
+            {
+              "inline_data": {
+                "mime_type": "$MIME",
+                "data": "$SOURCE_BASE64"
+              }
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "gemini|gemini-3.1-flash-lite-image|generate": {
+      "contents": [
+        {
+          "parts": [
+            {
+              "text": "$PROMPT"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "responseModalities": ["TEXT", "IMAGE"],
+        "responseFormat": {
+          "image": {
+            "aspectRatio": "ASPECT_RATIO_THREE_BY_FOUR",
+            "imageSize": "IMAGE_SIZE_ONE_K"
+          }
+        }
+      }
+    },
+    "krea|google/nano-banana-2|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|google/nano-banana-2|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4"
+    },
+    "krea|google/nano-banana-flash-lite|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|google/nano-banana-flash-lite|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4"
+    },
+    "krea|google/nano-banana-pro|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|google/nano-banana-pro|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4"
+    },
+    "krea|ideogram/ideogram-4.5-precise|edit": {
+      "prompt": "$PROMPT",
+      "quality": "medium",
+      "image_url": "$KREA_ASSET_URL"
+    },
+    "krea|ideogram/ideogram-4.5|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "4:5",
+      "resolution": "2K",
+      "quality": "medium",
+      "skip_prompt_expansion": true,
+      "preserve_source_size": true,
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|ideogram/ideogram-4.5|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "4:5",
+      "resolution": "2K",
+      "quality": "medium",
+      "skip_prompt_expansion": true
+    },
+    "krea|openai/gpt-image-2.5-flare|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "resolution": "2K",
+      "quality": "high",
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|openai/gpt-image-2.5-flare|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "resolution": "2K",
+      "quality": "high"
+    },
+    "krea|openai/gpt-image-2.5-sunburst|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "resolution": "2K",
+      "quality": "high",
+      "image_urls": ["$KREA_ASSET_URL"]
+    },
+    "krea|openai/gpt-image-2.5-sunburst|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "3:4",
+      "resolution": "2K",
+      "quality": "high"
+    },
+    "krea|z-image/z-image|edit": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "2:3",
+      "resolution": "1K",
+      "image_url": "$KREA_ASSET_URL",
+      "denoising_strength": 0.5
+    },
+    "krea|z-image/z-image|generate": {
+      "prompt": "$PROMPT",
+      "aspect_ratio": "2:3",
+      "resolution": "1K"
+    },
+    "luma|uni-1-max|edit": {
+      "type": "image_edit",
+      "model": "uni-1-max",
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "source": {
+        "data": "$SOURCE_BASE64",
+        "media_type": "$MIME"
+      }
+    },
+    "luma|uni-1-max|generate": {
+      "type": "image",
+      "model": "uni-1-max",
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "aspect_ratio": "2:3"
+    },
+    "luma|uni-1|edit": {
+      "type": "image_edit",
+      "model": "uni-1",
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "source": {
+        "data": "$SOURCE_BASE64",
+        "media_type": "$MIME"
+      }
+    },
+    "luma|uni-1|generate": {
+      "type": "image",
+      "model": "uni-1",
+      "prompt": "$PROMPT",
+      "output_format": "png",
+      "aspect_ratio": "2:3"
+    },
+    "openai|gpt-image-2.5-flare|edit": {
+      "model": "gpt-image-2.5-flare",
+      "prompt": "$PROMPT",
+      "size": "1536x2048",
+      "quality": "high",
+      "output_format": "webp",
+      "image": "$FILE"
+    },
+    "openai|gpt-image-2.5-flare|generate": {
+      "model": "gpt-image-2.5-flare",
+      "prompt": "$PROMPT",
+      "size": "1536x2048",
+      "quality": "high",
+      "output_format": "webp",
+      "n": 1
+    },
+    "openai|gpt-image-2.5-sunburst|edit": {
+      "model": "gpt-image-2.5-sunburst",
+      "prompt": "$PROMPT",
+      "size": "1536x2048",
+      "quality": "high",
+      "output_format": "webp",
+      "image": "$FILE"
+    },
+    "openai|gpt-image-2.5-sunburst|generate": {
+      "model": "gpt-image-2.5-sunburst",
+      "prompt": "$PROMPT",
+      "size": "1536x2048",
+      "quality": "high",
+      "output_format": "webp",
+      "n": 1
+    }
+  }
+}
