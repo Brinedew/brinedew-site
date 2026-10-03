@@ -307,7 +307,7 @@
         },
         {
           "category": "test",
-          "file": "workers/iconoplasm-topology.test.js",
+          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-009]"
         },
         {
