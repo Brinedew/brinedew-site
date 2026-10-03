@@ -22,7 +22,7 @@
 // reason is given (AGENTS.md: spend the daily allowance at the end of the UTC
 // day). Every run is idempotent: eligibility is recomputed per window.
 import { execFileSync } from "node:child_process"
-import { writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -271,7 +271,10 @@ async function main() {
     log: (line) => console.error(line),
   })
   const text = `${JSON.stringify(report, null, 2)}\n`
-  if (options.reportFile) writeFileSync(options.reportFile, text)
+  if (options.reportFile) {
+    mkdirSync(path.dirname(path.resolve(options.reportFile)), { recursive: true })
+    writeFileSync(options.reportFile, text)
+  }
   process.stdout.write(text)
   if (!report.done)
     console.error(`Not finished. Resume with --from-rowid ${report.next_from_rowid}`)
