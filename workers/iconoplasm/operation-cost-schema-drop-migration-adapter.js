@@ -1,12 +1,11 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
 import { executeOperationCostD1Batch } from "./operation-cost-d1-meter.js"
 
-// One adapter for the migrations that only drop schema objects nothing reads:
-// 0110 (the finalization handoff table and its three triggers) and 0114 (the
-// vote projection job table). Schema only: each DROP removes one sqlite_schema
-// row (a table's own indexes go with it) and rescans sqlite_schema (362 rows
-// on 2026-09-26), then the journal row. No statement scans a data table, so
-// the bound allows eight full passes over the admitted 512-row schema.
+// One adapter for a migration that only drops schema objects nothing reads.
+// Schema only: each DROP removes one sqlite_schema row (a table's own indexes
+// go with it) and rescans sqlite_schema (362 rows on 2026-09-26), then the
+// journal row. No statement scans a data table, so the bound allows eight full
+// passes over the admitted 512-row schema.
 export function createSchemaDropMigrationCostAdapter({
   db,
   name,

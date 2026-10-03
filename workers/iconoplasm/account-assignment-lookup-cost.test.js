@@ -3,9 +3,9 @@ import { createRequire } from "node:module"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
-import { createAssignmentLookupMigrationCostAdapter } from "./operation-cost-counter-migration-adapters.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 import { projectAuthorityAccountStatus } from "./caretaker/authority-account-projection.js"
+import { applyMigrationFile } from "../test-helpers/migration-sql-statements.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -54,11 +54,6 @@ test(
       }
       await db
         .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
-      await db
-        .prepare(
           "INSERT INTO icono_authority_accounts(account_id,public_credit_label) VALUES ('account_history','History caretaker'),('account_empty','Empty caretaker')",
         )
         .run()
@@ -87,33 +82,9 @@ test(
         projectAuthorityAccountStatus(db, args),
         /idx_icono_account_assignment_projection/,
       )
-      const adapter = createAssignmentLookupMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      const limits = { max_assignments: 20000, max_schema_rows: 512 }
-      await assert.rejects(
-        adapter.dispatch(await adapter.prepare({ ...limits, max_assignments: 19999 })),
-      )
-      assert.equal(
-        (
-          await db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='idx_icono_account_assignment_projection'",
-            )
-            .first()
-        ).n,
-        0,
-      )
-      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first()).n, 0)
-      const prepared = await adapter.prepare(limits)
-      const { actual } = await adapter.dispatch(prepared)
-      assert.ok(actual.rows_read <= prepared.bound.rows_read, JSON.stringify(actual))
-      assert.ok(actual.rows_written <= prepared.bound.rows_written, JSON.stringify(actual))
-      t.diagnostic(
-        JSON.stringify({ operation: "assignment-index-migration", actual, bound: prepared.bound }),
-      )
+      // The projection index is the only change in 0016; the lookup above
+      // refuses without it, and every cost assertion below runs with it.
+      await applyMigrationFile(db, root, "0016_account_assignment_lookup.sql")
 
       async function selectedAssignment(accountId, legacy = false) {
         const meter = createOperationCostD1Meter(db)

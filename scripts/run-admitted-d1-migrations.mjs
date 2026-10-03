@@ -7,8 +7,6 @@ import {
   RELEASE_REQUEST_LIMIT,
   MIGRATION_RELEASE_REQUEST_LIMIT,
 } from "./operation-cost-release-plan.mjs"
-import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
-import { inspectMigrationSizes } from "./operation-cost-release-prerequisites.mjs"
 
 const ROOT = new URL("../", import.meta.url)
 const ENDPOINT = "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations"
@@ -151,69 +149,21 @@ export async function runAdmittedMigrations({
   // the inventory is empty.
   const stageOneMigration = pending[0]?.migration_protocol === "one-migration-per-release-v1"
   const executablePending = stageOneMigration ? pending.slice(0, 1) : pending
-  const prerequisites = await inspectMigrationSizes({
-    pending: executablePending,
-    capabilities,
-    send,
-    releaseId: inventoryReleaseId,
-    now,
-  })
-  const localAdapters = createMigrationOperationCostAdapters(
-    { ICONOPLASM_SCHEMA_TRANSITION: "1" },
-    OPERATION_COST_IDENTITIES,
-  )
   for (const item of executablePending) {
     if (!item.migration_protocol) {
       await execute(item.adapter_id, item.prediction, item.arguments)
       continue
     }
-    if (adapters.get(item.adapter_id)?.migration_protocol !== item.migration_protocol)
-      throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
-    if (item.migration_protocol === "one-migration-per-release-v1") {
-      await execute(item.adapter_id, item.prediction, item.arguments)
-      continue
-    }
     if (
-      item.migration_protocol !== "admin-count-seed-v1" ||
-      !Number.isSafeInteger(item.max_steps) ||
-      item.max_steps < 1 ||
-      item.max_steps > 100
+      item.migration_protocol !== "one-migration-per-release-v1" ||
+      adapters.get(item.adapter_id)?.migration_protocol !== item.migration_protocol
     )
       throw new Error("COST_MIGRATION_PROTOCOL_INVALID")
-    let args = item.arguments,
-      complete = false
-    for (let step = 0; step < item.max_steps; step++) {
-      const { bound } = await localAdapters.get(item.adapter_id).prepare(args)
-      const capacity = await send("/capacity", "GET")
-      const checkedAt = Date.now()
-      if (
-        capacity?.day !== new Date(checkedAt).toISOString().slice(0, 10) ||
-        !Number.isSafeInteger(capacity.measured_at) ||
-        capacity.measured_at > checkedAt ||
-        checkedAt - capacity.measured_at > 60000
-      )
-        throw new Error("COST_SHARED_USAGE_UNAVAILABLE")
-      for (const meter of Object.keys(bound)) {
-        if (!Number.isSafeInteger(capacity.remaining?.[meter]) || capacity.remaining[meter] < 0)
-          throw new Error("COST_SHARED_USAGE_UNAVAILABLE")
-        if (capacity.remaining[meter] < bound[meter] + (meter === "requests" ? 2 : 0))
-          throw new Error("COST_MIGRATION_RESUME_AFTER_HEADROOM")
-      }
-      const result = await execute(item.adapter_id, item.prediction, args)
-      if (result?.applied === true) {
-        complete = true
-        break
-      }
-      if (!["catalog", "rollup", "assets", "finish"].includes(result?.next_phase))
-        throw new Error("COST_MIGRATION_PROGRESS_INVALID")
-      args = { phase: result.next_phase }
-    }
-    if (!complete) throw new Error("COST_MIGRATION_RESUME_REQUIRED")
+    await execute(item.adapter_id, item.prediction, item.arguments)
   }
   return {
     migrations_applied: executablePending.length,
     continuation_required: stageOneMigration && pending.length > executablePending.length,
-    prerequisites,
     evidence,
   }
 }

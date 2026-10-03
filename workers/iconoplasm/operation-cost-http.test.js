@@ -10,7 +10,6 @@ import { createOperationCostAuthority, OPERATION_COST_ROUTE_PREFIX } from "./ope
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function fixture({
-  migrated = true,
   kv,
   initializeCatalog,
   kvUsage = {},
@@ -20,7 +19,6 @@ function fixture({
   const local = new DatabaseSync(":memory:")
   const provider = new DatabaseSync(":memory:")
   for (const name of ["0028_add_finalization_jobs.sql", "0094_finalization_summary.sql"]) {
-    if (!migrated && name.startsWith("0094")) continue
     provider.exec(
       readFileSync(new URL(`../../migrations-iconoplasm/${name}`, import.meta.url), "utf8"),
     )
@@ -394,25 +392,26 @@ test("real Worker gateway authenticates before authority/provider access and for
   }
 })
 
-test("migration uses the same HTTP prediction gate and a query plan cannot be rebound to DDL", async () => {
-  const f = fixture({ migrated: false })
+test("the migration inventory uses the same HTTP prediction gate and a registered plan cannot be rebound to another adapter", async () => {
+  const f = fixture()
   try {
+    f.provider.exec("INSERT INTO d1_migrations(name) VALUES ('0001_example.sql')")
     const capabilities = await (await f.authority.fetch(f.request(""))).json()
     const adapter = capabilities.adapters.find(
-      (adapter) => adapter.id === "iconoplasm-migration-0094",
+      (adapter) => adapter.id === "iconoplasm-migration-inventory",
     )
     const plan = {
       ...adapter,
-      id: "migration",
+      id: "inventory",
       adapter_id: adapter.id,
-      prediction: { rows_read: 5000, rows_written: 300, requests: 1 },
+      prediction: { rows_read: 5000, rows_written: 0, requests: 1 },
       expires_at: f.clock + 60_000,
     }
     const execution = {
       operation_id: plan.id,
       adapter_id: adapter.id,
       step_id: "apply",
-      arguments: { max_rows: 1, max_unfinished: 0 },
+      arguments: { statements: [{ query_id: "applied-migrations", arguments: {} }] },
     }
     assert.equal((await f.authority.fetch(f.request("/execute", execution))).status, 428)
     assert.equal(f.calls.length, 0)
@@ -428,30 +427,30 @@ test("migration uses the same HTTP prediction gate and a query plan cannot be re
     assert.equal(f.calls.length, 0)
     const result = await f.authority.fetch(f.request("/execute", execution))
     assert.equal(result.status, 200)
-    assert.equal((await result.json()).result.applied, true)
+    assert.deepEqual(
+      (await result.json()).result[0].results.map((row) => row.name),
+      ["0001_example.sql"],
+    )
     assert.equal(f.calls.length, 1)
-    assert.equal(f.provider.prepare("SELECT COUNT(*) AS n FROM d1_migrations").get().n, 1)
   } finally {
     f.close()
   }
 })
 
-// Replay of the 25 Sep 2026 incident (B-847). D1 billed the 0109 CREATE INDEX
-// as two table passes, more than its bound. The executor threw after the
-// index had applied, and the overrun invalidated every adapter in the Worker
-// build, including the migration inventory each release starts with, so the
-// app stayed in schema transition for 43 minutes until new code shipped.
-test("a migration that overruns its bound after applying still reports success and leaves the release able to continue", async () => {
+// An operation whose provider cost exceeds its verified bound after it has
+// committed still reports success, flagged `bound_exceeded`, so a release can
+// carry on and bring production back. The adapter whose bound proved wrong is
+// refused until its code changes. Every other adapter in the same Worker build,
+// including the migration inventory each release starts with, keeps working.
+test("an adapter that overruns its bound after committing reports success, is refused until its code changes, and leaves the migration inventory usable", async () => {
   const f = fixture({
     meta: (sql) =>
-      /^CREATE INDEX/i.test(sql)
-        ? { rows_read: 38_573, rows_written: 19_161 }
+      /icono_sync_finalization_summary/.test(sql)
+        ? { rows_read: 38_573, rows_written: 0 }
         : { rows_read: 2, rows_written: 0 },
   })
   try {
-    f.provider.exec(
-      "CREATE TABLE icono_publish_state (gene_symbol TEXT PRIMARY KEY, updated_at TEXT); INSERT INTO icono_publish_state VALUES ('TP53', '2026-09-25'), ('BRCA1', '2026-09-25')",
-    )
+    f.provider.exec("INSERT INTO d1_migrations(name) VALUES ('0001_example.sql')")
     const capabilities = await (await f.authority.fetch(f.request(""))).json()
     const find = (id) => capabilities.adapters.find((adapter) => adapter.id === id)
     const register = async (adapter, id, prediction) => {
@@ -466,30 +465,23 @@ test("a migration that overruns its bound after applying still reports success a
       )
       assert.equal(response.status, 201)
     }
-    const migration = find("iconoplasm-migration-0109")
-    await register(migration, "release-0109", {
-      rows_read: 40_000,
-      rows_written: 20_000,
-      requests: 1,
-    })
-    const applied = await f.authority.fetch(
-      f.request("/execute", {
-        operation_id: "release-0109",
-        adapter_id: migration.id,
-        step_id: "execute-0",
-        arguments: { max_rows: 2, max_schema_rows: 64 },
-      }),
-    )
-    assert.equal(applied.status, 200)
-    const receipt = await applied.json()
-    assert.equal(receipt.result.applied, true)
+    const reader = find("iconoplasm-d1")
+    const readSummary = (operationId) =>
+      f.authority.fetch(
+        f.request("/execute", {
+          operation_id: operationId,
+          adapter_id: reader.id,
+          step_id: "execute-0",
+          arguments: { statements: [{ query_id: "finalization-summary", arguments: {} }] },
+        }),
+      )
+    await register(reader, "release-read", { rows_read: 40_000, rows_written: 0, requests: 1 })
+    const overrun = await readSummary("release-read")
+    assert.equal(overrun.status, 200)
+    const receipt = await overrun.json()
     assert.equal(receipt.bound_exceeded, true)
-    assert.equal(receipt.usage.rows_read, 38_573 + 3 * 2)
-    assert.ok(
-      f.provider
-        .prepare("SELECT 1 FROM sqlite_schema WHERE name = 'idx_icono_publish_state_updated'")
-        .get(),
-    )
+    assert.equal(receipt.usage.rows_read, 38_573)
+    assert.equal(receipt.result[0].results[0].unfinished_count, 0)
 
     // The next release's first step: a different adapter, same Worker build.
     const inventory = find("iconoplasm-migration-inventory")
@@ -507,23 +499,18 @@ test("a migration that overruns its bound after applying still reports success a
       }),
     )
     assert.equal(listed.status, 200)
-    const names = (await listed.json()).result[0].results.map((row) => row.name)
-    assert.ok(names.includes("0109_publish_state_updated_index.sql"))
+    assert.deepEqual(
+      (await listed.json()).result[0].results.map((row) => row.name),
+      ["0001_example.sql"],
+    )
 
     // The adapter whose bound proved wrong stays refused until its code changes.
-    await register(migration, "release-0109-again", {
+    await register(reader, "release-read-again", {
       rows_read: 40_000,
-      rows_written: 20_000,
+      rows_written: 0,
       requests: 1,
     })
-    const again = await f.authority.fetch(
-      f.request("/execute", {
-        operation_id: "release-0109-again",
-        adapter_id: migration.id,
-        step_id: "execute-0",
-        arguments: { max_rows: 2, max_schema_rows: 64 },
-      }),
-    )
+    const again = await readSummary("release-read-again")
     assert.equal(again.status, 429)
     assert.equal((await again.json()).code, "COST_VERIFIED_BOUND_INVALIDATED")
   } finally {

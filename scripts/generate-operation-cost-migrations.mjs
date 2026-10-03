@@ -1,37 +1,36 @@
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
-import { transactionalAdminCountSeedPhases } from "./generate-transactional-admin-counts.mjs"
-import {
-  assetSummaryMigration,
-  assetSummaryMigrationStatements,
-} from "./generate-asset-summary-counts.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
-const filename = "0094_finalization_summary.sql"
-const authoringFilename = "0012_streamed_replica_snapshots.sql"
-const uploadFilename = "0013_strict_upload_reservations.sql"
-const lineageFilename = "0014_bounded_lineage_upload_admission.sql"
 const target = path.join(root, "workers/generated/operation-cost-migrations.js")
 
-// Deliberately handles this one reviewed migration's line-oriented SQL. This
-// is not a general SQL parser. A changed statement shape must fail generation.
-function reviewedMigrationStatements(directory, name, expectedTriggers, expectedStatements = 7) {
-  const source = readFileSync(path.join(root, directory, name), "utf8")
+// Splits a migration file into the statements D1 runs one by one. Deliberately
+// handles the repository's line-oriented SQL: a statement ends at a line ending
+// in ";", except a CREATE TRIGGER block, which ends at the "END;" line that
+// closes it. This is not a general SQL parser.
+export function splitMigrationSql(source, name) {
   const statements = []
   let current = []
   let trigger = false
   for (const line of source.split(/\r?\n/)) {
     if (!line.trim() || line.trimStart().startsWith("--")) continue
-    if (!current.length) trigger = /^CREATE TRIGGER\b/.test(line)
+    if (!current.length) trigger = /^CREATE TRIGGER\b/i.test(line)
     current.push(line)
-    if ((trigger && /^END;\s*$/.test(line)) || (!trigger && /;\s*$/.test(line))) {
+    if (trigger ? /^END;\s*$/.test(line) : /;\s*$/.test(line)) {
       statements.push(current.join("\n"))
       current = []
     }
   }
+  if (current.length) throw new Error(`Migration ${name} ends inside an unterminated statement`)
+  return statements
+}
+
+// A reviewed migration's statement shape is pinned: a changed shape must fail
+// generation.
+export function reviewedMigrationStatements(directory, name, expectedTriggers, expectedStatements) {
+  const statements = splitMigrationSql(readFileSync(path.join(root, directory, name), "utf8"), name)
   if (
-    current.length ||
     statements.length !== expectedStatements ||
     statements.filter((sql) => sql.startsWith("CREATE TRIGGER")).length !== expectedTriggers
   ) {
@@ -40,258 +39,19 @@ function reviewedMigrationStatements(directory, name, expectedTriggers, expected
   return statements
 }
 
-export function finalizationMigrationStatements() {
-  return reviewedMigrationStatements("migrations-iconoplasm", filename, 3)
-}
-
-export function authoringStreamMigrationStatements() {
-  return reviewedMigrationStatements("migrations-iconoplasm-authoring", authoringFilename, 4)
-}
-
-export function uploadReservationMigrationStatements() {
-  return reviewedMigrationStatements("migrations-iconoplasm-authoring", uploadFilename, 2, 4)
-}
-
-export function lineageAdmissionMigrationStatements() {
-  return reviewedMigrationStatements("migrations-iconoplasm-authoring", lineageFilename, 1, 4)
-}
-
-export function adminCountsMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0095_transactional_admin_counts.sql",
-    9,
-    12,
-  )
-}
-
-export function inboxCountersMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0096_request_inbox_counters.sql",
-    18,
-    32,
-  )
-}
-
-export function snapshotRetirementMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm-authoring",
-    "0015_retire_materialized_snapshot_parts.sql",
-    0,
-    2,
-  )
-}
-
-export function deliveryCursorMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0097_delivery_reconciliation_cursor.sql",
-    0,
-    2,
-  )
-}
-
-export function assignmentLookupMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm-authoring",
-    "0016_account_assignment_lookup.sql",
-    0,
-    1,
-  )
-}
-
-export function compactDiscoveryMigrationStatements() {
-  // B-764: schema and singleton state only. The catalog-sized ordinal seed was
-  // replaced by the bounded on-demand dictionary resolver, so a statement
-  // count that grows with the migration means the seed came back. The canonical
-  // identity index plus the activation gate and its singleton are fifteen
-  // reviewed statements. Migration 0108 repairs installations that recorded
-  // 0106 before the activation statements were historically appended.
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0106_compact_discovery_state_v2.sql",
-    0,
-    15,
-  )
-}
-
-export function compactDiscoveryActivationMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0108_compact_discovery_activation_v2.sql",
-    0,
-    2,
-  )
+// A migration that is pending in production adds one entry here:
+// [export prefix, migration file name, reviewedMigrationStatements(...)]. Its
+// adapter in workers/iconoplasm/operation-cost-migration-adapters.js imports
+// the generated `<PREFIX>_MIGRATION_NAME` and `<PREFIX>_MIGRATION_STATEMENTS`.
+// The entry is deleted once the deploy shows the migration applied.
+function pendingMigrations() {
+  return []
 }
 
 function output() {
-  if (
-    readFileSync(
-      path.join(root, "migrations-iconoplasm/0104_asset_summary_counts.sql"),
-      "utf8",
-    ).replace(/\r\n/g, "\n") !== assetSummaryMigration()
-  ) {
-    throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
-  }
-  const migrations = [
-    [
-      "VOTE_PROJECTION_JOBS_RETIREMENT",
-      "0114_retire_vote_projection_jobs.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0114_retire_vote_projection_jobs.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "GENE_VOTE_VERSION",
-      "0113_gene_vote_version.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0113_gene_vote_version.sql", 0, 2),
-    ],
-    [
-      "GENE_BLOT_BACKLOG_WATERMARK",
-      "0112_gene_blot_backlog_watermark.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0112_gene_blot_backlog_watermark.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "FINALIZATION_HANDOFF_RETIREMENT",
-      "0110_retire_finalization_publication_handoff.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0110_retire_finalization_publication_handoff.sql",
-        0,
-        4,
-      ),
-    ],
-    [
-      "DISCOVERY_USER_SHELF",
-      "0111_discovery_user_shelf.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0111_discovery_user_shelf.sql", 0, 3),
-    ],
-    [
-      "PUBLISH_STATE_UPDATED_INDEX",
-      "0109_publish_state_updated_index.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0109_publish_state_updated_index.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "COMPACT_DISCOVERY_ACTIVATION",
-      "0108_compact_discovery_activation_v2.sql",
-      compactDiscoveryActivationMigrationStatements(),
-    ],
-    [
-      "COMPACT_DISCOVERY",
-      "0106_compact_discovery_state_v2.sql",
-      compactDiscoveryMigrationStatements(),
-    ],
-    [
-      "BLACKLIST_LOOKUP",
-      "0105_artist_blacklist_lookup.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0105_artist_blacklist_lookup.sql",
-        0,
-        1,
-      ),
-    ],
-    ["ASSET_SUMMARY", "0104_asset_summary_counts.sql", assetSummaryMigrationStatements()],
-    [
-      "FINALIZATION_RUNNING",
-      "0103_finalization_running_index.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0103_finalization_running_index.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "FINALIZATION_STATUS",
-      "0102_finalization_status_index.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0102_finalization_status_index.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "FINALIZATION_PUBLICATION",
-      "0101_finalization_publication_barrier.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0101_finalization_publication_barrier.sql",
-        3,
-        5,
-      ),
-    ],
-    [
-      "FINALIZATION_JOB_VERSION",
-      "0100_finalization_job_version.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0100_finalization_job_version.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "FINALIZATION_QUEUE",
-      "0099_finalization_queue_indexes.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0099_finalization_queue_indexes.sql",
-        0,
-        1,
-      ),
-    ],
-    [
-      "CANONICAL_LIFECYCLE_GUARDS",
-      "0017_canonical_lifecycle_keyed_guards.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm-authoring",
-        "0017_canonical_lifecycle_keyed_guards.sql",
-        3,
-        6,
-      ),
-    ],
-    [
-      "ASSIGNMENT_LOOKUP",
-      "0016_account_assignment_lookup.sql",
-      assignmentLookupMigrationStatements(),
-    ],
-    ["FINALIZATION", filename, finalizationMigrationStatements()],
-    ["AUTHORING_STREAM", authoringFilename, authoringStreamMigrationStatements()],
-    ["UPLOAD_RESERVATION", uploadFilename, uploadReservationMigrationStatements()],
-    ["LINEAGE_ADMISSION", lineageFilename, lineageAdmissionMigrationStatements()],
-    ["ADMIN_COUNTS", "0095_transactional_admin_counts.sql", adminCountsMigrationStatements()],
-    ["INBOX_COUNTERS", "0096_request_inbox_counters.sql", inboxCountersMigrationStatements()],
-    [
-      "DELIVERY_CURSOR",
-      "0097_delivery_reconciliation_cursor.sql",
-      deliveryCursorMigrationStatements(),
-    ],
-    [
-      "SNAPSHOT_RETIREMENT",
-      "0015_retire_materialized_snapshot_parts.sql",
-      snapshotRetirementMigrationStatements(),
-    ],
-  ]
   return (
     "// Generated from reviewed migrations; never accept caller SQL.\n" +
-    `export const ADMIN_COUNTS_SEED_PHASES = Object.freeze(${JSON.stringify(transactionalAdminCountSeedPhases(), null, 2)})\n` +
-    migrations
+    pendingMigrations()
       .map(
         ([prefix, name, statements]) =>
           `export const ${prefix}_MIGRATION_NAME = ${JSON.stringify(name)}\nexport const ${prefix}_MIGRATION_STATEMENTS = Object.freeze(${JSON.stringify(statements, null, 2)})\n`,
