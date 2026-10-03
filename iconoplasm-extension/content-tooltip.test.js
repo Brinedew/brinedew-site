@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFile } from "node:fs/promises"
 import vm from "node:vm"
+import { parseHTML } from "linkedom"
 
 // ARCHITECTURE FENCE [IPD-008]: hover readiness ends at decoded first paint,
 // not at a cache insert or a fire-and-forget prewarm message.
@@ -593,4 +594,101 @@ test("frame prewarm acknowledges decoded paint readiness and defers rough decora
     data: { ...load, requestId: "image-3", url: "https://example.test/image.webp" },
   })
   assert.equal(posted.find((message) => message.requestId === "image-3")?.ok, false)
+})
+
+// B-913: the one writer of the page's transient notice (the login prompt, a refused vote).
+//
+// Ways this can fail, written before the code:
+//  1. a second notice shown while the first is still up is cut short by the first one's timer;
+//  2. the sentence goes into the page as HTML (it comes from the server's JSON);
+//  3. the notice never leaves, or leaves before its duration;
+//  4. an enormous message is shown whole, or a message that is not text (or is blank) puts an
+//     empty notice on the page;
+//  5. a missing notice element throws inside a vote callback.
+function toastRig() {
+  const { document } = parseHTML("<!doctype html><html><body></body></html>")
+  const toast = document.createElement("div")
+  toast.className = "iconoplasm-auth-toast"
+  document.body.appendChild(toast)
+  let nextId = 1
+  const timers = new Map()
+  const windowRef = {
+    setTimeout(callback, delay) {
+      const id = nextId++
+      timers.set(id, { callback, delay })
+      return id
+    },
+    clearTimeout(id) {
+      timers.delete(id)
+    },
+  }
+  return {
+    toast,
+    windowRef,
+    timers,
+    visible: () => toast.classList.contains("iconoplasm-auth-toast-visible"),
+  }
+}
+
+test("a notice shows its text, stays for its duration and then leaves", async () => {
+  const api = await loadTooltipModule()
+  const rig = toastRig()
+  api.showToast(rig.toast, "Voting is paused until 00:00 UTC.", {
+    durationMs: 7000,
+    windowRef: rig.windowRef,
+  })
+  assert.equal(rig.toast.textContent, "Voting is paused until 00:00 UTC.")
+  assert.equal(rig.visible(), true)
+  assert.equal(rig.timers.size, 1)
+  assert.equal([...rig.timers.values()][0].delay, 7000)
+  const [[, timer]] = [...rig.timers.entries()]
+  timer.callback()
+  assert.equal(rig.visible(), false)
+})
+
+test("a second notice replaces the first and gets its own full duration", async () => {
+  const api = await loadTooltipModule()
+  const rig = toastRig()
+  api.showToast(rig.toast, "First.", { durationMs: 2600, windowRef: rig.windowRef })
+  const firstTimers = [...rig.timers.keys()]
+  api.showToast(rig.toast, "Second.", { durationMs: 7000, windowRef: rig.windowRef })
+  assert.equal(rig.toast.textContent, "Second.")
+  assert.equal(rig.timers.size, 1, "the first notice's timer must be cancelled")
+  assert.equal(
+    firstTimers.some((id) => rig.timers.has(id)),
+    false,
+  )
+  assert.equal([...rig.timers.values()][0].delay, 7000)
+})
+
+test("the sentence is shown as text, never as markup", async () => {
+  const api = await loadTooltipModule()
+  const rig = toastRig()
+  api.showToast(rig.toast, "<img src=x onerror=alert(1)><b>Paused</b>", {
+    windowRef: rig.windowRef,
+  })
+  assert.equal(rig.toast.children.length, 0)
+  assert.equal(rig.toast.textContent, "<img src=x onerror=alert(1)><b>Paused</b>")
+})
+
+test("an enormous message is bounded; a blank or non-text one shows nothing", async () => {
+  const api = await loadTooltipModule()
+  const rig = toastRig()
+  api.showToast(rig.toast, "x".repeat(5000), { windowRef: rig.windowRef })
+  assert.equal(rig.toast.textContent.length <= 300, true)
+  assert.equal(rig.toast.textContent.length > 0, true)
+
+  for (const message of [{ not: "text" }, "", "   ", null, undefined, 42]) {
+    const blank = toastRig()
+    api.showToast(blank.toast, message, { windowRef: blank.windowRef })
+    assert.equal(blank.visible(), false, `${JSON.stringify(message)} must not open a notice`)
+    assert.equal(blank.timers.size, 0)
+  }
+})
+
+test("a missing notice element does nothing", async () => {
+  const api = await loadTooltipModule()
+  const rig = toastRig()
+  assert.doesNotThrow(() => api.showToast(null, "Paused", { windowRef: rig.windowRef }))
+  assert.equal(rig.timers.size, 0)
 })
