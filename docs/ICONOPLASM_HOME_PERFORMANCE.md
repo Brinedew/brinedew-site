@@ -61,10 +61,11 @@ A symbol-to-SHA snapshot is its own portrait timeline. Used for the image-only
 account view, it shows an outvoted portrait on the signed-in homepage while
 `/gene/<SYMBOL>` shows the current one, and guest or substitute-browser checks
 never exercise that branch. The regression test "image-only account gallery
-ignores stale discovery and legacy portrait-ref identities"
-(`workers/iconoplasm.account-gallery-window.test.js`) makes the discovery-row
-SHA and the portrait-reference snapshot stale while the stable object is
-current, and requires the response to use the stable object.
+ignores a stale legacy portrait-ref snapshot"
+(`workers/iconoplasm.account-gallery-window.test.js`) makes the portrait-reference
+snapshot stale while the stable object is current, and requires the response to
+use the stable object. Compact discovery state holds no image identity, so there
+is no discovery-row SHA to go stale.
 
 ### Forbidden “optimizations”
 

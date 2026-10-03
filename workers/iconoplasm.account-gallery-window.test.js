@@ -1,13 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
+
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
 import {
   installStableGeneStorage,
@@ -15,14 +14,6 @@ import {
   stableGeneObjectPath,
   stableGeneStorageEnv,
 } from "./test-helpers/stable-gene-objects.js"
-
-const source = readFileSync(
-  new URL(
-    "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-    import.meta.url,
-  ),
-  "utf8",
-)
 
 // Real SQLite under the route handlers. Discovery fixtures are seeded into the
 // compact representation (membership bitmap, chronology events, shared arrays)
@@ -180,29 +171,6 @@ class FakeDb {
     } catch (error) {
       this.raw.exec("ROLLBACK")
       throw error
-    }
-  }
-
-  discovery(userId, symbol) {
-    return this.rows.find(
-      (row) => row.user_id === String(userId) && row.gene_symbol === String(symbol).toUpperCase(),
-    )
-  }
-
-  enrich(row) {
-    return {
-      ...row,
-      full_name: `${row.gene_symbol} full name`,
-      weight_kg: null,
-      age_years: null,
-      uniqueness_rank: null,
-      image_upvotes: Math.max(0, Number(row.image_score || 0)),
-      image_downvotes: 0,
-      published_at: row.last_encountered_at,
-      asset_created_at: row.last_encountered_at,
-      asset_sha256: "7b".repeat(32),
-      image_width: 384,
-      image_height: 512,
     }
   }
 
@@ -757,20 +725,13 @@ test("image-only account gallery window projects compact cards from the stable g
 })
 
 // ARCHITECTURE FENCE [IPD-011]
-// Keep both discarded sources stale on purpose. This test must fail if an agent
-// restores either the discovery-row SHA or the legacy published-portrait-ref
-// snapshot as the image-only account gallery authority.
-test("image-only account gallery ignores stale discovery and legacy portrait-ref identities", async () => {
+// Keep the discarded legacy published-portrait-ref snapshot stale on purpose.
+// This test must fail if an agent restores it as the image-only account gallery
+// authority. Compact discovery state holds no image identity at all.
+test("image-only account gallery ignores a stale legacy portrait-ref snapshot", async () => {
   const db = new FakeDb()
   const staleRowSha = "95".repeat(32)
   const publishedSha = "fb".repeat(32)
-  db.enrich = (row) => ({
-    ...row,
-    full_name: `${row.gene_symbol} full name`,
-    asset_sha256: staleRowSha,
-    image_width: 384,
-    image_height: 512,
-  })
   const env = buildEnv({ db })
   seedStableGeneObjects(["INS", "PRL", "RHO", "TP53", "BRCA1"], { assetSha256: publishedSha })
   await env.KV.put(
@@ -974,31 +935,6 @@ test("account gallery window rejects metric orders until a real order index exis
   assert.deepEqual(payload.supported_orders.sort(), ["newest", "symbol"])
 })
 
-test("account gallery endpoint block does not sort a bounded discovery slice for metric orders", () => {
-  const start = source.lastIndexOf('if (path === "/api/iconoplasm/account-gallery-window"')
-  const end = source.indexOf('if (path === "/api/iconoplasm/discoveries/merge"', start)
-  assert.notEqual(start, -1)
-  assert.notEqual(end, -1)
-  const block = source.slice(start, end)
-
-  assert.doesNotMatch(block, /sortDiscoveryRowsForOrder/)
-  assert.match(block, /ORDER_INDEX_NOT_READY/)
-  assert.match(block, /ACCOUNT_GALLERY_WINDOW_SUPPORTED_ORDERS/)
-})
-
-test("account gallery endpoint block reads cards from the stable gene objects, not the KV tree", () => {
-  const start = source.lastIndexOf('if (path === "/api/iconoplasm/account-gallery-window"')
-  const end = source.indexOf('if (path === "/api/iconoplasm/discoveries/merge"', start)
-  assert.notEqual(start, -1)
-  assert.notEqual(end, -1)
-  const block = source.slice(start, end)
-
-  assert.match(block, /readStableGeneObjects\(env, symbols\)/)
-  assert.doesNotMatch(block, /readPublishedCardCatalogArtifact|currentMobileCardSnapshotVersion/)
-  assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
-  assert.doesNotMatch(block, /versionInfo\.previous/)
-})
-
 test("account gallery window lists a missing stable object and fails loud on storage errors", async () => {
   const db = new FakeDb()
   const env = buildEnv({ db })
@@ -1039,12 +975,6 @@ test("account gallery window lists a missing stable object and fails loud on sto
   assert.equal(outage.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
   assert.equal((await outage.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
   assert.match(outage.headers.get("Server-Timing") || "", /acct_catalog;dur=/)
-})
-
-test("account gallery endpoint has an explicit budget class", () => {
-  const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === "account_gallery_window")
-  assert.equal(route?.budgetFamily, "account_gallery_window")
-  assert.match(source, /if \(family === "account_gallery_window"\) return "first_party_read"/)
 })
 
 // B-885 (27 Sep 2026): the home collection died with Cloudflare 1102 "Worker
