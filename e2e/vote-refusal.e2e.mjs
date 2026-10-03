@@ -242,7 +242,9 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
             const old = document.querySelector(selector)
             old.dataset.old = "yes"
           }, NOTICE)
-          await up.click()
+          // `force`: Playwright treats aria-disabled="true" as "not enabled" and would wait out
+          // the pause instead of tapping; a reader's finger taps it.
+          await up.click({ force: true })
           await page.waitForFunction(
             (selector) => {
               const current = document.querySelector(selector)
@@ -273,6 +275,8 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
           UP,
           { timeout: (RESET_SECONDS + 5) * 1000 },
         )
+        // The button fades back over 160 ms; measure once it has.
+        await page.waitForTimeout(300)
         const reopened = await page.evaluate(measure)
         assert.equal(reopened.paused, false, `${where}: the box must be live after the reset`)
         assert.equal(reopened.upOpacity, live.upOpacity, `${where}: back to the live look`)
@@ -332,7 +336,7 @@ test("a 429 with no number stays paused until the page is reloaded, and the sent
     // 11. Past the seconds that would have unlocked it, the box is still paused and sends nothing.
     await page.waitForTimeout((RESET_SECONDS + 2) * 1000)
     assert.equal((await page.evaluate(measure)).paused, true, "no number, no guess")
-    await up.click()
+    await up.click({ force: true })
     await page.waitForTimeout(300)
     assert.deepEqual(requests, ["snapshot", "set"], "a paused tap sends nothing")
     await page.screenshot({ path: path.join(OUT, "vote-paused-no-number.png") })
