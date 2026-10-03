@@ -24,9 +24,6 @@
       if (!parent) return nodeFilter.FILTER_REJECT
       if (isEditableTextSurface(parent)) return nodeFilter.FILTER_REJECT
       if (parent.closest && parent.closest(".iconoplasm-tooltip")) return nodeFilter.FILTER_REJECT
-      if (parent.closest?.(".iconoplasm-gene")) {
-        return nodeFilter.FILTER_REJECT
-      }
       if (skipTags.has(parent.tagName)) return nodeFilter.FILTER_REJECT
       if (String(node.textContent || "").trim().length < 2) return nodeFilter.FILTER_REJECT
       return nodeFilter.FILTER_ACCEPT

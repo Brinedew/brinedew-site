@@ -111,7 +111,6 @@ async function readProviderIdentity(db, provider, providerSubject) {
       `SELECT
          identity.account_id,
          identity.link_version,
-         identity.unlinked_at,
          account.status,
          account.account_version,
          account.author_label
@@ -202,18 +201,6 @@ function identityResult(identity, accountId) {
   }
 }
 
-async function readIdentityEventForCommand(db, accountId, commandId) {
-  return db
-    .prepare(
-      `SELECT provider, provider_subject_fingerprint, event_type, link_version
-       FROM brinedew_account_identity_events
-       WHERE account_id = ? AND command_id = ?
-       LIMIT 1`,
-    )
-    .bind(accountId, commandId)
-    .first()
-}
-
 async function readAccountEventForCommand(db, accountId, commandId) {
   return db
     .prepare(
@@ -225,20 +212,6 @@ async function readAccountEventForCommand(db, accountId, commandId) {
     )
     .bind(accountId, commandId)
     .first()
-}
-
-function assertIdentityCommandReplay(event, { provider, fingerprint, eventTypes }) {
-  if (
-    event &&
-    (event.provider !== provider ||
-      event.provider_subject_fingerprint !== fingerprint ||
-      !eventTypes.includes(event.event_type))
-  ) {
-    throw new BrinedewAccountIdentityError(
-      "ACCOUNT_COMMAND_REUSED",
-      "The account command ID was already used for a different identity transition",
-    )
-  }
 }
 
 /**
@@ -265,13 +238,6 @@ export async function resolveBrinedewAccountIdentity(
   if (identity?.account_id) {
     const accountId = normalizeBrinedewAccountId(identity.account_id)
     if (!accountId) throw new Error("Stored Brinedew account identity is invalid")
-    if (identity.unlinked_at != null) {
-      throw new BrinedewAccountIdentityError(
-        "PROVIDER_IDENTITY_UNLINKED",
-        "This provider identity must be explicitly relinked before it can sign in",
-        403,
-      )
-    }
     if (provider === "discord") await bindDiscordUserAccountId(db, providerSubject, accountId)
     await touchProviderIdentity(db, provider, providerSubject, observedAt)
     return identityResult(identity, accountId)
@@ -378,262 +344,9 @@ export async function resolveBrinedewAccountIdentity(
   identity = await readProviderIdentity(db, provider, providerSubject)
   const resolvedAccountId = normalizeBrinedewAccountId(identity?.account_id)
   if (!resolvedAccountId) throw new Error("Brinedew account identity resolution did not persist")
-  if (identity.unlinked_at != null) {
-    throw new BrinedewAccountIdentityError(
-      "PROVIDER_IDENTITY_UNLINKED",
-      "This provider identity must be explicitly relinked before it can sign in",
-      403,
-    )
-  }
   if (provider === "discord") await bindDiscordUserAccountId(db, providerSubject, resolvedAccountId)
   await touchProviderIdentity(db, provider, providerSubject, observedAt)
   return identityResult(identity, resolvedAccountId)
-}
-
-export async function linkBrinedewProviderIdentity(
-  db,
-  {
-    accountId: accountIdValue,
-    provider: providerValue,
-    providerSubject: providerSubjectValue,
-    commandId: commandIdValue,
-    actorAccountId: actorAccountIdValue = null,
-    now = Date.now(),
-  } = {},
-) {
-  requireDb(db)
-  const accountId = normalizeBrinedewAccountId(accountIdValue)
-  const provider = normalizeProvider(providerValue)
-  const providerSubject = normalizeProviderSubject(providerSubjectValue)
-  const commandId = normalizeCommandId(commandIdValue)
-  const actorAccountId = actorAccountIdValue
-    ? normalizeBrinedewAccountId(actorAccountIdValue)
-    : null
-  if (!accountId || (actorAccountIdValue && !actorAccountId)) {
-    throw new TypeError("Invalid Brinedew account ID")
-  }
-  const linkedAt = normalizeTimestamp(now)
-  const fingerprint = await brinedewProviderSubjectFingerprint(provider, providerSubject)
-  const replay = await readIdentityEventForCommand(db, accountId, commandId)
-  assertIdentityCommandReplay(replay, {
-    provider,
-    fingerprint,
-    eventTypes: ["identity_linked", "identity_relinked"],
-  })
-  if (replay) {
-    return { account_id: accountId, link_version: Number(replay.link_version), replay: true }
-  }
-
-  const account = await readBrinedewAccount(db, accountId)
-  if (!account || account.status !== "active") {
-    throw new BrinedewAccountIdentityError(
-      "ACCOUNT_NOT_ACTIVE",
-      "Only an active Brinedew account can link a provider identity",
-      403,
-    )
-  }
-  const current = await readProviderIdentity(db, provider, providerSubject)
-  if (current?.account_id && current.account_id !== accountId) {
-    throw new BrinedewAccountIdentityError(
-      "PROVIDER_IDENTITY_COLLISION",
-      "That provider identity already belongs to another Brinedew account",
-    )
-  }
-  if (current?.account_id && current.unlinked_at == null) {
-    await touchProviderIdentity(db, provider, providerSubject, linkedAt)
-    return { account_id: accountId, link_version: Number(current.link_version), replay: false }
-  }
-
-  const previousVersion = Number(current?.link_version || 0)
-  const nextVersion = previousVersion + 1
-  const eventType = current ? "identity_relinked" : "identity_linked"
-  const statements = []
-  if (current) {
-    statements.push(
-      db
-        .prepare(
-          `UPDATE brinedew_account_identities
-           SET unlinked_at = NULL, link_version = ?, last_seen_at = ?
-           WHERE provider = ? AND provider_subject = ?
-             AND account_id = ? AND link_version = ? AND unlinked_at IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM brinedew_accounts account
-               WHERE account.account_id = ? AND account.status = 'active'
-             )`,
-        )
-        .bind(
-          nextVersion,
-          linkedAt,
-          provider,
-          providerSubject,
-          accountId,
-          previousVersion,
-          accountId,
-        ),
-    )
-  } else {
-    statements.push(
-      db
-        .prepare(
-          `INSERT OR IGNORE INTO brinedew_account_identities (
-             provider, provider_subject, account_id, created_at, last_seen_at,
-             link_version, unlinked_at
-           )
-           SELECT ?, ?, account_id, ?, ?, 1, NULL
-           FROM brinedew_accounts
-           WHERE account_id = ? AND status = 'active'`,
-        )
-        .bind(provider, providerSubject, linkedAt, linkedAt, accountId),
-    )
-  }
-  statements.push(
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO brinedew_account_identity_events (
-           event_id, command_id, account_id, provider,
-           provider_subject_fingerprint, event_type, link_version,
-           actor_account_id, occurred_at
-         )
-         SELECT ?, ?, account_id, provider, ?, ?, link_version, ?, ?
-         FROM brinedew_account_identities
-         WHERE provider = ? AND provider_subject = ?
-           AND account_id = ? AND link_version = ? AND unlinked_at IS NULL`,
-      )
-      .bind(
-        newEventId("identity_event"),
-        commandId,
-        fingerprint,
-        eventType,
-        actorAccountId,
-        linkedAt,
-        provider,
-        providerSubject,
-        accountId,
-        nextVersion,
-      ),
-  )
-  await db.batch(statements)
-
-  const linked = await readProviderIdentity(db, provider, providerSubject)
-  if (!linked?.account_id || linked.account_id !== accountId || linked.unlinked_at != null) {
-    if (linked?.account_id && linked.account_id !== accountId) {
-      throw new BrinedewAccountIdentityError(
-        "PROVIDER_IDENTITY_COLLISION",
-        "That provider identity already belongs to another Brinedew account",
-      )
-    }
-    throw new BrinedewAccountIdentityError(
-      "ACCOUNT_LINK_CONFLICT",
-      "The provider identity changed while it was being linked",
-    )
-  }
-  const event = await readIdentityEventForCommand(db, accountId, commandId)
-  if (!event) {
-    throw new BrinedewAccountIdentityError(
-      "ACCOUNT_LINK_CONFLICT",
-      "The provider identity link was not committed with its audit event",
-    )
-  }
-  if (provider === "discord") await bindDiscordUserAccountId(db, providerSubject, accountId)
-  return { account_id: accountId, link_version: Number(linked.link_version), replay: false }
-}
-
-export async function unlinkBrinedewProviderIdentity(
-  db,
-  {
-    accountId: accountIdValue,
-    provider: providerValue,
-    providerSubject: providerSubjectValue,
-    commandId: commandIdValue,
-    actorAccountId: actorAccountIdValue = null,
-    now = Date.now(),
-  } = {},
-) {
-  requireDb(db)
-  const accountId = normalizeBrinedewAccountId(accountIdValue)
-  const provider = normalizeProvider(providerValue)
-  const providerSubject = normalizeProviderSubject(providerSubjectValue)
-  const commandId = normalizeCommandId(commandIdValue)
-  const actorAccountId = actorAccountIdValue
-    ? normalizeBrinedewAccountId(actorAccountIdValue)
-    : null
-  if (!accountId || (actorAccountIdValue && !actorAccountId)) {
-    throw new TypeError("Invalid Brinedew account ID")
-  }
-  const unlinkedAt = normalizeTimestamp(now)
-  const fingerprint = await brinedewProviderSubjectFingerprint(provider, providerSubject)
-  const replay = await readIdentityEventForCommand(db, accountId, commandId)
-  assertIdentityCommandReplay(replay, {
-    provider,
-    fingerprint,
-    eventTypes: ["identity_unlinked"],
-  })
-  if (replay) {
-    return { account_id: accountId, link_version: Number(replay.link_version), replay: true }
-  }
-
-  const current = await readProviderIdentity(db, provider, providerSubject)
-  if (!current?.account_id || current.account_id !== accountId) {
-    throw new BrinedewAccountIdentityError(
-      "PROVIDER_IDENTITY_NOT_OWNED",
-      "That provider identity is not linked to this Brinedew account",
-      404,
-    )
-  }
-  if (current.unlinked_at != null) {
-    return { account_id: accountId, link_version: Number(current.link_version), replay: false }
-  }
-  const nextVersion = Number(current.link_version) + 1
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE brinedew_account_identities
-         SET unlinked_at = ?, link_version = ?
-         WHERE provider = ? AND provider_subject = ?
-           AND account_id = ? AND link_version = ? AND unlinked_at IS NULL`,
-      )
-      .bind(
-        unlinkedAt,
-        nextVersion,
-        provider,
-        providerSubject,
-        accountId,
-        Number(current.link_version),
-      ),
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO brinedew_account_identity_events (
-           event_id, command_id, account_id, provider,
-           provider_subject_fingerprint, event_type, link_version,
-           actor_account_id, occurred_at
-         )
-         SELECT ?, ?, account_id, provider, ?, 'identity_unlinked',
-                link_version, ?, ?
-         FROM brinedew_account_identities
-         WHERE provider = ? AND provider_subject = ?
-           AND account_id = ? AND link_version = ? AND unlinked_at = ?`,
-      )
-      .bind(
-        newEventId("identity_event"),
-        commandId,
-        fingerprint,
-        actorAccountId,
-        unlinkedAt,
-        provider,
-        providerSubject,
-        accountId,
-        nextVersion,
-        unlinkedAt,
-      ),
-  ])
-  const event = await readIdentityEventForCommand(db, accountId, commandId)
-  if (!event) {
-    throw new BrinedewAccountIdentityError(
-      "ACCOUNT_LINK_CONFLICT",
-      "The provider identity changed while it was being unlinked",
-    )
-  }
-  return { account_id: accountId, link_version: nextVersion, replay: false }
 }
 
 export async function setBrinedewAccountStatus(
@@ -748,10 +461,6 @@ export async function setBrinedewAccountStatus(
     final_leave_policy: event.final_leave_policy || null,
     replay: false,
   }
-}
-
-export function disableBrinedewAccount(db, options = {}) {
-  return setBrinedewAccountStatus(db, { ...options, status: "disabled" })
 }
 
 export async function eraseBrinedewAccount(
@@ -990,10 +699,8 @@ export async function hydrateBrinedewSessionAccountIdentity(db, session, options
   }
 
   const providerIdentity = await readProviderIdentity(db, "discord", discordId)
-  const linkActive =
-    providerIdentity?.account_id === accountId && providerIdentity.unlinked_at == null
   const status = account?.status || "missing"
-  const active = status === "active" && linkActive
+  const active = status === "active" && providerIdentity?.account_id === accountId
   const resolvedSession = {
     ...current,
     account_id: accountId,
@@ -1004,7 +711,5 @@ export async function hydrateBrinedewSessionAccountIdentity(db, session, options
     changed:
       current.account_id !== accountId || String(current.account_status || "") !== String(status),
     active,
-    denial_code:
-      status === "active" && !linkActive ? "PROVIDER_IDENTITY_UNLINKED" : "ACCOUNT_NOT_ACTIVE",
   }
 }
