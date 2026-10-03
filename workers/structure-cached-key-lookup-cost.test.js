@@ -3,8 +3,11 @@
 // `/api/structure-cached?key=alphafold/<id>.pdb` and
 // `...?key=swissmodel/<id>_<template>.pdb` carry no upstream URL: the route reads
 // the protein's stored structure columns to learn it. With R2 unbound, as in
-// production, every such request is a miss, so this lookup runs once per view of
-// a guess structure and grows with players.
+// production, every such request is a miss, so this lookup runs once per request.
+// A guess's ordinary view goes to its provider and never reaches the route (B-943);
+// the route sees the page's fallback, the Discord recap and the admin preview, and
+// a provider that fails for every visitor sends every guess view here, so the cost
+// still grows with players on that day.
 //
 // The lookup compares the bare column to an upper-cased bound value. Written as
 // `WHERE upper(uniprot) = ?` it would defeat the UNIQUE index on
