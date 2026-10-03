@@ -21,8 +21,9 @@
 // transaction, so no write can land between the fill and the triggers. Four triggers keep it
 // equal to the join: `stats` after an insert (a first game, the import), after an update of the
 // streak, the wins or the played day (every finished game), after a delete; and `users` after the
-// public choice changes (the switch, a Discord login, an account erasure). Each recomputes the one
-// account it names, so a statement that does not touch a public account writes no extra row.
+// public choice changes (the switch, a Discord login). Each recomputes the one account it names, so
+// a statement that does not touch a public account writes no extra row. An account erasure deletes
+// the person's `stats` row, and the delete trigger takes the board row with it.
 //
 // A table rebuild that drops `stats` or `users` also drops its triggers. Drop `leaderboard_streaks`
 // too and the next read rebuilds it.

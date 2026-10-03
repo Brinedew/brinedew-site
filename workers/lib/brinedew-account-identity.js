@@ -2,6 +2,9 @@ const ACCOUNT_ID_PATTERN = /^acct_[0-9a-f]{32}$/
 const PROVIDER_PATTERN = /^[a-z0-9][a-z0-9._-]{0,31}$/
 const COMMAND_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/
 const ACCOUNT_STATUSES = new Set(["active", "disabled", "erasure_pending", "erased"])
+// What an erasure writes where a provider-subject fingerprint (or a command id built from one) used
+// to be: opaque, unique per event, derived from nothing about the person.
+const ERASED_MARKER = "erased:"
 
 export class BrinedewAccountIdentityError extends Error {
   constructor(code, message, status = 409) {
@@ -463,6 +466,42 @@ export async function setBrinedewAccountStatus(
   }
 }
 
+// The two guards that keep account and identity history append-only. Erasure rewrites the one
+// thing in that history that names a person: the provider-subject fingerprint, an unsalted
+// SHA-256 of a 17 to 19 digit Discord id, which also sits inside the command ids of the first
+// login's two events. Nothing reads any of it. So the erasing batch takes these two guards off,
+// rewrites those values to an opaque marker and puts back exactly the guard text it found, all in
+// one D1 batch (one transaction, so no other statement runs in the gap and a failed rewrite rolls
+// the guards back with it). The migration that created them stays the one definition.
+const APPEND_ONLY_UPDATE_GUARDS = Object.freeze([
+  "trg_brinedew_identity_events_append_only_update",
+  "trg_brinedew_account_events_append_only_update",
+])
+
+async function readAppendOnlyUpdateGuards(db) {
+  const rows = await allRows(
+    db
+      .prepare(
+        `SELECT name, sql FROM sqlite_master
+         WHERE type = 'trigger' AND name IN (${APPEND_ONLY_UPDATE_GUARDS.map(() => "?").join(", ")})`,
+      )
+      .bind(...APPEND_ONLY_UPDATE_GUARDS),
+  )
+  return rows.filter((row) => APPEND_ONLY_UPDATE_GUARDS.includes(row.name) && row.sql)
+}
+
+/**
+ * Completes an erasure whose data has already been removed (see
+ * workers/iconoplasm/account-erasure/erase-account-data.js). In one transaction it marks the
+ * account erased, queues the caretaker assignments' end through the account projection outbox,
+ * scrubs the provider-subject fingerprint from event history, deletes the provider link and
+ * deletes the `users` row, which is the last place the raw Discord id lives.
+ *
+ * A returning person with the same Discord id gets a brand-new account: the erased account keeps
+ * its opaque id and anonymous label (retained authorship), and nothing links it to the person
+ * any more. Every row keyed by the Discord id (`stats` first of all, which has a foreign key to
+ * `users`) must already be gone, or the foreign key aborts the whole batch.
+ */
 export async function eraseBrinedewAccount(
   db,
   {
@@ -522,7 +561,16 @@ export async function eraseBrinedewAccount(
       )
       .bind(accountId),
   )
+  const guards = await readAppendOnlyUpdateGuards(db)
   const nextVersion = current.account_version + 1
+  // True only once this command's own completion event is in the batch, so a lost race scrubs
+  // and deletes nothing.
+  const completed = `EXISTS (
+    SELECT 1 FROM brinedew_account_lifecycle_events completion
+    WHERE completion.account_id = ?
+      AND completion.command_id = ?
+      AND completion.event_type = 'erasure_completed'
+  )`
   const statements = [
     db
       .prepare(
@@ -564,7 +612,9 @@ export async function eraseBrinedewAccount(
   for (const identity of activeIdentities) {
     const provider = normalizeProvider(identity.provider)
     const providerSubject = normalizeProviderSubject(identity.provider_subject)
-    const fingerprint = await brinedewProviderSubjectFingerprint(provider, providerSubject)
+    // The unlink event is written already scrubbed: no fingerprint of the subject is ever
+    // computed for an erasure.
+    const eventId = newEventId("identity_event")
     statements.push(
       db
         .prepare(
@@ -579,54 +629,58 @@ export async function eraseBrinedewAccount(
            WHERE identity.provider = ? AND identity.provider_subject = ?
              AND identity.account_id = ? AND identity.link_version = ?
              AND identity.unlinked_at IS NULL
-             AND EXISTS (
-               SELECT 1 FROM brinedew_account_lifecycle_events event
-               WHERE event.account_id = identity.account_id
-                 AND event.command_id = ?
-                 AND event.event_type = 'erasure_completed'
-             )`,
+             AND ${completed}`,
         )
         .bind(
-          newEventId("identity_event"),
+          eventId,
           commandId,
-          fingerprint,
+          `${ERASED_MARKER}${eventId}`,
           actorAccountId,
           erasedAt,
           provider,
           providerSubject,
           accountId,
           Number(identity.link_version),
+          accountId,
           commandId,
         ),
     )
   }
+  for (const guard of guards) {
+    statements.push(db.prepare(`DROP TRIGGER IF EXISTS ${guard.name}`))
+  }
   statements.push(
     db
       .prepare(
-        `UPDATE users
-         SET username = ?, email = NULL, avatar_url = NULL, tier = 'registered',
-             premium_until = NULL, leaderboard_opt_in = 0, updated_at = ?
+        `UPDATE brinedew_account_identity_events
+         SET provider_subject_fingerprint = '${ERASED_MARKER}' || event_id,
+             command_id = CASE
+               WHEN command_id LIKE 'resolve-identity:%' THEN '${ERASED_MARKER}' || event_id
+               ELSE command_id
+             END
          WHERE account_id = ?
-           AND EXISTS (
-             SELECT 1 FROM brinedew_account_lifecycle_events event
-             WHERE event.account_id = users.account_id
-               AND event.command_id = ?
-               AND event.event_type = 'erasure_completed'
-           )`,
+           AND provider_subject_fingerprint NOT LIKE '${ERASED_MARKER}%'
+           AND ${completed}`,
       )
-      .bind(authorLabel, erasedAt, accountId, commandId),
+      .bind(accountId, accountId, commandId),
     db
       .prepare(
-        `DELETE FROM brinedew_account_identities
+        `UPDATE brinedew_account_lifecycle_events
+         SET command_id = '${ERASED_MARKER}' || event_id
          WHERE account_id = ?
-           AND EXISTS (
-             SELECT 1 FROM brinedew_account_lifecycle_events event
-             WHERE event.account_id = brinedew_account_identities.account_id
-               AND event.command_id = ?
-               AND event.event_type = 'erasure_completed'
-           )`,
+           AND command_id LIKE 'resolve-account:%'
+           AND ${completed}`,
       )
-      .bind(accountId, commandId),
+      .bind(accountId, accountId, commandId),
+  )
+  for (const guard of guards) statements.push(db.prepare(guard.sql))
+  statements.push(
+    db
+      .prepare(`DELETE FROM users WHERE account_id = ? AND ${completed}`)
+      .bind(accountId, accountId, commandId),
+    db
+      .prepare(`DELETE FROM brinedew_account_identities WHERE account_id = ? AND ${completed}`)
+      .bind(accountId, accountId, commandId),
   )
   await db.batch(statements)
 
@@ -641,13 +695,13 @@ export async function eraseBrinedewAccount(
 }
 
 /**
- * B-871: one operator command fulfils an erasure request exactly as the
- * privacy page promises. It requests erasure with the "retain" caretaker
- * policy (history stays under the anonymous label; per-text withdrawal is the
- * author's own action), then completes it. Both transitions are keyed by the
- * request's command id, so a retried request replays instead of repeating.
+ * Moves an account to `erasure_pending` (once; a repeat or a resume is a no-op) with the
+ * `retain` caretaker policy: authored history stays under the anonymous label, and per-text
+ * withdrawal is the author's own action. A pending account cannot keep a session: the next
+ * request any of its sessions makes finds the account inactive and ends the session, so nothing
+ * new is written under its Discord id while the data is removed.
  */
-export async function eraseBrinedewAccountOnRequest(
+export async function requestBrinedewAccountErasure(
   db,
   {
     accountId: accountIdValue,
@@ -676,7 +730,28 @@ export async function eraseBrinedewAccountOnRequest(
       now,
     })
   }
-  return eraseBrinedewAccount(db, { accountId, commandId, reasonCode, actorAccountId, now })
+  return readBrinedewAccount(db, accountId)
+}
+
+/**
+ * Every Discord id one account is reachable by: the provider link and the `users` projection.
+ * Both are deleted when the erasure completes, so the data removal reads this first.
+ */
+export async function readBrinedewAccountDiscordSubjects(db, accountIdValue) {
+  requireDb(db)
+  const accountId = normalizeBrinedewAccountId(accountIdValue)
+  if (!accountId) throw new TypeError("Invalid Brinedew account ID")
+  const rows = await allRows(
+    db
+      .prepare(
+        `SELECT provider_subject AS subject FROM brinedew_account_identities
+          WHERE account_id = ? AND provider = 'discord'
+         UNION
+         SELECT discord_id AS subject FROM users WHERE account_id = ?`,
+      )
+      .bind(accountId, accountId),
+  )
+  return rows.map((row) => String(row.subject || "")).filter(Boolean)
 }
 
 export async function hydrateBrinedewSessionAccountIdentity(db, session, options = {}) {
