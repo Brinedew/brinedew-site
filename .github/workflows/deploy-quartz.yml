@@ -353,22 +353,28 @@ jobs:
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
         run: node scripts/apply-online-d1-migrations.mjs
 
-      # A code release changes a Worker version, not its routes, queue consumers,
-      # or Cron triggers. Cloudflare manages those triggers separately from versions.
+      # A code release changes a Worker version, not its routes or queue
+      # consumers, and not its Cron triggers: only `wrangler deploy` installs
+      # those. The Worker runs a recurring job only when the scheduled event's
+      # trigger string is exactly an installed one, so a toml whose crons
+      # differ from the installed ones stops every job without an error.
       # ARCHITECTURE FENCE [IPD-004]: preserve durable wake intent on code pushes.
-      # Cloudflare refuses version uploads that carry an unapplied Durable
+      # Cloudflare also refuses version uploads that carry an unapplied Durable
       # Object migration; class lifecycle changes only go through
-      # `wrangler deploy`. Ask Cloudflare which tag is live first.
-      - name: Detect a pending Durable Object migration
-        id: do_migration
+      # `wrangler deploy`. Ask Cloudflare which tag and which triggers are live
+      # first, and switch this release to `wrangler deploy` when either differs
+      # from the checked-in config (the toml owns the trigger set).
+      - name: Detect a pending Durable Object migration or cron trigger drift
+        id: deploy_mode
         if: inputs.data_maintenance != true
-        run: node scripts/stateful-worker-do-migration.mjs wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
+        timeout-minutes: 2
+        run: node scripts/stateful-worker-deploy-mode.mjs wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Deploy the compatible stateful Worker
         if: inputs.data_maintenance != true
         run: |
           set -euo pipefail
-          if [ "${{ steps.do_migration.outputs.pending }}" = "true" ]; then
+          if [ "${{ steps.deploy_mode.outputs.needs_wrangler_deploy }}" = "true" ]; then
             pnpm exec wrangler deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$ICONOPLASM_INSTALLED_SHA" --var "SENTRY_RELEASE:$GITHUB_SHA"
           else
             pnpm exec wrangler versions upload --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$ICONOPLASM_INSTALLED_SHA" --tag "code-prepages-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -442,6 +448,14 @@ jobs:
         # reader-recovery containment into normal operation and silently
         # disabled every Iconoplasm background owner after each deployment.
         run: pnpm exec wrangler deploy --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --var "SENTRY_RELEASE:$GITHUB_SHA"
+
+      # The Worker's trigger strings and the installed ones must be the same set
+      # once every stateful deploy above has run, in the normal and in the
+      # maintenance path, or the recurring jobs are silently stopped.
+      - name: Verify the installed cron triggers are the checked-in ones
+        if: steps.migrations.outputs.continuation_required != 'true'
+        timeout-minutes: 2
+        run: node scripts/stateful-worker-deploy-mode.mjs --verify wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Verify Iconoplasm publication aliases (production)
         if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
