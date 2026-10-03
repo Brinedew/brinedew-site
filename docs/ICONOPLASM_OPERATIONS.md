@@ -380,8 +380,10 @@ row counts in production on 2026-10-03 (2,287 requests, 2,280 notifications, 2,0
 rows, 874 votes, 835 vote events, each the maximum of a different table, probably one account)
 add up, at the steps' worst-case weights, to at most about 76,000 rows written in all: 76% of the
 100,000 a day the whole account may write, over at least 16 requests. A heavy account therefore belongs in
-the last hours of the UTC day (00:00 UTC resets the meters), and a daily budget refusal is a
-reason to wait, not to retry in a loop. The unindexed steps (portrait creators, publish event
+the last hours of the UTC day (00:00 UTC resets the meters). The route is a high-risk admin mutation, so
+the mutation limiter refuses a pass that would cross the day's write target (503,
+`ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE`, with `limiter.rows_written_target_remaining`): resend
+with a smaller `max_rows_written`, or wait for the reset; do not retry in a loop. The unindexed steps (portrait creators, publish event
 actors) scan their tables once when everything else is gone: about 80,000 rows read. Repeat the
 request until complete, for example:
 

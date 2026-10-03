@@ -7378,8 +7378,8 @@ function kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha) {
 }
 
 // B-987: every KV key whose name embeds a user's Discord id, for the account erasure command
-// (workers/iconoplasm/account-erasure). A new per-user KV key belongs here: the erasure test
-// fails on a user-keyed key it does not delete.
+// (workers/iconoplasm/account-erasure). A new KV key that embeds a user id belongs here, or the
+// erasure leaves it behind: unlike the D1 tables, no test can find such a key by itself.
 export function iconoplasmUserKvKeyScopes(userId) {
   return {
     exact: ICONOPLASM_IMAGE_EDIT_LAST_USED_OPERATIONS.map((operation) =>
