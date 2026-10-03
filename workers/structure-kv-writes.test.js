@@ -2,18 +2,18 @@
 //
 // The free plan allows 1,000 KV writes a day, and the daily answer record
 // (`puzzle_actual:*`), the daily bootstrap cache and the comments cache share that
-// allowance. Looking up a protein's structure used to put `structure_source:<uniprot>`
-// every time it resolved a protein from its stored row. The row always wins over
-// that key, and the key's only reader runs when a protein has no stored source, so
-// the write was never read back: each practice bootstrap, structure token and guess
-// spent one (a first practice visit two).
+// allowance. A lookup that a reader can repeat must not write. The stored row always
+// wins over `structure_source:<uniprot>`, and that key's only reader runs when a
+// protein has no stored source, so a put for a stored row is never read back. A put
+// per practice bootstrap, structure token or guess (two for a first practice visit)
+// would reach the cap at a few hundred players a day.
 //
 // Production shape, measured 2026-10-03: 18,361 of 19,110 proteins have a stored
 // structure source and resolve from their row. The other 749 have none, are not in
 // the autocomplete index and are not in a target pool. Only those 749 reach the
 // discovery path, which asks three public APIs and caches the answer in KV. A
 // `/api/structure-token?uniprot=` request for an accession that is not in the
-// catalog used to reach discovery too, and made a put per distinct string.
+// catalog must not reach discovery: each distinct string would make a put.
 //
 // Everything runs through the real Worker against a real local D1 built from the
 // real GeneGuessr migrations and seeded with the production shape (19,110 proteins),
@@ -63,7 +63,10 @@ const firstWith = (source) => rows.find((row) => row.structure_source === source
 
 // One request through the real Worker. `fetch` is the network: discovery's three
 // API lookups answer 404, and any structure file answers with a usable body.
-async function call(path, { method = "GET", cookie = null, body = null, sessions = new Map(), kvEntries = {} } = {}) {
+async function call(
+  path,
+  { method = "GET", cookie = null, body = null, sessions = new Map(), kvEntries = {} } = {},
+) {
   const fetched = []
   const putOptions = []
   const originalFetch = globalThis.fetch

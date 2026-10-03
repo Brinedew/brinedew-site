@@ -920,9 +920,6 @@ export async function handleRenderPage(request, env) {
   if (structureToken && structureToken.cacheKey) {
     // Use cached structure endpoint (same as main app)
     structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(structureToken.cacheKey)}`
-    if (structureToken.upstreamUrl) {
-      structureUrl += `&upstream=${encodeURIComponent(structureToken.upstreamUrl)}`
-    }
     // Guard against stale bootstrap tokens where format drifted from cacheKey extension.
     structureFormat = inferStructureFormatFromCacheKey(
       structureToken.cacheKey,
@@ -944,12 +941,6 @@ export async function handleRenderPage(request, env) {
     // - lazy cache + source-specific upstream rules
     if (storedMeta.r2Key) {
       structureUrl = `${origin}/api/structure-cached?key=${encodeURIComponent(storedMeta.r2Key)}`
-      if (
-        storedMeta.upstreamUrl &&
-        (storedMeta.source === "swissmodel" || storedMeta.source === "alphafold")
-      ) {
-        structureUrl += `&upstream=${encodeURIComponent(storedMeta.upstreamUrl)}`
-      }
       structureFormat = inferStructureFormatFromCacheKey(
         storedMeta.r2Key,
         storedMeta.format || "cif",

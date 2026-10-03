@@ -112,7 +112,11 @@ function installNetwork(routes = {}) {
     }
     throw new TypeError("too many redirects")
   }
-  return { calls, urls: () => calls.map((call) => call.url), restore: () => (globalThis.fetch = original) }
+  return {
+    calls,
+    urls: () => calls.map((call) => call.url),
+    restore: () => (globalThis.fetch = original),
+  }
 }
 
 // One request through the real Worker with the given stored rows and network routes.
@@ -200,7 +204,11 @@ test("H6: the three providers are served with exactly the URL the server derives
       routes: { [derived]: { body: PROVIDER_BYTES } },
     })
     assert.equal(response.status, 200, key)
-    assert.equal(body.replace(/^HEADER[^\n]*\n/, ""), PROVIDER_BYTES, `${key} serves provider bytes`)
+    assert.equal(
+      body.replace(/^HEADER[^\n]*\n/, ""),
+      PROVIDER_BYTES,
+      `${key} serves provider bytes`,
+    )
     assert.deepEqual(urls, [derived], `${key} fetches only its own upstream`)
     assert.equal(calls[0].redirect, "manual", `${key}: redirects are the server's to follow`)
   }
@@ -278,7 +286,11 @@ test("H2: the AlphaFold file derived from a key that names no stored row stays o
   })
   assert.equal(response.status, 200)
   assert.deepEqual(urls, [derived])
-  for (const key of ["alphafold/a@evil.example.cif", "alphafold/a.evil.example/x.cif", "pdb/../x.bcif"]) {
+  for (const key of [
+    "alphafold/a@evil.example.cif",
+    "alphafold/a.evil.example/x.cif",
+    "pdb/../x.bcif",
+  ]) {
     const refused = await getStructure(keyQuery(key))
     assert.equal(refused.response.status, 400, key)
     assert.deepEqual(refused.urls, [], key)
@@ -382,13 +394,20 @@ test("H5: an R2 bucket never receives bytes from a URL the caller named", async 
       return null
     },
     async put(key, body, options) {
-      puts.push({ key, text: new TextDecoder().decode(body), contentType: options?.httpMetadata?.contentType })
+      puts.push({
+        key,
+        text: new TextDecoder().decode(body),
+        contentType: options?.httpMetadata?.contentType,
+      })
     },
   }
-  const { response, urls } = await getStructure(hintedQuery(AF_CIF_KEY, "https://evil.example/a.cif"), {
-    bucket,
-    routes: { [AF_CIF_URL]: { headers: { "Content-Type": "text/html" }, body: PROVIDER_BYTES } },
-  })
+  const { response, urls } = await getStructure(
+    hintedQuery(AF_CIF_KEY, "https://evil.example/a.cif"),
+    {
+      bucket,
+      routes: { [AF_CIF_URL]: { headers: { "Content-Type": "text/html" }, body: PROVIDER_BYTES } },
+    },
+  )
   assert.equal(response.status, 200)
   assert.deepEqual(urls, [AF_CIF_URL])
   assert.deepEqual(puts, [{ key: AF_CIF_KEY, text: PROVIDER_BYTES, contentType: "chemical/x-cif" }])
