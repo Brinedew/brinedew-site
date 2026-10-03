@@ -13,6 +13,7 @@ import {
   DailyMutationLaneReservations,
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
+import { TAGS_DERIVATIVE_SUBMIT_ROWS } from "../lib/iconoplasm-mutation-write-bounds.js"
 
 test("laptop publications spend only the laptop-delivery mutation lane", () => {
   assert.equal(
@@ -1181,6 +1182,11 @@ test("workstation mutation route refuses in the laptop lane before D1", async ()
   assert.equal(d1Touches, 0)
   assert.equal(calls.length, 1)
   assert.equal(calls[0].body.lane, "laptop_delivery")
-  assert.equal(calls[0].body.units, 50)
-  assert.match(calls[0].body.operation_id, /^laptop:[a-f0-9]{64}$/)
+  // B-945: a tags submission is sized from the rows it writes across both
+  // databases (workers/iconoplasm/tags-derivative-reservation-receipts.test.js).
+  assert.equal(calls[0].body.units, TAGS_DERIVATIVE_SUBMIT_ROWS)
+  assert.match(
+    calls[0].body.operation_id,
+    new RegExp(`^laptop:[a-f0-9]{64}:u${TAGS_DERIVATIVE_SUBMIT_ROWS}$`),
+  )
 })

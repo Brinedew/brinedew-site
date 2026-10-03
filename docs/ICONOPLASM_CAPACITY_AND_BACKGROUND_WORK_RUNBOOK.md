@@ -162,6 +162,28 @@ identity so a receipt held under an earlier sizing is never replayed at another
 size. A migration that adds an index or trigger to a reserved path fails that
 test until the new number is pinned.
 
+The laptop routes (the five generation executor routes and the tags-derivative
+submission) reserve in the laptop-delivery lane, sized from their own body, and
+only after their bearer is checked: a request the route would turn away reserves
+nothing. A claim takes new leases every time it is sent, so each claim call is its
+own operation, sized for a scan in which every row is quarantined. Renew, fail,
+completion and the tags submission name the exact thing they change, so their
+identity is their body and a retry is the same operation. Reading a lease's
+material writes no row and reserves none. A completion carries at most 50
+requests, the size of one claim, and is refused above that before any write. The
+tags head selection is not in this lane: the gateway hands it to the
+operation-cost authority, which admits it against its own declared bound. The
+numbers are pinned by `workers/iconoplasm/generation-executor-reservation-receipts.test.js`
+and `workers/iconoplasm/tags-derivative-reservation-receipts.test.js`, and a test
+fails when a route classed `workstation_sync_write` is neither sized nor admitted
+by the operation-cost authority.
+
+A vision carries at most 24 distinct emulsion codes (the largest in production
+carries 17). The vision rebuild reads the codes first and refuses a vision above
+the bound before it writes anything; the finalization job stays in its retry
+ledger with the reason in its last error. Raise the bound only together with a new
+measurement of `VISION_ROLLUP_ROWS`.
+
 ## Public-read behavior
 
 Anonymous shells, catalog data, gene records, portraits, and blots come from the

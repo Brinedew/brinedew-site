@@ -14,7 +14,12 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
 )("miniflare")
 
-export async function openMigratedD1(migrationDirectory = "../../migrations-iconoplasm/") {
+// seedRows copies the rows the migrations themselves insert (an authority
+// singleton, registered terms), which the schema definitions alone do not carry.
+export async function openMigratedD1(
+  migrationDirectory = "../../migrations-iconoplasm/",
+  { seedRows = false } = {},
+) {
   const runtime = new Miniflare(
     convertV4MiniflareOptions({
       modules: true,
@@ -38,6 +43,21 @@ export async function openMigratedD1(migrationDirectory = "../../migrations-icon
       .all()
     for (let offset = 0; offset < definitions.length; offset += 20)
       await db.batch(definitions.slice(offset, offset + 20).map(({ sql }) => db.prepare(sql)))
+    if (seedRows) {
+      for (const { name } of schema
+        .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .all()) {
+        for (const row of schema.prepare(`SELECT * FROM "${name}"`).all()) {
+          const columns = Object.keys(row)
+          await db
+            .prepare(
+              `INSERT INTO "${name}" (${columns.map((c) => `"${c}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+            )
+            .bind(...Object.values(row))
+            .run()
+        }
+      }
+    }
     return {
       db,
       dispose: async () => {
@@ -215,5 +235,40 @@ export function realBudgetLedger(providerRowsWritten = 0) {
       get: () => ({ fetch: (request) => owner.fetch(request) }),
     },
     close: () => raw.close(),
+  }
+}
+
+// Wraps a ledger so every call it receives is recorded and then answered by the
+// real ledger. A gateway test reads the reservations the request really made
+// (path, lane, units, operation id) instead of trusting what the code says.
+export function spyOnLedger(ledger) {
+  const calls = []
+  return {
+    calls,
+    reservations: () => calls.filter((call) => call.path === "/reserve-mutation-writes"),
+    namespace: {
+      idFromName: () => "global",
+      get: () => ({
+        async fetch(request) {
+          const path = new URL(request.url).pathname
+          const body = await request
+            .clone()
+            .json()
+            .catch(() => null)
+          const response = await ledger.namespace.get().fetch(request)
+          calls.push({
+            path,
+            status: response.status,
+            ...(body?.lane
+              ? { lane: body.lane, units: body.units, operation_id: body.operation_id }
+              : {}),
+            ...(path === "/record"
+              ? { rows_read: body?.rows_read, rows_written: body?.rows_written }
+              : {}),
+          })
+          return response
+        },
+      }),
+    },
   }
 }

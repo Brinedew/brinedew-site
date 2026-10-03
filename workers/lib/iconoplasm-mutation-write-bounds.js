@@ -5,16 +5,19 @@
 // counts every index entry and trigger write behind a statement. It is not a
 // statement and not a D1 call. Every number below is the worst case measured
 // from provider receipts on the complete migrated schema by
-// workers/iconoplasm/finalization-reservation-receipts.test.js, which drives
-// the real operation at its worst input and fails when a migration, index,
-// trigger or statement changes the number. Change a constant only together with
-// that measurement.
+// workers/iconoplasm/finalization-reservation-receipts.test.js (finalization and
+// the vision rebuild), generation-executor-reservation-receipts.test.js (the
+// generation executor routes) and tags-derivative-reservation-receipts.test.js
+// (the tags submission). Each drives the real operation at its worst input and
+// fails when a migration, index, trigger or statement changes the number. Change
+// a constant only together with that measurement.
 //
 // 50 is the floor of every reservation: a smaller measured worst case still
 // reserves 50, which absorbs one more index or trigger before a test must be
 // re-pinned. An operation whose size is above the floor carries its size in
 // its identity (reservationIdentity), so a receipt held under an earlier
-// sizing can never be replayed at a different size.
+// sizing can never be replayed at a different size. An operation that writes
+// no row (reading a lease's material) reserves nothing.
 
 import { FINALIZATION_COMPLETION_PAGE_SIZE } from "../iconoplasm/sync-finalization-publication.js"
 
@@ -34,10 +37,26 @@ export const VOTE_SUMMARY_ROWS_PER_ASSET = 4
 
 export const GENE_ROLLUP_ROWS = 8
 
-// One vision rebuild (the vision row and its option rollups): nine rows and
-// three more for every distinct emulsion code the vision carries, sized here
-// for nine codes. Nothing in code bounds the codes of one vision (B-946).
-export const VISION_ROLLUP_ROWS = 36
+// A vision carries at most this many distinct emulsion codes, enforced where the
+// rebuild reads them (workers/iconoplasm/vision-emulsion-code-bound.js) before it
+// writes anything. Production, read-only, 2026-10-03: 1,860 visions, 2,245
+// vision-code pairs; 1,605 visions carry one code, 234 carry two, the most any
+// carries is 17 (four visions: the legacy code and one per pipeline letter A to
+// P). 24 leaves seven codes of room and still covers one code per factory
+// pipeline plus the legacy code if the catalog grows; a vision above it is
+// refused with a named error, and the bound is raised only together with a new
+// measurement of VISION_ROLLUP_ROWS.
+export const MAX_EMULSION_CODES_PER_VISION = 24
+
+// One vision rebuild (the vision row and its option rollups, and the registered
+// pair and option rollup of every code it carries or just stopped carrying),
+// measured at MAX_EMULSION_CODES_PER_VISION codes in the worst of three runs: a
+// first build writes about six rows per code, and replacing every code writes
+// about eight (the stale pair and rollup go, the new pair and rollup come).
+// A typical vision (one or two codes) writes about 17 rows beyond its claim and
+// advance, so a bulk finalization reserves several times what it writes; the
+// reservation cannot know a vision's code count without scanning its assets.
+export const VISION_ROLLUP_ROWS = 194
 
 // A reconcile writes the emulsion option rollups of every asset its gene holds,
 // republishes the gene, and restores or marks assets one statement group at a
@@ -99,4 +118,149 @@ export function finalizationPhaseWriteUnits({ phase, keepCount = 0, legacyCount 
   else if (phase === "gene_rollups") body = GENE_ROLLUP_ROWS
   else if (phase === "vision_rollups") body = VISION_ROLLUP_ROWS
   return atLeastFloor(transitions + body)
+}
+
+// ---- The laptop routes (the laptop_delivery lane) ---------------------------
+//
+// Six routes reach the lane: the five generation executor routes and the
+// tags-derivative submission. Each is sized here from its own body, and
+// workers/iconoplasm/generation-executor-reservation-receipts.test.js fails when
+// a route classed workstation_sync_write has no entry, or a number drifts from
+// what the real function writes.
+
+// A claim reads up to scanLimit open requests, quarantines every one whose exact
+// source is permanently gone and leases up to claimLimit of the rest. The two
+// clamps below are the ones generationRequestLeaseClaim applies; the reservation
+// is sized from the same function so they cannot drift apart.
+export const GENERATION_CLAIM_DEFAULT_LIMIT = 10
+export const GENERATION_CLAIM_LIMIT_CEILING = 50
+export const GENERATION_CLAIM_SCAN_PER_LEASE = 4
+export const GENERATION_CLAIM_SCAN_FLOOR = 20
+export const GENERATION_CLAIM_SCAN_CEILING = 200
+
+export function generationClaimBounds(rawLimit) {
+  const claimLimit = Math.max(
+    1,
+    Math.min(
+      GENERATION_CLAIM_LIMIT_CEILING,
+      Math.trunc(Number(rawLimit) || GENERATION_CLAIM_DEFAULT_LIMIT),
+    ),
+  )
+  const scanLimit = Math.min(
+    GENERATION_CLAIM_SCAN_CEILING,
+    Math.max(GENERATION_CLAIM_SCAN_FLOOR, claimLimit * GENERATION_CLAIM_SCAN_PER_LEASE),
+  )
+  return { claimLimit, scanLimit }
+}
+
+// One quarantined request: the quarantine row with its two indexes, and the
+// request row cancelled with the six indexes that carry its status.
+export const GENERATION_QUARANTINE_ROWS = 10
+// One lease newly inserted, or a failed or lapsed lease taken over.
+export const GENERATION_LEASE_NEW_ROWS = 6
+export const GENERATION_LEASE_RENEW_ROWS = 2
+export const GENERATION_LEASE_FAIL_ROWS = 2
+
+// A quarantined row writes more than a lease, so the worst scan is one in which
+// every scanned row is quarantined.
+export function generationClaimWriteUnits(rawLimit) {
+  const { scanLimit } = generationClaimBounds(rawLimit)
+  return atLeastFloor(GENERATION_QUARANTINE_ROWS * scanLimit)
+}
+
+// A completion carries the requests of one generation session. One claim leases
+// at most GENERATION_CLAIM_LIMIT_CEILING, every downstream slice (delivery,
+// settlement) already takes 50 request ids, and production's largest publication
+// holds exactly 50 (read-only count, 2026-10-03). A body above the bound is
+// refused before any write.
+export const GENERATION_COMPLETION_MAX_REQUESTS = GENERATION_CLAIM_LIMIT_CEILING
+
+// Rows written for each request a completion carries, with its notification and
+// the delivery and settlement of the group it belongs to.
+export const GENERATION_COMPLETION_REQUEST_ROWS = 42
+export const GENERATION_COMPLETION_FIXED_ROWS = 3
+
+function plainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+// What a completion body asks for: how many items, and how many distinct
+// request ids across them. The handler refuses on either, and the reservation
+// is sized from the second.
+export function generationCompletionSize(body) {
+  const items = Array.isArray(body?.items) ? body.items : []
+  const requestIds = new Set()
+  for (const item of items) {
+    for (const value of Array.isArray(item?.request_ids) ? item.request_ids : []) {
+      const id = Number(value || 0)
+      if (id > 0) requestIds.add(id)
+    }
+  }
+  return { items: items.length, requestIds: requestIds.size }
+}
+
+export function generationCompletionWriteUnits(requestCount) {
+  const requests = count(requestCount)
+  if (requests > GENERATION_COMPLETION_MAX_REQUESTS)
+    throw new RangeError("A completion carries at most one claim's worth of requests")
+  if (!requests) return 0
+  return atLeastFloor(
+    GENERATION_COMPLETION_FIXED_ROWS + GENERATION_COMPLETION_REQUEST_ROWS * requests,
+  )
+}
+
+// The tags-derivative submission (B-945): one command per caretaker revision, a
+// batch in the authoring D1 (derivative, event, outbox, upload intent, storage
+// secret, head) and then the in-process projection of the accepted event into the
+// primary D1. Measured on both complete production schemas: a complete
+// submission writes 39 rows in the authoring D1 and 15 in the primary D1. The
+// head selection is not here: the gateway hands it to the operation-cost
+// authority (isReplicaCostRoute), which admits it against its own declared bound.
+export const TAGS_DERIVATIVE_SUBMIT_ROWS = 54
+
+// Per route: the rows one admitted request may write, from its parsed body.
+//   units 0     no reservation: the route writes no row (material is reads only)
+//   perCall     every request is a new operation (a claim takes new leases, so
+//               an identical body is not a replay); otherwise the operation is
+//               its body, because the body names the exact thing it changes
+//               (a lease token and version, a command id) and a retry is the
+//               same operation.
+// A body the handler cannot read is refused by the handler before any write, so
+// it reserves nothing.
+const LAPTOP_ROUTE_SIZING = Object.freeze({
+  authority_generation_lease_claim: Object.freeze({
+    perCall: true,
+    units: (body) => generationClaimWriteUnits(body.limit),
+  }),
+  authority_generation_lease_material: Object.freeze({ perCall: false, units: () => 0 }),
+  authority_generation_lease_renew: Object.freeze({
+    perCall: false,
+    units: () => atLeastFloor(GENERATION_LEASE_RENEW_ROWS),
+  }),
+  authority_generation_lease_fail: Object.freeze({
+    perCall: false,
+    units: () => atLeastFloor(GENERATION_LEASE_FAIL_ROWS),
+  }),
+  authority_generation_lease_complete: Object.freeze({
+    perCall: false,
+    units: (body) => {
+      const size = generationCompletionSize(body)
+      if (size.items > GENERATION_COMPLETION_MAX_REQUESTS) return 0
+      if (size.requestIds > GENERATION_COMPLETION_MAX_REQUESTS) return 0
+      return generationCompletionWriteUnits(size.requestIds)
+    },
+  }),
+  authority_tags_derivative_submit: Object.freeze({
+    perCall: false,
+    units: () => atLeastFloor(TAGS_DERIVATIVE_SUBMIT_ROWS),
+  }),
+})
+
+export const LAPTOP_RESERVATION_ROUTE_IDS = Object.freeze(Object.keys(LAPTOP_ROUTE_SIZING))
+
+export function laptopReservation(routeId, body) {
+  const sizing = LAPTOP_ROUTE_SIZING[routeId]
+  if (!sizing) throw new RangeError(`No laptop reservation sizing for route ${String(routeId)}`)
+  if (!plainObject(body)) return Object.freeze({ units: 0, perCall: sizing.perCall })
+  return Object.freeze({ units: sizing.units(body), perCall: sizing.perCall })
 }
