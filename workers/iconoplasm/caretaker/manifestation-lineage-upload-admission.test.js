@@ -238,10 +238,21 @@ test("a caretaker's next upload releases their own expired strays first (B-875)"
   const f = await fixture(t)
   f.migrate()
   stubStorage(t, deletingStorage)
+  const reserved = () =>
+    f.db.raw.prepare("SELECT body_reserved_bytes AS n FROM icono_authority_state").get().n
   const stray = await f.reserve("revision", 1, { now: PAST, leaseMs: 30_000 })
+  assert.equal(reserved(), 1)
   const fresh = await admit(f, 20001)
   assert.equal(fresh.status, "uploading")
   assert.equal(statusOf(f, stray.upload_intent_id), "deleted")
+  // Releasing the stray gave its bytes back; the fresh intent holds its own until adopted.
+  assert.equal(reserved(), 1)
+  f.db.raw
+    .prepare(
+      "UPDATE icono_manifestation_upload_intents SET status = 'adopted', resolved_at = CURRENT_TIMESTAMP WHERE upload_intent_id = ?",
+    )
+    .run("intent_admit_20001")
+  assert.equal(reserved(), 0)
 })
 
 test("the release is bounded to three strays per upload (B-875)", async (t) => {

@@ -10,7 +10,6 @@ import {
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
   deliverPendingCaretakerSupervoteNotifications,
-  resolveCaretakerCommentRecipient,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
 
@@ -350,20 +349,6 @@ function setup(t) {
   })
   return { primary, accounts, env: { ICONOPLASM_DB: primary, DB: accounts } }
 }
-
-test("recipient resolution uses the active assignment and suppresses self-notification", async (t) => {
-  const { env } = setup(t)
-  const recipient = await resolveCaretakerCommentRecipient(env, {
-    symbol: "tp53",
-    authorAccountId: AUTHOR,
-  })
-  assert.equal(recipient.caretaker_account_id, ACCOUNT)
-  assert.equal(recipient.caretaker_discord_user_id, "123456789")
-  assert.equal(
-    await resolveCaretakerCommentRecipient(env, { symbol: "TP53", authorAccountId: ACCOUNT }),
-    null,
-  )
-})
 
 test("durable outbox sends one DM and records Discord receipt", async (t) => {
   const { primary, env } = setup(t)

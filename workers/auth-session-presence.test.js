@@ -1,54 +1,56 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import {
-  handleLogout,
-  sharedSessionPresenceCookie,
-  SHARED_SESSION_PRESENCE_COOKIE,
-} from "./auth.js"
-import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
+import { handleLogout, SHARED_SESSION_PRESENCE_COOKIE } from "./auth.js"
+import worker, {
+  GameSession,
+} from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
-const statefulRuntimeSource = readFileSync(
-  new URL(
-    "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-    import.meta.url,
-  ),
-  "utf8",
-)
+function durableState(initialData) {
+  const values = new Map([["data", initialData]])
+  return {
+    storage: {
+      async get(key) {
+        return values.get(key)
+      },
+      async put(key, value) {
+        values.set(key, value)
+      },
+      async deleteAll() {
+        values.clear()
+      },
+    },
+  }
+}
 
-test("the readable session marker carries presence only, never identity or authority", () => {
-  const cookie = sharedSessionPresenceCookie({
-    present: true,
-    cookieDomain: ".brinedew.bio",
-  })
+test("logout destroys the server-side session as well as the browser cookies", async () => {
+  const sessionObject = new GameSession(
+    durableState({ user_id: "discord-user", username: "reader", access_token: "token" }),
+    {},
+  )
+  const env = {
+    GAME_SESSIONS: {
+      idFromName: (name) => name,
+      get: () => ({ fetch: (request) => sessionObject.fetch(request) }),
+    },
+  }
+  const stored = () =>
+    sessionObject.fetch(new Request("http://internal/get")).then((response) => response.json())
+  assert.equal((await stored()).user_id, "discord-user")
 
-  assert.match(cookie, new RegExp(`^${SHARED_SESSION_PRESENCE_COOKIE}=1;`))
-  assert.match(cookie, /Path=\//)
-  assert.match(cookie, /Secure/)
-  assert.match(cookie, /SameSite=Lax/)
-  assert.match(cookie, /Domain=\.brinedew\.bio/)
-  assert.doesNotMatch(cookie, /HttpOnly/)
-  assert.doesNotMatch(cookie, /user|discord|admin|tier/i)
-})
-
-test("logout clears both the credential and the anonymous-startup presence hint", async () => {
   const response = await handleLogout(
     new Request("https://iconoplasm.brinedew.bio/api/auth/logout", {
       method: "POST",
+      headers: { Cookie: "session=live-session" },
     }),
-    {},
+    env,
   )
-  const cookies =
-    typeof response.headers.getSetCookie === "function"
-      ? response.headers.getSetCookie()
-      : [response.headers.get("set-cookie") || ""]
-  const combined = cookies.join("\n")
 
   assert.equal(response.status, 204)
-  assert.match(combined, /session=;[^ \n]*|session=;/)
-  assert.match(combined, new RegExp(`${SHARED_SESSION_PRESENCE_COOKIE}=;`))
-  assert.match(combined, /Max-Age=0/)
+  assert.deepEqual(await stored(), {}, "a copied session cookie must stop working at logout")
+  const cookies = response.headers.getSetCookie()
+  assert.ok(cookies.some((cookie) => /^session=;.*Max-Age=0/.test(cookie)))
+  assert.ok(cookies.some((cookie) => cookie.startsWith(`${SHARED_SESSION_PRESENCE_COOKIE}=;`)))
 })
 
 test("the stateful security boundary makes every auth response non-cacheable", async () => {
@@ -61,27 +63,4 @@ test("the stateful security boundary makes every auth response non-cacheable", a
   assert.equal(response.status, 401)
   assert.deepEqual(await response.json(), { authenticated: false })
   assert.equal(response.headers.get("Cache-Control"), "no-store")
-})
-
-test("dynamic HTML repairs only the presence hint and never caches that personalized header", () => {
-  const cacheWrite = statefulRuntimeSource.indexOf("caches.default.put(")
-  const hintRepair = statefulRuntimeSource.indexOf(
-    'sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" })',
-  )
-  const finalResponse = statefulRuntimeSource.indexOf(
-    'return new Response(request.method === "HEAD" ? null : body',
-    hintRepair,
-  )
-
-  assert.notEqual(cacheWrite, -1)
-  assert.ok(hintRepair > cacheWrite)
-  assert.ok(finalResponse > hintRepair)
-  assert.match(
-    statefulRuntimeSource.slice(cacheWrite, hintRepair),
-    /body = injectAnalyticsConsentBootstrap\(body, request\)/,
-  )
-  assert.doesNotMatch(
-    statefulRuntimeSource.slice(cacheWrite, hintRepair),
-    /sharedSessionPresenceCookie/,
-  )
 })

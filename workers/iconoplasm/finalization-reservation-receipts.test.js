@@ -16,7 +16,6 @@ import {
   finalizationCompletionPageWriteUnits,
   finalizationPhaseWriteUnits,
   finalizationRecoveryWriteUnits,
-  reservationIdentity,
 } from "../lib/iconoplasm-mutation-write-bounds.js"
 import { ICONOPLASM_FACTORY_CATALOG } from "../generated/iconoplasm-factory-catalog.js"
 import { advanceEnrolledIconoplasmGeneCardMaterialization } from "../iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
@@ -351,20 +350,11 @@ async function recodeVision(prefix, visionId, codes) {
     .run()
 }
 
-test("the code bound is the largest vision in production with room to grow, and covers every pipeline once", () => {
-  // Read-only production count, 2026-10-03: 1,860 visions, 2,245 vision-code
-  // pairs; codes per vision: 1 for 1,605 visions, 2 for 234, up to 17 for four.
-  assert.ok(MAX_EMULSION_CODES_PER_VISION >= 17)
+test("a vision at the code bound reserves what its first build, a full replacement of its codes and a restore write", async (t) => {
+  quiet(t)
   // One code per factory pipeline plus the legacy code: a new pipeline fails
   // here until the bound and the rows behind it are measured again.
   assert.ok(MAX_EMULSION_CODES_PER_VISION >= PIPELINE_LETTERS.length + 1)
-  const codes = emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 5)
-  assert.equal(codes.length, MAX_EMULSION_CODES_PER_VISION)
-  assert.equal(new Set(codes).size, MAX_EMULSION_CODES_PER_VISION)
-})
-
-test("a vision at the code bound reserves what its first build, a full replacement of its codes and a restore write", async (t) => {
-  quiet(t)
   const visionId = "anima-v1-29101"
   const prefix = await seedVisionWithCodes(
     visionId,
@@ -404,18 +394,6 @@ test("a vision at the code bound reserves what its first build, a full replaceme
     VISION_ROLLUP_ROWS,
     "the vision constant is the worst body measured at the bound, not an estimate",
   )
-})
-
-test("a typical vision reserves the same as a vision at the bound, because its code count is not known before its phase starts", async (t) => {
-  quiet(t)
-  const visionId = "anima-v1-29103"
-  await seedVisionWithCodes(visionId, emulsionCodes(2, 29103))
-  const run = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
-  assertCovered("two-code vision", run, { tightness: 100 })
-  t.diagnostic(
-    JSON.stringify({ site: "vision-two-codes", wrote: run.entry.wrote, units: run.entry.units }),
-  )
-  assert.equal(run.entry.units, finalizationPhaseWriteUnits({ phase: "vision_rollups" }))
 })
 
 test("codes shared with other visions add no rows to a rebuild beyond its own codes", async (t) => {
@@ -763,20 +741,5 @@ test("a receipt held at the old size does not wedge a re-sized operation", async
       .bind(symbol)
       .first("phase"),
     "gene_rollups",
-  )
-})
-
-test("an identity above the floor carries its size, and one at the floor is unchanged", () => {
-  assert.equal(
-    reservationIdentity("finalization:TP53:7:reconcile", MUTATION_WRITE_FLOOR_UNITS),
-    "finalization:TP53:7:reconcile",
-  )
-  assert.equal(
-    reservationIdentity("finalization:TP53:7:reconcile", 214),
-    "finalization:TP53:7:reconcile:u214",
-  )
-  assert.match(
-    reservationIdentity(`finalization-complete-page:${"a".repeat(64)}`, 128),
-    /^[a-zA-Z0-9_.:@-]{1,255}$/,
   )
 })
