@@ -82,29 +82,3 @@ export async function selectAvailableDailyTarget({
 
   return { protein: null, structureMeta: null, rejected, skippedIneligible }
 }
-
-export function shouldReplaceRecordedDailyTarget({
-  existingUniprot,
-  selectedUniprot,
-  rejected,
-  totalGuesses,
-}) {
-  const existing = String(existingUniprot || "")
-    .trim()
-    .toUpperCase()
-  const selected = String(selectedUniprot || "")
-    .trim()
-    .toUpperCase()
-  if (!existing || !selected || existing === selected || Number(totalGuesses) !== 0) {
-    return false
-  }
-  return Array.isArray(rejected)
-    ? rejected.some(
-        (entry) =>
-          String(entry?.uniprot_id || "")
-            .trim()
-            .toUpperCase() === existing &&
-          (entry?.reason === "structure_unreachable" || entry?.reason === "no_structure_metadata"),
-      )
-    : false
-}
