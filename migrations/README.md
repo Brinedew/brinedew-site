@@ -8,7 +8,15 @@ that historical table by assuming the first migration is the current schema.
 
 - **Protein catalog and search:** D1 `proteins`, `protein_synonyms`, and
   trigger-maintained `protein_search`; reads go through
-  `workers/lib/protein-store.js`.
+  `workers/lib/protein-store.js`. `proteins.uniprot` is `UNIQUE` and holds
+  upper-case accessions (19,110 of 19,110 on 2026-10-03). A reader binds an
+  upper-cased value and compares the bare column with `=`, so the lookup is one
+  index search. Never write `upper(uniprot) = ?` or `lower(uniprot) = ?`: the
+  function defeats the index and reads the whole table. The structure-bytes
+  route (`/api/structure-cached?key=`) looks a protein up this way on every
+  hint-less SWISS-MODEL or AlphaFold request, and
+  `workers/structure-cached-key-lookup-cost.test.js` pins one row read per
+  request. A new importer must write accessions upper-case.
 - **Embeddings:** D1 `protein_embeddings` is independent of the search tables.
   `scripts/load_esm2_embeddings.py` is the checked-in ESM2 loader.
 - **Daily answer:** The existing stateful Worker owns the server-side

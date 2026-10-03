@@ -4502,9 +4502,17 @@ async function handleCachedStructureFetch(request, env, ctx, corsHeaders) {
     }
 
     let row = null
+    // ⚠️ COST BARRIER: compare the bare `uniprot` column to an upper-cased bound
+    // value, never `upper(uniprot) = ?`. The column is UNIQUE and every stored
+    // accession is already upper-case (19,110 of 19,110 on 2026-10-03; the other
+    // reader, fetchProteinByUniprot, relies on the same contract). Wrapping the
+    // column in a function defeats the index and reads the whole table: 19,110 rows
+    // for each view of a guess structure. With R2 unbound, every hint-less
+    // SWISS-MODEL or AlphaFold key reaches this lookup, so that cost grows with
+    // players. A test pins one row read per request at production shape.
     const structureRowSql = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
       FROM proteins
-      WHERE upper(uniprot) = ?`
+      WHERE uniprot = ?`
     try {
       if (source === "alphafold" && env?.DB?.prepare) {
         row = await env.DB.prepare(structureRowSql).bind(id.toUpperCase()).first()
@@ -4914,7 +4922,9 @@ async function getProdDailyBootstrapCache(env, date) {
  *
  * OPTIMIZATIONS APPLIED:
  * 1. DAILY CACHE: KV lookup for target + structure token (~1-5ms vs ~500-2000ms)
- * 2. Parallel fetch: getDailyTargetProtein runs concurrently with session load
+ * 2. Parallel fetch (daily mode): getDailyTargetProtein runs concurrently with
+ *    session load. Practice mode reads the session first and picks only when
+ *    nothing names a target, because a returning player's pick was discarded.
  * 3. Batched hydration: hydrateGuessProteins uses Promise.all, not sequential loop
  * 4. Skip redundant work: similarity scores not recalculated if already stored
  *
@@ -4985,20 +4995,42 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     }
     console.log(`[BOOTSTRAP] Cache checked: ${cachedDaily ? "HIT" : "MISS"}`)
 
-    // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
-    // Target protein lookup and session state load are independent
-    // Running in parallel saves 50-150ms per request
-    console.log("[BOOTSTRAP] Starting parallel fetch: targetSeed + existingState")
-    const [targetSeedRaw, existingState] = await Promise.all([
-      cachedDaily?.targetProtein
-        ? Promise.resolve(cachedDaily.targetProtein) // Use cached target
-        : getDailyTargetProtein(env, { practice: practiceMode, returnAudit: !practiceMode }),
-      getGameState(env, sessionId).catch(() => null), // Graceful fallback if session doesn't exist
-    ])
+    let targetSeedRaw = null
+    let existingState = null
+    if (practiceMode) {
+      // ⚠️ PRACTICE READS THE SESSION BEFORE IT PICKS ⚠️
+      // A returning player's own session names their target, and so can a stored
+      // practice pool, a `date=` link or `same_target=1`. A pick made in parallel
+      // with the session read is thrown away in all of those cases, yet it costs a
+      // D1 round, an outbound structure probe the player waits for, and a KV put
+      // on every page load. So the pick happens below, only when nothing names a
+      // target. A browser with no session cookie has no session (the id is minted
+      // for this request), so it skips the read and reaches the pick at once.
+      const sessionCannotExist =
+        sessionContext.needsSessionCookie && !sessionContext.authenticatedUserId
+      existingState = sessionCannotExist
+        ? null
+        : await getGameState(env, sessionId).catch(() => null)
+    } else {
+      // ⚠️ PARALLEL FETCH - DO NOT SERIALIZE ⚠️
+      // Daily target lookup and session state load are independent
+      // Running in parallel saves 50-150ms per request
+      console.log("[BOOTSTRAP] Starting parallel fetch: targetSeed + existingState")
+      const [dailyTarget, dailyState] = await Promise.all([
+        cachedDaily?.targetProtein
+          ? Promise.resolve(cachedDaily.targetProtein) // Use cached target
+          : getDailyTargetProtein(env, { practice: false, returnAudit: true }),
+        getGameState(env, sessionId).catch(() => null), // Graceful fallback if session doesn't exist
+      ])
+      targetSeedRaw = dailyTarget
+      existingState = dailyState
+    }
     let targetSeed = targetSeedRaw?.protein ? targetSeedRaw.protein : targetSeedRaw
     // Prefer audit from the API response, but fall back to cached audit from bootstrap cache
     const targetAudit = targetSeedRaw?.audit ? targetSeedRaw.audit : cachedDaily?.audit || null
-    console.log(`[BOOTSTRAP] Parallel fetch complete: targetSeed=${targetSeed?.uniprot || "null"}`)
+    console.log(
+      `[BOOTSTRAP] Session and target loaded: targetSeed=${targetSeed?.uniprot || "null"}, hasSession=${Boolean(existingState)}`,
+    )
 
     // When set, `date` should override any existing practice session for today.
     let dateOverrideUniprot = null
@@ -5077,6 +5109,13 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
             `[BOOTSTRAP] Practice override target: ${overrideProtein.uniprot} (poolSize=${pool.length})`,
           )
         }
+      }
+
+      // Nothing named a loadable target (a first-time or restarting player with no
+      // stored pool, yesterday's session, or a named protein the catalog lacks):
+      // pick one from the stored practice pool.
+      if (!targetSeed) {
+        targetSeed = await getDailyTargetProtein(env, { practice: true })
       }
     }
 
