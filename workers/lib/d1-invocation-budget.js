@@ -1,7 +1,13 @@
-// This is the provider's per-invocation statement ceiling, not a second daily
-// spending authority. Daily row/storage admission remains owned by the existing
-// operation-cost ledger. Statements are charged before any binding call, even
-// when that call fails or its transaction rolls back.
+// Our own per-invocation statement budget. It is not a provider limit (the
+// provider allows 1,000 D1 calls per Worker invocation on the free plan and
+// counts a batch as one call) and it is not a second daily spending authority.
+// It bounds how many statements one invocation may run, which is what stops a
+// runaway loop. It does not bound rows: one statement can write many. Rows are
+// counted by the mutation-write reservations
+// (workers/lib/iconoplasm-mutation-write-bounds.js) and daily row/storage
+// admission remains owned by the existing operation-cost ledger. Statements are
+// charged before any binding call, even when that call fails or its
+// transaction rolls back.
 export const D1_INVOCATION_STATEMENT_LIMIT = 50
 
 export function createD1InvocationBudget() {

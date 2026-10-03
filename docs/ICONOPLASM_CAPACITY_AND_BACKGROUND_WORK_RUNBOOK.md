@@ -149,6 +149,19 @@ Exact ceilings live in executable policy
 (`workers/lib/iconoplasm-mutation-lane-reservations.js`), not this runbook.
 Tests must fail when a new path bypasses that policy.
 
+A reservation's unit is a D1 row written, the provider's own meter, which counts
+every index entry and trigger write behind a statement. It is not a statement
+count: the provider allows 1,000 D1 calls per invocation and counts a batch as
+one, and the 50-statement invocation budget (`workers/lib/d1-invocation-budget.js`)
+is ours and bounds statements, not rows. What each operation reserves lives in
+`workers/lib/iconoplasm-mutation-write-bounds.js`, sized from the operation's own
+bounded input and pinned to receipts measured on the migrated schema by
+`workers/iconoplasm/finalization-reservation-receipts.test.js`. A reservation
+never goes below the 50-unit floor, and one above it carries its size in its
+identity so a receipt held under an earlier sizing is never replayed at another
+size. A migration that adds an index or trigger to a reserved path fails that
+test until the new number is pinned.
+
 ## Public-read behavior
 
 Anonymous shells, catalog data, gene records, portraits, and blots come from the

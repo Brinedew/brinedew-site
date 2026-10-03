@@ -1,0 +1,219 @@
+// Test harness for the mutation-reservation receipts tests. It runs the real
+// operation against a real D1 (Miniflare) holding the complete migrated schema,
+// so every index and trigger bills exactly the rows the provider would bill,
+// and it records how many rows the database had written when each admitted
+// operation reserved and when it completed.
+import { createRequire } from "node:module"
+import { readFileSync, readdirSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
+
+import { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+
+const require = createRequire(import.meta.url)
+const { Miniflare, convertV4MiniflareOptions } = createRequire(
+  require.resolve("wrangler/package.json"),
+)("miniflare")
+
+export async function openMigratedD1(migrationDirectory = "../../migrations-iconoplasm/") {
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: true,
+      script: "export default {fetch(){return new Response('reservation receipts')}}",
+      compatibilityDate: "2026-08-01",
+      d1Databases: ["DB"],
+    }),
+  )
+  const schema = new DatabaseSync(":memory:")
+  try {
+    const directory = new URL(migrationDirectory, import.meta.url)
+    for (const file of readdirSync(directory)
+      .filter((name) => name.endsWith(".sql"))
+      .sort())
+      schema.exec(readFileSync(new URL(file, directory), "utf8"))
+    const db = await runtime.getD1Database("DB")
+    const definitions = schema
+      .prepare(
+        "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+      )
+      .all()
+    for (let offset = 0; offset < definitions.length; offset += 20)
+      await db.batch(definitions.slice(offset, offset + 20).map(({ sql }) => db.prepare(sql)))
+    return {
+      db,
+      dispose: async () => {
+        schema.close()
+        await runtime.dispose()
+      },
+    }
+  } catch (error) {
+    schema.close()
+    await runtime.dispose()
+    throw error
+  }
+}
+
+// A D1 whose running totals can be read at any moment. Unlike the operation-cost
+// meter it never closes, so a reservation can be compared with the rows written
+// between its own reserve and complete calls.
+export function liveD1Meter(database) {
+  const totals = { rows_read: 0, rows_written: 0, calls: 0 }
+  const raws = new WeakMap()
+  const count = (receipt) => {
+    for (const item of Array.isArray(receipt) ? receipt : [receipt]) {
+      totals.rows_read += item?.meta?.rows_read || 0
+      totals.rows_written += item?.meta?.rows_written || 0
+    }
+    return receipt
+  }
+  function wrap(raw) {
+    const statement = {
+      bind: (...args) => wrap(raw.bind(...args)),
+      async all() {
+        totals.calls += 1
+        return count(await raw.all())
+      },
+      async run() {
+        totals.calls += 1
+        return count(await raw.run())
+      },
+      async first(column) {
+        totals.calls += 1
+        const result = count(await raw.all())
+        const row = result.results[0] ?? null
+        if (column === undefined || row === null) return row
+        return row[column]
+      },
+    }
+    raws.set(statement, raw)
+    return statement
+  }
+  return {
+    totals,
+    db: {
+      prepare: (sql) => wrap(database.prepare(sql)),
+      async batch(statements) {
+        totals.calls += 1
+        return count(await database.batch(statements.map((statement) => raws.get(statement))))
+      },
+    },
+  }
+}
+
+// One entry per admitted operation: the units it reserved and the rows the
+// database wrote from its reserve call to its complete call (or to the end of
+// the run when it never completed, as a failed operation does not).
+function settleReservations(events, endRowsWritten) {
+  const open = new Map()
+  const settled = []
+  for (const event of events) {
+    if (event.kind === "reserve") open.set(event.operation_id, event)
+    else {
+      const reserved = open.get(event.operation_id)
+      if (!reserved) continue
+      settled.push({
+        operation_id: reserved.operation_id,
+        lane: reserved.lane,
+        units: reserved.units,
+        wrote: event.at - reserved.at,
+        completed: true,
+      })
+      open.delete(event.operation_id)
+    }
+  }
+  for (const reserved of open.values())
+    settled.push({
+      operation_id: reserved.operation_id,
+      lane: reserved.lane,
+      units: reserved.units,
+      wrote: endRowsWritten - reserved.at,
+      completed: false,
+    })
+  return settled
+}
+
+// Stands in for the shared daily-budget Durable Object and admits everything.
+// It records the rows the database had written at each reserve and complete call.
+export function recordingMutationLedger(meter) {
+  const events = []
+  return {
+    namespace: {
+      idFromName: () => "global",
+      get: () => ({
+        async fetch(request) {
+          const path = new URL(request.url).pathname
+          const body = await request.json()
+          if (path === "/reserve-mutation-writes")
+            events.push({ kind: "reserve", at: meter.totals.rows_written, ...body })
+          else if (path === "/complete-mutation-write-reservation")
+            events.push({ kind: "complete", at: meter.totals.rows_written, ...body })
+          else throw new Error(`Unexpected ledger path ${path}`)
+          return Response.json({ ok: true })
+        },
+      }),
+    },
+    settle: (endRowsWritten) => settleReservations(events, endRowsWritten),
+  }
+}
+
+function sqliteDoStorage(raw) {
+  return {
+    sql: {
+      exec(sql, ...args) {
+        const statement = raw.prepare(String(sql))
+        if (statement.columns().length) return { toArray: () => statement.all(...args) }
+        statement.run(...args)
+        return { toArray: () => [] }
+      },
+    },
+    transactionSync(callback) {
+      raw.exec("BEGIN IMMEDIATE")
+      try {
+        const result = callback()
+        raw.exec("COMMIT")
+        return result
+      } catch (error) {
+        raw.exec("ROLLBACK")
+        throw error
+      }
+    },
+  }
+}
+
+// The real shared daily-budget Durable Object over in-memory SQLite, fed a
+// provider observation of `providerRowsWritten`.
+export function realBudgetLedger(providerRowsWritten = 0) {
+  const raw = new DatabaseSync(":memory:")
+  const observation = { rowsWritten: providerRowsWritten }
+  const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
+    { storage: sqliteDoStorage(raw), blockConcurrencyWhile: (callback) => callback() },
+    {
+      KV: {
+        async get() {
+          return {
+            schemaVersion: 3,
+            generatedAt: new Date().toISOString(),
+            providerAdmission: {
+              accountId: "reservation-receipts",
+              dayKey: new Date().toISOString().slice(0, 10),
+              rowsWritten: observation.rowsWritten,
+            },
+          }
+        },
+      },
+    },
+  )
+  return {
+    owner,
+    // A new provider reading, taking effect on the next admission.
+    observe(rowsWritten) {
+      observation.rowsWritten = rowsWritten
+      owner.providerObservationCheckedAt = 0
+      owner.providerObservationCache = null
+    },
+    namespace: {
+      idFromName: () => "global",
+      get: () => ({ fetch: (request) => owner.fetch(request) }),
+    },
+    close: () => raw.close(),
+  }
+}

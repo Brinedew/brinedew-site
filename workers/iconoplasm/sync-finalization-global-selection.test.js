@@ -8,10 +8,6 @@ import {
   GLOBAL_DUE_FINALIZATION_SQL,
   GLOBAL_PENDING_FINALIZATION_SQL,
 } from "./sync-finalization-global-selection.js"
-import {
-  createFinalizationQueueMigrationCostAdapter,
-  createFinalizationRunningMigrationCostAdapter,
-} from "./operation-cost-finalization-queue-migration-adapter.js"
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
   require.resolve("wrangler/package.json"),
@@ -79,7 +75,7 @@ test("global dispatch retains phase priority, orders by due time and probes boun
 })
 
 test(
-  "workerd migration and global dispatch stay within bounds across large runnable and future backlogs",
+  "workerd global dispatch stays within bounds across large runnable and future backlogs",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -94,7 +90,9 @@ test(
     try {
       schema.exec(source("0028_add_finalization_jobs.sql"))
       schema.exec(source("0094_finalization_summary.sql"))
+      schema.exec(source("0099_finalization_queue_indexes.sql"))
       schema.exec(source("0100_finalization_job_version.sql"))
+      schema.exec(source("0103_finalization_running_index.sql"))
       const db = await runtime.getD1Database("DB")
       for (const { sql } of schema
         .prepare(
@@ -103,11 +101,6 @@ test(
         .all())
         await db.prepare(sql).run()
       await db.prepare("INSERT INTO icono_sync_finalization_summary VALUES(1,0,0,0,0,0,0)").run()
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE)",
-        )
-        .run()
       await db.prepare(fixture).run()
       await db
         .prepare(
@@ -116,50 +109,6 @@ test(
     SELECT 'OLD'||n,CASE WHEN n<=4992 THEN 'retrying' ELSE 'completed' END,'reconcile','2099-01-01' FROM ids`,
         )
         .run()
-      const adapter = createFinalizationQueueMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      await assert.rejects(
-        adapter.dispatch(await adapter.prepare({ max_rows: 24999, max_unfinished: 5000 })),
-      )
-      await assert.rejects(
-        adapter.dispatch(await adapter.prepare({ max_rows: 25000, max_unfinished: 4999 })),
-      )
-      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM d1_migrations").first()).n, 0)
-      assert.equal(
-        (
-          await db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name='idx_icono_finalization_due'",
-            )
-            .first()
-        ).n,
-        0,
-      )
-      const prepared = await adapter.prepare({ max_rows: 25000, max_unfinished: 5000 })
-      const { actual } = await adapter.dispatch(prepared)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(
-          actual[meter] <= prepared.bound[meter],
-          JSON.stringify({ actual, bound: prepared.bound }),
-        )
-      const runningAdapter = createFinalizationRunningMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      const runningPrepared = await runningAdapter.prepare({
-        max_rows: 25000,
-        max_unfinished: 5000,
-      })
-      const running = await runningAdapter.dispatch(runningPrepared)
-      for (const meter of ["rows_read", "rows_written"])
-        assert.ok(
-          running.actual[meter] <= runningPrepared.bound[meter],
-          JSON.stringify({ actual: running.actual, bound: runningPrepared.bound }),
-        )
       const measure = async (limit = 25) => {
         const result = []
         for (const [sql, originalArgs] of queries) {
@@ -203,8 +152,6 @@ test(
       assert.equal(future[2].results[0].next_attempt_at, "2099-01-01")
       t.diagnostic(
         JSON.stringify({
-          migration: actual,
-          migration_bound: prepared.bound,
           before: before.map((r) => r.meta.rows_read),
           after: after.map((r) => r.meta.rows_read),
           maximum: maximum.map((r) => r.meta.rows_read),

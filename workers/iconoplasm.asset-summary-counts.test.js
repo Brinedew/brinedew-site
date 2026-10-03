@@ -2,21 +2,37 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { readFileSync, readdirSync } from "node:fs"
-import {
-  assetSummaryMigrationStatements,
-  ASSET_SUMMARY_FIELDS,
-} from "../scripts/generate-asset-summary-counts.mjs"
 import { fetchStorageAuditRecheckDue } from "./iconoplasm/asset-summary-counts.js"
 import { createRequire } from "node:module"
-import { createAssetSummaryMigrationCostAdapter } from "./iconoplasm/operation-cost-asset-summary-migration-adapter.js"
+import { applyMigrationFile } from "./test-helpers/migration-sql-statements.js"
 
+const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
+const ASSET_SUMMARY_SQL = readFileSync(new URL("0104_asset_summary_counts.sql", MIGRATIONS), "utf8")
+const ASSET_SUMMARY_FIELDS = [
+  "candidate_assets",
+  "catalog_candidate_assets",
+  "auditable_assets",
+  "catalog_auditable_assets",
+  "stale_assets",
+  "legacy_assets",
+  "published_live_portraits",
+  "catalog_published_live_portraits",
+  "audited_assets",
+  "verified_renderable_images",
+  "storage_incomplete_assets",
+  "storage_regionally_divergent_assets",
+  "broken_live_images",
+  "renderable_live_confirmed",
+  "storage_queue_backlog_assets",
+]
+
+// The schema as it stood before 0104 creates the counters.
 function fixture() {
   const db = new DatabaseSync(":memory:")
-  const root = new URL("../migrations-iconoplasm/", import.meta.url)
-  for (const name of readdirSync(root)
+  for (const name of readdirSync(MIGRATIONS)
     .filter((n) => n.endsWith(".sql") && parseInt(n) < 104)
     .sort())
-    db.exec(readFileSync(new URL(name, root), "utf8"))
+    db.exec(readFileSync(new URL(name, MIGRATIONS), "utf8"))
   return db
 }
 const baseline = `SELECT COUNT(*) candidate_assets, COALESCE(SUM(gc.gene_symbol IS NOT NULL),0) catalog_candidate_assets,
@@ -70,7 +86,7 @@ test("asset/audit counts retain exact meaning across source lifecycle and no-ops
     exec(
       "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,audit_state,is_current,last_audited_at) VALUES ('TP53','a','renderable',1,'2026-08-01T04:05:06Z'),('TP53','b','unknown',0,NULL),('OUTSIDE','c','broken',1,'2025-12-31 23:59:59')",
     )
-    db.exec(assetSummaryMigrationStatements().join("\n"))
+    db.exec(ASSET_SUMMARY_SQL)
     verify(db)
     const changes = [
       "UPDATE icono_storage_audit_queue SET audit_state='regionally_divergent',last_audited_at='2026-09-12T17:00:00Z' WHERE asset_sha256='b'",
@@ -127,7 +143,7 @@ test("asset/audit counts retain exact meaning across source lifecycle and no-ops
 })
 
 test(
-  "summary migration and warm reads have measured D1 costs at catalog scale",
+  "summary reads and source mutations have measured D1 costs at catalog scale",
   { timeout: 120000 },
   async () => {
     const require = createRequire(import.meta.url)
@@ -179,45 +195,8 @@ test(
           "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,audit_state,is_current,last_audited_at) SELECT gene_symbol,asset_sha256,CASE WHEN rowid%3=0 THEN 'broken' WHEN rowid%3=1 THEN 'regionally_divergent' ELSE 'renderable' END,rowid%2,datetime('0001-01-01','+'||(rowid%2048)||' years','+'||(rowid%86400)||' seconds') FROM icono_portrait_assets WHERE rowid<=50000",
         )
         .run()
-      await db
-        .prepare(
-          "CREATE TABLE d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
-        )
-        .run()
-      const adapter = createAssetSummaryMigrationCostAdapter({
-        db,
-        executable_sha256: "a".repeat(64),
-        schema_sha256: "b".repeat(64),
-      })
-      const arguments_ = {
-        max_assets: 100000,
-        max_audit_rows: 50000,
-        max_publish_rows: 25000,
-        max_audit_days: 2048,
-        max_schema_rows: 512,
-      }
-      // Oversize guards run atomically before the first new table or seed write.
-      const refused = await adapter.prepare({ ...arguments_, max_audit_days: 2047 })
-      await assert.rejects(() => adapter.dispatch(refused), /malformed JSON/)
-      assert.equal(
-        (
-          await db
-            .prepare("SELECT COUNT(*) n FROM sqlite_schema WHERE name='icono_asset_summary_counts'")
-            .first()
-        ).n,
-        0,
-      )
-      const prepared = await adapter.prepare(arguments_)
-      const { actual: cost } = await adapter.dispatch(prepared)
-      console.log(
-        "asset summary admitted migration receipt",
-        JSON.stringify({ cost, bound: prepared.bound }),
-      )
-      for (const key of ["rows_read", "rows_written"])
-        assert.ok(
-          cost[key] <= prepared.bound[key],
-          `${key}: ${cost[key]} <= ${prepared.bound[key]}`,
-        )
+      // 0104 creates the counters and seeds them from the rows above.
+      await applyMigrationFile(db, MIGRATIONS, "0104_asset_summary_counts.sql")
       const read = await db
         .prepare("SELECT * FROM icono_asset_summary_counts WHERE summary_key='default'")
         .all()

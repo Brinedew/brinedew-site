@@ -6,21 +6,65 @@ import {
   verifyReleaseAuthentication,
   requireReleaseSharedCapacity,
   chooseReleaseAdmission,
-  readCanonicalReleaseOrigin,
 } from "./preflight-operation-cost-release.mjs"
-import { readInspectionReleaseOrigin } from "./inspect-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
+import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
+import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
+import { createSchemaDropMigrationCostAdapter } from "../workers/iconoplasm/operation-cost-schema-drop-migration-adapter.js"
 
+// The release preflight decides, before any application traffic pauses,
+// whether a release fits. Its job does not depend on which migration is
+// pending, so these tests drive it with synthetic pending migrations built
+// from the generic schema-drop adapter. Failure modes, written first:
+// 1. A pending migration's prediction or bound is missing from the headroom
+//    the release reserves, so a release that cannot finish is admitted.
+// 2. A pending migration with an unreviewed adapter, a retired protocol,
+//    invalid arguments, a bound over twice its prediction or a bound over the
+//    daily allocation is admitted.
+// 3. A working site enters maintenance without full headroom.
+// 4. A paused site cannot resume its first staged migration when that one
+//    fits (the repair path), or resumes one that does not fit, or resumes a
+//    migration that is not staged.
+// 5. Missing, stale, future, wrong-day or malformed telemetry reads as headroom.
+// 6. An unknown or duplicated pending name is admitted.
+// 7. The catalog initialization's key-value reads and writes leave the sum.
 const releaseManifest = JSON.parse(
   readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
 )
-// Historical four-migration fixture retains its original boundary regressions.
+const staged = (index) => ({
+  key: `iconoplasm/900${index}_synthetic_drop.sql`,
+  adapterId: `iconoplasm-migration-900${index}`,
+  entry: {
+    adapter_id: `iconoplasm-migration-900${index}`,
+    arguments: { max_schema_rows: 512 },
+    migration_protocol: "one-migration-per-release-v1",
+    prediction: { rows_read: 3000, rows_written: 16, requests: 1 },
+  },
+})
+const [first, second] = [staged(1), staged(2)]
+// The schema-drop bound is eight passes over the admitted 512-row schema plus
+// 256 rows, and 32 rows written.
+const DROP_BOUND = { rows_read: 8 * 512 + 256, rows_written: 32 }
+// Three inventories each read the schema objects and the applied journal.
+const INVENTORY_READS = 3 * (2050 + 1026)
+const syntheticAdapters = () => {
+  const adapters = createMigrationOperationCostAdapters({}, OPERATION_COST_IDENTITIES)
+  for (const { key, adapterId } of [first, second])
+    adapters.set(
+      adapterId,
+      createSchemaDropMigrationCostAdapter({
+        db: null,
+        name: key.slice(key.indexOf("/") + 1),
+        statements: ["DROP TABLE IF EXISTS icono_synthetic_probe;"],
+        ...OPERATION_COST_IDENTITIES,
+      }),
+    )
+  return adapters
+}
 const manifest = {
   ...releaseManifest,
   catalog_initialization_prediction: undefined,
-  migrations: Object.fromEntries(
-    Object.entries(releaseManifest.migrations).filter(([key]) => /\/(0094|001[234])_/.test(key)),
-  ),
+  migrations: { [first.key]: first.entry, [second.key]: second.entry },
 }
 const time = Date.parse("2026-09-05T12:00:00Z")
 const sample = {
@@ -35,40 +79,32 @@ const sample = {
   kv_deletes: 0,
   kv_lists: 0,
 }
-const check = (observed, plan = manifest) =>
+const check = (observed, plan = manifest, extra = {}) =>
   preflightOperationCostRelease({
     manifest: plan,
     reader: { refresh: async () => observed },
     now: () => time,
+    adapters: syntheticAdapters(),
+    ...extra,
   })
 
-test("September 13's two pending migrations fit the unchanged whole-release allocation", async (t) => {
-  const result = await preflightOperationCostRelease({
-    manifest: releaseManifest,
-    pendingMigrations: [
-      "iconoplasm/0104_asset_summary_counts.sql",
-      "iconoplasm/0105_artist_blacklist_lookup.sql",
-    ],
-    reader: { refresh: async () => sample },
-    now: () => time,
-  })
-  assert.ok(result.maximum.rows_read <= 1000000, JSON.stringify(result.maximum))
-  assert.ok(result.maximum.rows_written < 18000, JSON.stringify(result.maximum))
-  t.diagnostic(JSON.stringify(result.maximum))
-})
-
-test("low provider usage cannot admit a release over retained shared reservations", async () => {
-  const release = await check(sample)
+test("low provider usage cannot admit a release over retained shared reservations", () => {
   const capacity = {
     day: sample.day,
     measured_at: time,
     remaining: { rows_read: 1000000 - 753048, rows_written: 20000 - 256, requests: 2300 },
   }
+  const maximum = { rows_read: capacity.remaining.rows_read, rows_written: 0, requests: 40 }
+  requireReleaseSharedCapacity(maximum, capacity, time)
   assert.throws(
-    () => requireReleaseSharedCapacity(release.maximum, capacity, time),
+    () =>
+      requireReleaseSharedCapacity(
+        { ...maximum, rows_read: maximum.rows_read + 1 },
+        capacity,
+        time,
+      ),
     /COST_RELEASE_SHARED_HEADROOM: rows_read/,
   )
-  requireReleaseSharedCapacity({ rows_read: 1000, rows_written: 0, requests: 40 }, capacity, time)
   for (const invalid of [
     null,
     { ...capacity, measured_at: time - 60001 },
@@ -77,37 +113,9 @@ test("low provider usage cannot admit a release over retained shared reservation
     { ...capacity, remaining: { ...capacity.remaining, rows_read: NaN } },
   ])
     assert.throws(
-      () => requireReleaseSharedCapacity(release.maximum, invalid, time),
+      () => requireReleaseSharedCapacity(maximum, invalid, time),
       /COST_SHARED_USAGE_UNAVAILABLE/,
     )
-})
-
-test("status-index release fits retained headroom with singleton prerequisites and a measured DDL envelope", async (t) => {
-  const release = await preflightOperationCostRelease({
-    manifest: releaseManifest,
-    pendingMigrations: ["iconoplasm/0102_finalization_status_index.sql"],
-    reader: { refresh: async () => sample },
-    now: () => time,
-  })
-  const capacity = {
-    day: sample.day,
-    measured_at: time,
-    remaining: { rows_read: 106754, rows_written: 6426, requests: 660 },
-  }
-  requireReleaseSharedCapacity(release.maximum, capacity, time)
-  assert.throws(
-    () =>
-      requireReleaseSharedCapacity(
-        release.maximum,
-        {
-          ...capacity,
-          remaining: { ...capacity.remaining, rows_read: release.maximum.rows_read - 1 },
-        },
-        time,
-      ),
-    /COST_RELEASE_SHARED_HEADROOM/,
-  )
-  t.diagnostic(JSON.stringify({ maximum: release.maximum }))
 })
 
 test("shared reservations also count against account headroom before pausing application traffic", () => {
@@ -129,10 +137,11 @@ test("shared reservations also count against account headroom before pausing app
   requireReleaseSharedCapacity(maximum, capacity, time, sample)
 })
 
-test("a working site cannot enter maintenance without full headroom; a paused site can resume bounded pages", async () => {
+test("a working site cannot enter maintenance without full headroom; a paused site can resume its first staged migration", async () => {
   const options = {
-    manifest: releaseManifest,
-    pendingMigrations: ["iconoplasm/0095_transactional_admin_counts.sql"],
+    manifest,
+    pendingMigrations: [first.key, second.key],
+    adapters: syntheticAdapters(),
     now: time,
     result: {
       maximum: { rows_read: 718916, rows_written: 19980, requests: 416 },
@@ -151,59 +160,29 @@ test("a working site cannot enter maintenance without full headroom; a paused si
   )
   const admitted = await chooseReleaseAdmission({ ...options, readMaintenance: async () => true })
   assert.equal(admitted.mode, "resume-existing-maintenance")
-  assert.equal(admitted.maximum.rows_read, 42252)
+  // Only the first staged migration and the inventories are reserved.
+  assert.equal(admitted.maximum.rows_read, DROP_BOUND.rows_read + INVENTORY_READS)
+  assert.equal(admitted.maximum.rows_written, DROP_BOUND.rows_written)
   await assert.rejects(
     chooseReleaseAdmission({
       ...options,
       capacity: {
         ...options.capacity,
-        remaining: { ...options.capacity.remaining, rows_read: 100 },
+        remaining: { ...options.capacity.remaining, rows_read: DROP_BOUND.rows_read },
       },
       readMaintenance: async () => true,
     }),
     /SHARED_HEADROOM/,
   )
+  const { migration_protocol: _protocol, ...unstaged } = first.entry
   await assert.rejects(
     chooseReleaseAdmission({
       ...options,
-      pendingMigrations: ["iconoplasm/0096_request_inbox_counters.sql"],
+      manifest: { ...manifest, migrations: { ...manifest.migrations, [first.key]: unstaged } },
       readMaintenance: async () => true,
     }),
     /SHARED_HEADROOM/,
   )
-})
-
-test("a protected transition stages one full-table index within retained headroom", async () => {
-  const pendingMigrations = [
-    "iconoplasm/0099_finalization_queue_indexes.sql",
-    "iconoplasm/0100_finalization_job_version.sql",
-    "iconoplasm/0101_finalization_publication_barrier.sql",
-    "iconoplasm/0102_finalization_status_index.sql",
-    "iconoplasm/0103_finalization_running_index.sql",
-  ]
-  const result = await preflightOperationCostRelease({
-    manifest: releaseManifest,
-    pendingMigrations,
-    reader: { refresh: async () => sample },
-    now: () => time,
-  })
-  const capacity = {
-    day: sample.day,
-    measured_at: time,
-    used: { rows_read: 753048, rows_written: 256, requests: 100 },
-    remaining: { rows_read: 246952, rows_written: 19744, requests: 2300 },
-  }
-  const admission = await chooseReleaseAdmission({
-    manifest: releaseManifest,
-    pendingMigrations,
-    result,
-    capacity,
-    readMaintenance: async () => true,
-    now: time,
-  })
-  assert.equal(admission.mode, "resume-existing-maintenance")
-  assert.ok(admission.maximum.rows_read <= capacity.remaining.rows_read)
-  assert.ok(admission.maximum.rows_written <= capacity.remaining.rows_written)
 })
 
 test("release authentication is checked without D1 work, redirects or credential output", async () => {
@@ -230,10 +209,13 @@ test("release authentication is checked without D1 work, redirects or credential
     )
 })
 
-test("release reserves headroom for all reviewed migrations and three inventories", async () => {
+test("release reserves headroom for every pending migration and three inventories", async () => {
   const result = await check(sample)
-  // Includes the reviewed 0014 lineage migration as well as the prior three.
-  assert.deepEqual(result.required, { rows_read: 825156, rows_written: 20880, requests: 416 })
+  assert.deepEqual(result.required, {
+    rows_read: 15900 + 2 * 2 * first.entry.prediction.rows_read,
+    rows_written: 2 * 2 * first.entry.prediction.rows_written,
+    requests: 416,
+  })
   for (const meter of Object.keys(ACCOUNT_CEILINGS)) {
     const boundary = { ...sample, [meter]: ACCOUNT_CEILINGS[meter] - result.required[meter] }
     await check(boundary)
@@ -244,35 +226,23 @@ test("release reserves headroom for all reviewed migrations and three inventorie
   }
 })
 
-test("the counter release fits protected capacity only after historical migrations are verified applied", async () => {
+test("catalog initialization keeps its key-value reads and writes in the release sum", async () => {
   const options = {
     manifest: releaseManifest,
+    pendingMigrations: [],
     reader: { refresh: async () => sample },
     now: () => time,
   }
-  await assert.rejects(preflightOperationCostRelease(options), /EXCEEDS_DAILY_ALLOCATION/)
-  const pendingMigrations = [
-    "iconoplasm-authoring/0017_canonical_lifecycle_keyed_guards.sql",
-    "iconoplasm/0095_transactional_admin_counts.sql",
-    "iconoplasm/0096_request_inbox_counters.sql",
-    "iconoplasm/0097_delivery_reconciliation_cursor.sql",
-    "iconoplasm-authoring/0015_retire_materialized_snapshot_parts.sql",
-    "iconoplasm-authoring/0016_account_assignment_lookup.sql",
-  ]
-  const result = await preflightOperationCostRelease({ ...options, pendingMigrations })
-  assert.equal(result.maximum.rows_read, 693896)
-  assert.equal(result.maximum.rows_written, 19964)
+  const result = await preflightOperationCostRelease(options)
   assert.equal(result.maximum.kv_reads, 10)
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({
     ...options,
-    pendingMigrations,
     reader: { refresh: async () => ({ ...sample, kv_deletes: 1000, kv_lists: 1000 }) },
   })
   await assert.rejects(
     preflightOperationCostRelease({
       ...options,
-      pendingMigrations,
       reader: { refresh: async () => ({ ...sample, kv_writes: 700 }) },
     }),
     /ACCOUNT_HEADROOM/,
@@ -292,6 +262,7 @@ test("missing, stale, future, wrong-day and malformed telemetry fail closed", as
   await assert.rejects(
     preflightOperationCostRelease({
       manifest,
+      adapters: syntheticAdapters(),
       reader: {
         refresh: async () => {
           throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
@@ -303,23 +274,28 @@ test("missing, stale, future, wrong-day and malformed telemetry fail closed", as
 })
 
 test("applied migrations do not consume new-release headroom; unknown or duplicate pending names fail closed", async () => {
-  const verify = (pendingMigrations) =>
-    preflightOperationCostRelease({
-      manifest,
-      pendingMigrations,
-      reader: { refresh: async () => sample },
-      now: () => time,
-    })
+  const verify = (pendingMigrations) => check(sample, manifest, { pendingMigrations })
   const none = await verify([])
   assert.deepEqual(none.required, { rows_read: 15900, rows_written: 0, requests: 160 })
   assert.equal(none.maximum.rows_written, 0)
-  const key = "iconoplasm-authoring/0013_strict_upload_reservations.sql"
-  const one = await verify([key])
-  assert.equal(one.required.rows_written, 32)
-  assert.equal(one.required.rows_read, 20252)
-  assert.ok(one.maximum.rows_written > 0)
-  await assert.rejects(verify([key, key]), /MIGRATION_NOT_REVIEWED/)
+  const one = await verify([first.key])
+  assert.equal(one.required.rows_written, 2 * first.entry.prediction.rows_written)
+  assert.equal(one.required.rows_read, 15900 + 2 * first.entry.prediction.rows_read)
+  assert.equal(one.maximum.rows_written, DROP_BOUND.rows_written)
+  assert.equal(one.maximum.rows_read - none.maximum.rows_read, DROP_BOUND.rows_read)
+  await assert.rejects(verify([first.key, first.key]), /MIGRATION_NOT_REVIEWED/)
   await assert.rejects(verify(["iconoplasm/unknown.sql"]), /MIGRATION_NOT_REVIEWED/)
+})
+
+test("an empty plan reserves the three inventories and nothing else", async () => {
+  const result = await preflightOperationCostRelease({
+    manifest: { ...releaseManifest, catalog_initialization_prediction: undefined, migrations: {} },
+    reader: { refresh: async () => sample },
+    now: () => time,
+  })
+  assert.deepEqual(result.required, { rows_read: 15900, rows_written: 0, requests: 160 })
+  assert.equal(result.maximum.rows_read, INVENTORY_READS)
+  assert.equal(result.maximum.rows_written, 0)
 })
 
 test("invalid forecast fails before contacting Cloudflare", async () => {
@@ -372,9 +348,17 @@ test("explicit maintenance checks capacity before mutations and refreshes before
 
 test("underfunded, invalid and oversized migration work is refused before telemetry or deployment", async () => {
   let calls = 0
-  const verify = (plan) =>
+  const oversized = {
+    resource: "iconoplasm",
+    migration_protocol: "one-migration-per-release-v1",
+    prepare: async () => ({
+      bound: { rows_read: ACCOUNT_CEILINGS.rows_read, rows_written: 0, requests: 1 },
+    }),
+  }
+  const verify = (item, extra = {}) =>
     preflightOperationCostRelease({
-      manifest: plan,
+      manifest: { ...manifest, migrations: { [first.key]: item } },
+      adapters: syntheticAdapters(),
       reader: {
         refresh: async () => {
           calls++
@@ -382,31 +366,32 @@ test("underfunded, invalid and oversized migration work is refused before teleme
         },
       },
       now: () => time,
+      ...extra,
     })
-  const original = manifest.migrations["iconoplasm/0094_finalization_summary.sql"]
-  const replace = (item) => ({
-    ...manifest,
-    migrations: { ...manifest.migrations, "iconoplasm/0094_finalization_summary.sql": item },
-  })
+  const original = first.entry
   await assert.rejects(
-    verify(replace({ ...original, prediction: { ...original.prediction, rows_read: 1 } })),
+    verify({ ...original, prediction: { ...original.prediction, rows_read: 1 } }),
     /TWICE_PREDICTION_LIMIT/,
   )
+  await assert.rejects(verify({ ...original, adapter_id: "unreviewed" }), /MIGRATION_NOT_REVIEWED/)
   await assert.rejects(
-    verify(replace({ ...original, adapter_id: "unreviewed" })),
-    /MIGRATION_NOT_REVIEWED/,
-  )
-  await assert.rejects(
-    verify(replace({ ...original, arguments: { max_rows: -1, max_unfinished: 0 } })),
+    verify({ ...original, arguments: { max_schema_rows: -1 } }),
     /MIGRATION_ARGUMENTS_INVALID/,
   )
+  for (const protocol of ["admin-count-seed-v1", "unreviewed-protocol"])
+    await assert.rejects(
+      verify({ ...original, migration_protocol: protocol }),
+      /COST_MIGRATION_PROTOCOL_INVALID/,
+    )
+  const adapters = syntheticAdapters()
+  adapters.set(first.adapterId, oversized)
   await assert.rejects(
     verify(
-      replace({
+      {
         ...original,
-        arguments: { max_rows: 21000, max_unfinished: 0 },
-        prediction: { rows_read: 200000, rows_written: 15000, requests: 1 },
-      }),
+        prediction: { rows_read: ACCOUNT_CEILINGS.rows_read, rows_written: 0, requests: 1 },
+      },
+      { adapters },
     ),
     /EXCEEDS_DAILY_ALLOCATION/,
   )
