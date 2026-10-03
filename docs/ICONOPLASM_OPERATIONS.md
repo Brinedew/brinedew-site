@@ -364,6 +364,8 @@ abuse case: erasure ends the disabling.
   were last published with until the gene is next republished.
 - A login session the person never uses again is not enumerable (session objects are named by a
   random id); it expires on its own after at most 30 days.
+- The discovery write lane keeps `discovery:<discord id>:<batch>` operation ids in a Durable Object for
+  about 64 days (a 32 day retry horizon plus 32 days of tombstones); it is not enumerable by person.
 - Discord holds the DMs we sent, the comment mirror in the public channel (username and body; the
   message id is not stored) and the person's own side of the conversation. Nothing deletes them.
 - The caretaker authority, the archive and the cold backups (the nightly local dumps, kept 30
