@@ -24,7 +24,11 @@
 // 10. the pause never ends: after the seconds the server named the box must take a tap and the
 //     vote must land (tick lit, no notice);
 // 11. a 429 with no number unlocks by itself, or survives a reload (a reload is the one thing
-//     that must clear it).
+//     that must clear it);
+// 12. loading the page or hovering the vote box already asks for a vote snapshot, which would
+//     cost a Workers request and D1 reads per gene view at reader scale (B-972: this replaces
+//     source-text pins on the deferred snapshot);
+// 13. the gene page scrolls sideways at phone width.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge), an installed Chrome and the live published
 // gene object for TP53 (as in production). The measurements and screenshots land in
@@ -94,6 +98,7 @@ function measure() {
     : null
   const look = up ? getComputedStyle(up) : null
   return {
+    overflowX: document.documentElement.scrollWidth - innerWidth,
     tickLit: up ? up.classList.contains("active") : null,
     upDisabled: up ? up.disabled === true : null,
     downDisabled: down ? down.disabled === true : null,
@@ -176,6 +181,15 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
         const live = await page.evaluate(measure)
         assert.equal(live.paused, false, `${where}: a box nobody has refused is not paused`)
         assert.equal(live.upAria, null, `${where}: a live box carries no aria-disabled`)
+        // 13. No sideways scroll.
+        assert.ok(
+          live.overflowX <= 1,
+          `${where}: the page is ${live.overflowX}px wider than the screen`,
+        )
+        // 12. Nothing is read before intent: loading the page and hovering the box send nothing.
+        await up.hover()
+        await page.waitForTimeout(500)
+        assert.deepEqual(requests, [], `${where}: loading and hovering must send no request`)
 
         await up.click()
         // 1. A message appears.

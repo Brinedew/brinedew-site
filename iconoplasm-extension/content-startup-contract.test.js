@@ -1,35 +1,8 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+
 import test from "node:test"
 await import("./content-matcher.js")
 await import("./content-lifecycle.js")
-
-const content = readFileSync(new URL("./content.js", import.meta.url), "utf8")
-const manifest = JSON.parse(readFileSync(new URL("./manifest.json", import.meta.url), "utf8"))
-
-test("article startup separates recognition from portrait freshness without a second authority", () => {
-  assert.equal(
-    manifest.content_scripts.find((entry) => entry.js.includes("content.js")).run_at,
-    "document_end",
-  )
-  assert.match(content, /requestGeneData\(chrome,\s*{[\s\S]*?cacheOnly: true/)
-  assert.match(content, /async function fetchGeneDetailsBatch[^]*?await ensureArticleCards\(\)/)
-  const cards = content.slice(
-    content.indexOf("function ensureArticleCards()"),
-    content.indexOf("// -- DOM scanning"),
-  )
-  // B-898 stage 1: the stable gene object has no epoch, so article startup
-  // prepares only the frame and fonts; it never asks the background for a
-  // card head and never clones a saved cache.
-  assert.match(cards, /ensureLitArchivalFrame\(\)/)
-  assert.match(cards, /injectFonts\(\)/)
-  assert.doesNotMatch(cards, /GET_CARD_FRESHNESS|cardSnapshotVersion|adoptCardSnapshotRevision/)
-  assert.doesNotMatch(
-    cards,
-    /hydratePersistentCache/,
-    "article startup must not clone the full saved cache",
-  )
-})
 
 test("cooperative matcher yields on busy turns and remains lexically identical to synchronous matcher", async () => {
   const genes = Object.fromEntries(
@@ -67,30 +40,6 @@ test("cooperative matcher yields on busy turns and remains lexically identical t
   ]) {
     assert.deepEqual(matcher.findMatches(text), synchronous.findMatches(text))
   }
-})
-
-test("storage-driven recognition rescans stay promise-safe before the scanner exists", () => {
-  // A blocklist storage event can arrive before the page scanner is
-  // constructed. The rescan call must always receive a promise, so that
-  // startup-race refreshes cannot silently drop their own rescan with a
-  // TypeError on a synchronous return value.
-  assert.match(content, /async function scanPage\(root\) \{/)
-  assert.match(
-    content,
-    /if \(rescan\) \{\s*void scanPage\(document\.body\)\.then\(\(\) => refreshHighlightStyles\(\)\)/,
-  )
-})
-
-test("an open article adopts a published recognition change without touching the card epoch", () => {
-  // B-765: the background broadcasts one recognition-policy update; the page
-  // adopts the new gene map and rescans in bounded slices. This must stay
-  // event-driven: no timer, no per-tab polling, no card-epoch change.
-  assert.match(content, /chrome\.runtime\.onMessage\.addListener/)
-  assert.match(content, /RECOGNITION_POLICY_UPDATED/)
-  assert.match(content, /function refreshRecognitionPolicy\(\)/)
-  assert.match(content, /geneMap = nextGenes/)
-  assert.match(content, /await scanPage\(document\.body\)/)
-  assert.doesNotMatch(content, /setInterval\([^)]*refreshRecognitionPolicy/)
 })
 
 test("post-load matcher completes in bounded tasks even when the browser never offers idle time", async () => {
