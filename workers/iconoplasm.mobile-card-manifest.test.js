@@ -35,116 +35,14 @@ class FakeStatement {
   }
 
   async first() {
-    if (this.sql.includes("icono_manifestation_projection_authority")) {
-      return { mode: "legacy_write" }
-    }
-    if (this.sql.includes("ORDER BY id DESC") && this.sql.includes("icono_publish_events")) {
-      return { id: 100, created_at: this.db.maxEventAt }
-    }
-    if (this.sql.includes("FROM icono_gene_catalog")) {
-      const symbol = String(this.args[0] || "")
-        .trim()
-        .toUpperCase()
-      return this.db.catalog.get(symbol) || null
-    }
-    if (
-      this.sql.includes("FROM icono_publish_state ps") &&
-      this.sql.includes("LEFT JOIN icono_portrait_assets pa")
-    ) {
-      const symbol = String(this.args[0] || "")
-        .trim()
-        .toUpperCase()
-      return this.db.published.get(symbol) || null
-    }
-    if (this.sql.includes("FROM icono_gene_essence")) {
-      const symbol = String(this.args[0] || "")
-        .trim()
-        .toUpperCase()
-      return this.db.essence.get(symbol) || null
-    }
     return null
   }
 
   async all() {
-    if (
-      this.sql.includes("SELECT DISTINCT gene_symbol") &&
-      this.sql.includes("icono_publish_events")
-    ) {
-      const limit = Number(this.args[this.args.length - 1] || 1)
-      return {
-        results: this.db.changedSymbols.slice(0, limit).map((gene_symbol) => ({ gene_symbol })),
-      }
-    }
-    if (
-      this.sql.includes("FROM icono_gene_catalog gc") &&
-      this.sql.includes("LEFT JOIN icono_gene_essence ge")
-    ) {
-      let symbols = Array.from(this.db.catalog.keys()).sort()
-      if (this.sql.includes("WHERE gc.gene_symbol IN")) {
-        const requested = new Set(
-          this.args.map((arg) =>
-            String(arg || "")
-              .trim()
-              .toUpperCase(),
-          ),
-        )
-        symbols = symbols.filter((symbol) => requested.has(symbol))
-      }
-      return {
-        results: symbols.map((symbol) => {
-          const catalog = this.db.catalog.get(symbol) || {}
-          const essence = this.db.essence.get(symbol) || {}
-          const portrait = this.db.published.get(symbol) || {}
-          const blot = this.db.blots.get(symbol) || {}
-          return {
-            gene_symbol: symbol,
-            catalog_full_name: catalog.full_name,
-            color_hex: catalog.color_hex,
-            tmh: catalog.tmh,
-            essence_full_name: essence.full_name,
-            ...essence,
-            asset_sha256: portrait.asset_sha256,
-            width: portrait.width,
-            height: portrait.height,
-            vision_id: portrait.vision_id,
-            candidate_image_id: portrait.candidate_image_id,
-            emulsion_id: portrait.emulsion_id,
-            gene_blot_fingerprint: blot.blot_fingerprint,
-            gene_blot_portrait_asset_sha256: blot.portrait_asset_sha256,
-            gene_blot_asset_sha256: blot.blot_asset_sha256,
-            gene_blot_object_key: blot.object_key,
-            gene_blot_width: blot.width,
-            gene_blot_height: blot.height,
-          }
-        }),
-      }
-    }
-    if (
-      this.sql.includes("SELECT gene_symbol") &&
-      this.sql.includes("FROM icono_gene_catalog") &&
-      this.sql.includes("WHERE gene_symbol > ?")
-    ) {
-      const cursor = String(this.args[0] || "")
-        .trim()
-        .toUpperCase()
-      const limit = Number(this.args[1] || 1000)
-      const rows = Array.from(this.db.catalog.keys())
-        .filter((symbol) => symbol > cursor)
-        .sort()
-        .slice(0, limit)
-        .map((gene_symbol) => ({ gene_symbol }))
-      return { results: rows }
-    }
     return { results: [] }
   }
 
   async run() {
-    if (
-      this.sql.includes("icono_published_gene_routes") ||
-      this.sql.includes("icono_card_catalog_publication_audit")
-    ) {
-      return { success: true, meta: { changes: 0 } }
-    }
     throw new Error(`Unexpected SQL in fake DB run(): ${this.sql}`)
   }
 }
@@ -322,10 +220,6 @@ class FakeIconoplasmDb {
       .toUpperCase()
     const catalog = this.catalog.get(symbol)
     const portrait = this.published.get(symbol)
-    if (!catalog || !portrait?.asset_sha256) {
-      this.blots.delete(symbol)
-      return
-    }
     const blotFingerprint = iconoplasmGeneBlotFingerprint({
       symbol,
       full_name: catalog.full_name,
@@ -461,14 +355,10 @@ function buildEnv({
         if (typeof onKvGet === "function") onKvGet(key)
         if (kvStore.has(key)) return kvStore.get(key)
         if (key === "iconoplasm:gallery-version") return version
-        if (key === `iconoplasm:card-catalog:${version}` && cardArtifact) {
-          return JSON.stringify(cardArtifact)
-        }
         return kvStore.get(key) || null
       },
       async put(key, value) {
         await recognitionPairReady
-        if (typeof onKvPut === "function") onKvPut(key, value)
         kvStore.set(key, value)
         return true
       },
