@@ -79,17 +79,25 @@ export class HttpStatus {
   }
 }
 
-export async function routeProduction(context, localOrigin, api = () => undefined) {
-  await context.addCookies([
-    {
-      name: "brinedew_session_present",
-      value: "1",
-      domain: "iconoplasm.brinedew.bio",
-      path: "/",
-      secure: true,
-      sameSite: "Lax",
-    },
-  ])
+export async function routeProduction(
+  context,
+  localOrigin,
+  api = () => undefined,
+  { session = true } = {},
+) {
+  // `session: false` is an anonymous reader: no signed-in hint cookie.
+  if (session) {
+    await context.addCookies([
+      {
+        name: "brinedew_session_present",
+        value: "1",
+        domain: "iconoplasm.brinedew.bio",
+        path: "/",
+        secure: true,
+        sameSite: "Lax",
+      },
+    ])
+  }
   await context.route(`${HOST}/**`, async (route) => {
     const url = new URL(route.request().url())
     if (url.pathname.startsWith("/api/")) {

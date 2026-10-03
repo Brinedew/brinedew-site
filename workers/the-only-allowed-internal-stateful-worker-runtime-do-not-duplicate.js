@@ -98,8 +98,7 @@ const PRACTICE_RESOLVE_SQL_CHUNK = 100
 
 function addIconoplasmGeneShellHeaders(headers, path, { indexable = false } = {}) {
   // Clone the upstream response before any mutation. Some cache paths receive
-  // immutable platform Headers objects, and the home-performance contract
-  // deliberately guards this boundary.
+  // immutable platform Headers objects.
   const next = new Headers(headers)
   appendIconoplasmServiceDiscoveryLinks(next)
   if (!String(path || "").startsWith("/gene/")) return next

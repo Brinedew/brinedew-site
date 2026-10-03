@@ -277,6 +277,11 @@
           "category": "test",
           "file": "scripts/iconoplasm-reader-benchmark.test.mjs",
           "token": "ARCHITECTURE FENCE [IPD-008]"
+        },
+        {
+          "category": "test",
+          "file": "e2e/anonymous-reader-requests.e2e.mjs",
+          "token": "ARCHITECTURE FENCE [IPD-008]"
         }
       ]
     },
