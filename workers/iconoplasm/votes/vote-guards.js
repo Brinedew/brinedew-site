@@ -90,18 +90,35 @@ export function imageEditInheritedUpvotes(sourceUpvotes) {
   return capImageEditInheritedUpvotes(Math.floor(upvotes * IMAGE_EDIT_INHERITED_UPVOTE_SHARE))
 }
 
-// A vote import is one Worker invocation, and the free plan allows 50 D1
-// queries per invocation ("Queries per Worker invocation",
-// developers.cloudflare.com/d1/platform/limits/, read 2026-10-03). This
-// counts one query per call to D1, a batch() being one call; the docs do not
-// say the statements inside a batch() count separately. An import makes two
-// queries per chunk of GENE_VOTE_IMPORT_CHUNK votes (a read batch, a write
-// batch) and two per gene it names (the election read and the projection), so
-// at most 2 x ceil(votes / 50) + 2 x genes. At the two bounds below that is
-// 2 x 4 + 2 x 12 = 32 queries, measured in
-// workers/iconoplasm.d1-votes.test.js, which leaves 18 for everything else
-// the invocation does. A request past either bound is refused up front, before
-// anything is written; callers split their imports by these numbers.
+// A vote import is one Worker invocation, so what counts is the number of
+// calls it makes to D1, and a db.batch() is one call however many statements
+// it carries. Measured 2026-10-03 on this account (a Cloudflare Free plan)
+// with a throwaway Worker run by `wrangler dev --remote` against a scratch D1
+// database (B-914):
+//   - after a batch of 1, 60 or 120 statements, 999 more separate D1 calls
+//     succeed and the 1,001st call of the invocation fails with "Too many API
+//     requests by single Worker invocation"; so a batch costs exactly one;
+//   - single batches of 101, 106 and 500 inserts, and of 1,100 and 5,000
+//     SELECTs, all run, so an image edit's batch of up to 106 statements is
+//     one call, and no batch ceiling was found up to 500 inserts or 5,000
+//     SELECTs;
+//   - the free limit for D1 calls is 1,000 per invocation. The 50 that
+//     developers.cloudflare.com/d1/platform/limits/ lists ("Queries per
+//     Worker invocation", updated 21 Apr 2026) is not what the platform
+//     enforces: the Workers limits page (5 Sep 2026) and the 11 Feb 2026
+//     changelog give the free plan 50 external subrequests (fetch(), where the
+//     same probe failed on the 51st call) and a separate 1,000 for Cloudflare
+//     services such as D1.
+// An import makes two calls per chunk of GENE_VOTE_IMPORT_CHUNK votes (a read
+// batch, a write batch) and two per gene it names (the election read and the
+// projection), so at most 2 x ceil(votes / 50) + 2 x genes. At the two bounds
+// below that is 2 x 4 + 2 x 12 = 32 calls, measured in
+// workers/iconoplasm.d1-votes.test.js. The bounds keep the 50-call figure
+// anyway: the measurement ran in a preview, the D1 page still says 50, and
+// callers already split their imports. No other limit was measured for them,
+// so raising them needs its own measurement of CPU time and rows written per
+// request. A request past either bound is refused up front, before anything
+// is written; callers split their imports by these numbers.
 export const VOTE_IMPORT_MAX_ITEMS = 200
 export const VOTE_IMPORT_MAX_GENES = 12
 
