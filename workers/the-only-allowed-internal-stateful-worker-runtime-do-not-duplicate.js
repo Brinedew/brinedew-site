@@ -1,6 +1,5 @@
 import { withErrorReporting, withScheduledErrorReporting } from "./lib/the-only-error-reporter.js"
 import { iconoplasmPageTitle } from "../quartz/static/iconoplasm/page-title.js"
-import { appendIconoplasmServiceDiscoveryLinks } from "./iconoplasm-service-discovery.js"
 import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 import {
   enforceIconoplasmRateLimit,
@@ -66,8 +65,6 @@ const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 // must not silently repeat Iconoplasm's full maintenance eight minutes later.
 const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
 const KATEX_VENDOR_VERSION = "0.16.21"
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS = 300
-const ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION = "2026-08-24-image-license-cc0-v1"
 
 const PRACTICE_RESOLVE_MAX_INPUTS = 10000
 // Cloudflare D1 enforces a relatively small limit on bound parameters per query.
@@ -135,20 +132,6 @@ function injectAnalyticsConsentBootstrap(html, request) {
   return String(html).replace(/<head([^>]*)>/i, `<head$1>${bootstrap}`)
 }
 
-function iconoplasmHtmlShellCacheVersion(env) {
-  return (
-    String(env?.ICONOPLASM_HTML_SHELL_CACHE_VERSION || "").trim() ||
-    ICONOPLASM_HTML_SHELL_EDGE_CACHE_VERSION
-  )
-}
-
-function iconoplasmHtmlShellCacheKey(url, env) {
-  const key = new URL("https://iconoplasm.brinedew.bio/__edge-cache/iconoplasm-html-shell")
-  key.searchParams.set("version", iconoplasmHtmlShellCacheVersion(env))
-  key.searchParams.set("staticOrigin", buildStaticSiteUrl(url, "/").origin)
-  return new Request(key.toString(), { method: "GET" })
-}
-
 function iconoplasmGeneNotFoundResponse(method) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>${iconoplasmPageTitle("Gene not found")}</title></head><body><main><h1>Gene not found</h1><p>This symbol is not in the published Iconoplasm catalog.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
   return new Response(method === "HEAD" ? null : html, {
@@ -159,41 +142,6 @@ function iconoplasmGeneNotFoundResponse(method) {
       "X-Robots-Tag": "noindex, follow, noarchive",
     },
   })
-}
-
-function iconoplasmCacheableHtmlShellResponse(html, response, request, cacheStatus) {
-  const body = response.status === 204 ? null : markIconoplasmHomeStartup(html)
-  const headers = new Headers(response.headers)
-  appendIconoplasmServiceDiscoveryLinks(headers)
-  // The cached object is the generic rewritten shell in caches.default. The response
-  // returned to browsers is tailored per request, so Cloudflare's outer HTTP cache
-  // must not store it.
-  headers.set("Cache-Control", "no-store")
-  headers.set("X-Iconoplasm-HTML-Shell-Cache", cacheStatus)
-  const consented = injectAnalyticsConsentBootstrap(body, request)
-  if (parseCookies(request.headers.get("Cookie") || "").session) {
-    // ARCHITECTURE FENCE [IPD-008]: this readable cookie carries presence only.
-    // Re-issuing it from a dynamic HTML response repairs browsers whose old
-    // frontend cleared the hint after confusing Discord token expiry with logout.
-    // The HttpOnly session remains the sole credential and anonymous requests do
-    // not perform an auth or D1 lookup.
-    headers.append(
-      "Set-Cookie",
-      sharedSessionPresenceCookie({ present: true, cookieDomain: ".brinedew.bio" }),
-    )
-  }
-  return new Response(request.method === "HEAD" ? null : consented, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
-}
-
-function markIconoplasmHomeStartup(html) {
-  return String(html).replace(
-    /(<div[^>]*id=["']iconoplasm-root["'][^>]*)(>)/,
-    `$1 data-icono-startup-route="home"$2`,
-  )
 }
 
 function buildPublicSubdomainRobotsTxt(host) {
@@ -427,7 +375,6 @@ import {
   handleMe,
   handleLogout,
   resolveDiscordSessionAuthorization,
-  sharedSessionPresenceCookie,
 } from "./auth.js"
 // Import Iconoplasm stateful handlers
 import {
@@ -1265,8 +1212,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     // Iconoplasm subdomain: static assets bypass this code; dynamic misses are
     // owned directly by this one stateful Worker. Do not add a public proxy,
     // service-binding hop, or second state owner here.
-    // Iconoplasm subdomain: proxy non-API requests through Pages (same pattern as geneguessr),
-    // delegate API/published-image/admin routes to the Iconoplasm handler.
+    // The API, published-image and admin routes go to the Iconoplasm handler;
+    // nothing else is served from here.
     if (isIconoplasmRequest(url.hostname)) {
       if (url.pathname === "/admin/iconoplasm" || url.pathname === "/admin/iconoplasm/") {
         return Response.redirect(`https://${ICONOPLASM_HOST}/admin#costs`, 302)
@@ -1321,186 +1268,19 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
         })
       }
 
-      // Every published gene is a static document the asset layer serves before
-      // this Worker runs, and `/gene/*` is not in run_worker_first. A /gene/ path that
-      // reaches here has no page to give: say so, and never read D1 or the shell.
+      // Static Assets answer every other Iconoplasm path (the documents, the
+      // scripts, the 404 page) before this Worker runs, and nothing in the route
+      // list reaches here with a page to give. Say so, and never read D1 or fetch
+      // a shell.
       if (url.pathname.startsWith("/gene/")) return iconoplasmGeneNotFoundResponse(request.method)
-
-      // Versioned iconoplasm static assets: extend cache aggressively
-      if (
-        url.pathname.startsWith("/static/iconoplasm/") &&
-        url.searchParams.has("v") &&
-        (request.method === "GET" || request.method === "HEAD")
-      ) {
-        const assetUrl = buildStaticSiteUrl(url)
-        const assetResp = await fetch(assetUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-        })
-        const headers = new Headers(assetResp.headers)
-        headers.set("Cache-Control", "public, max-age=31536000, immutable")
-        return new Response(request.method === "HEAD" ? null : assetResp.body, {
-          status: assetResp.status,
-          statusText: assetResp.statusText,
-          headers,
-        })
-      }
-
-      // For other static assets (CSS, JS, fonts, Quartz runtime files), proxy directly from Pages
-      if (
-        url.pathname.startsWith("/static/") ||
-        url.pathname === "/index.css" ||
-        url.pathname.endsWith(".js") ||
-        url.pathname.endsWith(".json") ||
-        url.pathname.endsWith(".css") ||
-        url.pathname.endsWith(".woff2") ||
-        url.pathname.endsWith(".png") ||
-        url.pathname.endsWith(".svg") ||
-        url.pathname.endsWith(".ico") ||
-        url.pathname.endsWith(".xml")
-      ) {
-        const assetUrl = buildStaticSiteUrl(url)
-        const assetResp = await fetch(assetUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-        })
-        const assetHeaders = new Headers(assetResp.headers)
-        // Build-versioned assets and stable font binaries are immutable. Font requests do
-        // not carry the CSS cache key, so key them by their release filename instead of
-        // forcing every browser navigation through a conditional revalidation.
-        if (url.searchParams.has("v") || /\.(?:woff2?|ttf|otf|eot)$/i.test(url.pathname)) {
-          assetHeaders.set("Cache-Control", "public, max-age=31536000, immutable")
-        }
-        return new Response(request.method === "HEAD" ? null : assetResp.body, {
-          status: assetResp.status,
-          statusText: assetResp.statusText,
-          headers: assetHeaders,
-        })
-      }
-
-      // Privacy policy: serve the actual Hugo page, not the SPA shell.
-      // CWS requires a privacy policy URL; this serves content/apps/iconoplasm/privacy.md.
-      if (request.method === "GET" || request.method === "HEAD") {
-        if (url.pathname === "/privacy/") {
-          return Response.redirect(`https://${ICONOPLASM_HOST}/privacy`, 301)
-        }
-        if (url.pathname === "/privacy") {
-          const privacyUrl = buildStaticSiteUrl(url, "/apps/iconoplasm/privacy")
-          const privacyResp = await fetch(privacyUrl.toString(), {
-            method: request.method,
-            headers: request.headers,
-          })
-          if (privacyResp.headers.get("content-type")?.includes("text/html")) {
-            let html = await privacyResp.text()
-            if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
-              return draftNotFoundResponse(request.method)
-            }
-            html = rewritePrivacyCanonicalMetadata(html, ICONOPLASM_HOST)
-            return new Response(request.method === "HEAD" ? null : html, {
-              status: privacyResp.status,
-              statusText: privacyResp.statusText,
-              headers: privacyResp.headers,
-            })
-          }
-          return new Response(request.method === "HEAD" ? null : privacyResp.body, {
-            status: privacyResp.status,
-            statusText: privacyResp.statusText,
-            headers: privacyResp.headers,
-          })
-        }
-      }
-
-      // All non-API, non-static routes serve the same Quartz HTML shell (client-side app handles routing).
-      // For root or any other path, fetch the iconoplasm content page from Pages.
-      const targetPath = "/apps/iconoplasm/index"
-      const targetUrl = buildStaticSiteUrl(url, targetPath)
-      const canUseHtmlShellEdgeCache =
-        (request.method === "GET" || request.method === "HEAD") &&
-        typeof caches !== "undefined" &&
-        caches.default
-      if (canUseHtmlShellEdgeCache) {
-        const cachedShell = await caches.default.match(iconoplasmHtmlShellCacheKey(url, env))
-        if (cachedShell) {
-          const cachedHtml = request.method === "HEAD" ? "" : await cachedShell.text()
-          return iconoplasmCacheableHtmlShellResponse(cachedHtml, cachedShell, request, "HIT")
-        }
-      }
-
-      const response = await fetch(targetUrl.toString(), {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+      return new Response(request.method === "HEAD" ? null : "Not Found", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=60",
+          "X-Robots-Tag": "noindex, nofollow, noarchive",
+        },
       })
-
-      // For HTML responses, rewrite links for subdomain context
-      if (response.headers.get("content-type")?.includes("text/html")) {
-        let html = await response.text()
-        if (isDraftHtmlDocument(html) && !(await isAdmin(request, env))) {
-          return draftNotFoundResponse(request.method)
-        }
-        // Rewrite site-brand/home links to main site
-        html = html.replace(
-          /<a\b[^>]*\bclass=["'][^"']*\bsite-brand\b[^"']*["'][^>]*>/gi,
-          (tag) => {
-            if (!/\bhref\s*=/i.test(tag)) return tag
-            return tag.replace(/\bhref=["'][^"']*["']/i, 'href="https://brinedew.bio/"')
-          },
-        )
-        // Rewrite internal navigation links to main domain
-        html = html.replace(
-          /href=["']\/(tags|posts|wiki|About|index)([^"']*)["']/g,
-          'href="https://brinedew.bio/$1$2"',
-        )
-        // Update OG metadata for subdomain
-        if (url.pathname === "/" || url.pathname === "") {
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property|name)=["']og:url["'][^>]*>/gi,
-            `<meta property="og:url" content="https://${ICONOPLASM_HOST}/">`,
-          )
-          html = html.replace(
-            /<meta\b[^>]*\b(?:property|name)=["']twitter:url["'][^>]*>/gi,
-            `<meta name="twitter:url" content="https://${ICONOPLASM_HOST}/">`,
-          )
-        }
-        html = html.replace(
-          /<meta\b[^>]*\b(?:property|name)=["']twitter:domain["'][^>]*>/gi,
-          `<meta name="twitter:domain" content="${ICONOPLASM_HOST}">`,
-        )
-        // Normalize KaTeX CDN URLs to self-hosted assets
-        html = html.replace(
-          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/katex\.min\.css/gi,
-          `/static/vendor/katex/katex.min.css?v=${KATEX_VENDOR_VERSION}`,
-        )
-        html = html.replace(
-          /https:\/\/cdn\.jsdelivr\.net\/npm\/katex@[^"']+\/dist\/contrib\/copy-tex\.min\.js/gi,
-          `/static/vendor/katex/contrib/copy-tex.min.js?v=${KATEX_VENDOR_VERSION}`,
-        )
-        html = html.replace(
-          /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
-          "",
-        )
-        if (canUseHtmlShellEdgeCache && request.method === "GET" && response.ok) {
-          const cacheHeaders = new Headers(response.headers)
-          cacheHeaders.set(
-            "Cache-Control",
-            `public, max-age=0, s-maxage=${ICONOPLASM_HTML_SHELL_EDGE_CACHE_TTL_SECONDS}`,
-          )
-          cacheHeaders.set("X-Iconoplasm-HTML-Shell-Cache", "STORED")
-          ctx?.waitUntil(
-            caches.default.put(
-              iconoplasmHtmlShellCacheKey(url, env),
-              new Response(html, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: cacheHeaders,
-              }),
-            ),
-          )
-        }
-        return iconoplasmCacheableHtmlShellResponse(html, response, request, "MISS")
-      }
-
-      return response
     }
 
     // Route all non-API apex requests through the worker so we can enforce

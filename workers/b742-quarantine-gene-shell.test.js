@@ -223,6 +223,19 @@ test("B-742 reader recovery serves the published card API without D1", async () 
     assert.match(await page.text(), /Gene not found/)
     assert.deepEqual(storageReads, [stableObjectPath("TP53")])
     assert.equal(d1Calls.count, 0)
+    // Nor does it proxy a shell: any other path that reaches the Worker (here, the
+    // leftovers of the /admin* pattern) is a 404 that fetches nothing.
+    for (const path of ["/admin/nothing-here", "/no/such/page"]) {
+      const stray = await runtime.fetch(
+        new Request(`https://iconoplasm.brinedew.bio${path}`),
+        env,
+        { waitUntil() {} },
+      )
+      assert.equal(stray.status, 404, path)
+      assert.equal(await stray.text(), "Not Found", path)
+    }
+    assert.deepEqual(storageReads, [stableObjectPath("TP53")])
+    assert.equal(d1Calls.count, 0)
   } finally {
     globalThis.fetch = originalFetch
   }
