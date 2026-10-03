@@ -57,6 +57,19 @@
 // 13. the leaderboard read at the end of a desktop visit costs more than a few dozen rows.
 // The rows land in geneguessr-request-budget.json with the counts.
 //
+// B-965 takes the leaderboard off the Worker: the "Top Streaks" box is read from an object on the
+// CDN that the Worker's own scheduled job publishes (workers/lib/leaderboard-publication.js; here
+// the real job runs in `before`, Bunny Storage and Discord's CDN are fixtures, and the CDN host
+// answers from what the job stored), with each avatar embedded in it. A box with five public
+// streaks cost 1 request for the board and 5 for the pictures through `/api/avatar`, all metered
+// and all paid on a first visit; now it costs none, and the Worker route is only the fallback.
+// Failure modes, written before the code:
+// 14. a visit still asks the Worker for the board or an avatar, or draws no picture, or the
+//     document policy blocks the CDN read (the Worker route would answer and hide it);
+// 15. with the CDN unreachable, or answering something that is not the board, the box stays empty
+//     instead of falling back to the Worker route; the fallback measures what a full board used
+//     to cost (the route and a request a picture);
+// 16. an object that names a picture address other than a data: image makes the page request it.
 // Playwright disables the HTTP cache while a route is installed, so a repeat view's cost is
 // not measured here. Against the real providers (Chrome 154, 2026-10-03) a repeat view with
 // `cache: "force-cache"` took 1 to 2 ms for all three, while a default repeat took 270 to 424 ms
@@ -86,6 +99,11 @@ import {
   ANONYMOUS_PDB_HEADER,
   MAX_STRUCTURE_FILE_BYTES,
 } from "../quartz/static/geneguessr/structure-bytes.js"
+import {
+  ICONOPLASM_BACKGROUND_MINUTES,
+  ICONOPLASM_RECURRING_CRON,
+} from "../workers/iconoplasm-background-schedule.js"
+import { LEADERBOARD_OBJECT_KEY } from "../workers/lib/iconoplasm-published-card-objects.js"
 import { OUT, ROOT, launchChrome } from "./harness.mjs"
 
 const STATIC = path.join(ROOT, "quartz", "static")
@@ -152,13 +170,33 @@ const CSP = publicContentSecurityPolicy({ geneguessrGame: true }).replace(
   "",
 )
 const PROVIDER_HOSTS = ["models.rcsb.org", "alphafold.ebi.ac.uk", "swissmodel.expasy.org"]
+// The CDN the "Top Streaks" object is published to and read from, Bunny Storage behind the
+// Worker's own writes, and Discord's CDN behind its avatar fetches: all fixtures here.
+const CDN_HOST = "iconoplasmportraits.b-cdn.net"
+const STORAGE_ZONE = "e2e-zone"
+const BUNNY_ENV = {
+  ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
+  ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+  ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "e2e-storage-password",
+  ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: `https://${CDN_HOST}`,
+  ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+}
+// A real 1 x 1 PNG: what Discord's CDN answers for an avatar.
+const AVATAR_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+)
 const DESKTOP = { width: 1280, height: 900 }
 const PHONE = { width: 390, height: 844 }
-// Public streaks the leaderboard shows, best first.
+// Public streaks the leaderboard shows, best first: a full board of five, each with the avatar
+// Discord stores for the account.
+const avatarOf = (id) => `https://cdn.discordapp.com/avatars/${id}/e2e.png`
 const LEADERBOARD = [
-  { id: "d1", username: "Ada", streak: 12, wins: 40 },
-  { id: "d2", username: "Barbara", streak: 7, wins: 31 },
-  { id: "d3", username: "Chien-Shiung", streak: 3, wins: 9 },
+  { id: "d1", username: "Ada", streak: 12, wins: 40, avatar: avatarOf("d1") },
+  { id: "d2", username: "Barbara", streak: 7, wins: 31, avatar: avatarOf("d2") },
+  { id: "d3", username: "Chien-Shiung", streak: 3, wins: 9, avatar: avatarOf("d3") },
+  { id: "d4", username: "Dorothy", streak: 2, wins: 15, avatar: avatarOf("d4") },
+  { id: "d5", username: "Emmy", streak: 1, wins: 5, avatar: avatarOf("d5") },
 ]
 
 let db
@@ -174,6 +212,11 @@ let requests = []
 // writes of the session), KV reads and puts, and D1 rows.
 const meters = { doReads: 0, doWrites: 0, kvGets: 0 }
 let rewrite = { directUrls: true, tokenRoute: true }
+// Bunny Storage's objects (written by the Worker's scheduled job), and what the CDN host answers:
+// `up` serves the stored object, `down` fails the connection, `garbage` answers 200 with a page
+// that is not JSON, `tampered` serves the object with picture addresses the page must not request.
+const bunny = new Map()
+const board = { mode: "up" }
 
 // A short helix, 12 residues: enough for Mol* to draw a cartoon.
 function helix() {
@@ -311,8 +354,22 @@ before(async () => {
 
   // The Worker's own provider fetches (the target, and any fallback) answer with the same
   // fixtures the browser gets.
-  mock.method(globalThis, "fetch", async (input) => {
+  mock.method(globalThis, "fetch", async (input, init = {}) => {
     const url = String(input?.url || input)
+    const { host, pathname } = new URL(url)
+    if (host === "storage.bunnycdn.com") {
+      const key = pathname.slice(`/${STORAGE_ZONE}/`.length)
+      if (String(init.method || "GET").toUpperCase() === "PUT") {
+        bunny.set(key, new Uint8Array(await new Response(init.body).arrayBuffer()))
+        return new Response("{}", { status: 201 })
+      }
+      return bunny.has(key)
+        ? new Response(bunny.get(key), { status: 200 })
+        : new Response("not found", { status: 404 })
+    }
+    if (host === "cdn.discordapp.com") {
+      return new Response(AVATAR_PNG, { status: 200, headers: { "Content-Type": "image/png" } })
+    }
     const file = providerFile(url)
     if (!file) return new Response("not found", { status: 404 })
     return new Response(file.body, { status: 200, headers: { "Content-Type": file.type } })
@@ -411,6 +468,16 @@ before(async () => {
       { waitUntil() {} },
     )
   assert.equal((await call("/api/stats/leaderboard?limit=5")).status, 200)
+  // The "Top Streaks" object, written by the Worker's own scheduled job as the cron runs it.
+  await worker.scheduled(
+    {
+      cron: ICONOPLASM_RECURRING_CRON,
+      scheduledTime: Date.UTC(2026, 9, 3, 12, ICONOPLASM_BACKGROUND_MINUTES.geneguessrBoard[0]),
+    },
+    { ...harness.env, ...BUNNY_ENV },
+    { waitUntil() {} },
+  )
+  assert.ok(bunny.has(LEADERBOARD_OBJECT_KEY), "the scheduled job published the board")
   await call("/api/game/bootstrap")
   for (const row of guessRows(target, 6)) {
     const answer = await call("/api/game/guess", {
@@ -513,6 +580,7 @@ function category(line) {
   if (line.startsWith("GET /api/game/bootstrap")) return "bootstrap"
   if (line.startsWith("GET /api/graphics-settings")) return "graphicsSettings"
   if (line.startsWith("GET /api/stats/leaderboard")) return "leaderboard"
+  if (line.startsWith("GET /api/avatar")) return "avatar"
   if (line.startsWith("POST /api/game/guess-similarity")) return "similarity"
   if (line.startsWith("POST /api/game/guess")) return "guess"
   if (line.includes("/api/structure-cached?type=target")) return "structureTarget"
@@ -525,6 +593,7 @@ function counts(lines) {
     bootstrap: 0,
     graphicsSettings: 0,
     leaderboard: 0,
+    avatar: 0,
     guess: 0,
     similarity: 0,
     structureTarget: 0,
@@ -534,6 +603,46 @@ function counts(lines) {
   }
   for (const line of lines) out[category(line)] += 1
   return { ...out, total: lines.length }
+}
+
+// The CDN host, as `board.mode` says (see above). Every request to it is recorded on the tracker.
+async function answerCdn(route, tracker) {
+  const request = route.request()
+  const { pathname } = new URL(request.url())
+  if (request.method() === "OPTIONS") {
+    // A preflight is not a read of the object.
+    return route.fulfill({
+      status: 204,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET",
+        "access-control-allow-headers": "*",
+      },
+    })
+  }
+  tracker.cdn.push(`${request.method()} ${pathname}`)
+  const cors = { "access-control-allow-origin": "*" }
+  if (board.mode === "down") return route.abort()
+  if (pathname !== `/${LEADERBOARD_OBJECT_KEY}`) {
+    return route.fulfill({ status: 404, headers: cors, body: "not found" })
+  }
+  if (board.mode === "garbage") {
+    return route.fulfill({
+      status: 200,
+      headers: { ...cors, "content-type": "text/html" },
+      body: "<html>maintenance</html>",
+    })
+  }
+  const object = JSON.parse(Buffer.from(bunny.get(LEADERBOARD_OBJECT_KEY)).toString("utf8"))
+  if (board.mode === "tampered") {
+    object.entries[0].avatarUrl = "https://tracker.example/pixel.png"
+    object.entries[1].avatarUrl = "javascript:alert(1)"
+  }
+  return route.fulfill({
+    status: 200,
+    headers: { ...cors, "content-type": "application/json" },
+    body: JSON.stringify(object),
+  })
 }
 
 // A browser context for one visitor. Off-origin requests: Mol* comes from the vendored build, a
@@ -548,6 +657,7 @@ async function openVisitor(
     providerRequests: [],
     providerHeaders: [],
     offOrigin: [],
+    cdn: [],
     complete: new Set(),
     cspViolations: [],
   }
@@ -570,6 +680,7 @@ async function openVisitor(
         }
         return route.abort()
       }
+      if (hostname === CDN_HOST) return answerCdn(route, tracker)
       tracker.offOrigin.push(url)
       const fixture = providerFile(url)
       if (!fixture || !PROVIDER_HOSTS.includes(hostname)) return route.abort()
@@ -699,6 +810,7 @@ async function visit(
       counts: counts(requests),
       meters: readMeters(),
       providerRequests: [...tracker.providerRequests],
+      cdnRequests: [...tracker.cdn],
       ...viewers,
     },
   }
@@ -1130,6 +1242,30 @@ const leaderboardShown = (page) =>
     ),
     texts: window.__leaderboardTexts,
   }))
+// The pictures in the box: where each comes from, and whether the browser decoded it.
+const picturesDecoded = (page, count) =>
+  page.waitForFunction(
+    (expected) => {
+      const images = [
+        ...document.querySelectorAll("#pg-sidebar-leaderboard img.pg-leaderboard-avatar"),
+      ]
+      return (
+        images.length === expected && images.every((img) => img.complete && img.naturalWidth > 0)
+      )
+    },
+    count,
+    { timeout: 10000 },
+  )
+const leaderboardPictures = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("#pg-sidebar-leaderboard img.pg-leaderboard-avatar")].map(
+      (img) => ({
+        src: img.getAttribute("src").slice(0, 30),
+        decoded: img.complete && img.naturalWidth > 0,
+      }),
+    ),
+  )
+const BOARD_READ = `GET /${LEADERBOARD_OBJECT_KEY}`
 const RANKED = {
   names: LEADERBOARD.map((entry) => entry.username),
   streaks: LEADERBOARD.map((entry) => entry.streak),
@@ -1142,8 +1278,8 @@ for (const [layout, viewport] of [
   ["phone", PHONE],
 ]) {
   for (const guesses of [3, 6]) {
-    const expectedTotal = 2 + guesses + (layout === "desktop" ? 1 : 0)
-    test(`a ${layout} visit, page load plus ${guesses} guesses, costs ${expectedTotal} Worker requests`, async (t) => {
+    const expectedTotal = 2 + guesses
+    test(`a ${layout} visit, page load plus ${guesses} guesses, costs ${expectedTotal} Worker requests, none of them the board or its pictures`, async (t) => {
       const browser = await chromeAndMolstar(t)
       if (!browser) return
       try {
@@ -1162,8 +1298,12 @@ for (const [layout, viewport] of [
           // Then the visitor scrolls down to the sidebar: the section is read once.
           await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
           await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-          entry.afterScroll = counts(requests)
+          entry.afterScroll = { ...counts(requests), cdn: [...tracker.cdn] }
+        } else {
+          await page.waitForFunction(rowsShown, null, { timeout: 10000 })
         }
+        await picturesDecoded(page, LEADERBOARD.length)
+        entry.pictures = await leaderboardPictures(page)
         await context.close()
 
         const c = result.counts
@@ -1175,8 +1315,14 @@ for (const [layout, viewport] of [
         assert.equal(c.structureKey, 0, "no guess view through the Worker")
         assert.equal(c.structureToken, 0, "no token request")
         assert.equal(c.other, 0, `nothing else: ${result.requests}`)
-        assert.equal(c.leaderboard, layout === "desktop" ? 1 : 0, "the leaderboard")
+        assert.equal(c.leaderboard, 0, "the board is not a Worker request")
+        assert.equal(c.avatar, 0, "nor are its pictures")
         assert.equal(c.total, expectedTotal, `${result.requests}`)
+        assert.deepEqual(
+          result.cdnRequests,
+          layout === "desktop" ? [BOARD_READ] : [],
+          "one CDN read on a desktop, none on a phone before its section is reached",
+        )
         assert.equal(marks, 0, "a score never shows as pending")
         // D1 rows (B-960, B-959): the receipts of every statement the visit ran.
         const receipts = result.meters.d1Receipts
@@ -1193,17 +1339,30 @@ for (const [layout, viewport] of [
           "the only rows a visit writes are the aggregates",
         )
         assert.equal(result.meters.d1RowsWritten, guesses, "1 row a guess")
-        const board = receipts.filter((receipt) => /leaderboard_streaks/.test(receipt.sql))
-        assert.equal(board.length, layout === "desktop" ? 1 : 0, "one board read on a desktop")
-        for (const read of board) {
-          assert.ok(read.rowsRead <= 28 && read.rowsWritten === 0, `${read.rowsRead} rows read`)
-        }
+        assert.deepEqual(
+          receipts.filter((receipt) => /leaderboard_streaks/.test(receipt.sql)),
+          [],
+          "a visit reads no board from D1",
+        )
         assert.deepEqual(result.failed, [], "no viewer failed")
         assert.equal(result.complete.length, 1 + guesses, `rendered viewers: ${result.complete}`)
         assert.deepEqual(tracker.cspViolations, [])
         if (layout === "phone") {
-          assert.equal(entry.afterScroll.leaderboard, 1, "scrolling to the section reads it once")
-          assert.equal(entry.afterScroll.total, 3 + guesses)
+          assert.deepEqual(
+            entry.afterScroll.cdn,
+            [BOARD_READ],
+            "scrolling to the section reads the object once",
+          )
+          assert.equal(entry.afterScroll.leaderboard + entry.afterScroll.avatar, 0)
+          assert.equal(entry.afterScroll.total, expectedTotal)
+        }
+        assert.equal(entry.pictures.length, LEADERBOARD.length, "a picture for every entry")
+        for (const picture of entry.pictures) {
+          assert.ok(
+            picture.src.startsWith("data:image/png;base64"),
+            `a data: image: ${picture.src}`,
+          )
+          assert.ok(picture.decoded, "the browser decoded it")
         }
       } finally {
         saveBudget()
@@ -1294,14 +1453,18 @@ test("a phone reads the leaderboard when its section nears the screen, and it lo
   if (!browser) return
   try {
     rewrite = { directUrls: true }
-    const { page, context } = await openVisitor(browser, {
+    const { page, context, tracker } = await openVisitor(browser, {
       visitorCookie: "geneguessr_session=e2e-board-phone",
       viewport: PHONE,
     })
     requests = []
     await openGame(page)
     await page.waitForTimeout(2000)
-    const before = { counts: counts(requests), shown: await leaderboardShown(page) }
+    const before = {
+      counts: counts(requests),
+      shown: await leaderboardShown(page),
+      cdn: [...tracker.cdn],
+    }
     const offScreen = await page.evaluate(() => {
       const top = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect().top
       return top - window.innerHeight
@@ -1313,14 +1476,23 @@ test("a phone reads the leaderboard when its section nears the screen, and it lo
     await page.waitForTimeout(500)
     await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
     await page.waitForTimeout(1000)
-    const after = { counts: counts(requests), shown: await leaderboardShown(page) }
+    const after = {
+      counts: counts(requests),
+      shown: await leaderboardShown(page),
+      cdn: [...tracker.cdn],
+    }
     await context.close()
     budget.leaderboardPhone = { before, after, pixelsBelowTheScreenAtLoad: Math.round(offScreen) }
 
     assert.ok(offScreen > 400, `the section starts ${offScreen} px below the screen at load`)
-    assert.equal(before.counts.leaderboard, 0, "not read while off screen")
+    assert.deepEqual(before.cdn, [], "not read while off screen")
     assert.deepEqual(before.shown.texts, ["Loading leaderboard..."], "the first paint")
-    assert.equal(after.counts.leaderboard, 1, "read once, however often it is scrolled to")
+    assert.deepEqual(after.cdn, [BOARD_READ], "read once, however often it is scrolled to")
+    assert.equal(
+      after.counts.leaderboard + after.counts.avatar,
+      0,
+      "no Worker request for the board or its pictures",
+    )
     assert.deepEqual({ names: after.shown.names, streaks: after.shown.streaks }, RANKED)
     assert.ok(
       !after.shown.texts.includes("No public streaks yet."),
@@ -1338,23 +1510,26 @@ test("a desktop reads the leaderboard at load, because its section is on screen,
   if (!browser) return
   try {
     rewrite = { directUrls: true }
-    const { page, context } = await openVisitor(browser, {
+    const { page, context, tracker } = await openVisitor(browser, {
       visitorCookie: "geneguessr_session=e2e-board-desktop",
       viewport: DESKTOP,
     })
     requests = []
     await openGame(page)
     await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    await picturesDecoded(page, LEADERBOARD.length)
     const shown = await leaderboardShown(page)
     const onScreen = await page.evaluate(() => {
       const box = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect()
       return box.top >= 0 && box.bottom <= window.innerHeight
     })
     await context.close()
-    budget.leaderboardDesktop = { counts: counts(requests), shown, onScreen }
+    budget.leaderboardDesktop = { counts: counts(requests), cdn: [...tracker.cdn], shown, onScreen }
 
     assert.equal(onScreen === true, true, "the section is on the first screen")
-    assert.equal(counts(requests).leaderboard, 1)
+    assert.deepEqual(tracker.cdn, [BOARD_READ], "read at load, from the CDN")
+    assert.equal(counts(requests).leaderboard + counts(requests).avatar, 0, "no Worker request")
+    assert.deepEqual(tracker.cspViolations, [], "the document policy lets the page read it")
     assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
     assert.equal(shown.texts.length, 2, `loading, then the rows: ${JSON.stringify(shown.texts)}`)
     assert.ok(!shown.texts.includes("No public streaks yet."), "the empty text never flashed")
@@ -1369,7 +1544,7 @@ test("a browser without IntersectionObserver still reads the leaderboard, at loa
   if (!browser) return
   try {
     rewrite = { directUrls: true }
-    const { page, context } = await openVisitor(browser, {
+    const { page, context, tracker } = await openVisitor(browser, {
       visitorCookie: "geneguessr_session=e2e-board-old",
       viewport: PHONE,
       noObserver: true,
@@ -1380,9 +1555,116 @@ test("a browser without IntersectionObserver still reads the leaderboard, at loa
     const shown = await leaderboardShown(page)
     await context.close()
 
-    assert.equal(counts(requests).leaderboard, 1)
+    assert.deepEqual(tracker.cdn, [BOARD_READ])
+    assert.equal(counts(requests).leaderboard, 0)
     assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
   } finally {
+    await browser.close()
+  }
+})
+
+test("with the CDN unreachable the page falls back to the Worker route, and a full board costs what it used to: the route and a request for each picture", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    board.mode = "down"
+    const { result, page, context } = await visit(browser, {
+      visitorCookie: "geneguessr_session=e2e-budget-fallback",
+      guesses: 3,
+      viewport: DESKTOP,
+    })
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    await picturesDecoded(page, LEADERBOARD.length)
+    const shown = await leaderboardShown(page)
+    const pictures = await leaderboardPictures(page)
+    await context.close()
+    budget.desktop3WithTheCdnDown = { ...result, pictures }
+
+    assert.deepEqual(result.cdnRequests, [BOARD_READ], "tried once")
+    assert.equal(result.counts.leaderboard, 1, "then the route")
+    assert.equal(result.counts.avatar, LEADERBOARD.length, "and a request a picture")
+    assert.equal(
+      result.counts.total,
+      2 + 3 + 1 + LEADERBOARD.length,
+      `a 3-guess desktop visit with a full board before B-965: ${result.requests}`,
+    )
+    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
+    for (const picture of pictures) {
+      assert.ok(
+        picture.src.startsWith("/api/avatar?src="),
+        `the Worker's avatar route: ${picture.src}`,
+      )
+      assert.ok(picture.decoded)
+    }
+  } finally {
+    board.mode = "up"
+    saveBudget()
+    await browser.close()
+  }
+})
+
+test("an answer from the CDN that is not the board sends the page to the Worker route", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    board.mode = "garbage"
+    const { page, context, tracker } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-board-garbage",
+      viewport: DESKTOP,
+    })
+    requests = []
+    await openGame(page)
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    const shown = await leaderboardShown(page)
+    await context.close()
+
+    assert.deepEqual(tracker.cdn, [BOARD_READ])
+    assert.equal(counts(requests).leaderboard, 1, "the route answered")
+    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
+    assert.ok(!shown.texts.includes("No public streaks yet."), "the empty text never flashed")
+  } finally {
+    board.mode = "up"
+    await browser.close()
+  }
+})
+
+test("a board object that names a picture address other than a data: image never makes the page request it", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    board.mode = "tampered"
+    const { page, context, tracker } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-board-tampered",
+      viewport: DESKTOP,
+    })
+    requests = []
+    await openGame(page)
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    await page.waitForTimeout(1500)
+    const shown = await leaderboardShown(page)
+    const pictures = await leaderboardPictures(page)
+    const initials = await page.evaluate(
+      () =>
+        document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-avatar-fallback").length,
+    )
+    await context.close()
+
+    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
+    assert.equal(initials, 2, "the two tampered entries show the initial of the name")
+    assert.equal(pictures.length, LEADERBOARD.length - 2)
+    assert.ok(pictures.every((picture) => picture.src.startsWith("data:image/png;base64")))
+    assert.deepEqual(
+      tracker.offOrigin.filter((url) => /tracker\.example/.test(url)),
+      [],
+      "the page never asked for the address",
+    )
+    assert.deepEqual(tracker.cspViolations, [], "the page refused it before the policy had to")
+    assert.equal(counts(requests).avatar, 0)
+  } finally {
+    board.mode = "up"
     await browser.close()
   }
 })

@@ -141,6 +141,16 @@ const selectBoard = async (db, limit) => {
   return Array.isArray(answer?.results) ? answer.results : []
 }
 
+// One row of the board as the page draws it. The route and the published object (B-965) both
+// answer with these, so the page reads either the same way: only the name, the picture, the rank
+// and the streak of a public account, nothing else about it.
+export const boardEntry = (row, index, avatarUrl) => ({
+  rank: index + 1,
+  username: String(row?.username || "Player"),
+  avatarUrl,
+  currentStreak: Math.max(0, Number.parseInt(row?.current_streak, 10) || 0),
+})
+
 // The top `limit` live public streaks, each as `{ user_id, username, avatar_url, current_streak,
 // total_wins, last_played_date }`.
 export async function readLeaderboard(db, limit) {

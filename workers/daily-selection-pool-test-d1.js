@@ -310,8 +310,8 @@ export async function ensureAccountTables(db) {
   )
 }
 
-// The accounts the leaderboard reads. Each entry is `{ id, username, streak, wins }`, public and
-// played today.
+// The accounts the leaderboard reads. Each entry is `{ id, username, streak, wins, avatar }`,
+// public and played today; `avatar` is the Discord CDN address stored in `users.avatar_url`.
 export async function seedLeaderboard(db, entries) {
   await ensureAccountTables(db)
   const today = new Date().toISOString().slice(0, 10)
@@ -320,10 +320,10 @@ export async function seedLeaderboard(db, entries) {
     statements.push(
       db
         .prepare(
-          `INSERT OR REPLACE INTO users (discord_id, username, leaderboard_opt_in, created_at, updated_at)
-           VALUES (?, ?, 1, 0, 0)`,
+          `INSERT OR REPLACE INTO users (discord_id, username, avatar_url, leaderboard_opt_in, created_at, updated_at)
+           VALUES (?, ?, ?, 1, 0, 0)`,
         )
-        .bind(entry.id, entry.username),
+        .bind(entry.id, entry.username, entry.avatar ?? null),
       db
         .prepare(
           `INSERT OR REPLACE INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)

@@ -4143,7 +4143,7 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
       const recorded =
         Boolean(payload.success) && (payload.pendingResults == null || payload.pendingResults === 0)
       // A finished game changes the streaks; a section nobody has opened is read fresh when it is.
-      if (recorded && leaderboardOpened) void loadLeaderboardFromAPI()
+      if (recorded && leaderboardOpened) void loadLeaderboard()
       updateSidebarStats()
       return recorded
     } catch (err) {
@@ -4808,6 +4808,8 @@ https://geneguessr.brinedew.bio/`
   let leaderboardOpened = false
   let leaderboardObserver = null
   const LEADERBOARD_LIMIT = 5
+  const LEADERBOARD_AVATAR_SOURCE =
+    /^(?:data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+|\/api\/avatar\?src=[^\s"'<>]+)$/
   const LEADERBOARD_CONSENT_STORAGE_KEY = "geneguessr_leaderboard_consent"
   let leaderboardConsentFeedbackTimer = null
 
@@ -4892,7 +4894,9 @@ https://geneguessr.brinedew.bio/`
         const username = String(entry?.username || "Player")
         const streakValue = entry?.currentStreak ?? entry?.bestStreak
         const streak = Math.max(0, Number.parseInt(streakValue, 10) || 0)
-        const avatarUrl = String(entry?.avatarUrl || "").trim()
+        const rawAvatar = String(entry?.avatarUrl || "").trim()
+        // A picture is a data: image the CDN object embeds, or the Worker's avatar route.
+        const avatarUrl = LEADERBOARD_AVATAR_SOURCE.test(rawAvatar) ? rawAvatar : ""
         const avatarMarkup = avatarUrl
           ? `<img class="pg-leaderboard-avatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
           : `<span class="pg-leaderboard-avatar pg-leaderboard-avatar-fallback" aria-hidden="true">${escapeHtml(getLeaderboardInitial(username))}</span>`
@@ -4938,32 +4942,71 @@ https://geneguessr.brinedew.bio/`
     if (leaderboardOpened || !panel) return
     if (typeof IntersectionObserver !== "function") {
       markLeaderboardOpened()
-      void loadLeaderboardFromAPI()
+      void loadLeaderboard()
       return
     }
     leaderboardObserver = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return
         markLeaderboardOpened()
-        void loadLeaderboardFromAPI()
+        void loadLeaderboard()
       },
       { rootMargin: LEADERBOARD_PREFETCH_MARGIN },
     )
     leaderboardObserver.observe(panel)
   }
 
-  async function loadLeaderboardFromAPI() {
+  // The board is read from an object on the CDN (B-965): the Worker rebuilds it every ten minutes
+  // or so (workers/lib/leaderboard-publication.js), with each avatar embedded, so a visit costs no
+  // Worker request for the box or its pictures. The Worker route answers the same shape and is the
+  // fallback for a network that cannot reach the CDN and for the minutes before the first publish,
+  // and the read after the visitor changes their own visibility, which should show at once.
+  const LEADERBOARD_OBJECT_URL = "https://iconoplasmportraits.b-cdn.net/leaderboard/v1/top.json"
+  const LEADERBOARD_OBJECT_TIMEOUT_MS = 4000
+
+  async function fetchLeaderboardObject() {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), LEADERBOARD_OBJECT_TIMEOUT_MS)
+    try {
+      // The CDN's copy is replaced in place, and the browser's cache would not see that.
+      const response = await fetch(LEADERBOARD_OBJECT_URL, {
+        cache: "no-cache",
+        signal: controller.signal,
+      })
+      if (!response.ok) throw new Error(`Leaderboard object fetch failed (${response.status})`)
+      const payload = await response.json()
+      if (!Array.isArray(payload?.entries)) throw new Error("Leaderboard object has no entries")
+      return payload.entries
+    } finally {
+      window.clearTimeout(timer)
+    }
+  }
+
+  async function fetchLeaderboardFromWorker() {
+    const response = await fetch(`${API_BASE}/api/stats/leaderboard?limit=${LEADERBOARD_LIMIT}`, {
+      credentials: "include",
+    })
+    if (!response.ok) {
+      throw new Error(`Leaderboard fetch failed (${response.status})`)
+    }
+    const payload = await response.json().catch(() => ({}))
+    return Array.isArray(payload?.entries) ? payload.entries : []
+  }
+
+  async function loadLeaderboard({ fresh = false } = {}) {
     leaderboardLoading = true
     updateSidebarStats()
     try {
-      const response = await fetch(`${API_BASE}/api/stats/leaderboard?limit=${LEADERBOARD_LIMIT}`, {
-        credentials: "include",
-      })
-      if (!response.ok) {
-        throw new Error(`Leaderboard fetch failed (${response.status})`)
+      if (fresh) {
+        leaderboardEntries = await fetchLeaderboardFromWorker()
+      } else {
+        try {
+          leaderboardEntries = await fetchLeaderboardObject()
+        } catch (err) {
+          console.warn("Leaderboard object unavailable, asking the Worker:", err)
+          leaderboardEntries = await fetchLeaderboardFromWorker()
+        }
       }
-      const payload = await response.json().catch(() => ({}))
-      leaderboardEntries = Array.isArray(payload?.entries) ? payload.entries : []
     } catch (err) {
       leaderboardEntries = []
       console.warn("Failed to load leaderboard:", err)
@@ -5613,7 +5656,7 @@ https://geneguessr.brinedew.bio/`
       currentUser.leaderboard_opt_in = saved
       setLeaderboardConsentEnabled(saved)
       markLeaderboardOpened()
-      await loadLeaderboardFromAPI()
+      await loadLeaderboard({ fresh: true })
       updateSidebarStats()
     } catch (err) {
       console.error("Failed to update leaderboard visibility:", err)
