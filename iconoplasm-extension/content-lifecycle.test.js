@@ -86,6 +86,25 @@ test("scanner accepts a text node as a dirty root", () => {
   assert.equal(document.getAnnotations()[0].dataset.geneLabel, "TP53")
 })
 
+test("the scanner never annotates text a person is typing into", () => {
+  const { document, scanner } = createRuntime(
+    "<html><body>" +
+      "<textarea>TP53 in a box</textarea>" +
+      "<div contenteditable='true'><p>TP53 typed here</p></div>" +
+      "<div role='textbox'>TP53 in a role</div>" +
+      "<select><option>TP53</option></select>" +
+      "<p id='page'>TP53 on the page</p>" +
+      "</body></html>",
+  )
+
+  for (const selector of ["textarea", "[contenteditable]", "[role='textbox']", "select"]) {
+    assert.equal(scanner.scanPage(document.querySelector(selector)), 0, selector)
+  }
+  assert.equal(scanner.scanPage(document.querySelector("#page")), 1)
+  assert.equal(scanner.scanPage(document.body), 0, "the page text is already annotated once")
+  assert.equal(document.getAnnotations().length, 1)
+})
+
 test("highlighting preserves a framework's retained Text object through streaming and removal", () => {
   const { document, scanner } = createRuntime("<html><body><p>TP53</p></body></html>")
   const parent = document.querySelector("p")

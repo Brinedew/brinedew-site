@@ -78,6 +78,10 @@ const GENES = [
 
 const sha = (char) => char.repeat(64)
 
+// B-972: icono_gene_essence.manifestation is the workstation's raw sample prose. It is internal:
+// no public producer may copy it, whatever it is called there (manifestation, description).
+const sampleProse = (symbol) => `CANARY internal sample prose for ${symbol}`
+
 class SqliteD1 {
   constructor() {
     this.sqlite = new DatabaseSync(":memory:")
@@ -146,9 +150,10 @@ function seedDatabase() {
       gene.catalog,
     )
     db.exec(
-      "INSERT INTO icono_gene_essence (gene_symbol, full_name, weight_kg, age_years) VALUES (?, ?, 43.7, 44)",
+      "INSERT INTO icono_gene_essence (gene_symbol, full_name, weight_kg, age_years, manifestation) VALUES (?, ?, 43.7, 44, ?)",
       gene.symbol,
       gene.essence,
+      sampleProse(gene.symbol),
     )
     db.exec(
       `INSERT INTO icono_portrait_assets (gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, created_at, is_stale, autopick_eligible, vision_id, width, height)
@@ -230,6 +235,18 @@ test("catalog row, stable object and static document name every gene the same wa
     assert.equal(object.full_name, gene.expected, `${gene.symbol}: stable object name`)
     assert.equal(row[1], object.full_name, `${gene.symbol}: catalog row[1] vs stable full_name`)
     assert.equal(object.essence?.name, object.full_name, `${gene.symbol}: card essence name`)
+    // Raw sample prose reaches no public producer.
+    for (const [producer, body] of [
+      ["stable object", JSON.stringify(object)],
+      ["catalog row", JSON.stringify(row)],
+      ["static document", html],
+    ]) {
+      assert.equal(
+        body.includes("CANARY") || body.includes(sampleProse(gene.symbol)),
+        false,
+        `${gene.symbol}: the ${producer} copied the raw sample prose`,
+      )
+    }
     assert.equal(htmlUnescape(metaTitle(html)), title, `${gene.symbol}: static <title>`)
     assert.equal(htmlUnescape(ogTitle(html)), title, `${gene.symbol}: static og:title`)
   }

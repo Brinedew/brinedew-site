@@ -542,3 +542,15 @@ test("extension release docs point store publish at the Iconoplasm GUI", () => {
   assert.match(readmeText, /Safari publishing is not another browser ZIP upload/)
   assert.match(readmeText, /pnpm run package:iconoplasm-safari/)
 })
+
+test("the AMO reviewer build pins the same direct build tools as the submission build", () => {
+  const versions = (file) => {
+    const manifest = JSON.parse(readFileSync(file, "utf8"))
+    return { ...manifest.dependencies, ...manifest.devDependencies }
+  }
+  const repository = versions("package.json")
+  const reviewer = versions("iconoplasm-extension/amo-source/package.json")
+  for (const dependency of ["esbuild", "pdfjs-dist", "roughjs", "typescript", "wxt"]) {
+    assert.equal(reviewer[dependency], repository[dependency], dependency)
+  }
+})

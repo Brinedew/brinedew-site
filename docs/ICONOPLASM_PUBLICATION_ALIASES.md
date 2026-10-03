@@ -269,6 +269,6 @@ before the new schema becomes mandatory.
 | Singleton recognition-validation receipt migration                                                | `migrations-iconoplasm/0067_recognition_policy_validation.sql`                                    |
 | Manifest, ETag, search/resolve, compatibility projection                                          | `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js` |
 | Extension overlay validation/application                                                          | `iconoplasm-extension/publication-alias-overlay.js`                                               |
-| Policy, route, race, fallback, and migration tests                                                | `workers/iconoplasm-publication-alias-policy.test.js`                                             |
+| Public-reader and reconciliation KV list-cost tests                                               | `workers/iconoplasm-publication-alias-policy.test.js`                                             |
 | Runtime projection tests                                                                          | `workers/iconoplasm.public-media.test.js`, `workers/iconoplasm.search.test.js`                    |
 | Live manifest and resolver verification                                                           | `scripts/verify-iconoplasm-publication-aliases.mjs`                                               |

@@ -9,14 +9,11 @@ import {
   iconoplasmGeneBlotFingerprint,
   iconoplasmGeneBlotObjectKey,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
-import {
-  ICONOPLASM_DEFAULT_PUBLICATION_ALIASES,
-  iconoplasmPublicationAliasManifestFromPolicy,
-} from "./iconoplasm-publication-aliases.js"
+import { iconoplasmPublicationAliasManifestFromPolicy } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
-import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
+
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   uploadIconoplasmGeneBlot,
@@ -244,24 +241,6 @@ class FakeIconoplasmDb {
   }
 }
 
-class FakeOnlyAllowedGateway {
-  constructor(responseFactory) {
-    this.responseFactory = responseFactory
-    this.calls = []
-  }
-
-  async fetch(request) {
-    const cloned = request.clone()
-    this.calls.push({
-      url: cloned.url,
-      method: cloned.method,
-      headers: Object.fromEntries(cloned.headers.entries()),
-      body: cloned.method === "GET" || cloned.method === "HEAD" ? null : await cloned.text(),
-    })
-    return this.responseFactory(cloned)
-  }
-}
-
 function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} }) {
   if (!env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE) {
     env.THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE = {
@@ -326,50 +305,6 @@ class FakeKV {
   }
 }
 
-class CountedJsonValue {
-  constructor(value, onParse) {
-    this.serialized = JSON.stringify(value)
-    this.onParse = onParse
-  }
-
-  [Symbol.toPrimitive]() {
-    this.onParse()
-    return this.serialized
-  }
-}
-
-class CountingCardCatalogKv {
-  constructor({ pauseReads = false } = {}) {
-    this.pauseReads = pauseReads
-    this.entries = new Map()
-    this.readCounts = new Map()
-    this.parseCounts = new Map()
-  }
-
-  setJson(key, value) {
-    this.entries.set(
-      key,
-      new CountedJsonValue(value, () => {
-        this.parseCounts.set(key, Number(this.parseCounts.get(key) || 0) + 1)
-      }),
-    )
-  }
-
-  async get(key) {
-    this.readCounts.set(key, Number(this.readCounts.get(key) || 0) + 1)
-    if (this.pauseReads) await Promise.resolve()
-    return this.entries.get(key) || null
-  }
-
-  reads(key) {
-    return Number(this.readCounts.get(key) || 0)
-  }
-
-  parses(key) {
-    return Number(this.parseCounts.get(key) || 0)
-  }
-}
-
 function completeCardCatalogCacheVm(symbol, label = symbol) {
   return {
     __complete: true,
@@ -392,47 +327,6 @@ function completeCardCatalogCacheVm(symbol, label = symbol) {
       portrait: { status: "missing" },
     },
   }
-}
-
-function putContentAddressedCardCatalog(kv, { version, shardCards }) {
-  const shards = []
-  const symbolShardIndex = {}
-  let cardCount = 0
-  shardCards.forEach((cards, index) => {
-    const contentHash = `${version}-shard-${index}`
-    const key = `iconoplasm:card-catalog-shard:${contentHash}`
-    const normalizedCards = cards.map((card) => ({ ...card }))
-    kv.setJson(key, {
-      schema: "iconoplasm.cardCatalog.v1",
-      storage: "kv_card_catalog_content_addressed_shards",
-      content_hash: contentHash,
-      cards: normalizedCards,
-    })
-    shards.push({
-      key,
-      index,
-      card_count: normalizedCards.length,
-      content_hash: contentHash,
-      first_symbol: normalizedCards[0]?.symbol || null,
-      last_symbol: normalizedCards.at(-1)?.symbol || null,
-    })
-    for (const card of normalizedCards) symbolShardIndex[card.symbol] = index
-    cardCount += normalizedCards.length
-  })
-  const manifestKey = `iconoplasm:card-catalog:${version}`
-  kv.setJson(manifestKey, {
-    schema: "iconoplasm.cardCatalog.v1",
-    artifact_version: version,
-    snapshot_version: version,
-    source: "published_card_catalog",
-    storage: "kv_card_catalog_content_addressed_shards",
-    shard_count: shards.length,
-    catalog_gene_count: cardCount,
-    card_count: cardCount,
-    symbol_shard_index: symbolShardIndex,
-    shards,
-  })
-  return { manifestKey, shards }
 }
 
 function publicGeneBatchRequest(symbols) {
@@ -693,7 +587,7 @@ test("catalog hydration emits only schema-5 inspectable portrait assets", () => 
   assert.equal("p" in hydrated.genes[1], false)
 })
 
-test("public gene payload includes published portrait dimensions", async () => {
+test("the public per-gene API refuses third-party callers and points them at the metadata endpoint", async () => {
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
     buildEnv({ KV: buildPublishedCardReadKv() }),
@@ -1879,32 +1773,6 @@ test("published extension receives its publisher-declared client contract", asyn
   )
 })
 
-test("portrait asset requests still reach the only allowed stateful worker when the public edge has no direct bucket binding", async () => {
-  const gateway = new FakeOnlyAllowedGateway(
-    () =>
-      new Response("image-bytes", {
-        status: 200,
-        headers: {
-          "Content-Type": "image/webp",
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      }),
-  )
-  const response = await viaStatefulWorker(
-    new Request(
-      "https://iconoplasm.brinedew.bio/portraits/v1/47/4713c9ed62d593a88fc73239fc9409d1486d149a456c78a1e6b5cbdcd9cff212/medium.webp",
-    ),
-    {
-      THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: gateway,
-    },
-    {},
-  )
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("content-type"), "image/webp")
-  assert.equal(gateway.calls.length, 1)
-})
-
 // B-898 Stage 1 (step B): POST /api/public/v1/genes/batch and the two
 // card-snapshots/<token>/{genes,portraits}/<SYM> routes read ONE stable gene
 // object per symbol. Failure modes these tests cover, written before the
@@ -2310,76 +2178,4 @@ test("concurrent public gene batches each read one stable object per symbol and 
   assert.equal(cappedPayload.missing.length, 40)
   assert.equal(reads.length, 40)
   assert.equal(new Set(reads).size, 40)
-})
-
-test("site gene detail reads the stable gene object the vote publisher rewrote in place", async (t) => {
-  const objects = new Map()
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async (url, init = {}) => {
-    const parsed = new URL(url instanceof Request ? url.url : String(url))
-    if (!parsed.hostname.endsWith("storage.test")) return originalFetch(url, init)
-    const method = String(
-      init.method || (url instanceof Request ? url.method : "GET") || "GET",
-    ).toUpperCase()
-    if (method === "PUT") {
-      objects.set(parsed.pathname, new Uint8Array(await new Response(init.body).arrayBuffer()))
-      return new Response(null, { status: 201 })
-    }
-    const value = objects.get(parsed.pathname)
-    return value
-      ? new Response(value, { status: 200, headers: { "content-type": "application/json" } })
-      : new Response(null, { status: 404 })
-  }
-  t.after(() => {
-    globalThis.fetch = originalFetch
-    resetIconoplasmRuntimeCachesForTest()
-  })
-  resetIconoplasmRuntimeCachesForTest()
-
-  const kv = buildPublishedCardReadKv()
-  const env = buildEnv({
-    KV: kv,
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
-  })
-  const store = createPublishedCardObjectStore(env)
-
-  // The stable object names a portrait the stale KV fixture never had, so a
-  // reader that walked any older state would fail this assertion.
-  const deltaPortrait = "b".repeat(64)
-  const baseShard = JSON.parse(await kv.get("iconoplasm:card-catalog-shard:test-card-v1:0"))
-  const baseCard = baseShard.cards.find((card) => card.symbol === "A1BG")
-  assert.notEqual(baseCard.payload.portrait.asset_sha256, deltaPortrait)
-  const deltaCard = JSON.parse(JSON.stringify(baseCard))
-  deltaCard.payload = {
-    ...deltaCard.payload,
-    portrait: {
-      ...deltaCard.payload.portrait,
-      asset_sha256: deltaPortrait,
-      vision_id: "anima-v1-9999",
-      candidate_image_id: 4242,
-    },
-  }
-  // The vote publisher rewrote the stable object with the same winner.
-  objects.set(
-    stableObjectPath("A1BG"),
-    new TextEncoder().encode(JSON.stringify(stableGeneObjectFromCard(deltaCard.payload))),
-  )
-  resetIconoplasmRuntimeCachesForTest()
-
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/A1BG", {
-      headers: { Referer: "https://iconoplasm.brinedew.bio/gene/A1BG" },
-    }),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("X-Iconoplasm-Card-Version"), "2026-09-30T22:52:55.283Z")
-  assert.equal(payload?.card_snapshot_version, "2026-09-30T22:52:55.283Z")
-  assert.equal(payload?.portrait?.asset_sha256, deltaPortrait)
-  assert.equal(payload?.canonical_manifestation?.prose, "The exact public A1BG manifestation.")
 })

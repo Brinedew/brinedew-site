@@ -4,6 +4,8 @@
 // stamp busts the CDN and browser caches when a module changes. A stamp change
 // alters the importer's own hash, so stamps are rewritten until nothing moves.
 //
+// A local import with no stamp at all is also reported (and stamped when rewriting).
+//
 // Order matters: run Prettier first, then this script. Formatting changes the
 // bytes and therefore the hashes.
 //
@@ -23,6 +25,12 @@ const dir = path.resolve(dirArg || "quartz/static/iconoplasm")
 // Imports of ./generated/ files are stamped too; they used to be stamped by hand.
 const STAMP = /(["'(])(\.\/(?:generated\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
 
+// The edge serves /static/iconoplasm/* as immutable, so an import with no stamp is never
+// refreshed for a returning reader. Only the Iconoplasm directory is held to this rule.
+const UNSTAMPED =
+  /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\/(?:generated\/)?[A-Za-z0-9._-]+\.(?:js|css))\2/g
+const requireStamps = path.basename(dir) === "iconoplasm"
+
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 16)
 const files = readdirSync(dir).filter(
   (name) => /\.(js|css|mjs)$/.test(name) && !name.endsWith(".test.js"),
@@ -41,7 +49,16 @@ function restampOnce(write) {
       stale.push(`${name} -> ${rel}`)
       return `${quote}${rel}?v=${current}`
     })
-    if (write && next !== source) writeFileSync(full, next)
+    let stamped = next
+    if (requireStamps) {
+      stamped = next.replace(UNSTAMPED, (match, lead, quote, rel) => {
+        const target = path.join(dir, rel)
+        if (!existsSync(target)) return match
+        stale.push(`${name} -> ${rel} (no stamp)`)
+        return `${lead}${quote}${rel}?v=${hashOf(target)}${quote}`
+      })
+    }
+    if (write && stamped !== source) writeFileSync(full, stamped)
   }
   return stale
 }
