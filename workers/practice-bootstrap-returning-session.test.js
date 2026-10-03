@@ -5,7 +5,7 @@
 // a returning player: the session's own target, a stored practice pool, a `date=`
 // link or `same_target=1` overwrites it. With R2 unbound, as in production, that
 // pick costs a D1 round (the stored pool, the failure lookup, a `structure_failures`
-// DELETE), one outbound structure probe the player waits for, and a KV put. A
+// DELETE) and one outbound structure probe the player waits for. A
 // browser with no session cookie has no session by construction, so it neither
 // reads one nor waits to pick.
 //
@@ -14,7 +14,7 @@
 // proteins, 17,513 practice-eligible), with no R2 bucket bound and `fetch` counted.
 //
 // Failure modes this file proves, each written before the code that fixes it:
-//   R1  a returning same-day bootstrap picks, probes a structure and writes KV twice
+//   R1  a returning same-day bootstrap picks, probes a structure or writes KV
 //   R2  a first-time bootstrap loses its pick
 //   R3  a restart keeps the old target, or drops the stored practice pool
 //   R4  a session that cannot name a usable target stops picking a replacement
@@ -134,7 +134,7 @@ async function bootstrap({
   }
 }
 
-test("R1: a returning practice bootstrap makes no pick, no structure probe and one KV write", async (t) => {
+test("R1: a returning practice bootstrap makes no pick, no structure probe and no KV write", async (t) => {
   const sessions = new Map()
   const first = await bootstrap({ cookie: "returning-1", sessions })
   assert.equal(first.response.status, 200)
@@ -154,7 +154,11 @@ test("R1: a returning practice bootstrap makes no pick, no structure probe and o
   assert.equal(onlySession(sessions).targetId, targetId, "the player keeps their target")
   assert.equal(pickStatements(again.statements).length, 0, "no pool read, failure lookup or write")
   assert.equal(again.fetched.length, 0, "no structure probe")
-  assert.ok(again.kvPuts.length <= 1, `${again.kvPuts.length} KV puts: ${again.kvPuts.join(", ")}`)
+  assert.deepEqual(
+    again.kvPuts,
+    [],
+    "a protein with a stored structure source is never written to KV",
+  )
 })
 
 test("R1: on a cold isolate a returning bootstrap reads the session's own protein row and nothing else", async (t) => {
