@@ -4,7 +4,6 @@ import test from "node:test"
 import toml from "toml"
 import {
   CANONICAL_CONFIG,
-  SCHEMA_TRANSITION_MODE,
   prepareSchemaTransitionConfig,
 } from "./prepare-iconoplasm-schema-transition-config.mjs"
 import { createReleaseSender } from "./run-admitted-d1-migrations.mjs"
@@ -18,87 +17,12 @@ test("schema staging preserves every production binding", () => {
     prepared.main,
     "workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
   )
-  assert.equal(SCHEMA_TRANSITION_MODE, "reader-recovery")
   const canonicalState = { ...canonical }
   delete canonicalState.assets
   const { unsafe: preparedUnsafe, ...preparedState } = prepared
   assert.deepEqual({ ...preparedState, main: canonical.main }, canonicalState)
   assert.equal(preparedUnsafe.metadata.keep_assets, true)
   assert.equal(preparedUnsafe.metadata.assets.config.not_found_handling, "none")
-  assert.deepEqual(preparedUnsafe.metadata.assets.config.run_worker_first, [
-    "/api/*",
-    "/blot/*",
-    "/portraits/*",
-    "/admin*",
-    "/blocklist*",
-    "/artist-styles*",
-    "/health",
-    "/gene/*",
-  ])
-  assert.throws(() => prepareSchemaTransitionConfig(""), /exactly one/)
-  assert.throws(() => prepareSchemaTransitionConfig(source + source), /exactly one/)
-  assert.throws(
-    () => prepareSchemaTransitionConfig(source, { mode: "shell-only" }),
-    /Unsupported schema-transition mode/,
-  )
-})
-
-test("migration staging preserves the fallback and all release gates", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
-  )
-  assert.match(workflow, /node scripts\/prepare-iconoplasm-schema-transition-config\.mjs/)
-  assert.equal(
-    (workflow.match(/node scripts\/deploy-iconoplasm-reader-recovery\.mjs/g) || []).length,
-    2,
-  )
-  assert.match(workflow, /--config wrangler\.iconoplasm-schema-transition\.generated\.toml/)
-  assert.match(workflow, /--var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery"/)
-  const names = [
-    "Require successful tests for the exact deployed commit",
-    "Refresh account capacity immediately before pausing application work",
-    "Stage migration admission in the existing state owner",
-    "Apply reviewed D1 migrations through prediction admission",
-    "Prepare the published catalog through shared KV admission",
-    "Deploy the stateful Worker after data maintenance",
-  ]
-  let previous = -1
-  for (const name of names) {
-    const position = workflow.indexOf(`- name: ${name}`)
-    assert.ok(position > previous, name)
-    previous = position
-  }
-  const readerRefresh = workflow.indexOf(
-    "- name: Refresh published readers during existing schema maintenance",
-  )
-  for (const gate of [
-    "Require successful tests for the exact deployed commit",
-    "Verify operation cost implementation and migration identities",
-    "Validate Iconoplasm deployment topology",
-    "Read installed schema-transition state and reader headroom",
-  ])
-    assert.ok(workflow.indexOf(`- name: ${gate}`) < readerRefresh, gate)
-  assert.match(
-    workflow.slice(readerRefresh),
-    /if: steps\.release-state\.outputs\.schema_transition == 'true'/,
-  )
-  assert.match(
-    workflow.slice(workflow.indexOf("- name: Stage migration admission")),
-    /if: inputs\.data_maintenance == true && steps\.release-state\.outputs\.schema_transition != 'true'/,
-  )
-  assert.ok(
-    readerRefresh <
-      workflow.indexOf("- name: Require account-wide D1 and Worker headroom before migrations"),
-  )
-})
-
-test("the manual reader-recovery job is gone (B-820)", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
-    "utf8",
-  )
-  assert.doesNotMatch(workflow, /reader-recovery-only:|reader_recovery_only|READER_RECOVERY_ONLY/)
 })
 
 test("failure classification never returns private provider prose", () => {

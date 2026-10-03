@@ -173,15 +173,46 @@ test("new Tags saves, from the caretaker panel and from the workstation, store p
     new TextDecoder().decode(bunny.objects.get(serviceRow.object_key)),
     'green eyes\n{"traits":["green eyes"]}',
   )
-  const material = await readJson(
-    await workstation(
-      serviceRequest(
-        `/api/iconoplasm/authority/derivatives/${posted.manifestation_derivative_id}/body`,
-      ),
+  const materialResponse = await workstation(
+    serviceRequest(
+      `/api/iconoplasm/authority/derivatives/${posted.manifestation_derivative_id}/body`,
     ),
   )
+  assert.equal(materialResponse.headers.get("cache-control"), "private, no-store")
+  const material = await readJson(materialResponse)
   assert.equal(material.tags_text, tagsText)
   assert.deepEqual(material.fields_json, fieldsJson)
+  // The body carries no storage metadata: sizes and keys stay in the authority.
+  assert.deepEqual(Object.keys(material).sort(), [
+    "entity_kind",
+    "fields_json",
+    "fields_sha256",
+    "manifestation_derivative_id",
+    "manifestation_revision_id",
+    "output_plain_bytes",
+    "output_plain_sha256",
+    "schema_version",
+    "tags_sha256",
+    "tags_text",
+  ])
+
+  // A damaged Tags object is refused and reported, never returned.
+  const damaged = Uint8Array.from(bunny.objects.get(serviceRow.object_key))
+  damaged[0] ^= 0xff
+  bunny.objects.set(serviceRow.object_key, damaged)
+  const failures = []
+  const damagedRead = await workstationHandler(context, env, {
+    onIntegrityFailure: async (descriptor) => {
+      failures.push(descriptor)
+    },
+  })(
+    serviceRequest(
+      `/api/iconoplasm/authority/derivatives/${posted.manifestation_derivative_id}/body`,
+    ),
+  )
+  assert.equal(damagedRead.status, 503)
+  assert.equal((await damagedRead.json()).error.code, "DERIVATIVE_BODY_UNAVAILABLE")
+  assert.equal(failures.at(-1).entity_id, posted.manifestation_derivative_id)
 })
 
 test("a legacy encrypted body still reads through the editor, the workstation and the dossier", async (t) => {

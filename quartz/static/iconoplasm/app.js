@@ -9262,8 +9262,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         editMarkup +
         // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics, but the
         // summary is rendered as a circular icon control. The visible "Copy to gene" string
-        // is preserved inside .icono-visually-hidden so the public-candidate-actions test
-        // and screen-reader users still find the label, while the form opens as a floating
+        // is preserved inside .icono-visually-hidden so screen-reader users still find
+        // the label, while the form opens as a floating
         // popover that does not push the candidate card height.
         '<details class="icono-candidate-copy-panel">' +
         '<summary class="icono-candidate-action-btn icono-candidate-action-btn--copy" aria-label="Copy to gene" title="Copy to gene">' +

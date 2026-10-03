@@ -88,10 +88,13 @@ import {
   VOTE_IMPORT_MAX_ITEMS,
 } from "./iconoplasm/votes/vote-guards.js"
 import {
+  ICONOPLASM_GENE_CARD_QUEUE_BINDING,
   ICONOPLASM_GENE_CARD_QUEUE_KIND,
   enrollIconoplasmGeneCardMaterialization,
   iconoplasmGeneCardFingerprint,
   readIconoplasmGeneCardMaterialization,
+  recoverDueIconoplasmGeneCardMaterializations,
+  reserveIconoplasmGeneCardBrowserLaunch,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
@@ -1436,7 +1439,7 @@ function seedImageEditJob(db, { id, symbol, source, result, inherited }) {
   )
 }
 
-async function publishImageEdit(db, id) {
+async function publishImageEdit(db, id, { user = "reader-1" } = {}) {
   const ctx = waitUntilRecorder()
   const response = await handleApi(
     new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${id}/publish`, {
@@ -1445,7 +1448,7 @@ async function publishImageEdit(db, id) {
     }),
     withTestMutationAuthority({
       ICONOPLASM_DB: db,
-      GAME_SESSIONS: sessions({ user_id: "reader-1" }),
+      GAME_SESSIONS: sessions({ user_id: user }),
     }),
     ctx,
   )
@@ -1842,4 +1845,459 @@ test("26: asking for the same print copy again counts one more request on the on
   assert.equal(row.request_count, 3)
   const rows = db.sqlite.prepare("SELECT COUNT(*) AS n FROM icono_gene_card_materializations").get()
   assert.equal(rows.n, 1)
+})
+
+// B-972: the sole guards of the rules below lived in tests that ran the route against a
+// hand-written fake D1, which re-implemented the SQL in JavaScript. These run the real
+// routes on the migrated schema. A refused or failed request must leave the tables as it
+// found them, and nothing private may leave the Worker.
+
+async function routeRequest(
+  db,
+  method,
+  path,
+  { body, user = { user_id: "reader-1", username: "reader" }, bindings = {} } = {},
+) {
+  const pending = []
+  const ctx = { waitUntil: (promise) => pending.push(Promise.resolve(promise).catch(() => {})) }
+  const response = await handleApi(
+    new Request(`https://iconoplasm.brinedew.bio${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", Cookie: "session=s1" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+    withTestMutationAuthority({
+      ICONOPLASM_DB: db,
+      GAME_SESSIONS: sessions(user),
+      ...bindings,
+    }),
+    ctx,
+  )
+  const payload = await response.json().catch(() => null)
+  await Promise.all(pending)
+  return { status: response.status, payload }
+}
+
+// 27. An image edit's publish belongs to its owner, and a failure says which step stopped.
+//     The candidate write and the final confirmation are separate steps: after the second
+//     one fails the candidate and its votes exist, so the retry must finish the publish
+//     without adding a second audit event.
+test("27: an image edit's publish is owner-only, names the step that failed, and a retry adds no second audit event", async () => {
+  const db = new SqliteD1()
+  seedAsset(db, "A1BG", sha("a"))
+  seedPublished(db, "A1BG", sha("a"))
+  seedImageEditJob(db, {
+    id: "job-ladder",
+    symbol: "A1BG",
+    source: sha("a"),
+    result: sha("c"),
+    inherited: 3,
+  })
+  const resultAssets = () =>
+    db.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets WHERE asset_sha256 = ?", sha("c"))[0].n
+  const auditEvents = () =>
+    db.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE action = 'edit_candidate'")[0].n
+
+  // Someone else's job is not found, and nothing is written for it.
+  const intruder = await publishImageEdit(db, "job-ladder", { user: "intruder-1" })
+  assert.equal(intruder.status, 404)
+  assert.equal(resultAssets(), 0)
+  assert.equal(auditEvents(), 0)
+
+  // The candidate write fails: the edit is saved, no candidate was added, nothing was voted.
+  db.failOn = { test: (sql) => sql.includes("INSERT INTO icono_portrait_assets") }
+  const noCandidate = await publishImageEdit(db, "job-ladder")
+  assert.equal(noCandidate.status, 503)
+  assert.equal(noCandidate.payload.code, "IMAGE_EDIT_PUBLISH_CANDIDATE_FAILED")
+  assert.equal(noCandidate.payload.failure.candidate_added, false)
+  assert.equal(noCandidate.payload.failure.vote_recorded, false)
+  assert.equal(noCandidate.payload.job.published, false)
+  assert.equal(resultAssets(), 0)
+
+  // The final confirmation fails after the candidate and its votes committed: it says so.
+  db.failOn = { test: (sql) => sql.includes("UPDATE icono_image_edit_jobs") }
+  const noConfirmation = await publishImageEdit(db, "job-ladder")
+  assert.equal(noConfirmation.status, 503)
+  assert.equal(noConfirmation.payload.code, "IMAGE_EDIT_PUBLISH_CONFIRMATION_FAILED")
+  assert.equal(noConfirmation.payload.failure.candidate_added, true)
+  assert.equal(noConfirmation.payload.failure.vote_recorded, true)
+  assert.equal(resultAssets(), 1)
+  assert.equal(auditEvents(), 1)
+
+  // The retry finishes the publish and the audit trail still has one event.
+  db.failOn = null
+  const retry = await publishImageEdit(db, "job-ladder")
+  assert.equal(retry.status, 200, JSON.stringify(retry.payload))
+  assert.equal(retry.payload.job.published, true)
+  assert.equal(auditEvents(), 1)
+})
+
+// 28. A reader's own image-provider key is theirs: stored encrypted, never returned by any
+//     route, never visible to another account or a guest.
+test("28: a saved provider key is stored encrypted, never returned, and invisible to other accounts", async () => {
+  const db = new SqliteD1()
+  const bindings = {
+    ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
+  }
+  const saved = await routeRequest(db, "POST", "/api/iconoplasm/image-edit/providers", {
+    body: {
+      provider_id: "openai",
+      api_key: "sk-test-secret",
+      endpoint_url: "https://api.openai.com/v1",
+      model: "gpt-image-2.5-sunburst",
+    },
+    bindings,
+  })
+  assert.equal(saved.status, 200, JSON.stringify(saved.payload))
+  const stored = db.rows("SELECT * FROM icono_user_image_provider_keys")[0]
+  assert.ok(stored.encrypted_api_key && stored.encryption_iv)
+  assert.equal(JSON.stringify(stored).includes("sk-test-secret"), false)
+
+  const own = await routeRequest(db, "GET", "/api/iconoplasm/image-edit/providers", { bindings })
+  assert.equal(own.status, 200)
+  assert.deepEqual(
+    own.payload.providers.map((provider) => [provider.provider_id, provider.configured]),
+    [["openai", true]],
+  )
+  const listed = JSON.stringify(own.payload)
+  for (const secret of ["sk-test-secret", stored.encrypted_api_key, stored.encryption_iv]) {
+    assert.equal(listed.includes(secret), false, "key material left the Worker")
+  }
+
+  const other = await routeRequest(db, "GET", "/api/iconoplasm/image-edit/providers", {
+    user: { user_id: "reader-2" },
+    bindings,
+  })
+  assert.deepEqual(other.payload.providers, [])
+  const guest = await routeRequest(db, "GET", "/api/iconoplasm/image-edit/providers", {
+    user: {},
+    bindings,
+  })
+  assert.equal(guest.status, 401)
+})
+
+// 29. Gene suggestions are public to read, but a hidden one never renders, no one is named by
+//     account id, a guest cannot write, and only the author can edit or delete one.
+test("29: gene comments hide hidden ones, need a sign-in to write, and only the author can change one", async () => {
+  const db = new SqliteD1()
+  db.exec(
+    "INSERT INTO icono_gene_comments (gene_symbol, user_id, username, body, status) VALUES ('A1BG', 'reader-2', 'visible-user', 'Should have an eraser instead of a pen.', 'visible')",
+  )
+  db.exec(
+    "INSERT INTO icono_gene_comments (gene_symbol, user_id, username, body, status) VALUES ('A1BG', 'reader-3', 'hidden-user', 'This hidden prompt should never render.', 'hidden')",
+  )
+
+  const read = await routeRequest(db, "GET", "/api/iconoplasm/comments/gene/A1BG", { user: {} })
+  assert.equal(read.status, 200)
+  assert.deepEqual(
+    read.payload.comments.map((comment) => comment.body),
+    ["Should have an eraser instead of a pen."],
+  )
+  assert.equal(
+    JSON.stringify(read.payload).includes("reader-2"),
+    false,
+    "user ids stay server-side",
+  )
+
+  const comment = { symbol: "A1BG", body: "Please add a lab stamp." }
+  const guest = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    body: comment,
+    user: {},
+  })
+  assert.equal(guest.status, 401)
+
+  const written = await routeRequest(db, "POST", "/api/iconoplasm/comments", { body: comment })
+  assert.equal(written.status, 200, JSON.stringify(written.payload))
+  const mine = db.rows(
+    "SELECT id, user_id FROM icono_gene_comments WHERE body = 'Please add a lab stamp.'",
+  )[0]
+  assert.equal(mine.user_id, "reader-1")
+
+  const commentsPath = "/api/iconoplasm/genes/A1BG/comments"
+  for (const method of ["PATCH", "DELETE"]) {
+    const refused = await routeRequest(db, method, commentsPath, {
+      body: { id: mine.id, body: "Rewritten by someone else." },
+      user: { user_id: "reader-2" },
+    })
+    assert.equal(refused.status, 403, method)
+  }
+  const untouched = db.rows("SELECT body, status FROM icono_gene_comments WHERE id = ?", mine.id)[0]
+  assert.equal(untouched.body, "Please add a lab stamp.")
+  assert.equal(untouched.status, "visible")
+
+  const edited = await routeRequest(db, "PATCH", commentsPath, {
+    body: { id: mine.id, body: "Please add a lab stamp, please." },
+  })
+  assert.equal(edited.status, 200, JSON.stringify(edited.payload))
+  const removed = await routeRequest(db, "DELETE", commentsPath, { body: { id: mine.id } })
+  assert.equal(removed.status, 200, JSON.stringify(removed.payload))
+  assert.equal(
+    db.rows("SELECT status FROM icono_gene_comments WHERE id = ?", mine.id)[0].status,
+    "deleted",
+  )
+})
+
+// 30. The request picker is read by every signed-in reader who opens it. Its answer is
+//     bounded (120 styles, four previews each) and carries no artist identity (B-883,
+//     B-884); the artist stays in the rollup row and goes no further.
+test("30: the request picker lists at most 120 styles, four medium previews each, and never an artist", async () => {
+  const db = new SqliteD1()
+  const previews = JSON.stringify(
+    [1, 2, 3, 4, 5, 6].map((rank) => ({
+      gene_symbol: `GENE${rank}`,
+      asset_sha256: sha(String(rank)),
+      is_current: rank === 1,
+      preview_rank: rank,
+    })),
+  )
+  for (let n = 1; n <= 300; n += 1) {
+    db.exec(
+      `INSERT INTO icono_generation_request_vision_option_rollup (
+         vision_id, emulsion_id, emulsion_family_id, artist_tag, artist_name, workflow_id,
+         workflow_label, prompt_version, variant_slot, image_count, live_count, score,
+         vote_h_index, preview_assets_json, builder_version
+       ) VALUES (?, ?, ?, '@secretartist', 'Secret Artist', 'A1', 'Anima v1', '93', ?, 8, 6, 5, 4, ?, 3)`,
+      `anima-v1-${n}`,
+      `A1-93-${n}`,
+      `0-${n}`,
+      String(n),
+      previews,
+    )
+  }
+
+  const guest = await routeRequest(db, "GET", "/api/iconoplasm/requests/options", { user: {} })
+  assert.equal(guest.status, 401)
+
+  const signedIn = await routeRequest(db, "GET", "/api/iconoplasm/requests/options")
+  assert.equal(signedIn.status, 200, JSON.stringify(signedIn.payload).slice(0, 400))
+  const options = signedIn.payload.request_options
+  assert.ok(options.length > 0 && options.length <= 120, `${options.length} styles in one answer`)
+  assert.doesNotMatch(JSON.stringify(signedIn.payload), /secretartist|secret artist/i)
+  for (const option of options) {
+    assert.equal(option.preview_assets.length, 4, "a card shows four of its six previews")
+    for (const preview of option.preview_assets) {
+      assert.match(String(preview.medium_url || ""), /medium\.webp$/)
+      assert.equal("thumb_url" in preview, false)
+      assert.equal("preview_rank" in preview, false)
+    }
+  }
+})
+
+// 31. Favorites are one account's own list: idempotent, refused to guests, and only for a
+//     style that exists. An asset that has left the picker's rollup is still favoriteable.
+test("31: emulsion favorites are per account, idempotent, refused to guests, and need a real emulsion", async () => {
+  const db = new SqliteD1()
+  seedAsset(db, "A1BG", sha("a"))
+  db.exec("UPDATE icono_portrait_assets SET vision_id = 'anima-v1-19' WHERE gene_symbol = 'A1BG'")
+  const favoritesPath = "/api/iconoplasm/emulsion-favorites"
+
+  for (let again = 0; again < 2; again += 1) {
+    const put = await routeRequest(db, "PUT", `${favoritesPath}/0-19`)
+    assert.equal(put.status, 200, JSON.stringify(put.payload))
+  }
+  const mine = await routeRequest(db, "GET", favoritesPath)
+  assert.deepEqual(mine.payload.favorite_emulsion_ids, ["0-19"])
+  const theirs = await routeRequest(db, "GET", favoritesPath, { user: { user_id: "reader-2" } })
+  assert.deepEqual(theirs.payload.favorite_emulsion_ids, [])
+
+  assert.equal((await routeRequest(db, "GET", favoritesPath, { user: {} })).status, 401)
+  assert.equal((await routeRequest(db, "PUT", `${favoritesPath}/0-19`, { user: {} })).status, 401)
+  const unknown = await routeRequest(db, "PUT", `${favoritesPath}/0-99999`)
+  assert.equal(unknown.status, 404)
+  assert.equal(unknown.payload.code, "EMULSION_NOT_FOUND")
+
+  // Another account removing it changes nothing for the owner; the owner removing it twice is fine.
+  await routeRequest(db, "DELETE", `${favoritesPath}/0-19`, { user: { user_id: "reader-2" } })
+  assert.deepEqual((await routeRequest(db, "GET", favoritesPath)).payload.favorite_emulsion_ids, [
+    "0-19",
+  ])
+  for (let again = 0; again < 2; again += 1) {
+    const removed = await routeRequest(db, "DELETE", `${favoritesPath}/0-19`)
+    assert.equal(removed.status, 200)
+  }
+  assert.deepEqual((await routeRequest(db, "GET", favoritesPath)).payload.favorite_emulsion_ids, [])
+})
+
+// 32. One request action queues at most twenty styles. Above that it is refused before it
+//     writes anything, so a hand-made request cannot turn one click into a hundred rows.
+test("32: a request batch above twenty styles is refused before any write, and a guest is refused", async () => {
+  const db = new SqliteD1()
+  const body = {
+    symbol: "A1BG",
+    requested_vision_ids: Array.from({ length: 21 }, (_, index) => `anima-v1-${index + 1}`),
+    client_batch_id: "batch-too-large",
+  }
+  const tooMany = await routeRequest(db, "POST", "/api/iconoplasm/requests", { body })
+  assert.equal(tooMany.status, 400)
+  assert.match(tooMany.payload.error, /no more than 20/i)
+  assert.deepEqual(tooMany.payload.failures, [])
+  assert.equal(db.rows("SELECT COUNT(*) AS n FROM icono_generation_requests")[0].n, 0)
+
+  const guest = await routeRequest(db, "POST", "/api/iconoplasm/requests", { body, user: {} })
+  assert.equal(guest.status, 401)
+})
+
+// 33. Copying a candidate to another gene puts it there, checkmarks it for the copier, and
+//     leaves an audit event. An unknown target is refused and writes nothing.
+test("33: copying a candidate adds it to the target gene, checkmarks it for the copier, and audits it", async () => {
+  const db = new SqliteD1()
+  seedAsset(db, "A1BG", sha("a"))
+  db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('INS', 'Insulin')")
+  const copyPath = "/api/iconoplasm/candidates/copy"
+  const copy = (target) => ({
+    body: { source_gene_symbol: "A1BG", target_gene_symbol: target, asset_sha256: sha("a") },
+  })
+
+  const missing = await routeRequest(db, "POST", copyPath, copy("NOPE"))
+  assert.equal(missing.status, 400)
+  assert.equal(
+    db.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets WHERE gene_symbol = 'NOPE'")[0].n,
+    0,
+  )
+
+  const copied = await routeRequest(db, "POST", copyPath, copy("INS"))
+  assert.equal(copied.status, 200, JSON.stringify(copied.payload))
+  assert.equal(copied.payload.target_url, "/gene/INS")
+  assert.equal(copied.payload.vote.vote_value, 1)
+  const asset = db.rows(
+    "SELECT created_by FROM icono_portrait_assets WHERE gene_symbol = 'INS' AND asset_sha256 = ?",
+    sha("a"),
+  )
+  assert.deepEqual(
+    asset.map((row) => row.created_by),
+    ["reader-1"],
+  )
+  const votes = db.rows(
+    "SELECT user_id, vote_value FROM icono_image_votes WHERE gene_symbol = 'INS' AND asset_sha256 = ?",
+    sha("a"),
+  )
+  assert.deepEqual(
+    votes.map((row) => [row.user_id, row.vote_value]),
+    [["reader-1", 1]],
+  )
+  assert.equal(
+    db.rows(
+      "SELECT COUNT(*) AS n FROM icono_publish_events WHERE gene_symbol = 'INS' AND action = 'copy_candidate'",
+    )[0].n,
+    1,
+  )
+
+  assert.equal((await routeRequest(db, "POST", copyPath, { ...copy("INS"), user: {} })).status, 401)
+})
+
+// 34. Browser Rendering is a free-plan meter. The ledger admits at most eight launches a day,
+//     none within 25 seconds of the last one, and then refuses until the UTC reset. The
+//     reservation is one atomic upsert, so two cards racing for the last launch cannot both win.
+test("34: the print-copy render budget admits eight launches a day, spaced apart, then refuses until the reset", async () => {
+  const db = new SqliteD1()
+  const env = { ICONOPLASM_DB: db }
+  const spaceOut = () =>
+    db.exec(
+      "UPDATE icono_gene_card_render_budget SET last_launch_at = datetime('now', '-30 seconds')",
+    )
+
+  assert.equal((await reserveIconoplasmGeneCardBrowserLaunch(env)).ok, true)
+  const tooSoon = await reserveIconoplasmGeneCardBrowserLaunch(env)
+  assert.equal(tooSoon.ok, false)
+  assert.equal(tooSoon.reason, "launch_interval")
+  assert.ok(tooSoon.delaySeconds >= 1 && tooSoon.delaySeconds <= 25)
+
+  for (let launch = 2; launch <= 8; launch += 1) {
+    spaceOut()
+    assert.equal((await reserveIconoplasmGeneCardBrowserLaunch(env)).ok, true, `launch ${launch}`)
+  }
+  spaceOut()
+  const ninth = await reserveIconoplasmGeneCardBrowserLaunch(env)
+  assert.equal(ninth.ok, false)
+  assert.equal(ninth.reason, "daily_budget")
+  assert.ok(ninth.delaySeconds > 0, "told to wait for the reset")
+  assert.equal(db.rows("SELECT launches FROM icono_gene_card_render_budget")[0].launches, 8)
+})
+
+// 35. The cron tick that rescues cards whose wake-up was lost is bounded: eight cards by
+//     default, 32 at most, however many are due. An expired render lease goes back to the
+//     queue so a crashed render is retried.
+test("35: the cron tick wakes at most 8 due cards by default and 32 at most, and requeues expired render leases", async () => {
+  const db = new SqliteD1()
+  const sent = []
+  const env = {
+    ICONOPLASM_DB: db,
+    [ICONOPLASM_GENE_CARD_QUEUE_BINDING]: { send: async (message) => sent.push(message) },
+  }
+  for (let n = 0; n < 40; n += 1) {
+    const symbol = `G${String(n).padStart(2, "0")}`
+    db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)", symbol, symbol)
+    db.exec(
+      `INSERT INTO icono_gene_card_materializations (gene_symbol, desired_card_fingerprint, state, next_attempt_at)
+       VALUES (?, ?, 'queued', datetime('now', '-1 minute'))`,
+      symbol,
+      "a".repeat(32),
+    )
+  }
+  const defaultTick = await recoverDueIconoplasmGeneCardMaterializations(env)
+  assert.deepEqual(defaultTick, { considered: 8, enqueued: 8 })
+  assert.equal(sent.length, 8)
+  const largestTick = await recoverDueIconoplasmGeneCardMaterializations(env, { limit: 1000 })
+  assert.equal(largestTick.considered, 32)
+
+  db.exec(
+    `UPDATE icono_gene_card_materializations
+        SET state = 'rendering', lease_token = 'lost', lease_expires_at = datetime('now', '-1 minute')
+      WHERE gene_symbol = 'G39'`,
+  )
+  await recoverDueIconoplasmGeneCardMaterializations(env, { limit: 32 })
+  const expired = db.rows(
+    "SELECT state, last_error FROM icono_gene_card_materializations WHERE gene_symbol = 'G39'",
+  )[0]
+  assert.equal(expired.state, "queued")
+  assert.equal(expired.last_error, "expired_render_lease")
+})
+
+// 36. Enrolling a card again never disturbs work in flight: the same card stays as it is, a changed
+//     card is queued once with a new wake-up, and only an explicit request revives a failed card
+//     (a failure is terminal otherwise, so a crawler cannot loop a broken render).
+test("36: enrolling the same card again changes nothing, a changed card is queued once, and a new request revives a failed card", async () => {
+  const db = new SqliteD1()
+  const env = { ICONOPLASM_DB: db }
+  db.exec(
+    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
+  )
+  const enroll = (fingerprint) =>
+    enrollIconoplasmGeneCardMaterialization(env, {
+      symbol: "TP53",
+      cardFingerprint: fingerprint,
+      assetSha256: sha("a"),
+    })
+  const cardA = "a".repeat(32)
+  const cardB = "b".repeat(32)
+
+  const queued = await enroll(cardA)
+  assert.equal(queued.state, "queued")
+  assert.equal(queued.wakeup_generation, 1)
+
+  db.exec(
+    "UPDATE icono_gene_card_materializations SET state = 'rendering', attempts = 1, lease_token = 'live', lease_expires_at = datetime('now', '+5 minutes')",
+  )
+  const duplicate = await enroll(cardA)
+  assert.equal(duplicate.state, "rendering")
+  assert.equal(duplicate.attempts, 1)
+  assert.equal(duplicate.lease_token, "live")
+  assert.equal(duplicate.wakeup_generation, 1)
+
+  db.exec(
+    "UPDATE icono_gene_card_materializations SET state = 'ready', ready_card_fingerprint = ?, lease_token = NULL, lease_expires_at = NULL",
+    cardA,
+  )
+  assert.equal((await enroll(cardA)).state, "ready")
+
+  const changed = await enroll(cardB)
+  assert.equal(changed.state, "queued")
+  assert.equal(changed.wakeup_generation, 2)
+  assert.equal(changed.attempts, 0)
+
+  db.exec("UPDATE icono_gene_card_materializations SET state = 'failed', attempts = 5")
+  const revived = await enroll(cardB)
+  assert.equal(revived.state, "queued")
+  assert.equal(revived.attempts, 0)
+  assert.equal(revived.wakeup_generation, 3)
 })
