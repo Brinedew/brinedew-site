@@ -464,6 +464,14 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
     )
     assert.equal(route?.auth, "authority-generation-bearer")
   }
+  // B-944: the bucket alone metered nothing. The five routes are classed
+  // workstation_sync_write, so the budget wrapper must also list their family,
+  // or they reserve no capacity and write into the daily ledger unseen.
+  assert.match(
+    runtime,
+    /function isIconoplasmAuthorityBudgetedRouteFamily\(routeFamily\) \{[^}]*"authority_generation_executor"/,
+    "the generation executor routes must be metered into the shared daily ledger",
+  )
   assert.match(
     runtime,
     /LEGACY_GENE_REQUEST_ROUTE_REMOVED/,
