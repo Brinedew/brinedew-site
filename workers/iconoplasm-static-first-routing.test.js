@@ -207,6 +207,64 @@ test("the bundle build refuses a test file and keeps assets that only look like 
   )
 })
 
+// B-932: the site offers one manual-install extension package, the one
+// extension-release.json names. Every other zip under static/iconoplasm/downloads
+// is a file of the 20,000-file cap and about 3.5 MB nobody downloads.
+// Failure modes, written before the guard:
+// 1. an unreferenced zip (an old version, or the predecessor after the next
+//    release) builds into the bundle anyway;
+// 2. the referenced zip is missing and the build ships a live download button
+//    with nothing behind it;
+// 3. the guard matches by prefix, so v0.5.9 passes for v0.5.90, or it flags a
+//    zip that is not an extension package.
+test("the bundle build holds exactly the extension package the release metadata names", async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "iconoplasm-one-package-"))
+  const source = path.join(fixtureRoot, "public")
+  const target = path.join(fixtureRoot, "public-iconoplasm-edge")
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  await mkdir(path.join(source, "apps", "iconoplasm"), { recursive: true })
+  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
+    await writeFile(path.join(source, "apps", "iconoplasm", `${page}.html`), "<main></main>")
+  const downloads = path.join(source, "static", "iconoplasm", "downloads")
+  await mkdir(downloads, { recursive: true })
+  await mkdir(path.join(source, "static", "iconoplasm", "vendor"), { recursive: true })
+  await writeFile(path.join(source, "favicon.ico"), "fixture")
+  await writeFile(
+    path.join(source, "static", "iconoplasm", "extension-release.json"),
+    JSON.stringify({
+      version: "0.5.9",
+      chromeDeveloperPackageUrl: "/static/iconoplasm/downloads/iconoplasm-extension-v0.5.9.zip",
+    }),
+  )
+  await writeFile(path.join(source, "static", "iconoplasm", "vendor", "library.zip"), "not ours")
+  const build = () =>
+    prepareIconoplasmEdgeAssets({
+      sourceRoot: source,
+      outputRoot: target,
+      publishedGenes: [["TP53", "tumor protein p53", "", "", 0]],
+    })
+
+  await assert.rejects(build(), /iconoplasm-extension-v0\.5\.9\.zip/, "named but missing")
+
+  await writeFile(path.join(downloads, "iconoplasm-extension-v0.5.9.zip"), "current")
+  const clean = await build()
+  assert.deepEqual(
+    clean.files.filter((file) => file.endsWith(".zip")).sort(),
+    [
+      "static/iconoplasm/downloads/iconoplasm-extension-v0.5.9.zip",
+      "static/iconoplasm/vendor/library.zip",
+    ],
+    "the named package and an unrelated zip outside downloads/ are both kept",
+  )
+
+  await writeFile(path.join(downloads, "iconoplasm-extension-v0.5.90.zip"), "prefix lookalike")
+  await writeFile(path.join(downloads, "iconoplasm-extension-v0.5.8.zip"), "predecessor")
+  await assert.rejects(
+    build(),
+    /unreferenced.*downloads\/iconoplasm-extension-v0\.5\.8\.zip.*downloads\/iconoplasm-extension-v0\.5\.90\.zip/,
+  )
+})
+
 test("production workflow assigns Iconoplasm only to the stateful route owner", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
