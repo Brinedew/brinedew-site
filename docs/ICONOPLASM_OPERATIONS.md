@@ -372,6 +372,194 @@ abuse case: erasure ends the disabling.
   own machine until it is rebuilt.
 - Result images of deleted unpublished jobs stay in Bunny storage as unreferenced objects.
 
+**Cost.** Each request writes at most 5,000 D1 rows (`erasure.rows_written`; every pass reserves the
+worst case of what it sends before sending it) and makes at most 20 D1 calls for the data, plus
+about 16 for the account lifecycle and the caretaker authority. `max_rows_written` in the request
+lowers the 5,000 (minimum 100). A small erasure is one request. The largest per-person row counts
+in production on 2026-10-03 (2,287 requests, 2,280 notifications, 2,092 legacy discovery rows, 874
+votes, 835 vote events; each the maximum of a different table, probably one account) add up, at the
+steps' worst-case weights, to at most about 76,000 rows written in all: 76% of the 100,000 a day
+the whole account may write, over at least 16 requests. A heavy account therefore belongs in the
+last hours of the UTC day (00:00 UTC resets the meters). The route is a high-risk admin mutation,
+so the mutation limiter refuses a pass that would cross the day's write target (503,
+`ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE`, with `limiter.rows_written_target_remaining`): resend
+with a smaller `max_rows_written`, or wait for the reset. The unindexed steps (portrait creators,
+publish event actors) scan their tables once when everything else is gone: about 80,000 rows read.
+Repeat the request until it is complete; the loop below stops at the first refusal, because
+`Invoke-RestMethod` throws on a 503:
+
+```powershell
+@'
+const symbol = "PRL";
+const endpoints = [
+  {
+    surface: "card",
+    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
+  },
+  {
+    surface: "site-detail",
+    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`,
+    headers: { referer: `https://iconoplasm.brinedew.bio/gene/${symbol}` },
+  },
+  {
+    surface: "public-media",
+    url: `https://iconoplasm.brinedew.bio/api/public/v1/media/${symbol}`,
+  },
+];
+for (const endpoint of endpoints) {
+  const res = await fetch(endpoint.url, {
+    headers: { accept: "application/json", ...(endpoint.headers || {}) },
+  });
+  const payload = await res.json();
+  const portrait = payload?.card?.portrait || payload?.portrait || payload?.media || null;
+  console.log(JSON.stringify({
+    surface: endpoint.surface,
+    url: endpoint.url,
+    status: res.status,
+    cfCacheStatus: res.headers.get("cf-cache-status"),
+    portraitSource: res.headers.get("x-iconoplasm-portrait-source"),
+    version:
+      res.headers.get("x-iconoplasm-card-version") ||
+      payload?.card_snapshot_version ||
+      payload?.diagnostics?.artifact_version ||
+      null,
+    portraitAsset: portrait?.asset_sha256 || portrait?.checksum_sha256 || null,
+    candidateImageId: portrait?.candidate_image_id || null
+  }, null, 2));
+}
+'@ | node -
+```
+
+All three public responses must name the same stable-object version and portrait SHA.
+An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
+publication failure, not permission to query D1 for substitute public bytes.
+
+After current provider and operation admission, an exact-key D1 read shows
+whether D1's winner is ahead of the published object. This remote query
+consumes shared D1 capacity:
+
+```powershell
+pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
+```
+
+A different D1 SHA is expected only until the republish after the vote that
+changed it, or the next Actions publisher run, rewrites the gene's stable
+object; every public surface reads that one object.
+
+### recover exact publication without reviving global sync
+
+Retain the original generation output, hashes, session/request IDs, authority
+revision, logical operation ID, publication obligations and uncertain receipts.
+Do not regenerate saved images, clear a pending job manually, edit
+`icono_publish_state`, or advance a public pointer by hand.
+
+Identify the failing stage from that operation's own receipts. Recovery
+republishes that gene through its one per-gene publisher. Verify the exact
+object bytes and advertised view from a fresh reader. An unrelated gene's backlog must not become its completion gate.
+An absent object is not a successful publication and does not authorize a D1
+fallback. Check the original scope and repeat/restart receipts for the same
+logical operation.
+
+The ordinary `/api/iconoplasm/admin/read-models/sync` handler rejects
+missing/empty scope. The publication wake
+processes dirty canonical events under its watermark; it does not use the
+caller's scope as a catalog-wide publication instruction. If a scoped operation
+is materially charged for unrelated backlog, record its original scope,
+receipt and provider cost as a concrete defect. Never bypass a scope refusal
+with a full flag, a new operation ID or a global continuation.
+
+### do not repeat the bad repair paths
+
+Avoid these even if they look faster:
+
+- do not trust the frontend candidate count as the source of truth
+- do not disguise a partial catalog as a complete one; the per-gene stable objects and the one catalog object are the supported source design
+- do not add a D1 fallback to the public card, site-gene-detail, public-media,
+  gene-page, gallery, sitemap, or print-copy path
+- do not purge the entire Cloudflare zone for one stale card URL
+- do not use remote `wrangler dev --test-scheduled` as a repair path for this worker; remote dev does not support the Queue/SQLite Durable Object combination here
+
+## sanity checks
+
+- If a result looks wrong, confirm you used `--remote`.
+- If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
+- If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
+- If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
+- If public portraits look wrong, inspect the gene's stable object, its
+  immutable portrait bytes and the gene's active authority. Compare retained D1
+  rows only after identifying their epoch and role.
+
+## website ops sync: missing Cloudflare telemetry
+
+Missing telemetry is not a pause (B-897). The workstation budget registry
+shows an unreadable meter as `needs_telemetry` and keeps syncing; only a meter
+known to have crossed its ceiling pauses sync. The Worker's D1 write admission
+is the authority, and it counts every worst-case reservation since its last
+same-day provider sample (or since midnight) when a sample is missing.
+
+When a meter is unreadable, fix the credential: `CLOUDFLARE_API_TOKEN` must be
+the account-owned `iconoplasm-admin` token that can read `CLOUDFLARE_ACCOUNT_ID`;
+do not use Wrangler OAuth or `cloudflare_auth_cache.json` as a recovery path.
+
+## account erasure request
+
+The privacy pages promise erasure. Fulfil a verified request with one command
+(B-871, B-987):
+
+`POST /api/iconoplasm/admin/accounts/erase` with
+`{"account_id": "...", "command_id": "<unique per request>", "reason_code": "user_request"}`
+and the admin token. The account id is the opaque `acct_...` id of
+`brinedew_accounts`; `brinedew_account_identities` maps the person's Discord id to it.
+
+The response carries `erasure.complete`. One request does a bounded slice of the work, so send
+the same request again until it is `true`; every request resumes from the rows that are left,
+and a request that fails or is refused (a spent daily D1 budget answers 503) changes nothing it
+cannot repeat. The first request marks the account `erasure_pending`: from then on every session
+of the person is refused and wiped on its next request, so nothing new is written under their
+Discord id while the data goes. Only when nothing keyed by the Discord id is left does the
+account complete: `erased`, provider link deleted, the `users` row deleted, the fingerprints
+scrubbed. A repeat of the completing `command_id` replays; a different `command_id` on an
+erased account refuses with `ACCOUNT_ERASED`.
+
+**What it does.** The rule (owner decision, 3 Oct 2026, as comparable sites handle a deleted
+account): keep the content, cut the person off it, delete the personal records that have no
+public value (`workers/iconoplasm/account-erasure/erasure-steps.js` lists every table and column).
+
+| Kind                          | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Deleted                       | discoveries and discovery state (compact and legacy tables, the delivery outbox and its receipts, the migration cursor), favourites, user emulsions and their picker rollup rows, image-provider API keys, the request inbox and Discord delivery rows, requests with no output, unpublished or pending generation and edit jobs, comments the author had already removed, the caretaker's own delivery outbox, GeneGuessr stats, the leaderboard row, game state and results waiting for the stats row (the `user_<id>` and `practice_user_<id>` Durable Objects), the KV keys that embed the Discord id, the `users` row and the provider link |
+| Kept, cut off from the person | votes and vote events (the user id becomes the erased account's id, so every count and every election is unchanged), public gene comments (shown under the anonymous label, no avatar), requests that produced a published image, published generation and edit jobs, the creator of a published portrait, publish event actors (also in the audit database), emulsion labels on published portraits and jobs, caretaker manifestations (the caretaker authority, retained under the label)                                                                                                                                                      |
+| Rewritten                     | the provider-subject fingerprint in identity events and in the command ids built from it, to an opaque `erased:` marker (the append-only guards are lifted and restored in the same transaction)                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+Everything cut off from the person points at the erased account's opaque id or its label
+(`Former caretaker · XXXXXXXXXX`, `brinedewFormerAuthorLabel`). Nothing links that id to a Discord id
+once the account completes. The `users` row is deleted, not kept: nothing reads it for an
+erased account, and keeping it made a returning person resolve to the erased account and be
+refused sign-in for good. A person who signs in again with the same Discord id gets a brand-new
+account with no history. Before erasing a `disabled` account to fulfil a request, decide the
+abuse case: erasure ends the disabling.
+
+**What it leaves, and why.**
+
+- Public counts of the shared discovery window (first seen, latest seen, encounter totals) still
+  include the person's discoveries. They are small and not personal. `POST
+/api/iconoplasm/admin/read-models/shared-discoveries` (`rebuildSharedGeneDiscoveryRollup`)
+  recomputes them from the remaining users' chronology; its cost grows with the number of users,
+  so run it only after erasing someone with a large collection, and late in the UTC day.
+- `daily_guess_aggregate` is a count per day and protein with no player in it.
+- The published leaderboard object follows the stats row within the ten minute publisher interval
+  and the pull zone's 60 second cache. Published stable gene objects keep the emulsion label they
+  were last published with until the gene is next republished.
+- A login session the person never uses again is not enumerable (session objects are named by a
+  random id); it expires on its own after at most 30 days.
+- Discord holds the DMs we sent, the comment mirror in the public channel (username and body; the
+  message id is not stored) and the person's own side of the conversation. Nothing deletes them.
+- The caretaker authority, the archive and the cold backups (the nightly local dumps, kept 30
+  days, and D1 Time Travel, 7 days) are retained by design or expire on their own.
+- The workstation's vote mirror (`remote_asset_votes`) holds the raw Discord id on the operator's
+  own machine until it is rebuilt.
+- Result images of deleted unpublished jobs stay in Bunny storage as unreferenced objects.
+
 **Cost.** Each request writes at most `erasure.rows_written` <= 5,000 D1 rows (every pass
 reserves the worst case of what it sends before sending it) and makes at most 20 D1 calls for the
 data plus about 16 for the account lifecycle and the caretaker authority; `max_rows_written` in
