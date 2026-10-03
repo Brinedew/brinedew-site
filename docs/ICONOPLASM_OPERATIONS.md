@@ -52,9 +52,9 @@ If you skip `--remote`, you are not looking at the live data.
 ## tables you usually want
 
 - `icono_gene_catalog`
-  - canonical symbol list, base full names, colors, aliases
+  - canonical symbol list, the HGNC approved name (`full_name`, the one public name of a gene), colors, aliases
 - `icono_gene_essence`
-  - synced NiceGUI/runtime traits like `sex`, `full_name`, `weight_kg`, `age_years`, `manifestation`
+  - synced NiceGUI/runtime traits like `sex`, `weight_kg`, `age_years`, `manifestation`, plus the UniProt protein name in `full_name`, which names no gene in public
 - `icono_gene_discoveries`
   - retained legacy per-user discovery rows (the shelf reads compact V2 state)
 - `icono_publish_state`
@@ -68,7 +68,7 @@ If you skip `--remote`, you are not looking at the live data.
    - Live site question: inspect the installed authority and exact published view in this repo; use D1 only for an admitted exact-key question about retained data.
    - Authoring/sync pipeline question: check `d:\Coding\Datasets\iconoplasm` first.
 2. Prefer the runtime table that already stores the answer.
-   - Example: `sex` and curated `full_name` live in `icono_gene_essence`, so use that instead of inferring from UI cards.
+   - Example: `sex` lives in `icono_gene_essence` and a gene's public name lives in `icono_gene_catalog.full_name`, so use those instead of inferring from UI cards.
 3. Ask for exactly the fields you need.
    - This keeps the output readable and makes it easier to paste results back into chat or docs.
 4. Sort in SQL, not by hand afterward.
@@ -86,16 +86,17 @@ against a local retained snapshot; the output limit does not make it a safe
 production D1 lookup.
 
 ```sql
-SELECT gene_symbol, full_name, LENGTH(TRIM(full_name)) AS name_len
-FROM icono_gene_essence
-WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> ''
-ORDER BY name_len ASC, full_name COLLATE NOCASE ASC, gene_symbol ASC
+SELECT ge.gene_symbol, gc.full_name, LENGTH(TRIM(gc.full_name)) AS name_len
+FROM icono_gene_essence ge
+JOIN icono_gene_catalog gc ON gc.gene_symbol = ge.gene_symbol
+WHERE lower(trim(ge.sex)) = 'male' AND trim(COALESCE(gc.full_name, '')) <> ''
+ORDER BY name_len ASC, gc.full_name COLLATE NOCASE ASC, ge.gene_symbol ASC
 LIMIT 100;
 ```
 
 What this does:
 
-- uses `icono_gene_essence` because that is where runtime `sex` and curated `full_name` live
+- reads `sex` from `icono_gene_essence` and the public name from `icono_gene_catalog`
 - filters to `male`
 - ignores blank names
 - sorts by trimmed name length first
@@ -105,8 +106,10 @@ What this does:
 If you only need the count first, use the same filter without the list projection:
 
 ```sql
-SELECT COUNT(*) AS male_count FROM icono_gene_essence
-WHERE lower(trim(sex)) = 'male' AND trim(COALESCE(full_name, '')) <> '';
+SELECT COUNT(*) AS male_count
+FROM icono_gene_essence ge
+JOIN icono_gene_catalog gc ON gc.gene_symbol = ge.gene_symbol
+WHERE lower(trim(ge.sex)) = 'male' AND trim(COALESCE(gc.full_name, '')) <> '';
 ```
 
 ## discovery questions
@@ -125,13 +128,11 @@ Shape to remember:
 SELECT
   d.user_id,
   d.gene_symbol,
-  COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), d.gene_symbol) AS full_name,
+  COALESCE(NULLIF(TRIM(gc.full_name), ''), d.gene_symbol) AS full_name,
   d.first_discovered_at,
   d.last_encountered_at,
   d.encounter_count
 FROM icono_gene_discoveries d
-LEFT JOIN icono_gene_essence ge
-  ON ge.gene_symbol = d.gene_symbol
 LEFT JOIN icono_gene_catalog gc
   ON gc.gene_symbol = d.gene_symbol
 WHERE d.user_id = ?
