@@ -3997,10 +3997,12 @@ async function buildTargetStructureToken(protein, options) {
 
 /**
  * Build structure token for a guess protein: the key and URL the browser loads
- * the structure by, and its labels. Fetches nothing.
+ * the structure by, and its labels. Fetches nothing, so it can be derived from a row
+ * that is already loaded: the guess response, the bootstrap's guess entries and
+ * `/api/structure-token?uniprot=` all return exactly this object.
  * Returns null if the protein has no stored structure.
  */
-async function buildGuessStructureToken(protein, { origin }) {
+function buildGuessStructureToken(protein, { origin }) {
   if (!protein) return null
 
   const meta = getCanonicalStructureMeta(protein)
@@ -4111,37 +4113,9 @@ async function handleStructureToken(request, env, corsHeaders) {
       )
     }
 
-    const structureUrl = `${url.origin}/api/structure-cached?key=${encodeURIComponent(meta.r2Key)}`
-    // Parse chain labels if present (stored as JSON string in D1)
-    // Use the right chain labels based on structure source
-    // AlphaFold structures are single-chain predictions, so no chain labels needed
-    let chainLabels = null
-    const chainLabelsRaw =
-      meta.source === "alphafold"
-        ? null
-        : meta.source === "swissmodel"
-          ? protein.swissmodel_chain_labels
-          : protein.pdb_chain_labels
-    if (chainLabelsRaw) {
-      try {
-        chainLabels =
-          typeof chainLabelsRaw === "string" ? JSON.parse(chainLabelsRaw) : chainLabelsRaw
-      } catch (e) {
-        console.warn("Failed to parse chain_labels", e)
-      }
-    }
-    return Response.json(
-      {
-        sourceLabel: meta.shortLabel,
-        displayLabel: meta.displayLabel,
-        format: meta.format || "cif",
-        url: structureUrl,
-        cacheKey: meta.r2Key,
-        chainLabels,
-        linkUrl: meta.linkUrl,
-      },
-      { headers: corsHeaders },
-    )
+    return Response.json(buildGuessStructureToken(protein, { origin: url.origin }), {
+      headers: corsHeaders,
+    })
   } catch (err) {
     console.error("GeneGuessr: handleStructureToken unhandled error", err)
     return Response.json(
@@ -5040,7 +5014,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       )
     }
 
-    const payload = buildGamePayload(state, targetProtein)
+    const payload = buildGamePayload(state, targetProtein, { structureTokenOrigin: url.origin })
     // Embed structure token in bootstrap response - client uses this instead of separate API call
     if (structureToken) {
       try {
@@ -5969,6 +5943,10 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
   }
 }
 
+// `options.structureTokenOrigin`: put each guess's structure token in its entry. The
+// bootstrap sets it, because a page load needs a token for every guess and the row each
+// token comes from is already loaded here; without it the browser asks
+// `/api/structure-token` once per guess on every load.
 function buildGamePayload(state, targetProtein, options = {}) {
   const revealedHints = new Set(state.revealedHints || [])
   const domainSpoilerTokens = getDomainSpoilerTokensFromFullName(targetProtein?.full_name)
@@ -6004,7 +5982,11 @@ function buildGamePayload(state, targetProtein, options = {}) {
     if (isLatest) {
       latestMatches = matches
     }
+    const structureToken = options.structureTokenOrigin
+      ? buildGuessStructureToken(guessProtein, { origin: options.structureTokenOrigin })
+      : null
     guessEntries.push({
+      ...(structureToken ? { structureToken } : {}),
       guessId: entry.guessId,
       uniprot: entry.uniprot,
       correct: Boolean(entry.correct),
