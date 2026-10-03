@@ -26,10 +26,14 @@
 //       the invocation still reports success
 //   C7  a failed pre-warm is not reported to Sentry; or is reported with no DSN set
 //   C8  a second cron run rewrites the record
+//   C9  a provider's error page, sent with a 200, is accepted as a structure
+//   C10 a staging Worker with no record of its own computes a pick instead of serving the
+//       production record's, or scans the pool to do it
 import assert from "node:assert/strict"
 import test, { after, afterEach, before, mock } from "node:test"
 
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
+import { DAILY_SELECTION_POOL_SOURCE_SQL } from "./lib/protein-store.js"
 import {
   geneguessrWorkerEnv,
   meteredDb,
@@ -79,7 +83,7 @@ function setClock(iso) {
 
 // The providers. `abortWhen(callNumber, url)` makes that provider call fail the way a
 // probe that misses its 5 second timer does. Sentry envelopes are kept apart.
-function stubNetwork({ abortWhen = () => false } = {}) {
+function stubNetwork({ abortWhen = () => false, respond = () => null } = {}) {
   const providerCalls = []
   const sentry = []
   mock.method(globalThis, "fetch", async (input) => {
@@ -92,6 +96,8 @@ function stubNetwork({ abortWhen = () => false } = {}) {
     if (abortWhen(providerCalls.length, url)) {
       throw new DOMException("The operation was aborted", "AbortError")
     }
+    const answer = respond(providerCalls.length, url)
+    if (answer) return answer
     return new Response(USABLE_STRUCTURE, {
       status: 200,
       headers: { "Content-Type": "application/octet-stream" },
@@ -122,6 +128,7 @@ function freshEnv(options = {}) {
 }
 
 const record = (harness) => JSON.parse(harness.kv.get(`puzzle_actual:${DAY}`))
+const oneLine = (sql) => String(sql).replace(/\s+/g, " ").trim()
 
 test("C5: the cron verifies once, records the pick first, then warms one cache per origin", async () => {
   setClock(NIGHT)
@@ -244,6 +251,15 @@ test("C3: with the caches gone and the pick recorded, the visitor probes nothing
   const payload = await response.json()
   assert.ok(payload.targetStructureToken?.url)
   assert.equal(network.providerCalls.length, 0)
+  // The recorded pick is read by its accession. The pool of 10,312 playable proteins is not
+  // scanned again to find it.
+  assert.ok(
+    visit.metered.receipts.every(
+      (receipt) => oneLine(receipt.sql) !== oneLine(DAILY_SELECTION_POOL_SOURCE_SQL),
+    ),
+    "no request runs the pool scan",
+  )
+  assert.ok(visit.metered.totalRead() < 100, `${visit.metered.totalRead()} rows read`)
   assert.deepEqual(visit.kvPuts, [`daily_bootstrap:${DAY}:geneguessr.brinedew.bio`])
   assert.deepEqual(visit.kvDeletes, [])
   assert.equal(visit.kv.get(`puzzle_actual:${DAY}`), recorded)
@@ -290,6 +306,111 @@ test("C4: with no pick recorded and the first candidate unreachable, the request
   assert.deepEqual(stored.rejected, [
     { uniprot_id: computedFirst, reason: "structure_unreachable" },
   ])
+})
+
+test("C9: a provider's error page sent with a 200 is not a structure: the pick advances to one that is", async () => {
+  setClock(NIGHT)
+  stubNetwork()
+  const first = freshEnv()
+  await first.runCron()
+  const computedFirst = JSON.parse(first.kv.get(`puzzle_actual:${DAY}`)).uniprot_id
+  const firstUrl = JSON.parse(first.kv.get(`daily_bootstrap:${DAY}:geneguessr.brinedew.bio`))
+    .structureMeta.upstreamUrl
+
+  const soft404s = [
+    ["an HTML page", "text/html; charset=utf-8", "<html>temporary error</html>"],
+    ["a JSON error", "application/json", '{"error":"not found"}'],
+  ]
+  for (const [name, type, body] of soft404s) {
+    mock.restoreAll()
+    setClock(NIGHT)
+    stubNetwork({
+      respond: (_call, url) =>
+        url === firstUrl
+          ? new Response(body, { status: 200, headers: { "Content-Type": type } })
+          : null,
+    })
+    const harness = freshEnv()
+    await harness.runCron()
+    const stored = JSON.parse(harness.kv.get(`puzzle_actual:${DAY}`))
+    assert.notEqual(stored.uniprot_id, computedFirst, `${name} was recorded as the pick`)
+    assert.deepEqual(stored.rejected[0], {
+      uniprot_id: computedFirst,
+      reason: "structure_unreachable",
+    })
+  }
+})
+
+test("C9: a SWISS-MODEL answer that is no PDB file is not a structure, and a PDB file is", async () => {
+  // Three SWISS-MODEL proteins, each in a family of its own: every candidate is a PDB file.
+  const small = await openCatalogDb()
+  try {
+    await seedCatalog(
+      small.db,
+      productionShapedCatalogRows()
+        .filter((row) => row.structure_source === "swissmodel" && row.gene_summary)
+        .slice(0, 3)
+        .map((row, index) => ({ ...row, gene_surname: `ONLY${index}` })),
+    )
+    setClock(NIGHT)
+    stubNetwork({
+      respond: () =>
+        new Response("upstream is healthy", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        }),
+    })
+    const refused = geneguessrWorkerEnv(small.db)
+    await assert.rejects(
+      worker.scheduled({ cron: CRON, scheduledTime: Date.now() }, refused.env, { waitUntil() {} }),
+      /no reachable target structure/i,
+    )
+    assert.deepEqual(refused.kvPuts, [], "nothing is recorded for a page that is no structure")
+
+    mock.restoreAll()
+    setClock(NIGHT)
+    stubNetwork()
+    const accepted = geneguessrWorkerEnv(small.db)
+    await worker.scheduled({ cron: CRON, scheduledTime: Date.now() }, accepted.env, {
+      waitUntil() {},
+    })
+    assert.ok(accepted.kv.get(`puzzle_actual:${DAY}`), "a PDB file is recorded as the pick")
+  } finally {
+    await small.dispose()
+  }
+})
+
+test("C10: a staging Worker with no record of its own serves the production record's pick, with no pool scan", async () => {
+  setClock(AN_HOUR_LATER)
+  stubNetwork()
+  const target = await db
+    .prepare(
+      "SELECT uniprot FROM proteins WHERE structure_source = 'pdb' AND gene_summary IS NOT NULL LIMIT 1",
+    )
+    .first()
+  const visit = freshEnv()
+  visit.env.PROD_KV = {
+    async get(key) {
+      return key === `puzzle_actual:${DAY}`
+        ? JSON.stringify({ date: DAY, uniprot_id: target.uniprot, source: "computed" })
+        : null
+    },
+  }
+
+  const response = await visit.bootstrap()
+  await visit.settle()
+
+  assert.equal(response.status, 200)
+  const payload = await response.json()
+  assert.equal(payload.status.date, DAY)
+  assert.equal(JSON.stringify(payload).includes(target.uniprot), false, "the target stays secret")
+  assert.ok(
+    visit.metered.receipts.every(
+      (receipt) => oneLine(receipt.sql) !== oneLine(DAILY_SELECTION_POOL_SOURCE_SQL),
+    ),
+    "the production record is read, the pool is not scanned",
+  )
+  assert.ok(visit.metered.totalRead() < 100, `${visit.metered.totalRead()} rows read`)
 })
 
 test("C6: a record write that fails makes the cron invocation fail, and nothing is warmed", async () => {
