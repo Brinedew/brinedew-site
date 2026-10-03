@@ -20,6 +20,8 @@
 // provider meter sat near 12%. Background work now stops at 70% of the meter
 // and user actions at 90%, so users always keep a band background cannot take.
 
+import { secondsUntilCloudflareDailyReset } from "./cloudflare-availability.js"
+
 export const D1_PROVIDER_DAILY_WRITE_LIMIT = 100_000
 export const MUTATION_BACKGROUND_CEILING = 70_000
 export const MUTATION_USER_ACTION_CEILING = 90_000
@@ -78,6 +80,29 @@ function pressureWindow(day, { provider_rows_written, local_rows_written, observ
       Math.max(midnight, observed ? observedMs - MUTATION_ANALYTICS_LAG_MS : midnight),
     ),
   }
+}
+
+// How many seconds until a refused request is worth sending again, given what the
+// ledger said when it refused (the 429 body of `reserve`). This is the one answer every
+// daily-budget refusal states, in `Retry-After` and in `retry_after_seconds`; pass null
+// for a refusal that has no lane (the shared day is spent, the admin limiter), which
+// only the reset clears.
+//
+// A lane refusal has two causes, and they clear at different times:
+// - Reservations in flight are the reason (the request would fit without them): they
+//   stop counting once a provider sample is 15 minutes past their bucket, so time
+//   alone clears it. 15 minutes is the earliest that can happen; the window is cut on
+//   15 minute buckets and the sample can be a few minutes old, so it can take up to
+//   twice that, and the next refusal then states the same 15 minutes again.
+// - The provider's own count already blocks the request: that count never falls
+//   within the UTC day, so only the reset clears it, however much is in flight.
+export function mutationRefusalRetryAfterSeconds(refusal, now = Date.now()) {
+  const inFlight = Number(refusal?.in_flight_units)
+  const withoutInFlight = Number(refusal?.provider_rows_written) + Number(refusal?.requested_units)
+  if (inFlight > 0 && withoutInFlight <= Number(refusal?.ceiling)) {
+    return MUTATION_ANALYTICS_LAG_MS / 1000
+  }
+  return secondsUntilCloudflareDailyReset(now)
 }
 
 export class MutationLaneReservationError extends Error {

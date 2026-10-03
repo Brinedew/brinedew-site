@@ -3,6 +3,7 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
+import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
 import {
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -535,6 +536,7 @@ test("guest merge reports capacity refusal as retryable pending work instead of 
       }),
     },
   })
+  const before = secondsUntilCloudflareDailyReset()
   const response = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
       cookie: "session=abc",
@@ -542,6 +544,7 @@ test("guest merge reports capacity refusal as retryable pending work instead of 
     }),
     env,
   )
+  const after = secondsUntilCloudflareDailyReset()
   const payload = await response.json()
   assert.equal(response.status, 429)
   assert.equal(payload.ok, false)
@@ -550,6 +553,10 @@ test("guest merge reports capacity refusal as retryable pending work instead of 
   assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
   assert.deepEqual(payload.symbols, ["TP53"])
   assert.equal(await compactRowCount(env), 0)
+  // B-968: a ledger refusal that says nothing more clears only at the UTC reset, and the
+  // header and the body state that one number (no fixed 60 seconds beside it).
+  assert.equal(Number(response.headers.get("Retry-After")), payload.retry_after_seconds)
+  assert.ok(payload.retry_after_seconds <= before && payload.retry_after_seconds >= after)
 })
 
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {

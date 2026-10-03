@@ -149,6 +149,27 @@ Exact ceilings live in executable policy
 (`workers/lib/iconoplasm-mutation-lane-reservations.js`), not this runbook.
 Tests must fail when a new path bypasses that policy.
 
+A refusal states when the same request is worth sending again, in the standard
+`Retry-After` header and as `retry_after_seconds` in the body, always the same
+whole number of seconds. Every daily-budget 503 the gateway answers
+(`ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED` and `ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE`)
+and the two discovery 429s (batch and guest merge) take it from one function,
+`mutationRefusalRetryAfterSeconds`. A lane refusal is told 15 minutes
+(`MUTATION_ANALYTICS_LAG_MS`) only when reservations in flight are the whole reason,
+that is when the provider's count plus the request would fit without them: they
+stop counting once a provider sample is 15 minutes past their bucket. That is the
+earliest it can clear. The window is cut on 15-minute buckets and the sample can be
+a few minutes old, so it can take up to twice as long, and the next refusal then
+states 15 minutes again. Anything else (the provider's own count already blocks the
+request, the shared day is spent, the admin limiter) is told the seconds to the next
+00:00 UTC reset plus five seconds of slack for Cloudflare's own meters
+(`secondsUntilCloudflareDailyReset`), because the provider's count never falls
+within a UTC day. The workstation waits for the stated time before it sends the
+request again (`daily_budget_retry_after_seconds` in the Iconoplasm repository).
+The monthly caps are set far above what the free plan can write in a month, so
+they are not a cause; a refusal for one would still state the next reset, which is
+never late.
+
 A reservation's unit is a D1 row written, the provider's own meter, which counts
 every index entry and trigger write behind a statement. It is not a statement
 count: the provider allows 1,000 D1 calls per invocation and counts a batch as
