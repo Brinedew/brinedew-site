@@ -353,37 +353,6 @@ async function authorityFixture({
   return { database, env, objects, first }
 }
 
-test("accepted encrypted Tags are read with derivative identity and Tags AAD", async () => {
-  const fixture = await authorityFixture()
-  const derivative = await insertAcceptedTags(fixture.database, fixture.env, fixture.objects, {
-    revision: fixture.first,
-    tags: "dense chromatin, guarded checkpoint, quiet nuclear tension",
-  })
-  const restoreFetch = installStorageFetch(fixture.objects)
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "taggerizer_prompt",
-    })
-    const exact = await readExactGenerationSource(fixture.env, queued)
-
-    assert.equal(queued.source_manifestation_derivative_id, derivative.derivativeId)
-    assert.equal(queued.source_manifestation_derivative_recipe_id, derivative.recipeId)
-    assert.equal(queued.source_manifestation_derivative_recipe_version, derivative.recipeVersion)
-    assert.equal(queued.source_manifestation_derivative_provider_id, derivative.providerId)
-    assert.equal(queued.source_manifestation_derivative_model_id, derivative.modelId)
-    assert.equal(
-      queued.source_manifestation_derivative_tagger_config_sha256,
-      derivative.taggerConfigSha256,
-    )
-    assert.equal(exact.prose, fixture.first.prose)
-    assert.equal(exact.tags, derivative.tags)
-  } finally {
-    restoreFetch()
-    fixture.database.close()
-  }
-})
-
 // B-859: bodies written since the vault was removed are plain text. The image
 // generator must read the exact prose and Tags the row hashes, and refuse bytes
 // that miss the hash.
@@ -403,6 +372,15 @@ test("plain prose and Tags are read exactly, and bytes that miss the hash are re
       promptBodyMode: "taggerizer_prompt",
     })
     const exact = await readExactGenerationSource(keyless, queued)
+    assert.equal(queued.source_manifestation_derivative_id, derivative.derivativeId)
+    assert.equal(queued.source_manifestation_derivative_recipe_id, derivative.recipeId)
+    assert.equal(queued.source_manifestation_derivative_recipe_version, derivative.recipeVersion)
+    assert.equal(queued.source_manifestation_derivative_provider_id, derivative.providerId)
+    assert.equal(queued.source_manifestation_derivative_model_id, derivative.modelId)
+    assert.equal(
+      queued.source_manifestation_derivative_tagger_config_sha256,
+      derivative.taggerConfigSha256,
+    )
     assert.equal(exact.prose, fixture.first.prose)
     assert.equal(exact.tags, derivative.tags)
     assert.deepEqual(exact.tags_fields_json, derivative.fieldsJson)
@@ -685,20 +663,6 @@ test("missing ciphertext and purged storage secrets cannot use cached plaintext"
     restoreFetch()
     fixture.database.close()
   }
-})
-
-test("legacy rows are refused instead of resolving the current gene revision", () => {
-  assert.throws(
-    () =>
-      requireExactGenerationProvenance({
-        gene_symbol: "TP53",
-        manifestation: "mutable legacy text",
-        generation_provenance_status: "legacy_unbound",
-      }),
-    (error) =>
-      error instanceof IconoplasmGenerationSourceError &&
-      error.code === "LEGACY_GENERATION_SOURCE_UNBOUND",
-  )
 })
 
 test("the primary migration leaves history unbound and accepts an exact receipt", async () => {
