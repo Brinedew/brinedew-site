@@ -92,15 +92,10 @@ export function createIconoplasmAdminReadModelHandlers(services) {
         json({ error: "Scoped read-model sync requires at least one symbol or vision_id" }, 400),
       )
     const fullVision = coerceBoolean(payload?.full_vision ?? payload?.fullVision, false)
-    const fullRebuild = coerceBoolean(payload?.full_rebuild ?? payload?.fullRebuild, false)
-    if (fullVision || fullRebuild)
+    if (fullVision)
       return done(
         "admin_read_models_sync_400",
-        json(
-          { error: "Scoped read-model sync does not allow full_vision or full_rebuild" },
-          400,
-          NO_STORE,
-        ),
+        json({ error: "Scoped read-model sync does not allow full_vision" }, 400, NO_STORE),
       )
     const skipVoteSummaries = coerceBoolean(
       payload?.skip_vote_summaries ?? payload?.skipVoteSummaries,
@@ -119,7 +114,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       symbols,
       visionIds,
       fullVision,
-      fullRebuild,
       skipVoteSummaries,
       skipGeneRollups,
       skipVisionRollups,
@@ -155,7 +149,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
               ? null
               : Number(result.target_daily_percent || 0) || null,
           full_vision: fullVision,
-          full_rebuild: fullRebuild,
           skip_vote_summaries: skipVoteSummaries,
           skip_gene_rollups: skipGeneRollups,
           skip_vision_rollups: skipVisionRollups,

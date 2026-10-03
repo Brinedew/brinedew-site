@@ -98,7 +98,6 @@ test("scoped read-model sync remains D1-only and normalizes targets", async () =
       symbols: ["TP53"],
       visionIds: ["vision-one"],
       fullVision: false,
-      fullRebuild: false,
       skipVoteSummaries: false,
       skipGeneRollups: false,
       skipVisionRollups: false,
@@ -132,7 +131,7 @@ for (const [description, body] of emptyScopes) {
   })
 }
 
-for (const flag of ["full_rebuild", "fullRebuild", "full_vision", "fullVision"]) {
+for (const flag of ["full_vision", "fullVision"]) {
   test(`scoped sync rejects ${flag}`, async () => {
     const calls = []
     const handlers = createIconoplasmAdminReadModelHandlers(
@@ -145,7 +144,7 @@ for (const flag of ["full_rebuild", "fullRebuild", "full_vision", "fullVision"])
 
     assert.equal(response.status, 400)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
-    assert.match(payload.error, /does not allow full_vision or full_rebuild/)
+    assert.match(payload.error, /does not allow full_vision/)
     assert.deepEqual(calls, [])
   })
 }
@@ -164,7 +163,6 @@ test("vision-only sync keeps its explicit scope", async () => {
     body: {
       visionIds: [" vision-one ", "invalid", "vision-one"],
       full_vision: false,
-      full_rebuild: false,
     },
   })
   const payload = await response.json()
@@ -175,7 +173,6 @@ test("vision-only sync keeps its explicit scope", async () => {
   assert.deepEqual(calls[0].symbols, [])
   assert.deepEqual(calls[0].visionIds, ["vision-one"])
   assert.equal(calls[0].fullVision, false)
-  assert.equal(calls[0].fullRebuild, false)
 })
 
 test("bootstrap implements the HEAD method admitted by its route contract", async () => {

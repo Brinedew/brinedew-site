@@ -45,6 +45,10 @@ export const ADMIN_COUNTS_SEED_PHASES = Object.freeze({
   "status": "SELECT phase FROM icono_admin_counts_seed_progress WHERE id=1",
   "complete": "DROP TABLE icono_admin_counts_seed_progress"
 })
+export const VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_NAME = "0114_retire_vote_projection_jobs.sql"
+export const VOTE_PROJECTION_JOBS_RETIREMENT_MIGRATION_STATEMENTS = Object.freeze([
+  "DROP TABLE IF EXISTS icono_vote_projection_refresh_jobs;"
+])
 export const GENE_VOTE_VERSION_MIGRATION_NAME = "0113_gene_vote_version.sql"
 export const GENE_VOTE_VERSION_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE IF NOT EXISTS icono_gene_vote_version (\n  gene_symbol TEXT PRIMARY KEY,\n  version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n) WITHOUT ROWID;",
@@ -75,11 +79,6 @@ export const COMPACT_DISCOVERY_ACTIVATION_MIGRATION_NAME = "0108_compact_discove
 export const COMPACT_DISCOVERY_ACTIVATION_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TABLE IF NOT EXISTS icono_discovery_compact_activation_v2 (\n  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),\n  status TEXT NOT NULL CHECK(status IN ('pending', 'complete')),\n  cursor_user_id TEXT NOT NULL DEFAULT '',\n  cursor_gene_symbol TEXT NOT NULL DEFAULT '',\n  lease_token TEXT NOT NULL DEFAULT '',\n  lease_until TEXT NOT NULL DEFAULT '',\n  total_legacy_rows INTEGER NOT NULL DEFAULT 0 CHECK(total_legacy_rows >= 0),\n  migrated_rows INTEGER NOT NULL DEFAULT 0 CHECK(migrated_rows >= 0),\n  migrated_users INTEGER NOT NULL DEFAULT 0 CHECK(migrated_users >= 0),\n  completed_at TEXT,\n  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
   "INSERT OR IGNORE INTO icono_discovery_compact_activation_v2 (\n  singleton, status, cursor_user_id, cursor_gene_symbol, migrated_users, total_legacy_rows\n) VALUES (1, 'pending', '', '', 0, 0);"
-])
-export const VOTE_WAKE_MIGRATION_NAME = "0107_vote_projection_wake_generation.sql"
-export const VOTE_WAKE_MIGRATION_STATEMENTS = Object.freeze([
-  "ALTER TABLE icono_vote_projection_refresh_jobs\n  ADD COLUMN wake_outstanding INTEGER NOT NULL DEFAULT 0 CHECK(wake_outstanding IN (0, 1));",
-  "ALTER TABLE icono_vote_projection_refresh_jobs\n  ADD COLUMN wake_version INTEGER NOT NULL DEFAULT 0 CHECK(wake_version >= 0);"
 ])
 export const COMPACT_DISCOVERY_MIGRATION_NAME = "0106_compact_discovery_state_v2.sql"
 export const COMPACT_DISCOVERY_MIGRATION_STATEMENTS = Object.freeze([
@@ -160,10 +159,6 @@ export const CANONICAL_LIFECYCLE_GUARDS_MIGRATION_STATEMENTS = Object.freeze([
   "CREATE TRIGGER icono_canonical_revision_reselect_before_ineligible\nBEFORE UPDATE OF status ON icono_manifestation_revision_lifecycle\nWHEN OLD.status = 'active' AND NEW.status <> 'active'\nBEGIN\n  SELECT CASE WHEN EXISTS (\n    SELECT 1 FROM icono_manifestation_revisions r\n    JOIN icono_manifestations m ON m.manifestation_id = r.manifestation_id\n    JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id\n    WHERE r.manifestation_revision_id = OLD.manifestation_revision_id\n      AND h.canonical_revision_id = OLD.manifestation_revision_id\n  ) THEN RAISE(ABORT, 'canonical_revision_must_be_reselected_first') END;\nEND;",
   "DROP TRIGGER icono_canonical_storage_reselect_before_delete;",
   "CREATE TRIGGER icono_canonical_storage_reselect_before_delete\nBEFORE DELETE ON icono_manifestation_revision_storage_secrets\nBEGIN\n  SELECT CASE WHEN EXISTS (\n    SELECT 1 FROM icono_manifestation_revisions r\n    JOIN icono_manifestations m ON m.manifestation_id = r.manifestation_id\n    JOIN icono_manifestation_heads h ON h.gene_id = m.gene_id\n    WHERE r.manifestation_revision_id = OLD.manifestation_revision_id\n      AND h.canonical_revision_id = OLD.manifestation_revision_id\n  ) THEN RAISE(ABORT, 'canonical_revision_storage_must_be_reselected_first') END;\nEND;"
-])
-export const VOTE_JOB_VERSION_MIGRATION_NAME = "0098_vote_projection_job_version.sql"
-export const VOTE_JOB_VERSION_MIGRATION_STATEMENTS = Object.freeze([
-  "ALTER TABLE icono_vote_projection_refresh_jobs\nADD COLUMN job_version INTEGER NOT NULL DEFAULT 1;"
 ])
 export const ASSIGNMENT_LOOKUP_MIGRATION_NAME = "0016_account_assignment_lookup.sql"
 export const ASSIGNMENT_LOOKUP_MIGRATION_STATEMENTS = Object.freeze([

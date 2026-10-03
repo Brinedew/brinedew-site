@@ -1,20 +1,31 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
 import { executeOperationCostD1Batch } from "./operation-cost-d1-meter.js"
-import {
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME,
-  FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS,
-} from "../generated/operation-cost-migrations.js"
 
-// 0110 drops 0101's singleton handoff row and its three triggers (B-869).
-// The work is schema-only: four sqlite_schema rows, one data row and the
-// journal row. No statement scans a data table. Each DROP rescans
-// sqlite_schema (362 rows on 2026-09-26), so the bound allows five full
-// passes over the admitted 512-row schema.
-export function createFinalizationHandoffRetirementMigrationCostAdapter({
+// One adapter for the migrations that only drop schema objects nothing reads:
+// 0110 (the finalization handoff table and its three triggers) and 0114 (the
+// vote projection job table). Schema only: each DROP removes one sqlite_schema
+// row (a table's own indexes go with it) and rescans sqlite_schema (362 rows
+// on 2026-09-26), then the journal row. No statement scans a data table, so
+// the bound allows eight full passes over the admitted 512-row schema.
+export function createSchemaDropMigrationCostAdapter({
   db,
+  name,
+  statements: migrationStatements,
   executable_sha256,
   schema_sha256,
 }) {
+  if (
+    !name ||
+    !Array.isArray(migrationStatements) ||
+    !migrationStatements.length ||
+    migrationStatements.length > 4 ||
+    !migrationStatements.every((sql) =>
+      /^DROP (?:TABLE|TRIGGER|INDEX) IF EXISTS [A-Za-z_][A-Za-z0-9_]*;$/.test(sql),
+    )
+  )
+    throw new TypeError(
+      "A schema-drop migration is one to four reviewed DROP ... IF EXISTS statements",
+    )
   return {
     resource: "iconoplasm",
     migration_protocol: "one-migration-per-release-v1",
@@ -34,13 +45,10 @@ export function createFinalizationHandoffRetirementMigrationCostAdapter({
           sql: "SELECT CASE WHEN (SELECT COUNT(*) FROM (SELECT 1 FROM sqlite_schema LIMIT ?)) <= ? THEN 1 ELSE json('COST_MIGRATION_SCHEMA_BOUND_EXCEEDED') END AS admitted",
           parameters: [args.max_schema_rows + 1, args.max_schema_rows],
         },
-        ...FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_STATEMENTS.map((sql) => ({
-          sql,
-          parameters: [],
-        })),
+        ...migrationStatements.map((sql) => ({ sql, parameters: [] })),
         {
           sql: "INSERT INTO d1_migrations(name) VALUES (?)",
-          parameters: [FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME],
+          parameters: [name],
         },
       ]
       const bound = {
@@ -60,10 +68,7 @@ export function createFinalizationHandoffRetirementMigrationCostAdapter({
     },
     async dispatch(prepared) {
       const { actual } = await executeOperationCostD1Batch(db, prepared)
-      return {
-        result: { migration: FINALIZATION_HANDOFF_RETIREMENT_MIGRATION_NAME, applied: true },
-        actual,
-      }
+      return { result: { migration: name, applied: true }, actual }
     },
   }
 }

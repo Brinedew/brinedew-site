@@ -101,15 +101,6 @@ export function assignmentLookupMigrationStatements() {
   )
 }
 
-export function voteJobVersionMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0098_vote_projection_job_version.sql",
-    0,
-    1,
-  )
-}
-
 export function compactDiscoveryMigrationStatements() {
   // B-764: schema and singleton state only. The catalog-sized ordinal seed was
   // replaced by the bounded on-demand dictionary resolver, so a statement
@@ -134,15 +125,6 @@ export function compactDiscoveryActivationMigrationStatements() {
   )
 }
 
-export function voteWakeMigrationStatements() {
-  return reviewedMigrationStatements(
-    "migrations-iconoplasm",
-    "0107_vote_projection_wake_generation.sql",
-    0,
-    2,
-  )
-}
-
 function output() {
   if (
     readFileSync(
@@ -153,6 +135,16 @@ function output() {
     throw new Error("Asset summary migration is stale; regenerate its reviewed SQL before release")
   }
   const migrations = [
+    [
+      "VOTE_PROJECTION_JOBS_RETIREMENT",
+      "0114_retire_vote_projection_jobs.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0114_retire_vote_projection_jobs.sql",
+        0,
+        1,
+      ),
+    ],
     [
       "GENE_VOTE_VERSION",
       "0113_gene_vote_version.sql",
@@ -198,7 +190,6 @@ function output() {
       "0108_compact_discovery_activation_v2.sql",
       compactDiscoveryActivationMigrationStatements(),
     ],
-    ["VOTE_WAKE", "0107_vote_projection_wake_generation.sql", voteWakeMigrationStatements()],
     [
       "COMPACT_DISCOVERY",
       "0106_compact_discovery_state_v2.sql",
@@ -274,11 +265,6 @@ function output() {
         3,
         6,
       ),
-    ],
-    [
-      "VOTE_JOB_VERSION",
-      "0098_vote_projection_job_version.sql",
-      voteJobVersionMigrationStatements(),
     ],
     [
       "ASSIGNMENT_LOOKUP",
