@@ -11,7 +11,9 @@ export async function waitForSuccessfulPushCi({
   workflow = "ci.yaml",
   fetchImpl = fetch,
   sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  timeoutMs = 15 * 60 * 1000,
+  // Build and Test runs 14 to 16 minutes on main (2026-10-03, with the browser
+  // E2E steps), and a deploy queued behind another one starts its wait early.
+  timeoutMs = 40 * 60 * 1000,
   pollMs = 5_000,
 } = {}) {
   const cleanRepository = requireText(repository, "GitHub repository")
