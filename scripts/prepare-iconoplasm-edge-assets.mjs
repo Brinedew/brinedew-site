@@ -16,6 +16,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const publicRoot = path.join(repoRoot, "public")
 const targetRoot = path.join(repoRoot, "public-iconoplasm-edge")
 const maxAssetFiles = 20_000
+// B-905: tests sit beside the browser modules under quartz/static and the Quartz
+// Static emitter (quartz/plugins/emitters/static.ts) leaves them out. A test file
+// in the bundle is one of its 20,000 files and public test code, so the build
+// refuses it instead of shipping it.
+const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/
 const maxAssetBytes = 25 * 1024 * 1024
 
 const iconoplasmCsp = [
@@ -512,6 +517,10 @@ export async function prepareIconoplasmEdgeAssets({
         `Iconoplasm ${page}.html links to paths this host does not serve: ${unserved.join(", ")}`,
       )
     }
+  }
+  const testFiles = bundleFiles.filter((file) => TEST_FILE.test(file)).sort()
+  if (testFiles.length) {
+    throw new Error(`Iconoplasm asset bundle contains test files: ${testFiles.join(", ")}`)
   }
   if (report.fileCount > maxAssetFiles) {
     throw new Error(

@@ -163,6 +163,50 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.ok(statSync(path.join(target, "static", "iconoplasm", "styles.css")).isFile())
 })
 
+// B-905: the bundle is capped at 20,000 files and the gene documents take
+// 19,023 of them. A test file under public/static is a file of that cap and
+// public test code, so the build refuses one instead of shipping it.
+// Failure modes, written before the guard:
+// 1. a *.test.* or *.spec.* file anywhere in the bundle builds anyway;
+// 2. a real asset whose name only contains "test" (latest.js, contest.css) is
+//    refused.
+test("the bundle build refuses a test file and keeps assets that only look like one", async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "iconoplasm-no-tests-"))
+  const source = path.join(fixtureRoot, "public")
+  const target = path.join(fixtureRoot, "public-iconoplasm-edge")
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  await mkdir(path.join(source, "apps", "iconoplasm"), { recursive: true })
+  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
+    await writeFile(path.join(source, "apps", "iconoplasm", `${page}.html`), "<main></main>")
+  await mkdir(path.join(source, "static", "iconoplasm"), { recursive: true })
+  await mkdir(path.join(source, "static", "shared"), { recursive: true })
+  await writeFile(path.join(source, "favicon.ico"), "fixture")
+  await writeFile(path.join(source, "static", "iconoplasm", "latest.js"), "export {}")
+  await writeFile(path.join(source, "static", "iconoplasm", "contest.css"), "body{}")
+  const build = () =>
+    prepareIconoplasmEdgeAssets({
+      sourceRoot: source,
+      outputRoot: target,
+      publishedGenes: [["TP53", "tumor protein p53", "", "", 0]],
+    })
+
+  const clean = await build()
+  assert.ok(statSync(path.join(target, "static", "iconoplasm", "latest.js")).isFile())
+  assert.ok(statSync(path.join(target, "static", "iconoplasm", "contest.css")).isFile())
+  assert.equal(
+    clean.files.filter((file) => /\.(?:test|spec)\./.test(file)).length,
+    0,
+    "a clean bundle has no test files",
+  )
+
+  await writeFile(path.join(source, "static", "iconoplasm", "app.test.js"), "export {}")
+  await writeFile(path.join(source, "static", "shared", "sidebar.spec.ts"), "export {}")
+  await assert.rejects(
+    build(),
+    /test files.*static\/iconoplasm\/app\.test\.js.*static\/shared\/sidebar\.spec\.ts/,
+  )
+})
+
 test("production workflow assigns Iconoplasm only to the stateful route owner", () => {
   const workflow = readFileSync(
     new URL("../.github/workflows/deploy-quartz.yml", import.meta.url),
