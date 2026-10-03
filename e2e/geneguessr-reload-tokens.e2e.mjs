@@ -146,7 +146,7 @@ before(async () => {
       uniprot: row.uniprot,
       correct: false,
       createdAt: Date.now() + index,
-      similarityPending: true,
+      score: { percent: 40, similarity: 40, isLadder: false, ladderRank: null },
     })),
   })
 })

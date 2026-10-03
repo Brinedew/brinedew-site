@@ -18,6 +18,7 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
 // journal order.
 const SCHEMA_MIGRATIONS = [
   "0006_proper_schema.sql",
+  "0013_add_neighbors.sql",
   "0015_add_gene_surname.sql",
   "0018_add_protein_search_fts.sql",
   "0025_add_daily_target_availability_pins.sql",
@@ -188,6 +189,128 @@ export async function seedCatalog(db, rows) {
            FROM json_each(?)`,
         )
         .bind(JSON.stringify(rows.slice(start, start + 400))),
+    )
+  }
+  if (statements.length) await db.batch(statements)
+}
+
+// Binary half precision, as the SaProt and ESM2 columns store it (round to nearest).
+function toHalfBits(value) {
+  const f32 = new Float32Array(1)
+  const u32 = new Uint32Array(f32.buffer)
+  f32[0] = value
+  const x = u32[0]
+  const sign = (x >>> 16) & 0x8000
+  const exponent = ((x >>> 23) & 0xff) - 127 + 15
+  const mantissa = x & 0x7fffff
+  if (exponent <= 0) {
+    if (exponent < -10) return sign
+    return sign | ((((mantissa | 0x800000) >> (1 - exponent)) + 0x1000) >> 13)
+  }
+  if (exponent >= 31) return sign | 0x7c00
+  return sign | (exponent << 10) | ((mantissa + 0x1000) >> 13)
+}
+
+// A gene's embeddings, in the byte layout and sizes production stores them (measured
+// read-only on 2026-10-03: `protein_embeddings_old` holds `vector` as 200 float32, `saprot_vector`
+// as 1,280 float16 and `esm2_vector` as 2,560 float16, 8,480 bytes a row). Deterministic per
+// gene, unit length, so a cosine between two genes is stable across runs.
+export function embeddingRow(gene, { saprot = true } = {}) {
+  let seed = 2166136261
+  for (const char of String(gene)) seed = Math.imul(seed ^ char.charCodeAt(0), 16777619) >>> 0
+  const next = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return seed / 4294967296 - 0.5
+  }
+  const unit = (dimension) => {
+    const values = Array.from({ length: dimension }, next)
+    const norm = Math.sqrt(values.reduce((sum, value) => sum + value * value, 0))
+    return values.map((value) => value / norm)
+  }
+  const half = (values) => new Uint16Array(values.map(toHalfBits))
+  return {
+    gene_symbol: String(gene).toUpperCase(),
+    dim: 200,
+    vector: new Uint8Array(new Float32Array(unit(200)).buffer),
+    saprot_dim: saprot ? 1280 : null,
+    saprot_vector: saprot ? new Uint8Array(half(unit(1280)).buffer) : null,
+    esm2_dim: 2560,
+    esm2_vector: new Uint8Array(half(unit(2560)).buffer),
+  }
+}
+
+// Creates the embeddings table with the columns the Worker reads and gives each gene its row.
+// A guess's similarity is computed from these rows.
+export async function seedEmbeddings(db, genes, options = {}) {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS protein_embeddings_old (
+         gene_symbol TEXT PRIMARY KEY,
+         dim INTEGER NOT NULL DEFAULT 200,
+         vector BLOB NOT NULL,
+         esm2_dim INTEGER,
+         esm2_vector BLOB,
+         saprot_dim INTEGER,
+         saprot_vector BLOB
+       )`,
+    )
+    .run()
+  const insert = db.prepare(
+    `INSERT OR REPLACE INTO protein_embeddings_old
+       (gene_symbol, dim, vector, esm2_dim, esm2_vector, saprot_dim, saprot_vector)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+  const statements = [...new Set(genes)].map((gene) => {
+    const row = embeddingRow(gene, options)
+    return insert.bind(
+      row.gene_symbol,
+      row.dim,
+      row.vector,
+      row.esm2_dim,
+      row.esm2_vector,
+      row.saprot_dim,
+      row.saprot_vector,
+    )
+  })
+  for (let start = 0; start < statements.length; start += 50) {
+    await db.batch(statements.slice(start, start + 50))
+  }
+}
+
+// The accounts the leaderboard reads: the columns of migrations 001 and 0016 that its query
+// uses. Each entry is `{ id, username, streak, wins }`, public and played yesterday or today.
+export async function seedLeaderboard(db, entries) {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS users (
+         discord_id TEXT PRIMARY KEY, username TEXT NOT NULL, email TEXT, avatar_url TEXT,
+         tier TEXT NOT NULL DEFAULT 'guest', premium_until INTEGER,
+         created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0,
+         leaderboard_opt_in INTEGER NOT NULL DEFAULT 0)`,
+    )
+    .run()
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS stats (
+         user_id TEXT PRIMARY KEY, total_played INTEGER DEFAULT 0, total_wins INTEGER DEFAULT 0,
+         current_streak INTEGER DEFAULT 0, best_streak INTEGER DEFAULT 0, last_played_date TEXT)`,
+    )
+    .run()
+  const today = new Date().toISOString().slice(0, 10)
+  const statements = []
+  for (const entry of entries) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT OR REPLACE INTO users (discord_id, username, leaderboard_opt_in) VALUES (?, ?, 1)`,
+        )
+        .bind(entry.id, entry.username),
+      db
+        .prepare(
+          `INSERT OR REPLACE INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(entry.id, entry.wins, entry.wins, entry.streak, entry.streak, today),
     )
   }
   if (statements.length) await db.batch(statements)

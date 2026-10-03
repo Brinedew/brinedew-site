@@ -320,6 +320,50 @@ it, so an importer must write `structure_source` for every protein that should b
 playable. The free plan allows 1,000 KV writes a day and the recorded daily answer
 shares that allowance, so a lookup that a reader can repeat must not write.
 
+## A visit's Worker requests (B-957)
+
+The free plan allows 100,000 Workers requests a day and counts each request to the API twice
+(the public edge Worker and the stateful Worker it calls), so what a visitor costs is the
+number of API requests the page makes. A visit with three guesses makes five:
+
+| request                                 | what it carries                                                                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/game/bootstrap`               | the session, the clue, every guess made so far with its score and its structure token, the target's token and the graphics settings |
+| `GET /api/structure-cached?type=target` | the daily target's structure (the only structure that goes through the Worker)                                                      |
+| `POST /api/game/guess`, once a guess    | the guess's score, its clue matches and its structure token                                                                         |
+
+A sixth request, `GET /api/stats/leaderboard?limit=5`, is made when the "Top Streaks" section
+of the right sidebar nears the screen (400 px margin, `IntersectionObserver`; a browser
+without it reads at once). That section sits beside the game from 1200 px, so on a desktop it
+is on the first screen and is read at load; on a tablet or phone it sits below the whole game
+and is read only when the visitor scrolls there. Until the first read it says "Loading
+leaderboard...". A finished game or the visibility switch refreshes it only after it has been
+read.
+
+The score is part of the guess answer. `scoreAgainstTarget` in the stateful runtime is the one
+similarity path: HiG2Vec and SaProt cosines, soft-OR blended, the ladder rank when the guess is
+one of the target's closest neighbours, and the clue matches. The embeddings read starts when the
+guess is accepted and runs beside the daily aggregate write; a correct guess is 100% and reads
+nothing. A row of `protein_embeddings_old` holds 800 B of HiG2Vec, 2,560 B of SaProt and 5,120 B of
+ESM2 (read-only on production, 2026-10-03), and D1 hands every BLOB over as an array of numbers the
+Worker parses, so the read names only HiG2Vec and SaProt (`fetchDualEmbeddings`); ESM2
+(`fetchEsm2Embedding`) is read only for a pair where one gene has no SaProt, 15% of the first 3,000
+rows. A guess is never failed by that read: when it fails the score has no similarity, the card
+says N/A, the hint is still paid, and the next bootstrap scores every stored guess that has none
+(`hydrateGuessProteins`; a session stored by the earlier two-request version with
+`similarityPending` is scored and cleaned there). There is no `guess-similarity` route.
+
+The graphics settings are live admin state, not a build artifact. The admin tunes them
+(`POST /api/admin/graphics-settings` writes KV `graphics_settings`; the live value on 2026-10-03
+had occlusion off and fog intensity 0.2, not the built-in default), so a file built at deploy
+would revert them, and a Pages deploy is atomic and takes 7 to 9 minutes, so no admin write can
+republish one. `readGraphicsSettings` in `workers/admin.js` is the one public reader. The bootstrap
+carries every section but the admin's profile manager (920 of 3,994 bytes) and the page styles its
+first viewer with it, so it makes no request for it. `GET /api/graphics-settings` stays for the
+admin preview and the Discord recap, which read the same function. The read starts at the top of
+the bootstrap and runs beside the session and target reads; an unreadable key leaves the page the
+defaults.
+
 ## Required tests
 
 `workers/lib/daily-selection-pool.test.js` must prove:
@@ -431,6 +475,36 @@ oversize body is cut off and not downloaded again; and a `directUrl` that is off
 http, or carries credentials is never requested. Playwright disables the HTTP cache while a
 route is installed, so a repeat view's cost was measured against the real providers instead
 (see "A guess loads from its provider" for the numbers).
+
+The same file counts the requests of a whole visit (see "A visit's Worker requests"), on a
+1280 px desktop and a 390 px phone with the grid and sidebar rules of `quartz/styles`, for
+three and for six guesses: exactly one bootstrap, one target view and one `guess` a guess,
+no similarity, graphics-settings, token or `?key=` request, a leaderboard request at load on
+the desktop and none on the phone until the visitor scrolls to the section (then exactly one,
+however often it is scrolled to), and no spinner or pending mark ever added to the page. Each
+card shows the number the Worker computes, and its bar. A stored graphics setting (an
+orthographic camera) styles the first viewer with no request for it, with the default as the
+control. The leaderboard section's text goes from "Loading leaderboard..." to the rows and never
+says "No public streaks yet." on the way; a browser without `IntersectionObserver` reads it at
+load. The counts and meters land in `geneguessr-request-budget.json`.
+
+`workers/geneguessr-request-budget.test.js` must prove, through the real Worker on the
+production-shaped local D1 with embedding rows of production size, that a wrong guess's answer
+carries the score the similarity rule computes for an ordinary guess and for the target's
+closest neighbour (percent, ladder flag, ladder rank) and no pending mark, that a correct guess
+is 100% and reads no embedding, that a failing embeddings read still accepts the guess, pays its
+hint, saves it and answers N/A until the next load computes it, that a guess stored with
+`similarityPending` is scored and cleaned by the next bootstrap, that `guess-similarity` is
+gone, and that the bootstrap carries the stored graphics settings (the defaults when none, the
+new value after an admin push, the defaults when the key is unreadable) without the profile
+manager and agrees with `GET /api/graphics-settings`.
+
+`workers/geneguessr-embeddings-read.test.js` must prove, with a stand-in D1 that serves the
+named columns of production-size rows as arrays of numbers, that a pair scores as the
+whole-row read scored it (golden values for two rows with SaProt, a guess or a target with
+none, a ladder neighbour, HiG2Vec alone and a gene with no row), that a pair with SaProt names
+no ESM2 column and reads at most the 3,360 bytes of HiG2Vec and SaProt a row, that a pair with
+no SaProt falls back to ESM2 and reads it, and that a failing read reaches the caller.
 
 `workers/bootstrap-guess-structure-tokens.test.js` must prove, through the real Worker on
 the production-shaped local D1, that every guess entry in the bootstrap carries the
