@@ -42,23 +42,12 @@ function requireOpaqueObjectLocator(storage, revisionId) {
   }
 }
 
-function uploadReconciliation(error, revisionId, storage) {
-  const failure =
-    error instanceof Error
-      ? error
-      : authorityError("AUTHORITY_COMMIT_FAILED", "Authority commit failed", 500)
-  Object.defineProperty(failure, "storageReconciliation", {
-    configurable: false,
-    enumerable: false,
-    writable: false,
-    value: Object.freeze({
-      action: "verify_revision_then_delete_if_unreferenced",
-      manifestation_revision_id: revisionId,
-      object_key: storage.object_key,
-      ciphertext_sha256: storage.ciphertext_sha256,
-    }),
-  })
-  return failure
+// An upload whose commit fails stays an unadopted upload intent; the sweep in
+// manifestation-upload-intents.js deletes its stored body once the lease ends.
+function commitFailure(error) {
+  return error instanceof Error
+    ? error
+    : authorityError("AUTHORITY_COMMIT_FAILED", "Authority commit failed", 500)
 }
 
 function revisionInsertStatements(
@@ -340,7 +329,7 @@ export async function seedSystemManifestation(
       ],
     })
   } catch (error) {
-    throw uploadReconciliation(error, revisionIdNorm, storage)
+    throw commitFailure(error)
   }
 }
 
@@ -418,14 +407,10 @@ export async function saveManifestationRevision(
     (isNewManifestation && expectedManifestation !== 0) ||
     (!isNewManifestation && expectedManifestation !== Number(manifestation.row_version))
   ) {
-    throw uploadReconciliation(
-      authorityError(
-        "STALE_AUTHORITY_STATE",
-        "The caretaker manifestation changed before this command was prepared",
-        409,
-      ),
-      revisionIdNorm,
-      storage,
+    throw authorityError(
+      "STALE_AUTHORITY_STATE",
+      "The caretaker manifestation changed before this command was prepared",
+      409,
     )
   }
   const sourceRevisionIdNorm = normalizeOptionalId(sourceRevisionId, "source_revision_id")
@@ -607,6 +592,6 @@ export async function saveManifestationRevision(
       ],
     })
   } catch (error) {
-    throw uploadReconciliation(error, revisionIdNorm, storage)
+    throw commitFailure(error)
   }
 }

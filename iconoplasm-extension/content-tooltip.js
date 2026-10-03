@@ -16,8 +16,6 @@
     documentRef.body.appendChild(tooltip)
 
     if (typeof options.applyTooltipTheme === "function") options.applyTooltipTheme()
-    documentRef.addEventListener("mouseover", options.onMouseOver)
-    documentRef.addEventListener("mouseout", options.onMouseOut)
     windowRef.addEventListener("message", options.onFrameMessage)
     // Some host pages stop click propagation before it reaches an injected
     // tooltip. Capture at the document, where the real click still arrives.

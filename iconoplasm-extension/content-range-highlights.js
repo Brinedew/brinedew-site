@@ -209,7 +209,7 @@
       for (const record of records) {
         const el = record.target.nodeType === 1 ? record.target : record.target.parentElement
         if (
-          el?.closest(".iconoplasm-range-sheet, .iconoplasm-tooltip, .iconoplasm-gene") ||
+          el?.closest(".iconoplasm-range-sheet, .iconoplasm-tooltip") ||
           painter.ownsMutation(record)
         )
           continue

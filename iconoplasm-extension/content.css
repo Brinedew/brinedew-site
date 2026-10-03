@@ -1,4 +1,4 @@
-/* Iconoplasm content styles -- gene highlighting + horizontal tooltip infobox.
+/* Iconoplasm content styles -- horizontal tooltip infobox (gene highlights are painted by ranges).
  * Canonical extension root: D:\Coding\Website\iconoplasm-extension
  * Fonts: IBM Plex Mono (body/labels), League Spartan (gene symbol), Special Elite (gene name).
  * Animation: fade only, no movement.
@@ -6,127 +6,9 @@
 
 /* Font faces are registered by generated/iconoplasm-font-runtime.js via runtime.getURL. */
 
-/* -- Gene highlight ------------------------------------------------- */
-.iconoplasm-gene {
-  position: relative;
-  display: inline;
-  overflow-anchor: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  line-height: inherit;
-  white-space: inherit;
-  vertical-align: baseline;
-  transition:
-    opacity 150ms ease,
-    background-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease;
-  text-decoration-skip-ink: auto;
-  cursor: text;
-}
-
-.iconoplasm-gene-copy {
-  display: inline;
-  position: relative;
-  z-index: 1;
-  font: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  line-height: inherit;
-  white-space: inherit;
-  vertical-align: baseline;
-}
-
-.iconoplasm-gene-paint-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 0;
-}
-
-.iconoplasm-gene-paint-fragment {
-  position: absolute;
-  pointer-events: none;
-}
-
-.iconoplasm-gene--underline {
-  /* Fence: underline mode must be paint-only. Real borders change the inline
-     box metrics and can shift line breaks on dense text pages. */
-  background-image: linear-gradient(
-    to top,
-    var(--iconoplasm-gene-color, #6b6b78) 0,
-    var(--iconoplasm-gene-color, #6b6b78) 100%
-  );
-  background-repeat: no-repeat;
-  background-size: 100% 0.16em;
-  background-position: 0 calc(100% - 0.01em);
-}
-
-.iconoplasm-gene--pill,
-.iconoplasm-gene--pill-outline {
-  display: inline;
-  position: relative;
-  z-index: 0;
-  margin: 0;
-  background: transparent;
-  box-shadow: none;
-  line-height: inherit;
-  isolation: isolate;
-}
-
-.iconoplasm-gene--pill .iconoplasm-gene-copy,
-.iconoplasm-gene--pill-outline .iconoplasm-gene-copy {
-  border-radius: 0.18em;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
-.iconoplasm-gene--pill {
-  color: var(--iconoplasm-gene-fg, #ffffff);
-  text-shadow: 0 0.02em 0.12em rgba(0, 0, 0, 0.16);
-}
-
-.iconoplasm-gene--pill .iconoplasm-gene-copy {
-  background: color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 72%, transparent);
-  box-shadow:
-    0 0 0 0.1em color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 72%, transparent),
-    0 0 0 0.145em rgba(22, 18, 16, 0.58);
-}
-
-.iconoplasm-gene--pill-outline {
-  color: inherit;
-  text-shadow: none;
-}
-
-.iconoplasm-gene--pill-outline .iconoplasm-gene-copy {
-  box-shadow:
-    0 0 0 0.11em color-mix(in srgb, var(--iconoplasm-gene-color, #6b6b78) 76%, transparent),
-    inset 0 0 0 0.08em rgba(255, 255, 255, 0.3);
-}
-
-.iconoplasm-gene--ellipse {
-  position: relative;
-  z-index: 0;
-  margin: 0;
-  color: inherit;
-  line-height: inherit;
-  text-decoration: none;
-  isolation: isolate;
-}
-
-.iconoplasm-gene--ellipse .iconoplasm-gene-copy {
-  display: inline;
-}
-
-.iconoplasm-gene-paint-fragment--ellipse .iconoplasm-gene-rough-loop {
-  inset: 0;
-}
-
+/* -- Rough ellipse loop --------------------------------------------- */
+/* The PDF reader appends this SVG to its ellipse decoration. A web page paints the same node as a
+   background image, where this rule does not apply. */
 .iconoplasm-gene-rough-loop {
   position: absolute;
   inset: 0;
@@ -139,41 +21,6 @@
      depending on surrounding page chrome, which makes identical genes look inconsistent. */
   color: var(--iconoplasm-gene-color, #6b6b78);
   z-index: 0;
-}
-
-.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop path {
-  vector-effect: non-scaling-stroke;
-}
-
-.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop svg,
-.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop g,
-.iconoplasm-gene--ellipse .iconoplasm-gene-rough-loop ellipse {
-  overflow: visible;
-}
-
-.iconoplasm-gene:hover {
-  opacity: 0.85;
-}
-
-body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) {
-  background-size: 0 0;
-}
-
-body.iconoplasm-highlight-on-hover .iconoplasm-gene:not(:hover) .iconoplasm-gene-paint-layer {
-  opacity: 0;
-}
-
-body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) {
-  color: inherit;
-  text-shadow: none;
-}
-
-body.iconoplasm-highlight-on-hover .iconoplasm-gene--pill:not(:hover) .iconoplasm-gene-copy,
-body.iconoplasm-highlight-on-hover
-  .iconoplasm-gene--pill-outline:not(:hover)
-  .iconoplasm-gene-copy {
-  background: transparent;
-  box-shadow: none;
 }
 
 /* -- Tooltip container: horizontal card ----------------------------- */
