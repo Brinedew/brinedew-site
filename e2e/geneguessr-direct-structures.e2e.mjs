@@ -712,6 +712,28 @@ async function openVisitor(
       return create(object)
     }
   })
+  // What the page passes to `fetch` for a provider's file: the options that decide whether a
+  // provider gets credentials or a referrer, and whether a repeat view is the browser cache's
+  // (Playwright turns the HTTP cache off while a route is installed, so the repeat view itself
+  // cannot be measured here; the options are what the page asks for).
+  await context.addInitScript(() => {
+    window.__providerFetches = []
+    const realFetch = window.fetch.bind(window)
+    window.fetch = (input, init) => {
+      try {
+        const url = new URL(typeof input === "string" ? input : input.url, location.href)
+        if (/(^|\.)(rcsb\.org|ebi\.ac\.uk|expasy\.org)$/.test(url.hostname)) {
+          window.__providerFetches.push({
+            host: url.hostname,
+            credentials: init?.credentials,
+            referrerPolicy: init?.referrerPolicy,
+            cache: init?.cache,
+          })
+        }
+      } catch {}
+      return realFetch(input, init)
+    }
+  })
   // What the visitor sees change: every spinner or pending mark that is ever added to the page,
   // and every text the leaderboard section shows, in order.
   await context.addInitScript(() => {
@@ -909,6 +931,7 @@ test("page load plus three guesses: guess structures come from the providers, th
       fullPage: true,
     })
     const blobs = await page.evaluate(() => window.__blobs)
+    const providerFetches = await page.evaluate(() => window.__providerFetches)
     await context.close()
     measured.direct = { ...result, blobs }
 
@@ -949,6 +972,18 @@ test("page load plus three guesses: guess structures come from the providers, th
     for (const sent of tracker.providerHeaders) {
       assert.equal(sent.referer, undefined, `a provider got a referrer: ${sent.referer}`)
       assert.equal(sent.cookie, undefined, "a provider got a cookie")
+    }
+    // The page asks for exactly that: no credentials, no referrer, and the browser's own cache
+    // for a repeat view (a provider such as RCSB sends no Cache-Control, so a default fetch
+    // asks the provider again, 270 to 424 ms against 1 to 2 ms measured on 2026-10-03).
+    assert.deepEqual(
+      hostsOf(providerFetches.map((fetched) => `https://${fetched.host}/`)),
+      [...PROVIDER_HOSTS].sort(),
+    )
+    for (const fetched of providerFetches) {
+      assert.equal(fetched.credentials, "omit", `${fetched.host}: credentials`)
+      assert.equal(fetched.referrerPolicy, "no-referrer", `${fetched.host}: referrer policy`)
+      assert.equal(fetched.cache, "force-cache", `${fetched.host}: a repeat view is the browser's`)
     }
   } finally {
     save()
@@ -1084,6 +1119,61 @@ test("a provider that fails, answers an error or blocks the browser sends that o
     assert.equal(result.complete.length, 4)
   } finally {
     save()
+    await browser.close()
+  }
+})
+
+test("a structure that fails to load leaves the clues playable, and a failure after the game rendered cannot replace it", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    const { page, context } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-structure-failure",
+    })
+    // The Worker's route for the target's structure answers 500.
+    await context.route(
+      (url) =>
+        url.origin === origin &&
+        url.pathname === "/api/structure-cached" &&
+        url.searchParams.get("type") === "target",
+      (route) =>
+        route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "structure unavailable" }),
+        }),
+    )
+    await openGame(page)
+    const message = page.locator(".pg-structure-error:not([hidden])").first()
+    await message.waitFor({ timeout: 30000 })
+    assert.match(
+      await message.innerText(),
+      /You can still play using the clues below\./,
+      "the viewer says what is still possible",
+    )
+    // The clues are there, and a guess is played through to its card.
+    assert.ok(await page.locator("#pg-input").isVisible(), "the guess box is on the page")
+    await guess(page, guessRows(newestTarget(), 1)[0], 1)
+
+    // A viewer that fails later, after the game rendered, is logged and nothing else: it
+    // cannot replace the game with an error page.
+    await page.evaluate(() => {
+      setTimeout(() => {
+        throw new Error("a viewer failed in the background")
+      }, 0)
+      Promise.reject(new Error("a viewer request was rejected late"))
+    })
+    await page.waitForTimeout(500)
+    assert.equal(await page.locator("body").getAttribute("data-geneguessr-status"), "rendered")
+    assert.ok(await page.locator("#pg-input").isVisible(), "the game is still on the page")
+    assert.equal(
+      await page.locator('.pg-feedback-card[id^="guess-card-"]').count(),
+      1,
+      "the guess card is still there",
+    )
+    await context.close()
+  } finally {
     await browser.close()
   }
 })
