@@ -49,8 +49,50 @@ from its own pool (see "Practice pool").
   UniProt ID and normalized surname are both outside the complete authoritative
   horizon. This prevents both a direct repeat and a wraparound/member-rotation
   family repeat without cascading later dates.
-- A recorded actual target remains authoritative unless the existing
-  availability rules permit replacement before the first guess.
+- A recorded actual target is authoritative. The 23:55 pre-warm verifies its
+  structure before it records it, and nothing on the player path probes or
+  replaces it (see "Pre-warm and the player path").
+
+## Pre-warm and the player path
+
+The 23:55 UTC cron (`runDailyPreWarm` in the stateful runtime) is the one place a
+daily structure is verified, and its steps run in this order:
+
+1. take tomorrow's admin override, else its availability pin, else the computed
+   pick (one stored-pool row, see "Pool storage");
+2. probe the structure and, when it is unreachable, walk the balanced candidate
+   sequence (ten candidates at most, five seconds each; probes go through
+   `fetchStructureUpstream`);
+3. record the pick as `puzzle_actual:<day>` (the write that must succeed);
+4. warm one `daily_bootstrap:<day>:<host>` entry for each of the three public
+   origins.
+
+A night costs four KV writes. Every way the cron can fail to leave a verified,
+recorded pick (no target, no reachable structure, a pick write that fails, a record
+that names a different pick) throws after it is logged. The throw reaches Sentry
+through the one error reporter (`withScheduledErrorReporting`, event named
+`cron 55 23 * * *`) and makes Cloudflare record the invocation as failed, which
+`workersInvocationsScheduled` shows. The cron's `success` status therefore means a
+pick was recorded.
+
+A visitor is served that pick as recorded. The bootstrap reads the day's cache entry
+for its origin and uses it as written for the whole UTC day: no outbound probe, no
+cache rewrite, no deletion and no `structure_failures` write, however slow a
+provider is at that moment (a probe that misses its timer proves nothing about a
+structure, and each rewrite is a KV write against the account's 1,000 a day). With
+no entry for its origin, the request builds the token from the recorded pick (one
+protein row) and writes the entry once. A recorded pick that is read from KV or from
+the production mirror is never probed again.
+
+When no pick is recorded at all, the request is the repair path: it computes the pick
+from the stored pool, probes it, walks the candidates when it is unreachable, and
+records the result. That is the only case in which the player path probes a daily
+structure, because nobody has verified the pick yet.
+
+A structure that dies after it was recorded shows the viewer's "Could not load the 3D
+structure" message while play continues on the clues, and the structure route's 502
+reaches Sentry. The repair is an admin override for the day, which deletes the day's
+cache entries.
 
 ## Pool storage
 
@@ -325,5 +367,17 @@ request returns 365 complete, unique protein and surname identities using bulk
 queries, and that missing summaries fail the response closed without caching
 partial rows.
 
-`workers/lib/daily-target-availability.test.js` protects the separate structure
-availability and recorded-target replacement rules.
+`workers/lib/daily-target-availability.test.js` protects the structure availability
+walk the pre-warm and the repair path share.
+
+`workers/daily-prewarm-cron.test.js` must prove, through the real Worker on the
+production-shaped local D1 with `fetch` as the providers and the clock set, that the
+cron probes once, records the pick before it warms one cache entry per origin, and
+leaves the record alone on a second run; that a visitor an hour later is served the
+recorded pick with no outbound probe, no KV write, no KV delete and no D1 write about
+the pick or its structure, whether every provider is dead or only that one structure is
+slow; that with the caches gone and the pick recorded the visitor probes nothing and
+writes one cache entry; that with no pick recorded the request still computes, probes,
+walks past an unreachable candidate and records; that the cron invocation fails when
+its pick write fails, when no structure is reachable and when the catalog is empty; and
+that a failed pre-warm reaches Sentry only when a DSN is set.

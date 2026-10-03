@@ -1,4 +1,4 @@
-import { withErrorReporting } from "./lib/the-only-error-reporter.js"
+import { withErrorReporting, withScheduledErrorReporting } from "./lib/the-only-error-reporter.js"
 import "../shared/iconoplasm-card/shared-card-runtime.js"
 import {
   iconoplasmPublishedPortraitUrl,
@@ -17,7 +17,6 @@ import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
-import { isD1DailyRowReadLimitError } from "./lib/cloudflare-availability.js"
 import {
   ackCompletedResult,
   getPendingResults,
@@ -68,7 +67,6 @@ function getCorsHeaders(origin, requestHost = "") {
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DAILY_TARGET_SALT = "geneguessr-v2-939b5a0b"
 const DAILY_BOOTSTRAP_CACHE_PREFIX = "daily_bootstrap:"
-const DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS = 5 * 60 * 1000
 
 const GENEGUESSR_HOST = "geneguessr.brinedew.bio"
 const BENCHMARK_HOST = "geneguessr-bench.brinedew.bio"
@@ -1409,7 +1407,7 @@ import {
   structureContentType,
   structureFormatFromKey,
 } from "./lib/structure-upstream.js"
-import { getDailyGuessAggregates, recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
+import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
   BrinedewAccountIdentityError,
@@ -1417,10 +1415,7 @@ import {
 } from "./lib/brinedew-account-identity.js"
 import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
-import {
-  selectAvailableDailyTarget,
-  shouldReplaceRecordedDailyTarget,
-} from "./lib/daily-target-availability.js"
+import { selectAvailableDailyTarget } from "./lib/daily-target-availability.js"
 import {
   getDailyTargetFamilyKey,
   readDailyTargetAvailabilityPin,
@@ -3267,137 +3262,160 @@ export default {
       return
     }
 
-    console.log("[CRON] Daily pre-warm triggered at", new Date().toISOString())
-
-    try {
-      // Get tomorrow's date
-      const tomorrow = new Date()
-      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10)
-
-      // 1. Check for admin override first
-      const overrideKey = `puzzle_override:${tomorrowStr}`
-      let overrideId = await env.KV.get(overrideKey)
-      if (!overrideId && env.PROD_KV?.get) {
-        overrideId = await env.PROD_KV.get(overrideKey)
-      }
-      const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
-      const computedSelection = await pickDailyTarget(env.DB, salt, tomorrowStr)
-      let targetProtein
-      let source
-      let availabilityPin = null
-      let skippedAlphaFold = null
-
-      if (overrideId) {
-        targetProtein = await fetchProteinByUniprot(env.DB, overrideId)
-        source = "admin_override"
-        console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
-      } else {
-        availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
-          date: tomorrowStr,
-          salt,
-          selectionPoolFingerprint: computedSelection?.poolFingerprint,
-        })
-        targetProtein = availabilityPin?.uniprot_id
-          ? await fetchProteinByUniprot(env.DB, availabilityPin.uniprot_id)
-          : computedSelection?.protein
-        skippedAlphaFold = Number.isFinite(computedSelection?.skippedAlphaFold)
-          ? computedSelection.skippedAlphaFold
-          : null
-        source = availabilityPin ? "availability_replacement" : "computed"
-        console.log(`[CRON] ${source} target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
-      }
-
-      if (!targetProtein) {
-        console.error("[CRON] No target protein found for", tomorrowStr)
-        return
-      }
-
-      const cronAudit = {
-        date: tomorrowStr,
-        source: source === "admin_override" ? "override" : source,
-        override_id: overrideId || null,
-        rejected: (availabilityPin?.rejected_uniprot_ids || []).map((uniprot) => ({
-          uniprot_id: uniprot,
-          reason: "catalog_render_unavailable",
-        })),
-        skipped_alpha_fold: skippedAlphaFold,
-      }
-
-      // 3. Verify the exact canonical structure before committing tomorrow's
-      // puzzle. Metadata presence is not availability: the 2026-07-17 IMMP2L
-      // incident had a perfectly formed SWISS-MODEL URL that returned 404.
-      const balancedCandidateIds = Array.isArray(computedSelection?.candidateIds)
-        ? computedSelection.candidateIds
-        : []
-      const availabilityIds = [
-        targetProtein.uniprot,
-        ...balancedCandidateIds.filter((uniprot) => uniprot !== targetProtein.uniprot),
-      ]
-      const availableTarget = await selectAvailableDailyTarget({
-        initialProtein: targetProtein,
-        eligibleIds: availabilityIds,
-        startIndex: 0,
-        loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
-        resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein),
-        isStructureAvailable: (structureMeta, protein) =>
-          verifyDailyTargetStructure(env, structureMeta, protein),
-        isCandidateIneligible:
-          source === "admin_override"
-            ? () => false
-            : (candidate) =>
-                isAlphaFoldOnlyProtein(candidate) ||
-                (candidate.uniprot !== availabilityPin?.uniprot_id &&
-                  isForbiddenByAvailabilityPin(candidate, availabilityPin)),
-        maxCandidates: 10,
-      })
-      cronAudit.rejected.push(...availableTarget.rejected)
-      cronAudit.skipped_alpha_fold =
-        Number(cronAudit.skipped_alpha_fold || 0) + availableTarget.skippedIneligible
-      targetProtein = availableTarget.protein
-      const structureMeta = availableTarget.structureMeta
-      if (!targetProtein || !structureMeta?.r2Key) {
-        console.error("[CRON] No reachable target structure for", tomorrowStr, cronAudit.rejected)
-        return
-      }
-
-      console.log(`[CRON] Structure verified: ${structureMeta.r2Key} for ${tomorrowStr}`)
-
-      // 4. Pre-warm bootstrap KV cache for tomorrow (for all public origins)
-      const origins = [
-        "https://brinedew.bio",
-        "https://geneguessr.brinedew.bio",
-        "https://iconoplasm.brinedew.bio",
-      ]
-      for (const origin of origins) {
-        const structureSelection = await buildTargetStructureSelection(targetProtein, {
-          practiceMode: false,
-          origin,
-        })
-        const structureToken = structureSelection?.token || null
-        if (!structureToken) continue
-        await setDailyBootstrapCache(
-          env,
-          tomorrowStr,
-          origin,
-          targetProtein,
-          structureToken,
-          structureSelection.meta,
-          cronAudit,
-        )
-      }
-      console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
-
-      // Write puzzle_actual so the recap handler always has data,
-      // even if nobody plays tomorrow.
-      await recordDailyPickOnce(env, tomorrowStr, targetProtein.uniprot, cronAudit)
-      console.log(`[CRON] puzzle_actual:${tomorrowStr} written`)
-
-      console.log(`[CRON] Pre-warm complete: ${targetProtein.uniprot} (${source})`)
-    } catch (err) {
-      console.error("[CRON] Pre-warm failed:", err)
-    }
+    // The pre-warm's failure is logged, sent to Sentry and thrown, so the invocation's
+    // status says it failed. A swallowed failure would make Cloudflare report a night
+    // with no pick as `success` (B-918).
+    return withScheduledErrorReporting(
+      env,
+      ctx,
+      "internal",
+      cronExpr || "55 23 * * *",
+      async () => {
+        try {
+          await runDailyPreWarm(env)
+        } catch (err) {
+          console.error("[CRON] Pre-warm failed:", err)
+          throw err
+        }
+      },
+    )
   },
+}
+
+// The 23:55 UTC pre-warm: choose tomorrow's target, verify its structure, record the
+// pick, then warm each public origin's bootstrap entry. This is the one place a daily
+// structure is verified, so the player path serves what it recorded and probes nothing.
+// The pick is recorded before anything is warmed because it is the one write that must
+// succeed. Throws when it cannot leave a verified, recorded pick.
+async function runDailyPreWarm(env) {
+  console.log("[CRON] Daily pre-warm triggered at", new Date().toISOString())
+
+  // Get tomorrow's date
+  const tomorrow = new Date()
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+
+  // 1. Check for admin override first
+  const overrideKey = `puzzle_override:${tomorrowStr}`
+  let overrideId = await env.KV.get(overrideKey)
+  if (!overrideId && env.PROD_KV?.get) {
+    overrideId = await env.PROD_KV.get(overrideKey)
+  }
+  const salt = env?.DAILY_TARGET_SALT || DAILY_TARGET_SALT
+  const computedSelection = await pickDailyTarget(env.DB, salt, tomorrowStr)
+  let targetProtein
+  let source
+  let availabilityPin = null
+  let skippedAlphaFold = null
+
+  if (overrideId) {
+    targetProtein = await fetchProteinByUniprot(env.DB, overrideId)
+    source = "admin_override"
+    console.log(`[CRON] Using admin override for ${tomorrowStr}: ${overrideId}`)
+  } else {
+    availabilityPin = await readDailyTargetAvailabilityPin(env.DB, {
+      date: tomorrowStr,
+      salt,
+      selectionPoolFingerprint: computedSelection?.poolFingerprint,
+    })
+    targetProtein = availabilityPin?.uniprot_id
+      ? await fetchProteinByUniprot(env.DB, availabilityPin.uniprot_id)
+      : computedSelection?.protein
+    skippedAlphaFold = Number.isFinite(computedSelection?.skippedAlphaFold)
+      ? computedSelection.skippedAlphaFold
+      : null
+    source = availabilityPin ? "availability_replacement" : "computed"
+    console.log(`[CRON] ${source} target for ${tomorrowStr}: ${targetProtein?.uniprot}`)
+  }
+
+  if (!targetProtein) {
+    throw new Error(`Pre-warm found no target protein for ${tomorrowStr}`)
+  }
+
+  const cronAudit = {
+    date: tomorrowStr,
+    source: source === "admin_override" ? "override" : source,
+    override_id: overrideId || null,
+    rejected: (availabilityPin?.rejected_uniprot_ids || []).map((uniprot) => ({
+      uniprot_id: uniprot,
+      reason: "catalog_render_unavailable",
+    })),
+    skipped_alpha_fold: skippedAlphaFold,
+  }
+
+  // 3. Verify the exact canonical structure before committing tomorrow's
+  // puzzle. Metadata presence is not availability: the 2026-07-17 IMMP2L
+  // incident had a perfectly formed SWISS-MODEL URL that returned 404.
+  const balancedCandidateIds = Array.isArray(computedSelection?.candidateIds)
+    ? computedSelection.candidateIds
+    : []
+  const availabilityIds = [
+    targetProtein.uniprot,
+    ...balancedCandidateIds.filter((uniprot) => uniprot !== targetProtein.uniprot),
+  ]
+  const availableTarget = await selectAvailableDailyTarget({
+    initialProtein: targetProtein,
+    eligibleIds: availabilityIds,
+    startIndex: 0,
+    loadProtein: (uniprot) => fetchProteinByUniprot(env.DB, uniprot),
+    resolveStructureMeta: (protein) => getCanonicalStructureMeta(protein),
+    isStructureAvailable: (structureMeta, protein) =>
+      verifyDailyTargetStructure(env, structureMeta, protein),
+    isCandidateIneligible:
+      source === "admin_override"
+        ? () => false
+        : (candidate) =>
+            isAlphaFoldOnlyProtein(candidate) ||
+            (candidate.uniprot !== availabilityPin?.uniprot_id &&
+              isForbiddenByAvailabilityPin(candidate, availabilityPin)),
+    maxCandidates: 10,
+  })
+  cronAudit.rejected.push(...availableTarget.rejected)
+  cronAudit.skipped_alpha_fold =
+    Number(cronAudit.skipped_alpha_fold || 0) + availableTarget.skippedIneligible
+  targetProtein = availableTarget.protein
+  const structureMeta = availableTarget.structureMeta
+  if (!targetProtein || !structureMeta?.r2Key) {
+    throw new Error(
+      `Pre-warm found no reachable target structure for ${tomorrowStr} (${cronAudit.rejected.length} candidates rejected)`,
+    )
+  }
+
+  console.log(`[CRON] Structure verified: ${structureMeta.r2Key} for ${tomorrowStr}`)
+
+  // 4. Record the pick first, so the recap and every visitor have it even if nobody
+  // plays tomorrow and even if a later write fails.
+  if (!(await recordDailyPickOnce(env, tomorrowStr, targetProtein.uniprot, cronAudit))) {
+    throw new Error(`Pre-warm could not record puzzle_actual:${tomorrowStr}`)
+  }
+  console.log(`[CRON] puzzle_actual:${tomorrowStr} written`)
+
+  // 5. Pre-warm bootstrap KV cache for tomorrow (for all public origins)
+  const origins = [
+    "https://brinedew.bio",
+    "https://geneguessr.brinedew.bio",
+    "https://iconoplasm.brinedew.bio",
+  ]
+  for (const origin of origins) {
+    const structureSelection = await buildTargetStructureSelection(targetProtein, {
+      practiceMode: false,
+      origin,
+    })
+    const structureToken = structureSelection?.token || null
+    if (!structureToken) continue
+    await setDailyBootstrapCache(
+      env,
+      tomorrowStr,
+      origin,
+      targetProtein,
+      structureToken,
+      structureSelection.meta,
+      cronAudit,
+    )
+  }
+  console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
+
+  console.log(`[CRON] Pre-warm complete: ${targetProtein.uniprot} (${source})`)
 }
 
 function parseCookies(cookieHeader) {
@@ -4502,6 +4520,13 @@ async function handleCachedStructureFetch(request, env, corsHeaders) {
  *
  * This eliminates D1 queries for repeat visitors on the same day.
  * KV lookup: ~1-5ms vs full computation: ~500-2000ms
+ *
+ * The 23:55 pre-warm verifies the structure and writes one entry per public
+ * origin; a visitor with no entry for their origin writes it once. An entry is
+ * served for the whole UTC day as written: a reader never probes a provider,
+ * rewrites the entry or deletes it, because a probe that misses its 5 second timer
+ * proves nothing about the structure and every refresh is a KV write against the
+ * account's 1,000 a day (B-918). An override deletes the day's entries.
  */
 async function getDailyBootstrapCache(env, date, origin) {
   const cacheKey = buildDailyBootstrapCacheKey(date, origin)
@@ -4534,12 +4559,7 @@ async function setDailyBootstrapCache(
     structureMeta,
     audit: audit || null,
     cachedAt: Date.now(),
-    structureVerifiedAt: Date.now(),
   }
-  await putDailyBootstrapCachePayload(env, date, cacheKey, payload)
-}
-
-async function putDailyBootstrapCachePayload(env, date, cacheKey, payload) {
   try {
     // Calculate TTL to expire at end of day (UTC)
     const now = new Date()
@@ -4549,70 +4569,6 @@ async function putDailyBootstrapCachePayload(env, date, cacheKey, payload) {
     console.log(`[PERF] Daily bootstrap cache SET for ${date} (TTL: ${ttlSeconds}s)`)
   } catch (e) {
     console.warn("Daily bootstrap cache write failed:", e)
-  }
-}
-
-async function validateDailyBootstrapCache(env, date, origin, cached) {
-  if (!cached?.targetProtein?.uniprot || !cached?.structureMeta?.r2Key) {
-    return null
-  }
-
-  const verifiedAt = Number(cached.structureVerifiedAt || 0)
-  if (
-    Number.isFinite(verifiedAt) &&
-    verifiedAt > 0 &&
-    Date.now() - verifiedAt < DAILY_BOOTSTRAP_STRUCTURE_VERIFICATION_TTL_MS
-  ) {
-    return cached
-  }
-
-  const cacheKey = buildDailyBootstrapCacheKey(date, origin)
-  const currentProtein = await fetchProteinByUniprot(env.DB, cached.targetProtein.uniprot)
-  const sourceWasExplicitOverride = cached?.audit?.source === "override"
-  const currentMeta = currentProtein ? getCanonicalStructureMeta(currentProtein) : null
-  const canonicalStillMatches = sameStructureMeta(currentMeta, cached.structureMeta)
-  const automaticSourceStillEligible =
-    sourceWasExplicitOverride || (currentProtein && !isAlphaFoldOnlyProtein(currentProtein))
-  const available =
-    canonicalStillMatches &&
-    automaticSourceStillEligible &&
-    (await verifyDailyTargetStructure(env, currentMeta, currentProtein))
-
-  if (!available) {
-    await env.KV.delete(cacheKey).catch(() => {})
-    console.warn(`[PERF] Daily bootstrap cache rejected for ${date}: target is no longer playable`)
-    return null
-  }
-
-  const refreshed = {
-    ...cached,
-    targetProtein: currentProtein,
-    structureMeta: currentMeta,
-    structureVerifiedAt: Date.now(),
-  }
-  await putDailyBootstrapCachePayload(env, date, cacheKey, refreshed)
-  return refreshed
-}
-
-export async function validateDailyBootstrapCacheWithAvailabilityFallback(
-  env,
-  date,
-  origin,
-  cached,
-) {
-  try {
-    return await validateDailyBootstrapCache(env, date, origin, cached)
-  } catch (error) {
-    if (!isD1DailyRowReadLimitError(error)) throw error
-    // The cache is scoped to this exact UTC day and contains a previously
-    // verified immutable target plus structure identity. D1 is the freshness
-    // validator, not the source of a second target. During the provider's
-    // account-wide daily read lockout, retaining that same known-good target is
-    // safer than taking the whole daily game offline or electing a fallback.
-    console.warn(
-      `[BOOTSTRAP] D1 daily row-read allowance exhausted; retaining verified ${date} target`,
-    )
-    return cached
   }
 }
 
@@ -4690,14 +4646,6 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     let cachedDaily = null
     if (!practiceMode) {
       cachedDaily = await getDailyBootstrapCache(env, today, url.origin)
-      if (cachedDaily) {
-        cachedDaily = await validateDailyBootstrapCacheWithAvailabilityFallback(
-          env,
-          today,
-          url.origin,
-          cachedDaily,
-        )
-      }
     }
 
     // Staging-only: If prod has already recorded today's actual pick, ensure our daily bootstrap cache
@@ -5062,17 +5010,21 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
   }
 }
 
+// Records the pick players are shown for `date`, once. Returns true when the record
+// now names `uniprotId` (written now, or already there), and false when it does not: a
+// failed write, an unreadable record, or a record that names a different pick, which is
+// left as it is. It never throws, because the player path calls it from waitUntil; the
+// pre-warm turns a false into a failed invocation.
 async function recordDailyPickOnce(env, date, uniprotId, audit) {
   try {
     const key = `puzzle_actual:${date}`
     const existing = await env.KV.get(key)
-    let replacedUnplayableUniprot = null
     if (existing) {
       let existingRecord = null
       try {
         existingRecord = JSON.parse(existing)
       } catch {
-        return
+        return false
       }
       const existingUniprot = String(existingRecord?.uniprot_id || "")
         .trim()
@@ -5081,25 +5033,12 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
         .trim()
         .toUpperCase()
       if (existingUniprot === selectedUniprot) {
-        return
+        return true
       }
-
-      const guesses = await getDailyGuessAggregates(env.DB, { day: date, limit: 1 })
-      const canReplace =
-        guesses?.ok &&
-        shouldReplaceRecordedDailyTarget({
-          existingUniprot,
-          selectedUniprot,
-          rejected: audit?.rejected,
-          totalGuesses: guesses.totalGuesses,
-        })
-      if (!canReplace) {
-        console.warn(
-          `[TARGET-PICK] Refusing to replace recorded ${date} target ${existingUniprot} with ${selectedUniprot}`,
-        )
-        return
-      }
-      replacedUnplayableUniprot = existingUniprot
+      console.warn(
+        `[TARGET-PICK] Refusing to replace recorded ${date} target ${existingUniprot} with ${selectedUniprot}`,
+      )
+      return false
     }
     const record = {
       date,
@@ -5111,7 +5050,6 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
         ? audit.skipped_alpha_fold
         : null,
       recorded_at: Date.now(),
-      replaced_unplayable_uniprot_id: replacedUnplayableUniprot,
     }
     const rejectedCount = Array.isArray(record.rejected) ? record.rejected.length : 0
     await env.KV.put(key, JSON.stringify(record), {
@@ -5123,13 +5061,10 @@ async function recordDailyPickOnce(env, date, uniprotId, audit) {
         recorded_at: record.recorded_at,
       },
     })
-    if (replacedUnplayableUniprot) {
-      console.warn(
-        `[TARGET-PICK] Replaced unplayable ${date} target ${replacedUnplayableUniprot} with ${record.uniprot_id} before any guesses`,
-      )
-    }
+    return true
   } catch (err) {
     console.warn("Daily pick record write failed:", err)
+    return false
   }
 }
 
@@ -5519,6 +5454,12 @@ async function getDailyTargetProtein(env, options = {}) {
   let availabilityPin = null
   let computedDailySelection = null
   let dailySelectionAttempted = false
+  // True when the pick is one the 23:55 pre-warm already verified and recorded (or the
+  // production mirror of it). The player path serves such a pick as it is and never
+  // probes it again: a probe that misses its 5 second timer proves nothing about a
+  // structure (RCSB's ModelServer takes 2 to 5 seconds to build one), and acting on it
+  // would swap a verified pick for the next candidate (B-918).
+  let pickIsRecorded = false
 
   const wantsAudit = Boolean(options.returnAudit)
   const audit = wantsAudit
@@ -5573,8 +5514,8 @@ async function getDailyTargetProtein(env, options = {}) {
 
     // A verified pre-warm pick is the production source of truth for the day.
     // Read it before recomputing so an origin cache miss cannot reshuffle the
-    // target. The availability pass below may replace it only if the recorded
-    // structure has become unreachable and nobody has submitted a guess.
+    // target. Nothing on the player path verifies or replaces it: the pre-warm
+    // probed its structure, and a structure that dies later is an override away.
     if (!protein) {
       try {
         const actualRaw = await env.KV.get(`puzzle_actual:${today}`)
@@ -5587,6 +5528,7 @@ async function getDailyTargetProtein(env, options = {}) {
             const actualProtein = await fetchProteinByUniprot(env.DB, actualUniprot)
             if (actualProtein) {
               protein = actualProtein
+              pickIsRecorded = true
               explicitOverrideSelected =
                 actual?.source === "override" || Boolean(actual?.override_id)
               if (audit) {
@@ -5617,6 +5559,7 @@ async function getDailyTargetProtein(env, options = {}) {
             const prodProtein = await fetchProteinByUniprot(env.DB, prodUniprot)
             if (prodProtein) {
               protein = prodProtein
+              pickIsRecorded = true
               if (audit) {
                 audit.source = "prod_actual"
                 audit.override_id = null
@@ -5638,6 +5581,7 @@ async function getDailyTargetProtein(env, options = {}) {
             const prodProtein = await fetchProteinByUniprot(env.DB, prodDailyUniprot)
             if (prodProtein) {
               protein = prodProtein
+              pickIsRecorded = true
               if (audit) {
                 audit.source = "prod_daily_cache"
                 audit.override_id = null
@@ -5704,11 +5648,12 @@ async function getDailyTargetProtein(env, options = {}) {
     }
   }
 
-  // Validate the exact canonical structure before committing to this pick.
-  // A stored URL is only metadata; it may still return 404 or 5xx. Preserve the
-  // curated source decision, reject the whole protein when that source is
-  // unreachable, and advance through the deterministic pool.
-  if (protein && env) {
+  // Validate the exact canonical structure before committing to a pick nobody has
+  // verified yet (computed here, a pin, an override, a practice pick). A stored URL is
+  // only metadata; it may still return 404 or 5xx. Preserve the curated source
+  // decision, reject the whole protein when that source is unreachable, and advance
+  // through the deterministic pool. A recorded pick skips this: see `pickIsRecorded`.
+  if (protein && env && !pickIsRecorded) {
     const selectAvailable = (ids) =>
       selectAvailableDailyTarget({
         initialProtein: protein,

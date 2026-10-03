@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { routeFingerprint, withErrorReporting } from "./the-only-error-reporter.js"
+import {
+  routeFingerprint,
+  withErrorReporting,
+  withScheduledErrorReporting,
+} from "./the-only-error-reporter.js"
 
 // B-832 failure list, written before the reporter:
 // 1. No SENTRY_DSN configured: a no-op that never fetches.
@@ -9,6 +13,10 @@ import { routeFingerprint, withErrorReporting } from "./the-only-error-reporter.
 // 3. No token, cookie, IP or query string leaves the Worker.
 // 4. 5xx responses and thrown errors are reported; 2xx-4xx are not.
 // 5. Per-gene/per-id URLs group into one issue instead of thousands.
+// B-918, a failed scheduled job:
+// 6. A thrown cron error is reported once and rethrown, so the invocation fails.
+// 7. The event names the cron and carries no request, header or URL.
+// 8. A job that returns is not reported; with no DSN nothing is sent.
 
 const DSN = "https://publickey@o1.ingest.us.sentry.io/42"
 
@@ -139,4 +147,65 @@ test("5: per-gene and per-id paths share one fingerprint", () => {
   )
   assert.equal(routeFingerprint("/api/game/5f3a9c2e7b"), "/api/game/:x")
   assert.equal(routeFingerprint("/api/auth/me"), "/api/auth/me")
+})
+
+test("6,7: a failed scheduled job is reported by its cron and rethrown", async () => {
+  const h = harness()
+  await assert.rejects(
+    withScheduledErrorReporting(
+      h.env,
+      h.ctx,
+      "internal",
+      "55 23 * * *",
+      async () => {
+        throw new Error("Pre-warm found no reachable target structure for 2026-10-04")
+      },
+      { fetcher: h.fetcher },
+    ),
+    /no reachable target structure/,
+  )
+  await Promise.all(h.waits)
+  assert.equal(h.sent.length, 1)
+  assert.equal(h.sent[0].url, "https://o1.ingest.us.sentry.io/api/42/envelope/")
+  const event = eventOf(h.sent)
+  assert.equal(
+    event.exception.values[0].value,
+    "Pre-warm found no reachable target structure for 2026-10-04",
+  )
+  assert.equal(event.transaction, "cron 55 23 * * *")
+  assert.equal(event.tags.worker, "internal")
+  assert.equal(event.tags.cron, "55 23 * * *")
+  assert.equal(event.request, undefined)
+  assert.equal(event.release, "abc123")
+})
+
+test("8: a scheduled job that returns is not reported, and no DSN sends nothing", async () => {
+  const ok = harness()
+  const result = await withScheduledErrorReporting(
+    ok.env,
+    ok.ctx,
+    "internal",
+    "55 23 * * *",
+    async () => "done",
+    { fetcher: ok.fetcher },
+  )
+  assert.equal(result, "done")
+  assert.equal(ok.sent.length, 0)
+
+  const noDsn = harness({})
+  await assert.rejects(
+    withScheduledErrorReporting(
+      noDsn.env,
+      noDsn.ctx,
+      "internal",
+      "55 23 * * *",
+      async () => {
+        throw new Error("boom")
+      },
+      { fetcher: noDsn.fetcher },
+    ),
+    /boom/,
+  )
+  assert.equal(noDsn.sent.length, 0)
+  assert.equal(noDsn.waits.length, 0)
 })
