@@ -48,6 +48,24 @@ a real 404 instead of the application shell.
 The same predicate owns response headers, HTML metadata, and tests. Never
 update just one of those surfaces.
 
+A gene has one public name: its HGNC approved name, which is
+`icono_gene_catalog.full_name`, with the symbol standing in when that is empty.
+`iconoplasmGeneName` in `workers/lib/iconoplasm-gene-name.js` is the only
+reader of that rule. The stable gene object's `full_name`, catalog row[1] of
+`catalog/v3/index.json` (which titles the static gene documents and labels the
+gallery and search results), and the shelf rows all take their name through it,
+so the static document's title and the loaded card's title are the same
+string. `icono_gene_essence.full_name` is the UniProt protein name the
+workstation syncs; it names no gene in public, and a reader that takes it ahead
+of the catalog row makes the tab title change when the card loads. The extension
+never reads the catalog object: it reads `full_name` from the stable gene
+object and `n` from the catalog manifest, both of which are the catalog row's
+name. Catalog row[1] only changes for genes the Actions publisher rebuilds, so
+a changed name reaches every gene's row with a full run
+(`workflow_dispatch` with `full`), and the static documents with the next
+deploy after it. `e2e/gene-name-one-source.e2e.mjs` proves the three
+producers agree and the title holds still in a real browser.
+
 ## Canonical blot discovery contract
 
 Iconoplasm's public machine image is a **gene blot**, not the source character
@@ -213,7 +231,8 @@ every production deploy:
   URL patterns and the developers page;
 - `gene/{SYMBOL}.html`, one small document per catalog gene with its own title,
   description, canonical URL, `og:image` and licence, which boots the shared
-  app shell in place;
+  app shell in place and writes its own `<title>` into that shell, so the tab
+  shows the gene's title from first paint until the card loads;
 - `_redirects`, which sends `/genes` and `/genes/*` to the Archive (`/`) with
   a 301, so old links and search results land on the one public catalog.
 
