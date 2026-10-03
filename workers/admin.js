@@ -1507,6 +1507,52 @@ export async function handleGraphicsSettings(request, env) {
 }
 
 /**
+ * THE ONLY PUBLIC READER OF THE GRAPHICS SETTINGS: the writer above stores them in KV, and
+ * the game's bootstrap and `GET /api/graphics-settings` (the admin preview and the Discord
+ * recap read that route) both read them here, so they cannot disagree. A visitor's page gets
+ * them in the bootstrap response, with no request of their own (B-957); the admin tunes them
+ * live, so there is no deploy-time file to read instead.
+ *
+ * When the prod frontend is pointed at the staging API via `?gg_api=...`, the prod settings are
+ * mirrored (otherwise staging can serve occlusion-heavy settings that freeze Mol* mid-render).
+ * Staging pages and admin read staging KV by default; prod's value is mirrored only when the
+ * request clearly originates from the prod site.
+ */
+export async function readGraphicsSettings(env, request) {
+  const requestOrigin = request.headers.get("Origin") || ""
+  const requestReferer = request.headers.get("Referer") || ""
+  const wantsProdGraphicsSettings =
+    Boolean(env.PROD_KV?.get) &&
+    (requestOrigin === "https://geneguessr.brinedew.bio" ||
+      requestOrigin === "https://brinedew.bio" ||
+      requestReferer.startsWith("https://geneguessr.brinedew.bio/") ||
+      requestReferer.startsWith("https://brinedew.bio/"))
+
+  let storedSettings = await env.KV.get("graphics_settings")
+  if (wantsProdGraphicsSettings) {
+    const prodSettings = await env.PROD_KV.get("graphics_settings")
+    if (prodSettings) {
+      storedSettings = prodSettings
+    }
+  }
+  if (!storedSettings) {
+    return clone(DEFAULT_GRAPHICS_SETTINGS)
+  }
+  try {
+    return normalizeGraphicsSettings(JSON.parse(storedSettings))
+  } catch (err) {
+    console.error("Failed to parse stored graphics settings, serving defaults", err)
+    return clone(DEFAULT_GRAPHICS_SETTINGS)
+  }
+}
+
+/** What the game page reads of the settings: every section but the admin's profile manager. */
+export function publicGraphicsSections(settings) {
+  const { profileManager: _profileManager, ...sections } = settings
+  return sections
+}
+
+/**
  * DELETE /api/admin/override-protein
  * Remove protein override for specific date
  */

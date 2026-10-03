@@ -29,6 +29,24 @@
 //  8. a page that is not given a direct URL (an older Worker) breaks instead of loading
 //     through the Worker as it always did.
 //
+// B-957 adds the request budget of a whole visit: a guess answers with its similarity score
+// (no second request), the bootstrap carries the graphics settings (no request of their own)
+// and the leaderboard is read when its sidebar section reaches the viewport. The visit is
+// measured on a desktop viewport (the sidebar beside the game, on screen at load) and on a
+// phone (the sidebar below the game), with 3 and 6 guesses; the counts land in
+// geneguessr-request-budget.json. Failure modes, written before the code:
+//  9. a guess is answered without its score and the page asks again (`guess-similarity`), or
+//     shows a spinner, or shows a number other than the one the Worker computes;
+// 10. the page asks `/api/graphics-settings` at load, or styles the first viewer with the
+//     built-in default while the stored value is on its way;
+// 11. the leaderboard is read while its section is off screen, never read when it is on
+//     screen or in a browser without IntersectionObserver, read again on every scroll, or
+//     painted differently than before (the first paint says "No public streaks yet." until the
+//     fetch starts; it must say "Loading leaderboard..." until the rows arrive).
+// The page here carries the grid and sidebar rules of quartz/styles (base.scss and
+// variables.scss): three columns from 1200 px with a sticky 100vh right sidebar, the sidebar
+// below the game under that.
+//
 // Playwright disables the HTTP cache while a route is installed, so a repeat view's cost is
 // not measured here. Against the real providers (Chrome 154, 2026-10-03) a repeat view with
 // `cache: "force-cache"` took 1 to 2 ms for all three, while a default repeat took 270 to 424 ms
@@ -43,12 +61,16 @@ import test, { after, before, mock } from "node:test"
 
 import worker from "../workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { publicContentSecurityPolicy } from "../workers/lib/the-only-public-document-policy-do-not-duplicate.js"
+import { DEFAULT_GRAPHICS_SETTINGS } from "../workers/admin.js"
+import { getBlendedSimilarity } from "../workers/lib/protein-store.js"
 import {
   geneguessrWorkerEnv,
   meteredDb,
   openCatalogDb,
   productionShapedCatalogRows,
   seedCatalog,
+  seedEmbeddings,
+  seedLeaderboard,
 } from "../workers/daily-selection-pool-test-d1.js"
 import {
   ANONYMOUS_PDB_HEADER,
@@ -71,11 +93,47 @@ const TYPES = {
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
 }
+// The game page in the shape Quartz gives it: the game in the centre column and the right sidebar
+// (where the stats and the "Top Streaks" section are mounted) beside it from 1200 px, below it
+// under that. The grid numbers are those of quartz/styles/variables.scss and base.scss.
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>GeneGuessr</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/geneguessr/styles.css">
+<style>
+  body { margin: 0; }
+  .page { max-width: calc(1200px + 300px); margin: 0 auto; }
+  #quartz-body { display: grid; column-gap: 5px; row-gap: 5px;
+    grid-template-columns: 320px auto 320px; grid-template-rows: auto auto auto;
+    grid-template-areas: "grid-sidebar-left grid-header grid-sidebar-right"
+      "grid-sidebar-left grid-center grid-sidebar-right"
+      "grid-sidebar-left grid-footer grid-sidebar-right"; }
+  #quartz-body .sidebar { gap: 1.2rem; top: 0; box-sizing: border-box; padding: 6rem 2rem 2rem 2rem;
+    display: flex; height: 100vh; position: sticky; }
+  #quartz-body .sidebar.left { grid-area: grid-sidebar-left; flex-direction: column; }
+  #quartz-body .sidebar.right { grid-area: grid-sidebar-right; flex-direction: column; }
+  #quartz-body .center { grid-area: grid-center; min-width: 100%; }
+  #quartz-body .page-header { grid-area: grid-header; }
+  #quartz-body footer { grid-area: grid-footer; }
+  @media not all and (min-width: 1200px) {
+    #quartz-body { padding: 0 1rem; grid-template-columns: 320px auto; grid-template-rows: auto auto auto auto;
+      grid-template-areas: "grid-sidebar-left grid-header" "grid-sidebar-left grid-center"
+        "grid-sidebar-left grid-sidebar-right" "grid-sidebar-left grid-footer"; }
+    #quartz-body .sidebar.right { position: initial; height: unset; width: 100%; flex-direction: row; padding: 0; }
+    #quartz-body .sidebar.right > * { flex: 1; max-height: 24rem; }
+  }
+  @media (max-width: 800px) {
+    #quartz-body { grid-template-columns: auto; grid-template-rows: auto auto auto auto auto;
+      grid-template-areas: "grid-sidebar-left" "grid-header" "grid-center" "grid-sidebar-right" "grid-footer"; }
+    #quartz-body .sidebar.left { position: initial; height: unset; padding: 0; padding-top: 2rem; }
+  }
+</style>
 <script src="/static/geneguessr/molstar-shared.js"></script>
-</head><body><main><div id="geneguessr-root"></div></main>
+</head><body><div class="page"><div id="quartz-body">
+<div class="sidebar left"></div><div class="page-header"></div>
+<div class="center"><article><div id="geneguessr-root"></div></article></div>
+<div class="sidebar right"></div><footer></footer>
+</div></div>
 <script type="module" src="/static/geneguessr/app.js"></script></body></html>`
 // The game document's real policy. Only `upgrade-insecure-requests` is dropped, because the
 // test origin is plain http on loopback.
@@ -84,6 +142,14 @@ const CSP = publicContentSecurityPolicy({ geneguessrGame: true }).replace(
   "",
 )
 const PROVIDER_HOSTS = ["models.rcsb.org", "alphafold.ebi.ac.uk", "swissmodel.expasy.org"]
+const DESKTOP = { width: 1280, height: 900 }
+const PHONE = { width: 390, height: 844 }
+// Public streaks the leaderboard shows, best first.
+const LEADERBOARD = [
+  { id: "d1", username: "Ada", streak: 12, wins: 40 },
+  { id: "d2", username: "Barbara", streak: 7, wins: 31 },
+  { id: "d3", username: "Chien-Shiung", streak: 3, wins: 9 },
+]
 
 let db
 let metered
@@ -311,6 +377,14 @@ before(async () => {
     harness.env,
     { waitUntil() {} },
   )
+  // The embedding rows a guess's similarity is computed from (the target, and every protein a
+  // visit can guess), and the accounts the leaderboard shows.
+  const target = newestTarget()
+  await seedEmbeddings(db, [
+    rows.find((row) => row.uniprot === target).gene,
+    ...guessRows(target, 6).map((row) => row.gene),
+  ])
+  await seedLeaderboard(db, LEADERBOARD)
 })
 
 after(async () => {
@@ -366,12 +440,17 @@ function proteinIndex() {
 // The target the daily pick gave the newest session (the visit's own), and three proteins to
 // guess, one per source.
 const newestTarget = () => [...harness.sessions.values()].at(-1).targetId
-const guessRows = (target) =>
-  ["pdb", "swissmodel", "alphafold"].map((source) =>
-    rows.find(
+// `count` proteins to guess, cycling through the three sources: the first three are one of
+// each, the next three the second of each.
+const guessRows = (target, count = 3) => {
+  const sources = ["pdb", "swissmodel", "alphafold"]
+  const pools = sources.map((source) =>
+    rows.filter(
       (row) => row.structure_source === source && row.gene_summary && row.uniprot !== target,
     ),
   )
+  return Array.from({ length: count }, (_, index) => pools[index % 3][Math.floor(index / 3)])
+}
 
 function resetMeters() {
   metered.receipts.length = 0
@@ -393,6 +472,8 @@ const readMeters = () => ({
 
 function category(line) {
   if (line.startsWith("GET /api/game/bootstrap")) return "bootstrap"
+  if (line.startsWith("GET /api/graphics-settings")) return "graphicsSettings"
+  if (line.startsWith("GET /api/stats/leaderboard")) return "leaderboard"
   if (line.startsWith("POST /api/game/guess-similarity")) return "similarity"
   if (line.startsWith("POST /api/game/guess")) return "guess"
   if (line.includes("/api/structure-cached?type=target")) return "structureTarget"
@@ -403,6 +484,8 @@ function category(line) {
 function counts(lines) {
   const out = {
     bootstrap: 0,
+    graphicsSettings: 0,
+    leaderboard: 0,
     guess: 0,
     similarity: 0,
     structureTarget: 0,
@@ -417,7 +500,10 @@ function counts(lines) {
 // A browser context for one visitor. Off-origin requests: Mol* comes from the vendored build, a
 // provider answers from a fixture with the CORS header the real ones send (or as `provider`
 // says), and everything else is refused. `tracker` records what the page did.
-async function openVisitor(browser, { visitorCookie, provider = null }) {
+async function openVisitor(
+  browser,
+  { visitorCookie, provider = null, viewport = { width: 1200, height: 900 }, noObserver = false },
+) {
   cookie = visitorCookie
   const tracker = {
     providerRequests: [],
@@ -426,7 +512,9 @@ async function openVisitor(browser, { visitorCookie, provider = null }) {
     complete: new Set(),
     cspViolations: [],
   }
-  const context = await browser.newContext({ viewport: { width: 1200, height: 900 } })
+  const context = await browser.newContext({ viewport })
+  // A browser without IntersectionObserver (an old one, or one that blocks it).
+  if (noObserver) await context.addInitScript(() => delete window.IntersectionObserver)
   await context.route(
     (url) => url.origin !== origin,
     async (route) => {
@@ -473,6 +561,29 @@ async function openVisitor(browser, { visitorCookie, provider = null }) {
       }
       return create(object)
     }
+  })
+  // What the visitor sees change: every spinner or pending mark that is ever added to the page,
+  // and every text the leaderboard section shows, in order.
+  await context.addInitScript(() => {
+    window.__pendingMarks = 0
+    window.__leaderboardTexts = []
+    const pending = ".pg-score-spinner, .pg-pending"
+    const record = () => {
+      const section = document.getElementById("pg-sidebar-leaderboard")
+      if (!section) return
+      const text = section.textContent.replace(/\s+/g, " ").trim()
+      if (text !== window.__leaderboardTexts.at(-1)) window.__leaderboardTexts.push(text)
+    }
+    new MutationObserver((changes) => {
+      for (const change of changes) {
+        for (const node of change.addedNodes) {
+          if (node.nodeType === 1 && (node.matches(pending) || node.querySelector(pending))) {
+            window.__pendingMarks += 1
+          }
+        }
+      }
+      record()
+    }).observe(document, { childList: true, subtree: true, characterData: true })
   })
   const page = await context.newPage()
   page.on("console", (message) => {
@@ -521,13 +632,21 @@ async function settle(page, tracker, expected, timeoutMs = 40000) {
 }
 
 // A visit: open the game and make `guesses` guesses by typing and clicking.
-async function visit(browser, { visitorCookie, guesses = 3, provider = null }) {
-  const { page, context, tracker } = await openVisitor(browser, { visitorCookie, provider })
+async function visit(
+  browser,
+  { visitorCookie, guesses = 3, provider = null, viewport, noObserver = false },
+) {
+  const { page, context, tracker } = await openVisitor(browser, {
+    visitorCookie,
+    provider,
+    viewport,
+    noObserver,
+  })
   requests = []
   resetMeters()
   await openGame(page)
   const target = newestTarget()
-  const chosen = guessRows(target).slice(0, guesses)
+  const chosen = guessRows(target, guesses)
   for (const [index, row] of chosen.entries()) await guess(page, row, index + 1)
   const viewers = await settle(page, tracker, 1 + chosen.length)
   return {
@@ -546,9 +665,9 @@ async function visit(browser, { visitorCookie, guesses = 3, provider = null }) {
   }
 }
 
-// A returning visitor: a session that already holds these guesses, as the guess handler leaves
-// them. The page opens the newest guess's card, so a load shows two viewers (the target and that
-// guess); the visitor then opens the other two cards, and reloads.
+// A returning visitor: a session that already holds these guesses with no score (the bootstrap
+// scores them). The page opens the newest guess's card, so a load shows two viewers (the target
+// and that guess); the visitor then opens the other two cards, and reloads.
 async function returningVisit(browser, { visitorCookie }) {
   const { page, context, tracker } = await openVisitor(browser, { visitorCookie })
   cookie = visitorCookie
@@ -566,7 +685,6 @@ async function returningVisit(browser, { visitorCookie }) {
       uniprot: row.uniprot,
       correct: false,
       createdAt: Date.now() + index,
-      similarityPending: true,
     })),
   })
   const phases = []
@@ -949,6 +1067,263 @@ test("a direct URL that is not a provider URL is never requested and the guess l
   } finally {
     rewrite = { directUrls: true }
     save()
+    await browser.close()
+  }
+})
+
+// ---------------------------------------------------------------------------------------------
+// B-957: the request budget of a visit. What a visit costs on the free plan is its Worker
+// requests (two meter units each), so these tests count them for page load plus 3 and 6
+// guesses, on a desktop viewport and on a phone.
+
+const budget = {}
+const saveBudget = () => {
+  mkdirSync(OUT, { recursive: true })
+  writeFileSync(path.join(OUT, "geneguessr-request-budget.json"), JSON.stringify(budget, null, 2))
+}
+const leaderboardShown = (page) =>
+  page.evaluate(() => ({
+    names: [...document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-name")].map(
+      (el) => el.textContent,
+    ),
+    streaks: [...document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-streak")].map(
+      (el) => Number(el.textContent),
+    ),
+    texts: window.__leaderboardTexts,
+  }))
+const RANKED = {
+  names: LEADERBOARD.map((entry) => entry.username),
+  streaks: LEADERBOARD.map((entry) => entry.streak),
+}
+const rowsShown = () =>
+  document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-row").length > 0
+
+for (const [layout, viewport] of [
+  ["desktop", DESKTOP],
+  ["phone", PHONE],
+]) {
+  for (const guesses of [3, 6]) {
+    const expectedTotal = 2 + guesses + (layout === "desktop" ? 1 : 0)
+    test(`a ${layout} visit, page load plus ${guesses} guesses, costs ${expectedTotal} Worker requests`, async (t) => {
+      const browser = await chromeAndMolstar(t)
+      if (!browser) return
+      try {
+        rewrite = { directUrls: true }
+        const { result, page, context, tracker } = await visit(browser, {
+          visitorCookie: `geneguessr_session=e2e-budget-${layout}-${guesses}`,
+          guesses,
+          viewport,
+        })
+        // The visit's own measurements first: a visitor on a phone has not scrolled to the
+        // sidebar, a desktop visitor has it on screen.
+        const marks = await page.evaluate(() => window.__pendingMarks)
+        const entry = { ...result, pendingMarks: marks }
+        budget[`${layout}${guesses}`] = entry
+        if (layout === "phone") {
+          // Then the visitor scrolls down to the sidebar: the section is read once.
+          await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
+          await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+          entry.afterScroll = counts(requests)
+        }
+        await context.close()
+
+        const c = result.counts
+        assert.equal(c.bootstrap, 1, `bootstrap: ${result.requests}`)
+        assert.equal(c.structureTarget, 1, "the target is one Worker view")
+        assert.equal(c.guess, guesses, "one request a guess")
+        assert.equal(c.similarity, 0, "no request for a similarity score")
+        assert.equal(c.graphicsSettings, 0, "no request for the graphics settings")
+        assert.equal(c.structureKey, 0, "no guess view through the Worker")
+        assert.equal(c.structureToken, 0, "no token request")
+        assert.equal(c.other, 0, `nothing else: ${result.requests}`)
+        assert.equal(c.leaderboard, layout === "desktop" ? 1 : 0, "the leaderboard")
+        assert.equal(c.total, expectedTotal, `${result.requests}`)
+        assert.equal(marks, 0, "a score never shows as pending")
+        assert.deepEqual(result.failed, [], "no viewer failed")
+        assert.equal(result.complete.length, 1 + guesses, `rendered viewers: ${result.complete}`)
+        assert.deepEqual(tracker.cspViolations, [])
+        if (layout === "phone") {
+          assert.equal(entry.afterScroll.leaderboard, 1, "scrolling to the section reads it once")
+          assert.equal(entry.afterScroll.total, 3 + guesses)
+        }
+      } finally {
+        saveBudget()
+        await browser.close()
+      }
+    })
+  }
+}
+
+test("each card shows the similarity score the Worker computes, at once and never as a spinner", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    const { result, page, context } = await visit(browser, {
+      visitorCookie: "geneguessr_session=e2e-scores",
+      viewport: DESKTOP,
+    })
+    const shown = await page.evaluate(() => ({
+      pending: window.__pendingMarks,
+      cards: [...document.querySelectorAll('.pg-feedback-card[id^="guess-card-"]')].map((card) => ({
+        gene: card.querySelector(".pg-feedback-gene")?.textContent,
+        score: card.querySelector(".pg-feedback-score")?.textContent,
+        bar: card.querySelector(".pg-bar-fill")?.style.width,
+      })),
+    }))
+    await context.close()
+    const target = rows.find((row) => row.uniprot === result.target)
+    assert.equal(shown.cards.length, 3)
+    for (const card of shown.cards) {
+      const guessed = rows.find((row) => row.gene === card.gene)
+      const expected = (await getBlendedSimilarity(db, guessed.gene, target.gene)).blended
+      assert.equal(typeof expected, "number", `${card.gene}: the seeded embeddings score`)
+      assert.equal(card.score, `${expected}%`, `${card.gene}: the number on the card`)
+      assert.equal(card.bar, `${expected}%`, `${card.gene}: the bar`)
+    }
+    assert.equal(shown.pending, 0, "no spinner or pending mark was ever added to the page")
+  } finally {
+    await browser.close()
+  }
+})
+
+test("the page is styled with the settings the bootstrap carries, with no request of their own", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  const tuned = {
+    ...DEFAULT_GRAPHICS_SETTINGS,
+    camera: { ...DEFAULT_GRAPHICS_SETTINGS.camera, mode: "orthographic" },
+  }
+  const cameraMode = async (stored) => {
+    if (stored) harness.kv.set("graphics_settings", JSON.stringify(stored))
+    else harness.kv.delete("graphics_settings")
+    const { page, context, tracker } = await openVisitor(browser, {
+      visitorCookie: `geneguessr_session=e2e-graphics-${stored ? "tuned" : "default"}`,
+      viewport: DESKTOP,
+    })
+    requests = []
+    // `molstar_debug` hands the page's last viewer to the test.
+    await page.goto(`${origin}/?molstar_debug&gg_api=${encodeURIComponent(origin)}`)
+    await page.waitForSelector('body[data-geneguessr-status="rendered"]', { timeout: 30000 })
+    await settle(page, tracker, 1)
+    await page.waitForTimeout(1500) // the stylization steps wait 100 to 300 ms each
+    const mode = await page.evaluate(
+      () => globalThis.__GeneguessrMolstarDebug?.viewer?.plugin?.canvas3d?.props?.camera?.mode,
+    )
+    const seen = counts(requests)
+    await context.close()
+    return { mode, seen }
+  }
+  try {
+    rewrite = { directUrls: true }
+    const withStored = await cameraMode(tuned)
+    const withDefault = await cameraMode(null)
+    budget.graphicsSettings = { withStored, withDefault }
+    assert.equal(withStored.mode, "orthographic", "the stored value styled the first viewer")
+    assert.equal(withDefault.mode, "perspective", "the control: with no stored value, the default")
+    assert.equal(withStored.seen.graphicsSettings, 0, "no settings request with a stored value")
+    assert.equal(withDefault.seen.graphicsSettings, 0, "none without one")
+  } finally {
+    harness.kv.delete("graphics_settings")
+    saveBudget()
+    await browser.close()
+  }
+})
+
+test("a phone reads the leaderboard when its section nears the screen, and it looks as it always did", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    const { page, context } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-board-phone",
+      viewport: PHONE,
+    })
+    requests = []
+    await openGame(page)
+    await page.waitForTimeout(2000)
+    const before = { counts: counts(requests), shown: await leaderboardShown(page) }
+    const offScreen = await page.evaluate(() => {
+      const top = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect().top
+      return top - window.innerHeight
+    })
+    await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    // Away and back: the rows are already there, so no second read.
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.waitForTimeout(500)
+    await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
+    await page.waitForTimeout(1000)
+    const after = { counts: counts(requests), shown: await leaderboardShown(page) }
+    await context.close()
+    budget.leaderboardPhone = { before, after, pixelsBelowTheScreenAtLoad: Math.round(offScreen) }
+
+    assert.ok(offScreen > 400, `the section starts ${offScreen} px below the screen at load`)
+    assert.equal(before.counts.leaderboard, 0, "not read while off screen")
+    assert.deepEqual(before.shown.texts, ["Loading leaderboard..."], "the first paint")
+    assert.equal(after.counts.leaderboard, 1, "read once, however often it is scrolled to")
+    assert.deepEqual({ names: after.shown.names, streaks: after.shown.streaks }, RANKED)
+    assert.ok(
+      !after.shown.texts.includes("No public streaks yet."),
+      `the empty text never flashed: ${JSON.stringify(after.shown.texts)}`,
+    )
+    assert.equal(after.shown.texts.length, 2, "loading, then the rows")
+  } finally {
+    saveBudget()
+    await browser.close()
+  }
+})
+
+test("a desktop reads the leaderboard at load, because its section is on screen, and it looks as it always did", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    const { page, context } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-board-desktop",
+      viewport: DESKTOP,
+    })
+    requests = []
+    await openGame(page)
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    const shown = await leaderboardShown(page)
+    const onScreen = await page.evaluate(() => {
+      const box = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect()
+      return box.top >= 0 && box.bottom <= window.innerHeight
+    })
+    await context.close()
+    budget.leaderboardDesktop = { counts: counts(requests), shown, onScreen }
+
+    assert.equal(onScreen === true, true, "the section is on the first screen")
+    assert.equal(counts(requests).leaderboard, 1)
+    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
+    assert.equal(shown.texts.length, 2, `loading, then the rows: ${JSON.stringify(shown.texts)}`)
+    assert.ok(!shown.texts.includes("No public streaks yet."), "the empty text never flashed")
+  } finally {
+    saveBudget()
+    await browser.close()
+  }
+})
+
+test("a browser without IntersectionObserver still reads the leaderboard, at load", async (t) => {
+  const browser = await chromeAndMolstar(t)
+  if (!browser) return
+  try {
+    rewrite = { directUrls: true }
+    const { page, context } = await openVisitor(browser, {
+      visitorCookie: "geneguessr_session=e2e-board-old",
+      viewport: PHONE,
+      noObserver: true,
+    })
+    requests = []
+    await openGame(page)
+    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
+    const shown = await leaderboardShown(page)
+    await context.close()
+
+    assert.equal(counts(requests).leaderboard, 1)
+    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
+  } finally {
     await browser.close()
   }
 })

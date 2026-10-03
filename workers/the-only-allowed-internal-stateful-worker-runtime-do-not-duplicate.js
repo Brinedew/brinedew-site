@@ -1358,8 +1358,9 @@ import {
   handleAdminDiscordRecapImageStatus,
   handleAdminDiscordRecapImageStatuses,
   handleGraphicsSettings,
+  readGraphicsSettings,
+  publicGraphicsSections,
   DEFAULT_GRAPHICS_SETTINGS,
-  normalizeGraphicsSettings,
   handleAdminSchedule,
   handleAdminScheduleAvailabilityReplacement,
   handleAdminCards,
@@ -2924,40 +2925,10 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       })
     }
 
-    // Public graphics settings endpoint (no auth required)
+    // Public graphics settings endpoint (no auth required). The game page does not call it (its
+    // bootstrap carries the settings); the admin preview and the Discord recap do.
     if (url.pathname === "/api/graphics-settings" && request.method === "GET") {
-      // When the prod frontend is pointed at the staging API via `?gg_api=...`, we want the same
-      // render characteristics as prod (otherwise we can get occlusion-heavy settings that freeze
-      // Mol* mid-render and make the viewer unresponsive).
-      //
-      // Staging pages/admin can still use staging KV by default; we only mirror prod settings when
-      // the request clearly originates from the prod site.
-      const requestOrigin = request.headers.get("Origin") || ""
-      const requestReferer = request.headers.get("Referer") || ""
-      const wantsProdGraphicsSettings =
-        Boolean(env.PROD_KV?.get) &&
-        (requestOrigin === "https://geneguessr.brinedew.bio" ||
-          requestOrigin === "https://brinedew.bio" ||
-          requestReferer.startsWith("https://geneguessr.brinedew.bio/") ||
-          requestReferer.startsWith("https://brinedew.bio/"))
-
-      let storedSettings = await env.KV.get("graphics_settings")
-      if (wantsProdGraphicsSettings) {
-        const prodSettings = await env.PROD_KV.get("graphics_settings")
-        if (prodSettings) {
-          storedSettings = prodSettings
-        }
-      }
-      let graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
-      if (storedSettings) {
-        try {
-          graphicsPayload = normalizeGraphicsSettings(JSON.parse(storedSettings))
-        } catch (err) {
-          console.error("Failed to parse stored graphics settings, serving defaults", err)
-          graphicsPayload = JSON.parse(JSON.stringify(DEFAULT_GRAPHICS_SETTINGS))
-        }
-      }
-      return Response.json(graphicsPayload, {
+      return Response.json(await readGraphicsSettings(env, request), {
         headers: corsHeaders,
       })
     }
@@ -3046,11 +3017,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
     if (url.pathname === "/api/game/reveal-hint" && request.method === "POST") {
       return handleHintReveal(request, env, corsHeaders)
-    }
-
-    // Lazy similarity calculation - called after guess card is shown
-    if (url.pathname === "/api/game/guess-similarity" && request.method === "POST") {
-      return handleGuessSimilarity(request, env, corsHeaders)
     }
 
     // Public proteins endpoint for autocomplete
@@ -4629,6 +4595,17 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     const url = new URL(request.url)
     const today = new Date().toISOString().slice(0, 10)
 
+    // The graphics settings ride along (B-957): the admin tunes them live in KV, the first viewer
+    // needs them, and the page used to spend a Worker request on them. The read starts now and
+    // runs beside everything below; one that fails leaves the page the defaults.
+    const graphicsSettingsRead = readGraphicsSettings(env, request).catch((err) => {
+      console.warn(
+        "GeneGuessr: graphics settings unreadable, serving defaults",
+        err?.message || err,
+      )
+      return DEFAULT_GRAPHICS_SETTINGS
+    })
+
     // ⚠️ DAILY MODE: CHECK KV CACHE FIRST ⚠️
     // Eliminates D1 queries for repeat visitors (~500-2000ms savings)
     let cachedDaily = null
@@ -4977,6 +4954,7 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
     }
 
     const payload = buildGamePayload(state, targetProtein, { structureTokenOrigin: url.origin })
+    payload.graphicsSettings = publicGraphicsSections(await graphicsSettingsRead)
     // Embed structure token in bootstrap response - client uses this instead of separate API call
     if (structureToken) {
       try {
@@ -5127,18 +5105,18 @@ async function handleGuessSubmission(request, env, corsHeaders) {
       )
     }
 
-    // ⚡ LAZY SIMILARITY: Skip slow similarity calculation here
-    // Return immediately with score: null, client will fetch via /api/game/guess-similarity
-    // This saves ~1-2 seconds on guess submission
+    // The score is part of the answer (B-957): one request for the guess, not a second for its
+    // similarity. The embeddings read starts here and runs while the aggregates are recorded;
+    // a correct guess is 100% and reads nothing.
     const correct = guessProtein.uniprot === targetProtein.uniprot
+    const scorePromise = correct
+      ? Promise.resolve(scoreGuess(guessProtein, targetProtein, { similarity: 100 }))
+      : scoreAgainstTarget(env, guessProtein, targetProtein)
     const guessEntry = {
       guessId: crypto.randomUUID(),
       uniprot,
       correct,
-      // scoreGuess() returns a structured score object expected by the client.
-      // Using a raw number here causes the UI to display N/A for correct guesses.
-      score: correct ? scoreGuess(guessProtein, targetProtein, { similarity: 100 }) : null,
-      similarityPending: !correct, // Client should fetch similarity
+      score: null, // set below, once the embeddings are read
       createdAt: Date.now(),
       protein: {
         ...guessProtein,
@@ -5159,6 +5137,7 @@ async function handleGuessSubmission(request, env, corsHeaders) {
     } catch (err) {
       console.warn("Guess aggregate recording failed (non-fatal):", err?.message || err)
     }
+    guessEntry.score = await scorePromise
 
     // ⚡ PERFORMANCE: Build guess structure token in parallel with saveGameState
     // This eliminates ~3s API round-trip on client after guess submission
@@ -5320,97 +5299,49 @@ async function handleHintReveal(request, env, corsHeaders) {
 }
 
 /**
- * ⚡ LAZY SIMILARITY CALCULATION
+ * THE ONLY SIMILARITY SCORE PATH. A guess's score is its similarity to the target (HiG2Vec and
+ * SaProt, blended), the ladder rank when the guess is one of the target's closest neighbours,
+ * and the clue matches. The guess response carries it (B-957: it used to be a second request
+ * after the card appeared, to save "1-2 seconds" that the in-isolate embedding caches and the
+ * calibrated cosine no longer cost), and the bootstrap computes it for a guess a session stored
+ * without one.
  *
- * Called after guess card is displayed to calculate and return similarity score.
- * This allows the guess card to appear instantly (~200ms) while similarity
- * calculation happens in the background (~1-2s).
- *
- * Client shows a spinner for the score, then updates when this returns.
+ * A failed embeddings read must not fail the guess it belongs to: the player has made the move,
+ * the hint is earned. The score then has no similarity, the card says N/A, and the next load
+ * computes it (`hydrateGuessProteins` scores every guess that has none).
  */
-async function handleGuessSimilarity(request, env, corsHeaders) {
+async function scoreAgainstTarget(env, guessProtein, targetProtein) {
+  let similarity = null
+  let isLadder = false
+  let ladderRank = null
   try {
-    const sessionContext = await resolveSessionContextAsync(request, env)
-    const { sessionId } = sessionContext
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request)
-
-    const body = await safeJson(request)
-    const guessId = body?.guessId
-    if (!guessId) {
-      return Response.json({ error: "Missing guessId" }, { status: 400, headers: responseHeaders })
-    }
-
-    // Get current game state
-    const state = await getGameState(env, sessionId)
-    if (!state) {
-      return Response.json(
-        { error: "Session not found" },
-        { status: 404, headers: responseHeaders },
-      )
-    }
-
-    // Find the guess entry
-    const guessIndex = (state.guesses || []).findIndex((g) => g.guessId === guessId)
-    if (guessIndex === -1) {
-      return Response.json({ error: "Guess not found" }, { status: 404, headers: responseHeaders })
-    }
-
-    const guessEntry = state.guesses[guessIndex]
-
-    // If similarity already calculated, return it immediately
-    if (guessEntry.score !== null && !guessEntry.similarityPending) {
-      return Response.json({ guessId, score: guessEntry.score }, { headers: responseHeaders })
-    }
-
-    // Fetch proteins for similarity calculation
-    const [guessProtein, targetProtein] = await Promise.all([
-      fetchProteinByUniprot(env.DB, guessEntry.uniprot),
-      fetchProteinByUniprot(env.DB, state.targetId),
-    ])
-
-    if (!guessProtein || !targetProtein) {
-      return Response.json(
-        { error: "Protein data unavailable" },
-        { status: 500, headers: responseHeaders },
-      )
-    }
-
-    // Calculate similarity
-    let similarity
-    let isLadder = false
-    let ladderRank = null
     if (SIMILARITY_MODE === "blended") {
-      const simResult = await getBlendedSimilarity(env.DB, guessProtein.gene, targetProtein.gene, {
-        esm2Weight: ESM2_WEIGHT,
-        targetNeighbors: targetProtein.neighbors,
-      })
+      const simResult = await getBlendedSimilarity(
+        env.DB,
+        guessProtein.gene || guessProtein.hgnc,
+        targetProtein.gene,
+        {
+          esm2Weight: ESM2_WEIGHT,
+          targetNeighbors: targetProtein.neighbors,
+        },
+      )
       similarity = simResult.blended
       isLadder = simResult.isLadder
       ladderRank = simResult.ladderRank
     } else {
-      similarity = await getHig2vecSimilarity(env.DB, guessProtein.gene, targetProtein.gene)
+      similarity = await getHig2vecSimilarity(
+        env.DB,
+        guessProtein.gene || guessProtein.hgnc,
+        targetProtein.gene,
+      )
     }
-
-    const score = scoreGuess(guessProtein, targetProtein, { similarity, isLadder, ladderRank })
-
-    // Update session state with calculated score
-    state.guesses[guessIndex].score = score
-    state.guesses[guessIndex].similarityPending = false
-    await saveGameState(env, sessionId, state, {
-      operation: "guess_similarity",
-      requestPath: "/api/game/guess-similarity",
-    })
-
-    return Response.json({ guessId, score }, { headers: responseHeaders })
   } catch (err) {
-    console.error("GeneGuessr: similarity calculation failed", err)
-    const unavailable = proteinReadUnavailableResponse(err, corsHeaders)
-    if (unavailable) return unavailable
-    return Response.json(
-      { error: "Similarity calculation failed" },
-      { status: 500, headers: corsHeaders },
-    )
+    console.warn("GeneGuessr: similarity read failed, scoring without it", err?.message || err)
+    similarity = null
+    isLadder = false
+    ladderRank = null
   }
+  return scoreGuess(guessProtein, targetProtein, { similarity, isLadder, ladderRank })
 }
 
 function isForbiddenByAvailabilityPin(protein, availabilityPin) {
@@ -5849,48 +5780,22 @@ async function hydrateGuessProteins(env, sessionId, state, targetProtein) {
     dirty = true
   }
 
-  // ⚠️ SKIP SIMILARITY RECALC IF SCORE EXISTS OR PENDING ⚠️
-  // Scores are stored in session state and only need calculation on first guess.
-  // Recalculating every bootstrap wastes 100-300ms per guess.
-  // ⚡ LAZY SIMILARITY: Skip entries with similarityPending - client will fetch via /api/game/guess-similarity
+  // ⚠️ SKIP SIMILARITY RECALC IF THE SCORE EXISTS ⚠️
+  // The guess handler scores a guess when it is made, so a stored guess already has its score and
+  // recalculating on every bootstrap would waste 100-300ms per guess. A guess with none gets one
+  // here: one whose embeddings read failed when it was made, or one an earlier version stored
+  // as `similarityPending` (the flag is dropped).
   const entriesNeedingScore = validEntries.filter(
-    (entry) =>
-      entry.protein && targetProtein && !entry.score?.similarity && !entry.similarityPending,
+    (entry) => entry.protein && targetProtein && !entry.score?.similarity,
   )
 
   if (entriesNeedingScore.length > 0) {
-    // Batch similarity calculations for entries that need them
-    const similarityPromises = entriesNeedingScore.map(async (entry) => {
-      let similarity
-      let isLadder = false
-      let ladderRank = null
-      if (SIMILARITY_MODE === "blended") {
-        const simResult = await getBlendedSimilarity(
-          env.DB,
-          entry.protein.gene || entry.protein.hgnc,
-          targetProtein.gene,
-          { esm2Weight: ESM2_WEIGHT, targetNeighbors: targetProtein.neighbors },
-        )
-        similarity = simResult.blended
-        isLadder = simResult.isLadder
-        ladderRank = simResult.ladderRank
-      } else {
-        similarity = await getHig2vecSimilarity(
-          env.DB,
-          entry.protein.gene || entry.protein.hgnc,
-          targetProtein.gene,
-        )
-      }
-      const nextScore = scoreGuess(entry.protein, targetProtein, {
-        similarity,
-        isLadder,
-        ladderRank,
-      })
-      entry.score = nextScore
-      return true // dirty
-    })
-
-    await Promise.all(similarityPromises)
+    await Promise.all(
+      entriesNeedingScore.map(async (entry) => {
+        entry.score = await scoreAgainstTarget(env, entry.protein, targetProtein)
+        delete entry.similarityPending
+      }),
+    )
     dirty = true
   }
 
@@ -5926,13 +5831,7 @@ function buildGamePayload(state, targetProtein, options = {}) {
       ...guessProtein,
       gene_summary: cleanGeneSummary(guessProtein.gene_summary),
     }
-    // ⚡ LAZY SIMILARITY: If similarity is pending, don't call scoreGuess - preserve null score
-    const resolvedScore = entry.similarityPending
-      ? null // Keep null, client will fetch via /api/game/guess-similarity
-      : entry.score ||
-        scoreGuess(guessProtein, targetProtein, {
-          similarity: entry.score?.similarity,
-        })
+    const resolvedScore = entry.score || scoreGuess(guessProtein, targetProtein)
     const matches = collectMatchedHintTexts(targetProtein, guessProtein, resolvedScore, {
       domainSpoilerTokens,
     })
@@ -5951,7 +5850,6 @@ function buildGamePayload(state, targetProtein, options = {}) {
       correct: Boolean(entry.correct),
       createdAt: entry.createdAt,
       score: resolvedScore,
-      similarityPending: Boolean(entry.similarityPending), // ⚡ Pass through to client
       matchedHints: matches,
       sections: buildFeedbackSections(guessProteinCleaned, { domainSpoilerTokens }),
       headerLabel: guessProtein.hgnc || guessProtein.uniprot,
