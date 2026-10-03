@@ -220,47 +220,6 @@ export default (() => {
     accountGalleryWindowData: null,
     accountGalleryWindowPromise: null,
     accountGalleryWindowUsed: false,
-    geneDetailSymbol: "",
-    geneDetailSnapshotVersion: "",
-    geneDetailData: null,
-    geneDetailPromise: null,
-    geneCardData: null,
-    geneCardPromise: null,
-  }
-  var geneMatch = /^\\/gene\\/([^/?#]+)/.exec(iconoplasmStartupPath)
-  if (geneMatch) {
-    bootstrap.geneDetailSymbol = decodeURIComponent(geneMatch[1] || "").trim().toUpperCase()
-    if (bootstrap.geneDetailSymbol) {
-      var embeddedGeneCard = null
-      try {
-        // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-        // Search terms: PRL split-brain, gene page bootstrap, canonical blot,
-        // public card artifact, KV_GALLERY_VERSION.
-        //
-        // The worker embeds the complete site-detail payload. Its rich fields
-        // and candidate state come from live D1, while its canonical portrait
-        // is overridden by the exact published card used by metadata and
-        // sitemaps. That single response can satisfy first paint and hydration.
-        var embeddedGeneCardNode = document.getElementById("iconoplasm-card-bootstrap")
-        var embeddedGeneCardPayload =
-          embeddedGeneCardNode && embeddedGeneCardNode.textContent
-            ? JSON.parse(embeddedGeneCardNode.textContent)
-            : null
-        if (
-          embeddedGeneCardPayload &&
-          embeddedGeneCardPayload.symbol === bootstrap.geneDetailSymbol
-        ) {
-          embeddedGeneCard = embeddedGeneCardPayload.payload || null
-          bootstrap.geneDetailSnapshotVersion = String(
-            embeddedGeneCardPayload.snapshot_version || "",
-          )
-        }
-      } catch (_iconoEmbeddedGeneCardError) {}
-      if (embeddedGeneCard) {
-        bootstrap.geneCardData = embeddedGeneCard
-        bootstrap.geneCardPromise = Promise.resolve(embeddedGeneCard)
-      }
-    }
   }
   if ((iconoplasmStartupPath === "/" || iconoplasmStartupPath === "") && window.fetch) {
     bootstrap.accountGalleryWindowLimit = 4

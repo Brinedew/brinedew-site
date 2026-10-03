@@ -1429,33 +1429,14 @@ async function fetchGeneData({ forceArtifactRefresh = false } = {}) {
 
 if (globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__) {
   Object.assign(globalThis.__ICONOPLASM_EXTENSION_TEST_HOOKS__, {
-    initializePdfPreferences,
-    getPdfOwnershipCapability,
-    setPdfOwnershipEnabled,
     fetchPortraitDataUrl,
-    portraitByteCache,
     stableGeneCache,
-    fetchStableGene,
-    forgetRetiredCardCaches,
     portraitSourcePlan,
     reportPortraitSourceResult,
-    warmPortraitDataUrls,
     clearPortraitDataUrlCaches,
     clearPortraitSourceStates,
-    portraitSourceState,
-    normalizePublishedManifest,
     acceptPublishedExtensionBlocklist,
-    normalizeScannerIndex,
-    migrateLegacyStoredScannerIndex,
-    fetchPublishedScannerArtifact,
-    jsonByteLength,
-    scannerArtifactMaxBytes: SCANNER_ARTIFACT_MAX_BYTES,
-    scannerIndexMaxBytes: SCANNER_INDEX_MAX_BYTES,
     fetchGeneData,
-    fetchIconoplasmApi,
-    apiFetchAbortControllers,
-    fetchWithTimeout,
-    refreshGeneData,
     ensureFreshGeneData,
   })
 }

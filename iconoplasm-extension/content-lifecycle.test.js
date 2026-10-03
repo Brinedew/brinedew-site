@@ -67,7 +67,7 @@ function createRuntime(html, options = {}) {
     scanPage: options.scanPage || scanner.scanPage,
     shouldIgnoreNode(node) {
       const element = node?.nodeType === 3 ? node.parentElement : node
-      return !element || Boolean(element.closest?.(".iconoplasm-gene"))
+      return !element
     },
   })
   return { document, window, scanner, controller }
@@ -459,12 +459,11 @@ test("busy loaded pages use bounded 4 ms tasks without depending on idle time", 
   assert.equal(await pending, 6)
 })
 
-test("article-first scanning still covers navigation, and rescanning never nests highlights", async () => {
+test("article-first scanning still covers navigation, and rescanning never duplicates highlights", async () => {
   const { document, scanner } = createRuntime(
     "<html><body><nav>TP53</nav><article><main>BRCA1</main></article><footer>EGFR</footer></body></html>",
   )
   assert.equal(await scanner.scanDocumentCooperatively(), 3)
   assert.equal(document.getAnnotations().length, 3)
   assert.equal(await scanner.scanDocumentCooperatively(), 0)
-  assert.equal(document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length, 0)
 })

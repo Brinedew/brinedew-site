@@ -1657,56 +1657,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // B-793: the published gene record keeps its complete candidate pool in
-  // immutable gallery pages. Hydrate it here, at the one place every dossier
-  // load funnels through, so each existing synchronous consumer keeps working;
-  // a record without a gallery reference (embedded pool or an older
-  // publication) passes through unchanged. A failed page fetch rejects this
-  // load, so the page shows its error state instead of silently rendering an
-  // empty gallery.
-  function hydratePublishedCandidateGallery(payload) {
-    var publicationReader = window.IconoplasmPublicationReader
-    if (
-      !payload ||
-      typeof payload !== "object" ||
-      // B-865: a pre-split catalog record has no gallery reference, but a newer
-      // delta riding on it may still hold the real pool.
-      (!payload.candidate_gallery && !payload.overlay_candidate_pool) ||
-      !publicationReader ||
-      typeof publicationReader.candidateGallery !== "function"
-    ) {
-      return Promise.resolve(payload)
-    }
-    return publicationReader.candidateGallery(payload).then(function (gallery) {
-      return Object.assign({}, payload, {
-        portrait_candidates: gallery.candidates,
-        candidate_count: gallery.count,
-      })
-    })
-  }
-
   function fetchCompleteGeneDetailFromEndpoint(key, options) {
     var publicationReader = window.IconoplasmPublicationReader
     if (!publicationReader || typeof publicationReader.gene !== "function") {
       return Promise.reject(new Error("Immutable Iconoplasm publication reader is unavailable"))
     }
-    return publicationReader
-      .gene(key, options || {})
-      .then(hydratePublishedCandidateGallery)
-      .then(function (data) {
-        // The reader answers null only after reading the index and finding no
-        // entry; load failures throw. Report it as a miss, not an outage: this
-        // used to tell readers of /gene/p53 to "try again shortly".
-        if (data === null) {
-          var missing = new Error("Gene is not in the published catalog: " + key)
-          missing.status = 404
-          throw missing
-        }
-        if (!isCompleteGeneDetailPayload(data, key)) {
-          throw new Error("Incomplete gene detail response for " + key)
-        }
-        return data
-      })
+    return publicationReader.gene(key, options || {}).then(function (data) {
+      // The reader answers null only after reading the index and finding no
+      // entry; load failures throw. Report it as a miss, not an outage: this
+      // used to tell readers of /gene/p53 to "try again shortly".
+      if (data === null) {
+        var missing = new Error("Gene is not in the published catalog: " + key)
+        missing.status = 404
+        throw missing
+      }
+      if (!isCompleteGeneDetailPayload(data, key)) {
+        throw new Error("Incomplete gene detail response for " + key)
+      }
+      return data
+    })
   }
 
   function fetchGeneDetail(symbol, options) {
@@ -1726,44 +1695,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     delete portraitDetailCache[key]
     if (!options.forceFresh && portraitDetailPromiseCache[key])
       return portraitDetailPromiseCache[key]
-    var bootstrap = window.__iconoplasmBootstrap || null
-    if (
-      !options.forceFresh &&
-      bootstrap &&
-      bootstrap.geneDetailSymbol === key &&
-      isCompleteGeneDetailPayload(bootstrap.geneDetailData, key)
-    ) {
-      portraitDetailCache[key] = bootstrap.geneDetailData
-      return Promise.resolve(bootstrap.geneDetailData)
-    }
-    if (
-      !options.forceFresh &&
-      bootstrap &&
-      bootstrap.geneDetailSymbol === key &&
-      bootstrap.geneDetailPromise
-    ) {
-      portraitDetailPromiseCache[key] = bootstrap.geneDetailPromise
-        .then(function (data) {
-          if (isCompleteGeneDetailPayload(data, key)) {
-            portraitDetailCache[key] = data
-            bootstrap.geneDetailData = data
-            return data
-          }
-          // A head-started promise from an older page build may still resolve
-          // to the lean card projection. Repair it with the complete endpoint
-          // instead of recursively rejoining the same incomplete promise.
-          return fetchCompleteGeneDetailFromEndpoint(key, options).then(function (completeData) {
-            portraitDetailCache[key] = completeData
-            bootstrap.geneDetailData = completeData
-            return completeData
-          })
-        })
-        .finally(function () {
-          delete portraitDetailPromiseCache[key]
-        })
-      return portraitDetailPromiseCache[key]
-    }
-
     // Rich per-gene detail is intentionally first-party only now. Bulk consumers
     // should sync from catalog snapshots + changes instead of crawling one gene at a time.
     portraitDetailPromiseCache[key] = fetchCompleteGeneDetailFromEndpoint(key, options)
@@ -3024,12 +2955,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (route.page !== "gene") return
     var content = document.getElementById("icono-gene-content")
     if (!content) return
-    var bootstrap = window.__iconoplasmBootstrap || null
     var genePayload =
-      content._iconoGenePayload ||
-      portraitDetailCache[normalizedSymbol(route.symbol)] ||
-      (bootstrap && bootstrap.geneDetailData) ||
-      null
+      content._iconoGenePayload || portraitDetailCache[normalizedSymbol(route.symbol)] || null
     if (!isCompleteGeneDetailPayload(genePayload, route.symbol)) return
     wireGeneContent(content, genePayload)
   }
@@ -9393,20 +9320,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var opts = options || {}
     var renderId = ++activeGeneRenderId
     var resolvedSymbol = normalizedSymbol(symbol)
-    var bootstrap = window.__iconoplasmBootstrap || null
-    var hasHeadStartedGene =
-      !opts.forceFresh &&
-      bootstrap &&
-      bootstrap.geneDetailSymbol === resolvedSymbol &&
-      (bootstrap.geneDetailPromise || bootstrap.geneCardData || bootstrap.geneCardPromise)
-    if (
-      !opts.forceFresh &&
-      bootstrap &&
-      bootstrap.geneDetailSymbol === resolvedSymbol &&
-      bootstrap.geneCardData
-    ) {
-      rememberGeneCardArtifact(bootstrap.geneCardData, { trusted: true })
-    }
     iconoSidebarState.page = "gene"
     iconoSidebarState.homeLayout = resolveHomeLayout()
     iconoSidebarState.gene = {
@@ -9418,11 +9331,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     iconoSidebarState.caretaker = null
     renderIconoplasmSidebar()
-    // Static gene documents carry no pre-rendered card, so a head-started fetch
-    // still needs the skeleton; only keep markup that already holds the gene.
-    if (!hasHeadStartedGene || !root.querySelector(".icono-gene-lead, #icono-gene-content")) {
-      root.innerHTML = genePageShellMarkup(true)
-    }
+    // Static gene documents carry no pre-rendered card: start from the skeleton.
+    root.innerHTML = genePageShellMarkup(true)
     ensureGenePageLandmarks(root)
     // The final-geometry skeleton is in place: the head bootstrap may show the page.
     document.documentElement.classList.remove("icono-route-pending")
@@ -9481,47 +9391,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         aliasCount: Array.isArray(g && g.aliases) ? g.aliases.length : 0,
       }
       renderIconoplasmSidebar()
-      var embeddedSnapshot =
-        bootstrap && bootstrap.geneDetailSymbol === resolvedSymbol
-          ? String(bootstrap.geneDetailSnapshotVersion || "")
-          : ""
-      var renderedSnapshot = String(
-        (contentEl && contentEl.getAttribute("data-icono-gene-snapshot")) || "",
-      )
-      var publicManifestation = g && g.canonical_manifestation
-      var publicManifestationProse = String(
-        (publicManifestation && publicManifestation.prose) || "",
-      )
-      var shouldRenderPublicManifestation = !!(
-        publicManifestation &&
-        publicManifestation.public_page_visible === true &&
-        publicManifestationProse.trim()
-      )
-      var renderedPublicManifestation =
-        contentEl && contentEl.querySelector(".icono-public-manifestation")
-      var renderedPublicManifestationBody =
-        renderedPublicManifestation &&
-        renderedPublicManifestation.querySelector(".icono-public-manifestation__body")
-      var publicManifestationMatches = shouldRenderPublicManifestation
-        ? !!(
-            renderedPublicManifestationBody &&
-            renderedPublicManifestationBody.textContent === publicManifestationProse
-          )
-        : !renderedPublicManifestation
-      var canAdoptServerContent = !!(
-        contentEl &&
-        contentEl.getAttribute("data-icono-server-rendered-gene") === "true" &&
-        contentEl.querySelector(".icono-candidate-gallery") &&
-        embeddedSnapshot &&
-        renderedSnapshot === embeddedSnapshot &&
-        normalizedSymbol(contentEl.getAttribute("data-icono-gene-symbol")) === resolvedSymbol &&
-        publicManifestationMatches
-      )
-      if (canAdoptServerContent) {
-        wireGeneContent(contentEl, g)
-      } else {
-        renderGeneContent(contentEl, g)
-      }
+      renderGeneContent(contentEl, g)
       recordGenePageVisitDiscovery(g && g.symbol ? g.symbol : symbol)
     }
     var renderGeneFailure = function (err) {

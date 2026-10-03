@@ -242,27 +242,9 @@
     }
   }
 
-  const highlightRuntime = IconoHighlightRuntime.createHighlightRuntime({
-    cardShared: IconoCardShared,
-    placeholderColor: PLACEHOLDER_COLOR,
-    textColors,
-    resolveColor(symbol) {
-      const gene = symbol ? geneMap && geneMap[symbol] : null
-      return gene && gene.c ? gene.c : PLACEHOLDER_COLOR
-    },
-  })
-  const HIGHLIGHT_RENDER_CONTRACT = IconoHighlightRuntime.HIGHLIGHT_RENDER_CONTRACT
-  const HIGHLIGHT_RENDERERS = highlightRuntime.renderers
-  const normalizeHighlightMode = highlightRuntime.normalizeHighlightMode
-  const applyHighlightStyle = highlightRuntime.applyHighlightStyle
-  const refreshHighlightStyles = () => {
-    if (rangeHighlights) rangeHighlights.refresh()
-    else highlightRuntime.refreshHighlightStyles()
-  }
-  const scheduleHighlightGeometryRefresh = () => {
-    if (rangeHighlights) rangeHighlights.refresh()
-    else highlightRuntime.scheduleHighlightGeometryRefresh()
-  }
+  const highlightRuntime = IconoHighlightRuntime.createHighlightRuntime({ textColors })
+  // A PDF reader page paints its own decorations and has no range highlights.
+  const refreshHighlights = () => rangeHighlights?.refresh()
 
   const normalizeCardVariant = (raw) =>
     IconoContentSettings.normalizeCardVariant(raw, IconoCardShared)
@@ -280,8 +262,7 @@
   const normalizeHighlightVisibility = IconoContentSettings.normalizeHighlightVisibility
 
   function applyHighlightVisibility() {
-    document.body.classList.toggle("iconoplasm-highlight-on-hover", highlightVisibility === "hover")
-    rangeHighlights?.refresh()
+    refreshHighlights()
   }
 
   async function loadHighlightVisibility() {
@@ -702,58 +683,9 @@
     window.open(buildGenePageUrl(symbol), "_blank", "noopener")
   }
 
-  function unwrapGeneElement(el) {
-    if (!el || !el.parentNode) return false
-    const label = String((el.dataset && el.dataset.geneLabel) || el.textContent || "")
-    const textNode = document.createTextNode(label)
-    const parent = el.parentNode
-    parent.replaceChild(textNode, el)
-    parent.normalize()
-    return true
-  }
-
-  function unwrapBlockedGeneHighlights(blocklist) {
-    if (rangeHighlights) {
-      for (const node of rangeHighlights.groups.keys()) rangeHighlights.remove(node)
-      return 0
-    }
-    if (!(blocklist instanceof Set) || blocklist.size === 0) return 0
-    const genes = Array.from(document.querySelectorAll(".iconoplasm-gene"))
-    const acceptedMatchesByParent = new Map()
-    let removed = 0
-    for (const el of genes) {
-      const symbol = String((el.dataset && el.dataset.gene) || "")
-        .trim()
-        .toUpperCase()
-      const label = String((el.dataset && el.dataset.geneLabel) || el.textContent || "")
-        .trim()
-        .toUpperCase()
-      if (!symbol && !label) continue
-      let remainsAccepted = !blocklist.has(symbol) && !blocklist.has(label)
-      const parent = el.parentNode
-      if (remainsAccepted && parent && geneMatcher) {
-        if (!acceptedMatchesByParent.has(parent)) {
-          acceptedMatchesByParent.set(parent, geneMatcher.findMatches(parent.textContent || ""))
-        }
-        const range = document.createRange()
-        range.setStart(parent, 0)
-        range.setEndBefore(el)
-        const start = range.toString().length
-        range.detach()
-        remainsAccepted = acceptedMatchesByParent.get(parent).some((match) => {
-          return (
-            match.symbol === symbol &&
-            match.index === start &&
-            match.length === String(el.textContent || "").length
-          )
-        })
-      }
-      if (remainsAccepted) continue
-      if (activeSymbol === symbol) hideTooltip()
-      if (unwrapGeneElement(el)) removed += 1
-    }
-    if (removed > 0) scheduleHighlightGeometryRefresh()
-    return removed
+  function clearRangeHighlights() {
+    if (!rangeHighlights) return
+    for (const node of rangeHighlights.groups.keys()) rangeHighlights.remove(node)
   }
 
   async function loadEffectiveBlocklist() {
@@ -788,9 +720,9 @@
       window.dispatchEvent(new CustomEvent("iconoplasm-reader-matcher-changed"))
       return
     }
-    unwrapBlockedGeneHighlights(nextBlocklist)
+    clearRangeHighlights()
     if (rescan) {
-      void scanPage(document.body).then(() => refreshHighlightStyles())
+      void scanPage(document.body).then(() => refreshHighlights())
     }
   }
 
@@ -811,7 +743,7 @@
         return
       }
       await scanPage(document.body)
-      refreshHighlightStyles()
+      refreshHighlights()
     })()
       .catch((error) => {
         console.error("[Iconoplasm] recognition refresh failed:", error)
@@ -1299,8 +1231,6 @@
     if (isEditableTextSurface(el)) return true
     if (el.classList && el.classList.contains("iconoplasm-tooltip")) return true
     if (el.closest && el.closest(".iconoplasm-tooltip")) return true
-    if (el.classList && el.classList.contains("iconoplasm-gene")) return true
-    if (el.closest && el.closest(".iconoplasm-gene")) return true
     if (SKIP_TAGS.has(el.tagName)) return true
     return false
   }
@@ -1668,15 +1598,6 @@
             shape: highlightRuntime.getCanvasShape(pdfMode),
           })
         },
-        decorateAnchor(anchor, rawSymbol) {
-          const symbol = String(rawSymbol || "")
-            .trim()
-            .toUpperCase()
-          const gene = geneMap[symbol]
-          if (!anchor || !gene) return false
-          applyHighlightStyle(anchor, symbol, gene.c || PLACEHOLDER_COLOR)
-          return true
-        },
         replaceAnchorGroup(groupId, anchors) {
           readingSession.replaceAnchorGroup(groupId, anchors)
         },
@@ -1722,7 +1643,7 @@
         if (next === rangeHoverAnchor) return
         rangeHoverAnchor = next
         rangeHighlights.hover(next)
-        if (next) activateTooltipForAnchor(next, event.relatedTarget)
+        if (next) activateTooltipForAnchor(next)
         else leaveTooltipAnchor(event.target)
       },
       { passive: true },
@@ -1732,21 +1653,17 @@
       documentRef: document,
       nodeFilter: NodeFilter,
       skipTags: SKIP_TAGS,
-      placeholderColor: PLACEHOLDER_COLOR,
-      getGeneMap: () => geneMap,
       getMatcher: () => geneMatcher,
-      applyHighlightStyle,
-      registerGeneAnchor,
     })
 
     console.log("[Iconoplasm] Loaded", Object.keys(geneMap).length, "genes. Scanning...")
     observeMutations()
-    void pageScanner.scanDocumentCooperatively().then(() => refreshHighlightStyles())
+    void pageScanner.scanDocumentCooperatively().then(() => refreshHighlights())
     scheduleDiscoveryBufferFlush()
     window.navigator?.connection?.addEventListener?.("change", () => {
       readingSession.updateConnection(window.navigator?.connection, window.navigator?.deviceMemory)
     })
-    window.addEventListener("resize", scheduleHighlightGeometryRefresh, { passive: true })
+    window.addEventListener("resize", refreshHighlights, { passive: true })
     window.addEventListener("focus", scheduleDiscoveryBufferFlush)
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
@@ -1790,7 +1707,7 @@
       shouldIgnoreNode: shouldIgnoreMutationNode,
       scanPage,
       onScanComplete() {
-        scheduleHighlightGeometryRefresh()
+        refreshHighlights()
       },
     })
     mutationScanController.start()
@@ -1803,8 +1720,6 @@
       documentRef: document,
       windowRef: window,
       applyTooltipTheme,
-      onMouseOver,
-      onMouseOut,
       onFrameMessage: onLitArchivalFrameMessage,
       onTooltipClick,
       onTooltipKeyDown,
@@ -1832,7 +1747,7 @@
     // adopts its head at initialization/reload, or explicit retired recovery.
     if (changes[HIGHLIGHT_MODE_KEY]) {
       highlightMode = highlightRuntime.setMode(changes[HIGHLIGHT_MODE_KEY].newValue)
-      refreshHighlightStyles()
+      refreshHighlights()
       if (isPdfReaderDocument) {
         window.dispatchEvent(new CustomEvent("iconoplasm-reader-highlight-mode-changed"))
       }
@@ -2178,13 +2093,8 @@
     return { left, top, showBelow }
   }
 
-  function activateTooltipForAnchor(target, relatedTarget = null) {
+  function activateTooltipForAnchor(target) {
     if (!extensionRuntime.checkConnected()) return
-    const relatedGene =
-      relatedTarget && typeof relatedTarget.closest === "function"
-        ? relatedTarget.closest(".iconoplasm-gene")
-        : null
-    if (relatedGene === target) return
     cancelHideTimer()
 
     const symbol = target.dataset.gene
@@ -2267,16 +2177,11 @@
     scheduleDiscoveryEncounter(symbol)
   }
 
-  function onMouseOver(e) {
-    const target = e.target.closest(".iconoplasm-gene")
-    if (target) activateTooltipForAnchor(target, e.relatedTarget)
-  }
-
   function leaveTooltipAnchor(relatedTarget = null) {
     if (
       relatedTarget &&
       typeof relatedTarget.closest === "function" &&
-      (relatedTarget.closest(".iconoplasm-tooltip") || relatedTarget.closest(".iconoplasm-gene"))
+      relatedTarget.closest(".iconoplasm-tooltip")
     ) {
       return
     }
@@ -2284,16 +2189,9 @@
     scheduleHideTooltip()
   }
 
-  function onMouseOut(e) {
-    const target = e.target.closest(".iconoplasm-gene")
-    if (!target) return
-    leaveTooltipAnchor(e.relatedTarget)
-  }
-
   function onTooltipMouseLeave(e) {
     const related = e.relatedTarget
-    if (related && (related.closest(".iconoplasm-tooltip") || related.closest(".iconoplasm-gene")))
-      return
+    if (related && related.closest(".iconoplasm-tooltip")) return
     clearPendingDiscovery(activeSymbol)
     scheduleHideTooltip()
   }
