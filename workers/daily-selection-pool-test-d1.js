@@ -277,32 +277,50 @@ export async function seedEmbeddings(db, genes, options = {}) {
   }
 }
 
-// The accounts the leaderboard reads: the columns of migrations 001 and 0016 that its query
-// uses. Each entry is `{ id, username, streak, wins }`, public and played yesterday or today.
-export async function seedLeaderboard(db, entries) {
-  await db
-    .prepare(
+// The two account tables as production has them (read from `sqlite_master` on 2026-10-03: the
+// `users` columns of migrations 001, 0016, 0019 and 0027 with its five secondary indexes, and
+// `stats` with the `migrated_at` of 002). The indexes are here because D1 counts every index
+// entry a statement writes as a row written, so a statement's receipt is only the production
+// one when the indexes exist.
+export async function ensureAccountTables(db) {
+  await db.batch(
+    [
       `CREATE TABLE IF NOT EXISTS users (
          discord_id TEXT PRIMARY KEY, username TEXT NOT NULL, email TEXT, avatar_url TEXT,
          tier TEXT NOT NULL DEFAULT 'guest', premium_until INTEGER,
-         created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0,
-         leaderboard_opt_in INTEGER NOT NULL DEFAULT 0)`,
-    )
-    .run()
-  await db
-    .prepare(
+         created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+         leaderboard_opt_in INTEGER NOT NULL DEFAULT 0,
+         iconoplasm_emulsion_text TEXT NOT NULL DEFAULT '',
+         iconoplasm_emulsion_revision INTEGER NOT NULL DEFAULT 0,
+         iconoplasm_emulsion_public_id TEXT NOT NULL DEFAULT '', account_id TEXT)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_account_id ON users (account_id)
+         WHERE account_id IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_users_iconoplasm_emulsion_public_id
+         ON users (iconoplasm_emulsion_public_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_iconoplasm_emulsion_recent
+         ON users (iconoplasm_emulsion_revision, updated_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_leaderboard_opt_in ON users (leaderboard_opt_in)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)`,
       `CREATE TABLE IF NOT EXISTS stats (
          user_id TEXT PRIMARY KEY, total_played INTEGER DEFAULT 0, total_wins INTEGER DEFAULT 0,
-         current_streak INTEGER DEFAULT 0, best_streak INTEGER DEFAULT 0, last_played_date TEXT)`,
-    )
-    .run()
+         current_streak INTEGER DEFAULT 0, best_streak INTEGER DEFAULT 0, last_played_date TEXT,
+         migrated_at INTEGER, FOREIGN KEY (user_id) REFERENCES users(discord_id))`,
+    ].map((sql) => db.prepare(sql)),
+  )
+}
+
+// The accounts the leaderboard reads. Each entry is `{ id, username, streak, wins }`, public and
+// played today.
+export async function seedLeaderboard(db, entries) {
+  await ensureAccountTables(db)
   const today = new Date().toISOString().slice(0, 10)
   const statements = []
   for (const entry of entries) {
     statements.push(
       db
         .prepare(
-          `INSERT OR REPLACE INTO users (discord_id, username, leaderboard_opt_in) VALUES (?, ?, 1)`,
+          `INSERT OR REPLACE INTO users (discord_id, username, leaderboard_opt_in, created_at, updated_at)
+           VALUES (?, ?, 1, 0, 0)`,
         )
         .bind(entry.id, entry.username),
       db
@@ -315,6 +333,120 @@ export async function seedLeaderboard(db, entries) {
   }
   if (statements.length) await db.batch(statements)
 }
+
+// The shape of the account tables on production, read-only on 2026-10-03: 64 users, 5 of them
+// public (7.8%), 18 with a `stats` row (28% of the users), 6 of those with a streak above 0,
+// the best streak 2.
+export const ACCOUNT_SHAPE = Object.freeze({
+  publicShare: 5 / 64,
+  playedShare: 18 / 64,
+  streakShare: 6 / 18,
+})
+
+export const isoDay = (offsetDays) =>
+  new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10)
+
+// A deterministic population of `count` accounts. `production` follows ACCOUNT_SHAPE with a
+// streak that is mostly 1 or 2 and rarely long, and a last played day that is mostly old.
+// `adversarial` is the worst case for every design that reads accounts in streak order: 2% of
+// the accounts have a long streak (50 to 499) and are either private, or public and no longer
+// played (a streak is only derived to 0 on read, so it stays in the row), and the only public
+// accounts played today or yesterday, six of them, have streaks of 1 to 4. A reader that scans
+// in streak order walks past all of the long ones.
+export function accountPopulation(count, { shape = "production", seed = 20261003 } = {}) {
+  let state = seed >>> 0
+  const next = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return state / 4294967296
+  }
+  const accounts = []
+  for (let index = 0; index < count; index += 1) {
+    const id = `u${String(index).padStart(7, "0")}`
+    const account = { id, username: `Player ${index}`, avatar: null, isPublic: false, stats: null }
+    if (shape === "production") {
+      account.isPublic = next() < ACCOUNT_SHAPE.publicShare
+      if (next() < ACCOUNT_SHAPE.playedShare) {
+        const streak = next() < ACCOUNT_SHAPE.streakShare ? 1 + Math.floor(next() ** 3 * 40) : 0
+        const age = next() < 0.15 ? Math.floor(next() * 2) : 2 + Math.floor(next() * 60)
+        account.stats = {
+          streak,
+          wins: streak + Math.floor(next() * 20),
+          lastPlayed: isoDay(-age),
+        }
+      }
+    } else {
+      const long = index % 50 === 0
+      const live = index % Math.max(1, Math.floor(count / 6)) === 1
+      if (long) {
+        account.isPublic = next() < 0.5
+        const stale = account.isPublic
+        account.stats = {
+          streak: 50 + Math.floor(next() * 450),
+          wins: 500,
+          lastPlayed: isoDay(stale ? -(2 + Math.floor(next() * 30)) : -Math.floor(next() * 2)),
+        }
+      } else if (live) {
+        account.isPublic = true
+        account.stats = {
+          streak: 1 + Math.floor(next() * 4),
+          wins: 1 + Math.floor(next() * 4),
+          lastPlayed: isoDay(-Math.floor(next() * 2)),
+        }
+      }
+    }
+    accounts.push(account)
+  }
+  return accounts
+}
+
+// Writes a population in chunks (a statement allows 100 bound parameters, so each chunk
+// travels as one JSON parameter).
+export async function seedAccounts(db, accounts) {
+  await ensureAccountTables(db)
+  for (let start = 0; start < accounts.length; start += 500) {
+    const chunk = accounts.slice(start, start + 500)
+    const withStats = chunk.filter((account) => account.stats)
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO users (discord_id, username, avatar_url, leaderboard_opt_in, created_at, updated_at)
+           SELECT json_extract(value, '$.id'), json_extract(value, '$.username'),
+                  json_extract(value, '$.avatar'), json_extract(value, '$.isPublic'), 0, 0
+           FROM json_each(?)`,
+        )
+        .bind(
+          JSON.stringify(
+            chunk.map((account) => ({ ...account, isPublic: account.isPublic ? 1 : 0 })),
+          ),
+        ),
+      db
+        .prepare(
+          `INSERT INTO stats (user_id, total_played, total_wins, current_streak, best_streak, last_played_date)
+           SELECT json_extract(value, '$.id'), json_extract(value, '$.stats.wins'),
+                  json_extract(value, '$.stats.wins'), json_extract(value, '$.stats.streak'),
+                  json_extract(value, '$.stats.streak'), json_extract(value, '$.stats.lastPlayed')
+           FROM json_each(?)`,
+        )
+        .bind(JSON.stringify(withStats)),
+    ])
+  }
+}
+
+// The leaderboard as a join over every account, which is what the route ran until B-959: the
+// definition of what the board may show and in which order. The read model must always agree
+// with it; it reads about three rows an account, which is why it is no longer the route's query.
+export const LEADERBOARD_ORACLE_SQL = `
+  SELECT users.discord_id AS user_id, users.username AS username, users.avatar_url AS avatar_url,
+         stats.current_streak AS current_streak, stats.total_wins AS total_wins,
+         stats.last_played_date AS last_played_date
+  FROM stats
+  INNER JOIN users ON users.discord_id = stats.user_id
+  WHERE COALESCE(users.leaderboard_opt_in, 0) = 1
+    AND COALESCE(stats.current_streak, 0) > 0
+    AND date(stats.last_played_date) >= date('now', '-1 day')
+  ORDER BY stats.current_streak DESC, stats.total_wins DESC,
+           COALESCE(stats.last_played_date, '9999-12-31') ASC, users.discord_id ASC
+  LIMIT ?`
 
 // Removes the stored pools and the triggers, as on a database that has never run
 // the pool code.
