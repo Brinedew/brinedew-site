@@ -960,7 +960,7 @@ test("11: a vote that lands while its gene's object is written is republished on
         await run()
       }
       written.push(value)
-      return { key, hash: "e".repeat(64), size: 1, purged: true }
+      return { key, hash: "e".repeat(64), size: 1 }
     },
   }
 
@@ -1038,7 +1038,7 @@ test("11: the republish rechecks after every write, at most three passes", async
         }
       }
       written.push([value.upvotes, value.vote_version])
-      return { key, hash: "e".repeat(64), size: 1, purged: true }
+      return { key, hash: "e".repeat(64), size: 1 }
     },
   }
   const landVote = (userId) => async () => {

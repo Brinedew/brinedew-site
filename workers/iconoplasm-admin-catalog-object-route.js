@@ -2,8 +2,9 @@
 // pages read one stable object, `catalog/v3/index.json`, from the free CDN.
 // Building it means reading all 19k genes, which is more CPU than a free-plan
 // Worker request gets (10 ms), so a GitHub Actions script builds it and hands
-// the bytes to this route. The Worker holds the Bunny storage password and the
-// account key for the purge; the runner holds neither. Streams nothing through
+// the bytes to this route. The Worker holds the Bunny storage password; the
+// runner does not. The pull zone's 60 s edge rule for catalog/v3 bounds how long
+// the old copy is served, so nothing is purged. Streams nothing through
 // the CPU but the bytes themselves: no hashing, no JSON parse of the body.
 import {
   STABLE_CATALOG_OBJECT_KEY,
@@ -14,7 +15,7 @@ import {
 export { STABLE_CATALOG_OBJECT_KEY, STABLE_CATALOG_OBJECT_LIMIT }
 
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
-const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json", "putObject", "purgeObject"])
+const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json", "putObject"])
 
 export function createIconoplasmAdminCatalogObjectHandlers(services) {
   for (const name of REQUIRED_SERVICES) {
@@ -22,7 +23,7 @@ export function createIconoplasmAdminCatalogObjectHandlers(services) {
       throw new TypeError(`Iconoplasm admin catalog object service is missing: ${name}`)
     }
   }
-  const { isAdmin, json, putObject, purgeObject } = services
+  const { isAdmin, json, putObject } = services
 
   async function put({ request, env, done }) {
     if (!(await isAdmin(request, env))) {
@@ -72,7 +73,6 @@ export function createIconoplasmAdminCatalogObjectHandlers(services) {
         ),
       )
     }
-    const purged = await purgeObject(env, STABLE_CATALOG_OBJECT_KEY)
     return done(
       "admin_publication_catalog_object",
       json(
@@ -80,7 +80,6 @@ export function createIconoplasmAdminCatalogObjectHandlers(services) {
           ok: true,
           key: STABLE_CATALOG_OBJECT_KEY,
           bytes: bytes.byteLength,
-          purged: purged === true,
         },
         200,
         NO_STORE,

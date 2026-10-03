@@ -138,8 +138,6 @@ export async function publishLeaderboardObject(
     throw error
   }
   if (stored && sameBytes(stored.bytes, bytes)) return { ok: true, published: false, ...summary }
-  // No purge: a purge re-pulls a replica that may not have the new bytes yet and caches it for the
-  // zone's 30 days (the 60 s edge cache time is what bounds staleness).
-  await objects.writeStable(LEADERBOARD_OBJECT_KEY, object, { purge: false })
+  await objects.writeStable(LEADERBOARD_OBJECT_KEY, object)
   return { ok: true, published: true, ...summary }
 }

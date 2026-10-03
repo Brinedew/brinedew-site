@@ -22458,7 +22458,7 @@ export async function publishIconoplasmGeneStableObject(
       ...(selected ? { selectedAssetSha256: selected } : {}),
       voteVersion,
     })
-    stable = await store.writeStable(stableGeneObjectKey(symbol), object, { purge: true })
+    stable = await store.writeStable(stableGeneObjectKey(symbol), object)
     if (!db || pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
     if ((await readGeneVoteVersion(db, symbol)) === voteVersion) break
     republishedAfterVote = true
@@ -22485,7 +22485,7 @@ export async function publishIconoplasmGeneStableObject(
     withdrawn: false,
     selected_asset_sha256: selected,
     vote_version: object.vote_version,
-    stable: { key: stable.key, hash: stable.hash, size: stable.size, purged: stable.purged },
+    stable: { key: stable.key, hash: stable.hash, size: stable.size },
     published_at: object.published_at,
     ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
@@ -27498,7 +27498,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     isAdmin: isIconoplasmAdmin,
     json,
     putObject: putPortraitStorageObject,
-    purgeObject: (env, key) => createPublishedCardObjectStore(env).purgeStableKey(key),
   }),
   ...createIconoplasmAdminRepublishHandlers({
     isAdmin: isIconoplasmAdmin,

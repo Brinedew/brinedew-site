@@ -5,8 +5,9 @@
 // by the Website manifest so an alias edit does not force a 19k-gene workstation
 // sync or a multi-megabyte catalog refetch.
 // Hover detail (B-898 stage 1) is one stable, mutable object per gene on the free
-// CDN: genes/v3/<SYMBOL>.json. The Worker purges that exact URL on every rewrite,
-// so reading it costs zero metered Worker requests. A CDN 404 means "no card".
+// CDN: genes/v3/<SYMBOL>.json. The pull zone caches it for 60 s, so a rewrite shows
+// within about a minute and reading it costs zero metered Worker requests. A CDN
+// 404 means "no card".
 
 if (typeof importScripts === "function") {
   if (!globalThis.IconoplasmImmutableResponseCache) importScripts("immutable-response-cache.js")
@@ -209,10 +210,9 @@ async function readStableGene(symbol) {
     const response = await fetchWithTimeout(
       `${STABLE_GENE_CDN_PREFIX}${symbol}.json`,
       // No cookies and no client-version header: every reader must share one
-      // CDN cache entry per gene, or the free CDN stops being free. The pull
-      // zone stamps a 30-day max-age on the object while the Worker purges it
-      // on every rewrite, so revalidate instead of trusting the HTTP cache: a
-      // 304 when nothing changed, the new bytes otherwise.
+      // CDN cache entry per gene, or the free CDN stops being free. The object
+      // is rewritten in place, so revalidate instead of trusting the HTTP
+      // cache: a 304 when nothing changed, the new bytes otherwise.
       { credentials: "omit", cache: "no-cache" },
       STABLE_GENE_FETCH_TIMEOUT_MS,
     )

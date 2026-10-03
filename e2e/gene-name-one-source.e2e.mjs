@@ -185,7 +185,7 @@ async function publishStableObjects(db) {
   const store = {
     async writeStable(key, value) {
       objects.set(key, JSON.parse(JSON.stringify(value)))
-      return { key, hash: "e".repeat(64), size: 1, purged: true }
+      return { key, hash: "e".repeat(64), size: 1 }
     },
   }
   for (const gene of GENES) {

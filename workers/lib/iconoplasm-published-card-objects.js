@@ -1,5 +1,4 @@
 import {
-  externalPortraitPublicUrl,
   externalPortraitStoragePassword,
   externalPortraitStorageUrl,
   fetchPortraitStorage,
@@ -22,17 +21,17 @@ export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
 // B-898 (Stage 1): ONE stable, mutable object per gene. Readers fetch this
 // single URL instead of walking head -> manifest -> indexes -> gene -> delta.
 // It is rewritten in place whenever the gene changes and carries the complete
-// candidate pool inline, so there is nothing else to resolve. Short TTL plus
-// stale-while-revalidate bounds staleness without a purge credential.
+// candidate pool inline, so there is nothing else to resolve.
 export const STABLE_GENE_OBJECT_PREFIX = "genes/v3"
 export const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
 export const STABLE_GENE_OBJECT_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400"
-// Measured 2026-09-30 22:53Z: the pull zone served genes/v3/A1BG.json with
-// `Cache-Control: public, max-age=2592000` and CDN-Cache: HIT, i.e. the zone
-// applies its own 30-day expiration and ignores the header above. A rewritten
-// gene would therefore sit stale on the edge for a month. Every rewrite purges
-// its exact CDN URL through the Bunny API (free, no request fees).
-export const BUNNY_PURGE_ENDPOINT = "https://api.bunny.net/purge"
+// The pull zone ignores this header and applies its own expiration. What bounds
+// staleness after a rewrite is the zone's edge rule for genes/v3, catalog/v3 and
+// leaderboard/v1 (bunny/the-only-iconoplasm-pull-zone-policy.json): a 60 s edge
+// and browser cache time, so a rewrite shows within replication lag plus 60 s.
+// No rewrite purges: a purge re-pulls a replica that may not have the new bytes
+// yet, and Bunny's API answers 429 once a bulk republish sends a purge per gene
+// (2026-10-03, 19 of the first 80 genes).
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,31}$/
 
 export function stableGeneObjectKey(symbol) {
@@ -139,7 +138,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
   // read back through authenticated Storage and hash-compared before this
   // returns, so a caller that sees success knows the exact bytes are on the
   // origin.
-  async function writeStable(key, value, { purge = true } = {}) {
+  async function writeStable(key, value) {
     const identity = stableGeneObjectIdentity(key)
     const bytes = encoder.encode(canonicalPublishedJson(value))
     if (bytes.byteLength > identity.limit) {
@@ -182,8 +181,7 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     const readBack = await boundedBytes(check, identity.limit, bodyTimeoutMs)
     if ((await publishedObjectHash(readBack)) !== hash)
       throw new Error("Stable gene object read-back hash mismatch")
-    const purged = purge ? await purgeCdnUrl(externalPortraitPublicUrl(env, key), key) : false
-    return { key, hash, size: bytes.byteLength, symbol: identity.symbol, purged }
+    return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
   }
 
   // First-party read of a stable gene object for the canonical-origin fallback
@@ -211,27 +209,5 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return { key, bytes, symbol: identity.symbol }
   }
 
-  // Exact-URL CDN purge. Returns false when no account key is configured (the
-  // object is still correct on the origin; only edge freshness is unbounded),
-  // and throws on a refused purge so the publication retries the gene.
-  async function purgeCdnUrl(publicUrl, key) {
-    const accountKey = String(env?.BUNNY_ACCOUNT_API_KEY || "").trim()
-    if (!accountKey || !publicUrl) return false
-    const response = await send(
-      `${BUNNY_PURGE_ENDPOINT}?url=${encodeURIComponent(publicUrl)}&async=true`,
-      { method: "POST", headers: { AccessKey: accountKey } },
-      key,
-    )
-    await response.body?.cancel().catch(() => {})
-    if (!response.ok) throw new Error(`CDN purge failed (${response.status})`)
-    return true
-  }
-
-  // Exact-URL purge for any stable (fixed-URL) object the Worker just rewrote
-  // or proxied, such as the catalog object uploaded by the Actions publisher.
-  async function purgeStableKey(key) {
-    return purgeCdnUrl(externalPortraitPublicUrl(env, key), key)
-  }
-
-  return { writeStable, readStable, purgeStableKey }
+  return { writeStable, readStable }
 }

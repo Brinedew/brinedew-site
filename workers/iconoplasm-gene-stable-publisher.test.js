@@ -39,7 +39,7 @@ function harness({ cards = null } = {}) {
   const objects = {
     async writeStable(key, value) {
       calls.written.push({ key, value })
-      return { key, hash: "e".repeat(64), size: 1, purged: true }
+      return { key, hash: "e".repeat(64), size: 1 }
     },
   }
   return {
