@@ -65,7 +65,11 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
 Prose is at most 4,000 code points and 16 KiB, checked the same way in the browser and in the
 authority. A caretaker's lineage holds at most 256 revisions, 512 Tags derivatives and 2 MiB of
 bodies, and the store admits at most 350 MB of bodies in all. Admission counts every byte before
-metadata commits, so a refused save keeps the draft.
+metadata commits, so a refused save keeps the draft. An upload that starts and never finishes
+(a phone losing signal mid-save) keeps its reservation only until its lease ends. The same
+caretaker's next upload releases it, and so does the background tick that drains the authority
+projection every twelve minutes (three at most per run): the reserved bytes return and the stored
+body is deleted.
 
 ## Images and the replica use exact sources, and releases are proven in a browser
 
