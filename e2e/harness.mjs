@@ -9,7 +9,8 @@ import { chromium } from "playwright-core"
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url))
 export const SITE = process.env.E2E_SITE || path.join(ROOT, "public-iconoplasm-edge")
-export const OUT = path.join(ROOT, "artifacts", "e2e")
+// CI uploads artifacts/e2e; a run for one issue can point E2E_OUT at artifacts/<issue>.
+export const OUT = process.env.E2E_OUT || path.join(ROOT, "artifacts", "e2e")
 export const HOST = "https://iconoplasm.brinedew.bio"
 export const VIEWPORTS = [
   [1280, 860, "desktop"],

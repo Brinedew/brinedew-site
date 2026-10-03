@@ -10584,6 +10584,7 @@
       var downBtn = box.querySelector("[data-icono-vote-down]");
       var snapshot = opts && opts.snapshot || {};
       var pending = !!(opts && opts.pending);
+      var paused = !!(opts && opts.paused);
       var userVote = Number(snapshot.user_vote || 0);
       if (statsEl) {
         statsEl.textContent = voteSummaryText(snapshot);
@@ -10592,13 +10593,19 @@
       if (!statsEl) {
         box.setAttribute("title", voteSummaryDetails(snapshot));
       }
+      if (paused) box.setAttribute("data-icono-vote-paused", "");
+      else box.removeAttribute("data-icono-vote-paused");
       if (upBtn) {
         upBtn.disabled = pending;
         upBtn.classList.toggle("active", userVote === 1);
+        if (paused) upBtn.setAttribute("aria-disabled", "true");
+        else upBtn.removeAttribute("aria-disabled");
       }
       if (downBtn) {
         downBtn.disabled = pending;
         downBtn.classList.toggle("active", userVote === -1);
+        if (paused) downBtn.setAttribute("aria-disabled", "true");
+        else downBtn.removeAttribute("aria-disabled");
       }
       var qcBlock = box.closest ? box.closest(".icono-label-qc-block") : null;
       if (qcBlock) {
@@ -10642,6 +10649,12 @@
       var sentence = payload && typeof payload.error === "string" ? payload.error.trim() : "";
       return status >= 400 && sentence ? sentence : VOTE_FAILURE_FALLBACK;
     }
+    var VOTE_PAUSE_MAX_SECONDS = 86400;
+    function votePauseSeconds(err) {
+      var seconds = err && err.payload && err.payload.retry_after_seconds;
+      if (typeof seconds !== "number" || !isFinite(seconds) || seconds <= 0) return 0;
+      return Math.min(VOTE_PAUSE_MAX_SECONDS, Math.ceil(seconds));
+    }
     function wireVoteBox(box, config) {
       if (!box) return null;
       var cfg = config || {};
@@ -10663,6 +10676,7 @@
       var state = {
         authenticated: !!cfg.authenticated,
         pending: false,
+        paused: false,
         snapshot: {
           image_upvotes: 0,
           image_downvotes: 0,
@@ -10678,6 +10692,39 @@
       if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot);
       var candidateImageId = Number(cfg.candidateImageId || 0);
       if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0;
+      var pause = null;
+      var pauseTimer = null;
+      function endPause() {
+        pause = null;
+        state.paused = false;
+        if (pauseTimer !== null) {
+          global.clearTimeout(pauseTimer);
+          pauseTimer = null;
+        }
+        render();
+      }
+      function startPause(err, message) {
+        var seconds = votePauseSeconds(err);
+        if (pauseTimer !== null) global.clearTimeout(pauseTimer);
+        pauseTimer = null;
+        pause = { message, until: seconds ? Date.now() + seconds * 1e3 : Infinity };
+        state.paused = true;
+        if (seconds) pauseTimer = global.setTimeout(endPause, seconds * 1e3);
+      }
+      function pauseActive() {
+        if (!pause) return false;
+        if (Date.now() < pause.until) return true;
+        endPause();
+        return false;
+      }
+      function reportVoteFailure(message, err) {
+        if (typeof cfg.onVoteFailed !== "function") return;
+        try {
+          cfg.onVoteFailed(message, err);
+        } catch (callbackError) {
+          if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError);
+        }
+      }
       function render() {
         for (var renderIndex = 0; renderIndex < boxes.length; renderIndex++) {
           setVoteBoxState(boxes[renderIndex], state);
@@ -10758,6 +10805,10 @@
         });
       }
       function submitVote(voteValue, sourceControl) {
+        if (pauseActive()) {
+          reportVoteFailure(pause.message, null);
+          return;
+        }
         var ready = cfg.deferSnapshot && !snapshotPrimed ? ensureSnapshot().catch(function() {
           return null;
         }) : Promise.resolve();
@@ -10817,19 +10868,15 @@
               return;
             }
             var refused = failureStatus >= 400 && failureStatus < 500;
+            var failureMessage = voteFailureMessage(err);
             if (refused) {
               state.snapshot = previousSnapshot;
               writeStoredVoteSnapshot(candidateRef, state.snapshot);
             }
+            if (failureStatus === 429) startPause(err, failureMessage);
             notifySnapshot();
             if (typeof cfg.onError === "function") cfg.onError("set", err);
-            if (typeof cfg.onVoteFailed === "function") {
-              try {
-                cfg.onVoteFailed(voteFailureMessage(err), err);
-              } catch (callbackError) {
-                if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError);
-              }
-            }
+            reportVoteFailure(failureMessage, err);
             if (refused) return;
             return refreshSnapshot();
           }).finally(function() {

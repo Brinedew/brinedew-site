@@ -2011,3 +2011,76 @@ test("DO NOT DELETE: print copy explicitly enrolls one durable PNG and never ope
     "print-copy should not introduce a modal-specific visual language",
   )
 })
+
+// B-913: a refused vote reaches the page's notice from the hover card and from the archival
+// frame. The runtime behaviour is tested in lit-archival-frame-vote.test.js and
+// content-vote-bridge.test.js; content.js cannot be run on its own, so this pins its glue.
+//
+// Ways this can fail, written before the code:
+//  1. the hover-card wiring in content.js passes no `onVoteFailed`, so the sentence is only logged;
+//  2. the frame and the page name the message differently, so nothing is ever shown;
+//  3. the page handles the frame's message above the checks that it came from our own iframe, so
+//     any script on the page could put a notice on screen;
+//  4. the login prompt keeps its own copy of the timer-and-text code, so there are two writers of
+//     one element and a refusal can be cut short by the prompt's timer;
+//  5. a vote notice overwrites the "Iconoplasm disconnected, reload" notice after the extension
+//     was updated under the page.
+test("DO NOT DELETE: a refused vote reaches the page notice from the hover card and the archival frame", () => {
+  const contentSource = readUtf8("./iconoplasm-extension/content.js")
+  const frameSource = readUtf8("./iconoplasm-extension/lit-archival-frame.js")
+
+  const frameType = frameSource.match(/FRAME_VOTE_FAILED_TYPE = "([A-Z_]+)"/)?.[1]
+  const pageType = contentSource.match(/LIT_ARCHIVAL_VOTE_FAILED_MESSAGE = "([A-Z_]+)"/)?.[1]
+  assert.equal(typeof frameType, "string", "the frame names its refused-vote message")
+  assert.equal(frameType, pageType, "the frame and the page must name the message the same way")
+  assert.match(
+    frameSource,
+    /onVoteFailed:\s*\(message\)\s*=>\s*\{[\s\S]*?postToParent\(FRAME_VOTE_FAILED_TYPE,\s*\{[\s\S]*?message[\s\S]*?\}\)/,
+    "the frame hands the runtime's sentence to its parent",
+  )
+
+  const handler = contentSource.slice(
+    contentSource.indexOf("function onLitArchivalFrameMessage(event)"),
+    contentSource.indexOf("function hideTooltip()"),
+  )
+  const guard = handler.indexOf("event.source !== iframe.contentWindow")
+  const sourceCheck = handler.indexOf("data.source !== LIT_ARCHIVAL_FRAME_SOURCE")
+  const refused = handler.indexOf("data.type === LIT_ARCHIVAL_VOTE_FAILED_MESSAGE")
+  assert.ok(sourceCheck >= 0 && guard >= 0, "the handler checks who sent the message")
+  assert.ok(
+    refused > guard && refused > sourceCheck,
+    "the refused-vote case sits behind both checks",
+  )
+  assert.match(
+    handler.slice(refused),
+    /^data\.type === LIT_ARCHIVAL_VOTE_FAILED_MESSAGE\)\s*\{\s*showVoteNotice\(data\.message,/,
+    "the page shows the frame's sentence through the one notice writer",
+  )
+
+  assert.match(
+    contentSource,
+    /IconoContentVoteBridge\.wireRenderedTooltipVoteBox\(\{[\s\S]*?onVoteFailed:\s*\(message\)\s*=>\s*showVoteNotice\(message,/,
+    "the hover card's wiring shows the runtime's sentence",
+  )
+
+  const notice = contentSource.slice(
+    contentSource.indexOf("function showVoteNotice("),
+    contentSource.indexOf("function disconnectContentRuntime()"),
+  )
+  assert.match(
+    notice,
+    /if \(runtimeDisconnected\) return/,
+    "the reload notice is never overwritten",
+  )
+  assert.match(notice, /IconoContentTooltip\.showToast\(authToast,/, "one writer of the notice")
+  const login = contentSource.slice(
+    contentSource.indexOf("function showVoteLoginPopup()"),
+    contentSource.indexOf("function showVoteNotice("),
+  )
+  assert.doesNotMatch(
+    login,
+    /setTimeout|textContent|classList/,
+    "the login prompt has no writer of its own",
+  )
+  assert.match(login, /showVoteNotice\("Log in on Iconoplasm to vote on portraits\."/)
+})

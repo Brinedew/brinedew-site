@@ -137,6 +137,9 @@
   const LIT_ARCHIVAL_READY_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_READY"
   const LIT_ARCHIVAL_RENDERED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_RENDERED"
   const LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
+  const LIT_ARCHIVAL_VOTE_FAILED_MESSAGE = "ICONOPLASM_LIT_ARCHIVAL_VOTE_FAILED"
+  // A refused vote's sentence is about 14 words, so it stays longer than the login prompt.
+  const VOTE_REFUSAL_NOTICE_MS = 7000
   const DEFAULT_PORTRAIT_DIMENSIONS = Object.freeze({ width: 768, height: 1024 })
   const DISCOVERY_HOVER_DWELL_MS = 900
   const DISCOVERY_SYMBOL_COOLDOWN_MS = 30 * 1000
@@ -820,16 +823,15 @@
   }
 
   function showVoteLoginPopup() {
+    showVoteNotice("Log in on Iconoplasm to vote on portraits.", 2600)
+  }
+
+  // The one place a vote message reaches the page: the login prompt, the hover card's refused
+  // vote and the archival frame's refused vote. After an extension update the same element
+  // carries the "disconnected, reload" notice, which a vote message must not overwrite.
+  function showVoteNotice(message, durationMs) {
     if (runtimeDisconnected) return
-    if (!authToast) return
-    authToast.textContent = "Log in on Iconoplasm to vote on portraits."
-    authToast.classList.add("iconoplasm-auth-toast-visible")
-    window.clearTimeout(Number(authToast.dataset.hideTimer || 0))
-    const hideTimerId = window.setTimeout(() => {
-      authToast.classList.remove("iconoplasm-auth-toast-visible")
-      authToast.dataset.hideTimer = ""
-    }, 2600)
-    authToast.dataset.hideTimer = String(hideTimerId)
+    IconoContentTooltip.showToast(authToast, message, { durationMs, windowRef: window })
   }
 
   function disconnectContentRuntime() {
@@ -2112,6 +2114,7 @@
       apiBaseUrl: ICONOPLASM_API_BASE,
       fetchImpl: extensionApiFetch,
       onAuthRequired: showVoteLoginPopup,
+      onVoteFailed: (message) => showVoteNotice(message, VOTE_REFUSAL_NOTICE_MS),
       onError: (phase, err) => {
         console.error("[Iconoplasm] extension vote " + phase + " error:", err)
       },
@@ -2336,6 +2339,10 @@
     }
     if (data.type === LIT_ARCHIVAL_AUTH_REQUIRED_MESSAGE) {
       showVoteLoginPopup()
+      return
+    }
+    if (data.type === LIT_ARCHIVAL_VOTE_FAILED_MESSAGE) {
+      showVoteNotice(data.message, VOTE_REFUSAL_NOTICE_MS)
     }
   }
 

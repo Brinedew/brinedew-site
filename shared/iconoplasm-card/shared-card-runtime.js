@@ -2186,6 +2186,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var downBtn = box.querySelector("[data-icono-vote-down]")
     var snapshot = (opts && opts.snapshot) || {}
     var pending = !!(opts && opts.pending)
+    var paused = !!(opts && opts.paused)
     var userVote = Number(snapshot.user_vote || 0)
     if (statsEl) {
       statsEl.textContent = voteSummaryText(snapshot)
@@ -2194,13 +2195,22 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (!statsEl) {
       box.setAttribute("title", voteSummaryDetails(snapshot))
     }
+    // A paused box (the server said "not now", see wireVoteBox) is dimmed and marked
+    // aria-disabled, not `disabled`: a disabled button swallows the tap, and the tap is what
+    // shows the reader why.
+    if (paused) box.setAttribute("data-icono-vote-paused", "")
+    else box.removeAttribute("data-icono-vote-paused")
     if (upBtn) {
       upBtn.disabled = pending
       upBtn.classList.toggle("active", userVote === 1)
+      if (paused) upBtn.setAttribute("aria-disabled", "true")
+      else upBtn.removeAttribute("aria-disabled")
     }
     if (downBtn) {
       downBtn.disabled = pending
       downBtn.classList.toggle("active", userVote === -1)
+      if (paused) downBtn.setAttribute("aria-disabled", "true")
+      else downBtn.removeAttribute("aria-disabled")
     }
     var qcBlock = box.closest ? box.closest(".icono-label-qc-block") : null
     if (qcBlock) {
@@ -2252,6 +2262,21 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     return status >= 400 && sentence ? sentence : VOTE_FAILURE_FALLBACK
   }
 
+  // The longest a refusal can pause a box. The server's number is the seconds to 00:00 UTC, so
+  // nothing honest is longer than a day; a larger one is clamped, not believed.
+  var VOTE_PAUSE_MAX_SECONDS = 86400
+
+  // The seconds a 429 asks the box to wait: the server's own `retry_after_seconds` when it is a
+  // positive number, else 0 (no usable number: the pause lasts until the page reloads). The
+  // body carries it because the header would not arrive: fetchJSON keeps only the body, the
+  // extension's fetch proxy drops headers, and a page on another origin cannot read
+  // Retry-After.
+  function votePauseSeconds(err) {
+    var seconds = err && err.payload && err.payload.retry_after_seconds
+    if (typeof seconds !== "number" || !isFinite(seconds) || seconds <= 0) return 0
+    return Math.min(VOTE_PAUSE_MAX_SECONDS, Math.ceil(seconds))
+  }
+
   function wireVoteBox(box, config) {
     if (!box) return null
     var cfg = config || {}
@@ -2279,6 +2304,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var state = {
       authenticated: !!cfg.authenticated,
       pending: false,
+      paused: false,
       snapshot: {
         image_upvotes: 0,
         image_downvotes: 0,
@@ -2294,6 +2320,50 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot)
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
+    // A 429 is the server saying "not now", for everyone, until a time it names. The box stops
+    // sending (each refused request costs the Worker a request and a D1 batch) and says why on
+    // every tap instead. `pause` holds the server's sentence and the wall-clock end of the
+    // pause (Infinity: until the page reloads). The end is checked against the clock on every
+    // tap, because a timer does not run while a laptop sleeps; the timer only lifts the dimmed
+    // look for a reader who is watching.
+    var pause = null
+    var pauseTimer = null
+
+    function endPause() {
+      pause = null
+      state.paused = false
+      if (pauseTimer !== null) {
+        global.clearTimeout(pauseTimer)
+        pauseTimer = null
+      }
+      render()
+    }
+
+    function startPause(err, message) {
+      var seconds = votePauseSeconds(err)
+      if (pauseTimer !== null) global.clearTimeout(pauseTimer)
+      pauseTimer = null
+      pause = { message: message, until: seconds ? Date.now() + seconds * 1000 : Infinity }
+      state.paused = true
+      if (seconds) pauseTimer = global.setTimeout(endPause, seconds * 1000)
+    }
+
+    function pauseActive() {
+      if (!pause) return false
+      if (Date.now() < pause.until) return true
+      endPause()
+      return false
+    }
+
+    function reportVoteFailure(message, err) {
+      if (typeof cfg.onVoteFailed !== "function") return
+      try {
+        cfg.onVoteFailed(message, err)
+      } catch (callbackError) {
+        if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError)
+      }
+    }
+
     function render() {
       for (var renderIndex = 0; renderIndex < boxes.length; renderIndex++) {
         setVoteBoxState(boxes[renderIndex], state)
@@ -2383,6 +2453,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
 
     function submitVote(voteValue, sourceControl) {
+      if (pauseActive()) {
+        reportVoteFailure(pause.message, null)
+        return
+      }
       // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Optimistic UI) +
       // C:\Users\Admin\.codex\skills\polish\SKILL.md (Interaction states).
       // Keep the selected vote lit on click, not after the network round-trip. This is shared
@@ -2457,19 +2531,17 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
             // 00:00 UTC, an invalid request), so the previous state goes back at once and
             // no second request is spent confirming it.
             var refused = failureStatus >= 400 && failureStatus < 500
+            var failureMessage = voteFailureMessage(err)
             if (refused) {
               state.snapshot = previousSnapshot
               writeStoredVoteSnapshot(candidateRef, state.snapshot)
             }
+            // A 429 also pauses the box: the refusal is about the site's allowance, so another
+            // tap would be refused the same way (until the reset the server named, if it did).
+            if (failureStatus === 429) startPause(err, failureMessage)
             notifySnapshot()
             if (typeof cfg.onError === "function") cfg.onError("set", err)
-            if (typeof cfg.onVoteFailed === "function") {
-              try {
-                cfg.onVoteFailed(voteFailureMessage(err), err)
-              } catch (callbackError) {
-                if (typeof cfg.onError === "function") cfg.onError("vote_failed", callbackError)
-              }
-            }
+            reportVoteFailure(failureMessage, err)
             if (refused) return
             // A 5xx or a lost response is ambiguous: the coordinator may already have
             // committed the desired state. Keep the optimistic state visible and

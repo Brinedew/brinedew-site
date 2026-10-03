@@ -11,6 +11,7 @@
   const FRAME_READY_TYPE = "ICONOPLASM_LIT_ARCHIVAL_READY"
   const FRAME_RENDERED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_RENDERED"
   const FRAME_AUTH_REQUIRED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_AUTH_REQUIRED"
+  const FRAME_VOTE_FAILED_TYPE = "ICONOPLASM_LIT_ARCHIVAL_VOTE_FAILED"
   const shared = globalThis.IconoplasmCardShared
   const frameRoot = document.getElementById("iconoplasm-root")
   const slot = document.getElementById("lit-archival-card-slot")
@@ -450,6 +451,14 @@
       apiBaseUrl: vote.apiBaseUrl,
       onAuthRequired: () => {
         postToParent(FRAME_AUTH_REQUIRED_TYPE, { symbol: currentSymbol() })
+      },
+      // The card lives in this iframe, so the sentence the runtime built (the server's own for
+      // a refusal) crosses to the page that owns the notice, as the login prompt does.
+      onVoteFailed: (message) => {
+        postToParent(FRAME_VOTE_FAILED_TYPE, {
+          symbol: currentSymbol(),
+          message: String(message || ""),
+        })
       },
       onError: (phase, err) => {
         console.error("[Iconoplasm] archival frame vote " + phase + " error:", err)

@@ -7,6 +7,8 @@
 // ARCHITECTURE FENCE [IPD-011]: the fingerprint is derived from the exact
 // published card payload. This module never reconstructs a winner from votes.
 
+import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
+
 export const ICONOPLASM_GENE_CARD_QUEUE_BINDING = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
 export const ICONOPLASM_GENE_CARD_QUEUE_KIND = "materialize_requested_gene_card"
 export const ICONOPLASM_GENE_CARD_RENDERER_REVISION = "gene-card-v2-2026-08-03-print-resolution"
@@ -462,12 +464,6 @@ function utcDay() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function secondsUntilNextUtcDay() {
-  const now = new Date()
-  const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
-  return Math.max(1, Math.ceil((next - now.getTime()) / 1000))
-}
-
 export async function reserveIconoplasmGeneCardBrowserLaunch(env) {
   const day = utcDay()
   const result = await env.ICONOPLASM_DB.prepare(
@@ -513,7 +509,9 @@ export async function reserveIconoplasmGeneCardBrowserLaunch(env) {
   return {
     ok: false,
     reason: exhausted ? "daily_budget" : "launch_interval",
-    delaySeconds: exhausted ? secondsUntilNextUtcDay() : Math.max(1, Math.ceil(gapDelay)),
+    delaySeconds: exhausted
+      ? secondsUntilCloudflareDailyReset(Date.now(), 0)
+      : Math.max(1, Math.ceil(gapDelay)),
   }
 }
 

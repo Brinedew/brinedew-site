@@ -74,21 +74,29 @@
   color: color-mix(in srgb, var(--icono-reject) 72%, var(--icono-vote-ink) 28%);
 }
 
-.icono-vote-btn:hover:not(:disabled) {
+.icono-vote-btn:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--icono-vote-line) 12%, transparent);
 }
 
-.icono-vote-btn--approve:hover:not(:disabled) {
+.icono-vote-btn--approve:hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--icono-approve);
 }
 
-.icono-vote-btn--reject:hover:not(:disabled) {
+.icono-vote-btn--reject:hover:not(:disabled):not([aria-disabled="true"]) {
   color: var(--icono-reject);
 }
 
 .icono-vote-btn:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+/* The server said "not now" (the daily vote budget is spent). Dimmer than a pending button, and
+   the cursor says "not allowed", not "wait". It is aria-disabled, not disabled, on purpose: the
+   button still takes the tap, and the tap shows the reader why. */
+.icono-vote-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .icono-vote-btn.active {
@@ -185,7 +193,7 @@
   color: var(--icono-vote-ink);
 }
 
-.icono-vote-box--label .icono-vote-btn:hover:not(:disabled) {
+.icono-vote-box--label .icono-vote-btn:hover:not(:disabled):not([aria-disabled="true"]) {
   background: transparent;
   color: var(--icono-vote-ink);
 }
@@ -219,7 +227,7 @@
   box-shadow: none;
 }
 
-.icono-vote-box--label .icono-vote-btn:hover:not(:disabled) .icono-vote-btn-loop {
+.icono-vote-box--label .icono-vote-btn:hover:not(:disabled):not([aria-disabled="true"]) .icono-vote-btn-loop {
   opacity: 0.38;
 }
 
