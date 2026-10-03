@@ -448,6 +448,12 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.equal(posts.length, 1, `${where}: specific batch was not posted`)
         assert.equal(posts[0].request_mode, "specific", `${where}: batch mode`)
         assert.deepEqual(posts[0].requested_vision_ids, ["anima-v1-31261"], `${where}: batch ids`)
+        // The server refuses a batch without an id of this shape, so every Queue click would fail.
+        assert.match(
+          String(posts[0].client_batch_id),
+          /^[a-z0-9][a-z0-9._:-]*$/i,
+          `${where}: client batch id`,
+        )
 
         // 10. Select all respects the 20-style limit.
         await page.click("[data-icono-request-select-all-favorites]")

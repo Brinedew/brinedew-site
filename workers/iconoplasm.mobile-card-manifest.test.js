@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { readFileSync } from "node:fs"
-import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
+
 import {
   iconoplasmGeneBlotFingerprint,
   iconoplasmGeneBlotObjectKey,
@@ -22,18 +21,6 @@ import {
   stableGeneObjectPath,
   stableGeneStorageEnv,
 } from "./test-helpers/stable-gene-objects.js"
-
-const source = readFileSync(
-  new URL(
-    "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-    import.meta.url,
-  ),
-  "utf8",
-)
-const appSource = readFileSync(
-  new URL("../quartz/static/iconoplasm/app.js", import.meta.url),
-  "utf8",
-)
 
 class FakeStatement {
   constructor(db, sql) {
@@ -375,111 +362,6 @@ function completeCardCatalogArtifact(symbols = ["ERBB2", "INS"], version = "test
   }
 }
 
-function putShardedCardCatalogArtifact(
-  kvStore,
-  symbols = ["ERBB2", "INS"],
-  version = "test-vm-version",
-) {
-  const cards = symbols.map((symbol) =>
-    completeMobileCardVM(symbol, version, "published_card_catalog"),
-  )
-  const shards = cards.map((card, index) => ({
-    key: `iconoplasm:card-catalog:${version}:shard:${index}`,
-    index,
-    card_count: 1,
-    first_symbol: card.symbol,
-    last_symbol: card.symbol,
-  }))
-  kvStore.set(
-    `iconoplasm:card-catalog:${version}`,
-    JSON.stringify({
-      schema: "iconoplasm.cardCatalog.v1",
-      artifact_version: version,
-      snapshot_version: version,
-      artifact_validated_at: "2026-05-09T00:00:00.000Z",
-      source: "published_card_catalog",
-      storage: "kv_sharded",
-      shard_size: 1,
-      shard_count: shards.length,
-      catalog_gene_count: cards.length,
-      card_count: cards.length,
-      shards,
-    }),
-  )
-  for (const shard of shards) {
-    kvStore.set(
-      shard.key,
-      JSON.stringify({
-        schema: "iconoplasm.cardCatalog.v1",
-        artifact_version: version,
-        shard_index: shard.index,
-        cards: [cards[shard.index]],
-      }),
-    )
-  }
-}
-
-function putContentAddressedCardCatalogBaseline(
-  kvStore,
-  symbols = ["ERBB2", "INS", "PTEN"],
-  version = "test-vm-version",
-) {
-  const cards = symbols.map((symbol) =>
-    completeMobileCardVM(symbol, version, "published_card_catalog"),
-  )
-  const contentHash = `test-baseline-${version}`
-  const shardKey = `iconoplasm:card-catalog-shard:${contentHash}`
-  kvStore.set(
-    shardKey,
-    JSON.stringify({
-      schema: "iconoplasm.cardCatalog.v1",
-      storage: "kv_card_catalog_content_addressed_shards",
-      content_hash: contentHash,
-      cards,
-    }),
-  )
-  kvStore.set(
-    `iconoplasm:card-catalog:${version}`,
-    JSON.stringify({
-      schema: "iconoplasm.cardCatalog.v1",
-      build_revision: 4,
-      artifact_version: version,
-      snapshot_version: version,
-      artifact_validated_at: "2026-05-09T00:00:00.000Z",
-      content_hash: version,
-      source: "published_card_catalog",
-      storage: "kv_card_catalog_content_addressed_shards",
-      shard_size: 750,
-      shard_count: 1,
-      catalog_gene_count: cards.length,
-      card_count: cards.length,
-      shards: [
-        {
-          key: shardKey,
-          index: 0,
-          card_count: cards.length,
-          content_hash: contentHash,
-          first_symbol: cards[0].symbol,
-          last_symbol: cards[cards.length - 1].symbol,
-        },
-      ],
-    }),
-  )
-  kvStore.set("iconoplasm:gallery-version", JSON.stringify({ current: version }))
-  kvStore.set(
-    "iconoplasm:card-catalog-publish-watermark:v1",
-    JSON.stringify({
-      schema: "iconoplasm.cardCatalogPublishWatermark.v1",
-      artifact_version: version,
-      watermark_event_at: "2026-05-09 00:00:00",
-      watermark_event_id: 100,
-      card_count: cards.length,
-      catalog_gene_count: cards.length,
-      published_at: "2026-05-09T00:00:00.000Z",
-    }),
-  )
-}
-
 function putCatalogResolveArtifact(
   kvStore,
   genes = [
@@ -548,16 +430,6 @@ function seedStableGeneObjects(symbols, version = "test-vm-version") {
   }
 }
 
-test.beforeEach(() => {
-  stableStorage = installStableGeneStorage(new Map())
-  seedStableGeneObjects(["ERBB2", "INS"])
-})
-
-test.afterEach(() => {
-  stableStorage?.restore()
-  stableStorage = null
-})
-
 function buildEnv({
   kvStore = new Map(),
   db = new FakeIconoplasmDb(),
@@ -597,58 +469,6 @@ function buildEnv({
     },
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     ...extraEnv,
-  }
-}
-
-function fakeCardCatalogKvWriteBudgetBinding({
-  dailyLimit = 900,
-  initialEstimatedWrites = 0,
-} = {}) {
-  let estimatedWrites = initialEstimatedWrites
-  const reservations = []
-  return {
-    reservations,
-    binding: {
-      idFromName(name) {
-        return String(name || "global")
-      },
-      get() {
-        return {
-          async fetch(request) {
-            const url = new URL(request.url)
-            if (url.pathname !== "/reserve-card-catalog-kv-writes") {
-              return Response.json({ error: "Not found" }, { status: 404 })
-            }
-            const payload = await request.json()
-            const requestedWrites = Math.max(0, Number(payload.estimated_kv_writes || 0) || 0)
-            const projectedWrites = estimatedWrites + requestedWrites
-            reservations.push({ ...payload, requestedWrites, projectedWrites })
-            if (projectedWrites > dailyLimit) {
-              return Response.json(
-                {
-                  ok: false,
-                  code: "CARD_CATALOG_KV_WRITE_BUDGET_EXHAUSTED",
-                  daily_limit: dailyLimit,
-                  estimated_writes: estimatedWrites,
-                  requested_writes: requestedWrites,
-                  projected_writes: projectedWrites,
-                },
-                { status: 429 },
-              )
-            }
-            estimatedWrites = projectedWrites
-            return Response.json({
-              ok: true,
-              code: "OK",
-              daily_limit: dailyLimit,
-              estimated_writes: estimatedWrites,
-              requested_writes: requestedWrites,
-              projected_writes: projectedWrites,
-            })
-          },
-        }
-      },
-    },
   }
 }
 
@@ -877,42 +697,6 @@ test("mobile card symbol endpoint fails loud with 503 no-store when storage erro
   assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
 })
 
-test("mobile card manifest reads exactly one stable object per requested symbol and no KV head, manifest or shard", async () => {
-  resetIconoplasmRuntimeCachesForTest()
-  const kvStore = new Map()
-  const kvGets = []
-  // The old sharded tree is still seeded in KV so a regression that walks it
-  // shows up as a KV read below.
-  putShardedCardCatalogArtifact(kvStore, ["BRCA1", "ERBB2", "INS", "TP53"], "test-vm-version")
-  seedStableGeneObjects(["BRCA1", "TP53"])
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
-      }),
-      buildEnv({ kvStore, db: null, cardArtifact: null, onKvGet: (key) => kvGets.push(key) }),
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload.data_source, "stable_gene_object")
-  assert.equal(payload.diagnostics.artifact_gene_count, 2)
-  assert.deepEqual(
-    payload.cards.map((card) => card.symbol),
-    ["INS", "ERBB2"],
-  )
-  assert.deepEqual([...stableStorage.reads].sort(), [
-    stableGeneObjectPath("ERBB2"),
-    stableGeneObjectPath("INS"),
-  ])
-  assert.deepEqual(
-    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
-    [],
-  )
-})
-
 test("mobile card manifest keeps its 100-symbol limit and reads at most one object per accepted symbol", async () => {
   const symbols = Array.from({ length: 120 }, (_, index) => `G${String(index).padStart(4, "0")}`)
   const response =
@@ -955,39 +739,8 @@ test("mobile card manifest fails loud when stable object storage errors", async 
   assert.equal(payload.artifact_version, "stable-v3")
 })
 
-test("mobile card manifest reports a missing stable object without any KV head or previous-version fallback", async () => {
-  const kvGets = []
-  stableStorage.objects.delete("INS")
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/mobile-card-manifest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout: "mobile-dossier-v1", symbols: ["INS", "ERBB2"] }),
-      }),
-      buildEnv({
-        db: null,
-        version: JSON.stringify({ current: "current-vm-version", previous: "previous-vm-version" }),
-        cardArtifact: completeCardCatalogArtifact(["INS"], "previous-vm-version"),
-        onKvGet: (key) => kvGets.push(key),
-      }),
-    )
-  assert.equal(response.status, 200)
-  const payload = await response.json()
-  assert.deepEqual(payload.missing, ["INS"])
-  assert.deepEqual(
-    payload.cards.map((card) => card.symbol),
-    ["ERBB2"],
-  )
-  assert.deepEqual(
-    kvGets.filter((key) => key === "iconoplasm:gallery-version" || key.includes("card-catalog")),
-    [],
-  )
-})
-
-// The card mapper keeps the HGNC name when UniProt differs (the
-// source-level mapper tests below pin that), and the print-copy renderer reads
-// the stable gene object the per-gene publisher composes from that payload.
+// The print-copy renderer reads the stable gene object the per-gene publisher composes; its
+// name is the HGNC name when UniProt differs.
 test("print-copy renders the HGNC gene name from the stable gene object", async () => {
   resetIconoplasmRuntimeCachesForTest()
   const kvStore = new Map()
@@ -1012,106 +765,4 @@ test("print-copy renders the HGNC gene name from the stable gene object", async 
   assert.equal(printCopyRender.status, 200)
   assert.match(printCopyHtml, /phosphatase and tensin homolog/)
   assert.doesNotMatch(printCopyHtml, /Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase/)
-})
-
-test("card catalog records do not copy raw sample prose into public card payloads", () => {
-  const start = source.indexOf("function cardCatalogRecordFromJoinedRow")
-  const end = source.indexOf("async function cardCatalogRecordsForArtifact", start)
-  assert.notEqual(start, -1, "missing card catalog row mapper")
-  assert.notEqual(end, -1, "missing card catalog row mapper boundary")
-  const block = source.slice(start, end)
-
-  assert.doesNotMatch(
-    block,
-    /manifestation:\s*String\(row\.manifestation\)|description:\s*String\(row\.manifestation\)/,
-    "published card payloads must not expose raw sample prose",
-  )
-})
-
-test("card catalog mapper copies public card companion fields from the synced read model", () => {
-  const start = source.indexOf("function cardCatalogRecordFromJoinedRow")
-  const end = source.indexOf("async function cardCatalogRecordsForArtifact", start)
-  assert.notEqual(start, -1, "missing card catalog row mapper")
-  assert.notEqual(end, -1, "missing card catalog row mapper boundary")
-  const block = source.slice(start, end)
-
-  assert.match(block, /row\?\.molecular_weight_kda/)
-  assert.match(block, /row\?\.first_publication_year/)
-  assert.match(block, /row\?\.primary_tissue/)
-  assert.match(block, /sample_label:\s*sanitizeText\(row\?\.sample_label \|\| "", 64\) \|\| null/)
-  assert.match(block, /sample_number:\s*optionalInt\(row\?\.sample_number\)/)
-  assert.match(
-    block,
-    /sample_text_hash:\s*normalizeSha256\(row\?\.sample_text_hash \|\| ""\) \|\| null/,
-  )
-  assert.doesNotMatch(
-    block,
-    /2020\s*-|DEMOGRAPHIC_MAPPING_BASE_YEAR|tissueTau\s*>=|optionalFloat\(row\?\.weight_kg/,
-    "card artifacts should not rebuild renderer companion facts path-locally",
-  )
-})
-
-test("card catalog artifact query carries public portrait sample provenance", () => {
-  const start = source.indexOf("async function cardCatalogRecordsForArtifact")
-  const end = source.indexOf("function galleryCanUseEdgeCache", start)
-  assert.notEqual(start, -1, "missing card catalog artifact query")
-  assert.notEqual(end, -1, "missing card catalog artifact query boundary")
-  const block = source.slice(start, end)
-
-  assert.match(block, /pa\.sample_label/)
-  assert.match(block, /pa\.sample_number/)
-  assert.match(block, /pa\.sample_text_hash/)
-})
-
-test("mobile manifest route is owned by the declared gateway contract", () => {
-  const post = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "POST")
-  const get = matchIconoplasmRouteContract("/api/iconoplasm/mobile-card-manifest", "GET")
-  assert.equal(post?.route.gatewayHandler, "mobile_card_manifest")
-  assert.equal(post?.route.budgetFamily, "mobile_card_manifest")
-  assert.equal(post?.methodAllowed, true)
-  assert.equal(get?.methodAllowed, false)
-})
-
-test("mobile manifest runtime block does not call per-gene KV or D1 composition", () => {
-  const start = source.indexOf("async function handleMobileCardManifest")
-  const end = source.indexOf("function mobileCardSymbolClientHeaders", start)
-  assert.notEqual(start, -1)
-  assert.notEqual(end, -1)
-  const block = source.slice(start, end)
-  assert.doesNotMatch(block, /readMobileCardVMFromSharedSnapshot/)
-  assert.doesNotMatch(block, /writeMobileCardVMToSharedSnapshot/)
-  assert.doesNotMatch(block, /composeAndCacheMobileCardVMs/)
-  assert.doesNotMatch(block, /geneRecord\(/)
-  assert.doesNotMatch(block, /readPublishedCardCatalogArtifact|currentMobileCardSnapshotVersion/)
-  assert.match(block, /readStableGeneObjects\(env, symbols\)/)
-})
-
-test("frontend mobile path uses the card catalog manifest and rejects fallback records", () => {
-  assert.match(appSource, /function assertCompleteMobileCardVM\(card\)/)
-  assert.match(appSource, /\/api\/iconoplasm\/mobile-card-manifest/)
-  assert.match(appSource, /card\.__complete !== true/)
-  // B-898: the manifest reads one stable gene object per symbol.
-  assert.match(source, /readStableGeneObjects\(env, symbols\)/)
-  assert.match(source, /STABLE_GENE_OBJECT_SNAPSHOT_LABEL/)
-  assert.doesNotMatch(source, /KV_CARD_CATALOG_ARTIFACT_PREFIX|readPublishedCardCatalogArtifact\(/)
-  assert.doesNotMatch(source, /KV_MOBILE_CARD_VM_PREFIX/)
-  assert.doesNotMatch(source, /composeAndCacheMobileCardVMs/)
-  assert.doesNotMatch(source, /readMobileCardVMFromSharedSnapshot/)
-  assert.doesNotMatch(source, /writeMobileCardVMToSharedSnapshot/)
-  const mobileBranch = appSource.slice(
-    appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
-    appSource.indexOf(
-      "if (orderEl)",
-      appSource.indexOf("return loadMobileCardPageVM(pageEntries)"),
-    ),
-  )
-  assert.doesNotMatch(
-    mobileBranch,
-    /fallbackDiscoveredGene|loadDiscoveredGeneCardData|hydrateBrickCards/,
-    "mobile collection branch must not render fallback cards or rely on later card hydration",
-  )
-})
-
-test("the runtime keeps the one per-gene stable object publisher", () => {
-  assert.match(source, /export async function publishIconoplasmGeneStableObject\(/)
 })

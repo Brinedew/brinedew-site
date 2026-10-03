@@ -211,6 +211,9 @@ test("the Iconoplasm admin page has no unsafe-inline or unsafe-eval in script-sr
   // The control: the host's other responses keep inline scripts, so the check above can fail.
   const publicPolicy = await policyFor("https://iconoplasm.brinedew.bio/.well-known/ai")
   assert.match(publicPolicy, /script-src[^;]*'unsafe-inline'/)
+  // Shoelace loads its checkbox, select and dialog icons from data: URLs; without this the
+  // Iconoplasm dialogs lose their icons in production.
+  assert.match(publicPolicy, /connect-src 'self' data: https:\/\/brinedew\.bio/)
 })
 
 // B-972: a logged-in admin's cookie must not let another site, or a form post, change the
