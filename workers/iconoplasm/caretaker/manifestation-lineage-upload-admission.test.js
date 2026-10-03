@@ -12,8 +12,14 @@ import {
   submitTagsDerivative,
   createManifestationUploadIntent,
   admitManifestationUploadIntent,
+  releaseAbandonedManifestationUploads,
 } from "./manifestation-authority.js"
 import { TestD1, command, sha, storage } from "./manifestation-authority-test-support.js"
+import {
+  ICONOPLASM_BACKGROUND_MINUTES,
+  ICONOPLASM_RECURRING_CRON,
+} from "../../iconoplasm-background-schedule.js"
+import runtime from "../../the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 
 const migration = readFileSync(
   new URL(
@@ -294,4 +300,121 @@ test("a storage outage during the release never blocks the new upload (B-875)", 
   const fresh = await admit(f, 20004)
   assert.equal(fresh.status, "uploading")
   assert.equal(statusOf(f, stray.upload_intent_id), "uploading", "released on a later upload")
+})
+
+// B-985: a caretaker who abandons an upload and never uploads again is invisible to
+// the release above. The `manifestations` background tick sweeps every caretaker's
+// expired strays, three at most per run. These drive the Worker's real scheduled
+// entry point over the real authoring schema; only the storage service is faked.
+const reservedBytes = (f) =>
+  f.db.raw.prepare("SELECT body_reserved_bytes AS n FROM icono_authority_state").get().n
+
+function manifestationsTick(f) {
+  // This test is about uploads: the fixture's own events need no projection.
+  f.db.raw.exec("UPDATE icono_manifestation_events SET projection_status = 'not_required'")
+  const refusePrimary = {
+    prepare() {
+      throw new Error("the upload sweep never touches the primary database")
+    },
+  }
+  return runtime.scheduled(
+    {
+      cron: ICONOPLASM_RECURRING_CRON,
+      scheduledTime: Date.UTC(2026, 9, 3, 12, ICONOPLASM_BACKGROUND_MINUTES.manifestations[0]),
+    },
+    { ...storageEnv, ICONOPLASM_DB: refusePrimary, ICONOPLASM_AUTHORING_DB: f.db },
+    { waitUntil() {} },
+  )
+}
+
+test("the scheduled manifestations tick releases an abandoned upload nobody retries (B-985)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  const deleted = []
+  stubStorage(t, async (url, init = {}) => {
+    const isDelete = String(init.method).toUpperCase() === "DELETE"
+    if (isDelete) deleted.push(String(url))
+    return new Response(null, { status: isDelete ? 200 : 404 })
+  })
+  const stray = await f.reserve("revision", 5, { now: PAST, leaseMs: 30_000 })
+  const live = await f.reserve("revision", 7, { leaseMs: 600_000 })
+  assert.equal(reservedBytes(f), 12)
+  await manifestationsTick(f)
+  assert.equal(statusOf(f, stray.upload_intent_id), "deleted")
+  assert.equal(statusOf(f, live.upload_intent_id), "uploading", "its lease has not ended")
+  assert.equal(reservedBytes(f), 7, "the stray's bytes came back and the live upload's did not")
+  assert.equal(deleted.length, 1)
+  assert.ok(deleted[0].endsWith(stray.object_key), "the stray's stored body was deleted")
+})
+
+test("each tick releases at most three strays and the next tick finishes the rest (B-985)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  stubStorage(t, deletingStorage)
+  const strays = []
+  for (let i = 0; i < 5; i++)
+    strays.push(await f.reserve("revision", 1, { now: PAST, leaseMs: 30_000 }))
+  const released = () => strays.filter((s) => statusOf(f, s.upload_intent_id) === "deleted").length
+  await manifestationsTick(f)
+  assert.equal(released(), 3)
+  assert.equal(reservedBytes(f), 2)
+  await manifestationsTick(f)
+  assert.equal(released(), 5)
+  assert.equal(reservedBytes(f), 0)
+})
+
+test("a storage outage keeps the stray reserved, is reported as pending, and a later tick releases it (B-985)", async (t) => {
+  const f = await fixture(t)
+  f.migrate()
+  const errors = []
+  t.mock.method(console, "error", (...args) => errors.push(args.join(" ")))
+  let storageIsUp = false
+  stubStorage(t, async (url, init) => {
+    if (!storageIsUp) throw new TypeError("fetch failed")
+    return deletingStorage(url, init)
+  })
+  const stray = await f.reserve("revision", 5, { now: PAST, leaseMs: 30_000 })
+  await manifestationsTick(f)
+  assert.equal(statusOf(f, stray.upload_intent_id), "uploading")
+  assert.equal(reservedBytes(f), 5)
+  assert.ok(
+    errors.some((line) => line.includes("manifestations remains pending")),
+    errors.join("; "),
+  )
+  // The failed release leased the stray for a minute; let that minute pass.
+  f.db.raw
+    .prepare(
+      "UPDATE icono_manifestation_upload_intents SET lease_expires_at = ? WHERE upload_intent_id = ?",
+    )
+    .run(PAST, stray.upload_intent_id)
+  storageIsUp = true
+  await manifestationsTick(f)
+  assert.equal(statusOf(f, stray.upload_intent_id), "deleted")
+  assert.equal(reservedBytes(f), 0)
+})
+
+test("the scheduled read walks the due index in order, so its cost is the limit and not the number of strays (B-985)", async (t) => {
+  const db = new TestD1()
+  t.after(() => db.close())
+  stubStorage(t, deletingStorage)
+  const captured = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    captured.push(sql)
+    return prepare(sql)
+  }
+  await releaseAbandonedManifestationUploads({ ...storageEnv, ICONOPLASM_AUTHORING_DB: db })
+  const read = captured.find((sql) =>
+    /FROM icono_manifestation_upload_intents\s+WHERE status IN/.test(sql),
+  )
+  assert.ok(read, "the sweep reads the expired intents of every caretaker")
+  const plan = db.raw
+    .prepare(`EXPLAIN QUERY PLAN ${read}`)
+    .all(PAST, 3)
+    .map(({ detail }) => detail)
+  assert.ok(
+    plan.some((detail) => detail.includes("idx_icono_upload_intents_due")),
+    plan.join("; "),
+  )
+  assert.ok(!plan.some((detail) => /TEMP B-TREE|SCAN/.test(detail)), plan.join("; "))
 })
