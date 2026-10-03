@@ -6455,6 +6455,17 @@ function parseGeneInputs(body) {
   return []
 }
 
+// ⚠️ COST BARRIER: compare the bare `gene` column to the already upper-cased bound
+// values, never `upper(gene) IN (...)`. Every stored gene is upper-case, trimmed and
+// made of `A-Z`, `0-9` and `-` (19,110 of 19,110 on 2026-10-03), and
+// `normalizeGeneToken` upper-cases every pasted symbol first, so the equality finds
+// the same rows through `idx_proteins_gene`. Wrapping the column in a function
+// defeats the index and reads the whole table for every chunk of 100 symbols:
+// 19,110 rows for a one-symbol paste and 1.9M rows (38% of the day's read
+// allowance) for the 10,000-symbol maximum. Production reads about one row per
+// symbol looked up plus two per symbol found. A new importer must write genes
+// upper-case (migrations/README.md). `workers/practice-resolve-cost.test.js` pins the
+// index search and the rows read at production shape.
 async function resolveGenesExact(db, genesUpper) {
   const found = new Map()
   if (!db || !Array.isArray(genesUpper) || genesUpper.length === 0) {
@@ -6468,7 +6479,7 @@ async function resolveGenesExact(db, genesUpper) {
     const statement = `
       SELECT gene, uniprot, structure_source, alphafold_url, pdb_id, swissmodel_url
       FROM proteins
-      WHERE upper(gene) IN (${placeholders})
+      WHERE gene IN (${placeholders})
     `
     const resp = await db
       .prepare(statement)

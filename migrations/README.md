@@ -16,7 +16,15 @@ that historical table by assuming the first migration is the current schema.
   route (`/api/structure-cached?key=`) looks a protein up this way on every
   SWISS-MODEL or AlphaFold request, and
   `workers/structure-cached-key-lookup-cost.test.js` pins one row read per
-  request. A new importer must write accessions upper-case.
+  request. A new importer must write accessions upper-case. `proteins.gene`
+  holds upper-case, trimmed symbols made of `A-Z`, `0-9` and `-` (19,110 of
+  19,110, all distinct, on 2026-10-03) under `idx_proteins_gene`. The practice
+  gene-list resolver (`POST /api/game/practice/resolve`) upper-cases each pasted
+  symbol and compares the bare column with `IN`, so a paste costs about three rows
+  per symbol. Never write `upper(gene) IN (...)`: it reads the whole table per
+  chunk of 100 symbols. A new importer must write genes upper-case, because a
+  lower-case stored gene would be invisible to the resolver;
+  `workers/practice-resolve-cost.test.js` pins the index search and the rows read.
 - **Embeddings:** D1 `protein_embeddings` is independent of the search tables.
   `scripts/load_esm2_embeddings.py` is the checked-in ESM2 loader.
 - **Daily answer:** The existing stateful Worker owns the server-side

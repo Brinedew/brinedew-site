@@ -253,6 +253,16 @@ Worker on the same production-shaped local D1 with R2 unbound and `fetch` counte
   pick;
 - a browser with no session cookie reads no session.
 
+`workers/practice-resolve-cost.test.js` must prove, through the real Worker on the
+production-shaped local D1, that `POST /api/game/practice/resolve` runs one
+statement per hundred symbols, each an index search on `idx_proteins_gene`, reads at
+most three rows per symbol (2 rows for one symbol, about 30,000 for the
+10,000-symbol maximum, where the `upper(gene)` statement read 19,110 rows per
+statement and 1.9M for the maximum), classifies playable, unplayable and unknown
+symbols as the `upper(gene)` statement did, and keeps its answers for lower-case,
+padded, punctuated and duplicate symbols, an empty paste, the 10,000-symbol cut and a
+D1 error.
+
 `workers/structure-cached-key-lookup-cost.test.js` must prove that an
 `/api/structure-cached?key=` request for a SWISS-MODEL or AlphaFold structure
 reads at most one row of `proteins` through an index search, finds the row the
