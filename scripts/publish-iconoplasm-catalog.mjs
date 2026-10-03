@@ -17,7 +17,7 @@
 //
 // Object shape (schema 3): { schema, generated_at, watermark_event_id, genes }
 // where each gene row is
-//   [symbol, full_name, portrait_sha256 | "", color_hex | "", image_score,
+//   [symbol, full_name (the gene's HGNC name, iconoplasmGeneName), portrait_sha256 | "", color_hex | "", image_score,
 //    uniqueness_rank | null, weight_kg | null, age_years | null,
 //    first_publication_year | null, published_at | ""]
 import { mkdirSync, writeFileSync } from "node:fs"
@@ -26,6 +26,7 @@ import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { PUBLICATION_AFFECTING_ACTIONS } from "../workers/iconoplasm-catalog-dispatch.js"
+import { iconoplasmGeneName } from "../workers/lib/iconoplasm-gene-name.js"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
@@ -33,9 +34,9 @@ const KEY = "catalog/v3/index.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
 const PAGE = 2000
 const MAX_INCREMENTAL_SYMBOLS = 2000
-const ROW_SQL = `
+export const ROW_SQL = `
   SELECT gc.gene_symbol AS symbol,
-         COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), gc.gene_symbol) AS full_name,
+         gc.full_name AS catalog_full_name,
          CASE WHEN pa.asset_sha256 IS NOT NULL THEN ps.current_asset_sha256 ELSE '' END AS portrait_sha256,
          COALESCE(gc.color_hex, '') AS color_hex,
          COALESCE(vs.score, 0) AS image_score,
@@ -90,10 +91,11 @@ function nullableNumber(value) {
     : number
 }
 
-function geneRow(row) {
+export function geneRow(row) {
+  const symbol = String(row.symbol || "").toUpperCase()
   return [
-    String(row.symbol || "").toUpperCase(),
-    String(row.full_name || ""),
+    symbol,
+    iconoplasmGeneName(row.catalog_full_name, symbol),
     /^[a-f0-9]{64}$/i.test(String(row.portrait_sha256 || ""))
       ? String(row.portrait_sha256).toLowerCase()
       : "",
@@ -326,7 +328,10 @@ function finish(receipt, bytes = null) {
   console.log(JSON.stringify(receipt, null, 2))
 }
 
-main().catch((error) => {
-  console.error(error?.stack || String(error))
-  process.exit(1)
-})
+// Importable by the tests that prove the row shape; only a direct run publishes.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error?.stack || String(error))
+    process.exit(1)
+  })
+}

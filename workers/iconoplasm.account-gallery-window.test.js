@@ -1243,11 +1243,20 @@ test("discoveries/me shape=compact returns the bare shelf without enriching it (
   assert.match(first.first_discovered_at, /^2026-04-\d\dT00:00:00Z$/)
 
   // The enriched shape is unchanged for tabs on the old script.
+  // B-908: a gene has one public name. The essence row carries the UniProt
+  // protein name; the shelf must name each gene from the catalog (HGNC) row,
+  // as the catalog object, the stable object and the static document do.
+  db.raw.exec(
+    "INSERT INTO icono_gene_essence (gene_symbol, full_name) SELECT gene_symbol, 'UniProt ' || gene_symbol FROM icono_gene_catalog",
+  )
   db.calls.length = 0
   const legacy = await (await call("order=popularity")).json()
   assert.equal(legacy.shape, undefined)
   assert.ok(enrichments() > 0, "the legacy shape stopped enriching")
   assert.equal(legacy.discoveries[0].full_name.endsWith("full name"), true)
+  for (const item of legacy.discoveries) {
+    assert.equal(item.full_name, `${item.gene_symbol} full name`, `${item.gene_symbol}: shelf name`)
+  }
 })
 
 // B-887: with a current shelf the home window and the compact shelf read one

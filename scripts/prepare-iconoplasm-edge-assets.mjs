@@ -103,7 +103,9 @@ const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 
 // B-898: the build reads the one stable catalog object, catalog/v3/index.json
 // (schema 3, one row per gene: [symbol, full_name, ...]). publishedGenes is that
-// rows array.
+// rows array. B-908: row[1] is the gene's HGNC name, the same string the stable
+// gene object carries (workers/lib/iconoplasm-gene-name.js), so a document's
+// title is the title its loaded card sets.
 function publishedGeneRows(publishedGenes = []) {
   if (!Array.isArray(publishedGenes)) throw new Error("Invalid published catalog rows")
   return publishedGenes.map((row) => {
@@ -212,8 +214,14 @@ function escapeHtml(value) {
 // rule as the shell: saved choice, else light on this host), keep the body
 // hidden, and start the shell request from <head>. The crawler copy is shown
 // only if the shell cannot be fetched.
+// B-908: the shell carries the home page's <title>, so writing it over the stub
+// would put "Iconoplasm | Gene character cards" in the tab for the ~300 ms the
+// app takes to start, then a symbol-only title, before the card's own. The stub
+// writes its own title into the shell it hands over to. The app keeps a title
+// that is already this gene's (isIconoplasmGenePageTitle) and sets the loaded
+// card's name once, so the tab shows one title from first paint to the card.
 const GENE_PAGE_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-theme="dark"]{background:oklch(16% 0.01 45)}body{visibility:hidden}html.icono-stub-failed body{visibility:visible}</style>
-<script>(function(){try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){document.open();document.write(html);document.close()}).catch(function(){document.documentElement.classList.add("icono-stub-failed")})})()</script>`
+<script>(function(){try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){var n=document.title,a=html.indexOf("<title>"),b=html.indexOf("</title>");if(a>-1&&b>a)html=html.slice(0,a+7)+n.replace(/&/g,"&amp;").replace(/</g,"&lt;")+html.slice(b);document.open();document.write(html);document.close()}).catch(function(){document.documentElement.classList.add("icono-stub-failed")})})()</script>`
 
 export function iconoplasmGenePageHtml({ symbol, fullName }) {
   const name = String(fullName || "").trim()

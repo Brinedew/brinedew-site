@@ -175,6 +175,7 @@ import {
   enrichPublishedGeneCandidates,
   projectCardBlot,
 } from "./lib/iconoplasm-stable-gene-object.js"
+import { iconoplasmGeneName } from "./lib/iconoplasm-gene-name.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
 import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery-routes.js"
@@ -11749,7 +11750,7 @@ async function enrichGeneDiscoveryRows(env, rows) {
     const result = await env.ICONOPLASM_DB.prepare(
       `SELECT
          gc.gene_symbol,
-         COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
+         gc.full_name AS catalog_full_name,
          ge.weight_kg,
          ge.age_years,
          ge.leakage_percent AS uniqueness_rank,
@@ -11771,7 +11772,10 @@ async function enrichGeneDiscoveryRows(env, rows) {
       .bind(JSON.stringify(chunk))
       .all()
     for (const row of Array.isArray(result?.results) ? result.results : []) {
-      metadata.set(String(row.gene_symbol || ""), row)
+      metadata.set(String(row.gene_symbol || ""), {
+        ...row,
+        full_name: iconoplasmGeneName(row.catalog_full_name, normalizeSymbol(row.gene_symbol)),
+      })
     }
   }
   return rows.map((row) =>
@@ -12151,7 +12155,7 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
   const rows = await env.ICONOPLASM_DB.prepare(
     `SELECT
        gc.gene_symbol,
-       COALESCE(NULLIF(TRIM(ge.full_name), ''), NULLIF(TRIM(gc.full_name), ''), upper(gc.gene_symbol)) AS full_name,
+       gc.full_name AS catalog_full_name,
        ge.weight_kg,
        ge.age_years,
        ge.leakage_percent AS uniqueness_rank,
@@ -12184,7 +12188,11 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
   }
   return sortDiscoveryRowsForOrder(
     (Array.isArray(rows?.results) ? rows.results : []).map((row) =>
-      mapGeneDiscoveryRow({ ...(discovered.get(String(row.gene_symbol || "")) || {}), ...row }),
+      mapGeneDiscoveryRow({
+        ...(discovered.get(String(row.gene_symbol || "")) || {}),
+        ...row,
+        full_name: iconoplasmGeneName(row.catalog_full_name, normalizeSymbol(row.gene_symbol)),
+      }),
     ),
     normalizeIconoplasmHomeOrder(order, "newest"),
     seed,
@@ -15965,10 +15973,7 @@ async function geneRecord(
     typeof r?.catalog?.tmh === "boolean"
       ? [r.catalog.tmh ? "Transmembrane" : "Soluble"]
       : sexOriginFromProtein(r?.protein)
-  const identityFullName =
-    sanitizeText(r?.catalog?.full_name, 255) ||
-    (r?.protein?.full_name && String(r.protein.full_name).trim()) ||
-    r.symbol
+  const identityFullName = iconoplasmGeneName(r?.catalog?.full_name, r.symbol)
   const tooltipEssence = needsEssence
     ? {
         ...syncedEssence,
@@ -16002,9 +16007,7 @@ async function geneRecord(
   const uniprot = needsUniprot
     ? normalizeUniprot(r?.catalog?.uniprot || r?.protein?.uniprot || null)
     : null
-  const fullName = needsFullName
-    ? sanitizeText(r?.catalog?.full_name, 255) || identityFullName
-    : null
+  const fullName = needsFullName ? identityFullName : null
   const weightKgValue = Number(tooltipEssence?.weight_kg)
   const weightKg = Number.isFinite(weightKgValue) && weightKgValue > 0 ? weightKgValue : null
   const proteinLengthAa = optionalInt(r?.protein?.length)
@@ -22574,12 +22577,10 @@ function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
   const molecularWeightKda = optionalFloat(row?.molecular_weight_kda, { min: 0 })
   const firstPublicationYear = optionalInt(row?.first_publication_year)
   const primaryTissue = sanitizeText(row?.primary_tissue || "", 64) || ""
-  const catalogFullName = sanitizeText(row?.catalog_full_name || "", 255)
-  // Public Iconoplasm cards represent genes, so their visible identity comes
-  // exclusively from the HGNC-backed catalog. The essence row describes the
-  // generated character and also carries an internal UniProt protein name;
-  // allowing that field to win made card/print titles disagree with gene pages.
-  const fullName = catalogFullName || symbol
+  // B-908: the gene's public name is the catalog row's HGNC name, through the
+  // one rule the catalog builder shares (lib/iconoplasm-gene-name.js). The
+  // essence row's name is a UniProt protein name and never names a gene.
+  const fullName = iconoplasmGeneName(row?.catalog_full_name, symbol)
   const portrait = assetSha
     ? {
         status: "published",
