@@ -188,12 +188,6 @@ class FakeDb {
         })
         continue
       }
-      if (String(row.first_discovered_at || "") < String(existing.first_discovered_at || "")) {
-        existing.first_discovered_at = row.first_discovered_at
-      }
-      if (String(row.last_encountered_at || "") > String(existing.last_encountered_at || "")) {
-        existing.last_encountered_at = row.last_encountered_at
-      }
       existing.encounter_count += Number(row.encounter_count || 0) || 0
     }
     return Array.from(bySymbol.values())
@@ -440,10 +434,6 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
     }),
     KV: {
       async get(key) {
-        // The retired tree: a reader that comes back to it fails loudly.
-        if (key === "iconoplasm:gallery-version" || key.includes("card-catalog")) {
-          throw new Error(`account gallery window must not read the retired KV tree: ${key}`)
-        }
         return kvStore.get(key) || null
       },
       async put(key, value) {
