@@ -7,13 +7,13 @@
 // production, every such request is a miss, so this lookup runs once per view of
 // a guess structure and grows with players.
 //
-// It used to be `WHERE upper(uniprot) = ?`. Wrapping the column in `upper()`
-// defeats the UNIQUE index on `proteins.uniprot` and read the whole table:
-// 19,110 rows per request, so about 261 views spent the day's 5M-row allowance.
-// Every stored accession is already upper-case (19,110 of 19,110 measured on
-// 2026-10-03), and the other protein reader, `fetchProteinByUniprot`, compares
-// `uniprot = ?` with an upper-cased bound value, so the equality finds the same
-// rows.
+// The lookup compares the bare column to an upper-cased bound value. Written as
+// `WHERE upper(uniprot) = ?` it would defeat the UNIQUE index on
+// `proteins.uniprot` and read the whole table: 19,110 rows per request, so about
+// 261 views would spend the day's 5M-row allowance. Every stored accession is
+// already upper-case (19,110 of 19,110 measured on 2026-10-03), and the other
+// protein reader, `fetchProteinByUniprot`, compares `uniprot = ?` with an
+// upper-cased bound value, so the equality finds the same rows.
 //
 // Everything runs against a real local D1 built from the real GeneGuessr
 // migrations and seeded with the production shape (19,110 proteins), through the
@@ -21,7 +21,7 @@
 //
 // Failure modes this file proves, each written before the code that fixes it:
 //   S1  a key-based request reads the table in O(rows) instead of one indexed row
-//   S2  the indexed lookup resolves a different row than the old statement did
+//   S2  the indexed lookup resolves a different row than the upper() form does
 //   S3  a missing row, or a key with no accession in it, changes its answer
 //   S4  a D1 error on the lookup throws instead of falling through
 //   S5  a hinted request or a PDB key starts reading the database
@@ -39,9 +39,10 @@ import {
   seedCatalog,
 } from "./daily-selection-pool-test-d1.js"
 
-// The statement the route ran before this change, kept here to replay its cost
-// and to compare its answers with the new one's.
-const OLD_STRUCTURE_ROW_SQL = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
+// The same lookup with the column wrapped in upper(). It is the oracle: replayed
+// here to show what a full scan costs on this catalog and to compare its answers
+// with the route's.
+const UPPER_COLUMN_SQL = `SELECT uniprot, structure_source, pdb_id, alphafold_url, swissmodel_url, swissmodel_template
       FROM proteins
       WHERE upper(uniprot) = ?`
 
@@ -106,9 +107,9 @@ async function getStructure(query, { failProteinReads = false } = {}) {
 
 const keyQuery = (key) => `key=${encodeURIComponent(key)}`
 
-test("S1: replaying the old statement on this catalog costs what production paid", async () => {
+test("S1: the upper() form scans this catalog, the 19,110 rows production paid per request", async () => {
   const metered = meteredDb(db)
-  await metered.prepare(OLD_STRUCTURE_ROW_SQL).bind("Q00001").first()
+  await metered.prepare(UPPER_COLUMN_SQL).bind("Q00001").first()
   assert.equal(metered.totalRead(), PRODUCTION_SHAPE.proteins)
 })
 
@@ -144,8 +145,8 @@ test("S1: the row is found however the key spells the accession", async () => {
   assert.equal(metered.totalRead(), 1, "a lower-case key still matches the stored accession")
 })
 
-test("S2: the statement the route runs returns the row the old statement returned, for every key spelling", async () => {
-  // The old statement scans the table, so each comparison replays 19,110 rows.
+test("S2: the statement the route runs returns the row the upper() form returns, for every key spelling", async () => {
+  // The upper() form scans the table, so each comparison replays 19,110 rows.
   const samples = [...sample(bySource("alphafold"), 10), ...sample(bySource("swissmodel"), 10)]
   let compared = 0
   for (const row of samples) {
@@ -157,20 +158,20 @@ test("S2: the statement the route runs returns the row the old statement returne
       const { statements } = await getStructure(keyQuery(key))
       const lookup = statements.find((entry) => /FROM proteins/i.test(entry.sql))
       assert.ok(lookup, `${key} reads the protein row`)
-      const oldRow = await db.prepare(OLD_STRUCTURE_ROW_SQL).bind(row.uniprot.toUpperCase()).first()
-      const newRow = await db
+      const upperRow = await db.prepare(UPPER_COLUMN_SQL).bind(row.uniprot.toUpperCase()).first()
+      const routeRow = await db
         .prepare(lookup.sql)
         .bind(...lookup.args)
         .first()
-      assert.deepEqual(newRow, oldRow, `${key}: same row from both statements`)
-      assert.equal(oldRow.uniprot, row.uniprot)
+      assert.deepEqual(routeRow, upperRow, `${key}: same row from both statements`)
+      assert.equal(upperRow.uniprot, row.uniprot)
       compared += 1
     }
   }
   assert.equal(compared, 40)
 })
 
-test("S3: an accession that is not in the catalog behaves as it did, and reads nothing", async () => {
+test("S3: an accession that is not in the catalog gets the derived upstream (AlphaFold) or a 404 (SWISS-MODEL), and reads nothing", async () => {
   const alphafold = await getStructure(keyQuery("alphafold/QZZZZZ.cif"))
   assert.equal(alphafold.response.status, 200)
   assert.deepEqual(

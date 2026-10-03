@@ -5001,9 +5001,9 @@ async function handleGameBootstrap(request, env, ctx, corsHeaders) {
       // ⚠️ PRACTICE READS THE SESSION BEFORE IT PICKS ⚠️
       // A returning player's own session names their target, and so can a stored
       // practice pool, a `date=` link or `same_target=1`. A pick made in parallel
-      // with the session read was thrown away in all of those cases, yet it cost a
-      // D1 round, an outbound structure probe the player waited for, and a KV put
-      // on every page load. The pick now happens below, only when nothing names a
+      // with the session read is thrown away in all of those cases, yet it costs a
+      // D1 round, an outbound structure probe the player waits for, and a KV put
+      // on every page load. So the pick happens below, only when nothing names a
       // target. A browser with no session cookie has no session (the id is minted
       // for this request), so it skips the read and reaches the pick at once.
       const sessionCannotExist =

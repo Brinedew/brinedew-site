@@ -1,22 +1,20 @@
 // A returning practice player is served from their own session, not from a fresh pick.
 //
-// `/api/game/bootstrap?practice=1` used to pick a random practice protein on every
-// page load, in parallel with the session read, and then throw the pick away for a
-// returning player: the session's own target, a stored practice pool, a `date=`
-// link or `same_target=1` overwrote it. With R2 unbound, as in production, that pick
-// was a D1 round (the stored pool, the failure lookup, a `structure_failures`
-// DELETE), one outbound structure probe the player waited for, and a KV put.
-//
-// Now a practice request reads the session first and picks only when nothing
-// names a target. A browser with no session cookie has no session by construction,
-// so it neither reads one nor waits to pick.
+// `/api/game/bootstrap?practice=1` reads the session first and picks only when
+// nothing names a target. A pick made on every page load would be thrown away for
+// a returning player: the session's own target, a stored practice pool, a `date=`
+// link or `same_target=1` overwrites it. With R2 unbound, as in production, that
+// pick costs a D1 round (the stored pool, the failure lookup, a `structure_failures`
+// DELETE), one outbound structure probe the player waits for, and a KV put. A
+// browser with no session cookie has no session by construction, so it neither
+// reads one nor waits to pick.
 //
 // Everything runs through the real Worker against a real local D1 built from the
 // real GeneGuessr migrations and seeded with the production shape (19,110
 // proteins, 17,513 practice-eligible), with no R2 bucket bound and `fetch` counted.
 //
 // Failure modes this file proves, each written before the code that fixes it:
-//   R1  a returning same-day bootstrap still picks, probes a structure and writes KV twice
+//   R1  a returning same-day bootstrap picks, probes a structure and writes KV twice
 //   R2  a first-time bootstrap loses its pick
 //   R3  a restart keeps the old target, or drops the stored practice pool
 //   R4  a session that cannot name a usable target stops picking a replacement
@@ -226,7 +224,7 @@ test("R3: a restart with no pool picks a new target", async () => {
   assert.ok(pickStatements(restart.statements).length > 0)
 })
 
-test("R4: a same-day session whose target is not in the catalog behaves as it did", async () => {
+test("R4: a same-day session whose target is not in the catalog keeps that target and answers 500", async () => {
   // Proteins are never removed from the catalog, so this is not a path a player
   // takes. It is pinned so a later change to it is deliberate: the session keeps
   // the target it has, and the request answers that the target is unavailable.
