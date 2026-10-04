@@ -88,20 +88,6 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
-  const siteDetailStart = runtime.indexOf("async function handleSiteGeneDetail")
-  const siteDetailEnd = runtime.indexOf("\nasync function ", siteDetailStart + 1)
-  assert.ok(siteDetailStart >= 0 && siteDetailEnd > siteDetailStart)
-  const siteDetail = runtime.slice(siteDetailStart, siteDetailEnd)
-  // B-898 Stage 1, step B: the one published identity is the stable gene
-  // object (genes/v3/<SYMBOL>.json). The old KV head + delta-chain reader
-  // (readPublishedGeneCardPortraitProjection) must not creep back into a
-  // public surface.
-  assert.match(siteDetail, /readStableGeneObjectProjection/)
-  assert.doesNotMatch(siteDetail, /readPublishedGeneCardPortraitProjection/)
-  assert.match(siteDetail, /portraitOverride/)
-  assert.match(siteDetail, /etagFor\(\{ card_snapshot_version:/)
-  assert.doesNotMatch(siteDetail, /await portraitState\(env/)
-
   const publicMediaStart = runtime.indexOf("async function handlePublicMedia")
   const publicMediaEnd = runtime.indexOf("\nasync function ", publicMediaStart + 1)
   assert.ok(publicMediaStart >= 0 && publicMediaEnd > publicMediaStart)
@@ -110,15 +96,6 @@ test("IPD-011 keeps one exact-card blot authority across every public surface", 
   assert.doesNotMatch(publicMedia, /readPublishedGeneCardPortraitProjection/)
   assert.match(publicMedia, /publicGeneBlotMediaEnvelope/)
   assert.doesNotMatch(publicMedia, /await portraitState\(env/)
-
-  const recoveryStart = runtime.indexOf(
-    "export async function handleIconoplasmReaderRecoverySiteGeneDetail",
-  )
-  const recoveryEnd = runtime.indexOf("\nasync function ", recoveryStart + 1)
-  assert.ok(recoveryStart >= 0 && recoveryEnd > recoveryStart)
-  const recovery = runtime.slice(recoveryStart, recoveryEnd)
-  assert.match(recovery, /readStableGeneObjectProjection/)
-  assert.doesNotMatch(recovery, /readPublishedGeneCardPortraitProjection/)
 
   const resolverStart = runtime.indexOf("async function handlePublicImageResolve")
   const resolverEnd = runtime.indexOf("\nasync function ", resolverStart + 1)

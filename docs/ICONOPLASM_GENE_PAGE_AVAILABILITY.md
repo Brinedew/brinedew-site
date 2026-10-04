@@ -62,13 +62,10 @@ While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`, a
 `data_maintenance` release may set
 `ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`
 (`workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js`).
-That mode permits only GET/HEAD reads for
-`/api/iconoplasm/site/genes/:symbol` and exact content-addressed portrait
-renditions. The gene route reads the one stable gene object
-`genes/v3/<SYMBOL>.json`; it does not resolve live D1 rows.
-Portrait bytes use the existing storage adapter so first-party delivery remains
-available when Bunny is unreachable from the reader's network. Reader recovery
-performs no image selection, publication repair or D1 lookup.
+That mode permits only GET/HEAD reads for exact content-addressed portrait
+renditions. Portrait bytes use the existing storage adapter so first-party
+delivery remains available when Bunny is unreachable from the reader's network.
+Reader recovery performs no image selection, publication repair or D1 lookup.
 
 Gene pages are not part of it. The containment deploy keeps the asset bytes
 already serving production, which hold one static document per published gene,
@@ -77,8 +74,9 @@ maintenance window as in normal service. A `/gene/` path with no document has
 no page to give: containment keeps no 404 page, so it reaches the Worker, which
 answers 404.
 
-A gene with no stable object is a 404. An unreadable or invalid stable object
-is a 503. Candidate images, caretaker identity, voting, generation, authoring, and other mutation routes remain behind the
+A gene's card is its stable object on the CDN, which the page reads directly;
+the Worker serves none of it. Candidate images, caretaker identity, voting,
+generation, authoring, and other mutation routes remain behind the
 schema-transition response. Reader recovery restores reading, not full service:
 full service requires the admitted migration, normal stateful Worker activation,
 background-capacity release, and fresh live acceptance.

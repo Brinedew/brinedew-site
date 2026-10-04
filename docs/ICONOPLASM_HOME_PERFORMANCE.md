@@ -48,12 +48,10 @@ objects (`readStableGeneObjects(...)`), and then projects
 compact image cards from those published card VMs. The ordinary and image-only
 views therefore differ in response shape, not authority.
 
-The same rule covers anonymous galleries, site-gene detail, the server-rendered
-gene-page lead and metadata, public media, extension cards, and print-copy
-inputs. Site-gene detail may overlay fresh D1
-facts and candidates around the card portrait, but it has no signed-in or
-gene-detail portrait fallback. A missing or incomplete stable object fails
-closed and uncached instead of selecting a D1 or catalog SHA.
+The same rule covers anonymous galleries, the server-rendered gene-page lead
+and metadata, public media, extension cards, and print-copy inputs. None of them
+has a signed-in or gene-detail portrait fallback. A missing or incomplete stable
+object fails closed and uncached instead of selecting a D1 or catalog SHA.
 
 ### Why this fence exists
 
@@ -75,7 +73,7 @@ Do not:
   image-only account source;
 - use `row.asset_sha256` from the discovery window for a displayed portrait;
 - treat an image-only response as permission to bypass the stable gene object;
-- let site-gene detail, public media, metadata, a sitemap, or print-copy select
+- let public media, metadata, a sitemap, or print-copy select
   the D1 authoring leader;
 - add a cache that is not keyed by the stable object's version; or
 - accept API/hash equality alone as proof when the bug report is visual.

@@ -378,7 +378,7 @@ export function locateReaderRangeTarget(reference) {
 }
 
 export async function measureHover(page, diagnostics, sample) {
-  const selector = `.iconoplasm-gene[data-gene="${sample.symbol}"], .iconoplasm-pdf-hit-anchor[data-gene="${sample.symbol}"]`
+  const selector = `.iconoplasm-pdf-hit-anchor[data-gene="${sample.symbol}"]`
   if (!/^[A-Z0-9-]{1,64}$/.test(sample.symbol)) throw new Error("Invalid benchmark symbol")
   const timeoutMs = sample.timeoutMs || READER_BUDGETS.sampleTimeoutMs
   const record = { ...sample, imageMs: null, detailsMs: null }
@@ -406,7 +406,7 @@ export async function measureHover(page, diagnostics, sample) {
         reveal: true,
       })
       if (revealed.error) throw new Error(revealed.error)
-      // Wait only for the highlight, exactly as the legacy anchor wait above.
+      // Wait only for the highlight.
       // Never use portrait readiness as the start of the fixed prediction lead.
       while (
         !(await diagnostics.inspect(sample.symbol, sample.occurrence || 0))?.highlight?.rendered
