@@ -1619,49 +1619,38 @@ async function deliverGeneCardWakeup(env, symbol) {
   return { acked, outcome }
 }
 
-test("21: the publisher fingerprints what the print-copy queue consumer reads back", async (t) => {
+// B-997: print copies render only for readers who ask. Publication never touches a request, and
+// the consumer renders the card as published at render time, so an older fingerprint in the
+// request still ends as a PNG of the current card.
+test("21: publication queues no print copy; a request renders the card as currently published", async (t) => {
   const { env, stored, source, setUpvotes } = printCopyHarness(t)
+  await publishIconoplasmGeneStableObject(env, "TP53", { source })
   await enrollIconoplasmGeneCardMaterialization(env, {
     symbol: "TP53",
     cardFingerprint: "0".repeat(32),
     assetSha256: sha("a"),
   })
-  await publishIconoplasmGeneStableObject(env, "TP53", { source })
-  const queued = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(queued.state, "queued")
-  assert.notEqual(queued.desired_card_fingerprint, "0".repeat(32))
+  const enrolled = await readIconoplasmGeneCardMaterialization(env, "TP53")
 
-  // The consumer: claim, read the card back through the card route, compare.
-  const { acked, outcome } = await deliverGeneCardWakeup(env, "TP53")
-  assert.deepEqual(acked, ["TP53"])
-  assert.equal(outcome.results[0].superseded, undefined, JSON.stringify(outcome.results[0]))
-  assert.equal(outcome.results[0].ok, true, JSON.stringify(outcome.results[0]))
+  // Republishing (a vote, the republish route) leaves the reader's request exactly as it was.
+  setUpvotes(7)
+  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  const untouched = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(untouched.desired_card_fingerprint, "0".repeat(32))
+  assert.equal(untouched.wakeup_generation, enrolled.wakeup_generation)
+
+  // The consumer reads the card back through the card route, sees it moved, and renders the
+  // current card for the reader (one supersede, then the render).
+  for (let delivery = 0; delivery < 2; delivery += 1) {
+    const { acked } = await deliverGeneCardWakeup(env, "TP53")
+    assert.deepEqual(acked, ["TP53"])
+  }
   const ready = await readIconoplasmGeneCardMaterialization(env, "TP53")
   assert.equal(ready.state, "ready")
-  assert.equal(ready.ready_card_fingerprint, queued.desired_card_fingerprint)
-
-  // The same object read back and fingerprinted independently agrees. A
-  // JSON.stringify round trip of the in-memory object would not: it drops the
-  // undefined key that storage holds as null, which is why the publisher
-  // fingerprints the object through the store's own serialization.
   const readBack = JSON.parse(
     new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
   )
-  assert.equal(iconoplasmGeneCardFingerprint(readBack), queued.desired_card_fingerprint)
-  const [{ payload: inMemory }] = await source.materialize(["TP53"])
-  assert.equal(iconoplasmGeneCardFingerprint(inMemory), queued.desired_card_fingerprint)
-  assert.notEqual(
-    iconoplasmGeneCardFingerprint(JSON.parse(JSON.stringify(inMemory))),
-    queued.desired_card_fingerprint,
-  )
-
-  // A vote that only moves counts republishes the object and queues nothing.
-  setUpvotes(7)
-  await publishIconoplasmGeneStableObject(env, "TP53", { source })
-  const after = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(after.state, "ready")
-  assert.equal(after.desired_card_fingerprint, queued.desired_card_fingerprint)
-  assert.equal(after.wakeup_generation, ready.wakeup_generation)
+  assert.equal(ready.ready_card_fingerprint, iconoplasmGeneCardFingerprint(readBack))
 })
 
 // 22. Something still addresses the deleted vote coordinator, so the first

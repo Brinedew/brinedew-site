@@ -96,7 +96,6 @@ import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   createPublishedCardObjectStore,
-  publishedObjectAsRead,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
@@ -21691,14 +21690,11 @@ export async function publishIconoplasmGeneStableObject(
       )
       .bind(symbol)
       .run()
-    // The fingerprint of the object as storage holds it: the queue consumer
-    // reads that object back through the card route and must arrive at the
-    // same value, or it would advance and render again.
-    await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
-      symbol,
-      cardFingerprint: iconoplasmGeneCardFingerprint(publishedObjectAsRead(object)),
-      assetSha256: iconoplasmPrintCopyAssetSha(stableCard.payload),
-    })
+    // B-997: publication does not re-render print copies. The 8 browser launches a day go to
+    // readers who click "request print copy"; the status and PNG routes only ever serve a PNG of
+    // the current card, and a click enrols the current fingerprint, so a stale copy is never
+    // served. Re-rendering every requested gene on each publication spent all 8 launches on
+    // genes nobody was asking for (16 of 16 on 2026-10-03 and 10-04).
   }
   return {
     symbol,
