@@ -84,3 +84,22 @@ It's completely understandable to feel taken advantage of, when you craft a desi
 - In 40 years, the doctor treating you from cancer might not have been there if not for using Iconoplasm characters as a study reference. Looking at your work this way, you're making your own future healthcare cheaper and better quality.
 
 If you're interested in the idea of Iconoplasm, but you need stronger attribution and ownership of your labor, I will be happy to collaborate with you on the distribution side of things.
+
+### Generation tips
+
+**I struggle to make the characters look 20kg or 200kg
+
+There are three approaches to make the weight readable from an image:
+
+1. Recommended - Specify a head-to-body ratio as a separate character tag
+
+| Weight | How many heads tall |
+| ------ | ------------------- |
+| 5 kg   | 4                   |
+| 10 kg  | 5                   |
+| 20 kg  | 6                   |
+| 40 kg  | 7                   |
+| 80 kg  | 8                   |
+| 160 kg | 9                   |
+| 320 kg | 10                  |
+
