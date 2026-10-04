@@ -704,6 +704,22 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   white-space: nowrap;
 }
 
+/* An undiscovered gene keeps the portrait slot; the slot shows the gene-coloured placeholder
+   the cards use for a missing portrait until the gene is opened (discovered). */
+.icono-search-result-media--undiscovered {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--icono-search-gene-color, var(--gray)) 35%, var(--ui-bg)),
+    var(--ui-bg)
+  );
+}
+
+.icono-search-result-note {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--gray);
+}
+
 .icono-search-wrapper {
   position: relative;
 }
