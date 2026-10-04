@@ -155,7 +155,10 @@ async function openGenePage(browser, origin, { width, height }, requests, mode, 
   await page.goto(`${HOST}/gene/TP53`)
   const up = page.locator(UP).filter({ visible: true }).first()
   await up.waitFor({ timeout: 45_000 })
-  await up.scrollIntoViewIfNeeded()
+  // Mid-screen, as a reader would hold it: at the bottom edge of a phone the consent banner
+  // (and the notice lifted above it) cover the vote row, and the forced taps below would land
+  // on the banner instead of the button.
+  await up.evaluate((element) => element.scrollIntoView({ block: "center" }))
   if (consent === "prompt") {
     await page.waitForSelector(".brinedew-analytics-consent", { timeout: 10_000 })
   }
