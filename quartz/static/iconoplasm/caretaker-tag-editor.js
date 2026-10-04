@@ -19,6 +19,19 @@ function tagList(text) {
     .filter(Boolean)
 }
 
+// B-995: the Tags helper hands over a whole suggestion. The mounted editor for a
+// form registers how to swap its fields in, so the chips redraw and the change
+// travels the same input event a typed edit does.
+const suggestionAppliers = new WeakMap()
+
+export function applyCaretakerTagSuggestion(form, nextFields, tagsText) {
+  const source = form?.querySelector("[data-icono-caretaker-tags]")
+  const apply = source && suggestionAppliers.get(source)
+  if (!apply) return false
+  apply(nextFields, tagsText)
+  return true
+}
+
 export function mountCaretakerTagEditor(form) {
   const source = form?.querySelector("[data-icono-caretaker-tags]")
   const host = form?.querySelector("[data-icono-caretaker-tag-categories]")
@@ -160,4 +173,12 @@ export function mountCaretakerTagEditor(form) {
   render()
   source.dataset.fieldsJson = JSON.stringify(fields)
   source.dataset.initialFieldsJson = source.dataset.fieldsJson
+  suggestionAppliers.set(source, function (nextFields, tagsText) {
+    for (const name of Object.keys(fields)) delete fields[name]
+    Object.assign(fields, upcastTagFields(nextFields))
+    source.value = String(tagsText || "")
+    render()
+    source.dataset.fieldsJson = JSON.stringify(fields)
+    source.dispatchEvent(new doc.defaultView.Event("input", { bubbles: true }))
+  })
 }

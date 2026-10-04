@@ -56,6 +56,14 @@ import {
   prepareManifestationTagsPayload,
 } from "./manifestation-tags-payload.js"
 import { deliverAcceptedAuthorityEvent } from "./manifestation-authority-projection-delivery.js"
+import {
+  TAGGERIZER_MESSAGES,
+  TaggerizerError,
+  admitTaggerizerCall,
+  readTaggerizerInput,
+  runTaggerizer,
+  taggerizerDisabled,
+} from "./taggerizer.js"
 
 function segment(raw) {
   try {
@@ -255,8 +263,11 @@ function createCaretakerManifestationHttpHandler({
             })
             // B-724: caretaker-only; one gene's candidate pool, null when unreadable.
             const candidateSources = await readCandidateSources(primaryDb, value?.gene?.symbol)
+            const withTaggerizer = { ...value, taggerizer_enabled: !taggerizerDisabled(env) }
             return jsonResponse(
-              candidateSources ? { ...value, candidate_sources: candidateSources } : value,
+              candidateSources
+                ? { ...withTaggerizer, candidate_sources: candidateSources }
+                : withTaggerizer,
             )
           } catch (error) {
             if (error?.code === "GENE_DOSSIER_FORBIDDEN") {
@@ -290,6 +301,7 @@ function createCaretakerManifestationHttpHandler({
       const selectTags = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivative-head$/,
       )
+      const taggerize = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/taggerize$/)
       const select = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/canonical-selections$/,
       )
@@ -310,6 +322,7 @@ function createCaretakerManifestationHttpHandler({
           (claim ||
             save ||
             saveTags ||
+            taggerize ||
             selectTags ||
             select ||
             restore ||
@@ -322,10 +335,50 @@ function createCaretakerManifestationHttpHandler({
       await requireAuthoritativeMode(db)
       const session = await requireBrowserSession(request, env, resolveSession)
       // The verified Tags payload allows 32 KiB; its JSON command envelope is larger.
-      const parsed = await readBoundedJson(request, saveTags ? 72 * 1024 : undefined)
+      const parsed = await readBoundedJson(
+        request,
+        saveTags ? 72 * 1024 : taggerize ? 96 * 1024 : undefined,
+      )
       const body = parsed.value
       const command = await commandEnvelope(request, parsed.raw, body, "account", session.accountId)
       let result
+
+      if (taggerize) {
+        // B-995: a suggestion only. Same caretaker check as the save route; then the
+        // kill switch, the input, the caretaker's daily count (one D1 upsert) and one AI call.
+        const { assignment } = await requireRouteCurrentAssignment(
+          db,
+          segment(taggerize[1]),
+          session.accountId,
+        )
+        if (assignment.status !== "active") {
+          throw authorityError("ASSIGNMENT_NOT_ACTIVE", "Caretaker assignment is not active", 409)
+        }
+        try {
+          if (taggerizerDisabled(env)) {
+            throw new TaggerizerError("TAGGERIZER_DISABLED", TAGGERIZER_MESSAGES.disabled, 503)
+          }
+          const input = readTaggerizerInput(body)
+          const stamp = now()
+          await admitTaggerizerCall(primaryDb, session.accountId, stamp)
+          return jsonResponse({
+            ok: true,
+            suggestion: await runTaggerizer(env, input, Date.parse(stamp)),
+          })
+        } catch (error) {
+          if (!(error instanceof TaggerizerError)) throw error
+          const retry = error.extra?.retryAfterSeconds
+          return jsonResponse(
+            {
+              ok: false,
+              error: { code: error.code, message: error.message },
+              ...(retry ? { retry_after_seconds: retry } : {}),
+            },
+            error.status,
+            retry ? { "Retry-After": String(retry) } : {},
+          )
+        }
+      }
 
       if (claim) {
         if (body.terms_accepted !== true) {

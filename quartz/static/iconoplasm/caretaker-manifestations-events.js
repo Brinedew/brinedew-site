@@ -1,11 +1,11 @@
 import {
   ownManifestation,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+} from "./caretaker-manifestations-model.js?v=061f1b27d6945213"
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=ad73b60c0b58be62"
+} from "./caretaker-manifestations-view.js?v=0030fec43bebc033"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -19,6 +19,8 @@ export function createCaretakerManifestationEventWiring({
   retrySave,
   scheduleAutosave,
   saveDraft,
+  saveSuggestion,
+  taggerize,
   setStatus,
   showBasis,
   updateCount,
@@ -63,6 +65,15 @@ export function createCaretakerManifestationEventWiring({
       if (!target) return
       if (target.hasAttribute("data-icono-caretaker-retry-save")) {
         void retrySave(state)
+        return
+      }
+      const direction = target.getAttribute("data-icono-caretaker-taggerize")
+      if (direction) {
+        void taggerize(state, direction)
+        return
+      }
+      if (target.hasAttribute("data-icono-caretaker-save-suggestion")) {
+        saveSuggestion(state)
         return
       }
       if (target.hasAttribute("data-icono-caretaker-retry-tags")) {

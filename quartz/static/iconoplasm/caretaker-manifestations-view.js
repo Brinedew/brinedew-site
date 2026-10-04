@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+} from "./caretaker-manifestations-model.js?v=061f1b27d6945213"
 import { dialogMarkup } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
@@ -608,6 +608,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     const currentTags = String(dossier?.prefill_tags_text ?? own?.head_tags ?? "")
     const tagsUnavailable =
       own?.tags_body_unavailable === true || dossier.tags_body_unavailable === true
+    const helper = dossier.taggerizer_enabled === true && !tagsUnavailable
     body +=
       (tagsUnavailable
         ? '<div class="icono-caretaker-callout" data-tone="error"><p>Saved Tags could not be loaded. Editing is paused so they cannot be replaced by blank text. Any unsent draft on this device remains preserved.</p><button type="button" class="icono-button" data-icono-caretaker-retry-tags>Retry loading saved Tags</button></div>'
@@ -636,10 +637,17 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       codePointLength(currentBody).toLocaleString() +
       " / " +
       MAX_PROSE_CODE_POINTS.toLocaleString() +
-      "</span></div>" +
+      "</span>" +
+      (helper
+        ? '<button type="button" class="icono-button" data-icono-caretaker-taggerize="tags_from_prose">Tags from prose</button>'
+        : "") +
+      "</div>" +
       "</section>" +
       '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
       '<div class="icono-caretaker-pane__label icono-caretaker-tags-heading">Generation tags</div><div class="icono-caretaker-tag-scroll" data-icono-caretaker-tag-categories></div>' +
+      (helper
+        ? '<div class="icono-caretaker-editor__meta"><button type="button" class="icono-button" data-icono-caretaker-taggerize="prose_from_tags">Prose from Tags</button></div>'
+        : "") +
       '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       ' data-fields-json="' +
@@ -719,6 +727,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       : "") +
     "</div>" +
     '<div class="icono-caretaker-footer__actions icono-actions">' +
+    (canWrite
+      ? '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-save-suggestion hidden>Save</button>'
+      : "") +
     '<button type="button" class="icono-button" data-icono-dialog-close>Close</button>' +
     "</div>"
   return dialogMarkup({

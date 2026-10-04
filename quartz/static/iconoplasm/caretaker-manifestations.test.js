@@ -741,3 +741,94 @@ test("B-740 saved tag fields stay parseable under a text-only attribute escaper"
   assert.ok(source, "the tag source textarea must render")
   assert.deepEqual(readTagFields(source), withFields.prefill_fields)
 })
+
+// B-995: the Tags helper fills a suggestion in and saves nothing until the caretaker presses Save.
+test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-995)", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  let finishSuggestion
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      calls.push({ path, init })
+      if ((init?.method || "GET") === "GET") return { ...dossier(), taggerizer_enabled: true }
+      if (path.endsWith("/taggerize")) {
+        await new Promise((resolve) => (finishSuggestion = resolve))
+        return {
+          ok: true,
+          suggestion: {
+            tags_text: "second_body, red_coat",
+            fields_json: { archetype: ["second_body"], outfit: ["red_coat"] },
+          },
+        }
+      }
+      if (path.endsWith("/revisions")) {
+        return { ok: true, manifestation_id: "manifestation_own", manifestation_revision_id: "r9" }
+      }
+      return { ok: true, manifestation_derivative_id: "derivative_9", derivative_head_version: 0 }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const button = host.querySelector('[data-icono-caretaker-taggerize="tags_from_prose"]')
+  assert.ok(button)
+  assert.ok(host.querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]'))
+  button.dispatchEvent(new Event("click", { bubbles: true }))
+  assert.equal(button.textContent, "Working…")
+  assert.equal(button.disabled, true)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  finishSuggestion()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  const request = JSON.parse(calls.find((call) => call.path.endsWith("/taggerize")).init.body)
+  assert.equal(request.direction, "tags_from_prose")
+  assert.equal(request.prose, "Second body")
+  const tags = host.querySelector("[data-icono-caretaker-tags]")
+  assert.equal(tags.value, "second_body, red_coat")
+  assert.deepEqual(JSON.parse(tags.dataset.fieldsJson).outfit, ["red_coat"])
+  assert.equal(button.textContent, "Tags from prose")
+  assert.equal(
+    host.querySelector("[data-icono-caretaker-status]").textContent,
+    "Suggestion filled in. Review it, then save.",
+  )
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").dataset.state, "unsaved")
+
+  // Nothing is saved on its own, even after the autosave delay.
+  await new Promise((resolve) => setTimeout(resolve, 1300))
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/revisions")),
+    false,
+  )
+  const save = host.querySelector("[data-icono-caretaker-save-suggestion]")
+  assert.equal(save.hidden, false)
+  save.dispatchEvent(new Event("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1400))
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/revisions")),
+    true,
+  )
+})
+
+test("the Tags helper buttons are hidden when the server switches it off (B-995)", async () => {
+  const { document } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async () => ({ ...dossier(), taggerizer_enabled: false }),
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  assert.ok(host.querySelector("[data-icono-caretaker-prose]"))
+  assert.equal(host.querySelector("[data-icono-caretaker-taggerize]") === null, true)
+})
