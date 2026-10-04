@@ -257,6 +257,14 @@ export function iconoplasmGeneBlotWebpDimensions(bytes) {
   return null
 }
 
+// CURRENT_TIMESTAMP and datetime('now', ...) are UTC wall-clock strings with no zone marker, and
+// Date.parse reads such a string in the runtime's own zone. Workers run in UTC, so that was
+// right in production and wrong on a laptop; say UTC out loud.
+function d1UtcMs(value) {
+  const text = String(value || "").trim()
+  return Date.parse(`${text.replace(" ", "T")}Z`)
+}
+
 function rowResult(result) {
   return Array.isArray(result?.results) ? result.results[0] || null : null
 }
@@ -438,7 +446,7 @@ export async function claimDueIconoplasmGeneCardMaterialization(env, symbolValue
   if (!symbol) return { kind: "missing", row: null }
   const current = await readIconoplasmGeneCardMaterialization(env, symbol)
   if (!current || current.state !== "queued") return { kind: "not_due", row: current }
-  const dueMs = Date.parse(String(current.next_attempt_at || ""))
+  const dueMs = d1UtcMs(current.next_attempt_at)
   if (Number.isFinite(dueMs) && dueMs > Date.now()) {
     return { kind: "future", row: current, delaySeconds: Math.max(1, (dueMs - Date.now()) / 1000) }
   }
@@ -501,7 +509,7 @@ export async function reserveIconoplasmGeneCardBrowserLaunch(env) {
       .bind(day)
       .all(),
   )
-  const lastLaunchMs = Date.parse(String(budget?.last_launch_at || ""))
+  const lastLaunchMs = d1UtcMs(budget?.last_launch_at)
   const gapDelay = Number.isFinite(lastLaunchMs)
     ? Math.max(0, MIN_LAUNCH_INTERVAL_SECONDS - (Date.now() - lastLaunchMs) / 1000)
     : 0

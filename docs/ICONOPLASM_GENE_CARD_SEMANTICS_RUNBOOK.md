@@ -302,6 +302,13 @@ in flight, the stale completion cannot replace the newer desired fingerprint;
 the ledger remains due for the new card. Downloads use a useful per-gene name,
 for example `SOX12-iconoplasm-gene-card.png`.
 
+Browser Rendering is a free-plan meter (10 minutes a day, one new browser every
+20 seconds), so the ledger admits eight launches a day, 25 seconds apart. A card
+that finds no launch left is parked in D1 until the next UTC day and waits for
+the scheduled due-row recovery; it does not get a next-day Queue message of its
+own. A repeated request sends an early wake-up, and the consumer puts that
+wake-up back at the row's due time without touching the row.
+
 Every print-copy enrollment, status, render, and download resolves its identity
 through `/api/iconoplasm/cards/:symbol` and the gene's stable object. An
 `asset=` query value can only assert that object's
