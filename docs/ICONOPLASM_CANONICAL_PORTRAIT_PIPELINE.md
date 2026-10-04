@@ -234,13 +234,8 @@ failure: D1 says one portrait won, readers see another.
 
 ### 1. Confirm the split for one symbol
 
-Do not run a catalog-wide report first. Read D1's winner:
-
-```powershell
-pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, admin_override, updated_by, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL'"
-```
-
-Then the object readers fetch:
+Do not run a catalog-wide report first, and do not read production D1 from a
+shell: agent shells refuse it (B-1002). Read what readers get, the stable object:
 
 ```powershell
 @'
@@ -255,13 +250,17 @@ console.log(JSON.stringify({
 '@ | node -
 ```
 
-`portrait` and `marked_current` should both equal D1's `current_asset_sha256`.
+`portrait` and `marked_current` should be the same SHA, and the one readers
+report seeing. The admin page's gene detail (`GET /api/iconoplasm/admin/gene/PRL`,
+`live_sha`) shows D1's winner through the admin read model, which can lag a
+refresh; treat it as a hint, not proof.
 
 ### 2. Republish the gene from D1
 
-If D1 is right and the object is stale, republish. With no selection the
+Republishing is the check and the repair in one step. With no selection the
 publisher publishes what D1 holds and writes nothing back to D1, so this call
-cannot change a winner. It rewrites `genes/v3/PRL.json` and returns the new
+cannot change a winner: if `portrait` changes afterwards, D1 was ahead and the
+object is now right; if it does not, the object already matched D1. It rewrites `genes/v3/PRL.json` and returns the new
 `published_at`; the CDN shows it within about a minute. Up to `REPUBLISH_MAX_SYMBOLS` (8) per call.
 
 ```powershell
