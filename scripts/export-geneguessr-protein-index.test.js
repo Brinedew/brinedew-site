@@ -26,7 +26,10 @@ import {
 //    (gz without its manifest) is read;
 // 4. a dump past MAX_DUMP_AGE_DAYS is used instead of refused, and the refusal does not say how old;
 // 5. the reader does not say that the data is a dump and not live;
-// 6. a dump that does not match its manifest sha256 is used.
+// 6. a dump that does not match its manifest sha256 is used;
+// 7. the symbols the paste box must call "recognized but missing structure" (no source, or a
+//    recorded structure failure) are missing from `recognized_unplayable`, or a playable symbol is
+//    listed there too.
 
 const NOW = Date.parse("2026-10-04T10:00:00Z")
 
@@ -77,7 +80,7 @@ function read(extra = {}) {
     now: NOW,
     log: (line) => lines.push(line),
     ...extra,
-  }).then((rows) => ({ rows, lines }))
+  }).then(({ rows, unplayable }) => ({ rows, unplayable, lines }))
 }
 
 before(() => {
@@ -97,7 +100,7 @@ test("1,2,3,5: the guessable proteins come from the newest complete dump, in ind
   // A later dump still being written: gz present, manifest not yet.
   writeDump("geneguessr", "2026-10-03", { manifest: false })
 
-  const { rows, lines } = await read()
+  const { rows, unplayable, lines } = await read()
 
   assert.match(lines[0], /^# NOT LIVE DATA: geneguessr nightly dump of 2026-10-01 \(3 days old\)/)
   assert.deepEqual(
@@ -106,7 +109,13 @@ test("1,2,3,5: the guessable proteins come from the newest complete dump, in ind
     "no structure and structure-failure proteins, ordered by gene then uniprot",
   )
 
-  const index = buildProteinIndex(rows)
+  assert.deepEqual(
+    unplayable.map((row) => row.gene).sort(),
+    ["BROKEN", "NOSTRUCT"],
+    "no source, or a recorded structure failure",
+  )
+  const index = buildProteinIndex(rows, unplayable)
+  assert.deepEqual(index.recognized_unplayable, ["BROKEN", "NOSTRUCT"])
   assert.deepEqual(index.fields, PROTEIN_INDEX_FIELDS)
   assert.deepEqual(index.rows[0], [
     "P00001",
