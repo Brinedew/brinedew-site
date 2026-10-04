@@ -16,14 +16,25 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
     caller = driver.current_window_handle
     driver.switch_to.new_window("tab")
     try:
-        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
         value = "on" if enabled else "off"
-        radio = wait(
-            driver,
-            lambda current: current.find_element(
-                By.CSS_SELECTOR, f'input[name="pdf-highlighting"][value="{value}"]'
-            ),
-        )
+        radio = None
+        # Firefox occasionally leaves a fresh extension tab blank on the first
+        # load; reloading the popup is what a user would do.
+        for attempt in range(3):
+            driver.get(f"moz-extension://{runtime_uuid}/popup.html")
+            try:
+                radio = wait(
+                    driver,
+                    lambda current: current.find_element(
+                        By.CSS_SELECTOR,
+                        f'input[name="pdf-highlighting"][value="{value}"]',
+                    ),
+                    timeout=10,
+                )
+                break
+            except TimeoutException:
+                if attempt == 2:
+                    raise
         # The native radio is intentionally visually hidden beneath its styled
         # label; Selenium's is_displayed() is therefore false even when the control
         # is available to a real click.
@@ -414,9 +425,7 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
             By.CSS_SELECTOR, ".iconoplasm-tooltip iframe"
         ),
     )
-    # A real click on the card's iframe, from the parent frame, moves the
-    # pointer into the card and focuses the iframe's document.
-    # duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
+    # Pointer into the card. duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
     # leave grace, which no human pointer move into an adjacent card does.
     ActionChains(driver, duration=0).move_to_element(frame).perform()
     pause(driver, 600)
