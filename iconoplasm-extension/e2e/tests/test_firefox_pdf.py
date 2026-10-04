@@ -424,12 +424,8 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
         "the card closed when the pointer moved into it"
     )
     ActionChains(driver, duration=0).click().perform()
-    driver.switch_to.frame(frame)
-    try:
-        # Prove the click really landed inside the card's own document.
-        assert driver.execute_script("return document.hasFocus()") is True
-    finally:
-        driver.switch_to.default_content()
+    # Prove the click really moved focus into the card's iframe.
+    assert driver.execute_script("return document.activeElement?.tagName") == "IFRAME"
     # Give a dismiss-on-blur handler time to fire before asserting.
     pause(driver, 1500)
     assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), {
