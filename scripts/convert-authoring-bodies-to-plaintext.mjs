@@ -327,9 +327,14 @@ export async function convertBodies({
         state[kind] = body.next_after
         onProgress(state)
       }
-      log(
-        `${kind}: ${receipt.scanned[kind]} scanned, ${receipt.converted} converted in total, ${receipt.failed.length} failed`,
-      )
+      // One line every 100 bodies of a kind, and at once for anything that
+      // needs a look: a night is 15,000 calls.
+      const scanned = receipt.scanned[kind]
+      const crossed = Math.floor(scanned / 100) !== Math.floor((scanned - body.scanned) / 100)
+      if (crossed || body.unverified || body.failed.length || body.done)
+        log(
+          `${kind}: ${scanned} scanned; ${receipt.converted} converted with ${receipt.puts} PUTs, ${receipt.unverified} unverified, ${receipt.failed.length} failed`,
+        )
       if (body.done) {
         receipt.done[kind] = true
         return

@@ -533,7 +533,7 @@ const snapshot = (w) =>
   )
 
 test("F13 a store that acknowledges PUTs without applying them is repeated until it does, through the real route", async (t) => {
-  for (const ignored of [0, 1, 3, 5]) {
+  for (const ignored of [1, 3, 5, 0]) {
     const w = await world(t)
     dropFirstPuts(w, ignored)
     const receipt = await run(w)
