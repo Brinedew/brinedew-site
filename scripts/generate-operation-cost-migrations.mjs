@@ -17,7 +17,9 @@ export function splitMigrationSql(source, name) {
     if (!line.trim() || line.trimStart().startsWith("--")) continue
     if (!current.length) trigger = /^CREATE TRIGGER\b/i.test(line)
     current.push(line)
-    if (trigger ? /^END;\s*$/.test(line) : /;\s*$/.test(line)) {
+    // SQLite keywords are case-insensitive; a trigger copied verbatim from
+    // sqlite_schema may close with "end;" (B-977).
+    if (trigger ? /^END;\s*$/i.test(line) : /;\s*$/.test(line)) {
       statements.push(current.join("\n"))
       current = []
     }
