@@ -5400,17 +5400,55 @@ function resolveImageEditProviderModel(raw, providerDef) {
 // be quietly swapped to the provider default and bill the person's own key for a
 // model they did not pick, so the request is refused with a reload instruction.
 // A request that names no model runs the stored selection, resolved as above.
-function resolveImageEditRequestModel({ requestedModel, storedModel, providerDef }) {
+//
+// B-970: the model must also be able to do the requested `operation` ("edit" or
+// "generate"). A named model that cannot is refused with a plain message; a stored
+// model that cannot (fal's edit-only default, saved, then a generation request that
+// names no model) resolves to a model of that provider that can, so it never posts
+// to an endpoint that is missing the inputs it requires.
+function imageEditModelCan(providerDef, model, operation) {
+  if (!operation) return true
+  const options = imageEditProviderModelOptions(providerDef)
+  if (!options.length) return true
+  const option = options.map(mapImageEditModelOption).find((item) => item?.model === model)
+  if (!option) return false
+  return operation === "edit" ? option.edit_capable : option.generate_capable
+}
+
+function firstImageEditModelFor(providerDef, operation) {
+  const preferred = normalizeImageEditModel(providerDef?.default_model || "", providerDef)
+  if (preferred && imageEditModelCan(providerDef, preferred, operation)) return preferred
+  const option = imageEditProviderModelOptions(providerDef)
+    .map(mapImageEditModelOption)
+    .find((item) => item?.model && imageEditModelCan(providerDef, item.model, operation))
+  return option?.model || ""
+}
+
+function resolveImageEditRequestModel({ requestedModel, storedModel, providerDef, operation }) {
+  const provider = providerDef?.label || "this provider"
+  const doing = operation === "edit" ? "edit an image" : "generate an image"
   const requested = sanitizeText(String(requestedModel || "").trim(), 128) || ""
   if (!requested) {
-    return { ok: true, model: resolveImageEditProviderModel(storedModel || "", providerDef) }
+    const stored = resolveImageEditProviderModel(storedModel || "", providerDef)
+    if (imageEditModelCan(providerDef, stored, operation)) return { ok: true, model: stored }
+    const fallback = firstImageEditModelFor(providerDef, operation)
+    if (fallback) return { ok: true, model: fallback }
+    return { ok: false, error: `No ${provider} model offered here can ${doing}.` }
   }
   const offered = normalizeImageEditModel(requested, providerDef)
-  if (offered) return { ok: true, model: offered }
-  return {
-    ok: false,
-    error: `The model "${requested}" is no longer offered for ${providerDef?.label || "this provider"}. Reload the page and choose a current model.`,
+  if (!offered) {
+    return {
+      ok: false,
+      error: `The model "${requested}" is no longer offered for ${provider}. Reload the page and choose a current model.`,
+    }
   }
+  if (!imageEditModelCan(providerDef, offered, operation)) {
+    return {
+      ok: false,
+      error: `The model "${requested}" cannot ${doing}. Choose a ${provider} model that can.`,
+    }
+  }
+  return { ok: true, model: offered }
 }
 
 function mapImageEditModelOption(option) {
@@ -28763,6 +28801,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requestedModel: p?.model,
         storedModel: providerRow.model,
         providerDef: imageEditProviderDefinition(providerId),
+        operation: "edit",
       })
       if (!chosenModel.ok) {
         return done("image_edit_jobs_400", json({ ok: false, error: chosenModel.error }, 400))
@@ -29141,6 +29180,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         requestedModel: p?.model,
         storedModel: providerRow.model,
         providerDef: imageEditProviderDefinition(providerId),
+        operation: "generate",
       })
       if (!chosenModel.ok) {
         return done(
