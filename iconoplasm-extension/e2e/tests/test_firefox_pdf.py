@@ -59,6 +59,13 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
         driver.switch_to.window(caller)
 
 
+def pause(driver, milliseconds: int) -> None:
+    driver.execute_async_script(
+        "const done = arguments[arguments.length - 1]; setTimeout(done, arguments[0]);",
+        milliseconds,
+    )
+
+
 def reader_is_mounted(driver) -> bool:
     try:
         return driver.execute_script(
@@ -411,7 +418,12 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     # pointer into the card and focuses the iframe's document.
     # duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
     # leave grace, which no human pointer move into an adjacent card does.
-    ActionChains(driver, duration=0).move_to_element(frame).click().perform()
+    ActionChains(driver, duration=0).move_to_element(frame).perform()
+    pause(driver, 600)
+    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
+        "the card closed when the pointer moved into it"
+    )
+    ActionChains(driver, duration=0).click().perform()
     driver.switch_to.frame(frame)
     try:
         # Prove the click really landed inside the card's own document.
@@ -419,9 +431,7 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     finally:
         driver.switch_to.default_content()
     # Give a dismiss-on-blur handler time to fire before asserting.
-    driver.execute_async_script(
-        "const done = arguments[arguments.length - 1]; setTimeout(done, 1500);"
-    )
+    pause(driver, 1500)
     assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), {
         "message": "the card closed when its iframe took focus",
         "documentHasFocus": driver.execute_script("return document.hasFocus()"),
