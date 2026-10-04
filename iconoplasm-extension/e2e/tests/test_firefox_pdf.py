@@ -109,6 +109,7 @@ def seed_retired_card_snapshot(driver, runtime_uuid: str) -> tuple[str, str]:
             const done = arguments[arguments.length - 1];
             chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(async payload => {
               const current = String(payload?.cardSnapshotVersion || "");
+              if (!current) { done({ diagnostic: JSON.stringify(payload)?.slice(0, 800) }); return; }
               await chrome.storage.local.set({
                 iconoplasm_card_snapshot_version: "ccv1-retired-firefox-e2e",
                 iconoplasm_last_fetch: new Date().toISOString(),
@@ -117,7 +118,7 @@ def seed_retired_card_snapshot(driver, runtime_uuid: str) -> tuple[str, str]:
             }, error => done({ error: String(error) }));
             """
         )
-        assert isinstance(current, str) and current and current != retired
+        assert isinstance(current, str) and current and current != retired, current
         return retired, current
     finally:
         driver.close()
