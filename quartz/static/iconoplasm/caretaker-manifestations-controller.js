@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=85f92f11b5d1e2fd"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=e820722796d7982b"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,7 +15,8 @@ import {
   proseValidationError,
   revisionById,
 } from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=bfc0c15b1e6b80c2"
+import { openDialog } from "./dialog.js?v=57a3c00198f06598"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=3ffe9bbb030cb69d"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -102,7 +103,7 @@ export function createCaretakerManifestationPanel({
       const editing =
         state.autosaving &&
         control.closest(
-          "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-caretaker-close]",
+          "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-dialog-close]",
         )
       control.disabled = (busy && !editing) || control.hasAttribute("data-icono-caretaker-disabled")
     })
@@ -160,7 +161,7 @@ export function createCaretakerManifestationPanel({
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
-    if (wasOpen && dialog && !dialog.open) dialog.showModal()
+    if (wasOpen) openDialog(dialog)
   }
 
   function activateTab(state, tab) {
@@ -754,8 +755,7 @@ export function createCaretakerManifestationPanel({
   function open(host) {
     const dialog = host?.querySelector?.("[data-icono-caretaker-dialog]")
     if (!dialog) return false
-    if (!dialog.open) dialog.showModal()
-    return true
+    return openDialog(dialog)
   }
 
   // B-724: take the caretaker to one saved version in History, from a candidate

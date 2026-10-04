@@ -163,8 +163,8 @@ const DIALOG = "[data-icono-request-dialog]"
 // Runs in the page: everything the assertions need, measured once.
 function measurePicker() {
   const dialog = document.querySelector("[data-icono-request-dialog]")
-  const panel = dialog.shadowRoot.querySelector('[part~="panel"]')
-  const header = dialog.shadowRoot.querySelector('[part~="header"]')
+  const panel = dialog
+  const header = dialog.querySelector(".icono-dialog__header")
   const box = (el) => {
     if (!el) return null
     const r = el.getBoundingClientRect()

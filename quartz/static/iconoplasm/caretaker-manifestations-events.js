@@ -5,7 +5,7 @@ import {
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=bfc0c15b1e6b80c2"
+} from "./caretaker-manifestations-view.js?v=3ffe9bbb030cb69d"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -63,10 +63,6 @@ export function createCaretakerManifestationEventWiring({
       if (!target) return
       if (target.hasAttribute("data-icono-caretaker-retry-save")) {
         void retrySave(state)
-        return
-      }
-      if (target.hasAttribute("data-icono-caretaker-close")) {
-        target.closest("dialog")?.close()
         return
       }
       if (target.hasAttribute("data-icono-caretaker-retry-tags")) {

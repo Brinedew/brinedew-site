@@ -5,6 +5,7 @@ import {
   manifestationWordDiff,
   ownManifestation,
 } from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+import { dialogMarkup } from "./dialog.js?v=57a3c00198f06598"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
 // quotes. The iconoplasm app passes a text-node escaper that leaves raw
@@ -518,27 +519,22 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   const assignmentState = String(assignment?.status || "")
   const editable = dossier.viewer.can_edit && assignmentState === "active"
   const canWrite = editable && own?.status !== "withdrawn"
-  let body =
-    '<dialog class="icono-caretaker-dialog" data-icono-caretaker-dialog aria-labelledby="icono-caretaker-title">' +
-    '<section class="icono-caretaker-panel">' +
-    '<header class="icono-caretaker-panel__header"><div>' +
-    // B-874 walkthrough: the title names the task, not a database object, and
-    // the state pill appears only when the state is news (never for "active").
-    '<h2 id="icono-caretaker-title">' +
-    esc(
-      (dossier.viewer.can_accept ? "Invitation to care for " : "Caring for ") + dossier.gene.symbol,
-    ) +
-    "</h2>" +
-    "</div>" +
-    (assignmentState && assignmentState !== "active"
+  // B-849: the frame is the shared dialog. What the caretaker record adds is the
+  // state pill beside the title, the notices and tabs under the header, the tab
+  // panels as the scrolling body, and the autosave state beside Close.
+  // B-874 walkthrough: the title names the task, not a database object, and the
+  // state pill appears only when the state is news (never for "active").
+  const title =
+    (dossier.viewer.can_accept ? "Invitation to care for " : "Caring for ") + dossier.gene.symbol
+  const headerExtra =
+    assignmentState && assignmentState !== "active"
       ? '<span class="icono-caretaker-panel__state" data-state="' +
         esc(assignmentState) +
         '">' +
         esc(assignmentState.replaceAll("_", " ")) +
         "</span>"
-      : "") +
-    '<button type="button" class="icono-caretaker-dialog__close" data-icono-caretaker-close aria-label="Close">×</button>' +
-    "</header>"
+      : ""
+  let body = ""
 
   if (dossier.gene.status === "merged") {
     body +=
@@ -602,8 +598,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     '<button type="button" role="tab" aria-selected="true" aria-controls="icono-caretaker-tab-manifestation" id="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tab="manifestation">Manifestation</button>' +
     '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-history" id="icono-caretaker-tab-button-history" data-icono-caretaker-tab="history" tabindex="-1">History</button>' +
     '<button type="button" role="tab" aria-selected="false" aria-controls="icono-caretaker-tab-settings" id="icono-caretaker-tab-button-settings" data-icono-caretaker-tab="settings" tabindex="-1">Settings</button>' +
-    "</div>" +
-    '<div class="icono-caretaker-body">' +
+    "</div>"
+  const afterHeader = body
+  body =
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-manifestation" aria-labelledby="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tabpanel="manifestation">'
 
   if (canWrite) {
@@ -712,9 +709,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   }
   body += "</div>"
   body += "</div>"
-  body += "</div>"
-  body +=
-    '<div class="icono-caretaker-panel__footer">' +
+  const footer =
     '<div class="icono-caretaker-footer__status">' +
     (canWrite
       ? '<span data-icono-caretaker-autosave-state data-state="saved" role="status" title="Saved">' +
@@ -724,8 +719,21 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       : "") +
     "</div>" +
     '<div class="icono-caretaker-footer__actions icono-actions">' +
-    '<button type="button" class="icono-button" data-icono-caretaker-close>Close</button>' +
-    "</div>" +
+    '<button type="button" class="icono-button" data-icono-dialog-close>Close</button>' +
     "</div>"
-  return body + "</section></dialog>"
+  return dialogMarkup({
+    title,
+    titleId: "icono-caretaker-title",
+    size: "wide",
+    fixed: true,
+    className: "icono-caretaker-dialog",
+    attributes: "data-icono-caretaker-dialog",
+    panelClass: "icono-caretaker-panel",
+    headerExtra,
+    afterHeader,
+    bodyClass: "icono-caretaker-body",
+    body,
+    footerClass: "icono-caretaker-panel__footer",
+    footer,
+  })
 }

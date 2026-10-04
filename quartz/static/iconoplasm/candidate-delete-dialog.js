@@ -1,3 +1,5 @@
+import { bindDialog, createDialogElement } from "./dialog.js?v=57a3c00198f06598"
+
 const CANDIDATE_DELETE_DIALOG_SELECTOR = "[data-icono-candidate-delete-dialog]"
 const CANDIDATE_DELETE_NOTICE_SELECTOR = "[data-icono-candidate-delete-notice]"
 const ANALYTICS_CONSENT_SELECTOR = ".brinedew-analytics-consent"
@@ -96,56 +98,34 @@ export function openCandidateDeleteDialog(options = {}) {
   const emulsionLabel = String(options.emulsionLabel || "").trim()
   const identity = candidateIdentity(symbol, sampleLabel, emulsionLabel)
 
-  const dialog = ownerDocument.createElement("dialog")
-  dialog.className = "icono-candidate-delete-dialog"
-  dialog.setAttribute("data-icono-candidate-delete-dialog", "")
-  dialog.setAttribute("aria-labelledby", "icono-candidate-delete-title")
-  dialog.setAttribute("aria-describedby", "icono-candidate-delete-consequence")
-
-  const panel = ownerDocument.createElement("div")
-  panel.className = "icono-candidate-delete-panel"
-
-  const title = ownerDocument.createElement("h2")
-  title.className = "icono-candidate-delete-title"
-  title.id = "icono-candidate-delete-title"
-  title.textContent = "Delete this candidate?"
-
-  const identityEl = ownerDocument.createElement("p")
-  identityEl.className = "icono-candidate-delete-identity"
-  identityEl.textContent = identity || "Selected candidate"
-
-  const consequence = ownerDocument.createElement("p")
-  consequence.className = "icono-candidate-delete-consequence"
-  consequence.id = "icono-candidate-delete-consequence"
-  consequence.textContent =
-    "The image will be removed from this gene and marked for deletion from the local image lab. This cannot be undone."
-
-  const status = ownerDocument.createElement("p")
-  status.className = "icono-candidate-delete-status"
-  status.setAttribute("data-icono-candidate-delete-status", "")
-  status.setAttribute("role", "status")
-  status.setAttribute("aria-live", "polite")
-  status.hidden = true
-
-  const actions = ownerDocument.createElement("div")
-  actions.className = "icono-candidate-delete-actions icono-actions"
-
-  const cancelButton = ownerDocument.createElement("button")
-  cancelButton.type = "button"
-  cancelButton.className = "icono-button icono-candidate-delete-cancel"
-  cancelButton.setAttribute("data-icono-candidate-delete-cancel", "")
-  cancelButton.setAttribute("autofocus", "")
-  cancelButton.textContent = "Keep candidate"
-
-  const confirmButton = ownerDocument.createElement("button")
-  confirmButton.type = "button"
-  confirmButton.className = "icono-button icono-button--danger icono-candidate-delete-confirm"
-  confirmButton.setAttribute("data-icono-candidate-delete-confirm", "")
-  confirmButton.textContent = "Delete candidate"
-
-  actions.append(cancelButton, confirmButton)
-  panel.append(title, identityEl, consequence, status, actions)
-  dialog.appendChild(panel)
+  const dialog = createDialogElement(ownerDocument, {
+    id: "icono-candidate-delete",
+    titleId: "icono-candidate-delete-title",
+    title: "Delete this candidate?",
+    size: "compact",
+    className: "icono-candidate-delete-dialog",
+    dataAttributes: {
+      "data-icono-candidate-delete-dialog": "",
+      "aria-describedby": "icono-candidate-delete-consequence",
+    },
+    body:
+      '<div class="icono-candidate-delete-body">' +
+      '<p class="icono-candidate-delete-identity"></p>' +
+      '<p class="icono-candidate-delete-consequence" id="icono-candidate-delete-consequence">' +
+      "The image will be removed from this gene and marked for deletion from the local image lab. This cannot be undone." +
+      "</p>" +
+      '<p class="icono-candidate-delete-status" data-icono-candidate-delete-status role="status" aria-live="polite" hidden></p>' +
+      "</div>",
+    footer:
+      '<button type="button" class="icono-button icono-candidate-delete-cancel" data-icono-candidate-delete-cancel autofocus>Keep candidate</button>' +
+      '<button type="button" class="icono-button icono-button--danger icono-candidate-delete-confirm" data-icono-candidate-delete-confirm>Delete candidate</button>',
+  })
+  dialog.querySelector(".icono-candidate-delete-identity").textContent =
+    identity || "Selected candidate"
+  const status = dialog.querySelector("[data-icono-candidate-delete-status]")
+  const cancelButton = dialog.querySelector("[data-icono-candidate-delete-cancel]")
+  const confirmButton = dialog.querySelector("[data-icono-candidate-delete-confirm]")
+  bindDialog(dialog)
 
   let isSubmitting = false
   cancelButton.addEventListener("click", function () {
