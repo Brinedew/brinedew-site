@@ -196,7 +196,7 @@ export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
 export const ICONOPLASM_REDIRECTS = `${[
   "/genes / 301",
   ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => `${from} ${to} 301`),
-  "/genes/* / 301",
+  "/genes/* /gene/:splat 301",
   ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => `${from}* ${to}:splat 301`),
 ].join("\n")}\n`
 

@@ -8151,6 +8151,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return { page: "studio" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
+    // People type iconoplasm.brinedew.bio/TP53 or /p53. A bare word with no dot (so never a
+    // file) is a gene question; the gene page already resolves names and says when none fits.
+    var bare = path.match(/^\/([A-Za-z0-9][A-Za-z0-9_-]{0,39})\/?$/)
+    if (bare) return { page: "gene", symbol: bare[1], bare: true }
     return { page: "404" }
   }
 
@@ -10701,6 +10705,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
     var route = getRoute()
+    if (route.bare) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        "/gene/" + encodeURIComponent(route.symbol) + window.location.search,
+      )
+    }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
     unmountDiagramStudio()
