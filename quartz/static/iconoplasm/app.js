@@ -293,7 +293,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=219ede1bd8a6a75f", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=d256d9bfa919d30e", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -309,9 +309,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=34a62bd7961d1c5a"),
+      import("./caretaker-manifestations.js?v=b72e1e2fd060633a"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
+      import("./caretaker-candidate-sources.js?v=0f9d866e5f6a1c4b"),
     ]).then(function (modules) {
+      var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
         fetchJSON: fetchAuthedJSON,
         escapeHtml: esc,
@@ -359,6 +361,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
+          candidateSourceLinks.mount(geneContent, {
+            dossier: detail.dossier,
+            openVersion: function (revisionId) {
+              return manifestationPanel.showVersion(detail.host, revisionId)
+            },
+          })
           return supervoteControls.mount(geneContent, {
             symbol: detail.symbol,
             dossier: detail.dossier,
@@ -368,7 +376,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return Object.freeze({
         mount: manifestationPanel.mount,
         open: manifestationPanel.open,
-        unmountSupervote: supervoteControls.unmount,
+        unmountSupervote: function (root) {
+          candidateSourceLinks.unmount(root)
+          supervoteControls.unmount(root)
+        },
       })
     })
     return caretakerPanelPromise

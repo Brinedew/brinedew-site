@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
+} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
 // quotes. The iconoplasm app passes a text-node escaper that leaves raw
@@ -138,6 +138,16 @@ function versionTitle(item, revisions) {
   return (
     "Version " + String(index < 0 ? item.revision?.revision_number || "" : numbered.length - index)
   )
+}
+
+// B-724: the same label History shows for a version, for the "made from" links on
+// candidate images. Empty when the version is not in the loaded history.
+export function versionLabelForRevision(dossier, revisionId) {
+  const revisions = allRevisions(dossier)
+  const item = revisions.find(function (entry) {
+    return entry.revision?.manifestation_revision_id === revisionId
+  })
+  return item ? versionTitle(item, revisions) : ""
 }
 
 function versionBodyAvailable(revision) {
