@@ -126,6 +126,9 @@ def pytest_runtest_makereport(item, call):
             return {
               url: location.href,
               readerState: document.body?.dataset?.readerState || null,
+              visibility: document.visibilityState,
+              readyState: document.readyState,
+              hasFocus: document.hasFocus(),
               bridgeReady: Boolean(globalThis.IconoplasmReaderBridge),
               anchors: document.querySelectorAll('.iconoplasm-pdf-hit-anchor').length,
               textLayers: document.querySelectorAll('.textLayer').length,

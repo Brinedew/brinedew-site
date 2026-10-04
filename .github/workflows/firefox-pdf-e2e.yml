@@ -47,13 +47,14 @@ jobs:
         working-directory: iconoplasm-extension/e2e
         env:
           FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+          MOZ_HEADLESS: "1"
         run: |
           set -euo pipefail
           artifacts="$GITHUB_WORKSPACE/iconoplasm-extension/artifacts/firefox-pdf-e2e"
           mkdir -p "$artifacts"
           cp "$GITHUB_WORKSPACE/iconoplasm-extension/dist/validation/firefox/iconoplasm-firefox-validation.zip" "$artifacts/iconoplasm-firefox-under-test.xpi"
           uv sync --frozen
-          xvfb-run -a uv run pytest \
+          uv run pytest \
             "--firefox-binary=$FIREFOX_BINARY" \
             "--xpi=$artifacts/iconoplasm-firefox-under-test.xpi" \
             "--artifacts=$artifacts"
