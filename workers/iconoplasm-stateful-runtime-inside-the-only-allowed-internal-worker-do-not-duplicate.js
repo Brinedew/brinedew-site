@@ -265,6 +265,7 @@ import {
   claimDueIconoplasmGeneCardMaterialization,
   completeIconoplasmGeneCardMaterialization,
   deferIconoplasmGeneCardMaterialization,
+  enqueueIconoplasmGeneCardWakeup,
   enrollIconoplasmGeneCardMaterialization,
   failIconoplasmGeneCardMaterialization,
   iconoplasmGeneCardCdnUrl,
