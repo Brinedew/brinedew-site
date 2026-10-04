@@ -710,8 +710,12 @@ container.addEventListener("pointerleave", (event) => {
 })
 window.addEventListener("blur", () => {
   // Focusing the card's child iframe also blurs this window, but the document
-  // still has focus. Closing then would swallow the reader's card interaction.
-  if (!document.hasFocus()) closeActiveCard()
+  // still has focus. Firefox fires blur before focus lands in the child frame,
+  // so hasFocus() is briefly false; judge it after focus has settled, or the
+  // card closes under the reader's own click (found by the Firefox PDF E2E).
+  window.setTimeout(() => {
+    if (!document.hasFocus()) closeActiveCard()
+  }, 50)
 })
 
 async function loadPdf(bytes, name = "document.pdf") {
