@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
+  BYPASSED_PROJECTION_TRIGGERS,
   BYPASSED_TRIGGERS,
   STATEMENT_ROWS,
   authoringMigrationSql,
@@ -278,8 +279,17 @@ test("the projection migration rewrites canonical seeds only, guarded on the old
     .map((name) => readFileSync(new URL(name, directory), "utf8"))
     .find((text) => text.includes("CREATE TABLE icono_manifestation_canonical_projection"))
   assert.ok(definition, "projection table definition")
-  const table = definition.match(/CREATE TABLE icono_manifestation_canonical_projection \([\s\S]*?\n\);/)[0]
-  main.exec(table)
+  // The real table with its real guards: an earlier version of this test built
+  // the table alone, and the event-replay guard would have refused 0116 in
+  // production (found 2026-10-04 before the merge).
+  main.exec(definition.match(/CREATE TABLE icono_manifestation_projection_authority \([\s\S]*?\n\);/)[0])
+  main.exec("INSERT INTO icono_manifestation_projection_authority (singleton, authority_epoch) VALUES (1, 1)")
+  main.exec(definition.match(/CREATE TABLE icono_manifestation_canonical_projection \([\s\S]*?\n\);/)[0])
+  const guards = definition.match(/CREATE TRIGGER icono_projection_epoch_guard_\w+[\s\S]*?\nend;/g)
+  assert.equal(guards.length, 2)
+  for (const guard of guards) main.exec(guard)
+  const triggerSql = (name) => main.prepare("SELECT sql FROM sqlite_master WHERE name = ?").get(name)?.sql
+  const triggers = Object.fromEntries(BYPASSED_PROJECTION_TRIGGERS.map((name) => [name, triggerSql(name)]))
   const g = (n, canonical) => ({
     revision_id: `revision_${n}`,
     canonical,
@@ -294,11 +304,23 @@ test("the projection migration rewrites canonical seeds only, guarded on the old
         "INSERT INTO icono_manifestation_canonical_projection (gene_id, canonical_symbol, canonical_manifestation_id, canonical_selection_id, canonical_revision_lifecycle, canonical_revision_id, canonical_body_sha256, canonical_body_bytes, accepted_tags_source_body_sha256, head_version, gene_revision, authority_event_id, authority_event_sequence, authority_epoch, public_material_event_id, accepted_tags_derivative_id, accepted_tags_derivative_head_version, accepted_tags_status, accepted_tags_body_sha256, accepted_tags_body_bytes, accepted_tags_text_sha256, accepted_tags_text_bytes, accepted_tags_fields_sha256, accepted_tags_fields_bytes, accepted_tags_provenance_status) VALUES (?, ?, 'manifestation_x', 'selection_x', 'active', ?, ?, 4000, ?, 1, 1, ?, ?, 1, ?, 'derivative_x', 1, 'complete', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 10, 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 5, 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', 4, 'legacy_unknown')",
       )
       .run(`gene_${i}`, `G${i}`, gene.canonical ? gene.revision_id : `revision_caretaker_${i}`, gene.canonical ? gene.old_sha256 : sha("c"), gene.canonical ? gene.old_sha256 : sha("c"), `event_${i}`, i + 1, `event_${i}`)
-  for (const statement of splitMigrationSql(projectionMigrationSql({ uploads: genes }), "0116.sql")) main.exec(statement)
+  // Without the bypass, the guard refuses exactly this correction.
+  assert.throws(
+    () => main.exec(`UPDATE icono_manifestation_canonical_projection SET canonical_body_sha256 = '${genes[0].new_sha256}' WHERE gene_id = 'gene_0'`),
+    /manifestation_projection_event_replay_changed_payload/,
+  )
+  for (const statement of splitMigrationSql(projectionMigrationSql({ uploads: genes, triggers }), "0116.sql"))
+    main.exec(statement)
   const rows = main.prepare("SELECT canonical_body_sha256 AS h, canonical_body_bytes AS b, accepted_tags_source_body_sha256 AS t FROM icono_manifestation_canonical_projection ORDER BY gene_id").all()
   assert.deepEqual(rows.map((r) => [r.h, r.b, r.t]), [
     [genes[0].new_sha256, 6200, genes[0].new_sha256],
     [genes[1].new_sha256, 6200, genes[1].new_sha256],
     [sha("c"), 4000, sha("c")],
   ])
+  // The guard is back, verbatim, and still refuses a replayed payload change.
+  for (const name of BYPASSED_PROJECTION_TRIGGERS) assert.equal(triggerSql(name), triggers[name])
+  assert.throws(
+    () => main.exec(`UPDATE icono_manifestation_canonical_projection SET canonical_body_bytes = 1 WHERE gene_id = 'gene_0'`),
+    /manifestation_projection_event_replay_changed_payload/,
+  )
 })

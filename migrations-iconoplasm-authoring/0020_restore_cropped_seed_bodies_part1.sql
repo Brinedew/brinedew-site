@@ -170,7 +170,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -653,7 +653,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -1136,7 +1136,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -1619,7 +1619,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -2102,7 +2102,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -2585,7 +2585,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -3068,7 +3068,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -3551,7 +3551,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -4034,7 +4034,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -4517,7 +4517,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -5000,7 +5000,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -5483,7 +5483,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -5966,7 +5966,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -6449,7 +6449,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -6932,7 +6932,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -7415,7 +7415,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -7898,7 +7898,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -8381,7 +8381,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -8864,7 +8864,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -9347,7 +9347,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -9830,7 +9830,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -10313,7 +10313,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r
@@ -10731,7 +10731,7 @@ UPDATE icono_manifestation_revision_storage_secrets AS s
    SET object_key = fix.new_key, ciphertext_sha256 = fix.new_sha256,
        ciphertext_bytes = fix.new_bytes + 16, body_iv_base64 = '', wrapped_dek_base64 = '',
        wrap_iv_base64 = '', key_version = 1, aad_version = 1,
-       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T20:21:27.480Z'
+       object_etag = NULLIF(fix.etag, ''), verified_at = '2026-10-04T22:27:05.097Z'
   FROM fix
  WHERE s.manifestation_revision_id = fix.revision_id AND s.object_key = fix.old_key
    AND EXISTS (SELECT 1 FROM icono_manifestation_revisions r

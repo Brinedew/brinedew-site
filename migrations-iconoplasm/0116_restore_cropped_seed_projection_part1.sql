@@ -2,6 +2,10 @@
 
 -- (the matching migrations-iconoplasm-authoring part). Guarded on the old hash.
 
+-- The event-replay guard is dropped for this correction and recreated verbatim.
+
+DROP TRIGGER IF EXISTS icono_projection_epoch_guard_update;
+
 WITH fix(revision_id, old_sha256, new_sha256, new_bytes) AS (VALUES
   ('revision_9eec573ea3e56cf34ad3b7614c36aa3df8172735b9618057', '6ecb8e45efa2d24dd1870cb61f548d705c8e9196c585c59c1083e283c540f781', 'a3b8e9032d49af98dc4242450c4c6888213ebca74fa8dc4419f0065ae0da098e', 6764),
   ('revision_1c8c7cd165dab46a6dcbfb54c0415563b1ca645bd44acaac', 'ce239459230983700307b83a615797a977b1848b1afe78578ae30606dc9edb22', '4c0754f0245f7bd0397c0ffa82a8aa75477a9f846090032f3287812d2ccbd579', 4827),
@@ -3615,3 +3619,47 @@ UPDATE icono_manifestation_canonical_projection AS p
          ELSE p.accepted_tags_source_body_sha256 END
   FROM fix
  WHERE p.canonical_revision_id = fix.revision_id AND p.canonical_body_sha256 = fix.old_sha256;
+
+CREATE TRIGGER icono_projection_epoch_guard_update
+BEFORE UPDATE ON icono_manifestation_canonical_projection
+BEGIN
+  SELECT case WHEN NEW.authority_epoch <> (
+    SELECT authority_epoch
+      FROM icono_manifestation_projection_authority
+     WHERE singleton = 1
+  ) OR NEW.gene_id IS NOT OLD.gene_id
+  THEN RAISE(ABORT, 'manifestation_projection_epoch_or_identity_mismatch') end;
+  SELECT case WHEN NEW.authority_event_sequence < OLD.authority_event_sequence
+    OR NEW.gene_revision < OLD.gene_revision
+    OR NEW.head_version < OLD.head_version
+  THEN RAISE(ABORT, 'manifestation_projection_cannot_rewind') end;
+  SELECT case WHEN NEW.authority_event_sequence = OLD.authority_event_sequence AND (
+    NEW.canonical_symbol IS NOT OLD.canonical_symbol
+    OR NEW.canonical_manifestation_id IS NOT OLD.canonical_manifestation_id
+    OR NEW.canonical_revision_id IS NOT OLD.canonical_revision_id
+    OR NEW.canonical_selection_id IS NOT OLD.canonical_selection_id
+    OR NEW.canonical_body_sha256 IS NOT OLD.canonical_body_sha256
+    OR NEW.canonical_body_bytes IS NOT OLD.canonical_body_bytes
+    OR NEW.canonical_revision_lifecycle IS NOT OLD.canonical_revision_lifecycle
+    OR NEW.accepted_tags_derivative_id IS NOT OLD.accepted_tags_derivative_id
+    OR NEW.accepted_tags_derivative_head_version IS NOT OLD.accepted_tags_derivative_head_version
+    OR NEW.accepted_tags_status IS NOT OLD.accepted_tags_status
+    OR NEW.accepted_tags_source_body_sha256 IS NOT OLD.accepted_tags_source_body_sha256
+    OR NEW.accepted_tags_body_sha256 IS NOT OLD.accepted_tags_body_sha256
+    OR NEW.accepted_tags_body_bytes IS NOT OLD.accepted_tags_body_bytes
+    OR NEW.accepted_tags_text_sha256 IS NOT OLD.accepted_tags_text_sha256
+    OR NEW.accepted_tags_text_bytes IS NOT OLD.accepted_tags_text_bytes
+    OR NEW.accepted_tags_fields_sha256 IS NOT OLD.accepted_tags_fields_sha256
+    OR NEW.accepted_tags_fields_bytes IS NOT OLD.accepted_tags_fields_bytes
+    OR NEW.accepted_tags_recipe_id IS NOT OLD.accepted_tags_recipe_id
+    OR NEW.accepted_tags_recipe_version IS NOT OLD.accepted_tags_recipe_version
+    OR NEW.accepted_tags_provider_id IS NOT OLD.accepted_tags_provider_id
+    OR NEW.accepted_tags_model_id IS NOT OLD.accepted_tags_model_id
+    OR NEW.accepted_tags_config_sha256 IS NOT OLD.accepted_tags_config_sha256
+    OR NEW.accepted_tags_provenance_status IS NOT OLD.accepted_tags_provenance_status
+    OR NEW.head_version IS NOT OLD.head_version
+    OR NEW.gene_revision IS NOT OLD.gene_revision
+    OR NEW.authority_event_id IS NOT OLD.authority_event_id
+    OR NEW.authority_epoch IS NOT OLD.authority_epoch
+  ) THEN RAISE(ABORT, 'manifestation_projection_event_replay_changed_payload') end;
+end;

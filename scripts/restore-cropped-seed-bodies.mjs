@@ -67,6 +67,11 @@ export const BYPASSED_TRIGGERS = Object.freeze([
   "icono_revision_storage_restore_upload_intent_fence",
   "icono_derivatives_immutable_provenance",
 ])
+// The main database's projection refuses a changed payload under an unchanged
+// event sequence (event replay protection). The correction has no event, so it
+// passes that guard the same way: dropped, then recreated verbatim from the
+// main copy's schema in the same file.
+export const BYPASSED_PROJECTION_TRIGGERS = Object.freeze(["icono_projection_epoch_guard_update"])
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const OUT = path.join(ROOT, "artifacts", "b977-seed-replacement")
@@ -80,18 +85,30 @@ export function normalizeProse(text) {
   return String(text).normalize("NFC").replace(/\r\n?/g, "\n")
 }
 
-// The newest unpacked authoring copy that scripts/d1-local.mjs left behind.
-function newestAuthoringCopy() {
-  const files = existsSync(LOCAL_COPIES)
-    ? readdirSync(LOCAL_COPIES).filter((name) => /^iconoplasm-authoring-[0-9a-f]{64}\.sqlite$/.test(name))
-    : []
+// The newest unpacked copy of a database that scripts/d1-local.mjs left behind.
+function newestCopy(database) {
+  const pattern = new RegExp(`^${database}-[0-9a-f]{64}\\.sqlite$`)
+  const files = existsSync(LOCAL_COPIES) ? readdirSync(LOCAL_COPIES).filter((name) => pattern.test(name)) : []
   if (!files.length)
-    throw new Error(
-      `No unpacked authoring copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs iconoplasm-authoring "SELECT 1"`,
-    )
+    throw new Error(`No unpacked ${database} copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs ${database} "SELECT 1"`)
   return files
     .map((name) => path.join(LOCAL_COPIES, name))
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
+}
+
+export function readTriggers(databasePath, names) {
+  const db = new DatabaseSync(databasePath, { readOnly: true })
+  try {
+    return Object.fromEntries(
+      names.map((name) => {
+        const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?").get(name)
+        if (!row?.sql) throw new Error(`Trigger ${name} is missing from ${path.basename(databasePath)}`)
+        return [name, row.sql]
+      }),
+    )
+  } finally {
+    db.close()
+  }
 }
 
 // Every seed with its storage row and accepted Tags derivative, from the copy.
@@ -166,15 +183,7 @@ export function buildPlan({ authoringPath, promptsPath }) {
           overLimit.push({ symbol: seed.symbol, code_points: result.code_points })
       }
     }
-    const triggers = Object.fromEntries(
-      BYPASSED_TRIGGERS.map((name) => {
-        const row = authoring
-          .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?")
-          .get(name)
-        if (!row?.sql) throw new Error(`Trigger ${name} is missing from the copy`)
-        return [name, row.sql]
-      }),
-    )
+    const triggers = readTriggers(authoringPath, BYPASSED_TRIGGERS)
     return { authoring_copy: path.basename(authoringPath), genes, skipped, over_limit: overLimit, triggers }
   } finally {
     authoring.close()
@@ -250,10 +259,12 @@ UPDATE icono_manifestation_revisions AS r
 }
 
 // The main database's copy of each canonical seed's body facts.
-export function projectionMigrationSql({ uploads }) {
+export function projectionMigrationSql({ uploads, triggers }) {
   const lines = [
     "-- B-977: the canonical projection follows the in-place seed body replacement",
     "-- (the matching migrations-iconoplasm-authoring part). Guarded on the old hash.",
+    "-- The event-replay guard is dropped for this correction and recreated verbatim.",
+    ...BYPASSED_PROJECTION_TRIGGERS.map((name) => `DROP TRIGGER IF EXISTS ${name};`),
   ]
   for (const part of chunks(
     uploads.filter((u) => u.canonical),
@@ -273,6 +284,7 @@ UPDATE icono_manifestation_canonical_projection AS p
   FROM fix
  WHERE p.canonical_revision_id = fix.revision_id AND p.canonical_body_sha256 = fix.old_sha256;`)
   }
+  lines.push(...BYPASSED_PROJECTION_TRIGGERS.map((name) => `${String(triggers[name]).trim().replace(/;$/, "")};`))
   return `${lines.join("\n\n")}\n`
 }
 
@@ -342,7 +354,7 @@ async function main(argv) {
   }
   const promptsPath = flag("--prompts", DEFAULT_PROMPTS_DB)
   if (step === "plan") {
-    const plan = buildPlan({ authoringPath: flag("--authoring", newestAuthoringCopy()), promptsPath })
+    const plan = buildPlan({ authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")), promptsPath })
     writeJson(path.join(OUT, "plan.json"), plan)
     console.log(
       JSON.stringify({ genes: plan.genes.length, skipped: plan.skipped, over_limit: plan.over_limit.length }),
@@ -355,6 +367,7 @@ async function main(argv) {
     if (uploads.length !== plan.genes.length)
       throw new Error(`Only ${uploads.length} of ${plan.genes.length} genes are uploaded; finish upload first`)
     const verifiedAt = new Date().toISOString()
+    const projectionTriggers = readTriggers(flag("--main", newestCopy("iconoplasm")), BYPASSED_PROJECTION_TRIGGERS)
     const half = Math.ceil(uploads.length / PARTS.length)
     const written = PARTS.map((part, index) => {
       const slice = uploads.slice(index * half, (index + 1) * half)
@@ -362,7 +375,10 @@ async function main(argv) {
         path.join(ROOT, "migrations-iconoplasm-authoring", part.authoring),
         authoringMigrationSql({ uploads: slice, triggers: plan.triggers, verifiedAt }),
       )
-      writeFileSync(path.join(ROOT, "migrations-iconoplasm", part.projection), projectionMigrationSql({ uploads: slice }))
+      writeFileSync(
+        path.join(ROOT, "migrations-iconoplasm", part.projection),
+        projectionMigrationSql({ uploads: slice, triggers: projectionTriggers }),
+      )
       return { ...part, genes: slice.length, canonical: slice.filter((u) => u.canonical).length }
     })
     console.log(JSON.stringify(written))
