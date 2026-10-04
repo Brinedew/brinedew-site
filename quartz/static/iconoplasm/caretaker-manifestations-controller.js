@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=ac21c7021544e8c8"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=85f92f11b5d1e2fd"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -14,8 +14,8 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=1f19040ced5395f4"
+} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=bfc0c15b1e6b80c2"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -758,7 +758,35 @@ export function createCaretakerManifestationPanel({
     return true
   }
 
-  return Object.freeze({ mount, open })
+  // B-724: take the caretaker to one saved version in History, from a candidate
+  // image's "made from version N" link. An older version may sit beyond the loaded
+  // page, so older pages load until it appears or History runs out.
+  async function showVersion(host, revisionId) {
+    const state = mounted.get(host)
+    const wanted = String(revisionId || "")
+    if (!state?.dossier?.enabled || !wanted) return false
+    let cursor = state.dossier.history.next_cursor
+    while (!revisionById(state.dossier, wanted) && cursor && !state.busy) {
+      await loadOlderHistory(state)
+      if (state.dossier.history.next_cursor === cursor) break
+      cursor = state.dossier.history.next_cursor
+    }
+    const found = Boolean(revisionById(state.dossier, wanted))
+    if (found) state.selectedRevisionId = wanted
+    state.activeTab = "history"
+    render(state, { preserveDraft: true })
+    open(host)
+    if (!found) {
+      setStatus(state, "That version is no longer available in History.", "warn")
+      return false
+    }
+    state.host
+      .querySelector("[data-icono-caretaker-version][aria-current]")
+      ?.scrollIntoView?.({ block: "nearest" })
+    return true
+  }
+
+  return Object.freeze({ mount, open, showVersion })
 }
 
 export { normalizedDossier, proseValidationError }
