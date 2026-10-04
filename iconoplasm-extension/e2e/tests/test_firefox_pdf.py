@@ -345,7 +345,10 @@ def test_post_pdf_uses_the_original_response_bytes(firefox, pdf_server) -> None:
     driver, runtime_uuid = firefox
     driver.get(f"{pdf_server.origin}/form/post.html")
     set_pdf_highlighting(driver, runtime_uuid, True)
-    driver.find_element(By.CSS_SELECTOR, "button[type=submit]").click()
+    # Submit through the page: the same browser POST navigation the button makes. A WebDriver
+    # click right after set_pdf_highlighting closed its tab was sometimes swallowed (CI run
+    # 37204717543 failed with the form still on screen and no POST sent).
+    driver.execute_script("document.querySelector('form').requestSubmit()")
     wait_for_reader(driver, runtime_uuid)
     records = [record for record in pdf_server.requests if record.path == "/pdf/post"]
     assert len(records) == 1
