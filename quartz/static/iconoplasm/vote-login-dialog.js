@@ -1,9 +1,7 @@
+import { bindDialog, createDialogElement, setDialogTitle } from "./dialog.js?v=a5c98f9ed0ae3eb6"
+
 const VOTE_LOGIN_DIALOG_SELECTOR = "[data-icono-vote-login-prompt]"
-const VOTE_LOGIN_DIALOG_CONTENT = `
-  <button type="button" class="icono-vote-login-close" aria-label="Close">Close</button>
-  <div class="icono-vote-login-copy">
-    <h2 class="icono-vote-login-title" id="icono-vote-login-title">Log in with Discord to vote</h2>
-  </div>
+const VOTE_LOGIN_DIALOG_BODY = `
   <a class="icono-button icono-button--primary icono-vote-login-link" data-icono-vote-login-link autofocus>
     Log in with Discord
   </a>
@@ -28,37 +26,25 @@ export function openVoteLoginDialog(options = {}) {
 
   const existing = ownerDocument.querySelector(VOTE_LOGIN_DIALOG_SELECTOR)
   if (existing) {
-    existing.querySelector(".icono-vote-login-title").textContent = title
+    setDialogTitle(existing, title)
     existing.querySelector("[data-icono-vote-login-link]").href = loginUrl
     focusWithoutScrolling(existing.querySelector("[data-icono-vote-login-link]"))
     return existing
   }
 
-  const dialog = ownerDocument.createElement("dialog")
-  dialog.className = "icono-vote-login-dialog"
-  dialog.setAttribute("data-icono-vote-login-prompt", "")
-  dialog.setAttribute("aria-labelledby", "icono-vote-login-title")
-  dialog.innerHTML = VOTE_LOGIN_DIALOG_CONTENT
-
-  const closeButton = dialog.querySelector(".icono-vote-login-close")
-  const titleElement = dialog.querySelector(".icono-vote-login-title")
+  const dialog = createDialogElement(ownerDocument, {
+    id: "icono-vote-login",
+    titleId: "icono-vote-login-title",
+    title,
+    size: "compact",
+    className: "icono-vote-login-dialog",
+    dataAttributes: { "data-icono-vote-login-prompt": "" },
+    body: VOTE_LOGIN_DIALOG_BODY,
+  })
   const loginLink = dialog.querySelector("[data-icono-vote-login-link]")
-  titleElement.textContent = title
   loginLink.href = loginUrl
 
-  closeButton.addEventListener("click", function () {
-    dialog.close("dismiss")
-  })
-  dialog.addEventListener("click", function (event) {
-    if (event.target !== dialog) return
-    const bounds = dialog.getBoundingClientRect()
-    const outside =
-      event.clientX < bounds.left ||
-      event.clientX > bounds.right ||
-      event.clientY < bounds.top ||
-      event.clientY > bounds.bottom
-    if (outside) dialog.close("dismiss")
-  })
+  bindDialog(dialog)
   dialog.addEventListener(
     "close",
     function () {
