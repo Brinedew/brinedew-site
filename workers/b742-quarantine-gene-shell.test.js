@@ -205,19 +205,28 @@ test("B-742 reader recovery leaves voting and authority routes behind the transi
   assert.equal(d1Calls.count, 0)
 })
 
+// Production has no R2 binding (the bytes live in Bunny Storage), so without the shell the
+// portrait request reaches the transition fence. A bound R2 bucket would be served by the
+// base Worker's own early portrait path before the fence, which is not what this proves.
 test("B-742 transition mode is explicit; a missing mode cannot open the reader", async () => {
   const d1Calls = { count: 0 }
-  const objectReads = []
+  const workerFetches = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = forbidWorkerFetch(workerFetches)
   const env = buildForbiddenEnv(new FakeKV({}), d1Calls)
-  env.ICONOPLASM_PORTRAITS = portraitBucket(objectReads)
   delete env.ICONOPLASM_SCHEMA_TRANSITION_MODE
-  const response = await runtime.fetch(
-    new Request(`https://iconoplasm.brinedew.bio/portraits/v1/aa/${"a".repeat(64)}/full.webp`),
-    env,
-    { waitUntil() {} },
-  )
+  let response
+  try {
+    response = await runtime.fetch(
+      new Request(`https://iconoplasm.brinedew.bio/portraits/v1/aa/${"a".repeat(64)}/full.webp`),
+      env,
+      { waitUntil() {} },
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
   assert.equal(response.status, 503)
   assert.equal((await response.json()).code, "ICONOPLASM_SCHEMA_TRANSITION")
-  assert.deepEqual(objectReads, [])
+  assert.deepEqual(workerFetches, [])
   assert.equal(d1Calls.count, 0)
 })
