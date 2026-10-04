@@ -53,6 +53,8 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
     options.set_preference("browser.download.folderList", 2)
     options.set_preference("browser.download.dir", str(artifacts / "downloads"))
     options.set_preference("browser.download.alwaysOpenPanel", False)
+    # Route extension console output into geckodriver.log for failure diagnosis.
+    options.set_preference("devtools.console.stdout.content", True)
     manager_args = ["--browser", "firefox", "--skip-driver-in-path"]
     if binary:
         manager_args += ["--browser-path", str(binary)]
