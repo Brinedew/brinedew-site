@@ -4356,7 +4356,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       if (isMobileLabelReviewEnabled()) {
         wireMobileLabelCard(card)
-        setMobileLabelExpanded(card, false, { preserveTop: false })
+        setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
       } else {
         resetMobileLabelCardState(card)
       }
@@ -4826,6 +4826,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }, 2600)
   }
 
+  // A gallery card starts as a torn preview, so many fit a phone screen and can be swiped
+  // MISFIT/FIT. On a gene's own page the reader came for that one gene, so its card opens
+  // with the field notes (age, sex, mass, aesthetic) showing; the vote buttons stay.
+  function mobileLabelStartsExpanded(card) {
+    return !!card && card.classList.contains("icono-gene-lead-card")
+  }
+
   function wireMobileLabelCard(card) {
     if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label"))
       return
@@ -4837,7 +4844,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
     card.setAttribute("data-icono-mobile-label-wired", "true")
     syncMobileLabelDossierContent(card)
-    setMobileLabelExpanded(card, false, { preserveTop: false })
+    setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
     }, 180)
