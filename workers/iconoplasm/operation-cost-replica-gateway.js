@@ -1,4 +1,5 @@
 import { authorizeIconoplasmAuthorityReplicaBearer } from "../iconoplasm-authority-service-auth.js"
+import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
 import {
   OPERATION_COST_ROUTE_PREFIX,
   OPERATION_COST_PRINCIPAL_HEADER,
@@ -8,10 +9,21 @@ import {
   safeErrorResponse,
 } from "./caretaker/manifestation-authority-http-security.js"
 
+// B-978: the operation-cost authority's daily refusals clear at the UTC reset; say so, as every
+// other daily refusal does (B-968), so a client other than the workstation knows when to retry.
+const DAILY_REFUSAL_CODES = new Set(["COST_SHARED_DAILY_LIMIT", "COST_ACCOUNT_HEADROOM_LIMIT"])
+
 function refuse(code, status) {
+  const retryAfter = DAILY_REFUSAL_CODES.has(code) ? secondsUntilCloudflareDailyReset() : null
   return Response.json(
-    { error: { code } },
-    { status, headers: { "Cache-Control": "private, no-store" } },
+    { error: { code }, ...(retryAfter ? { retry_after_seconds: retryAfter } : {}) },
+    {
+      status,
+      headers: {
+        "Cache-Control": "private, no-store",
+        ...(retryAfter ? { "Retry-After": String(retryAfter) } : {}),
+      },
+    },
   )
 }
 
