@@ -11,6 +11,11 @@
 }
 
 #geneguessr-root {
+  /* The parent is a column flexbox, and auto side margins switch off its stretch, so without
+     an explicit width the game sized itself to its widest row (about 470 px) and phones
+     (360-440 px wide to a website) showed it cut off on the right. */
+  width: 100%;
+  box-sizing: border-box;
   max-width: 700px;
   margin: 2rem auto;
   padding: 0 1rem;
@@ -1832,6 +1837,18 @@ body:has(.pg-modal-dialog[open]) {
   .pg-practice-badge {
     font-size: 0.75rem;
     padding: 0.15rem 0.5rem;
+  }
+}
+
+/* On a phone the text box takes its own full-width line and the Hints, Guesses and help
+   controls sit below it; side by side they need about 450 px. */
+@media (max-width: 520px) {
+  .pg-input-row {
+    flex-wrap: wrap;
+  }
+
+  .pg-autocomplete-wrapper {
+    flex: 1 1 100%;
   }
 }
 
