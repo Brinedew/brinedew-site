@@ -66,11 +66,6 @@ const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
 const KATEX_VENDOR_VERSION = "0.16.21"
 
-const PRACTICE_RESOLVE_MAX_INPUTS = 10000
-// Cloudflare D1 enforces a relatively small limit on bound parameters per query.
-// Keep this low enough to avoid `too many SQL variables`-style failures when users paste 100+ symbols.
-const PRACTICE_RESOLVE_SQL_CHUNK = 100
-
 const ANALYTICS_CONSENT_COUNTRIES = new Set([
   "AT",
   "BE",
@@ -1845,11 +1840,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
     if (url.pathname === "/api/game/bootstrap" && request.method === "GET") {
       return handleGameBootstrap(request, env, ctx, corsHeaders)
-    }
-
-    // Practice mode helpers: bulk HGNC validation + start from a user-provided pool.
-    if (url.pathname === "/api/game/practice/resolve" && request.method === "POST") {
-      return handlePracticeResolve(request, env, corsHeaders)
     }
 
     if (url.pathname === "/api/game/practice/start" && request.method === "POST") {
@@ -4860,144 +4850,6 @@ function applyLatestHighlights(sections, latestMatches) {
       item.highlighted = set.has(item.fullText)
     })
   })
-}
-
-function normalizeGeneToken(raw) {
-  const trimmed = String(raw || "").trim()
-  if (!trimmed) return null
-  const cleaned = trimmed.replace(/^[^A-Za-z0-9-]+|[^A-Za-z0-9-]+$/g, "")
-  if (!cleaned) return null
-  return cleaned.toUpperCase()
-}
-
-function parseGeneInputs(body) {
-  if (Array.isArray(body?.genes)) {
-    return body.genes
-  }
-  if (typeof body?.text === "string") {
-    return body.text.split(/[,\s;]+/g)
-  }
-  return []
-}
-
-// ⚠️ COST BARRIER: compare the bare `gene` column to the already upper-cased bound
-// values, never `upper(gene) IN (...)`. Every stored gene is upper-case, trimmed and
-// made of `A-Z`, `0-9` and `-` (19,110 of 19,110 on 2026-10-03), and
-// `normalizeGeneToken` upper-cases every pasted symbol first, so the equality finds
-// the same rows through `idx_proteins_gene`. Wrapping the column in a function
-// defeats the index and reads the whole table for every chunk of 100 symbols:
-// 19,110 rows for a one-symbol paste and 1.9M rows (38% of the day's read
-// allowance) for the 10,000-symbol maximum. Production reads about one row per
-// symbol looked up plus two per symbol found. A new importer must write genes
-// upper-case (migrations/README.md). `workers/practice-resolve-cost.test.js` pins the
-// index search and the rows read at production shape.
-async function resolveGenesExact(db, genesUpper) {
-  const found = new Map()
-  if (!db || !Array.isArray(genesUpper) || genesUpper.length === 0) {
-    return found
-  }
-
-  for (let offset = 0; offset < genesUpper.length; offset += PRACTICE_RESOLVE_SQL_CHUNK) {
-    const chunk = genesUpper.slice(offset, offset + PRACTICE_RESOLVE_SQL_CHUNK)
-    if (chunk.length === 0) continue
-    const placeholders = chunk.map(() => "?").join(",")
-    const statement = `
-      SELECT gene, uniprot, structure_source, alphafold_url, pdb_id, swissmodel_url
-      FROM proteins
-      WHERE gene IN (${placeholders})
-    `
-    const resp = await db
-      .prepare(statement)
-      .bind(...chunk)
-      .all()
-    for (const row of resp?.results || []) {
-      const key = normalizeGeneToken(row?.gene)
-      if (!key) continue
-      if (!found.has(key)) {
-        found.set(key, row)
-      }
-    }
-  }
-
-  return found
-}
-
-async function handlePracticeResolve(request, env, corsHeaders) {
-  try {
-    const sessionContext = await resolveSessionContextAsync(request, env)
-    const responseHeaders = buildResponseHeaders(corsHeaders, sessionContext, request)
-    const body = await safeJson(request)
-
-    const rawInputs = parseGeneInputs(body)
-    const normalizedInputs = []
-    const seen = new Set()
-    for (const value of rawInputs) {
-      const gene = normalizeGeneToken(value)
-      if (!gene) continue
-      if (seen.has(gene)) continue
-      seen.add(gene)
-      normalizedInputs.push(gene)
-      if (normalizedInputs.length >= PRACTICE_RESOLVE_MAX_INPUTS) break
-    }
-
-    if (normalizedInputs.length === 0) {
-      return Response.json(
-        {
-          inputCount: rawInputs.length,
-          uniqueCount: 0,
-          recognizedCount: 0,
-          playableCount: 0,
-          playable: [],
-          unrecognized: [],
-          recognizedUnplayable: [],
-        },
-        { headers: responseHeaders },
-      )
-    }
-
-    const found = await resolveGenesExact(env.DB, normalizedInputs)
-    const playable = []
-    const recognizedUnplayable = []
-    const unrecognized = []
-
-    for (const gene of normalizedInputs) {
-      const row = found.get(gene)
-      if (!row) {
-        unrecognized.push(gene)
-        continue
-      }
-      const hasStructure =
-        Boolean(row?.structure_source) ||
-        Boolean(row?.alphafold_url) ||
-        Boolean(row?.pdb_id) ||
-        Boolean(row?.swissmodel_url)
-      if (hasStructure) {
-        playable.push({ gene: row.gene || gene, uniprot: String(row.uniprot || "").toUpperCase() })
-      } else {
-        recognizedUnplayable.push(row.gene || gene)
-      }
-    }
-
-    return Response.json(
-      {
-        inputCount: rawInputs.length,
-        uniqueCount: normalizedInputs.length,
-        recognizedCount: normalizedInputs.length - unrecognized.length,
-        playableCount: playable.length,
-        playable,
-        unrecognized,
-        recognizedUnplayable,
-        truncated: normalizedInputs.length >= PRACTICE_RESOLVE_MAX_INPUTS,
-      },
-      { headers: responseHeaders },
-    )
-  } catch (err) {
-    console.error("GeneGuessr: practice resolve failed", err)
-    return Response.json(
-      { error: "Practice resolve failed" },
-      { status: 500, headers: corsHeaders },
-    )
-  }
 }
 
 async function handlePracticeStart(request, env, ctx, corsHeaders) {
