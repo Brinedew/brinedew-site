@@ -368,8 +368,13 @@ abuse case: erasure ends the disabling.
   changes to other regions asynchronously; measured for an overwrite on 2026-10-02).
 - The caretaker authority, the archive and the cold backups (the nightly local dumps, kept 30
   days, and D1 Time Travel, 7 days) are retained by design or expire on their own.
-- The workstation's vote mirror (`remote_asset_votes`) holds the raw Discord id on the operator's
-  own machine until it is rebuilt.
+- The workstation's vote mirror (`remote_asset_votes` in `control_plane.db`, on the operator's machine) holds
+  no Discord id since B-991: each vote is keyed by an HMAC digest of its gene, asset and voter under a
+  random key stored in the same database, and the first start of that build rewrote an older table and
+  vacuumed the file. An erasure needs no step on the workstation. An erased person's votes stay there
+  under those digests: cut off from the id, but not beyond a guess, because the key is local. Copies of
+  `control_plane.db` made before that first start still hold the old ids. The requester's id and name
+  in the workstation's open requests and request cache are in memory only.
 
 **The public Discord copy of comments (B-992).** Every gene comment is posted to the public
 `#iconoplasm` channel with the author's username in front
