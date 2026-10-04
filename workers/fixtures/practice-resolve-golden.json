@@ -1,48 +1,24 @@
 {
   "capturedFrom": "POST /api/game/practice/resolve at origin/main 3b6a8868, real Worker, real local D1 (Miniflare)",
   "catalog": [
-    [
-      "P04637",
-      "TP53",
-      "TP",
-      "Cellular tumor antigen p53",
-      393,
-      [
-        "P53"
-      ],
-      "pdb"
-    ],
+    ["P04637", "TP53", "TP", "Cellular tumor antigen p53", 393, ["P53"], "pdb"],
     [
       "P38398",
       "BRCA1",
       "BRCA",
       "Breast cancer type 1 susceptibility protein",
       1863,
-      [
-        "RNF53"
-      ],
+      ["RNF53"],
       "alphafold"
     ],
-    [
-      "P01308",
-      "INS",
-      "INS",
-      "Insulin",
-      110,
-      [],
-      "pdb"
-    ],
+    ["P01308", "INS", "INS", "Insulin", 110, [], "pdb"],
     [
       "P00533",
       "EGFR",
       "EGFR",
       "Epidermal growth factor receptor",
       1210,
-      [
-        "ERBB",
-        "ERBB1",
-        "HER1"
-      ],
+      ["ERBB", "ERBB1", "HER1"],
       "alphafold"
     ],
     [
@@ -51,13 +27,7 @@
       "MTOR",
       "Serine/threonine-protein kinase mTOR",
       2549,
-      [
-        "FRAP",
-        "FRAP1",
-        "FRAP2",
-        "RAFT1",
-        "RAPT1"
-      ],
+      ["FRAP", "FRAP1", "FRAP2", "RAFT1", "RAPT1"],
       "pdb"
     ],
     [
@@ -66,48 +36,17 @@
       "MARCHF",
       "E3 ubiquitin-protein ligase MARCHF1",
       289,
-      [
-        "MARCH1",
-        "RNF171"
-      ],
+      ["MARCH1", "RNF171"],
       "alphafold"
     ],
-    [
-      "P02649",
-      "APOE",
-      "APOE",
-      "Apolipoprotein E",
-      317,
-      [],
-      "pdb"
-    ],
-    [
-      "Q9ULW3",
-      "ABT1",
-      "ABT",
-      "Activator of basal transcription 1",
-      0,
-      [],
-      null
-    ],
-    [
-      "Q8NEB7",
-      "ACRBP",
-      "ACRBP",
-      "Acrosin-binding protein",
-      0,
-      [],
-      null
-    ]
+    ["P02649", "APOE", "APOE", "Apolipoprotein E", 317, [], "pdb"],
+    ["Q9ULW3", "ABT1", "ABT", "Activator of basal transcription 1", 0, [], null],
+    ["Q8NEB7", "ACRBP", "ACRBP", "Acrosin-binding protein", 0, [], null]
   ],
   "cases": {
     "playable, unplayable and unknown": {
       "body": {
-        "genes": [
-          "TP53",
-          "ABT1",
-          "NOTAGENE"
-        ]
+        "genes": ["TP53", "ABT1", "NOTAGENE"]
       },
       "status": 200,
       "response": {
@@ -121,24 +60,14 @@
             "uniprot": "P04637"
           }
         ],
-        "unrecognized": [
-          "NOTAGENE"
-        ],
-        "recognizedUnplayable": [
-          "ABT1"
-        ],
+        "unrecognized": ["NOTAGENE"],
+        "recognizedUnplayable": ["ABT1"],
         "truncated": false
       }
     },
     "lowercase, padded and punctuated": {
       "body": {
-        "genes": [
-          "tp53",
-          " brca1 ",
-          "(INS)",
-          "egfr,",
-          "mtor;"
-        ]
+        "genes": ["tp53", " brca1 ", "(INS)", "egfr,", "mtor;"]
       },
       "status": 200,
       "response": {
@@ -175,17 +104,7 @@
     },
     "duplicates": {
       "body": {
-        "genes": [
-          "TP53",
-          "tp53",
-          "TP53",
-          "INS",
-          "ins",
-          "ABT1",
-          "abt1",
-          "NOTAGENE",
-          "notagene"
-        ]
+        "genes": ["TP53", "tp53", "TP53", "INS", "ins", "ABT1", "abt1", "NOTAGENE", "notagene"]
       },
       "status": 200,
       "response": {
@@ -203,25 +122,14 @@
             "uniprot": "P01308"
           }
         ],
-        "unrecognized": [
-          "NOTAGENE"
-        ],
-        "recognizedUnplayable": [
-          "ABT1"
-        ],
+        "unrecognized": ["NOTAGENE"],
+        "recognizedUnplayable": ["ABT1"],
         "truncated": false
       }
     },
     "aliases are not resolved": {
       "body": {
-        "genes": [
-          "P53",
-          "MARCH1",
-          "RNF53",
-          "HER1",
-          "FRAP1",
-          "MARCHF1"
-        ]
+        "genes": ["P53", "MARCH1", "RNF53", "HER1", "FRAP1", "MARCHF1"]
       },
       "status": 200,
       "response": {
@@ -235,27 +143,14 @@
             "uniprot": "Q8TCQ1"
           }
         ],
-        "unrecognized": [
-          "P53",
-          "MARCH1",
-          "RNF53",
-          "HER1",
-          "FRAP1"
-        ],
+        "unrecognized": ["P53", "MARCH1", "RNF53", "HER1", "FRAP1"],
         "recognizedUnplayable": [],
         "truncated": false
       }
     },
     "junk and empty entries": {
       "body": {
-        "genes": [
-          "",
-          "***",
-          "  ",
-          "TP53",
-          "-",
-          "2"
-        ]
+        "genes": ["", "***", "  ", "TP53", "-", "2"]
       },
       "status": 200,
       "response": {
@@ -269,10 +164,7 @@
             "uniprot": "P04637"
           }
         ],
-        "unrecognized": [
-          "-",
-          "2"
-        ],
+        "unrecognized": ["-", "2"],
         "recognizedUnplayable": [],
         "truncated": false
       }
@@ -301,21 +193,14 @@
             "uniprot": "P01308"
           }
         ],
-        "unrecognized": [
-          "NOPE"
-        ],
-        "recognizedUnplayable": [
-          "ACRBP"
-        ],
+        "unrecognized": ["NOPE"],
+        "recognizedUnplayable": ["ACRBP"],
         "truncated": false
       }
     },
     "all unplayable": {
       "body": {
-        "genes": [
-          "ABT1",
-          "ACRBP"
-        ]
+        "genes": ["ABT1", "ACRBP"]
       },
       "status": 200,
       "response": {
@@ -325,19 +210,13 @@
         "playableCount": 0,
         "playable": [],
         "unrecognized": [],
-        "recognizedUnplayable": [
-          "ABT1",
-          "ACRBP"
-        ],
+        "recognizedUnplayable": ["ABT1", "ACRBP"],
         "truncated": false
       }
     },
     "nothing usable": {
       "body": {
-        "genes": [
-          "",
-          "***"
-        ]
+        "genes": ["", "***"]
       },
       "status": 200,
       "response": {
@@ -352,10 +231,7 @@
     },
     "an unknown-only list": {
       "body": {
-        "genes": [
-          "NOSUCHGENE",
-          "FOO1"
-        ]
+        "genes": ["NOSUCHGENE", "FOO1"]
       },
       "status": 200,
       "response": {
@@ -364,10 +240,7 @@
         "recognizedCount": 0,
         "playableCount": 0,
         "playable": [],
-        "unrecognized": [
-          "NOSUCHGENE",
-          "FOO1"
-        ],
+        "unrecognized": ["NOSUCHGENE", "FOO1"],
         "recognizedUnplayable": [],
         "truncated": false
       }
@@ -411,10 +284,7 @@
           }
         ],
         "unrecognizedCount": 9991,
-        "recognizedUnplayable": [
-          "ABT1",
-          "ACRBP"
-        ],
+        "recognizedUnplayable": ["ABT1", "ACRBP"],
         "truncated": true
       }
     }
