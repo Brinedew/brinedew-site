@@ -23,6 +23,14 @@
       "arguments": { "max_schema_rows": 512 },
       "migration_protocol": "one-migration-per-release-v1",
       "prediction": { "rows_read": 3000, "rows_written": 16, "requests": 1 }
+    },
+    "iconoplasm-authoring/0020_restore_cropped_seed_bodies_part1.sql": {
+      "online": true,
+      "prediction": { "rows_read": 70000, "rows_written": 15200, "requests": 1 }
+    },
+    "iconoplasm/0116_restore_cropped_seed_projection_part1.sql": {
+      "online": true,
+      "prediction": { "rows_read": 20000, "rows_written": 3400, "requests": 1 }
     }
   }
 }

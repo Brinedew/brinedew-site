@@ -308,7 +308,18 @@ async function upload({ maxGenes, promptsPath }) {
       const bytes = ENCODER.encode(normalizeProse(row?.manifestation ?? ""))
       if (sha256(bytes) !== gene.new_sha256) throw new Error(`${gene.symbol}: the full text changed since plan`)
       const key = await createManifestationBodyObjectKey()
-      const result = await putManifestationBodyObject(env, key, bytes, { expectedSha256: gene.new_sha256 })
+      // A slow Bunny request aborts after its own timeout (2026-10-04: once in
+      // 1,207 genes). Retry the same key; the PUT is idempotent.
+      let result
+      for (let attempt = 1; ; attempt++) {
+        try {
+          result = await putManifestationBodyObject(env, key, bytes, { expectedSha256: gene.new_sha256 })
+          break
+        } catch (error) {
+          if (attempt >= 4) throw error
+          await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
+        }
+      }
       receipt.uploads.push({ ...gene, new_object_key: key, etag: result.etag || null })
       sent++
       if (sent % 50 === 0) {
