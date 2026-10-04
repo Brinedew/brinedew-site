@@ -103,3 +103,6 @@ There are three approaches to make the weight readable from an image:
 | 160 kg | 9                   |
 | 320 kg | 10                  |
 
+**I struggle to make the character look their age**
+
+In my experience, eye-to-head ratio is great at conveying maturity at a glance. 
