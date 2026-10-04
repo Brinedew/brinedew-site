@@ -93,9 +93,13 @@ function measure() {
   const notice = document.querySelector("[data-icono-candidate-delete-notice]")
   const consent = document.querySelector(".brinedew-analytics-consent")
   const rect = notice?.getBoundingClientRect()
+  // The notice lets taps through (pointer-events: none), and hit-testing skips such elements,
+  // so it is made hittable for this one probe: the question is what is drawn on top of it.
+  if (notice) notice.style.pointerEvents = "auto"
   const top = rect
     ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
     : null
+  if (notice) notice.style.pointerEvents = ""
   const look = up ? getComputedStyle(up) : null
   return {
     overflowX: document.documentElement.scrollWidth - innerWidth,
