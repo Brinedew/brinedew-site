@@ -3,12 +3,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
-import {
-  CATALOG_STATE_SCOPED_SQL,
-  ESSENCE_STATE_SCOPED_SQL,
-  readCatalogStateRows,
-  readEssenceStateRows,
-} from "./sync-state-selection.js"
+import { CATALOG_STATE_SCOPED_SQL, readCatalogStateRows } from "./sync-state-selection.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 import { createIconoplasmAdminPublicationHandlers } from "../iconoplasm-admin-publication-routes.js"
 
@@ -39,7 +34,6 @@ test(
       const db = await runtime.getD1Database("DB")
       for (const [table, query, read] of [
         ["icono_gene_catalog", CATALOG_STATE_SCOPED_SQL, readCatalogStateRows],
-        ["icono_gene_essence", ESSENCE_STATE_SCOPED_SQL, readEssenceStateRows],
       ]) {
         const definition = schema
           .prepare("SELECT sql FROM sqlite_schema WHERE name=?")
@@ -148,7 +142,6 @@ test(
             symbol: row.gene_symbol,
             content_hash: "test-hash",
           })),
-        fetchEssenceStateRows: async () => [],
         isAdmin: async () => true,
         json: (data, status = 200, headers = {}) =>
           new Response(JSON.stringify(data), {

@@ -6,7 +6,6 @@ const REQUIRED_SERVICE_NAMES = Object.freeze([
   "actor",
   "coerceBoolean",
   "fetchCatalogStateRows",
-  "fetchEssenceStateRows",
   "isAdmin",
   "json",
   "mutationLimiterSnapshot",
@@ -34,7 +33,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     actor,
     coerceBoolean,
     fetchCatalogStateRows,
-    fetchEssenceStateRows,
     isAdmin,
     json,
     mutationLimiterSnapshot,
@@ -269,37 +267,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     }
   }
 
-  async function essenceState({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_essence_state_403", json({ error: "Unauthorized" }, 403))
-    if (!env.ICONOPLASM_DB)
-      return done("admin_essence_state_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-    let payload
-    try {
-      payload = await request.json()
-    } catch {
-      return done("admin_essence_state_400", json({ error: "Invalid JSON" }, 400))
-    }
-    if (!Array.isArray(payload?.symbols))
-      return done(
-        "admin_essence_state_400",
-        json({ error: "symbols must be a non-empty array" }, 400),
-      )
-    const rawSymbols = payload.symbols
-    if (rawSymbols.length > 25000)
-      return done("admin_essence_state_400", json({ error: "Too many symbols (max 25000)" }, 400))
-    // See catalogState: retain stable first-seen membership while removing
-    // duplicate reads from an authenticated, metered state lookup.
-    const symbols = Array.from(new Set(rawSymbols.map((value) => normalizeSymbol(value))))
-    if (!symbols.length || symbols.some((symbol) => !symbol))
-      return done(
-        "admin_essence_state_400",
-        json({ error: "symbols must contain at least one valid symbol" }, 400),
-      )
-    const rows = await fetchEssenceStateRows(env, symbols)
-    return done("admin_essence_state", json({ ok: true, count: rows.length, rows }, 200, NO_STORE))
-  }
-
   async function essenceUpsert({ request, env, done }) {
     if (!(await isAdmin(request, env)))
       return done("admin_essence_upsert_403", json({ error: "Unauthorized" }, 403))
@@ -403,7 +370,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     "admin_publication.catalog_reconcile": catalogReconcile,
     "admin_publication.catalog_state": catalogState,
     "admin_publication.catalog_upsert": catalogUpsert,
-    "admin_publication.essence_state": essenceState,
     "admin_publication.essence_upsert": essenceUpsert,
     "admin_publication.shared_discoveries": sharedDiscoveries,
   })

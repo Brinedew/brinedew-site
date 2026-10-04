@@ -55,7 +55,7 @@ import {
   fetchMaintainedAssetSummary,
   fetchStorageAuditRecheckDue,
 } from "./iconoplasm/asset-summary-counts.js"
-import { readCatalogStateRows, readEssenceStateRows } from "./iconoplasm/sync-state-selection.js"
+import { readCatalogStateRows } from "./iconoplasm/sync-state-selection.js"
 import {
   GLOBAL_FINALIZATION_STATUS_LIST_SQL,
   SCOPED_FINALIZATION_STATUS_LIST_SQL,
@@ -1611,8 +1611,7 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     // requests); a call that only reads scans at most ten.
     family === "admin_plaintext_bodies" ||
     family === "admin_essence" ||
-    family === "admin_essence_upsert" ||
-    family === "admin_essence_state"
+    family === "admin_essence_upsert"
   ) {
     return "admin_sync"
   }
@@ -13095,50 +13094,6 @@ async function hashCatalogItems(rawItems) {
   return sha256Hex(JSON.stringify(rows))
 }
 
-function essenceStateHashPayload(rawEssence, fallbackSymbol = "") {
-  const essence = normalizeEssencePayload(rawEssence, fallbackSymbol)
-  if (!essence || essence.validation_error) return null
-  return [
-    essence.gene_symbol,
-    essence.full_name || "",
-    essence.weight_kg ?? null,
-    essence.molecular_weight_kda ?? null,
-    essence.height_cm ?? null,
-    essence.sex || "",
-    essence.age || "",
-    essence.age_years ?? null,
-    essence.first_publication_year ?? null,
-    essence.faction || "",
-    essence.skin_hex || "",
-    essence.skin_name || "",
-    essence.tissue_tau ?? null,
-    essence.primary_tissue || "",
-    essence.loeuf ?? null,
-    essence.constraint_percentile ?? null,
-    essence.leakage_percent ?? null,
-    essence.leakage_hits ?? null,
-    essence.leakage_total ?? null,
-    essence.aesthetics_json || "[]",
-    essence.aesthetics_origin_json || "[]",
-    essence.politics_origin_json || "[]",
-    essence.family_surname || "",
-    essence.family_members ?? null,
-    essence.family_feature || "",
-    essence.manifestation || "",
-    essence.manifestation_tags || "",
-    essence.manifestation_fields_json || "",
-    essence.sample_label || "",
-    essence.sample_number ?? null,
-    essence.sample_text_hash || "",
-  ]
-}
-
-async function hashEssencePayload(rawEssence, fallbackSymbol = "") {
-  const payload = essenceStateHashPayload(rawEssence, fallbackSymbol)
-  if (!payload) return ""
-  return sha256Hex(JSON.stringify(payload))
-}
-
 function decodeBase64Bytes(raw) {
   const input = String(raw || "").trim()
   if (!input) return null
@@ -13877,89 +13832,6 @@ async function fetchCatalogStateRows(env, requestedSymbols = null) {
         },
       ]),
     })
-  }
-  return out
-}
-
-async function fetchEssenceStateRows(env, requestedSymbols = null) {
-  if (!env.ICONOPLASM_DB) return []
-  const wantedSymbols = Array.isArray(requestedSymbols)
-    ? requestedSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)
-    : null
-  const results = await readEssenceStateRows(env.ICONOPLASM_DB, wantedSymbols)
-
-  const out = []
-  // WebCrypto hashing is asynchronous. Awaiting 19,023 digests serially made
-  // the admin sync planner sit on one request for minutes even after D1 had
-  // returned the rows. Bound concurrency so a full-catalog state proof uses
-  // parallel digest work without creating an unbounded promise fan-out.
-  const hashBatchSize = 128
-  for (let start = 0; start < results.length; start += hashBatchSize) {
-    const batch = results.slice(start, start + hashBatchSize)
-    const hashedRows = await Promise.all(
-      batch.map(async (row) => {
-        const rawEssence = {
-          gene_symbol: row?.gene_symbol || "",
-          full_name: row?.full_name || "",
-          weight_kg: row?.weight_kg,
-          molecular_weight_kda: row?.molecular_weight_kda,
-          height_cm: row?.height_cm,
-          sex: row?.sex || "",
-          age: row?.age || "",
-          age_years: row?.age_years,
-          first_publication_year: row?.first_publication_year,
-          faction: row?.faction || "",
-          skin_hex: row?.skin_hex || "",
-          skin_name: row?.skin_name || "",
-          tissue_tau: row?.tissue_tau,
-          primary_tissue: row?.primary_tissue,
-          loeuf: row?.loeuf,
-          constraint_percentile: row?.constraint_percentile,
-          leakage_percent: row?.leakage_percent,
-          leakage_hits: row?.leakage_hits,
-          leakage_total: row?.leakage_total,
-          aesthetics: (() => {
-            try {
-              const parsed = JSON.parse(String(row?.aesthetics_json || "[]"))
-              return Array.isArray(parsed) ? parsed : []
-            } catch {
-              return []
-            }
-          })(),
-          aesthetics_origin: (() => {
-            try {
-              const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
-              return Array.isArray(parsed) ? parsed : []
-            } catch {
-              return []
-            }
-          })(),
-          politics_origin: (() => {
-            try {
-              const parsed = JSON.parse(String(row?.politics_origin_json || "[]"))
-              return Array.isArray(parsed) ? parsed : []
-            } catch {
-              return []
-            }
-          })(),
-          family_surname: row?.family_surname || "",
-          family_members: row?.family_members,
-          family_feature: row?.family_feature || "",
-          manifestation: row?.manifestation || "",
-          sample_label: row?.sample_label || "",
-          sample_number: row?.sample_number,
-          sample_text_hash: row?.sample_text_hash || "",
-        }
-        const symbol = normalizeSymbol(row?.gene_symbol || "")
-        if (!symbol) return null
-        return {
-          symbol,
-          hash: await hashEssencePayload(rawEssence, symbol),
-          updated_at: row?.updated_at ? String(row.updated_at) : null,
-        }
-      }),
-    )
-    out.push(...hashedRows.filter(Boolean))
   }
   return out
 }
@@ -26512,7 +26384,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     actor,
     coerceBoolean,
     fetchCatalogStateRows,
-    fetchEssenceStateRows,
     isAdmin: isIconoplasmAdmin,
     json,
     mutationLimiterSnapshot: iconoplasmAdminMutationLimiterSnapshotFromEnv,
