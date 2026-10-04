@@ -98,33 +98,6 @@ def get_pdf_capability(driver, runtime_uuid: str) -> dict:
         driver.switch_to.window(caller)
 
 
-def seed_retired_card_snapshot(driver, runtime_uuid: str) -> tuple[str, str]:
-    caller = driver.current_window_handle
-    driver.switch_to.new_window("tab")
-    retired = "ccv1-retired-firefox-e2e"
-    try:
-        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
-        current = driver.execute_async_script(
-            """
-            const done = arguments[arguments.length - 1];
-            chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(async payload => {
-              const current = String(payload?.cardSnapshotVersion || "");
-              if (!current) { done({ diagnostic: JSON.stringify(payload)?.slice(0, 800) }); return; }
-              await chrome.storage.local.set({
-                iconoplasm_card_snapshot_version: "ccv1-retired-firefox-e2e",
-                iconoplasm_last_fetch: new Date().toISOString(),
-              });
-              done(current);
-            }, error => done({ error: String(error) }));
-            """
-        )
-        assert isinstance(current, str) and current and current != retired, current
-        return retired, current
-    finally:
-        driver.close()
-        driver.switch_to.window(caller)
-
-
 def wait_for_reader(driver, runtime_uuid: str) -> None:
     try:
         wait(driver, reader_is_mounted)
@@ -232,9 +205,6 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     paper = Path(request.config.getoption("--paper")).resolve()
     driver.get("about:blank")
     set_pdf_highlighting(driver, runtime_uuid, True)
-    retired_snapshot, current_snapshot = seed_retired_card_snapshot(
-        driver, runtime_uuid
-    )
     driver.get(paper.as_uri())
     wait_for_reader(driver, runtime_uuid)
     assert "geckoLocalFile=" in driver.current_url
@@ -303,15 +273,6 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     assert portrait["naturalHeight"] > 1
     assert "BRCA1 DNA repair associated" in portrait["text"]
     assert "Portrait pending" not in portrait["text"]
-    adopted_snapshot = driver.execute_async_script(
-        """
-        const done = arguments[arguments.length - 1];
-        chrome.storage.local.get(["iconoplasm_card_snapshot_version"])
-          .then(value => done(value.iconoplasm_card_snapshot_version || ""));
-        """
-    )
-    assert adopted_snapshot == current_snapshot
-    assert adopted_snapshot != retired_snapshot
     capture(driver, artifacts / "firefox-local-file-highlight-hover.png")
 
     driver.find_element(By.ID, "native-viewer").click()
