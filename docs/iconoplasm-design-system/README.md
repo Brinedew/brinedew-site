@@ -1,5 +1,20 @@
 # Iconoplasm — Design System
 
+## Before designing
+
+On 2026-10-04 (B-996, the caretaker sidebar) an agent made two mockups the owner rejected. The first was a timid reskin inside this document's rules. The second pasted the owner's reference posters on literally and decorated them with hand-drawn SVG stars. Neither changed the UX. Earlier strikes of the same kind came on 2026-09-25 and 2026-09-26. Work in this order:
+
+1. Read this document, the [Caretakers Handbook](../../content/wiki/Iconoplasm%20-%20Caretakers%20Handbook.md) and the live page: fonts, motifs, and the words already on screen.
+2. Measure the live data behind the feature and write down the user's actual job. On B-996, "Ready 174" turned out to hold 1 unread item and 173 already-seen ones: history posing as news.
+3. List about ten mistakes in the current foundation, including the rules below, and decide which to break. The rules below were written by earlier agents. They are evidence, not law, and following them to the letter produces a reskin.
+4. Copy the interaction from one comparable product (a collection game for a collection game). Change the interaction, not just the paint.
+5. Translate the owner's references into Iconoplasm's own metaphor; never paste them on. The card already speaks of emulsion numbers, glass plates and print copies, so generating an image is developing a plate.
+6. Use a licensed professional asset pack for textures and ornaments, never hand-drawn shapes. Bring the owner the exact pack, its licence and its price, because buying it is their call.
+7. Mock it up in Paper. Before showing it, answer three questions: Did the UX change? Does it fit the theme? Does it look like a professional asset pack, or homemade from basic vector shapes?
+
+---
+
+
 > *"19,000+ gene portraits. Every human gene gets a unique color and portrait. Hover any symbol on any page for instant context."*
 
 Iconoplasm is a **wet-lab gene blot archive where each human protein-coding gene is a character.** It gives every gene a stable unique color, an illustrated portrait, and a mnemonic backstory — then surfaces that identity wherever you read about biology on the web.
