@@ -9,11 +9,34 @@
 // hands back with the next call, so a crash loses nothing and a rerun is safe:
 // an object that is already plain text is recognised by its hash and skipped.
 //
-// One call handles at most PLAINTEXT_CONVERSION_MAX_BODIES bodies at the same
-// time. A free-plan Worker may make 50 subrequests, and a body can cost one read,
-// one write, up to three read-backs, and (only when the write lands damaged) one
-// rollback write and three more read-backs. Every storage call below makes one
-// request, so 4 bodies * 9 + 1 D1 query stays inside 50 even in the worst case.
+// Bunny can acknowledge a PUT and keep serving the old object (see
+// bunny-storage-consistency.js). The first night's single PUT per body left
+// 1,499 of 1,500 bodies as envelopes, so a body is written the way every other
+// body write is: the identical PUT is repeated until a read shows the plain
+// text, up to BUNNY_IDEMPOTENT_PUT_ATTEMPTS times, with the shared
+// read-after-write delays between the reads.
+//
+// One call converts ONE body, because of the free plan's 50 external fetches per
+// invocation (D1 calls and the admin check are not fetches). Every storage call
+// below passes maxAttempts: 1, so each one is exactly one fetch. One body costs,
+// at worst:
+//   1 read of the object as it stands
+//   6 PUTs (BUNNY_IDEMPOTENT_PUT_ATTEMPTS)
+//  30 read-backs (BUNNY_READ_AFTER_WRITE_DELAYS_MS has 5 delays, one read each,
+//     after every PUT)
+//   4 rollback fetches (one PUT and three reads), only when the last read shows
+//     a missing or damaged object
+//  41 in all, nine under the cap. A body that converts on the first PUT costs 3.
+// Two bodies at the worst case would need 82, so the cap for a writing call is 1.
+// A check call (no writes) makes one read per body, so it may scan up to
+// PLAINTEXT_CHECK_MAX_BODIES; that stays small because the stateful Worker has
+// almost no CPU headroom on the free plan (the Tags republish lost 19% of its
+// calls to the 10 ms cap on 2026-10-03).
+import {
+  BUNNY_IDEMPOTENT_PUT_ATTEMPTS,
+  BUNNY_READ_AFTER_WRITE_DELAYS_MS,
+  putBunnyObjectUntilVerified,
+} from "../../lib/bunny-storage-consistency.js"
 import {
   classifyManifestationBody,
   openManifestationBody,
@@ -24,14 +47,19 @@ import {
 } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { authorityError } from "./manifestation-authority-contract.js"
 
-export const PLAINTEXT_CONVERSION_MAX_BODIES = 4
-export const PLAINTEXT_CONVERSION_DEFAULT_BODIES = 3
+export const PLAINTEXT_CONVERSION_MAX_BODIES = 1
+export const PLAINTEXT_CONVERSION_DEFAULT_BODIES = 1
+export const PLAINTEXT_CHECK_MAX_BODIES = 10
 
-// Bunny can take seconds to serve an acknowledged write (see
-// bunny-storage-consistency.js). Three reads, spaced, keep one body's wall time
-// near five seconds; a body that still shows the old bytes is reported, and
-// the next pass looks again.
-const READ_BACK_PAUSES_MS = Object.freeze([0, 1500, 3000])
+// After the last PUT is still unreadable as plain text, an object that reads as
+// missing or as neither version is put back as the old envelope: one PUT, then up
+// to three reads.
+const ROLLBACK_READ_PAUSES_MS = Object.freeze([0, 1500, 3000])
+
+export const PLAINTEXT_CONVERSION_WORST_CASE_FETCHES =
+  1 +
+  BUNNY_IDEMPOTENT_PUT_ATTEMPTS * (1 + BUNNY_READ_AFTER_WRITE_DELAYS_MS.length) +
+  (1 + ROLLBACK_READ_PAUSES_MS.length)
 
 const ROW_SELECT = Object.freeze({
   revision: `SELECT storage.manifestation_revision_id AS id, storage.object_key,
@@ -108,14 +136,14 @@ async function observe(env, objectKey, storage, ids) {
   return classifyManifestationBody(stored.bytes, storage, ids)
 }
 
-// Reads back until the object shows `expected` ("plain" after a conversion,
-// "legacy" after a rollback), or the pauses run out. Returns the last observation.
-async function readBack(env, objectKey, storage, ids, sleep, expected) {
+// Reads back after a rollback until the object shows the old envelope again, or
+// the pauses run out. Returns the last observation.
+async function readBackRollback(env, objectKey, storage, ids, sleep) {
   let seen = "error"
-  for (const pause of READ_BACK_PAUSES_MS) {
+  for (const pause of ROLLBACK_READ_PAUSES_MS) {
     if (pause > 0) await sleep(pause)
     seen = await observe(env, objectKey, storage, ids)
-    if (seen === expected) return seen
+    if (seen === "legacy") return seen
   }
   return seen
 }
@@ -126,13 +154,13 @@ async function convertOne(env, kind, row, { execute, sleep }) {
   try {
     stored = await readManifestationBodyObject(env, row.object_key, { maxAttempts: 1 })
   } catch {
-    return { status: "failed", code: "read" }
+    return { status: "failed", code: "read", puts: 0 }
   }
-  if (!stored) return { status: "failed", code: "object_missing" }
+  if (!stored) return { status: "failed", code: "object_missing", puts: 0 }
   const state = await classifyManifestationBody(stored.bytes, storage, ids)
-  if (state === "plain") return { status: "plaintext" }
-  if (state === "damaged") return { status: "failed", code: "integrity" }
-  if (!execute) return { status: "legacy" }
+  if (state === "plain") return { status: "plaintext", puts: 0 }
+  if (state === "damaged") return { status: "failed", code: "integrity", puts: 0 }
+  if (!execute) return { status: "legacy", puts: 0 }
 
   let plain
   try {
@@ -146,30 +174,55 @@ async function convertOne(env, kind, row, { execute, sleep }) {
       )
     ).bytes
   } catch {
-    return { status: "failed", code: "decrypt" }
-  }
-  try {
-    // One request, no retry: a refused write leaves the old object as it was.
-    await writeManifestationBodyObject(env, row.object_key, plain, { maxAttempts: 1 })
-  } catch {
-    return { status: "failed", code: "write" }
+    return { status: "failed", code: "decrypt", puts: 0 }
   }
 
-  const after = await readBack(env, row.object_key, storage, ids, sleep, "plain")
-  if (after === "plain") return { status: "converted" }
-  // Acknowledged but still serving the old bytes (Bunny's documented window),
-  // or the read itself failed: both versions read correctly, so leave it and
-  // let the next pass look again.
-  if (after === "legacy" || after === "error") return { status: "unverified" }
+  // Repeat the identical PUT until a read shows the plain text. A refused PUT
+  // spends one of the attempts and leaves the object as it was; the read that
+  // follows shows whether anything changed.
+  let puts = 0
+  let accepted = 0
+  let seen = "error"
+  const put = async () => {
+    puts += 1
+    try {
+      await writeManifestationBodyObject(env, row.object_key, plain, { maxAttempts: 1 })
+      accepted += 1
+    } catch {
+      // see above
+    }
+  }
+  const verify = async () => {
+    for (const pause of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+      if (pause > 0) await sleep(pause)
+      seen = await observe(env, row.object_key, storage, ids)
+      if (seen === "plain") return true
+    }
+    return null
+  }
+  if (await putBunnyObjectUntilVerified({ put, verify })) return { status: "converted", puts }
+
+  // Both versions read correctly, so an object that still shows the old bytes
+  // (Bunny's documented window), or whose reads failed, is safe: report it and
+  // let a later pass look again. When Bunny never accepted a PUT, say so.
+  if (seen === "legacy" || seen === "error") {
+    return accepted === 0
+      ? { status: "failed", code: "write", puts }
+      : { status: "unverified", puts }
+  }
 
   // The object is missing or is neither version. Put the old envelope back.
   try {
     await writeManifestationBodyObject(env, row.object_key, stored.bytes, { maxAttempts: 1 })
   } catch {
-    return { status: "failed", code: "restore_failed" }
+    return { status: "failed", code: "restore_failed", puts }
   }
-  const restored = await readBack(env, row.object_key, storage, ids, sleep, "legacy")
-  return { status: "failed", code: restored === "legacy" ? "rolled_back" : "restore_failed" }
+  const restored = await readBackRollback(env, row.object_key, storage, ids, sleep)
+  return {
+    status: "failed",
+    code: restored === "legacy" ? "rolled_back" : "restore_failed",
+    puts,
+  }
 }
 
 export async function convertManifestationBodies(
@@ -180,8 +233,11 @@ export async function convertManifestationBodies(
   if (kind !== "revision" && kind !== "derivative") {
     throw invalid("kind must be revision or derivative")
   }
-  if (!Number.isInteger(limit) || limit < 1 || limit > PLAINTEXT_CONVERSION_MAX_BODIES) {
-    throw invalid(`limit must be a whole number from 1 to ${PLAINTEXT_CONVERSION_MAX_BODIES}`)
+  const maxLimit = execute === true ? PLAINTEXT_CONVERSION_MAX_BODIES : PLAINTEXT_CHECK_MAX_BODIES
+  if (!Number.isInteger(limit) || limit < 1 || limit > maxLimit) {
+    throw invalid(
+      `limit must be a whole number from 1 to ${maxLimit}${execute === true ? " when writing" : ""}`,
+    )
   }
   const cursor = String(after ?? "")
   if (!/^[A-Za-z0-9_-]{0,128}$/.test(cursor)) throw invalid("after is not a row id")
@@ -202,6 +258,10 @@ export async function convertManifestationBodies(
     converted: count("converted"),
     legacy: count("legacy"),
     unverified: count("unverified"),
+    unverified_ids: outcomes.flatMap((outcome, index) =>
+      outcome.status === "unverified" ? [rows[index].id] : [],
+    ),
+    puts: outcomes.reduce((sum, outcome) => sum + outcome.puts, 0),
     failed: outcomes.flatMap((outcome, index) =>
       outcome.status === "failed" ? [{ id: rows[index].id, code: outcome.code }] : [],
     ),
