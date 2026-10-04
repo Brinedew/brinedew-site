@@ -1,13 +1,13 @@
 ---
 title: "Privacy Policy"
 description: "How GeneGuessr handles your data"
-date: 2026-10-03
+date: 2026-10-04
 draft: false
 ---
 
 # Privacy Policy
 
-**Last updated:** October 3, 2026
+**Last updated:** October 4, 2026
 
 This Privacy Policy describes how GeneGuessr ("we", "us", or "our") collects, uses, and protects your information when you use our website at geneguessr.brinedew.bio.
 
@@ -117,6 +117,8 @@ Cloudflare operates data centers globally. For EU users, this may involve data t
 - **Public leaderboard entries**: Visible only while your visibility preference is enabled
 - **Session data**: Automatically expires (10 minutes for OAuth, 30 days for login sessions)
 - **Aggregated analytics**: Retained indefinitely (contains no personal data)
+
+Please note that any information that we have copied may remain in back-up storage for up to 30 days after your deletion request.
 
 ## Your Rights
 
