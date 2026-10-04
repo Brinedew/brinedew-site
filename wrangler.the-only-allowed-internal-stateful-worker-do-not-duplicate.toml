@@ -76,6 +76,11 @@ head_sampling_rate = 1
 [browser]
 binding = "ICONOPLASM_PRINT_COPY_BROWSER"
 
+# B-995: the caretaker editor's "Tags from prose" and "Prose from Tags" buttons.
+# Workers AI free plan: 10,000 Neurons a day (workers/iconoplasm/caretaker/taggerizer.js).
+[ai]
+binding = "AI"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "geneguessr"
@@ -235,6 +240,8 @@ allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 SENTRY_DSN = "https://44c29985415416cc070584965dcd686c@o4512140355239936.ingest.us.sentry.io/4512142881259520"
 ICONOPLASM_SCHEMA_TRANSITION = "0"
 ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
+# B-995 kill switch: "1" makes the taggerizer route answer 503 and hides the editor buttons.
+ICONOPLASM_TAGGERIZER_DISABLED = "0"
 ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 # Billing guardrail model:
 # 1) hard monthly stop near the included PAYGO allowance, and
@@ -311,6 +318,9 @@ routes = []
 
 [env.staging.browser]
 binding = "ICONOPLASM_PRINT_COPY_BROWSER"
+
+[env.staging.ai]
+binding = "AI"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -448,6 +458,8 @@ allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 [env.staging.vars]
 ICONOPLASM_SCHEMA_TRANSITION = "0"
 ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
+# B-995 kill switch: "1" makes the taggerizer route answer 503 and hides the editor buttons.
+ICONOPLASM_TAGGERIZER_DISABLED = "0"
 ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "1000000"
