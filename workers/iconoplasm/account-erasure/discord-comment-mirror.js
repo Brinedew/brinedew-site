@@ -134,15 +134,17 @@ export async function anonymiseCommentPost(config, budget, comment, { label, rem
         Date.parse(message.timestamp) <= createdMs + WINDOW_MS,
     )
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
-  // Only the post that quotes this comment is acted on. Falling back to the nearest post by the same
-  // person on the same gene could edit or delete a different comment's post: a comment from before
-  // the mirror has no post of its own, and an earlier run may already have handled this one. A text
-  // that no longer matches (an edit on the site, B-1001) is reported as not found and fixed by hand.
+  // The post that quotes this comment is the one to delete or rewrite. Without an exact match (an
+  // edit on the site after posting, B-1001) the nearest post by the same person on the same gene is
+  // still anonymised, because the person's name must leave the channel either way, but it is never
+  // deleted: it may be the post of a different comment that stays (a comment from before the mirror
+  // has no post of its own).
   const text = commentMirrorText(comment.body)
-  const post = candidates.find((message) => message.content.match(pattern)?.[3] === text)
+  const exact = candidates.find((message) => message.content.match(pattern)?.[3] === text)
+  const post = exact || candidates[0]
   if (!post) return "not_found"
   const messagePath = `/channels/${encodeURIComponent(config.channelId)}/messages/${encodeURIComponent(post.id)}`
-  if (remove) {
+  if (remove && exact) {
     await discordCall(config, budget, "DELETE", messagePath)
     return "deleted"
   }
