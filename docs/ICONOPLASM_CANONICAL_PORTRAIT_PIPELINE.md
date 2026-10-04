@@ -50,7 +50,10 @@ bulk republish (429), so the edge rule, not a purge, bounds staleness.
 A change to what the object carries reaches the CDN only when each gene is
 rewritten. The Actions publisher rewrites only the genes whose winner or
 candidates changed, so a change of shape needs a sweep of every gene through the
-republish route, eight genes a call, started in the last hours of the UTC day.
+republish route, started in the last hours of the UTC day. The route takes up
+to eight genes a call, but the sweep sends four, because the free plan's 10 ms
+CPU cap kills a share of the heavier calls; the sweep retries a killed call and
+then sends its genes one at a time.
 `scripts/republish-iconoplasm-gene-objects.mjs` is that sweep (dry run by
 default, resumable, its first batch read back from the CDN before it goes on);
 `--verify` reads every public object.
