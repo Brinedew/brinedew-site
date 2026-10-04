@@ -263,7 +263,9 @@ export function createIconoplasmPublicationReader(options = {}) {
   function searchRank(needle, rawSymbol, rawName) {
     const symbol = String(rawSymbol || "").toLowerCase()
     const name = String(rawName || "").toLowerCase()
-    if (symbol === needle) return 1
+    // An exact full name ("insulin" for INS) is as good as an exact symbol; ranked with the
+    // prefix matches it sorted after "insulin degrading enzyme" and every IGF gene.
+    if (symbol === needle || name === needle) return 1
     if (symbol.startsWith(needle)) return 2
     if (name.startsWith(needle)) return 3
     if (symbol.includes(needle)) return 4
