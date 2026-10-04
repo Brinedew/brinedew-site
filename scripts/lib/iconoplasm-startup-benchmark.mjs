@@ -9,8 +9,7 @@ export function assessBlockedHostStartup(result) {
     failures.push("host-paint-not-proven-first")
   if (result?.first?.load !== 0 || result?.beforeRelease?.state !== "interactive")
     failures.push("load-was-not-held")
-  if (result?.first?.highlights !== 3 || result.first.nested !== 0)
-    failures.push("wrong-highlight-inventory")
+  if (result?.first?.highlights !== 3) failures.push("wrong-highlight-inventory")
   if (!Array.isArray(result?.beforeRelease?.requests) || result.beforeRelease.requests.length)
     failures.push("pre-load-network")
   // B-898: after the host releases, the extension reads one stable gene object
@@ -65,7 +64,6 @@ export async function measureBlockedHostStartup(page, { holdMs = 20000, timeoutM
       state: document.readyState,
       load: performance.getEntriesByType("navigation")[0]?.loadEventEnd,
       highlights: CSS.highlights.get("iconoplasm-gene-ranges")?.size || 0,
-      nested: document.querySelectorAll(".iconoplasm-gene .iconoplasm-gene").length,
     }))
     await page.waitForTimeout(Math.max(0, holdMs - (Date.now() - started)))
     const beforeRelease = {

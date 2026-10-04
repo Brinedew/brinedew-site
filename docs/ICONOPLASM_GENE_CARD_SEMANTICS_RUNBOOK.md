@@ -306,9 +306,8 @@ Every print-copy enrollment, status, render, and download resolves its identity
 through `/api/iconoplasm/cards/:symbol` and the gene's stable object. An
 `asset=` query value can only assert that object's
 exact portrait SHA: malformed values return `400`, and a different valid SHA
-returns `409`. It must never select the current D1 authoring portrait or trigger
-a site-gene-detail fallback, even during the expected D1-to-artifact publication
-window.
+returns `409`. It must never select the current D1 authoring portrait, even
+during the expected D1-to-artifact publication window.
 
 High-resolution print copies remain an explicit user-requested PNG workflow.
 They are not the canonical search image. Sitemap, semantic blot, and gene-page

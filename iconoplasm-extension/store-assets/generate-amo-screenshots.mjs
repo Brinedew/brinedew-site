@@ -57,7 +57,7 @@ const pal = {
  *  Frame inner dimensions are aspect-matched to each source image so
  *  object-fit:cover fills the frame with <3% crop (no letterboxing).
  *
- *  Source dimensions (from take-screenshots.mjs):
+ *  Source dimensions (the committed source screenshots):
  *    screenshot-1-hovercard.png  575 x 802  (UCSC genome browser + RHO)
  *    screenshot-2-hovercard.png  628 x 907  (Wikipedia homeobox + HOXB1)
  *    screenshot-6-archive.png    750 x 1057 (archive lab-label card)
