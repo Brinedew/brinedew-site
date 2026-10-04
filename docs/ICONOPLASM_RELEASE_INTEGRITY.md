@@ -58,6 +58,13 @@ need distinct output directories when they target the same browser.
    artifact hash. They do not rebuild packages. Separate store signing/review can
    transform the signed deliverable; the exact submitted bundles remain archived.
 
+The Firefox PDF ownership Selenium suite (`iconoplasm-extension/e2e`) runs in
+CI on every pull request that touches the extension, as a real Firefox with the
+real validation package, and again as a required job of the preparation
+workflow: preparation does not start unless it passes on the release commit.
+The recorded `pdf-ownership-certification.json` claim is still checked, but it
+is no longer the only evidence.
+
 The preparation jobs serialize by version. A failed draft can be retried before
 publication. Once sealed, it is reused without uploading anything. A source or
 byte mismatch fails; the remedy is a newly authorized version. If an administrator

@@ -12,11 +12,15 @@ from selenium.webdriver.common.selenium_manager import SeleniumManager
 
 from pdf_conformance_server import PdfConformanceServer
 
+DEFAULT_PAPER = Path(__file__).resolve().parent / "PLOS_BRCA1_BRCA2_TP53.pdf"
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption("--firefox-binary", required=True)
+    # Optional: without it Selenium Manager locates (or downloads) Firefox.
+    parser.addoption("--firefox-binary", default=None)
     parser.addoption("--xpi", required=True)
-    parser.addoption("--paper", required=True)
+    # Carraro et al. 2013, PLOS ONE, CC BY 4.0 (see e2e/README.md).
+    parser.addoption("--paper", default=str(DEFAULT_PAPER))
     parser.addoption("--artifacts", required=True)
 
 
@@ -39,23 +43,22 @@ def pdf_server(request: pytest.FixtureRequest, artifacts: Path):
 
 @pytest.fixture(scope="session")
 def firefox(request: pytest.FixtureRequest, artifacts: Path):
-    binary = Path(request.config.getoption("--firefox-binary")).resolve()
+    binary_option = request.config.getoption("--firefox-binary")
+    binary = Path(binary_option).resolve() if binary_option else None
     xpi = Path(request.config.getoption("--xpi")).resolve()
     options = Options()
-    options.binary_location = str(binary)
+    if binary:
+        options.binary_location = str(binary)
     options.set_preference("browser.download.useDownloadDir", True)
     options.set_preference("browser.download.folderList", 2)
     options.set_preference("browser.download.dir", str(artifacts / "downloads"))
     options.set_preference("browser.download.alwaysOpenPanel", False)
-    driver_path = SeleniumManager().binary_paths(
-        [
-            "--browser",
-            "firefox",
-            "--browser-path",
-            str(binary),
-            "--skip-driver-in-path",
-        ]
-    )["driver_path"]
+    # Route extension console output into geckodriver.log for failure diagnosis.
+    options.set_preference("devtools.console.stdout.content", True)
+    manager_args = ["--browser", "firefox", "--skip-driver-in-path"]
+    if binary:
+        manager_args += ["--browser-path", str(binary)]
+    driver_path = SeleniumManager().binary_paths(manager_args)["driver_path"]
     service = Service(
         executable_path=driver_path,
         log_output=str(artifacts / "geckodriver.log"),
@@ -73,7 +76,24 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
                 """,
                 addon_id,
             )
+        # A fresh profile has no gene catalog, and readers refuse to mount
+        # without one. Download it from production once, up front, so a slow
+        # first download cannot masquerade as a PDF routing failure.
+        driver.set_script_timeout(120)
+        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
+        gene_count = driver.execute_async_script(
+            """
+            const done = arguments[arguments.length - 1];
+            chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(
+              payload => done(Object.keys(payload?.genes || {}).length),
+              error => done(-1),
+            );
+            """
+        )
+        assert gene_count > 1000, f"gene catalog did not download: {gene_count}"
+        driver.get("about:blank")
         identity = {
+            "geneCount": gene_count,
             "addonId": addon_id,
             "runtimeUuid": runtime_uuid,
             "browserVersion": driver.capabilities.get("browserVersion"),
@@ -88,3 +108,39 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
         yield driver, runtime_uuid
     finally:
         driver.quit()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+    if "firefox" not in item.fixturenames:
+        return
+    driver, _runtime_uuid = item.funcargs["firefox"]
+    artifacts = Path(item.config.getoption("--artifacts")).resolve()
+    stem = item.name
+    try:
+        driver.save_screenshot(str(artifacts / f"FAILED-{stem}.png"))
+        state = driver.execute_script(
+            """
+            return {
+              url: location.href,
+              readerState: document.body?.dataset?.readerState || null,
+              visibility: document.visibilityState,
+              readyState: document.readyState,
+              hasFocus: document.hasFocus(),
+              bridgeReady: Boolean(globalThis.IconoplasmReaderBridge),
+              anchors: document.querySelectorAll('.iconoplasm-pdf-hit-anchor').length,
+              textLayers: document.querySelectorAll('.textLayer').length,
+              status: document.getElementById('reader-status-message')?.innerText || null,
+              html: document.documentElement.outerHTML.slice(0, 4000),
+            };
+            """
+        )
+        (artifacts / f"FAILED-{stem}.json").write_text(
+            json.dumps(state, indent=2), encoding="utf-8"
+        )
+    except Exception as error:  # diagnostics must never mask the real failure
+        (artifacts / f"FAILED-{stem}.json").write_text(str(error), encoding="utf-8")

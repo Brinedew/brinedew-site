@@ -9,5 +9,5 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-q --strict-markers --timeout=60"
+addopts = "-q --strict-markers --timeout=240"
 testpaths = ["tests"]

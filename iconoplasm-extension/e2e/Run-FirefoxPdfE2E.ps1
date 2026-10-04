@@ -1,6 +1,6 @@
 param(
     [string]$FirefoxBinary = 'C:\Program Files\Mozilla Firefox\firefox.exe',
-    [string]$Paper = (Join-Path $env:USERPROFILE 'Downloads\PLOS_BRCA1_BRCA2_TP53.pdf'),
+    [string]$Paper = (Join-Path $PSScriptRoot 'tests\PLOS_BRCA1_BRCA2_TP53.pdf'),
     [string]$Artifacts = (Join-Path $PSScriptRoot '..\artifacts\firefox-pdf-e2e')
 )
 
