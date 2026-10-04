@@ -322,7 +322,7 @@ test("the kill switch refuses with a sentence and never calls the AI", async (t)
 test("an exhausted Workers AI free allowance becomes the plain 503 sentence with a retry time", async (t) => {
   const { handler } = await bootstrap(t, {
     aiReply: new Error(
-      "4006: you have used up your daily free allocation of 10,000 neurons, please upgrade",
+      "3036: You have used up your daily free allocation of 10,000 neurons. Please upgrade to Cloudflare's Workers Paid plan if you would like to continue usage.",
     ),
   })
   const response = await handler(

@@ -262,10 +262,12 @@ export function taggerizerRequest({ direction, prose, fields }) {
   }
 }
 
-// Workers AI answers an exhausted free allowance with an error (code 4006, "you
-// have used up your daily free allocation of 10,000 neurons").
+// Workers AI answers an exhausted free allowance with error 3036, HTTP 429: "You have used up
+// your daily free allocation of 10,000 neurons. Please upgrade to Cloudflare's Workers Paid plan
+// if you would like to continue usage." (developers.cloudflare.com/workers-ai/platform/errors/,
+// read 2026-10-04).
 function allowanceExhausted(error) {
-  return /4006|daily free allocation|free allocation|neurons/i.test(
+  return /3036|daily free allocation|free allocation|neurons/i.test(
     String(error?.message || error || ""),
   )
 }
