@@ -40,10 +40,8 @@ jobs:
           firefox-version: latest
       - name: Probe the production endpoints the suite depends on
         run: |
-          curl -sS -o /dev/null -w 'iconoplasm host %{http_code}
-' -m 20 https://iconoplasm.brinedew.bio/ || true
-          curl -sS -o /dev/null -w 'portrait cdn %{http_code}
-' -m 20 https://iconoplasmportraits.b-cdn.net/ || true
+          echo "iconoplasm host: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasm.brinedew.bio/ || echo unreachable)"
+          echo "portrait cdn: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasmportraits.b-cdn.net/ || echo unreachable)"
       - uses: astral-sh/setup-uv@v6
       - name: Run the Firefox PDF suite
         working-directory: iconoplasm-extension/e2e
