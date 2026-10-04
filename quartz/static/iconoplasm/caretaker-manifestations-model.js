@@ -1,4 +1,4 @@
-export const MAX_PROSE_CODE_POINTS = 4000
+export const MAX_PROSE_CODE_POINTS = 10000
 export const MAX_PROSE_BYTES = 16 * 1024
 
 export function codePointLength(value) {

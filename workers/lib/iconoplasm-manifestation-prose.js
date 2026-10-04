@@ -2,7 +2,7 @@ import { sha256Hex } from "./iconoplasm-sha256.js"
 
 const ENCODER = new TextEncoder()
 
-export const ICONOPLASM_MANIFESTATION_PROSE_MAX_CODE_POINTS = 4000
+export const ICONOPLASM_MANIFESTATION_PROSE_MAX_CODE_POINTS = 10000
 export const ICONOPLASM_MANIFESTATION_PROSE_MAX_BYTES = 16 * 1024
 
 export function normalizeManifestationProse(raw) {

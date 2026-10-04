@@ -119,8 +119,11 @@ test("a legacy Tags envelope is bound to its derivative and cannot be opened as 
 test("prose validation rejects empty, control, and character overflow", () => {
   assert.throws(() => normalizeManifestationProse("   "))
   assert.throws(() => normalizeManifestationProse("bad\u0000text"))
-  assert.throws(() => normalizeManifestationProse("a".repeat(4001)))
-  assert.equal(normalizeManifestationProse("😀".repeat(4000)).codePoints, 4000)
+  assert.throws(() => normalizeManifestationProse("a".repeat(10001)))
+  assert.equal(normalizeManifestationProse("a".repeat(10000)).codePoints, 10000)
+  // B-977: 99.9% of the 19,188 workstation manifestations are under 9,289 characters.
+  assert.equal(normalizeManifestationProse("😀".repeat(4096)).codePoints, 4096)
+  assert.throws(() => normalizeManifestationProse("😀".repeat(4097)), /16384 UTF-8 bytes/)
   assert.equal(normalizeManifestationProse("a\r\nb").prose, "a\nb")
 })
 
