@@ -1331,13 +1331,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_essence",
     "admin_publication.essence_upsert",
   ),
-  adminApiContract(
-    "admin_essence_state",
-    "/essence/state",
-    POST,
-    "admin_essence",
-    "admin_publication.essence_state",
-  ),
   adminApiContract("admin_cost_usage", "/cost/usage", GET),
   adminApiContract("admin_cost_snapshot", "/cost/snapshot", GET, "admin_cost_usage"),
   adminApiContract(
