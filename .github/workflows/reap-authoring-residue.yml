@@ -1,0 +1,95 @@
+name: Reap authoring residue
+
+# B-859 step 5, moved here by B-1002. scripts/reap-authoring-residue.mjs deletes the authoring
+# D1's two one-time leftovers (command receipts no event references, and the abandoned cutover
+# backup's index rows). It runs here, with the CI Cloudflare token, because the owner's laptop and
+# every agent shell have no production D1 credential. A dry run (the default) sends only SELECT
+# statements. A run with "execute" refuses before 20:00 UTC unless an incident reason is given
+# (AGENTS.md: spend the daily D1 allowance at the end of the UTC day), stops at the rows-written
+# cap, and prints the --from-rowid to resume from. The job log carries the script's JSON report.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to reap"
+        required: true
+        type: choice
+        options:
+          - receipts
+          - backup-entries
+      execute:
+        description: "Delete rows. Leave off for a dry run that only reads."
+        required: true
+        type: boolean
+        default: false
+      from_rowid:
+        description: "Resume point printed by the previous run (0 starts at the beginning)."
+        required: true
+        default: "0"
+      max_writes:
+        description: "Stop after about this many rows written."
+        required: true
+        default: "15000"
+      allow_early_reason:
+        description: "Incident reason that lets an execute run start before 20:00 UTC. Leave empty otherwise."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iconoplasm-authoring-residue-reaper
+  cancel-in-progress: false
+
+jobs:
+  reap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      REAP_TARGET: ${{ inputs.target }}
+      REAP_EXECUTE: ${{ inputs.execute }}
+      REAP_FROM_ROWID: ${{ inputs.from_rowid }}
+      REAP_MAX_WRITES: ${{ inputs.max_writes }}
+      REAP_ALLOW_EARLY_REASON: ${{ inputs.allow_early_reason }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Verify Node/pnpm and dependency release delay
+        run: |
+          node -v
+          pnpm -v
+          pnpm config set minimumReleaseAge 1440
+          pnpm config get minimumReleaseAge
+
+      - name: Validate Cloudflare secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Missing CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      # Every dispatch input reaches the script through an environment variable and is quoted, so
+      # a free-text reason cannot become shell syntax.
+      - name: Reap authoring residue
+        run: |
+          args=(--target "$REAP_TARGET" --from-rowid "$REAP_FROM_ROWID" --max-writes "$REAP_MAX_WRITES" --report-file "$RUNNER_TEMP/reap-report.json")
+          if [ "$REAP_EXECUTE" = "true" ]; then args+=(--execute); fi
+          if [ -n "$REAP_ALLOW_EARLY_REASON" ]; then args+=(--allow-early "$REAP_ALLOW_EARLY_REASON"); fi
+          node scripts/reap-authoring-residue.mjs "${args[@]}"

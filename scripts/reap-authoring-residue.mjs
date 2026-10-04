@@ -222,8 +222,10 @@ export function parseReaperArgs(argv) {
   return parsed
 }
 
-// Production executor: the signed-in wrangler session, remote D1. Statements
-// carry only validated integers and one generated timestamp, never user text.
+// Production executor: wrangler with the CI Cloudflare token, remote D1. It runs from
+// .github/workflows/reap-authoring-residue.yml; no laptop or agent shell has a production D1
+// credential (B-1002). Statements carry only validated integers and one generated timestamp,
+// never user text.
 export function createWranglerExecutor({
   cwd = path.resolve(fileURLToPath(new URL("..", import.meta.url))),
   execFile = execFileSync,

@@ -6,8 +6,10 @@
 # the fresh day's. It retries every 2 hours until 22:00 UTC. The script is a
 # no-op once the day's dump exists, before 12:00 UTC (a laptop catching up
 # after midnight), and when readers already used 50% of the reads.
-# Credentials come from the user's CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID
-# environment, so the task runs as the signed-in user.
+# The D1 read token is the backup's own (B-1002): backup-token.txt next to the dumps, or the
+# file named by D1_BACKUP_TOKEN_FILE. CLOUDFLARE_ACCOUNT_ID comes from the user's environment,
+# so the task runs as the signed-in user. CLOUDFLARE_API_TOKEN is only a fallback for a machine
+# that has no token file yet; the token every agent shell inherits has no D1 permission.
 param(
   [string]$Checkout = "D:\Coding\Website",
   [string]$TaskName = "Brinedew D1 Backup Rotation"

@@ -8,14 +8,28 @@
 //
 // Run after the protein set or structure failures change:
 //   node scripts/export-geneguessr-protein-index.mjs
-// One run reads each protein row once (~19k D1 rows).
-import { execFileSync } from "node:child_process"
+// It reads the newest nightly dump of the geneguessr D1 (written by
+// scripts/backup-d1-rotation.mjs, up to a few days old), not production: agents have no
+// production D1 credential (B-1002). The dump's date is printed first, and a dump older than
+// MAX_DUMP_AGE_DAYS is refused. After a change to the protein set, run this after the next
+// nightly backup so the dump holds the change.
 import { writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { DatabaseSync } from "node:sqlite"
+
+import {
+  DEFAULT_BACKUP_ROOT,
+  dumpBanner,
+  dumpDescription,
+  findNewestDump,
+  unpackDump,
+} from "./d1-local.mjs"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
-const CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
+// The backup rotation writes one dump per database about every five days.
+export const MAX_DUMP_AGE_DAYS = 6
 export const PROTEIN_INDEX_PATH = "quartz/static/geneguessr/protein-index.json"
 export const PROTEIN_INDEX_FIELDS = Object.freeze([
   "uniprot",
@@ -69,30 +83,36 @@ export function buildProteinIndex(rows) {
   return { schema_version: 1, fields: PROTEIN_INDEX_FIELDS, rows: out }
 }
 
-function readRows() {
-  // Run Wrangler's entry point directly: a Windows shell would split the SQL.
-  const output = execFileSync(
-    process.execPath,
-    [
-      path.join(root, "node_modules/wrangler/bin/wrangler.js"),
-      "d1",
-      "execute",
-      "geneguessr",
-      "--remote",
-      "--config",
-      CONFIG,
-      "--json",
-      "--command",
-      QUERY.replace(/\s+/g, " "),
-    ],
-    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  )
-  const parsed = JSON.parse(output.slice(output.indexOf("[")))
-  return parsed?.[0]?.results || []
+// The newest nightly dump of the geneguessr D1, opened read-only through the same unpacker
+// scripts/d1-local.mjs uses. Nothing here touches Cloudflare, so the free plan's D1 read
+// allowance stays whole and no production credential is needed (B-1002).
+export async function readRows({
+  backupRoot = process.env.D1_BACKUP_ROOT || DEFAULT_BACKUP_ROOT,
+  cacheDir = path.join(tmpdir(), "brinedew-d1-local"),
+  now = Date.now(),
+  log = (line) => console.error(line),
+} = {}) {
+  const dump = findNewestDump({ root: backupRoot, database: "geneguessr" })
+  const description = dumpDescription(dump, now)
+  log(dumpBanner(description))
+  if (description.age_days > MAX_DUMP_AGE_DAYS) {
+    throw new Error(
+      `The newest geneguessr dump is ${description.age_days} days old (limit ${MAX_DUMP_AGE_DAYS}). ` +
+        "Let the nightly backup (scripts/backup-d1-rotation.mjs) write a newer one, then run this again.",
+    )
+  }
+  const file = await unpackDump(dump, cacheDir, { now, log })
+  const database = new DatabaseSync(file, { readOnly: true })
+  try {
+    database.exec("PRAGMA query_only = ON")
+    return database.prepare(QUERY).all()
+  } finally {
+    database.close()
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const index = buildProteinIndex(readRows())
+  const index = buildProteinIndex(await readRows())
   if (index.rows.length < 10000)
     throw new Error(`Refusing a suspiciously small index: ${index.rows.length}`)
   writeFileSync(path.join(root, PROTEIN_INDEX_PATH), JSON.stringify(index) + "\n", "utf8")
