@@ -185,20 +185,18 @@ The authority relationship is:
 - The stable gene object `genes/v3/<SYMBOL>.json` owns the public portrait.
   Read it from Bunny. It is rewritten in place; its `published_at` is the
   version that public responses report.
-- `/api/iconoplasm/cards/:symbol`, site-gene detail, the gene-page lead and
+- `/api/iconoplasm/cards/:symbol`, the gene-page lead and
   metadata, public media, signed-in and anonymous galleries,
   extension cards, and print-copy inputs must all project that
   object's portrait.
 - The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 
-Site-gene detail reads bounded D1 rich detail and candidates, but it overrides
-the portrait and candidate `is_current` state with the stable object's SHA.
 There is no signed-in or gene-detail fallback. A missing or incomplete stable
 object fails closed and uncached instead of selecting the D1 leader.
 
 ### diagnose one symbol
 
-Compare the public card, site-gene-detail, and public-media projections:
+Compare the public card and public-media projections:
 
 ```powershell
 @'
@@ -207,11 +205,6 @@ const endpoints = [
   {
     surface: "card",
     url: `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
-  },
-  {
-    surface: "site-detail",
-    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`,
-    headers: { referer: `https://iconoplasm.brinedew.bio/gene/${symbol}` },
   },
   {
     surface: "public-media",
@@ -286,7 +279,7 @@ Avoid these even if they look faster:
 
 - do not trust the frontend candidate count as the source of truth
 - do not disguise a partial catalog as a complete one; the per-gene stable objects and the one catalog object are the supported source design
-- do not add a D1 fallback to the public card, site-gene-detail, public-media,
+- do not add a D1 fallback to the public card, public-media,
   gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
 - do not use remote `wrangler dev --test-scheduled` as a repair path for this worker; remote dev does not support the Queue/SQLite Durable Object combination here
@@ -399,11 +392,6 @@ const endpoints = [
     url: `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
   },
   {
-    surface: "site-detail",
-    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/site/genes/${symbol}`,
-    headers: { referer: `https://iconoplasm.brinedew.bio/gene/${symbol}` },
-  },
-  {
     surface: "public-media",
     url: `https://iconoplasm.brinedew.bio/api/public/v1/media/${symbol}`,
   },
@@ -476,7 +464,7 @@ Avoid these even if they look faster:
 
 - do not trust the frontend candidate count as the source of truth
 - do not disguise a partial catalog as a complete one; the per-gene stable objects and the one catalog object are the supported source design
-- do not add a D1 fallback to the public card, site-gene-detail, public-media,
+- do not add a D1 fallback to the public card, public-media,
   gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
 - do not use remote `wrangler dev --test-scheduled` as a repair path for this worker; remote dev does not support the Queue/SQLite Durable Object combination here

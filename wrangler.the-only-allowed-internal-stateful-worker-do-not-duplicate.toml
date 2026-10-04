@@ -45,9 +45,16 @@ run_worker_first = [
   # entry the asset layer would answer it with the 404 page.
   "/blots/*",
   "/portraits/*",
-  "/admin*",
-  "/blocklist*",
-  "/artist-styles*",
+  # Exact paths only. A scanner's /admin/login, /admin/.env or /blocklist-x has no
+  # document and is answered by the asset layer's 404 page, not by a metered Worker
+  # request. /admin/iconoplasm is the old admin address; the Worker redirects it.
+  "/admin",
+  "/admin/iconoplasm",
+  "/admin/iconoplasm/",
+  "/blocklist",
+  "/blocklist/",
+  "/artist-styles",
+  "/artist-styles/",
   "/health"
 ]
 

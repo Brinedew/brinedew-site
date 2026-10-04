@@ -100,9 +100,8 @@ test("a gene with a stable object is one revalidated CDN fetch with its pool inl
   assert.deepEqual(requests, [`${BUNNY}/genes/v3/TP53.json`])
   assert.deepEqual(cacheModes, ["no-cache"])
   assert.equal(gene.portrait.medium_url, `${BUNNY}/portraits/v1/aa/${"a".repeat(64)}/medium.webp`)
-  const pool = await reader.candidateGallery(gene)
-  assert.equal(pool.count, 2)
-  assert.equal(pool.candidates[0].is_current, true)
+  assert.equal(gene.portrait_candidates.length, 2)
+  assert.equal(gene.portrait_candidates[0].is_current, true)
   assert.equal(requests.length, 1, "the inline pool needs no further fetch")
 })
 

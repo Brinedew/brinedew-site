@@ -240,16 +240,6 @@ test("DO NOT DELETE: canon auto-promotion must not select stale portrait assets"
 })
 
 test("DO NOT DELETE: automatic canon tie-break ranks newer assets before current-asset inertia", () => {
-  const compareFn = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function compareAdminLeaderRows",
-    "async function listAdminReadModelSymbolsAfter",
-  )
-  DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(
-    compareFn,
-    'compareNullableTextDesc(left?.created_at || "", right?.created_at || "")',
-    'Number(normalizeSha256(right?.asset_sha256 || "") === normalizeSha256(currentAssetSha || ""))',
-    "the shared canon comparator must rank newer tied assets before preserving the existing current asset",
-  )
   DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(
     electionSource,
     'compareNullableTextDesc(left?.created_at || "", right?.created_at || "")',

@@ -45,8 +45,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=830ba55ffe7168b2"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=ec90b0e844aa4ac5"
+} from "./diagram-studio.js?v=d572b8cf5ac52831"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=1248540b8dc10d31"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,

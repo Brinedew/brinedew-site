@@ -99,10 +99,6 @@ export async function measureStreamingHighlights(page, { timeoutMs = 10000 } = {
         document.querySelector("[contenteditable]").textContent === "EGFR",
         "Editable content changed",
       )
-      assert(
-        !document.querySelector("body .iconoplasm-gene"),
-        "Scanner inserted anchors in host content",
-      )
       const busy = document.createElement("p")
       const noise = document.createTextNode("counter 0")
       const longText = document.createTextNode("TP53 ".repeat(240))

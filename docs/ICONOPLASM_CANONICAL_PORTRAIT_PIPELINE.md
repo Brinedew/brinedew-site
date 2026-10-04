@@ -82,13 +82,12 @@ rebuilds cards from D1 per request, because cold Cloudflare isolates multiply
 D1 reads globally:
 
 1. `readStableGeneObjects(...)` reads `genes/v3/<SYMBOL>.json` from Bunny Storage, one read per requested symbol.
-2. `/api/iconoplasm/cards/:symbol`, the mobile cards, site detail, public media and the blot route project that one object.
+2. `/api/iconoplasm/cards/:symbol`, the mobile cards, public media and the blot route project that one object.
 3. The public edge proxy stays state-free and adds no symbol-only Cache API entry in front of those endpoints.
 
-`/api/iconoplasm/site/genes/:symbol` combines live D1 detail and candidates
-with the portrait from the stable object, and marks candidates `is_current`
-from that same published SHA. So a D1 winner that is not yet published shows
-as an ordinary candidate, never as a second current portrait. The signed-in
+The gene page marks candidates `is_current` from the published SHA of the
+stable object it read. So a D1 winner that is not yet published shows as an
+ordinary candidate, never as a second current portrait. The signed-in
 account gallery (both its full and `image-only` views) loads the same stable
 objects; it never keeps a separate portrait snapshot (B-700).
 
@@ -96,9 +95,8 @@ The home page's IndexedDB card cache is write-through only: the page always
 asks `/api/iconoplasm/mobile-card-manifest` for the current snapshot label
 before painting cached cards, because browsers keep IndexedDB rows for weeks.
 
-`/gene/:symbol` embeds its first-paint card from
-`/api/iconoplasm/site/genes/:symbol`; its ETag covers the published card and
-the complete payload. Print-copy generation accepts only the portrait of the
+`/gene/:symbol` reads its card from the stable object on the CDN
+(`genes/v3/<SYMBOL>.json`). Print-copy generation accepts only the portrait of the
 published card: an `asset=` parameter is an assertion, so a malformed value
 fails with `400` and a valid SHA that differs from the published portrait fails
 with `409`. Print-copy enrollment, status, rendering and download never fall

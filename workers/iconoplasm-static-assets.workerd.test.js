@@ -49,6 +49,29 @@ async function makeAssetFixture() {
   return { temporaryRoot, outputRoot }
 }
 
+// The Worker's own pages. Exact paths only: nothing else under /admin, /blocklist or
+// /artist-styles has a handler, so a scanner's guess must not cost a Worker request.
+const WORKER_OWNED_PAGES = [
+  "/admin",
+  "/admin/iconoplasm",
+  "/admin/iconoplasm/",
+  "/blocklist",
+  "/blocklist/",
+  "/artist-styles",
+  "/artist-styles/",
+  "/health",
+]
+const SCANNER_GUESSES = [
+  "/admin/login",
+  "/admin/.env",
+  "/admin.php",
+  "/administrator",
+  "/blocklist-x",
+  "/blocklist/x",
+  "/artist-stylesx",
+  "/artist-styles/x",
+]
+
 test(
   "real workerd routes the mutable blot and first-party portrait fallback through the Worker",
   { timeout: 30_000 },
@@ -96,6 +119,20 @@ test(
       }
       const apiResponse = await runtime.dispatchFetch("https://iconoplasm.test/api/auth/me")
       assert.equal(apiResponse.status, 599, await apiResponse.text())
+      for (const pathname of WORKER_OWNED_PAGES)
+        assert.equal(
+          (
+            await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+          ).status,
+          599,
+          `${pathname} is a Worker page`,
+        )
+      for (const pathname of SCANNER_GUESSES) {
+        const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)
+        assert.equal(response.status, 404, `${pathname} is the asset layer's 404, not the Worker`)
+      }
       for (const method of ["GET", "HEAD"]) {
         const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp", {
           method,
@@ -259,6 +296,16 @@ test(
           (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
           599,
           pathname,
+        )
+      for (const pathname of WORKER_OWNED_PAGES)
+        assert.equal(
+          (
+            await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+              redirect: "manual",
+            })
+          ).status,
+          599,
+          `${pathname} is a Worker page`,
         )
       // The retained bytes hold the per-gene documents, so a containment deploy
       // serves a gene page from the asset layer at no Worker request.

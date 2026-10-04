@@ -3,7 +3,6 @@ export const ICONOPLASM_PUBLIC_API_VERSION = "v1"
 // the card-snapshots routes below serve the 0.5.8 compatibility window from that same object.
 export const ICONOPLASM_API_SCHEMA_VERSION = 4
 export const ICONOPLASM_PUBLIC_API_PREFIX = `/api/public/${ICONOPLASM_PUBLIC_API_VERSION}`
-export const ICONOPLASM_SITE_GENE_API_PREFIX = "/api/iconoplasm/site/genes"
 
 export function iconoplasmPublicApiPath(suffix = "") {
   const normalized = String(suffix || "")
@@ -384,16 +383,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "public_gene_blot_asset",
     gatewayHandler: "gene_blot_asset",
     rateLimit: null,
-  }),
-  contract({
-    id: "site_gene_detail",
-    match: prefix(`${ICONOPLASM_SITE_GENE_API_PREFIX}/`, "symbol"),
-    methods: GET,
-    auth: "trusted-browser-or-admin",
-    cache: "handler-defined",
-    budgetFamily: "site_gene_detail",
-    gatewayHandler: "site_gene_detail",
-    rateLimit: rateLimit("site_gene", 120),
   }),
   contract({
     id: "votes_me",

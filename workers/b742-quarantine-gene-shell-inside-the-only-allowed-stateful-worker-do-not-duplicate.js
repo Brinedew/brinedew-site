@@ -4,10 +4,7 @@ import baseRuntime, {
   IconoplasmSyncGovernor,
   applySecurityHeaders,
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
-import {
-  handleIconoplasmReaderRecoverySiteGeneDetail,
-  handlePublishedImageAssetRoute,
-} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { handlePublishedImageAssetRoute } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   enforceIconoplasmRateLimit,
   withIconoplasmRateLimitHeaders,
@@ -39,13 +36,12 @@ function readerRecoveryResponse(response) {
 async function serveReaderRecoveryRoute(request, env, ctx, url) {
   if (url.hostname !== ICONOPLASM_HOST || !readerRecoveryEnabled(env)) return null
   if (request.method !== "GET" && request.method !== "HEAD") return null
-  const geneDetail = /^\/api\/iconoplasm\/site\/genes\/[^/]+$/.test(url.pathname)
   const portraitMatch =
     /^\/portraits\/v1\/([a-f0-9]{2})\/([a-f0-9]{64})\/(?:full|medium|thumb)\.webp$/.exec(
       url.pathname,
     )
   const portrait = portraitMatch && portraitMatch[1] === portraitMatch[2].slice(0, 2)
-  if (!geneDetail && !portrait) return null
+  if (!portrait) return null
 
   const rateLimit = await enforceIconoplasmRateLimit(request, env)
   if (rateLimit.response) return readerRecoveryResponse(rateLimit.response)
@@ -53,24 +49,12 @@ async function serveReaderRecoveryRoute(request, env, ctx, url) {
   // Preserve IPD-001's first-party byte path when Bunny is unreachable in the
   // reader's network. The existing object adapter reads one immutable key;
   // it does not select canon, consult D1, or repair publication.
-  if (portrait) {
-    return readerRecoveryResponse(
-      withIconoplasmRateLimitHeaders(
-        await handlePublishedImageAssetRoute(request, env, ctx, url.pathname),
-        rateLimit.headers,
-      ),
-    )
-  }
-
-  if (geneDetail) {
-    return readerRecoveryResponse(
-      withIconoplasmRateLimitHeaders(
-        await handleIconoplasmReaderRecoverySiteGeneDetail(request, env, url.pathname),
-        rateLimit.headers,
-      ),
-    )
-  }
-  return null
+  return readerRecoveryResponse(
+    withIconoplasmRateLimitHeaders(
+      await handlePublishedImageAssetRoute(request, env, ctx, url.pathname),
+      rateLimit.headers,
+    ),
+  )
 }
 
 const runtime = {

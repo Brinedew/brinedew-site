@@ -248,25 +248,6 @@ export function createIconoplasmPublicationReader(options = {}) {
     return stableCatalogPromise
   }
 
-  // The stable gene object carries its complete candidate pool inline (B-898);
-  // a dossier that renders the gallery reads it from the record it already
-  // holds. A record without a pool is a broken publication and fails loudly,
-  // never "no candidates".
-  async function candidateGallery(record) {
-    const symbol = normalizedSymbol(record?.symbol)
-    if (!symbol) throw new Error("Invalid candidate gallery symbol")
-    if (!Array.isArray(record?.portrait_candidates))
-      throw new Error(`Published gene object has no candidate pool: ${symbol}`)
-    const selected = String(record?.portrait?.asset_sha256 || "").toLowerCase()
-    const candidates = selected
-      ? record.portrait_candidates.map((item) => ({
-          ...item,
-          is_current: String(item.asset_sha256 || "").toLowerCase() === selected,
-        }))
-      : record.portrait_candidates
-    return { candidates, count: candidates.length }
-  }
-
   // A brick needs the name and the portrait, which the catalog row carries;
   // the per-brick hydration fetches the full stable gene object afterwards.
   // One catalog fetch per page.
@@ -425,7 +406,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     return { card_snapshot_version: stable.version, publication_source: "stable_v3" }
   }
 
-  return { gene, genes, candidateGallery, search, gallery, geneMetrics, metadata }
+  return { gene, genes, search, gallery, geneMetrics, metadata }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
