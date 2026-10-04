@@ -19,7 +19,13 @@ permissions:
   actions: read
 
 jobs:
+  firefox-pdf-e2e:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/firefox-pdf-e2e.yml
+
   prepare:
+    needs: firefox-pdf-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:

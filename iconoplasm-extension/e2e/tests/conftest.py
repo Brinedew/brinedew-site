@@ -12,11 +12,15 @@ from selenium.webdriver.common.selenium_manager import SeleniumManager
 
 from pdf_conformance_server import PdfConformanceServer
 
+DEFAULT_PAPER = Path(__file__).resolve().parent / "PLOS_BRCA1_BRCA2_TP53.pdf"
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption("--firefox-binary", required=True)
+    # Optional: without it Selenium Manager locates (or downloads) Firefox.
+    parser.addoption("--firefox-binary", default=None)
     parser.addoption("--xpi", required=True)
-    parser.addoption("--paper", required=True)
+    # Carraro et al. 2013, PLOS ONE, CC BY 4.0 (see e2e/README.md).
+    parser.addoption("--paper", default=str(DEFAULT_PAPER))
     parser.addoption("--artifacts", required=True)
 
 
@@ -39,23 +43,20 @@ def pdf_server(request: pytest.FixtureRequest, artifacts: Path):
 
 @pytest.fixture(scope="session")
 def firefox(request: pytest.FixtureRequest, artifacts: Path):
-    binary = Path(request.config.getoption("--firefox-binary")).resolve()
+    binary_option = request.config.getoption("--firefox-binary")
+    binary = Path(binary_option).resolve() if binary_option else None
     xpi = Path(request.config.getoption("--xpi")).resolve()
     options = Options()
-    options.binary_location = str(binary)
+    if binary:
+        options.binary_location = str(binary)
     options.set_preference("browser.download.useDownloadDir", True)
     options.set_preference("browser.download.folderList", 2)
     options.set_preference("browser.download.dir", str(artifacts / "downloads"))
     options.set_preference("browser.download.alwaysOpenPanel", False)
-    driver_path = SeleniumManager().binary_paths(
-        [
-            "--browser",
-            "firefox",
-            "--browser-path",
-            str(binary),
-            "--skip-driver-in-path",
-        ]
-    )["driver_path"]
+    manager_args = ["--browser", "firefox", "--skip-driver-in-path"]
+    if binary:
+        manager_args += ["--browser-path", str(binary)]
+    driver_path = SeleniumManager().binary_paths(manager_args)["driver_path"]
     service = Service(
         executable_path=driver_path,
         log_output=str(artifacts / "geckodriver.log"),

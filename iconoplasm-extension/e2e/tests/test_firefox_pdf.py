@@ -383,3 +383,76 @@ def test_attachment_and_partial_range_remain_native(firefox, pdf_server) -> None
         "attachmentRequests": pdf_server.count("/pdf/attachment"),
     }
     assert summary["rangePartialRequests"] == 1
+
+
+# Failure mode: with PDF highlighting Off the add-on still hijacks a local file
+# and Firefox's built-in viewer never gets to render it.
+def test_local_pdf_with_highlighting_off_stays_in_native_viewer(
+    firefox, request
+) -> None:
+    driver, runtime_uuid = firefox
+    paper = Path(request.config.getoption("--paper")).resolve()
+    driver.get("about:blank")
+    set_pdf_highlighting(driver, runtime_uuid, False)
+    driver.get(paper.as_uri())
+    wait(driver, native_pdf_page_is_rendered, timeout=60)
+    assert not reader_is_mounted(driver)
+    assert driver.current_url.startswith("file:")
+    assert "geckoLocalFile=" not in driver.current_url
+
+
+# Failure mode: a file: navigation gets a response filter and is rewritten into
+# the HTML redirect shell. The background exposes no filter-count observable, so
+# this asserts the closest one: the redirect shell (only the filter writes it,
+# marked data-iconoplasm-gecko-pdf-source) never appears, and the tab reaches
+# the private reader through the tabs.update path (geckoLocalFile= URL).
+def test_local_pdf_navigation_gets_no_response_filter(firefox, request) -> None:
+    driver, runtime_uuid = firefox
+    paper = Path(request.config.getoption("--paper")).resolve()
+    driver.get("about:blank")
+    set_pdf_highlighting(driver, runtime_uuid, True)
+    driver.get(paper.as_uri())
+    wait_for_reader(driver, runtime_uuid)
+    assert "geckoLocalFile=" in driver.current_url
+    shell_marker = driver.execute_script(
+        "return document.documentElement.getAttribute('data-iconoplasm-gecko-pdf-source')"
+    )
+    assert shell_marker is None
+
+
+# Failure mode: clicking inside the hover card (which moves focus into its
+# iframe) dismisses the card before the reader can use it.
+def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> None:
+    driver, runtime_uuid = firefox
+    driver.get(f"{pdf_server.origin}/form/post.html")
+    set_pdf_highlighting(driver, runtime_uuid, True)
+    driver.get(f"{pdf_server.origin}/pdf/get.pdf")
+    wait_for_reader(driver, runtime_uuid)
+    anchor = wait(
+        driver,
+        lambda current: current.find_element(
+            By.CSS_SELECTOR, ".iconoplasm-pdf-hit-anchor"
+        ),
+        timeout=60,
+    )
+    ActionChains(driver).move_to_element(anchor).perform()
+    tooltip_selector = ".iconoplasm-tooltip.iconoplasm-tooltip-visible"
+    wait(driver, lambda current: current.find_element(By.CSS_SELECTOR, tooltip_selector))
+    frame = wait(
+        driver,
+        lambda current: current.find_element(
+            By.CSS_SELECTOR, ".iconoplasm-tooltip iframe"
+        ),
+    )
+    driver.switch_to.frame(frame)
+    try:
+        driver.find_element(By.TAG_NAME, "body").click()
+    finally:
+        driver.switch_to.default_content()
+    # Give a dismiss-on-blur handler time to fire before asserting.
+    driver.execute_async_script(
+        "const done = arguments[arguments.length - 1]; setTimeout(done, 1500);"
+    )
+    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
+        "the card closed when its iframe took focus"
+    )
