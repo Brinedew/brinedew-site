@@ -15,6 +15,7 @@ import {
   commentMirrorPostPattern,
   commentMirrorText,
   commentMirrorWithAuthor,
+  commentMirrorWithText,
 } from "../../lib/iconoplasm-comment-discord-mirror.js"
 
 const DISCORD_API = "https://discord.com/api/v10"
@@ -113,8 +114,66 @@ async function discordCall(config, budget, method, path, body) {
  * `budget.fetches` is charged for every Discord call; the caller leaves two for each comment.
  */
 export async function anonymiseCommentPost(config, budget, comment, { label, remove }) {
+  const found = await findCommentPosts(config, budget, comment)
+  if (!found) return "not_found"
+  const { symbol, candidates, exact, messagePath } = found
+  // The post that quotes this comment is the one to delete or rewrite. Without an exact match (an
+  // edit on the site after posting, B-1001) the nearest post by the same person on the same gene is
+  // still anonymised, because the person's name must leave the channel either way, but it is never
+  // deleted: it may be the post of a different comment that stays (a comment from before the mirror
+  // has no post of its own).
+  const post = exact || candidates[0]
+  if (!post) return "not_found"
+  if (remove && exact) {
+    await discordCall(config, budget, "DELETE", messagePath(post))
+    return "deleted"
+  }
+  const content = commentMirrorWithAuthor(post.content, {
+    symbol,
+    username: comment.username,
+    author: commentMirrorAuthor(label),
+  })
+  await discordCall(config, budget, "PATCH", messagePath(post), {
+    content,
+    allowed_mentions: { parse: [] },
+  })
+  return "edited"
+}
+
+/**
+ * B-1001: an author's own edit or delete on the site reaches the comment's Discord post, so the
+ * public copy never says what the site no longer says. `comment` is the row as it was before the
+ * change (its old body finds the post). Only the post that quotes it exactly is touched; anything
+ * else is left alone, because it may be another comment's post. Returns "edited", "deleted" or
+ * "not_found". Best-effort: the caller runs it after the response and logs a failure.
+ */
+export async function followCommentChangeOnDiscord(config, comment, { newBody = null, remove }) {
+  const budget = { fetches: 3 }
+  const found = await findCommentPosts(config, budget, comment)
+  if (!found?.exact) return "not_found"
+  const { symbol, exact, messagePath } = found
+  if (remove) {
+    await discordCall(config, budget, "DELETE", messagePath(exact))
+    return "deleted"
+  }
+  const content = commentMirrorWithText(exact.content, {
+    symbol,
+    username: comment.username,
+    text: commentMirrorText(newBody),
+  })
+  if (!content) return "not_found"
+  await discordCall(config, budget, "PATCH", messagePath(exact), {
+    content,
+    allowed_mentions: { parse: [] },
+  })
+  return "edited"
+}
+
+// The bot's posts in the minutes after the comment row, that name this gene and this author, oldest
+// first; `exact` is the one that quotes the comment's text.
+async function findCommentPosts(config, budget, comment) {
   const createdMs = commentTimeMs(comment.created_at)
-  if (!Number.isFinite(createdMs)) return "not_found"
+  if (!Number.isFinite(createdMs)) return null
   const symbol = String(comment.gene_symbol || "")
   const pattern = commentMirrorPostPattern({ symbol, username: comment.username })
   const { data } = await discordCall(
@@ -134,28 +193,9 @@ export async function anonymiseCommentPost(config, budget, comment, { label, rem
         Date.parse(message.timestamp) <= createdMs + WINDOW_MS,
     )
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
-  // The post that quotes this comment is the one to delete or rewrite. Without an exact match (an
-  // edit on the site after posting, B-1001) the nearest post by the same person on the same gene is
-  // still anonymised, because the person's name must leave the channel either way, but it is never
-  // deleted: it may be the post of a different comment that stays (a comment from before the mirror
-  // has no post of its own).
   const text = commentMirrorText(comment.body)
-  const exact = candidates.find((message) => message.content.match(pattern)?.[3] === text)
-  const post = exact || candidates[0]
-  if (!post) return "not_found"
-  const messagePath = `/channels/${encodeURIComponent(config.channelId)}/messages/${encodeURIComponent(post.id)}`
-  if (remove && exact) {
-    await discordCall(config, budget, "DELETE", messagePath)
-    return "deleted"
-  }
-  const content = commentMirrorWithAuthor(post.content, {
-    symbol,
-    username: comment.username,
-    author: commentMirrorAuthor(label),
-  })
-  await discordCall(config, budget, "PATCH", messagePath, {
-    content,
-    allowed_mentions: { parse: [] },
-  })
-  return "edited"
+  const exact = candidates.find((message) => message.content.match(pattern)?.[3] === text) || null
+  const messagePath = (post) =>
+    `/channels/${encodeURIComponent(config.channelId)}/messages/${encodeURIComponent(post.id)}`
+  return { symbol, candidates, exact, messagePath }
 }
