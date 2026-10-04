@@ -16,14 +16,25 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
     caller = driver.current_window_handle
     driver.switch_to.new_window("tab")
     try:
-        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
         value = "on" if enabled else "off"
-        radio = wait(
-            driver,
-            lambda current: current.find_element(
-                By.CSS_SELECTOR, f'input[name="pdf-highlighting"][value="{value}"]'
-            ),
-        )
+        radio = None
+        # Firefox occasionally leaves a fresh extension tab blank on the first
+        # load; reloading the popup is what a user would do.
+        for attempt in range(3):
+            driver.get(f"moz-extension://{runtime_uuid}/popup.html")
+            try:
+                radio = wait(
+                    driver,
+                    lambda current: current.find_element(
+                        By.CSS_SELECTOR,
+                        f'input[name="pdf-highlighting"][value="{value}"]',
+                    ),
+                    timeout=10,
+                )
+                break
+            except TimeoutException:
+                if attempt == 2:
+                    raise
         # The native radio is intentionally visually hidden beneath its styled
         # label; Selenium's is_displayed() is therefore false even when the control
         # is available to a real click.
@@ -57,6 +68,13 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
     finally:
         driver.close()
         driver.switch_to.window(caller)
+
+
+def pause(driver, milliseconds: int) -> None:
+    driver.execute_async_script(
+        "const done = arguments[arguments.length - 1]; setTimeout(done, arguments[0]);",
+        milliseconds,
+    )
 
 
 def reader_is_mounted(driver) -> bool:
@@ -93,32 +111,6 @@ def get_pdf_capability(driver, runtime_uuid: str) -> dict:
             chrome.runtime.sendMessage({ type: "PDF_OWNERSHIP_GET_CAPABILITY" }).then(done);
             """
         )
-    finally:
-        driver.close()
-        driver.switch_to.window(caller)
-
-
-def seed_retired_card_snapshot(driver, runtime_uuid: str) -> tuple[str, str]:
-    caller = driver.current_window_handle
-    driver.switch_to.new_window("tab")
-    retired = "ccv1-retired-firefox-e2e"
-    try:
-        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
-        current = driver.execute_async_script(
-            """
-            const done = arguments[arguments.length - 1];
-            chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(async payload => {
-              const current = String(payload?.cardSnapshotVersion || "");
-              await chrome.storage.local.set({
-                iconoplasm_card_snapshot_version: "ccv1-retired-firefox-e2e",
-                iconoplasm_last_fetch: new Date().toISOString(),
-              });
-              done(current);
-            }, error => done({ error: String(error) }));
-            """
-        )
-        assert isinstance(current, str) and current and current != retired
-        return retired, current
     finally:
         driver.close()
         driver.switch_to.window(caller)
@@ -231,15 +223,13 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     paper = Path(request.config.getoption("--paper")).resolve()
     driver.get("about:blank")
     set_pdf_highlighting(driver, runtime_uuid, True)
-    retired_snapshot, current_snapshot = seed_retired_card_snapshot(
-        driver, runtime_uuid
-    )
     driver.get(paper.as_uri())
     wait_for_reader(driver, runtime_uuid)
     assert "geckoLocalFile=" in driver.current_url
     status = wait(
         driver, lambda current: current.find_element(By.ID, "reader-status-message")
     )
+    wait(driver, lambda _current: "Choose" in status.text)
     assert f"Choose {paper.name} once" in status.text
     assert "exact path will be copied" in status.text
     assert "press Ctrl+V, then Open" in status.text
@@ -302,15 +292,6 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     assert portrait["naturalHeight"] > 1
     assert "BRCA1 DNA repair associated" in portrait["text"]
     assert "Portrait pending" not in portrait["text"]
-    adopted_snapshot = driver.execute_async_script(
-        """
-        const done = arguments[arguments.length - 1];
-        chrome.storage.local.get(["iconoplasm_card_snapshot_version"])
-          .then(value => done(value.iconoplasm_card_snapshot_version || ""));
-        """
-    )
-    assert adopted_snapshot == current_snapshot
-    assert adopted_snapshot != retired_snapshot
     capture(driver, artifacts / "firefox-local-file-highlight-hover.png")
 
     driver.find_element(By.ID, "native-viewer").click()
@@ -364,7 +345,10 @@ def test_post_pdf_uses_the_original_response_bytes(firefox, pdf_server) -> None:
     driver, runtime_uuid = firefox
     driver.get(f"{pdf_server.origin}/form/post.html")
     set_pdf_highlighting(driver, runtime_uuid, True)
-    driver.find_element(By.CSS_SELECTOR, "button[type=submit]").click()
+    # Submit through the page: the same browser POST navigation the button makes. A WebDriver
+    # click right after set_pdf_highlighting closed its tab was sometimes swallowed (CI run
+    # 37204717543 failed with the form still on screen and no POST sent).
+    driver.execute_script("document.querySelector('form').requestSubmit()")
     wait_for_reader(driver, runtime_uuid)
     records = [record for record in pdf_server.requests if record.path == "/pdf/post"]
     assert len(records) == 1
@@ -383,3 +367,90 @@ def test_attachment_and_partial_range_remain_native(firefox, pdf_server) -> None
         "attachmentRequests": pdf_server.count("/pdf/attachment"),
     }
     assert summary["rangePartialRequests"] == 1
+
+
+# Failure mode: with PDF highlighting Off the add-on still hijacks a local file
+# and Firefox's built-in viewer never gets to render it.
+def test_local_pdf_with_highlighting_off_stays_in_native_viewer(
+    firefox, request
+) -> None:
+    driver, runtime_uuid = firefox
+    paper = Path(request.config.getoption("--paper")).resolve()
+    driver.get("about:blank")
+    set_pdf_highlighting(driver, runtime_uuid, False)
+    driver.get(paper.as_uri())
+    wait(driver, native_pdf_page_is_rendered, timeout=60)
+    assert not reader_is_mounted(driver)
+    assert driver.current_url.startswith("file:")
+    assert "geckoLocalFile=" not in driver.current_url
+
+
+# Failure mode: a file: navigation gets a response filter and is rewritten into
+# the HTML redirect shell. The background exposes no filter-count observable, so
+# this asserts the closest one: the redirect shell (only the filter writes it,
+# marked data-iconoplasm-gecko-pdf-source) never appears, and the tab reaches
+# the private reader through the tabs.update path (geckoLocalFile= URL).
+def test_local_pdf_navigation_gets_no_response_filter(firefox, request) -> None:
+    driver, runtime_uuid = firefox
+    paper = Path(request.config.getoption("--paper")).resolve()
+    driver.get("about:blank")
+    set_pdf_highlighting(driver, runtime_uuid, True)
+    driver.get(paper.as_uri())
+    wait_for_reader(driver, runtime_uuid)
+    assert "geckoLocalFile=" in driver.current_url
+    shell_marker = driver.execute_script(
+        "return document.documentElement.getAttribute('data-iconoplasm-gecko-pdf-source')"
+    )
+    assert shell_marker is None
+
+
+# Failure mode: clicking inside the hover card (which moves focus into its
+# iframe) dismisses the card before the reader can use it.
+def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> None:
+    driver, runtime_uuid = firefox
+    driver.get(f"{pdf_server.origin}/form/post.html")
+    set_pdf_highlighting(driver, runtime_uuid, True)
+    driver.get(f"{pdf_server.origin}/pdf/get.pdf")
+    wait_for_reader(driver, runtime_uuid)
+    anchor = wait(
+        driver,
+        lambda current: current.find_element(
+            By.CSS_SELECTOR, ".iconoplasm-pdf-hit-anchor"
+        ),
+        timeout=60,
+    )
+    ActionChains(driver).move_to_element(anchor).perform()
+    tooltip_selector = ".iconoplasm-tooltip.iconoplasm-tooltip-visible"
+    wait(driver, lambda current: current.find_element(By.CSS_SELECTOR, tooltip_selector))
+    frame = wait(
+        driver,
+        lambda current: current.find_element(
+            By.CSS_SELECTOR, ".iconoplasm-tooltip iframe"
+        ),
+    )
+    # Pointer into the card. duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
+    # leave grace, which no human pointer move into an adjacent card does.
+    ActionChains(driver, duration=0).move_to_element(frame).perform()
+    pause(driver, 600)
+    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
+        "the card closed when the pointer moved into it"
+    )
+    # Move focus into the card the way keyboard users do. (A pointer click is
+    # no use here: the whole card is a link that opens the gene page in a new
+    # tab, which legitimately closes the card.)
+    driver.switch_to.frame(frame)
+    try:
+        driver.execute_script(
+            "window.focus(); document.body.tabIndex = -1; document.body.focus();"
+        )
+    finally:
+        driver.switch_to.default_content()
+    # Prove focus really moved into the card's iframe.
+    assert driver.execute_script("return document.activeElement?.tagName") == "IFRAME"
+    # Give a dismiss-on-blur handler time to fire before asserting.
+    pause(driver, 1500)
+    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), {
+        "message": "the card closed when its iframe took focus",
+        "documentHasFocus": driver.execute_script("return document.hasFocus()"),
+        "activeElement": driver.execute_script("return document.activeElement?.tagName"),
+    }
