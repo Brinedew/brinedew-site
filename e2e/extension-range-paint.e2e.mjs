@@ -194,16 +194,23 @@ test("gene pills paint in every column of a multi-column list", async (t) => {
   assert.ok(secondRed > 100, `second-column pill missing (${secondRed} red pixels)`)
 })
 
-// B-986: Zanagrams pops each new word to 110% and back with a CSS animation.
-// The pill was measured mid-pop and never again, so it stayed oversized and off
-// to the side. Mirrors the game's markup: a centred word with a keyframe pop.
+// B-986: Zanagrams shows the word being spelled in `.forming`, a flex box as
+// wide as the board with the word centred in it, and pops that whole box to
+// 110% when a word is accepted (zanagrams-wordPop). The pill is painted into
+// the box's background at offsets measured from the box's left edge; measured
+// mid-pop, a centred word's offset is 10% too large (about 20 px here), and
+// nothing re-measured it when the pop ended. The fixture copies the game's
+// layout and holds the box at 110% long enough for the pill to be painted
+// mid-animation, which is the case a quick pop makes intermittent.
 const POP_FIXTURE = `<!doctype html><html><head><style>
-  body { font: 700 24px/1.4 sans-serif; margin: 0; background: #151515; color: #fff; }
-  .board { width: 400px; margin: 60px auto; text-align: center; }
-  @keyframes wordPop { 0% { transform: scale(1); } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
-  .word { display: inline-block; }
-  .word.pop { animation: wordPop 600ms ease-out; }
-</style></head><body><div class="board"><div class="word">GENE07</div></div></body></html>`
+  body { margin: 0; background: #151515; color: #fff; }
+  .subtitle { width: 400px; height: 50px; margin: 60px auto 0; display: flex;
+    align-items: center; justify-content: center; position: relative; }
+  .forming { position: relative; flex: 1 1 auto; display: flex; align-items: center;
+    justify-content: center; font: 700 27px/1 sans-serif; min-height: 34px; white-space: nowrap; }
+  @keyframes held { from { transform: scale(1.1); } to { transform: scale(1.1); } }
+  .forming.res-good { animation: held 1500ms linear 1; }
+</style></head><body><div class="subtitle"><div class="forming">GENE07</div></div></body></html>`
 
 test("a gene pill sits on its word after the word's pop animation ends", async (t) => {
   const browser = await launchChrome(t)
@@ -236,18 +243,28 @@ test("a gene pill sits on its word after the word's pop animation ends", async (
       registerGeneAnchor() {},
       placeholderColor: "rgb(255, 0, 0)",
     })
-    const word = document.querySelector(".word")
-    word.classList.add("pop")
-    // Measure at the peak of the pop, as a scan that lands mid-animation does.
-    await new Promise((resolve) => setTimeout(resolve, 240))
+    const word = document.querySelector(".forming")
+    word.classList.add("res-good")
+    await new Promise((resolve) => setTimeout(resolve, 100))
     highlights.update(word.firstChild, [{ symbol: "GENE07", index: 0, length: 6 }])
+    // The pill must be painted while the box is still scaled, or this test proves nothing.
+    const deadline = performance.now() + 1200
+    while (!word.style.backgroundImage.includes("svg") && performance.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    globalThis.paintedMidAnimation =
+      word.style.backgroundImage.includes("svg") && word.getAnimations().length > 0
   })
-  // The pop ends at 600 ms; leave time for the idle-scheduled repaint.
-  await page.waitForTimeout(1500)
+  assert.equal(
+    await page.evaluate(() => globalThis.paintedMidAnimation),
+    true,
+    "the pill was not painted while the word was scaled",
+  )
+  // The hold ends at 1500 ms; leave time for an idle-scheduled repaint.
+  await page.waitForTimeout(2000)
 
   const rect = await page.evaluate(() => {
     const range = document.createRange()
-    range.selectNodeContents(document.querySelector(".word").firstChild)
+    range.selectNodeContents(document.querySelector(".forming").firstChild)
     const box = range.getBoundingClientRect()
     return { x: box.left, y: box.top, width: box.width, height: box.height }
   })
@@ -255,9 +272,9 @@ test("a gene pill sits on its word after the word's pop animation ends", async (
   const png = await page.screenshot()
   writeFileSync(path.join(OUT, "extension-range-paint-pop.png"), png)
   const boundsBox = {
-    x: Math.max(0, Math.floor(rect.x - 40)),
+    x: Math.max(0, Math.floor(rect.x - 120)),
     y: Math.max(0, Math.floor(rect.y - 40)),
-    width: Math.ceil(rect.width + 80),
+    width: Math.ceil(rect.width + 240),
     height: Math.ceil(rect.height + 80),
   }
   const bounds = await redBounds(page, png, boundsBox)
@@ -273,7 +290,7 @@ test("a gene pill sits on its word after the word's pop animation ends", async (
   assert.ok(Math.abs(centerX - wordCenterX) <= 4, `pill centre x off by ${centerX - wordCenterX}`)
   // At rest the fill is the word plus 0.12 em each side; measured mid-pop it is ~10% wider.
   assert.ok(
-    pillWidth <= rect.width + 24 * 0.12 * 2 + 4,
+    pillWidth <= rect.width + 27 * 0.12 * 2 + 4,
     `pill ${pillWidth}px wide for a ${rect.width}px word`,
   )
 })
