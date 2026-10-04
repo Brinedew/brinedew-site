@@ -709,11 +709,13 @@ container.addEventListener("pointerleave", (event) => {
   transitionActiveAnchor(null, event.relatedTarget)
 })
 window.addEventListener("blur", () => {
-  // Focusing the card's child iframe also blurs this window, but the document
-  // still has focus. Firefox fires blur before focus lands in the child frame,
-  // so hasFocus() is briefly false; judge it after focus has settled, or the
-  // card closes under the reader's own click (found by the Firefox PDF E2E).
+  // Focusing the card's child iframe also blurs this window. Firefox fires blur
+  // before focus lands in the frame and keeps reporting hasFocus() false for
+  // the parent while the frame holds focus, so closing on hasFocus() alone
+  // swallowed the reader's own card interaction (found by the Firefox PDF E2E).
+  // Judge after focus settles, and never close while focus is inside the card.
   window.setTimeout(() => {
+    if (document.activeElement?.closest?.(".iconoplasm-tooltip")) return
     if (!document.hasFocus()) closeActiveCard()
   }, 50)
 })
