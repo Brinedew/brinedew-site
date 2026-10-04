@@ -4703,6 +4703,9 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-candidate-delete-notice {
   position: fixed;
   z-index: 1000;
+  /* A status line with nothing to click. When the consent prompt lifts it, it can sit over a
+     phone's vote buttons; a tap there must still reach the button underneath. */
+  pointer-events: none;
   inset-inline-end: max(1rem, env(safe-area-inset-right));
   inset-block-end: max(1rem, env(safe-area-inset-bottom));
   max-width: min(24rem, calc(100% - 2rem));
