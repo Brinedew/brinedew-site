@@ -1851,7 +1851,8 @@ img-comparison-slider.rendered [slot="second"] {
 /* Phones: narrower gutters, so the grid gains width and the footer holds
    "Select all N" beside "Queue 20 candidates" on one line down to 360 px. */
 @media (max-width: 599px) {
-  .icono-request-dialog .icono-dialog__body {
+  /* The signed-out request dialog is compact and has no footer bar, so it keeps its gap. */
+  .icono-request-dialog:not(.icono-dialog--compact) .icono-dialog__body {
     padding-bottom: 0;
   }
 
