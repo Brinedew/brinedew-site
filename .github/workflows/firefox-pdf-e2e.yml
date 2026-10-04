@@ -38,10 +38,10 @@ jobs:
         uses: browser-actions/setup-firefox@v1
         with:
           firefox-version: latest
-      - name: Probe the production endpoints the suite depends on
-        run: |
-          echo "iconoplasm host: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasm.brinedew.bio/ || echo unreachable)"
-          echo "portrait cdn: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasmportraits.b-cdn.net/ || echo unreachable)"
+      - name: Install a window manager
+        # Without one, Firefox's window is never "active", document.hasFocus()
+        # is false everywhere, and focus-dependent card behavior is untestable.
+        run: sudo apt-get install -y --no-install-recommends openbox xdotool
       - uses: astral-sh/setup-uv@v6
       - name: Run the Firefox PDF suite
         working-directory: iconoplasm-extension/e2e
@@ -53,10 +53,13 @@ jobs:
           mkdir -p "$artifacts"
           cp "$GITHUB_WORKSPACE/iconoplasm-extension/dist/validation/firefox/iconoplasm-firefox-validation.zip" "$artifacts/iconoplasm-firefox-under-test.xpi"
           uv sync --frozen
-          xvfb-run -a uv run pytest \
-            "--firefox-binary=$FIREFOX_BINARY" \
-            "--xpi=$artifacts/iconoplasm-firefox-under-test.xpi" \
-            "--artifacts=$artifacts"
+          export ARTIFACTS="$artifacts"
+          cat > "$RUNNER_TEMP/run-suite.sh" <<'SCRIPT'
+          openbox &
+          sleep 2
+          uv run pytest "--firefox-binary=$FIREFOX_BINARY" "--xpi=$ARTIFACTS/iconoplasm-firefox-under-test.xpi" "--artifacts=$ARTIFACTS"
+          SCRIPT
+          xvfb-run -a bash "$RUNNER_TEMP/run-suite.sh"
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v5
