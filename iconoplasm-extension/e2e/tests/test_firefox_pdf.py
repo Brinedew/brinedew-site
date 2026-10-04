@@ -406,15 +406,20 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
             By.CSS_SELECTOR, ".iconoplasm-tooltip iframe"
         ),
     )
+    # A real click on the card's iframe, from the parent frame, moves the
+    # pointer into the card and focuses the iframe's document.
+    ActionChains(driver).move_to_element(frame).pause(0.3).click().perform()
     driver.switch_to.frame(frame)
     try:
-        driver.find_element(By.TAG_NAME, "body").click()
+        # Prove the click really landed inside the card's own document.
+        assert driver.execute_script("return document.hasFocus()") is True
     finally:
         driver.switch_to.default_content()
     # Give a dismiss-on-blur handler time to fire before asserting.
     driver.execute_async_script(
         "const done = arguments[arguments.length - 1]; setTimeout(done, 1500);"
     )
-    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
-        "the card closed when its iframe took focus"
-    )
+    assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), {
+        "message": "the card closed when its iframe took focus",
+        "documentHasFocus": driver.execute_script("return document.hasFocus()"),
+    }
