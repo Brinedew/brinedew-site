@@ -2511,7 +2511,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sharedDisabled = false
     var guestStorageCopy =
       collectionState && !collectionState.authenticated
-        ? " · dossier visits stay in this browser until you sign in"
+        ? // A newcomer does not know a "dossier"; say how the collection grows and how to keep it.
+          " · open any gene to find it · sign in to keep what you find"
         : ""
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
@@ -4356,7 +4357,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       if (isMobileLabelReviewEnabled()) {
         wireMobileLabelCard(card)
-        setMobileLabelExpanded(card, false, { preserveTop: false })
+        setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
       } else {
         resetMobileLabelCardState(card)
       }
@@ -4826,6 +4827,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }, 2600)
   }
 
+  // A gallery card starts as a torn preview, so many fit a phone screen and can be swiped
+  // MISFIT/FIT. On a gene's own page the reader came for that one gene, so its card opens
+  // with the field notes (age, sex, mass, aesthetic) showing; the vote buttons stay.
+  function mobileLabelStartsExpanded(card) {
+    return !!card && card.classList.contains("icono-gene-lead-card")
+  }
+
   function wireMobileLabelCard(card) {
     if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label"))
       return
@@ -4837,7 +4845,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
     card.setAttribute("data-icono-mobile-label-wired", "true")
     syncMobileLabelDossierContent(card)
-    setMobileLabelExpanded(card, false, { preserveTop: false })
+    setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
     }, 180)
@@ -8144,6 +8152,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return { page: "studio" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
+    // People type iconoplasm.brinedew.bio/TP53 or /p53. A bare word with no dot (so never a
+    // file) is a gene question; the gene page already resolves names and says when none fits.
+    var bare = path.match(/^\/([A-Za-z0-9][A-Za-z0-9_-]{0,39})\/?$/)
+    if (bare) return { page: "gene", symbol: bare[1], bare: true }
     return { page: "404" }
   }
 
@@ -10694,6 +10706,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
     var route = getRoute()
+    if (route.bare) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        "/gene/" + encodeURIComponent(route.symbol) + window.location.search,
+      )
+    }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
     unmountDiagramStudio()
