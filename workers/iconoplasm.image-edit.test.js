@@ -1280,6 +1280,88 @@ test("a retired last-used model reads as the provider default and is never writt
   }
 })
 
+// B-970: a job route checks that the model can do the job it was asked for.
+// Krea offers edit-only models (bytedance/seededit) and generate-only ones
+// (qwen/2512). Failure modes:
+//   1. an edit job naming a generate-only model reaches the provider
+//   2. a generation job naming an edit-only model reaches the provider
+//   3. a job that names no model runs a stored model that cannot do the job
+const KREA_EDIT_ONLY = "bytedance/seededit"
+const KREA_GENERATE_ONLY = "qwen/2512"
+
+async function saveKrea(env, model) {
+  const saved = await workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+    method: "POST",
+    body: { provider_id: "krea", api_key: "test-key-krea", model },
+  })
+  assert.equal(saved.status, 200, JSON.stringify(saved.body))
+}
+
+test("a model that cannot do the requested job is refused before any provider request", async () => {
+  const originalFetch = globalThis.fetch
+  const db = new FakeDb()
+  const env = buildEnv(db)
+  const recorded = []
+  globalThis.fetch = recordingProviderFetch(env, recorded)
+  try {
+    await saveKrea(env)
+    const edit = await workerRequest(env, "/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      body: { ...EDIT_JOB_BODY, provider_id: "krea", model: KREA_GENERATE_ONLY },
+    })
+    assert.equal(edit.status, 400)
+    assert.match(edit.body.error, /cannot edit an image/)
+
+    const generation = await workerRequest(env, "/api/iconoplasm/candidate-generation/jobs", {
+      method: "POST",
+      body: { provider_id: "krea", symbol: "A1BG", model: KREA_EDIT_ONLY },
+    })
+    assert.equal(generation.status, 400)
+    assert.match(generation.body.error, /cannot generate an image/)
+
+    assert.deepEqual(
+      recorded.map((call) => call.url),
+      [],
+      "no request may leave for a provider",
+    )
+    assert.equal(db.jobs.size, 0, "no job row is created for a refused model")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("a job naming no model runs a capable model when the saved one cannot do the job", async () => {
+  for (const [saved, path, body, unwanted] of [
+    [
+      KREA_EDIT_ONLY,
+      "/api/iconoplasm/candidate-generation/jobs",
+      { provider_id: "krea", symbol: "A1BG", request_mode: "novel" },
+      "seededit",
+    ],
+    [
+      KREA_GENERATE_ONLY,
+      "/api/iconoplasm/image-edit/jobs",
+      { ...EDIT_JOB_BODY, provider_id: "krea" },
+      "qwen",
+    ],
+  ]) {
+    const originalFetch = globalThis.fetch
+    const env = buildEnv(new FakeDb())
+    const recorded = []
+    globalThis.fetch = recordingProviderFetch(env, recorded)
+    try {
+      await saveKrea(env, saved)
+      const job = await workerRequest(env, path, { method: "POST", body })
+      assert.equal(job.status, 200, JSON.stringify(job.body).slice(0, 600))
+      assert.equal(recorded.length, 1)
+      assert.ok(recorded[0].url.startsWith("https://api.krea.ai/generate/image/"))
+      assert.ok(!recorded[0].url.includes(unwanted), `${saved} must not run: ${recorded[0].url}`)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  }
+})
+
 // B-916: every model the registry offers is sent exactly what its provider's own
 // docs describe. The documented schemas and the exact bodies live in
 // __fixtures__/image-provider-doc-schemas.json (read from each provider's docs on
