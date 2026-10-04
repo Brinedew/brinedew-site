@@ -376,7 +376,9 @@ export async function republishGeneObjects({
       const index = launched
       launched += 1
       await runBatch(index)
-      log(`${receipt.published}/${targets.length} rewritten, ${receipt.failed.length} failed`)
+      log(
+        `${receipt.published}/${targets.length} rewritten, ${receipt.failed.length} failed, ${receipt.retries} retries in ${receipt.calls} calls`,
+      )
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker))
