@@ -1,3 +1,5 @@
+// Same limit as workers/lib/iconoplasm-manifestation-prose.js; the rules behind it are in
+// docs/CARETAKER_MANIFESTATION_AUTHORITY.md.
 export const MAX_PROSE_CODE_POINTS = 10000
 export const MAX_PROSE_BYTES = 16 * 1024
 

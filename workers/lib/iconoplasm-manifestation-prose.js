@@ -2,6 +2,9 @@ import { sha256Hex } from "./iconoplasm-sha256.js"
 
 const ENCODER = new TextEncoder()
 
+// The rules for manifestation prose (who owns it, where seeds came from, why this limit) are in
+// docs/CARETAKER_MANIFESTATION_AUTHORITY.md. The browser editor repeats this limit in
+// quartz/static/iconoplasm/caretaker-manifestations-model.js.
 export const ICONOPLASM_MANIFESTATION_PROSE_MAX_CODE_POINTS = 10000
 export const ICONOPLASM_MANIFESTATION_PROSE_MAX_BYTES = 16 * 1024
 
