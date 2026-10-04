@@ -211,6 +211,7 @@ def test_firefox_local_pdf_routes_to_private_reader_and_restores_hover(
     status = wait(
         driver, lambda current: current.find_element(By.ID, "reader-status-message")
     )
+    wait(driver, lambda _current: "Choose" in status.text)
     assert f"Choose {paper.name} once" in status.text
     assert "exact path will be copied" in status.text
     assert "press Ctrl+V, then Open" in status.text
@@ -408,7 +409,9 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     )
     # A real click on the card's iframe, from the parent frame, moves the
     # pointer into the card and focuses the iframe's document.
-    ActionChains(driver).move_to_element(frame).pause(0.3).click().perform()
+    # duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
+    # leave grace, which no human pointer move into an adjacent card does.
+    ActionChains(driver, duration=0).move_to_element(frame).click().perform()
     driver.switch_to.frame(frame)
     try:
         # Prove the click really landed inside the card's own document.
