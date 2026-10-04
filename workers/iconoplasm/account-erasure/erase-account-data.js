@@ -45,15 +45,32 @@ import {
   readBrinedewAccountDiscordSubjects,
   requestBrinedewAccountErasure,
 } from "../../lib/brinedew-account-identity.js"
+import {
+  canWriteExternalPortraitStorage,
+  deletePortraitStorageObject,
+} from "../../lib/iconoplasm-portrait-storage.js"
+import {
+  DiscordMirrorError,
+  anonymiseCommentPost,
+  discordMirrorConfig,
+} from "./discord-comment-mirror.js"
 import { ERASURE_DATABASES, ERASURE_SLICE_ROWS, ERASURE_STEPS } from "./erasure-steps.js"
+import { deletableJobImageKeys, jobImagesSliceSql } from "./job-result-images.js"
 
 export const ERASURE_DEFAULT_ROW_WRITES = 5000
 export const ERASURE_MIN_ROW_WRITES = 100
 export const ERASURE_MAX_D1_CALLS = 20
 export const ERASURE_MAX_KV_OPERATIONS = 100
+// External fetch() calls (the Bunny object deletes and the Discord calls) one request may make. The
+// free plan allows 50 per invocation; the rest is headroom.
+export const ERASURE_MAX_EXTERNAL_FETCHES = 40
 // A slice of comments names at most this many genes, and each gene's cached comment list is one
 // KV delete.
 const COMMENT_SLICE_ROWS = 25
+const JOB_IMAGE_SLICE_ROWS = 12
+// A job writes at most three renditions, one delete each.
+const OBJECTS_PER_JOB = 3
+const CUSTOM_ACTIONS = new Set(["comments", "job_images"])
 
 function rowsFrom(result) {
   return Array.isArray(result?.results) ? result.results : []
@@ -215,18 +232,22 @@ async function runScanPasses(env, database, steps, context, budget, changedBy) {
   }
 }
 
-// Public comments stay under the anonymous label. The gene's cached comment list (KV, 24 hours)
-// still carries the old name and avatar, so each slice deletes the lists of the genes it touches
-// before it rewrites the rows: a failure in between leaves the rows to the next run, and a
-// reader that arrives in between reads D1 (a GET never fills the cache).
-async function runCommentsStep(env, step, context, budget, services, changedBy) {
+// Public comments stay under the anonymous label; a comment its author had already removed goes.
+// Each slice does four things, in this order, so a failure at any point leaves the rows to the next
+// run: (1) the gene's cached comment list (KV, 24 hours), which carries the old name and avatar, is
+// dropped (a reader that arrives in between reads D1: a GET never fills the cache); (2) the
+// comment's copy in the public Discord channel is rewritten to the label, or deleted for a removed
+// comment (B-992, discord-comment-mirror.js); (3) the rows are rewritten or deleted. The rows are
+// the progress: a comment whose Discord post is done but whose row is not is found again, finds
+// no post that names the person, and moves on.
+async function runCommentsStep(env, step, context, budget, services, changedBy, discord) {
   const db = databaseFor(env, step.database)
   for (;;) {
     const limit = Math.min(COMMENT_SLICE_ROWS, Math.floor(budget.writes / step.weight))
     if (limit < 1 || budget.calls < 2) return false
     const found = await db
       .prepare(
-        `SELECT id, gene_symbol FROM icono_gene_comments
+        `SELECT id, gene_symbol, username, body, status, created_at FROM icono_gene_comments
          WHERE user_id = ? ORDER BY id LIMIT ${limit}`,
       )
       .bind(context.userId)
@@ -240,22 +261,111 @@ async function runCommentsStep(env, step, context, budget, services, changedBy) 
       for (const symbol of symbols) await env.KV.delete(services.geneCommentsCacheKey(symbol))
       budget.kv -= symbols.length
     }
+    // Each comment needs up to two Discord calls (find the post, then edit or delete it). A comment
+    // the budget cannot reach waits for the next request, as does everything after a rate limit.
+    const handled = []
+    let interrupted = false
+    for (const row of rows) {
+      if (discord.config) {
+        if (budget.fetches < 2) {
+          interrupted = true
+          break
+        }
+        try {
+          const outcome = await anonymiseCommentPost(discord.config, budget, row, {
+            label: context.label,
+            remove: row.status === "deleted",
+          })
+          const counter = `discord_posts_${outcome}`
+          changedBy.set(counter, (changedBy.get(counter) || 0) + 1)
+        } catch (error) {
+          if (error instanceof DiscordMirrorError && error.code === "DISCORD_RATE_LIMITED") {
+            budget.retryAfterSeconds = Math.max(budget.retryAfterSeconds, error.retryAfterSeconds)
+            interrupted = true
+            break
+          }
+          throw error
+        }
+      }
+      handled.push(row)
+    }
+    if (handled.length) {
+      const removed = handled.filter((row) => row.status === "deleted").map((row) => row.id)
+      const kept = handled.filter((row) => row.status !== "deleted").map((row) => row.id)
+      const results = await db.batch(
+        [
+          db
+            .prepare(
+              `UPDATE icono_gene_comments SET user_id = ?, username = ?, avatar_url = ''
+               WHERE id IN (SELECT value FROM json_each(?)) AND status <> 'deleted'`,
+            )
+            .bind(context.accountId, context.label, JSON.stringify(kept)),
+          db
+            .prepare(
+              `DELETE FROM icono_gene_comments
+               WHERE id IN (SELECT value FROM json_each(?)) AND status = 'deleted'`,
+            )
+            .bind(JSON.stringify(removed)),
+        ],
+        { maxRowsWritten: handled.length * step.weight },
+      )
+      budget.calls -= 1
+      for (const result of results) {
+        const count = Number(result?.meta?.changes ?? 0)
+        spendRowsWritten(budget, result?.meta, count, step.weight)
+        changedBy.set(step.id, (changedBy.get(step.id) || 0) + count)
+      }
+    }
+    if (interrupted) return false
+    if (rows.length < limit) return true
+  }
+}
+
+// B-993: an unpublished job's result images are deleted from the portrait storage, then the job's
+// row (job-result-images.js says which keys are safe to delete and why). Runs before every other
+// step of the Iconoplasm database, so the generic steps never see an unpublished job that wrote an
+// image. A delete that fails throws and leaves the row, so the next request repeats it.
+async function runJobImagesStep(env, step, context, budget, changedBy) {
+  const db = databaseFor(env, step.database)
+  const sql = jobImagesSliceSql(step.table, step.geneColumn)
+  for (;;) {
+    const limit = Math.min(
+      JOB_IMAGE_SLICE_ROWS,
+      Math.floor(budget.fetches / OBJECTS_PER_JOB),
+      Math.floor(budget.writes / step.weight),
+    )
+    if (limit < 1 || budget.calls < 2) return false
+    const found = await db.prepare(sql).bind(context.userId, limit).all()
+    budget.calls -= 1
+    const jobs = rowsFrom(found)
+    if (!jobs.length) return true
+    const keys = new Set()
+    for (const job of jobs) {
+      if (!Number(job.published)) for (const key of deletableJobImageKeys(job)) keys.add(key)
+    }
+    if (keys.size && !env?.ICONOPLASM_PORTRAITS?.delete && !canWriteExternalPortraitStorage(env)) {
+      throw new Error("Portrait storage is not configured for deletes; cannot erase job images")
+    }
+    for (const key of keys) {
+      await deletePortraitStorageObject(env, key, { maxAttempts: 1 })
+      budget.fetches -= 1
+    }
+    if (keys.size) {
+      changedBy.set("job_image_objects", (changedBy.get("job_image_objects") || 0) + keys.size)
+    }
     const [result] = await db.batch(
       [
         db
-          .prepare(
-            `UPDATE icono_gene_comments SET user_id = ?, username = ?, avatar_url = ''
-             WHERE id IN (SELECT value FROM json_each(?))`,
-          )
-          .bind(context.accountId, context.label, JSON.stringify(rows.map((row) => row.id))),
+          .prepare(`DELETE FROM ${step.table} WHERE rowid IN (SELECT value FROM json_each(?))`)
+          .bind(JSON.stringify(jobs.map((job) => job.k))),
       ],
-      { maxRowsWritten: rows.length * step.weight },
+      { maxRowsWritten: jobs.length * step.weight },
     )
     budget.calls -= 1
     const count = Number(result?.meta?.changes ?? 0)
     spendRowsWritten(budget, result?.meta, count, step.weight)
     changedBy.set(step.id, (changedBy.get(step.id) || 0) + count)
-    if (rows.length < limit) return true
+    if (jobs.length < limit) return true
   }
 }
 
@@ -324,7 +434,7 @@ async function eraseKvKeys(env, userId, services, budget) {
  */
 export async function eraseAccountData(
   env,
-  { accountId, discordIds, maxRowsWritten = ERASURE_DEFAULT_ROW_WRITES },
+  { accountId, discordIds, maxRowsWritten = ERASURE_DEFAULT_ROW_WRITES, skipDiscordMirror = false },
   services = {},
 ) {
   const label = await brinedewFormerAuthorLabel(accountId)
@@ -338,7 +448,20 @@ export async function eraseAccountData(
     ),
     calls: ERASURE_MAX_D1_CALLS,
     kv: ERASURE_MAX_KV_OPERATIONS,
+    fetches: ERASURE_MAX_EXTERNAL_FETCHES,
+    retryAfterSeconds: 0,
     rowsWritten: 0,
+  }
+  // The comments' copies in the public Discord channel (B-992). A deployment without the bot never
+  // mirrored a comment. `skip_discord_mirror` is the operator's way past a Discord that cannot be
+  // reached: the response says so, and the posts are then fixed by hand.
+  const discord = {
+    config: skipDiscordMirror ? null : discordMirrorConfig(env),
+    state: skipDiscordMirror
+      ? "skipped"
+      : discordMirrorConfig(env)
+        ? "processed"
+        : "not_configured",
   }
   const changedBy = new Map()
   let complete = true
@@ -356,21 +479,32 @@ export async function eraseAccountData(
     const pick = (database, scan) =>
       steps.filter(
         (step) =>
-          step.database === database && Boolean(step.scan) === scan && step.action !== "comments",
+          step.database === database &&
+          Boolean(step.scan) === scan &&
+          !CUSTOM_ACTIONS.has(step.action),
       )
     const comments = steps.find((step) => step.action === "comments")
     // The Iconoplasm database first (the accounts database is about to delete the emulsion ids it
     // needs), indexed steps before unindexed ones, the accounts database next, the cold copy last.
-    let finished = await runIndexedPasses(
-      env,
-      "iconoplasm",
-      pick("iconoplasm", false),
-      context,
-      budget,
-      changedBy,
-    )
+    // The unpublished jobs' stored images go before everything else of the Iconoplasm database
+    // (B-993): the generic steps delete the rest of those jobs' rows, and must never see a job
+    // whose image is still in the storage.
+    let finished = true
+    for (const step of steps.filter((candidate) => candidate.action === "job_images")) {
+      if (finished) finished = await runJobImagesStep(env, step, context, budget, changedBy)
+    }
+    if (finished) {
+      finished = await runIndexedPasses(
+        env,
+        "iconoplasm",
+        pick("iconoplasm", false),
+        context,
+        budget,
+        changedBy,
+      )
+    }
     if (finished && comments) {
-      finished = await runCommentsStep(env, comments, context, budget, services, changedBy)
+      finished = await runCommentsStep(env, comments, context, budget, services, changedBy, discord)
     }
     if (finished) {
       finished = await runScanPasses(
@@ -405,6 +539,8 @@ export async function eraseAccountData(
     complete,
     rows_written: budget.rowsWritten,
     changed: Object.fromEntries([...changedBy].filter(([, count]) => count > 0)),
+    discord_mirror: discord.state,
+    ...(budget.retryAfterSeconds ? { retry_after_seconds: budget.retryAfterSeconds } : {}),
   }
 }
 
@@ -422,6 +558,7 @@ export async function eraseBrinedewAccountOnRequest(
     actorAccountId = null,
     now = Date.now(),
     maxRowsWritten,
+    skipDiscordMirror = false,
   } = {},
   services = {},
 ) {
@@ -440,7 +577,11 @@ export async function eraseBrinedewAccountOnRequest(
   }
   await requestBrinedewAccountErasure(db, lifecycle)
   const discordIds = await readBrinedewAccountDiscordSubjects(db, accountId)
-  const erasure = await eraseAccountData(env, { accountId, discordIds, maxRowsWritten }, services)
+  const erasure = await eraseAccountData(
+    env,
+    { accountId, discordIds, maxRowsWritten, skipDiscordMirror },
+    services,
+  )
   if (!erasure.complete) {
     return { account: await readBrinedewAccount(db, accountId), erasure }
   }
