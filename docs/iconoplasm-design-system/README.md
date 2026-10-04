@@ -12,6 +12,9 @@ On 2026-10-04 (B-996, the caretaker sidebar) an agent made two mockups the owner
 6. Make textures and ornaments at print fidelity, never crude flat shapes such as SVG stars or checker rectangles. In 2026 professional packs are mostly free, so check the licence, not the price. Opus 5.5 practitioners also generate the material in code: grain, off-registration, halftone, shader paper.
 7. Write a brief, not a wish: a mood with exclusions, named type families, one memorable thing, explicit bans and named libraries. Then make several variants and choose between them; never show a single attempt.
 8. Mock it up in Paper. Before showing it, answer three questions: Did the UX change? Does it fit the theme? Does it look like a professional asset pack, or homemade from basic vector shapes?
+9. Never conclude the current design is "roughly right". The owner opened the issue because it isn't; find what's wrong, functionally and emotionally, before drawing.
+10. Compare every mockup with the live version and every variant already rejected. A restyled copy of the same layout isn't a new design.
+11. Paper's free plan allows 100 MCP calls a week. Don't spend them on capability tests or throwaway variants, and test any assumption about a tool before announcing a switch away from it.
 
 
 ### The design landscape moves faster than agent training
