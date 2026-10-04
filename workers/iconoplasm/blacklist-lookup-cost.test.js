@@ -78,8 +78,11 @@ test(
           .all()
       ).results
       assert.ok(
+        // Newer SQLite (wrangler 4.147) answers from the index alone: "USING COVERING INDEX".
         plan.some((row) =>
-          row.detail.includes("SEARCH bl USING INDEX idx_icono_artist_blacklist_normalized_tag"),
+          /SEARCH bl USING (COVERING )?INDEX idx_icono_artist_blacklist_normalized_tag/.test(
+            row.detail,
+          ),
         ),
         JSON.stringify(plan),
       )
