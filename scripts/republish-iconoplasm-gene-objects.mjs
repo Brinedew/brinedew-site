@@ -8,23 +8,52 @@
 // bytes until something rewrites them, and nothing does that for an unchanged
 // gene: the Actions catalog publisher only republishes the genes whose winner or
 // candidates changed. This script drives the existing admin republish route
-// (`admin_publication.republish`, eight genes a call) over the whole catalog. It
-// is a one-shot, not a cron: delete it once `--verify` reports every object
-// clean.
+// (`admin_publication.republish`, up to eight genes a call, four by default) over
+// the catalog. It is a one-shot, not a cron: delete it once `--verify` reports
+// every object clean.
+//
+// WHAT THE FIRST NIGHT (2026-10-03) TAUGHT. About one call in five (3,521 of
+// 16,979 at eight genes a call) came back `HTTP 503` with no JSON body. The
+// stateful Worker's own analytics count the same calls as `exceededResources`
+// with a median CPU of exactly 10 ms, and the Worker had none in the eight hours
+// before: it is the free plan's CPU cap killing a call that builds eight stable
+// objects. The route is idempotent, and the old script retried a call once, which
+// hid a 20% failure rate as a 4% one. So: four genes a call by default
+// (`--batch`); a call that gets a 5xx or a network error is retried twice with
+// backoff, then its genes are sent one at a time, and only a gene that still
+// fails counts as failed. The old "Resume with --from X" named the earliest
+// FAILED gene while parallel batches had gone far beyond it, and a shell loop
+// that followed it redid hundreds of genes a round. Now the hint names the first
+// gene of the earliest batch that did not finish; every batch before it reached a
+// final outcome, and the genes that failed are listed apart.
+//
+// TONIGHT, AFTER 20:00 UTC (each execute needs ICONOPLASM_ADMIN_TOKEN):
+//   1. node scripts/republish-iconoplasm-gene-objects.mjs --verify
+//        Reads every public object from the CDN (no Worker request, any hour) and
+//        writes a receipt listing every gene still carrying Tags.
+//   2. node scripts/republish-iconoplasm-gene-objects.mjs --execute --from-verify <that receipt>
+//        Republishes exactly those genes.
+//   3. Repeat 1 and 2 until `--verify` says clean. A gene that is listed again
+//        after two rounds is a real problem, not a retry: read `failed` in the
+//        execute receipt. Then delete this script.
 //
 //   node scripts/republish-iconoplasm-gene-objects.mjs                      # dry run: the plan and its cost
+//   node scripts/republish-iconoplasm-gene-objects.mjs --verify             # read every public object
 //   node scripts/republish-iconoplasm-gene-objects.mjs --execute            # rewrite every gene
+//   node scripts/republish-iconoplasm-gene-objects.mjs --execute --from-verify artifacts/iconoplasm-republish/<receipt>.json
 //   node scripts/republish-iconoplasm-gene-objects.mjs --execute --from X   # resume at symbol X
 //   node scripts/republish-iconoplasm-gene-objects.mjs --execute --only A,B # re-run named genes
-//   node scripts/republish-iconoplasm-gene-objects.mjs --verify             # read every public object
+//   node scripts/republish-iconoplasm-gene-objects.mjs --execute --batch 2  # genes a call, 1 to 8 (default 4)
 //
 // Dry run is the default and sends nothing to the Worker. `--execute` needs
 // ICONOPLASM_ADMIN_TOKEN, refuses before 20:00 UTC unless an incident reason is
 // given (AGENTS.md: spend the daily allowance at the end of the UTC day), stops
 // after too many failed genes, prints where to resume, and writes a receipt to
 // artifacts/iconoplasm-republish/. Every run is idempotent: the route rewrites a
-// gene from D1 and the authoring store as they stand.
-import { mkdirSync, writeFileSync } from "node:fs"
+// gene from D1 and the authoring store as they stand. `--verify` only reads the
+// public CDN, so it runs at any hour. `--only` and `--from-verify` take `--from`
+// too, to resume inside the same list.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -37,6 +66,22 @@ export const CDN = "https://iconoplasmportraits.b-cdn.net"
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const TAG_KEYS = new Set(["accepted_tags_derivative", "tags_text", "fields_json"])
 const MAX_CONCURRENCY = 6
+// Genes a call carries. The route takes up to REPUBLISH_MAX_SYMBOLS (a limit, not
+// a target); the CPU cap killed about one call in five at eight.
+export const DEFAULT_BATCH_SYMBOLS = 4
+// Pauses before the first and second retry of a call that got a 5xx or a network
+// error.
+export const RETRY_DELAYS_MS = Object.freeze([2000, 5000])
+// 3,521 of 16,979 calls answered 503 on 2026-10-03 at eight genes a call; this is
+// the allowance the dry run adds for retries. Unmeasured at four a call.
+const RETRY_ALLOWANCE = 1.3
+// A public read-only verify: no Worker request, so it can go wider than a sweep.
+const VERIFY_CONCURRENCY = 16
+// The pull zone caches a rewritten object for 60 s on top of replication lag
+// (bunny/the-only-iconoplasm-pull-zone-policy.json), so a second look 65 s later
+// sees what the first one could not.
+const VERIFY_RETRIES = 1
+const VERIFY_RETRY_DELAY_MS = 65_000
 
 // Measured on production 2026-10-03 by running the publisher's own SELECTs
 // read-only and summing D1's meta.rows_read: 20 rows of point reads for a gene
@@ -87,7 +132,12 @@ export async function loadCatalogSymbols({ cdn = CDN, fetchImpl = fetch } = {}) 
   return symbols
 }
 
-export function createRoutePoster({ origin = ORIGIN, token, fetchImpl = fetch } = {}) {
+export function createRoutePoster({
+  origin = ORIGIN,
+  token,
+  fetchImpl = fetch,
+  timeoutMs = 60_000,
+} = {}) {
   const bearer = String(token ?? "").trim()
   if (!bearer) throw fail("ADMIN_TOKEN_MISSING", "set ICONOPLASM_ADMIN_TOKEN to execute")
   return async function post(symbols) {
@@ -95,18 +145,30 @@ export function createRoutePoster({ origin = ORIGIN, token, fetchImpl = fetch } 
       method: "POST",
       headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
       body: JSON.stringify({ symbols }),
+      signal: AbortSignal.timeout(timeoutMs),
     })
-    return { status: response.status, body: await response.json().catch(() => null) }
+    // A body-less 503 is Cloudflare's own page (the CPU cap answers
+    // "error code: 1102"); keep its start so the receipt says so.
+    const raw = await response.text().catch(() => "")
+    let body = null
+    try {
+      body = JSON.parse(raw)
+    } catch {
+      // not JSON
+    }
+    return { status: response.status, body, raw: body === null ? raw.slice(0, 120) : "" }
   }
 }
 
-function sweepCost(count) {
+function sweepCost(count, batchSize) {
+  const calls = Math.ceil(count / batchSize)
   return {
-    worker_requests: Math.ceil(count / REPUBLISH_MAX_SYMBOLS),
+    worker_requests: calls,
+    worker_requests_with_retries: Math.ceil(calls * RETRY_ALLOWANCE),
     bunny_storage_puts: count,
     bunny_storage_reads: count * 2,
-    bunny_purge_calls: count,
     d1_rows_read_estimate: count * D1_ROWS_READ_PER_GENE,
+    d1_rows_read_with_retries: Math.ceil(count * D1_ROWS_READ_PER_GENE * RETRY_ALLOWANCE),
     d1_rows_written_estimate: 0,
   }
 }
@@ -128,9 +190,10 @@ export async function republishGeneObjects({
   from = null,
   limit = null,
   only = null,
+  batchSize = DEFAULT_BATCH_SYMBOLS,
   concurrency = 3,
   maxFailures = 10,
-  retryDelayMs = 2000,
+  retryDelaysMs = RETRY_DELAYS_MS,
   allowEarlyReason = null,
   canary = null,
   log = () => {},
@@ -142,7 +205,8 @@ export async function republishGeneObjects({
     throw fail("LIMIT_INVALID", "limit must be a whole number of at least 1")
   if (!(Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= MAX_CONCURRENCY))
     throw fail("CONCURRENCY_INVALID", `concurrency must be 1 to ${MAX_CONCURRENCY}`)
-  if (only && from) throw fail("ONLY_AND_FROM", "--only and --from cannot be combined")
+  if (!(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= REPUBLISH_MAX_SYMBOLS))
+    throw fail("BATCH_INVALID", `batch must be 1 to ${REPUBLISH_MAX_SYMBOLS} genes a call`)
 
   let plan
   if (only) {
@@ -151,6 +215,10 @@ export async function republishGeneObjects({
     if (unknown.length)
       throw fail("ONLY_UNKNOWN_SYMBOL", `not in the catalog: ${unknown.join(", ")}`)
     plan = [...new Set(only)].sort()
+    if (from) {
+      const start = plan.findIndex((symbol) => symbol >= from)
+      plan = start === -1 ? [] : plan.slice(start)
+    }
   } else {
     const start = from ? symbols.findIndex((symbol) => symbol >= from) : 0
     plan = start === -1 ? [] : symbols.slice(start)
@@ -174,12 +242,14 @@ export async function republishGeneObjects({
     started_at: now.toISOString(),
     catalog_genes: symbols.length,
     planned: targets.length,
+    batch_size: batchSize,
     published: 0,
     failed: [],
     calls: 0,
+    retries: 0,
     stopped: null,
     early_reason: execute && early ? String(allowEarlyReason).trim() : null,
-    cost: sweepCost(targets.length),
+    cost: sweepCost(targets.length, batchSize),
     next_from: targets[0] ?? null,
     done: false,
     verify_sample: [],
@@ -187,23 +257,47 @@ export async function republishGeneObjects({
   if (!execute) return receipt
 
   const batches = []
-  for (let index = 0; index < targets.length; index += REPUBLISH_MAX_SYMBOLS)
-    batches.push(targets.slice(index, index + REPUBLISH_MAX_SYMBOLS))
+  for (let index = 0; index < targets.length; index += batchSize)
+    batches.push(targets.slice(index, index + batchSize))
+  // A batch is finished when every gene in it reached a final outcome: published
+  // or listed as failed. The resume hint is built from this, not from failures.
+  const finished = batches.map(() => false)
 
   const rewritten = []
+  // One call to the route. `retry` says whether trying again can help: a 5xx,
+  // a 429, a network error or an unreadable reply can; a refused token or a
+  // refused request cannot. `fatal` ends the whole run.
   async function attempt(batch) {
     receipt.calls += 1
+    let reply
     try {
-      const reply = await post(batch)
-      if (reply?.status === 200 && reply.body?.ok === true && Array.isArray(reply.body.results))
-        return { ok: true, results: reply.body.results }
-      return {
-        ok: false,
-        error: `HTTP ${reply?.status}: ${JSON.stringify(reply?.body ?? null).slice(0, 200)}`,
-      }
+      reply = await post(batch)
     } catch (error) {
-      return { ok: false, error: String(error?.message || error).slice(0, 200) }
+      return { ok: false, retry: true, error: String(error?.message || error).slice(0, 200) }
     }
+    const status = Number(reply?.status)
+    if (status === 200 && reply.body?.ok === true && Array.isArray(reply.body.results))
+      return { ok: true, results: reply.body.results }
+    const detail = reply?.body
+      ? JSON.stringify(reply.body).slice(0, 200)
+      : `no JSON body: "${String(reply?.raw ?? "").slice(0, 80)}"`
+    const error = `HTTP ${status} (${detail})`
+    if (status === 401 || status === 403) return { ok: false, fatal: "unauthorized", error }
+    const retry = status >= 500 || status === 429 || status === 408 || status === 200
+    return { ok: false, retry, error }
+  }
+
+  async function callWithRetries(batch) {
+    let outcome
+    for (let tries = 0; tries <= retryDelaysMs.length; tries += 1) {
+      if (tries > 0) {
+        receipt.retries += 1
+        await sleep(retryDelaysMs[tries - 1])
+      }
+      outcome = await attempt(batch)
+      if (outcome.ok || outcome.fatal || !outcome.retry) return outcome
+    }
+    return outcome
   }
 
   function record(batch, results) {
@@ -226,24 +320,29 @@ export async function republishGeneObjects({
     }
   }
 
-  async function runBatch(batch) {
-    let outcome = await attempt(batch)
-    if (!outcome.ok) {
-      await sleep(retryDelayMs)
-      outcome = await attempt(batch)
-    }
-    if (outcome.ok) return record(batch, outcome.results)
-    if (batch.length === 1) {
-      receipt.failed.push({ symbol: batch[0], error: outcome.error })
+  async function runBatch(index) {
+    const batch = batches[index]
+    const outcome = await callWithRetries(batch)
+    if (outcome.fatal) {
+      receipt.stopped ??= outcome.fatal
       return
     }
-    // A call that fails twice may be too heavy for a cold isolate: send the
-    // genes one at a time, once each.
-    for (const symbol of batch) {
-      const single = await attempt([symbol])
-      if (single.ok) record([symbol], single.results)
-      else receipt.failed.push({ symbol, error: single.error })
+    if (outcome.ok) record(batch, outcome.results)
+    else if (batch.length === 1) receipt.failed.push({ symbol: batch[0], error: outcome.error })
+    else {
+      // A call that failed three times may be too heavy for a cold isolate:
+      // send the genes one at a time, each with the same retries.
+      for (const symbol of batch) {
+        const single = await callWithRetries([symbol])
+        if (single.fatal) {
+          receipt.stopped ??= single.fatal
+          return
+        }
+        if (single.ok) record([symbol], single.results)
+        else receipt.failed.push({ symbol, error: single.error })
+      }
     }
+    finished[index] = true
   }
 
   let launched = 0
@@ -252,7 +351,7 @@ export async function republishGeneObjects({
   // again, so Tags still published stop the run after this one call.
   if (canary && batches.length) {
     launched = 1
-    await runBatch(batches[0])
+    await runBatch(0)
     const check = await verifyGeneObjects({
       symbols: rewritten.slice(0, 3),
       fetchObject: canary.fetchObject,
@@ -274,24 +373,34 @@ export async function republishGeneObjects({
         return
       }
       if (launched >= batches.length) return
-      const batch = batches[launched]
+      const index = launched
       launched += 1
-      await runBatch(batch)
+      await runBatch(index)
       log(`${receipt.published}/${targets.length} rewritten, ${receipt.failed.length} failed`)
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker))
 
-  const firstFailure = receipt.failed.map((entry) => entry.symbol).sort()[0] ?? null
-  if (receipt.stopped === "too_many_failures") receipt.next_from = firstFailure
-  else if (receipt.stopped) receipt.next_from = targets[0]
-  else receipt.next_from = afterTargets
+  // Where to resume: the first gene of the earliest batch that did not finish.
+  // Batches finish out of order, so this is not the earliest failure and not the
+  // last batch started; every batch before it reached a final outcome.
+  const firstOpen = finished.indexOf(false)
+  if (receipt.stopped === "tags_still_published" || receipt.stopped === "canary_unreadable")
+    receipt.next_from = targets[0]
+  else receipt.next_from = firstOpen === -1 ? afterTargets : batches[firstOpen][0]
+  receipt.batches = { total: batches.length, finished: finished.filter(Boolean).length }
   receipt.done = receipt.next_from === null
+  receipt.failed.sort((one, other) => (one.symbol < other.symbol ? -1 : 1))
   receipt.verify_sample = evenlySpaced([...rewritten].sort(), 40)
   receipt.elapsed_seconds = Math.round((Date.now() - startedMs) / 1000)
   return receipt
 }
 
+// Reads every symbol's public object and reports which still carry Tags, are
+// missing or could not be read. A symbol that is not clean is looked at again
+// after `retryDelayMs`, up to `retries` times, because the CDN may serve the old
+// copy for a minute or two after a rewrite; the wait happens once per round for
+// all of them, not once per object.
 export async function verifyGeneObjects({
   symbols,
   fetchObject,
@@ -299,47 +408,53 @@ export async function verifyGeneObjects({
   retries = 6,
   retryDelayMs = 10_000,
   concurrency = 8,
+  log = () => {},
 }) {
-  const carrying = []
-  const missing = []
-  const unreadable = []
+  const verdict = new Map()
+  let pending = [...symbols]
 
-  async function check(symbol) {
-    let last = null
-    for (let attempt = 0; attempt <= retries; attempt += 1) {
-      if (attempt > 0) await sleep(retryDelayMs)
-      let reply
-      try {
-        reply = await fetchObject(symbol, attempt)
-      } catch {
-        last = unreadable
-        continue
-      }
-      if (reply?.status === 200 && reply.json && typeof reply.json === "object") {
-        if (!objectCarriesTags(reply.json)) return
-        last = carrying
-      } else if (reply?.status === 404) {
-        last = missing
-      } else {
-        last = unreadable
-      }
+  async function read(symbol, round) {
+    let reply
+    try {
+      reply = await fetchObject(symbol, round)
+    } catch {
+      return "unreadable"
     }
-    last?.push(symbol)
+    if (reply?.status === 200 && reply.json && typeof reply.json === "object")
+      return objectCarriesTags(reply.json) ? "carrying" : "clean"
+    return reply?.status === 404 ? "missing" : "unreadable"
   }
 
-  let next = 0
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, symbols.length) }, async () => {
-      while (next < symbols.length) {
-        const symbol = symbols[next]
-        next += 1
-        await check(symbol)
+  for (let round = 0; round <= retries && pending.length; round += 1) {
+    if (round > 0) await sleep(retryDelayMs)
+    const outcomes = new Array(pending.length)
+    let next = 0
+    let readCount = 0
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, pending.length) }, async () => {
+        while (next < pending.length) {
+          const position = next
+          next += 1
+          outcomes[position] = await read(pending[position], round)
+          readCount += 1
+          if (readCount % 2000 === 0) log(`round ${round}: ${readCount}/${pending.length} read`)
+        }
+      }),
+    )
+    const stillNotClean = []
+    pending.forEach((symbol, position) => {
+      if (outcomes[position] === "clean") verdict.delete(symbol)
+      else {
+        verdict.set(symbol, outcomes[position])
+        stillNotClean.push(symbol)
       }
-    }),
-  )
-  carrying.sort()
-  missing.sort()
-  unreadable.sort()
+    })
+    pending = stillNotClean
+  }
+  const listed = (kind) => symbols.filter((symbol) => verdict.get(symbol) === kind).sort()
+  const carrying = listed("carrying")
+  const missing = listed("missing")
+  const unreadable = listed("unreadable")
   return {
     checked: symbols.length,
     carrying_tags: carrying,
@@ -353,7 +468,7 @@ function cdnObjectFetcher(cdn = CDN) {
   return async (symbol, attempt) => {
     const response = await fetch(
       `${cdn}/genes/v3/${encodeURIComponent(symbol)}.json?cb=${Date.now()}-${attempt}`,
-      { cache: "no-store" },
+      { cache: "no-store", signal: AbortSignal.timeout(30_000) },
     )
     return {
       status: response.status,
@@ -368,6 +483,33 @@ export function writeReceipt(dir, receipt) {
   const file = path.join(dir, `${stamp}-${receipt.mode || "run"}.json`)
   writeFileSync(file, `${JSON.stringify(receipt, null, 2)}\n`)
   return file
+}
+
+// The genes a `--verify` receipt listed as carrying Tags, for `--from-verify`.
+// It refuses a file that is not a verify receipt, and a clean one, so a typo
+// never republishes nothing and says "ok".
+export function symbolsFromVerifyReceipt(file, readText = (name) => readFileSync(name, "utf8")) {
+  let receipt
+  try {
+    receipt = JSON.parse(readText(file))
+  } catch {
+    throw fail("VERIFY_RECEIPT_UNREADABLE", `${file} is missing or is not JSON`)
+  }
+  if (receipt?.mode !== "verify" || !Array.isArray(receipt.carrying_tags))
+    throw fail("NOT_A_VERIFY_RECEIPT", `${file} is not a receipt written by --verify`)
+  const symbols = [
+    ...new Set(
+      receipt.carrying_tags
+        .map((symbol) => String(symbol).trim().toUpperCase())
+        .filter((symbol) => SYMBOL.test(symbol)),
+    ),
+  ].sort()
+  if (!symbols.length)
+    throw fail(
+      "VERIFY_RECEIPT_CLEAN",
+      `${file} lists no gene carrying Tags; there is nothing to do`,
+    )
+  return symbols
 }
 
 function wholeNumber(flag, value, { min, max = Number.MAX_SAFE_INTEGER }) {
@@ -391,28 +533,41 @@ export function parseRepublishArgs(argv) {
     from: null,
     limit: null,
     only: null,
+    fromVerify: null,
+    batch: DEFAULT_BATCH_SYMBOLS,
     concurrency: 3,
     allowEarlyReason: null,
   }
+  const valued = [
+    "--from",
+    "--limit",
+    "--only",
+    "--from-verify",
+    "--batch",
+    "--concurrency",
+    "--allow-early",
+    "--verify-sample",
+  ]
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     if (flag === "--execute") parsed.execute = true
     else if (flag === "--verify") parsed.verify = true
-    else if (
-      ["--from", "--limit", "--only", "--concurrency", "--allow-early", "--verify-sample"].includes(
-        flag,
-      )
-    ) {
+    else if (valued.includes(flag)) {
       const value = argv[(index += 1)]
       if (value === undefined) throw new Error(`${flag} needs a value`)
       if (flag === "--from") parsed.from = symbolValue(flag, value)
       else if (flag === "--limit") parsed.limit = wholeNumber(flag, value, { min: 1 })
+      else if (flag === "--batch")
+        parsed.batch = wholeNumber(flag, value, { min: 1, max: REPUBLISH_MAX_SYMBOLS })
       else if (flag === "--concurrency")
         parsed.concurrency = wholeNumber(flag, value, { min: 1, max: MAX_CONCURRENCY })
       else if (flag === "--verify-sample")
         parsed.verifySample = wholeNumber(flag, value, { min: 1 })
       else if (flag === "--allow-early") parsed.allowEarlyReason = String(value)
-      else {
+      else if (flag === "--from-verify") {
+        if (!String(value).trim()) throw new Error("--from-verify needs a receipt file")
+        parsed.fromVerify = String(value)
+      } else {
         const only = String(value)
           .split(",")
           .map((entry) => entry.trim())
@@ -426,6 +581,10 @@ export function parseRepublishArgs(argv) {
     }
   }
   if (parsed.verify && parsed.execute) throw new Error("--verify reads only; drop --execute")
+  if (parsed.only && parsed.fromVerify)
+    throw new Error("--only and --from-verify both name the genes; use one")
+  if (parsed.verify && (parsed.only || parsed.fromVerify))
+    throw new Error("--verify checks the whole catalog; drop --only and --from-verify")
   return parsed
 }
 
@@ -438,29 +597,49 @@ async function main() {
     "artifacts",
     "iconoplasm-republish",
   )
+  const scriptName = "node scripts/republish-iconoplasm-gene-objects.mjs"
 
   if (options.verify) {
     const sample = options.verifySample ? evenlySpaced(symbols, options.verifySample) : symbols
-    const result = await verifyGeneObjects({ symbols: sample, fetchObject: cdnObjectFetcher() })
+    const result = await verifyGeneObjects({
+      symbols: sample,
+      fetchObject: cdnObjectFetcher(),
+      concurrency: VERIFY_CONCURRENCY,
+      retries: VERIFY_RETRIES,
+      retryDelayMs: VERIFY_RETRY_DELAY_MS,
+      log: (line) => console.error(line),
+    })
     const receipt = { mode: "verify", started_at: new Date().toISOString(), ...result }
     receipt.file = writeReceipt(receiptDir, receipt)
     console.log(
       JSON.stringify({ ...receipt, carrying_tags: receipt.carrying_tags.slice(0, 50) }, null, 2),
     )
-    if (!result.clean) process.exitCode = 1
+    if (!result.clean) {
+      process.exitCode = 1
+      if (result.carrying_tags.length)
+        console.error(
+          `${result.carrying_tags.length} genes still carry Tags; the receipt lists every one. Republish exactly those with: ${scriptName} --execute --from-verify "${receipt.file}"`,
+        )
+      if (result.missing.length || result.unreadable.length)
+        console.error(
+          `${result.missing.length} genes have no public object and ${result.unreadable.length} could not be read; the receipt lists them.`,
+        )
+    }
     return
   }
 
   const post = options.execute
     ? createRoutePoster({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
     : null
+  const only = options.fromVerify ? symbolsFromVerifyReceipt(options.fromVerify) : options.only
   const receipt = await republishGeneObjects({
     symbols,
     post,
     execute: options.execute,
     from: options.from,
     limit: options.limit,
-    only: options.only,
+    only,
+    batchSize: options.batch,
     concurrency: options.concurrency,
     allowEarlyReason: options.allowEarlyReason,
     canary: options.execute ? { fetchObject: cdnObjectFetcher() } : null,
@@ -476,10 +655,17 @@ async function main() {
   receipt.file = writeReceipt(receiptDir, receipt)
   console.log(JSON.stringify(receipt, null, 2))
   if (!receipt.done && options.execute)
-    console.error(`Not finished. Resume with --execute --from ${receipt.next_from}`)
+    console.error(
+      `Not finished (${receipt.stopped ?? "limit"}). Resume with the same options plus --from ${receipt.next_from}. Every batch before that gene reached a final outcome.`,
+    )
   if (receipt.failed.length) {
     console.error(
-      `Failed genes: ${receipt.failed.map((entry) => entry.symbol).join(",")}. Re-run them with --execute --only <list>`,
+      `${receipt.failed.length} genes failed (first ${Math.min(20, receipt.failed.length)}: ${receipt.failed
+        .slice(0, 20)
+        .map((entry) => entry.symbol)
+        .join(
+          ",",
+        )}). --from does not cover them. Run ${scriptName} --verify, then --execute --from-verify <its receipt>; the errors are in ${receipt.file}.`,
     )
     process.exitCode = 1
   }

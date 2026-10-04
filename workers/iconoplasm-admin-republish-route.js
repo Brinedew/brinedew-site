@@ -2,6 +2,9 @@
 // object of every gene that changed by calling this route in small batches.
 // Each gene costs about four subrequests inside the Worker, so one call takes
 // at most REPUBLISH_MAX_SYMBOLS genes and stays under the 50-subrequest ceiling.
+// That is a limit, not a target: the free plan's 10 ms CPU cap kills a share of
+// the heavier calls, so the bulk sweep (scripts/republish-iconoplasm-gene-objects.mjs)
+// sends four.
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json", "publish"])
