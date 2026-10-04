@@ -306,8 +306,8 @@ function putCatalogResolveArtifact(
 //      per-symbol endpoint answers 404 after trying alias resolution.
 //   3. Storage error (5xx): 503 CARD_ARTIFACT_UNAVAILABLE, no-store, with the
 //      stable label as artifact_version.
-//   4. Symbol limit (100 per manifest request) unchanged: a request past it
-//      reads only the first 100 objects.
+//   4. Symbol limit (40 per manifest request, B-983: under the free plan's 50 external
+//      fetches): a request past it reads only the first 40 objects.
 //   5. Print copy reads the same object and keeps its asset-mismatch 409
 //      without any D1 fallback.
 let stableStorage = null
@@ -597,7 +597,7 @@ test("mobile card symbol endpoint fails loud with 503 no-store when storage erro
   assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
 })
 
-test("mobile card manifest keeps its 100-symbol limit and reads at most one object per accepted symbol", async () => {
+test("mobile card manifest keeps its 40-symbol limit and reads at most one object per accepted symbol", async () => {
   const symbols = Array.from({ length: 120 }, (_, index) => `G${String(index).padStart(4, "0")}`)
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -612,9 +612,9 @@ test("mobile card manifest keeps its 100-symbol limit and reads at most one obje
 
   assert.equal(response.status, 200)
   assert.equal(payload.cards.length, 0)
-  assert.equal(payload.missing.length, 100)
-  assert.equal(stableStorage.reads.length, 100)
-  assert.equal(new Set(stableStorage.reads).size, 100)
+  assert.equal(payload.missing.length, 40)
+  assert.equal(stableStorage.reads.length, 40)
+  assert.equal(new Set(stableStorage.reads).size, 40)
 })
 
 test("mobile card manifest fails loud when stable object storage errors", async () => {
