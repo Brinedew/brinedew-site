@@ -207,6 +207,10 @@ import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-c
 import { eraseBrinedewAccountOnRequest } from "./iconoplasm/account-erasure/erase-account-data.js"
 import { commentMirrorContent } from "./lib/iconoplasm-comment-discord-mirror.js"
 import {
+  discordMirrorConfig,
+  followCommentChangeOnDiscord,
+} from "./iconoplasm/account-erasure/discord-comment-mirror.js"
+import {
   BrinedewAccountIdentityError,
   readBrinedewAccount,
 } from "./lib/brinedew-account-identity.js"
@@ -28561,6 +28565,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             )
           }
           const nowIso = new Date().toISOString()
+          // B-1001: the row as it is now finds its Discord post (the post quotes this body).
+          const beforeChange = await env.ICONOPLASM_DB.prepare(
+            `SELECT gene_symbol, username, body, created_at FROM icono_gene_comments
+              WHERE id = ? AND user_id = ? AND gene_symbol = ? AND status = 'visible'`,
+          )
+            .bind(commentId, userId, commentSymbol)
+            .first()
           let res
           let okComment
           if (request.method === "PATCH") {
@@ -28602,6 +28613,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           }
           // Write-through: recompute the cache from D1 after the edit/delete.
           await refreshGeneCommentsCache(env, commentSymbol)
+          // B-1001: the public Discord copy follows the author's edit or delete, after the
+          // response and best-effort, like the original post.
+          const mirror = discordMirrorConfig(env)
+          if (mirror && beforeChange) {
+            ctx?.waitUntil?.(
+              followCommentChangeOnDiscord(mirror, beforeChange, {
+                newBody: okComment.body ?? null,
+                remove: request.method === "DELETE",
+              }).catch((error) =>
+                console.warn(
+                  `[iconoplasm-comment-discord] follow ${request.method} failed:`,
+                  error,
+                ),
+              ),
+            )
+          }
           return done(
             "gene_comments",
             json({ ok: true, symbol: commentSymbol, comment: okComment }, 200, {
