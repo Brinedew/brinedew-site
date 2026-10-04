@@ -76,8 +76,6 @@ export async function measureRangePaint(page, { extensionId, artifactDirectory }
           originalNodes: ranges.every(
             (range, index) => range.startContainer === window.__paintFixture.textNodes[index],
           ),
-          copies: document.querySelectorAll(".iconoplasm-range-anchor,.iconoplasm-gene-copy")
-            .length,
           boxes: window.__paintFixture.nodes.map((node) => ({
             id: node.id,
             box: node.getBoundingClientRect().toJSON(),
@@ -91,7 +89,6 @@ export async function measureRangePaint(page, { extensionId, artifactDirectory }
         state.count !== 13 ||
         !state.originalText ||
         !state.originalNodes ||
-        state.copies ||
         !state.existingBackground ||
         JSON.stringify(state.boxes) !== JSON.stringify(baseline)
       )

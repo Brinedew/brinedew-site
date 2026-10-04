@@ -25,7 +25,7 @@ export function prepareRetainedAssetsConfig(source) {
   if (!assets) throw new Error("Canonical Iconoplasm asset routing is missing")
   output = output.replace(
     assets[0],
-    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/admin*", "/blocklist*", "/artist-styles*", "/health"] } }\n\n`,
+    `\n[unsafe.metadata]\nkeep_assets = true\nassets = { config = { not_found_handling = "none", run_worker_first = ["/api/*", "/blot/*", "/portraits/*", "/admin", "/admin/iconoplasm", "/admin/iconoplasm/", "/blocklist", "/blocklist/", "/artist-styles", "/artist-styles/", "/health"] } }\n\n`,
   )
   return output
 }

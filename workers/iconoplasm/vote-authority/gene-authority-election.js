@@ -8,9 +8,10 @@
  *
  * Keep this module free of storage, network and clock access.
  *
- * The tie-break ordering mirrors the admin read-model `compareAdminLeaderRows`
- * contract. Any change to either ordering must change both implementations
- * and their tests in the same commit.
+ * The tie-break ordering mirrors the admin read-model leader SQL (its
+ * `ROW_NUMBER() OVER` ranking blocks in the stateful runtime). Any change to
+ * either ordering must change both implementations and their tests in the same
+ * commit.
  */
 import { compareCaretakerWeightedCandidates } from "../caretaker/caretaker-supervote.js"
 

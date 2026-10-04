@@ -289,13 +289,11 @@ reason for a reader route to reveal the unpublished SHA. The public portrait
 changes only when that object is rewritten.
 
 During that window every public projection stays on the gene's current stable
-object: signed-in and anonymous galleries, site-gene detail, gene-page lead
+object: signed-in and anonymous galleries, gene-page lead
 and metadata, public media, extension cards, and
-print-copy inputs. Site-gene detail may combine fresh D1 traits, candidates, and
-votes with that object, but its portrait and candidate `is_current` state are
-overridden by the stable object's SHA.
+print-copy inputs.
 
-Do not add a signed-in, site-gene-detail, public-media, or print-copy fallback to
+Do not add a signed-in, public-media, or print-copy fallback to
 D1: it exposes the D1 leader before the stable object is rewritten. If the
 stable object is unavailable or incomplete, the public projection fails closed
 with an uncached unavailable or missing response.

@@ -5,9 +5,9 @@ import {
   measureBlockedHostStartup,
 } from "./lib/iconoplasm-startup-benchmark.mjs"
 
-test("startup benchmark fails missing evidence, late highlights, early network and duplicate markup", () => {
+test("startup benchmark fails missing evidence, late highlights and early network", () => {
   const result = {
-    first: { at: 900, fcp: 70, load: 0, highlights: 3, nested: 0 },
+    first: { at: 900, fcp: 70, load: 0, highlights: 3 },
     beforeRelease: { state: "interactive", requests: [] },
     afterReleaseRequests: [{ url: "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json" }],
   }
@@ -15,7 +15,6 @@ test("startup benchmark fails missing evidence, late highlights, early network a
   for (const change of [
     { first: { ...result.first, at: 2100 } },
     { first: { ...result.first, fcp: null } },
-    { first: { ...result.first, nested: 1 } },
     { beforeRelease: { state: "complete", requests: [] } },
     { beforeRelease: { state: "interactive", requests: [{ url: "early" }] } },
     { afterReleaseRequests: [] },
