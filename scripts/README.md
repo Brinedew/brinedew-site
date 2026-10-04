@@ -17,7 +17,3 @@ Scripts in that pipeline:
 
 - `step_0_build_index.py` through `step_4_upload_to_d1.py`
 - Generates `proteins.json` for production D1
-
-## Embedding/similarity tools
-
-- `load_esm2_embeddings.py` - ESM-2 embedding loader
