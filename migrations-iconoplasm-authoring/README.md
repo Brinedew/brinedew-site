@@ -22,18 +22,17 @@ The numbered SQL files here are the complete, append-only migration history;
 the production D1 migration journal records what has actually run. Use the
 `ICONOPLASM_AUTHORING_DB` binding in
 `wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml`.
-For a small, measured schema change, use Cloudflare's standard commands from
-the repository root, with the config above:
-
-```sh
-pnpm exec wrangler d1 migrations list ICONOPLASM_AUTHORING_DB --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
-pnpm exec wrangler d1 migrations apply ICONOPLASM_AUTHORING_DB --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
-```
-
-The apply command records the pending file in the D1 journal. Do not repeat
-the DDL in a Worker or an ad hoc API call. The existing data-maintenance
-preflight also reads this journal. A normal deploy verifies that changed SQL
-files are already journaled; it does not apply schema changes.
+A schema change reaches production only through the release, never from a
+laptop or an agent shell, which have no production D1 credential (B-1002).
+A reviewed online migration (marked `"online": true` in
+`cloudflare/operation-cost-migration-plan.json`) is applied by
+`scripts/apply-online-d1-migrations.mjs` on the ordinary push to `main`, with
+the CI Cloudflare token and the config above; any other migration runs in a
+`workflow_dispatch` of the production deploy with `data_maintenance=true`.
+Either way `wrangler d1 migrations apply` records the file in the D1 journal.
+Do not repeat the DDL in a Worker or an ad hoc API call. The data-maintenance
+preflight also reads this journal, and a deploy that finds changed SQL files
+the journal does not hold refuses with `CODE_RELEASE_REQUIRES_MAINTENANCE`.
 
 `0018_assignment_manifestation_lookup.sql` indexes only manifestations with
 an assignment. The lookup still returns the latest withdrawn caretaker or fork
