@@ -377,6 +377,8 @@ test("admin mutation requires strict same-origin browser metadata", async (t) =>
 // B-859: the administrator's one slice of the rewrite of legacy envelope body
 // objects as plain text. The conversion itself is tested in
 // manifestation-plaintext-conversion.test.js; this is the door in front of it.
+// A call that writes converts one body (the free plan's 50 fetches); a call that
+// only reads scans up to ten.
 test("the plaintext conversion route is administrator-only, bounded, and returns counts, never text", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrapLegacyGene(t, "8301", bunny)
@@ -386,6 +388,7 @@ test("the plaintext conversion route is administrator-only, bounded, and returns
     json,
     resolveActiveAccount: async () => ({ account_id: ADMIN }),
     wakeAuthorityProjection: async () => ({ ok: true, results: [] }),
+    sleep: async () => {},
   })
   const route = (isAdmin, body) =>
     createIconoplasmCaretakerAdminHandlers(services(isAdmin))["caretaker_admin.plaintext_bodies"]({
@@ -406,7 +409,8 @@ test("the plaintext conversion route is administrator-only, bounded, and returns
   for (const body of [
     {},
     { kind: "tags" },
-    { kind: "revision", limit: 5 },
+    { kind: "revision", limit: 11 },
+    { kind: "revision", limit: 2, execute: true },
     { kind: "revision", limit: 0 },
     { kind: "revision", after: "x; DROP TABLE y" },
   ]) {
@@ -416,7 +420,7 @@ test("the plaintext conversion route is administrator-only, bounded, and returns
   assert.equal(bunny.log.length, 0, "a refused call touches no storage")
 
   // Check mode finds the one envelope (the seed) and writes nothing.
-  const checked = await route(true, { kind: "revision" })
+  const checked = await route(true, { kind: "revision", limit: 5 })
   assert.equal(checked.status, 200)
   const check = await checked.json()
   assert.equal(check.ok, true)
