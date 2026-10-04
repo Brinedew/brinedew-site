@@ -12,6 +12,7 @@ export {
   transitionCaretakerAssignment,
 } from "./caretaker-assignment-commands.js"
 export {
+  restoreCroppedSeedProse,
   saveManifestationRevision,
   seedSystemManifestation,
 } from "./manifestation-write-commands.js"

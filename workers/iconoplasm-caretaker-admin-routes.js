@@ -13,6 +13,7 @@ import {
   PLAINTEXT_CONVERSION_DEFAULT_BODIES,
   convertManifestationBodies,
 } from "./iconoplasm/caretaker/manifestation-plaintext-conversion.js"
+import { restoreSeedProseForGene } from "./iconoplasm/caretaker/manifestation-seed-prose-restoration.js"
 import {
   commandEnvelope,
   readBoundedJson,
@@ -449,7 +450,41 @@ export function createIconoplasmCaretakerAdminHandlers(services) {
     }
   }
 
+  // B-977: restores ONE seed text the importer cut at 4,000 characters. The
+  // operator script scripts/restore-cropped-seed-prose.mjs calls it; both go away
+  // with the command once no seed is left cut. The Worker proves the crop by hash
+  // itself (see manifestation-seed-prose-restoration.js), then publishes the
+  // accepted event the way every other admin command does.
+  async function restoreSeedProse({ request, env, done }) {
+    const routeName = "caretaker_admin_restore_seed_prose"
+    if (!(await authorize(request, env))) {
+      return done(`${routeName}_403`, json({ error: "Unauthorized" }, 403, NO_STORE))
+    }
+    try {
+      const db = requireAuthoringDb(env)
+      await requireAuthoritativeMode(db)
+      const parsed = await readBoundedJson(request, 64 * 1024)
+      const body = parsed.value
+      const command = await commandEnvelope(request, parsed.raw, body, "migration", null)
+      const value = await restoreSeedProseForGene(db, env, {
+        geneSymbol: body.gene_symbol,
+        prose: body.prose,
+        command,
+        sleep,
+      })
+      if (value.status !== "restored") {
+        return done(routeName, json({ ok: true, ...value }, 200, NO_STORE))
+      }
+      const delivered = await deliverMutation(db, wakeAuthorityProjection, env, value)
+      return done(routeName, json(delivered.payload, delivered.status, NO_STORE))
+    } catch (error) {
+      const response = errorResponse(error, json)
+      return done(`${routeName}_${response.status}`, response)
+    }
+  }
+
   return Object.freeze({
+    "caretaker_admin.restore_seed_prose": restoreSeedProse,
     "caretaker_admin.plaintext_bodies": convertPlaintextBodies,
     "caretaker_admin.registry": read("caretaker_admin_registry", (db, params) =>
       readCaretakerAdminRegistry(db, {

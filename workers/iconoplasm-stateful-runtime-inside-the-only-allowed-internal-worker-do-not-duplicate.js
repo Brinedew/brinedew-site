@@ -1606,6 +1606,9 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     // B-859: a call that writes converts one body (one D1 query, at most 41 storage
     // requests); a call that only reads scans at most ten.
     family === "admin_plaintext_bodies" ||
+    // B-977: one gene a call (one seed read, at most 37 storage requests, one atomic
+    // authority batch and the accepted event's projection).
+    family === "admin_seed_prose_restore" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
     family === "admin_essence_state"

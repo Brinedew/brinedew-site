@@ -528,6 +528,6 @@ export async function selectTagsDerivativeHead(
   })
 }
 
-export { derivativeHeadSnapshot, derivativeSnapshot }
+export { derivativeHeadSnapshot, derivativeSnapshot, derivativeStorage }
 
 // ARCHITECTURE FENCE [IPD-012]

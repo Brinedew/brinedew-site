@@ -816,6 +816,17 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
     budgetFamily: "admin_plaintext_bodies",
   }),
+  // B-977: restores one cut seed text a call, driven by
+  // scripts/restore-cropped-seed-prose.mjs; both go away with the command once no
+  // seed is left cut.
+  iconoplasmApiContract({
+    apiHandler: "caretaker_admin.restore_seed_prose",
+    id: "caretaker_admin_restore_seed_prose",
+    match: exact("/api/iconoplasm/admin/caretakers/restore-seed-prose"),
+    methods: POST,
+    auth: "administrator",
+    budgetFamily: "admin_seed_prose_restore",
+  }),
   // B-871: one operator command fulfils an erasure request (privacy page).
   iconoplasmApiContract({
     apiHandler: "admin_account.erase",
