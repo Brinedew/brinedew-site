@@ -1520,15 +1520,16 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
 
 // --- 21 -----------------------------------------------------------------
 
-test("21: the publisher fingerprints what the print-copy queue consumer reads back", async (t) => {
+// An in-memory Bunny Storage zone (the publisher's PUT and read-back, the consumer's
+// read through the card route) and a one-gene card source, on a real SQLite D1.
+// `pngStored: false` leaves the rendered PNG absent, so the consumer needs a browser launch.
+function printCopyHarness(t, { queue = null, pngStored = true } = {}) {
   const db = new SqliteD1()
   const stored = new Map()
   const originalFetch = globalThis.fetch
   t.after(() => {
     globalThis.fetch = originalFetch
   })
-  // An in-memory Bunny Storage zone: the publisher's PUT and read-back, the
-  // consumer's read through the card route.
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
     const method = String(init.method || "GET").toUpperCase()
@@ -1550,7 +1551,11 @@ test("21: the publisher fingerprints what the print-copy queue consumer reads ba
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "zone",
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-key",
-    ICONOPLASM_PORTRAITS: { head: async () => ({ size: 1 }) },
+    ICONOPLASM_PORTRAITS: {
+      head: async (key) =>
+        !pngStored && String(key).startsWith("gene-cards/") ? null : { size: 1 },
+    },
+    ...(queue ? { [ICONOPLASM_GENE_CARD_QUEUE_BINDING]: queue } : {}),
   }
   let upvotes = 1
   const source = {
@@ -1580,10 +1585,42 @@ test("21: the publisher fingerprints what the print-copy queue consumer reads ba
     stable: (card) => card,
     project: (payload) => payload,
   }
-
   db.exec(
     "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
   )
+  return {
+    db,
+    env,
+    stored,
+    source,
+    setUpvotes(value) {
+      upvotes = value
+    },
+  }
+}
+
+// One message delivered to the real queue consumer, as the Queue would.
+async function deliverGeneCardWakeup(env, symbol) {
+  const acked = []
+  const outcome = await handleIconoplasmQueue(
+    {
+      queue: "iconoplasm-gene-card-materialization",
+      messages: [
+        {
+          body: { kind: ICONOPLASM_GENE_CARD_QUEUE_KIND, symbol },
+          ack: () => acked.push(symbol),
+          retry: () => acked.push("retry"),
+        },
+      ],
+    },
+    env,
+    waitUntilRecorder(),
+  )
+  return { acked, outcome }
+}
+
+test("21: the publisher fingerprints what the print-copy queue consumer reads back", async (t) => {
+  const { env, stored, source, setUpvotes } = printCopyHarness(t)
   await enrollIconoplasmGeneCardMaterialization(env, {
     symbol: "TP53",
     cardFingerprint: "0".repeat(32),
@@ -1595,21 +1632,7 @@ test("21: the publisher fingerprints what the print-copy queue consumer reads ba
   assert.notEqual(queued.desired_card_fingerprint, "0".repeat(32))
 
   // The consumer: claim, read the card back through the card route, compare.
-  const acked = []
-  const outcome = await handleIconoplasmQueue(
-    {
-      queue: "iconoplasm-gene-card-materialization",
-      messages: [
-        {
-          body: { kind: ICONOPLASM_GENE_CARD_QUEUE_KIND, symbol: "TP53" },
-          ack: () => acked.push("TP53"),
-          retry: () => acked.push("retry"),
-        },
-      ],
-    },
-    env,
-    waitUntilRecorder(),
-  )
+  const { acked, outcome } = await deliverGeneCardWakeup(env, "TP53")
   assert.deepEqual(acked, ["TP53"])
   assert.equal(outcome.results[0].superseded, undefined, JSON.stringify(outcome.results[0]))
   assert.equal(outcome.results[0].ok, true, JSON.stringify(outcome.results[0]))
@@ -1633,7 +1656,7 @@ test("21: the publisher fingerprints what the print-copy queue consumer reads ba
   )
 
   // A vote that only moves counts republishes the object and queues nothing.
-  upvotes = 7
+  setUpvotes(7)
   await publishIconoplasmGeneStableObject(env, "TP53", { source })
   const after = await readIconoplasmGeneCardMaterialization(env, "TP53")
   assert.equal(after.state, "ready")
@@ -2300,4 +2323,73 @@ test("36: enrolling the same card again changes nothing, a changed card is queue
   assert.equal(revived.state, "queued")
   assert.equal(revived.attempts, 0)
   assert.equal(revived.wakeup_generation, 3)
+})
+
+// 37. A reader asks again for a print copy whose render is parked behind the day's eight browser
+//     launches. The row is not due until the 00:00 UTC reset, but the new request sends a wake-up
+//     now, so the real consumer receives the message early. It used to call a function the
+//     runtime never imported: a ReferenceError that failed the delivery, retried it five times
+//     and dead-lettered it, every time a card was asked for twice while the cap was spent. The
+//     consumer must instead put the wake-up back at the row's due time and change nothing else.
+test("37: a wake-up that arrives before its row is due is re-sent for the due time, not thrown", async (t) => {
+  const sent = []
+  const { env, db, stored, source } = printCopyHarness(t, {
+    queue: { send: async (message, options) => sent.push({ message, options }) },
+    pngStored: false,
+  })
+  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  const published = JSON.parse(
+    new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
+  )
+  const card = iconoplasmGeneCardFingerprint(published)
+  const ask = () =>
+    enrollIconoplasmGeneCardMaterialization(env, {
+      symbol: "TP53",
+      cardFingerprint: card,
+      assetSha256: sha("a"),
+    })
+
+  // The day's eight launches are already spent (as they are within minutes of every reset).
+  db.exec(
+    `INSERT INTO icono_gene_card_render_budget (day_utc, launches, reserved_seconds, used_seconds, last_launch_at)
+     VALUES (date('now'), 8, 480, 0, datetime('now', '-1 hour'))`,
+  )
+
+  // First request: the wake-up is delivered, finds no launch left, and parks the row until the
+  // reset without sending a next-day message of its own.
+  await ask()
+  assert.equal(sent.length, 1)
+  const first = await deliverGeneCardWakeup(env, "TP53")
+  assert.equal(first.outcome.results[0].reason, "daily_budget", JSON.stringify(first.outcome))
+  const parked = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(parked.state, "queued")
+  assert.equal(parked.attempts, 0)
+  assert.equal(sent.length, 1)
+  const dueMs = Date.parse(`${parked.next_attempt_at.replace(" ", "T")}Z`)
+  assert.ok(dueMs > Date.now(), "parked until a later UTC day")
+
+  // Second request for the same card: its wake-up is sent now, but the row is not due.
+  await ask()
+  assert.equal(sent.length, 2)
+  assert.equal(sent[1].options, undefined)
+  const second = await deliverGeneCardWakeup(env, "TP53")
+  assert.deepEqual(second.acked, ["TP53"])
+  assert.equal(second.outcome.ok, true, JSON.stringify(second.outcome))
+  assert.equal(second.outcome.results[0].deferred, true)
+
+  // The wake-up went back for the due time, and the row is as it was.
+  assert.equal(sent.length, 3)
+  assert.deepEqual(sent[2].message, sent[1].message)
+  const delay = sent[2].options.delaySeconds
+  assert.ok(
+    Math.abs(delay - (dueMs - Date.now()) / 1000) < 5,
+    `delay ${delay}s targets the due time`,
+  )
+  assert.ok(delay <= 86400, "inside the Queue's 24 hour delay limit")
+  const after = await readIconoplasmGeneCardMaterialization(env, "TP53")
+  assert.equal(after.state, "queued")
+  assert.equal(after.attempts, 0)
+  assert.equal(after.next_attempt_at, parked.next_attempt_at)
+  assert.equal(after.lease_token, null)
+  assert.equal(after.enqueued_generation, after.wakeup_generation)
 })
