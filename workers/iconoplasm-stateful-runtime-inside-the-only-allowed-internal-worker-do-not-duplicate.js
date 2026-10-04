@@ -24027,7 +24027,9 @@ async function handleMobileCardManifest(request, env) {
   // probing, no previous-version fallback and no D1 composition belongs here.
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405)
   const body = await parseJsonBody(request)
-  const symbols = normalizeRequestedSymbols(body.symbols || [], 100)
+  // B-983: one stable-object read per symbol, so the cap stays under the free plan's 50
+  // external fetches per invocation, like the public gene batch. The app asks for at most 12.
+  const symbols = normalizeRequestedSymbols(body.symbols || [], PUBLIC_MAX_GENE_BATCH_LIMIT)
   const layout = sanitizeText(body.layout || MOBILE_CARD_LAYOUT, 64) || MOBILE_CARD_LAYOUT
   if (layout !== MOBILE_CARD_LAYOUT) {
     return json({ error: "Unsupported mobile card layout", layout }, 400, {
