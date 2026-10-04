@@ -45,7 +45,13 @@ export function reviewedMigrationStatements(directory, name, expectedTriggers, e
 // the generated `<PREFIX>_MIGRATION_NAME` and `<PREFIX>_MIGRATION_STATEMENTS`.
 // The entry is deleted once the deploy shows the migration applied.
 function pendingMigrations() {
-  return []
+  return [
+    [
+      "TAGGERIZER_DAILY_CALLS",
+      "0115_taggerizer_daily_calls.sql",
+      reviewedMigrationStatements("migrations-iconoplasm", "0115_taggerizer_daily_calls.sql", 0, 1),
+    ],
+  ]
 }
 
 function output() {

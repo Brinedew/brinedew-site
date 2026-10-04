@@ -697,6 +697,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
+    id: "caretaker_taggerize",
+    match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/taggerize$/, ["gene"]),
+    methods: POST,
+    auth: "authenticated-caretaker",
+    budgetFamily: "caretaker_manifestations_write",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "caretaker_manifestations",
     id: "caretaker_manifestation_tags_select",
     match: pattern(
       /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivative-head$/,

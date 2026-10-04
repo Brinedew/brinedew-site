@@ -82,6 +82,18 @@ caretaker's next upload releases it, and so does the background tick that drains
 projection every twelve minutes (three at most per run): the reserved bytes return and the stored
 body is deleted.
 
+## The Tags helper only suggests
+
+The editor's "Tags from prose" and "Prose from Tags" buttons call
+`POST /api/iconoplasm/caretaker/genes/<gene>/taggerize`
+(`workers/iconoplasm/caretaker/taggerizer.js`). The route answers with a suggestion and
+saves nothing; the editor fills it in, marks it unsaved and waits for the caretaker's
+Save, which uses the ordinary revision and Tags-derivative commands. Only the gene's
+active caretaker may call it. It runs Cloudflare Workers AI (`AI` binding, model id in
+the module header) on the free plan's 10,000 Neurons a day, so each caretaker gets 30
+calls per UTC day (`icono_taggerizer_daily_calls`, one upsert per call) and
+`ICONOPLASM_TAGGERIZER_DISABLED = "1"` switches the route off and hides the buttons.
+
 ## Images and the replica use exact sources, and releases are proven in a browser
 
 A caretaker can go from a candidate image to the saved version that made it. Each candidate on
