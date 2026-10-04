@@ -194,6 +194,90 @@ test("gene pills paint in every column of a multi-column list", async (t) => {
   assert.ok(secondRed > 100, `second-column pill missing (${secondRed} red pixels)`)
 })
 
+// B-986: Zanagrams pops each new word to 110% and back with a CSS animation.
+// The pill was measured mid-pop and never again, so it stayed oversized and off
+// to the side. Mirrors the game's markup: a centred word with a keyframe pop.
+const POP_FIXTURE = `<!doctype html><html><head><style>
+  body { font: 700 24px/1.4 sans-serif; margin: 0; background: #151515; color: #fff; }
+  .board { width: 400px; margin: 60px auto; text-align: center; }
+  @keyframes wordPop { 0% { transform: scale(1); } 40% { transform: scale(1.1); } 100% { transform: scale(1); } }
+  .word { display: inline-block; }
+  .word.pop { animation: wordPop 600ms ease-out; }
+</style></head><body><div class="board"><div class="word">GENE07</div></div></body></html>`
+
+test("a gene pill sits on its word after the word's pop animation ends", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  t.after(() => browser.close())
+  const page = await browser.newPage({ viewport: { width: 600, height: 300 } })
+  await page.setContent(POP_FIXTURE)
+  for (const file of [
+    "content-lifecycle.js",
+    "content-range-paint.js",
+    "content-range-highlights.js",
+  ])
+    await page.addScriptTag({ path: path.join(ROOT, "iconoplasm-extension", file) })
+
+  await page.evaluate(async () => {
+    const highlights = globalThis.IconoplasmRangeHighlights.createRangeHighlights({
+      documentRef: document,
+      highlightRuntime: {
+        getMode: () => "canvas",
+        getCanvasShape: () => ({
+          kind: "pill",
+          fillSpreadEm: 0.12,
+          ringSpreadEm: 0.2,
+          radiusEm: 0.45,
+          fillAlpha: 1,
+          ringColor: "rgb(120, 0, 0)",
+        }),
+      },
+      getGeneMap: () => ({ GENE07: { c: "rgb(255, 0, 0)" } }),
+      registerGeneAnchor() {},
+      placeholderColor: "rgb(255, 0, 0)",
+    })
+    const word = document.querySelector(".word")
+    word.classList.add("pop")
+    // Measure at the peak of the pop, as a scan that lands mid-animation does.
+    await new Promise((resolve) => setTimeout(resolve, 240))
+    highlights.update(word.firstChild, [{ symbol: "GENE07", index: 0, length: 6 }])
+  })
+  // The pop ends at 600 ms; leave time for the idle-scheduled repaint.
+  await page.waitForTimeout(1500)
+
+  const rect = await page.evaluate(() => {
+    const range = document.createRange()
+    range.selectNodeContents(document.querySelector(".word").firstChild)
+    const box = range.getBoundingClientRect()
+    return { x: box.left, y: box.top, width: box.width, height: box.height }
+  })
+  mkdirSync(OUT, { recursive: true })
+  const png = await page.screenshot()
+  writeFileSync(path.join(OUT, "extension-range-paint-pop.png"), png)
+  const boundsBox = {
+    x: Math.max(0, Math.floor(rect.x - 40)),
+    y: Math.max(0, Math.floor(rect.y - 40)),
+    width: Math.ceil(rect.width + 80),
+    height: Math.ceil(rect.height + 80),
+  }
+  const bounds = await redBounds(page, png, boundsBox)
+  writeFileSync(
+    path.join(OUT, "extension-range-paint-pop.json"),
+    JSON.stringify({ rect, boundsBox, bounds }, null, 2),
+  )
+
+  assert.ok(bounds.count > 100, `pill missing (${bounds.count} red pixels)`)
+  const wordCenterX = rect.x + rect.width / 2 - boundsBox.x
+  const centerX = (bounds.minX + bounds.maxX + 1) / 2
+  const pillWidth = bounds.maxX - bounds.minX + 1
+  assert.ok(Math.abs(centerX - wordCenterX) <= 4, `pill centre x off by ${centerX - wordCenterX}`)
+  // At rest the fill is the word plus 0.12 em each side; measured mid-pop it is ~10% wider.
+  assert.ok(
+    pillWidth <= rect.width + 24 * 0.12 * 2 + 4,
+    `pill ${pillWidth}px wide for a ${rect.width}px word`,
+  )
+})
+
 test("gene pills paint on their word in a captioned table", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
