@@ -8053,6 +8053,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!state || !state.authenticated) {
           freeQueueAvailable = false
           if (freeFooter) freeFooter.hidden = true
+          // Signed out, the dialog holds one sentence and a login button; the tall work-surface
+          // frame read as a page that failed to load, so it shrinks to a sign-in dialog.
+          var guestDialog = body.closest ? body.closest(".icono-dialog") : null
+          if (guestDialog) {
+            guestDialog.classList.remove("icono-dialog--fixed", "icono-dialog--wide")
+            guestDialog.classList.add("icono-dialog--compact")
+          }
           body.innerHTML =
             '<div class="icono-home-auth-copy">' +
             '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
