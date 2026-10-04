@@ -1,17 +1,20 @@
 import assert from "node:assert/strict"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
-import test from "node:test"
+import test, { afterEach } from "node:test"
 
 import {
   ADMIN_TOKEN,
   ASSET,
   ERASED_NAME,
   ERASED_USER,
+  IMAGE,
   OTHER_NAME,
   OTHER_USER,
   dumpDatabase,
   findTraces,
+  renditionKeys,
+  seedDiscordMirror,
   seedSessionsAndKv,
   seedWorld,
 } from "./test-helpers/account-erasure-fixture.js"
@@ -19,9 +22,11 @@ import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   iconoplasmUserKvKeyScopes,
+  postIconoplasmGeneCommentToDiscord,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   ERASURE_MAX_D1_CALLS,
+  ERASURE_MAX_EXTERNAL_FETCHES,
   ERASURE_MIN_ROW_WRITES,
 } from "./iconoplasm/account-erasure/erase-account-data.js"
 import {
@@ -51,6 +56,10 @@ import {
   resolveBrinedewAccountIdentity,
 } from "./lib/brinedew-account-identity.js"
 import { drainBrinedewAuthorityAccountProjectionOutbox } from "./lib/brinedew-authority-account-projection.js"
+import {
+  commentMirrorContent,
+  commentMirrorWithAuthor,
+} from "./lib/iconoplasm-comment-discord-mirror.js"
 
 // B-871, B-987: the privacy pages promise that a verified erasure request removes the person's
 // account, discovery, generation and settings data, GeneGuessr stats and game history, and the
@@ -66,7 +75,14 @@ import { drainBrinedewAuthorityAccountProjectionOutbox } from "./lib/brinedew-au
 // 3. the other person's rows, or the public vote counts, move;
 // 4. the account completes while rows keyed by the Discord id remain;
 // 5. a re-run, or a re-run after a partial failure, double-applies or errors;
-// 6. one request is unbounded in D1 calls or rows written.
+// 6. one request is unbounded in D1 calls, rows written or external calls;
+// 7. an unpublished job's result images stay in the public storage, or a published portrait's
+//    objects go with a job (B-993);
+// 8. the person's username stays in the public Discord copy of a comment, a post that is not hers
+//    changes, or a comment she removed keeps its post (B-992).
+//
+// Bunny and Discord are a stateful fake at the fetch boundary (test-helpers/fake-discord-and-bunny.js);
+// the real poster writes the Discord messages the erasure then has to find.
 
 function route(env, body, token = ADMIN_TOKEN) {
   return viaStatefulWorker(
@@ -127,11 +143,41 @@ function rowsNotAbout(dump, needles) {
   return result
 }
 
+const installed = []
+afterEach(() => {
+  // Newest first: each network restores the fetch it replaced.
+  for (const network of installed.splice(0).reverse()) network.restore()
+})
+
 async function erasedWorld() {
   const world = await seedWorld()
   await seedSessionsAndKv(world, iconoplasmUserKvKeyScopes)
+  world.network.install()
+  installed.push(world.network)
+  await seedDiscordMirror(world, postIconoplasmGeneCommentToDiscord)
   return world
 }
+
+// Sends the same request until the erasure reports complete; every request's response and the
+// external calls it made are returned.
+async function eraseToCompletion(env, world, body = {}, limit = 16) {
+  const requests = []
+  for (let attempt = 0; attempt < limit; attempt += 1) {
+    const externalBefore = world.network.calls.length
+    const response = await route(env, {
+      account_id: world.erasedAccount,
+      command_id: "req-1",
+      ...body,
+    })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    const payload = await response.json()
+    requests.push({ ...payload, external: world.network.calls.length - externalBefore })
+    if (payload.erasure.complete) return requests
+  }
+  throw new Error(`not complete after ${limit} requests`)
+}
+
+const botPosts = (world) => world.network.messages.filter((message) => message.author.bot)
 
 test("the admin erasure route refuses non-admins and malformed requests", async () => {
   const world = await erasedWorld()
@@ -192,8 +238,9 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
   // The erasure runs in slices. A small row budget makes this seed take several requests, the way a
   // heavy real account does.
   const requests = []
-  for (let attempt = 1; attempt <= 12; attempt += 1) {
+  for (let attempt = 1; attempt <= 16; attempt += 1) {
     const callsBefore = calls(world)
+    const externalBefore = world.network.calls.length
     const response = await route(env, {
       account_id: accountId,
       command_id: "req-1",
@@ -202,7 +249,11 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
     })
     assert.equal(response.status, 200)
     const payload = await response.json()
-    requests.push({ ...payload, d1Calls: calls(world) - callsBefore })
+    requests.push({
+      ...payload,
+      d1Calls: calls(world) - callsBefore,
+      external: world.network.calls.length - externalBefore,
+    })
     if (attempt === 1) {
       // The person's own browser session is refused and wiped by its next request: the account is
       // already pending, so nothing is written under the Discord id from here on.
@@ -214,7 +265,7 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
     if (payload.erasure.complete) break
   }
   const last = requests.at(-1)
-  assert.equal(last.erasure.complete, true, "the erasure finishes within a dozen requests")
+  assert.equal(last.erasure.complete, true, "the erasure finishes within sixteen requests")
   assert.equal(last.account.status, "erased")
   assert.ok(requests.length >= 2, "the small budget forced more than one request")
   assert.equal(requests[0].erasure.complete, false)
@@ -225,6 +276,11 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
     assert.ok(
       request.d1Calls <= ERASURE_MAX_D1_CALLS + 15,
       `${request.d1Calls} D1 calls in one request`,
+    )
+    // The free plan allows 50 external fetches an invocation (Bunny deletes, Discord calls).
+    assert.ok(
+      request.external <= ERASURE_MAX_EXTERNAL_FETCHES,
+      `${request.external} external calls in one request`,
     )
   }
 
@@ -284,6 +340,8 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
     "SELECT user_id, username, avatar_url, body FROM icono_gene_comments ORDER BY body",
   ).map((comment) => ({ ...comment }))
   assert.deepEqual(comments, [
+    { user_id: accountId, username: label, avatar_url: "", body: "Alice before the mirror" },
+    { user_id: accountId, username: label, avatar_url: "", body: "Alice on EZH2, edited" },
     { user_id: accountId, username: label, avatar_url: "", body: "Alice on SOX11" },
     { user_id: accountId, username: label, avatar_url: "", body: "Alice on TP53" },
     {
@@ -479,7 +537,7 @@ test("a failure in the middle of an erasure resumes where it stopped and never c
   world.iconoplasm.batch = batch
 
   let complete = false
-  for (let attempt = 0; attempt < 12 && !complete; attempt += 1) {
+  for (let attempt = 0; attempt < 16 && !complete; attempt += 1) {
     const response = await route(env, body)
     assert.equal(response.status, 200)
     complete = (await response.json()).erasure.complete
@@ -614,7 +672,7 @@ test("every step's declared weight covers the rows the real schema writes for on
           .map((column) => column.name),
       }))
     let minimum
-    if (step.action === "delete") {
+    if (step.action === "delete" || step.action === "job_images") {
       minimum = 1 + indexes.length - (withoutRowid ? 1 : 0)
     } else {
       const changed = [...step.set.matchAll(/(\w+)\s*=/g)].map((match) => match[1])
@@ -757,4 +815,273 @@ test("a caretaker's manifestation survives the erasure under the anonymous label
     }
   }
   assert.deepEqual(traces, [])
+})
+
+test("an unpublished job's result images leave the storage with the job; published and other people's objects stay (B-993)", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  const before = new Set(world.network.objects.keys())
+
+  const requests = await eraseToCompletion(env, world)
+
+  // The two jobs' three renditions each, and the two canonical renditions of the job whose full key
+  // pointed somewhere else: eight objects.
+  const gone = new Set([
+    ...renditionKeys(IMAGE.candidate),
+    ...renditionKeys(IMAGE.edit),
+    ...renditionKeys(IMAGE.oddKey).slice(1),
+  ])
+  for (const key of gone)
+    assert.equal(world.network.objects.has(key), false, `${key} is still public`)
+  // Everything else is exactly where it was: the portraits that were published (including the
+  // hash a job shared with a published portrait, B-993's shared-key case), the other person's
+  // image, the gene object a job row named, and the oddly keyed job's own full rendition.
+  assert.deepEqual(
+    [...world.network.objects.keys()].sort(),
+    [...before].filter((key) => !gone.has(key)).sort(),
+  )
+  assert.equal(world.network.objects.has("genes/v3/TP53.json"), true)
+  for (const key of renditionKeys(IMAGE.bob)) assert.equal(world.network.objects.has(key), true)
+  for (const key of renditionKeys("c".repeat(64))) {
+    assert.equal(world.network.objects.has(key), true, "a published portrait lost an object")
+  }
+  const changed = Object.assign({}, ...requests.map((request) => request.erasure.changed))
+  assert.equal(
+    requests.reduce((sum, request) => sum + (request.erasure.changed.job_image_objects || 0), 0),
+    gone.size,
+  )
+  assert.ok(changed.candidate_job_images >= 1 || changed.edit_job_images >= 1)
+  // None of the person's unpublished jobs is left, with or without an image.
+  assert.deepEqual(
+    rows(world.iconoplasm, "SELECT id FROM icono_candidate_generation_jobs ORDER BY id").map(
+      (job) => job.id,
+    ),
+    ["cand-alice-published", "cand-bob-image", "cand-bob-queued"],
+  )
+  assert.deepEqual(
+    rows(world.iconoplasm, "SELECT id FROM icono_image_edit_jobs ORDER BY id").map((job) => job.id),
+    ["edit-alice-published", "edit-bob-queued"],
+  )
+})
+
+test("a failed storage delete leaves the job row, and the next request finishes the job", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  world.network.storageFailures = 1
+
+  const failed = await route(env, { account_id: world.erasedAccount, command_id: "req-1" })
+  assert.equal(failed.status, 503)
+  assert.equal((await failed.json()).code, "ERASURE_FAILED")
+  assert.equal(
+    (await readBrinedewAccount(world.accounts, world.erasedAccount)).status,
+    "erasure_pending",
+  )
+  // The job rows that name the undeleted objects are still there: nothing remembers the keys
+  // anywhere else.
+  assert.ok(
+    row(
+      world.iconoplasm,
+      "SELECT 1 FROM icono_candidate_generation_jobs WHERE id = 'cand-alice-image'",
+    ),
+  )
+  assert.ok(
+    row(world.iconoplasm, "SELECT 1 FROM icono_image_edit_jobs WHERE id = 'edit-alice-image'"),
+  )
+
+  await eraseToCompletion(env, world)
+  for (const hash of [IMAGE.candidate, IMAGE.edit]) {
+    for (const key of renditionKeys(hash)) assert.equal(world.network.objects.has(key), false, key)
+  }
+})
+
+test("a person with many stored images takes several requests, each within the external-call bound", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  const insertJob = world.iconoplasm.database.prepare(
+    `INSERT INTO icono_image_edit_jobs
+       (id, user_id, provider_id, source_gene_symbol, source_asset_sha256, status,
+        result_asset_sha256, result_r2_key_full, result_r2_key_medium, result_r2_key_thumb)
+     VALUES (?, ?, 'openai', 'TP53', ?, 'succeeded', ?, ?, ?, ?)`,
+  )
+  for (let index = 1; index <= 30; index += 1) {
+    const hash = String(index).padStart(4, "0").repeat(16)
+    const [full, medium, thumb] = renditionKeys(hash)
+    insertJob.run(
+      `edit-alice-bulk-${index}`,
+      ERASED_USER,
+      "b".repeat(64),
+      hash,
+      full,
+      medium,
+      thumb,
+    )
+    for (const key of [full, medium, thumb]) world.network.storeObject(key)
+  }
+
+  const requests = await eraseToCompletion(env, world, {}, 16)
+
+  assert.ok(requests.length >= 3, "ninety more objects cannot fit in one request")
+  for (const request of requests) {
+    assert.ok(request.external <= ERASURE_MAX_EXTERNAL_FETCHES, `${request.external} calls`)
+  }
+  for (let index = 1; index <= 30; index += 1) {
+    for (const key of renditionKeys(String(index).padStart(4, "0").repeat(16))) {
+      assert.equal(world.network.objects.has(key), false, `${key} is still public`)
+    }
+  }
+  assert.equal(
+    row(
+      world.iconoplasm,
+      "SELECT count(*) AS n FROM icono_image_edit_jobs WHERE id LIKE 'edit-alice-bulk-%'",
+    ).n,
+    0,
+  )
+})
+
+test("the public Discord copy of a comment names the anonymous label; a removed comment's post is deleted (B-992)", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  const label = await brinedewFormerAuthorLabel(world.erasedAccount)
+  const original = world.network.messages.map((message) => ({ ...message }))
+  const seededCalls = world.network.callsTo("discord").length
+  const header = (symbol) =>
+    `New comment on **${symbol}** gene: <https://iconoplasm.brinedew.bio/gene/${symbol}>\n\n`
+
+  const requests = await eraseToCompletion(env, world)
+
+  // No post of the bot names her any more.
+  assert.deepEqual(
+    botPosts(world).filter((message) => message.content.includes(ERASED_NAME)),
+    [],
+  )
+  const contents = botPosts(world).map((message) => message.content)
+  // Her comments stay in the channel, under the label, with the text they were posted with
+  // (including the one she edited on the site after it was posted).
+  assert.ok(contents.includes(`${header("TP53")}**${label}**: Alice on TP53`))
+  assert.ok(contents.includes(`${header("SOX11")}**${label}**: Alice on SOX11`))
+  assert.ok(contents.includes(`${header("EZH2")}**${label}**: Alice on EZH2, first draft`))
+  // The comment she removed is gone from the channel, and only that one.
+  assert.equal(
+    contents.some((content) => content.includes("Alice removed this")),
+    false,
+  )
+  assert.equal(contents.filter((content) => content.includes("Alice on TP53")).length, 1)
+  // Everything that is not her post is exactly as it was: Bob's comment, the recap, the chatter
+  // and a person's own copy of her post (a person's message is not the bot's to edit).
+  const after = new Map(world.network.messages.map((message) => [message.id, message]))
+  for (const message of original) {
+    const touchedPost = message.author.bot && message.content.includes(ERASED_NAME)
+    if (!touchedPost) assert.deepEqual(after.get(message.id), message, message.content)
+  }
+  assert.ok(contents.includes(`${header("TP53")}**${OTHER_NAME}**: Bob on TP53`))
+  const total = (name) =>
+    requests.reduce((sum, request) => sum + (request.erasure.changed[name] || 0), 0)
+  assert.equal(total("discord_posts_edited"), 3)
+  assert.equal(total("discord_posts_deleted"), 1)
+  assert.equal(
+    total("discord_posts_not_found"),
+    1,
+    "the comment from before the mirror has no post",
+  )
+  assert.equal(requests.at(-1).erasure.discord_mirror, "processed")
+  assert.equal(total("comments"), 5, "four comments rewritten, one deleted")
+  // Two Discord calls a comment at most: a find, then an edit or a delete.
+  assert.ok(world.network.callsTo("discord").length - seededCalls <= 2 * 5)
+})
+
+test("a rate-limited Discord ends the request without losing work, and the next request finishes", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  world.network.rateLimits = 1
+
+  const requests = await eraseToCompletion(env, world)
+
+  assert.equal(requests[0].erasure.complete, false)
+  assert.equal(requests[0].erasure.retry_after_seconds, 3)
+  assert.equal(requests[0].account.status, "erasure_pending")
+  assert.equal(requests.at(-1).erasure.complete, true)
+  assert.deepEqual(
+    botPosts(world).filter((message) => message.content.includes(ERASED_NAME)),
+    [],
+  )
+})
+
+test("a Discord the bot cannot read refuses the erasure with its cause; the operator can skip the mirror explicitly", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  world.network.discordStatus = 403
+
+  const refused = await route(env, { account_id: world.erasedAccount, command_id: "req-1" })
+  assert.equal(refused.status, 503)
+  const failure = await refused.json()
+  assert.equal(failure.code, "DISCORD_MIRROR_FORBIDDEN")
+  assert.match(failure.error, /Read Message History/)
+  // Nothing was lost: her comments still carry her Discord id, and the account is still pending.
+  assert.equal(
+    row(
+      world.iconoplasm,
+      "SELECT count(*) AS n FROM icono_gene_comments WHERE user_id = ?",
+      ERASED_USER,
+    ).n,
+    5,
+  )
+  assert.equal(
+    (await readBrinedewAccount(world.accounts, world.erasedAccount)).status,
+    "erasure_pending",
+  )
+
+  // A deployment without the bot never mirrored a comment; the operator may also skip it by name.
+  const discordCalls = world.network.callsTo("discord").length
+  assert.ok(discordCalls > 0)
+  const skipped = await eraseToCompletion(env, world, { skip_discord_mirror: true })
+  assert.equal(skipped.at(-1).erasure.discord_mirror, "skipped")
+  assert.equal(world.network.callsTo("discord").length, discordCalls, "no Discord call was made")
+  assert.equal(
+    row(
+      world.iconoplasm,
+      "SELECT count(*) AS n FROM icono_gene_comments WHERE user_id = ?",
+      ERASED_USER,
+    ).n,
+    0,
+  )
+
+  const unconfigured = await erasedWorld()
+  const seeded = unconfigured.network.callsTo("discord").length
+  const unconfiguredEnv = routeEnv({ ...unconfigured.env, DISCORD_BOT_TOKEN: "" })
+  const finished = await eraseToCompletion(unconfiguredEnv, unconfigured)
+  assert.equal(finished.at(-1).erasure.discord_mirror, "not_configured")
+  assert.equal(unconfigured.network.callsTo("discord").length, seeded)
+})
+
+test("the comment mirror's shape is found and rewritten for any username, however it is spelled", () => {
+  const link = "https://iconoplasm.brinedew.bio/gene/TP53"
+  for (const username of [
+    "Dr. Who? (the *real* one)",
+    "a**b",
+    "x|y[1]^$\\",
+    "ünïcødé 蛋白",
+    "  padded  ",
+  ]) {
+    const posted = commentMirrorContent({ symbol: "TP53", link, username, body: "p53 is **bold**" })
+    const rewritten = commentMirrorWithAuthor(posted, {
+      symbol: "TP53",
+      username,
+      author: "Former caretaker · 0123456789",
+    })
+    assert.equal(
+      rewritten,
+      `New comment on **TP53** gene: <${link}>\n\n**Former caretaker · 0123456789**: p53 is **bold**`,
+      username,
+    )
+  }
+  // Another gene or another author is not this post.
+  const posted = commentMirrorContent({ symbol: "TP53", link, username: "ada", body: "hi" })
+  assert.equal(
+    commentMirrorWithAuthor(posted, { symbol: "SOX11", username: "ada", author: "x" }),
+    null,
+  )
+  assert.equal(
+    commentMirrorWithAuthor(posted, { symbol: "TP53", username: "adam", author: "x" }),
+    null,
+  )
 })

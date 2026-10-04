@@ -157,6 +157,13 @@ it into `#iconoplasm`.
     served from cache — at most one render per (gene, canonical version).
   - If the render fails, the mirror degrades to a clean text-only post.
 - New comments only. Edits and deletes are not mirrored.
+- The post's message id is not stored. An account erasure
+  (`workers/iconoplasm/account-erasure/discord-comment-mirror.js`) finds the post again, as the
+  bot's message that follows the comment row by seconds, and rewrites its author to the anonymous
+  label (or deletes the post of a comment its author had removed). The message shape lives in
+  [`workers/lib/iconoplasm-comment-discord-mirror.js`](../workers/lib/iconoplasm-comment-discord-mirror.js),
+  used by both the poster and the erasure. The bot needs View Channel and Read Message History in
+  `#iconoplasm`.
 - Comment creation is already rate-limited to 20/user/hour in the handler.
 
 ---
