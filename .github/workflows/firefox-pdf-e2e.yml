@@ -38,6 +38,12 @@ jobs:
         uses: browser-actions/setup-firefox@v1
         with:
           firefox-version: latest
+      - name: Probe the production endpoints the suite depends on
+        run: |
+          curl -sS -o /dev/null -w 'iconoplasm host %{http_code}
+' -m 20 https://iconoplasm.brinedew.bio/ || true
+          curl -sS -o /dev/null -w 'portrait cdn %{http_code}
+' -m 20 https://iconoplasmportraits.b-cdn.net/ || true
       - uses: astral-sh/setup-uv@v6
       - name: Run the Firefox PDF suite
         working-directory: iconoplasm-extension/e2e
