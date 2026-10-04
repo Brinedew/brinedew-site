@@ -1,11 +1,11 @@
 import {
   ownManifestation,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
+} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=1f19040ced5395f4"
+} from "./caretaker-manifestations-view.js?v=ad73b60c0b58be62"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -63,10 +63,6 @@ export function createCaretakerManifestationEventWiring({
       if (!target) return
       if (target.hasAttribute("data-icono-caretaker-retry-save")) {
         void retrySave(state)
-        return
-      }
-      if (target.hasAttribute("data-icono-caretaker-close")) {
-        target.closest("dialog")?.close()
         return
       }
       if (target.hasAttribute("data-icono-caretaker-retry-tags")) {

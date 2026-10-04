@@ -13,6 +13,7 @@ import {
   limitStructureBody,
   structureNeedsAnonymousHeader,
 } from "./structure-bytes.js?v=14316e269d498942"
+import { buildPracticeLookup, resolvePracticeGenes } from "./practice-resolve.js?v=99a10823bee53398"
 // ⚡ PERFORMANCE: Mark navigation start for pre-zero timing measurement
 var NAVIGATION_START = performance.now()
 console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
@@ -4212,14 +4213,40 @@ console.log(`[TIMING] navigation-start | 0ms (performance.now baseline)`)
   // server search remains only as a fallback if the file cannot load.
   const PROTEIN_INDEX_URL = `${STATIC_BASE}protein-index.json`
   let proteinIndexPromise = null
+  let practiceLookupPromise = null
 
-  function loadProteinIndex() {
-    if (!proteinIndexPromise) {
-      proteinIndexPromise = fetch(PROTEIN_INDEX_URL, { credentials: "omit" })
+  // One fetch of the static file feeds both the autocomplete rows and the practice paste box.
+  let proteinIndexPayloadPromise = null
+  function loadProteinIndexPayload() {
+    if (!proteinIndexPayloadPromise) {
+      proteinIndexPayloadPromise = fetch(PROTEIN_INDEX_URL, { credentials: "omit" })
         .then((response) => {
           if (!response.ok) throw new Error(`Protein index HTTP ${response.status}`)
           return response.json()
         })
+        .catch((error) => {
+          proteinIndexPayloadPromise = null
+          throw error
+        })
+    }
+    return proteinIndexPayloadPromise
+  }
+
+  // The "paste your own gene list" box resolves from the same static file (B-934): no Worker
+  // request and no D1 read per paste. Opening the practice dialog starts the download.
+  function loadPracticeLookup() {
+    if (!practiceLookupPromise) {
+      practiceLookupPromise = loadProteinIndexPayload().then(buildPracticeLookup)
+      practiceLookupPromise.catch(() => {
+        practiceLookupPromise = null
+      })
+    }
+    return practiceLookupPromise
+  }
+
+  function loadProteinIndex() {
+    if (!proteinIndexPromise) {
+      proteinIndexPromise = loadProteinIndexPayload()
         .then((payload) => {
           const fields = Array.isArray(payload?.fields) ? payload.fields : []
           const at = (name) => fields.indexOf(name)
@@ -5384,16 +5411,7 @@ https://geneguessr.brinedew.bio/`
     }
     setPracticeBusy(true)
     try {
-      const resp = await fetch(`${API_BASE}/api/game/practice/resolve?practice=1`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ genes }),
-      })
-      const payload = await resp.json().catch(() => ({}))
-      if (!resp.ok) {
-        throw new Error(payload?.error || `Resolve failed (${resp.status})`)
-      }
+      const payload = resolvePracticeGenes(await loadPracticeLookup(), genes)
       const practiceList = {
         text,
         resolvedAt: Date.now(),
@@ -5412,7 +5430,10 @@ https://geneguessr.brinedew.bio/`
       updateSidebarStats()
     } catch (err) {
       console.warn("Geneguessr: practice resolve failed", err)
-      renderPracticeResults(null, err?.message || "Practice resolve failed")
+      renderPracticeResults(
+        null,
+        "Could not load the gene list to check your symbols. Check your connection and try Validate again.",
+      )
     } finally {
       setPracticeBusy(false)
     }
@@ -5602,6 +5623,7 @@ https://geneguessr.brinedew.bio/`
     }
     renderPracticeResults(stored, null)
     setPracticeBusy(false)
+    loadPracticeLookup().catch(() => {})
     if (!isPracticeDialogOpen()) practiceDialog.showModal()
     practiceTextarea?.focus()
   }

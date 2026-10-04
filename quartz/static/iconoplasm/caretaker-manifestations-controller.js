@@ -2,7 +2,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=ac21c7021544e8c8"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=c8e008f0aa8cd76b"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -14,8 +14,9 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=1f19040ced5395f4"
+} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=ad73b60c0b58be62"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -102,7 +103,7 @@ export function createCaretakerManifestationPanel({
       const editing =
         state.autosaving &&
         control.closest(
-          "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-caretaker-close]",
+          "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-dialog-close]",
         )
       control.disabled = (busy && !editing) || control.hasAttribute("data-icono-caretaker-disabled")
     })
@@ -160,7 +161,7 @@ export function createCaretakerManifestationPanel({
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
-    if (wasOpen && dialog && !dialog.open) dialog.showModal()
+    if (wasOpen) openDialog(dialog)
   }
 
   function activateTab(state, tab) {
@@ -754,11 +755,38 @@ export function createCaretakerManifestationPanel({
   function open(host) {
     const dialog = host?.querySelector?.("[data-icono-caretaker-dialog]")
     if (!dialog) return false
-    if (!dialog.open) dialog.showModal()
+    return openDialog(dialog)
+  }
+
+  // B-724: take the caretaker to one saved version in History, from a candidate
+  // image's "made from version N" link. An older version may sit beyond the loaded
+  // page, so older pages load until it appears or History runs out.
+  async function showVersion(host, revisionId) {
+    const state = mounted.get(host)
+    const wanted = String(revisionId || "")
+    if (!state?.dossier?.enabled || !wanted) return false
+    let cursor = state.dossier.history.next_cursor
+    while (!revisionById(state.dossier, wanted) && cursor && !state.busy) {
+      await loadOlderHistory(state)
+      if (state.dossier.history.next_cursor === cursor) break
+      cursor = state.dossier.history.next_cursor
+    }
+    const found = Boolean(revisionById(state.dossier, wanted))
+    if (found) state.selectedRevisionId = wanted
+    state.activeTab = "history"
+    render(state, { preserveDraft: true })
+    open(host)
+    if (!found) {
+      setStatus(state, "That version is no longer available in History.", "warn")
+      return false
+    }
+    state.host
+      .querySelector("[data-icono-caretaker-version][aria-current]")
+      ?.scrollIntoView?.({ block: "nearest" })
     return true
   }
 
-  return Object.freeze({ mount, open })
+  return Object.freeze({ mount, open, showVersion })
 }
 
 export { normalizedDossier, proseValidationError }

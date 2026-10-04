@@ -10,6 +10,7 @@ import {
   transitionCaretakerAssignment,
 } from "./caretaker-assignment-commands.js"
 import { readActiveCaretakerTerms } from "./caretaker-terms-registry.js"
+import { readCandidateSources } from "./manifestation-candidate-sources.js"
 import { authorityError, defaultIdFactory } from "./manifestation-authority-contract.js"
 import {
   authorityMode,
@@ -206,6 +207,7 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
 function createCaretakerManifestationHttpHandler({
   db,
   env,
+  primaryDb,
   resolveSession,
   cursorSecret = env?.ICONOPLASM_AUTHORING_CURSOR_SECRET,
   onAuthorityEvent,
@@ -251,7 +253,11 @@ function createCaretakerManifestationHttpHandler({
               storageEnv: env,
               onIntegrityFailure,
             })
-            return jsonResponse(value)
+            // B-724: caretaker-only; one gene's candidate pool, null when unreadable.
+            const candidateSources = await readCandidateSources(primaryDb, value?.gene?.symbol)
+            return jsonResponse(
+              candidateSources ? { ...value, candidate_sources: candidateSources } : value,
+            )
           } catch (error) {
             if (error?.code === "GENE_DOSSIER_FORBIDDEN") {
               return jsonResponse({ enabled: false }, 200)

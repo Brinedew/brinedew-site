@@ -74,9 +74,9 @@ const DOSSIER = {
 function measure() {
   const rect = (el) => el && el.getBoundingClientRect()
   const dialog = document.querySelector(".icono-caretaker-dialog[open]")
-  const footer = document.querySelector(".icono-caretaker-panel__footer")
-  const title = document.querySelector(".icono-caretaker-panel__header h2")
-  const close = document.querySelector(".icono-caretaker-dialog__close")
+  const footer = document.querySelector(".icono-caretaker-dialog .icono-dialog__footer")
+  const title = document.querySelector(".icono-caretaker-dialog .icono-dialog__title")
+  const close = document.querySelector(".icono-caretaker-dialog .icono-dialog__close")
   const d = rect(dialog)
   const buttons = [...dialog.querySelectorAll("button, .icono-button")]
     .filter((el) => el.offsetParent)

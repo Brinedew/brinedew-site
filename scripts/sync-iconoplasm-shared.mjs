@@ -304,6 +304,15 @@ if (!extensionOnly) {
   ])
   await syncStudioImportVersions(staticRoot)
 
+  // B-849: the one dialog template is a leaf under every dialog module.
+  await syncStaticImportVersions(staticRoot, "iconoplasm/dialog.js", [
+    "iconoplasm/vote-login-dialog.js",
+    "iconoplasm/candidate-delete-dialog.js",
+    "iconoplasm/caretaker-manifestations-view.js",
+    "iconoplasm/caretaker-manifestations-controller.js",
+    "iconoplasm/app.js",
+  ])
+
   // The caretaker editor was stranded on a cached pre-fix view module even
   // though the current source and API were healthy. Cover the full lazy graph.
   await syncStaticImportVersions(staticRoot, "iconoplasm/caretaker-manifestations-model.js", [

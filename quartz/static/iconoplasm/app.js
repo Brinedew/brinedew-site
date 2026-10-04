@@ -33,13 +33,19 @@ import {
   wireSharedUserPanel,
 } from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
 import "./vendor/img-comparison-slider.js?v=6e01335000bbafdd"
-import { openVoteLoginDialog } from "./vote-login-dialog.js?v=0155acc7b23ca528"
+import {
+  closeDialog,
+  dialogMarkup,
+  openDialog,
+  setDialogTitle,
+} from "./dialog.js?v=a5c98f9ed0ae3eb6"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installIconoplasmLightbox } from "./lightbox.js?v=c176444f4b2570e4"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=2e163b70b081599b"
+} from "./candidate-delete-dialog.js?v=e9b90dccfb37810b"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
@@ -293,7 +299,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=219ede1bd8a6a75f", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=4755c8909a84fd1a", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -309,9 +315,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=34a62bd7961d1c5a"),
+      import("./caretaker-manifestations.js?v=9ebd7a1e80884305"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
+      import("./caretaker-candidate-sources.js?v=e6ce7ed31fd8a395"),
     ]).then(function (modules) {
+      var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
         fetchJSON: fetchAuthedJSON,
         escapeHtml: esc,
@@ -359,6 +367,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
+          candidateSourceLinks.mount(geneContent, {
+            dossier: detail.dossier,
+            openVersion: function (revisionId) {
+              return manifestationPanel.showVersion(detail.host, revisionId)
+            },
+          })
           return supervoteControls.mount(geneContent, {
             symbol: detail.symbol,
             dossier: detail.dossier,
@@ -368,7 +382,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return Object.freeze({
         mount: manifestationPanel.mount,
         open: manifestationPanel.open,
-        unmountSupervote: supervoteControls.unmount,
+        unmountSupervote: function (root) {
+          candidateSourceLinks.unmount(root)
+          supervoteControls.unmount(root)
+        },
       })
     })
     return caretakerPanelPromise
@@ -456,31 +473,36 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           '"><span>' +
           esc(actionLabel) +
           "</span></button>" +
-          '<sl-dialog class="icono-standard-dialog icono-caretaker-claim-dialog" id="' +
-          esc(dialogId) +
-          '" data-icono-caretaker-claim-dialog label="' +
-          esc(switchFrom ? "Switch to " + symbol + "?" : actionLabel) +
-          '">' +
-          '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
-          (switchFrom
-            ? "<p>You will stop caring for " +
-              esc(switchFrom.canonical_symbol) +
-              " and start caring for " +
-              esc(symbol) +
-              ". What you wrote for " +
-              esc(switchFrom.canonical_symbol) +
-              ' stays in its history.</p><p>Switching accepts the <a href="'
-            : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
-          esc(terms.document_url) +
-          '" target="_blank" rel="noopener">' +
-          esc(terms.display_label || "caretaker terms") +
-          (switchFrom ? "</a>.</p>" : "</a>.</sl-checkbox>") +
-          '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
-          '</form><div class="icono-caretaker-claim-actions icono-actions" slot="footer"><button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit' +
-          (switchFrom ? "" : " disabled") +
-          ">" +
-          esc(actionLabel) +
-          "</button></div></sl-dialog>"
+          dialogMarkup({
+            id: dialogId,
+            title: switchFrom ? "Switch to " + symbol + "?" : actionLabel,
+            size: "standard",
+            className: "icono-caretaker-claim-dialog",
+            attributes: "data-icono-caretaker-claim-dialog",
+            body:
+              '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
+              (switchFrom
+                ? "<p>You will stop caring for " +
+                  esc(switchFrom.canonical_symbol) +
+                  " and start caring for " +
+                  esc(symbol) +
+                  ". What you wrote for " +
+                  esc(switchFrom.canonical_symbol) +
+                  ' stays in its history.</p><p>Switching accepts the <a href="'
+                : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
+              esc(terms.document_url) +
+              '" target="_blank" rel="noopener">' +
+              esc(terms.display_label || "caretaker terms") +
+              (switchFrom ? "</a>.</p>" : "</a>.</sl-checkbox>") +
+              '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
+              "</form>",
+            footer:
+              '<button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit' +
+              (switchFrom ? "" : " disabled") +
+              ">" +
+              esc(actionLabel) +
+              "</button>",
+          })
         // B-838: the claim button may sit in the toolbar's More menu; the dialog moves
         // next to the toolbar so closing the menu never hides it.
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
@@ -496,13 +518,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           ?.addEventListener("click", function () {
             var menu = target.closest("[popover]")
             if (menu && menu.matches(":popover-open")) menu.hidePopover()
-            if (!dialog.open) dialog.show()
+            openDialog(dialog)
             if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
           })
         scope
           .querySelector("[data-icono-caretaker-claim-cancel]")
           ?.addEventListener("click", function () {
-            dialog.hide()
+            closeDialog(dialog)
           })
         // The vendored sl-checkbox emits only sl-change; listen for both so a
         // native change event can never be the reason the button stays dead.
@@ -542,7 +564,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             },
           )
             .then(function () {
-              dialog.hide()
+              dialog.close()
               target.replaceChildren()
               if (scope !== target) scope.replaceChildren()
               var host = container.querySelector("[data-icono-caretaker-island]")
@@ -2500,7 +2522,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sharedDisabled = false
     var guestStorageCopy =
       collectionState && !collectionState.authenticated
-        ? " · dossier visits stay in this browser until you sign in"
+        ? // A newcomer does not know a "dossier"; say how the collection grows and how to keep it.
+          " · open any gene to find it · sign in to keep what you find"
         : ""
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
@@ -4345,7 +4368,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       if (isMobileLabelReviewEnabled()) {
         wireMobileLabelCard(card)
-        setMobileLabelExpanded(card, false, { preserveTop: false })
+        setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
       } else {
         resetMobileLabelCardState(card)
       }
@@ -4815,6 +4838,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }, 2600)
   }
 
+  // A gallery card starts as a torn preview, so many fit a phone screen and can be swiped
+  // MISFIT/FIT. On a gene's own page the reader came for that one gene, so its card opens
+  // with the field notes (age, sex, mass, aesthetic) showing; the vote buttons stay.
+  function mobileLabelStartsExpanded(card) {
+    return !!card && card.classList.contains("icono-gene-lead-card")
+  }
+
   function wireMobileLabelCard(card) {
     if (!card || !card.classList || !card.classList.contains("icono-card--variant-lab-label"))
       return
@@ -4826,7 +4856,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (card.getAttribute("data-icono-mobile-label-wired") === "true") return
     card.setAttribute("data-icono-mobile-label-wired", "true")
     syncMobileLabelDossierContent(card)
-    setMobileLabelExpanded(card, false, { preserveTop: false })
+    setMobileLabelExpanded(card, mobileLabelStartsExpanded(card), { preserveTop: false })
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
     }, 180)
@@ -5709,30 +5739,31 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderRequestDialogMarkup(symbol) {
     var safeSymbol = normalizedSymbol(symbol)
     var dialogId = "icono-request-dialog-" + safeSymbol
-    return (
-      '<sl-dialog class="icono-standard-dialog icono-request-dialog" id="' +
-      esc(dialogId) +
-      '" data-icono-request-dialog label="New candidate for ' +
-      esc(safeSymbol) +
-      '">' +
-      '<div class="icono-request-dialog-shell" data-icono-request-body>' +
-      renderRequestShellMarkup(safeSymbol) +
-      "</div>" +
-      '<div class="icono-request-footer" slot="footer">' +
-      '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-      // Secondary left, primary right: the dialog's one action bar (B-884).
-      '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
-      '<button type="submit" form="icono-request-form-' +
-      esc(safeSymbol) +
-      '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
-      "</div>" +
-      '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
-      '<button type="button" class="icono-button icono-button--primary icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
-      '<button type="button" class="icono-button icono-request-direct-publish" data-icono-request-image-publish disabled>Publish candidate</button>' +
-      "</div>" +
-      "</div>" +
-      "</sl-dialog>"
-    )
+    return dialogMarkup({
+      id: dialogId,
+      title: "New candidate for " + safeSymbol,
+      size: "wide",
+      fixed: true,
+      className: "icono-request-dialog",
+      attributes: "data-icono-request-dialog",
+      body:
+        '<div class="icono-request-dialog-shell" data-icono-request-body>' +
+        renderRequestShellMarkup(safeSymbol) +
+        "</div>",
+      footerClass: "icono-request-footer",
+      footer:
+        '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
+        // Secondary left, primary right: the dialog's one action bar (B-884).
+        '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
+        '<button type="submit" form="icono-request-form-' +
+        esc(safeSymbol) +
+        '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
+        "</div>" +
+        '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
+        '<button type="button" class="icono-button icono-button--primary icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
+        '<button type="button" class="icono-button icono-request-direct-publish" data-icono-request-image-publish disabled>Publish candidate</button>' +
+        "</div>",
+    })
   }
 
   document.addEventListener("click", function (event) {
@@ -5977,47 +6008,50 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.encryptionConfigured = false
     var dialog = imageEditDialogState.dialog
     if (!dialog) return
-    if (typeof dialog.hide === "function") void dialog.hide()
-    else dialog.removeAttribute("open")
+    if (dialog.open) dialog.close()
     renderImageEditProviders()
   }
 
   function renderImageEditDialogMarkup() {
-    return (
-      '<sl-dialog class="icono-image-edit-dialog" data-icono-image-edit-dialog label="Edit blot">' +
-      '<div class="icono-image-edit-shell">' +
-      '<div class="icono-image-edit-body">' +
-      '<section class="icono-image-edit-preview">' +
-      '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source blot" loading="eager"></div>' +
-      '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
-      '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
-      '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
-      '<img slot="first" data-icono-image-edit-before alt="Before edit">' +
-      '<img slot="second" data-icono-image-edit-after alt="After edit">' +
-      "</img-comparison-slider>" +
-      "</div>" +
-      "</section>" +
-      '<section class="icono-image-edit-controls">' +
-      '<sl-select label="Editing API" hoist data-icono-image-edit-provider></sl-select>' +
-      '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
-      '<section class="icono-image-edit-adjustments" aria-label="Adjustments">' +
-      '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source blot only</span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="sex"><sl-checkbox data-icono-image-edit-adjustment="sex">Sex</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="sex"></span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="age_years"><sl-checkbox data-icono-image-edit-adjustment="age_years">Age</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="age_years"></span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="mass_kg"><sl-checkbox data-icono-image-edit-adjustment="mass_kg">Mass</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="mass_kg"></span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="surface_tone_hex"><sl-checkbox data-icono-image-edit-adjustment="surface_tone_hex">Surface tone</sl-checkbox><span class="icono-image-edit-adjustment-value icono-image-edit-adjustment-value--tone" data-icono-image-edit-adjustment-value="surface_tone_hex"></span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fantastical_feature"><sl-checkbox data-icono-image-edit-adjustment="fantastical_feature">Feature</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fantastical_feature"></span></div>' +
-      '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fashion_styles"><sl-checkbox data-icono-image-edit-adjustment="fashion_styles">Style mix</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fashion_styles"></span></div>' +
-      "</section>" +
-      "</section>" +
-      "</div>" +
-      "</div>" +
-      '<div slot="footer" class="icono-image-edit-actions">' +
-      '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
-      '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish</button>' +
-      "</div>" +
-      "</sl-dialog>"
-    )
+    return dialogMarkup({
+      id: "icono-image-edit-dialog",
+      title: "Edit blot",
+      size: "wide",
+      className: "icono-image-edit-dialog",
+      attributes: "data-icono-image-edit-dialog",
+      body:
+        '<div class="icono-image-edit-shell">' +
+        '<div class="icono-image-edit-body">' +
+        '<section class="icono-image-edit-preview">' +
+        '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source blot" loading="eager"></div>' +
+        '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
+        '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
+        '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
+        '<img slot="first" data-icono-image-edit-before alt="Before edit">' +
+        '<img slot="second" data-icono-image-edit-after alt="After edit">' +
+        "</img-comparison-slider>" +
+        "</div>" +
+        "</section>" +
+        '<section class="icono-image-edit-controls">' +
+        '<sl-select label="Editing API" hoist data-icono-image-edit-provider></sl-select>' +
+        '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
+        '<section class="icono-image-edit-adjustments" aria-label="Adjustments">' +
+        '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source blot only</span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="sex"><sl-checkbox data-icono-image-edit-adjustment="sex">Sex</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="sex"></span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="age_years"><sl-checkbox data-icono-image-edit-adjustment="age_years">Age</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="age_years"></span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="mass_kg"><sl-checkbox data-icono-image-edit-adjustment="mass_kg">Mass</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="mass_kg"></span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="surface_tone_hex"><sl-checkbox data-icono-image-edit-adjustment="surface_tone_hex">Surface tone</sl-checkbox><span class="icono-image-edit-adjustment-value icono-image-edit-adjustment-value--tone" data-icono-image-edit-adjustment-value="surface_tone_hex"></span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fantastical_feature"><sl-checkbox data-icono-image-edit-adjustment="fantastical_feature">Feature</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fantastical_feature"></span></div>' +
+        '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="fashion_styles"><sl-checkbox data-icono-image-edit-adjustment="fashion_styles">Style mix</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="fashion_styles"></span></div>' +
+        "</section>" +
+        "</section>" +
+        "</div>" +
+        "</div>",
+      footerClass: "icono-image-edit-actions",
+      footer:
+        '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
+        '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish</button>',
+    })
   }
 
   function ensureImageEditDialog() {
@@ -6398,7 +6432,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
-    dialog.label = source.source === "candidate" ? "Edit candidate blot" : "Edit blot"
+    setDialogTitle(dialog, source.source === "candidate" ? "Edit candidate blot" : "Edit blot")
     if (sourceImg) {
       var syncNaturalRatio = function () {
         if (!source.width && sourceImg.naturalWidth > 0) source.width = sourceImg.naturalWidth
@@ -6418,8 +6452,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     applyImageEditModelConstraints()
     updateImageEditButtons()
     loadImageEditProviders()
-    if (typeof dialog.show === "function") dialog.show()
-    else dialog.setAttribute("open", "open")
+    openDialog(dialog)
   }
 
   function sourceFromEditButton(button) {
@@ -6526,8 +6559,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function closeImageEditDialog() {
     var dialog = imageEditDialogState.dialog
     if (!dialog || !document.body.contains(dialog)) return
-    if (typeof dialog.hide === "function") dialog.hide()
-    else dialog.removeAttribute("open")
+    closeDialog(dialog)
   }
 
   function seedPublisherVoteSnapshotAfterImageEditPublish(payload) {
@@ -6762,8 +6794,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     function openRequestDialog() {
       if (!dialog) return
       activateRequestTab(savedRequestTab())
-      if (typeof dialog.show === "function") dialog.show()
-      else dialog.setAttribute("open", "open")
+      openDialog(dialog)
     }
 
     if (dialogOpenButton) {
@@ -8022,6 +8053,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!state || !state.authenticated) {
           freeQueueAvailable = false
           if (freeFooter) freeFooter.hidden = true
+          // Signed out, the dialog holds one sentence and a login button; the tall work-surface
+          // frame read as a page that failed to load, so it shrinks to a sign-in dialog.
+          var guestDialog = body.closest ? body.closest(".icono-dialog") : null
+          if (guestDialog) {
+            guestDialog.classList.remove("icono-dialog--fixed", "icono-dialog--wide")
+            guestDialog.classList.add("icono-dialog--compact")
+          }
           body.innerHTML =
             '<div class="icono-home-auth-copy">' +
             '<div class="icono-home-auth-title">Log in to request new candidates</div>' +
@@ -8133,6 +8171,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return { page: "studio" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
+    // People type iconoplasm.brinedew.bio/TP53 or /p53. A bare word with no dot (so never a
+    // file) is a gene question; the gene page already resolves names and says when none fits.
+    var bare = path.match(/^\/([A-Za-z0-9][A-Za-z0-9_-]{0,39})\/?$/)
+    if (bare) return { page: "gene", symbol: bare[1], bare: true }
     return { page: "404" }
   }
 
@@ -10683,6 +10725,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
     var route = getRoute()
+    if (route.bare) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        "/gene/" + encodeURIComponent(route.symbol) + window.location.search,
+      )
+    }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
     unmountDiagramStudio()

@@ -2,6 +2,6 @@ export {
   createCaretakerManifestationPanel,
   normalizedDossier,
   proseValidationError,
-} from "./caretaker-manifestations-controller.js?v=7ff389c8109d14a1"
-export { manifestationWordDiff } from "./caretaker-manifestations-model.js?v=fcee998f5b583a90"
-export { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=1f19040ced5395f4"
+} from "./caretaker-manifestations-controller.js?v=a17b427e0304cdc7"
+export { manifestationWordDiff } from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+export { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=ad73b60c0b58be62"
