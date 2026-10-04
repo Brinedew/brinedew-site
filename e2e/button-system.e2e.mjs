@@ -1,3 +1,4 @@
+// B-849 also asserts the shared dialog frame on each surface.
 // B-839: the shared button system (B-835) checked in a real browser, by computed
 // style, on the surfaces that used to be pinned by CSS regexes: the request
 // picker's two tabs, the image-edit dialog and the logged-out Join Discord
@@ -24,6 +25,7 @@ import {
   VIEWPORTS,
   launchChrome,
   measureButtons,
+  measureDialogFrame,
   routeProduction,
   startSite,
 } from "./harness.mjs"
@@ -151,6 +153,23 @@ test("buttons keep one face, one line and the ink primary on every modal surface
             path: path.join(OUT, `buttons-${where.replaceAll("/", "-")}.png`),
           })
           const m = await page.evaluate(measureButtons, surface.root)
+          // B-849: every dialog is the one frame (header, close button, radius).
+          const frame = await page.evaluate(measureDialogFrame, surface.root)
+          assert.equal(frame.isNativeDialog, true, `${where}: not a native .icono-dialog`)
+          assert.equal(frame.modal, true, `${where}: not modal`)
+          assert.equal(frame.radius, "6px", `${where}: dialog radius`)
+          assert.equal(frame.closeLabel, "Close", `${where}: close button label`)
+          assert.ok(
+            frame.close && Math.abs(frame.close.w - frame.close.h) < 0.5,
+            `${where}: close button is not square`,
+          )
+          assert.match(frame.titleFont, /IBM Plex Mono/, `${where}: title face`)
+          assert.equal(frame.pageScrollLocked, true, `${where}: page behind the dialog scrolls`)
+          assert.ok(
+            frame.dialog.left >= 0 && frame.dialog.right <= frame.viewport + 0.5,
+            `${where}: dialog fits the viewport`,
+          )
+          report.push({ where: `${where}/frame`, ...frame })
           const fonts = surface.root === EDIT ? await page.evaluate(editFonts) : null
           report.push({ where, ...m, fonts })
 

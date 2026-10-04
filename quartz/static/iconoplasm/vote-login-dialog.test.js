@@ -81,6 +81,11 @@ test("guest voting opens one native modal and deliberately focuses the Discord a
   assert.equal(harness.document.body.lastElementChild === dialog, true)
   assert.equal(dialog.getAttribute("aria-labelledby"), "icono-vote-login-title")
   assert.equal(dialog.querySelector("h2")?.textContent, "Log in with Discord to vote")
+  assert.equal(
+    dialog.classList.contains("icono-dialog") && dialog.classList.contains("icono-dialog--compact"),
+    true,
+    "the vote prompt is the shared compact dialog",
+  )
   assert.deepEqual(
     harness.documentListenerTypes,
     [],
@@ -127,7 +132,9 @@ test("native close and cancel lifecycles remove the modal and restore its vote c
     returnFocus: harness.source,
   })
 
-  dialog.querySelector(".icono-vote-login-close")?.dispatchEvent(new harness.window.Event("click"))
+  dialog
+    .querySelector("[data-icono-dialog-close]")
+    ?.dispatchEvent(new harness.window.Event("click", { bubbles: true }))
 
   assert.equal(harness.document.querySelector("[data-icono-vote-login-prompt]") === null, true)
   assert.equal(dialog.returnValue, "dismiss")

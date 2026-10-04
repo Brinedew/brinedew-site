@@ -165,7 +165,36 @@ export function measureButtons(rootSelector) {
         ...box(el),
       }
     })
-  // A Shoelace dialog host has no box of its own; its visible panel is a part.
-  const panel = root.shadowRoot?.querySelector('[part~="panel"]') || root
-  return { viewport: innerWidth, root: box(panel), buttons }
+  return { viewport: innerWidth, root: box(root), buttons }
+}
+
+// B-849: the one dialog frame. Runs in the page; every Iconoplasm dialog must
+// return the same radius, header height, close-button size and title face.
+export function measureDialogFrame(rootSelector) {
+  const dialog = document.querySelector(rootSelector)
+  const box = (el) => {
+    const r = el.getBoundingClientRect()
+    return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }
+  }
+  const header = dialog.querySelector(".icono-dialog__header")
+  const title = dialog.querySelector(".icono-dialog__title")
+  const close = dialog.querySelector(".icono-dialog__close")
+  const body = dialog.querySelector(".icono-dialog__body")
+  const footer = dialog.querySelector(".icono-dialog__footer")
+  const style = getComputedStyle(dialog)
+  return {
+    isNativeDialog: dialog.tagName === "DIALOG" && dialog.classList.contains("icono-dialog"),
+    modal: dialog.matches(":modal"),
+    viewport: innerWidth,
+    radius: style.borderTopLeftRadius,
+    dialog: box(dialog),
+    header: header ? box(header) : null,
+    close: close ? box(close) : null,
+    closeLabel: close?.getAttribute("aria-label") || null,
+    titleFont: title ? getComputedStyle(title).fontFamily : null,
+    titleSize: title ? getComputedStyle(title).fontSize : null,
+    bodyOverflowY: body ? getComputedStyle(body).overflowY : null,
+    footerVisible: footer ? footer.checkVisibility() : false,
+    pageScrollLocked: getComputedStyle(document.documentElement).overflow === "hidden",
+  }
 }

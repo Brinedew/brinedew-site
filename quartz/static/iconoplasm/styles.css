@@ -53,6 +53,14 @@
   --icono-action-primary-bg: color-mix(in srgb, var(--dark) 88%, var(--accent) 12%);
   --icono-action-primary-bg-hover: color-mix(in srgb, var(--dark) 76%, var(--accent) 24%);
   --icono-action-primary-text: var(--light);
+  /* B-849: dialog tokens. A scrim is dark in light and dark mode alike, so it is
+     one token, not a mix of the theme ink (which turns light in dark mode). */
+  --icono-scrim: oklch(18% 0.03 50 / 0.62);
+  --icono-dialog-radius: var(--icono-radius-lg);
+  --icono-dialog-width-compact: 28rem;
+  --icono-dialog-width-standard: 36rem;
+  --icono-dialog-width-wide: 72rem;
+  --icono-dialog-gutter: 1.25rem;
 }
 
 /* ───────── Buttons: the only definition ─────────
@@ -164,6 +172,180 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.55rem;
+}
+
+/* ───────── Dialogs: the only definition ─────────
+   B-849. Every Iconoplasm dialog is a native <dialog class="icono-dialog"> built
+   by dialog.js, with one header (title + close icon button), one scrolling body
+   and one sticky footer:
+     .icono-dialog--compact    28rem  confirmations and sign-in
+     .icono-dialog--standard   36rem  short forms (the default)
+     .icono-dialog--wide       72rem  work surfaces
+     .icono-dialog--fixed      a fixed height, for content that changes under tabs
+   Dialogs add content classes (inside __body or __footer); they never restyle the
+   frame. Colors read the theme variables, so light and dark both work. */
+.icono-dialog {
+  box-sizing: border-box;
+  width: min(var(--icono-dialog-width, var(--icono-dialog-width-standard)), calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 72%, var(--dark) 28%);
+  border-radius: var(--icono-dialog-radius);
+  background: var(--light);
+  color: var(--dark);
+  box-shadow: 0 24px 56px color-mix(in srgb, var(--dark) 22%, transparent);
+  font-family: var(--icono-action-font);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  accent-color: var(--accent);
+  /* Shoelace inputs inside dialogs (checkbox, select) read these. */
+  --sl-font-sans: var(--icono-action-font);
+  --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
+  --sl-input-height-medium: 2.55rem;
+  --sl-input-height-small: 2.5rem;
+  --sl-input-border-radius-medium: var(--icono-control-radius);
+  --sl-input-border-radius-small: var(--icono-control-radius);
+  --sl-input-background-color: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+  --sl-input-background-color-hover: color-mix(in srgb, var(--light) 90%, var(--secondary) 10%);
+  --sl-input-background-color-focus: color-mix(in srgb, var(--light) 92%, var(--secondary) 8%);
+  --sl-input-border-color: color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
+  --sl-input-border-color-hover: color-mix(in srgb, var(--secondary) 44%, var(--ui-border) 56%);
+  --sl-input-border-color-focus: color-mix(in srgb, var(--secondary) 58%, var(--ui-border) 42%);
+  --sl-input-color: var(--dark);
+  --sl-input-placeholder-color: color-mix(in srgb, var(--dark) 46%, var(--light) 54%);
+  --sl-input-label-color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
+  --sl-panel-background-color: var(--light);
+  --sl-color-neutral-0: var(--light);
+  --sl-color-neutral-50: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+  --sl-color-neutral-100: color-mix(in srgb, var(--light) 88%, var(--dark) 12%);
+  --sl-color-neutral-200: color-mix(in srgb, var(--ui-border) 88%, var(--dark) 12%);
+  --sl-color-neutral-700: color-mix(in srgb, var(--dark) 72%, var(--light) 28%);
+  --sl-color-neutral-900: var(--dark);
+  --sl-color-primary-600: color-mix(in srgb, var(--secondary) 84%, var(--dark) 16%);
+  --sl-color-primary-700: color-mix(in srgb, var(--secondary) 70%, var(--dark) 30%);
+}
+
+.icono-dialog,
+.icono-dialog * {
+  box-sizing: border-box;
+}
+
+.icono-dialog--compact {
+  --icono-dialog-width: var(--icono-dialog-width-compact);
+}
+
+.icono-dialog--standard {
+  --icono-dialog-width: var(--icono-dialog-width-standard);
+}
+
+.icono-dialog--wide {
+  --icono-dialog-width: var(--icono-dialog-width-wide);
+}
+
+.icono-dialog--fixed {
+  height: min(48rem, calc(100dvh - 2rem));
+}
+
+.icono-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.icono-dialog::backdrop {
+  background: var(--icono-scrim);
+  backdrop-filter: blur(3px);
+}
+
+/* The scroll lock: the page behind a modal never scrolls. */
+html:has(.icono-dialog[open]),
+body:has(.icono-dialog[open]) {
+  overflow: hidden;
+}
+
+.icono-dialog__panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.icono-dialog__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.7rem 0.7rem var(--icono-dialog-gutter);
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
+}
+
+.icono-dialog__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--dark);
+  font: 600 1.05rem / 1.3 var(--icono-action-font);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.icono-dialog__close {
+  flex: none;
+}
+
+.icono-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem var(--icono-dialog-gutter) 1.25rem;
+  scrollbar-color: color-mix(in srgb, var(--darkgray) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.icono-dialog__footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 0.8rem var(--icono-dialog-gutter) 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
+}
+
+/* A footer with nothing visible in it draws no bar (the signed-out request dialog). */
+.icono-dialog__footer:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.icono-dialog a:not(.icono-button) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* Phones: nearly full width, with the same frame. */
+@media (max-width: 599px) {
+  .icono-dialog {
+    --icono-dialog-gutter: 0.85rem;
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .icono-dialog--fixed {
+    height: calc(100dvh - 1rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-dialog * {
+    scroll-behavior: auto !important;
+  }
 }
 
 #iconoplasm-root :where(a[href], button, input, select, [tabindex]):focus-visible {
@@ -394,77 +576,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   font-weight: 600;
   line-height: 1.22;
   letter-spacing: 0;
-}
-
-.icono-vote-login-dialog {
-  position: fixed;
-  inset: 0;
-  width: min(28rem, calc(100% - 3rem));
-  max-height: calc(100dvh - 3rem);
-  margin: auto;
-  padding: 1.5rem;
-  overflow-y: auto;
-  border: 1px solid var(--ui-border);
-  border-radius: 16px;
-  background: var(--light);
-  color: var(--dark);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
-  color-scheme: light;
-  --light: oklch(96% 0.015 75);
-  --dark: oklch(20% 0.035 50);
-  --ui-border: oklch(82% 0.02 70);
-}
-
-html:has(.icono-vote-login-dialog[open]),
-body:has(.icono-vote-login-dialog[open]) {
-  overflow: hidden;
-}
-
-.icono-vote-login-dialog[open] {
-  display: grid;
-  gap: 1rem;
-}
-
-.icono-vote-login-dialog,
-.icono-vote-login-dialog * {
-  box-sizing: border-box;
-}
-
-.icono-vote-login-dialog::backdrop {
-  background: color-mix(in srgb, var(--dark) 78%, transparent);
-}
-
-.icono-vote-login-copy {
-  display: grid;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.icono-vote-login-title {
-  font-family: "IBM Plex Mono", monospace;
-}
-
-.icono-vote-login-title {
-  max-width: 22ch;
-  font-size: 1.1rem;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.icono-vote-login-close {
-  position: absolute;
-  inset-block-start: 1rem;
-  inset-inline-end: 1.25rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.82rem;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* ───────── Search ───────── */
+} /* ───────── Search ───────── */
 .icono-search {
   max-width: 480px;
   margin: 0 auto 1.5rem;
@@ -820,10 +932,9 @@ body:has(.icono-vote-login-dialog[open]) {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-
-.icono-caretaker-claim-dialog {
-  --width: min(34rem, calc(100vw - 2rem));
-  --sl-font-sans: "IBM Plex Mono", monospace;
+/* The sign-in dialog's one action fills the row, an easy target on a phone. */
+.icono-vote-login-link {
+  width: 100%;
 }
 
 .icono-caretaker-claim-form {
@@ -882,98 +993,6 @@ body:has(.icono-vote-login-dialog[open]) {
 .icono-request-shell {
   display: grid;
   gap: 1rem;
-  width: 100%;
-}
-
-.icono-standard-dialog {
-  --sl-font-sans: "IBM Plex Mono", monospace;
-  font-family: var(--icono-action-font);
-  font-size: 0.88rem;
-  line-height: 1.5;
-  --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
-  --sl-input-height-small: 2.5rem;
-  --sl-input-border-radius-small: var(--icono-radius-sm);
-  --sl-input-background-color: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
-  --sl-input-background-color-hover: color-mix(in srgb, var(--light) 90%, var(--secondary) 10%);
-  --sl-input-background-color-focus: color-mix(in srgb, var(--light) 92%, var(--secondary) 8%);
-  --sl-input-border-color: color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
-  --sl-input-border-color-hover: color-mix(in srgb, var(--secondary) 44%, var(--ui-border) 56%);
-  --sl-input-border-color-focus: color-mix(in srgb, var(--secondary) 58%, var(--ui-border) 42%);
-  --sl-input-color: var(--dark);
-  --sl-input-placeholder-color: color-mix(in srgb, var(--dark) 46%, var(--light) 54%);
-  --sl-input-label-color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
-  --sl-panel-background-color: var(--light);
-  --sl-color-neutral-0: var(--light);
-  --sl-color-neutral-50: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
-  --sl-color-neutral-100: color-mix(in srgb, var(--light) 88%, var(--dark) 12%);
-  --sl-color-neutral-200: color-mix(in srgb, var(--ui-border) 88%, var(--dark) 12%);
-  --sl-color-neutral-700: color-mix(in srgb, var(--dark) 72%, var(--light) 28%);
-  --sl-color-neutral-900: var(--dark);
-  --sl-color-primary-600: color-mix(in srgb, var(--secondary) 84%, var(--dark) 16%);
-  --sl-color-primary-700: color-mix(in srgb, var(--secondary) 70%, var(--dark) 30%);
-  color: var(--dark);
-}
-
-.icono-request-dialog {
-  --width: min(68rem, calc(100vw - 2rem));
-}
-
-.icono-standard-dialog::part(overlay) {
-  background: color-mix(in srgb, rgba(27, 18, 11, 0.5) 88%, transparent 12%);
-  backdrop-filter: blur(8px);
-}
-
-.icono-standard-dialog::part(panel) {
-  max-height: min(48rem, calc(100vh - 2rem));
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: var(--icono-radius-lg);
-  background: color-mix(in srgb, var(--light) 98%, white 2%);
-  box-shadow: 0 24px 48px rgba(27, 18, 11, 0.18);
-}
-
-.icono-standard-dialog::part(header) {
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
-}
-
-.icono-standard-dialog::part(title) {
-  font: 600 1.05rem/1.3 var(--icono-action-font);
-  color: var(--dark);
-}
-
-.icono-standard-dialog::part(body) {
-  overflow: hidden;
-  padding: 1rem 1.2rem 1.2rem;
-}
-
-/* Until Shoelace defines <sl-dialog>, the browser renders its children inline:
-   the whole New candidate form flashed under the gene card for 2-8 frames on
-   every gene page load (B-836, measured in Playwright). */
-sl-dialog:not(:defined) {
-  display: none;
-}
-
-/* No visible actions, no footer bar (the signed-out request dialog). */
-.icono-standard-dialog:not(:has([slot="footer"] > :not([hidden])))::part(footer) {
-  display: none;
-}
-
-.icono-standard-dialog::part(footer) {
-  padding: 0.8rem 1.1rem 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
-  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
-}
-
-.icono-standard-dialog a:not(.icono-button) {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.icono-caretaker-claim-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.55rem;
   width: 100%;
 }
 
@@ -1055,82 +1074,9 @@ sl-dialog:not(:defined) {
   display: grid;
   gap: 0.85rem;
 }
-
-.icono-image-edit-dialog {
-  --width: min(68rem, calc(100vw - 2rem));
-  --sl-font-sans: "IBM Plex Mono", monospace;
-  --sl-focus-ring-color: color-mix(in srgb, var(--secondary) 42%, transparent);
-  --sl-input-height-medium: 2.55rem;
-  --sl-input-height-small: 2.25rem;
-  --sl-input-border-radius-medium: 7px;
-  --sl-input-border-radius-small: 7px;
-  --sl-input-background-color: color-mix(in srgb, var(--light) 92%, var(--dark) 8%);
-  --sl-input-background-color-hover: color-mix(in srgb, var(--light) 88%, var(--secondary) 12%);
-  --sl-input-background-color-focus: color-mix(in srgb, var(--light) 90%, var(--secondary) 10%);
-  --sl-input-border-color: color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
-  --sl-input-border-color-hover: color-mix(in srgb, var(--secondary) 46%, var(--ui-border) 54%);
-  --sl-input-border-color-focus: color-mix(in srgb, var(--secondary) 60%, var(--ui-border) 40%);
-  --sl-input-color: var(--dark);
-  --sl-input-placeholder-color: color-mix(in srgb, var(--dark) 46%, var(--light) 54%);
-  --sl-input-label-color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
-  --sl-panel-background-color: var(--light);
-  --sl-color-primary-600: color-mix(in srgb, var(--secondary) 84%, var(--dark) 16%);
-  --sl-color-primary-700: color-mix(in srgb, var(--secondary) 70%, var(--dark) 30%);
-  --sl-color-neutral-0: var(--light);
-  --sl-color-neutral-50: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
-  --sl-color-neutral-100: color-mix(in srgb, var(--light) 88%, var(--dark) 12%);
-  --sl-color-neutral-200: color-mix(in srgb, var(--ui-border) 88%, var(--dark) 12%);
-  --sl-color-neutral-700: color-mix(in srgb, var(--dark) 72%, var(--light) 28%);
-  --sl-color-neutral-900: var(--dark);
-  color: var(--dark);
-}
-
-.icono-image-edit-dialog::part(overlay) {
-  background: color-mix(in srgb, rgba(27, 18, 11, 0.62) 88%, transparent 12%);
-  backdrop-filter: blur(10px);
-}
-
-.icono-image-edit-dialog::part(panel) {
-  max-height: min(48rem, calc(100vh - 2rem));
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 72%, var(--dark) 28%);
-  border-radius: var(--icono-radius-lg);
-  background: var(--light);
-  box-shadow: 0 24px 72px rgba(27, 18, 11, 0.3);
-}
-
-.icono-image-edit-dialog::part(header) {
-  align-items: center;
-  padding: 1rem 1.1rem 0.7rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
-}
-
-.icono-image-edit-dialog::part(title) {
-  font-family: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif;
-  font-size: clamp(1.18rem, 2vw, 1.55rem);
-  line-height: 1.1;
-  color: var(--dark);
-}
-
-.icono-image-edit-dialog::part(close-button) {
-  color: color-mix(in srgb, var(--dark) 74%, var(--secondary) 26%);
-}
-
-.icono-image-edit-dialog::part(body) {
-  padding: 0;
-  overflow: auto;
-}
-
-.icono-image-edit-dialog::part(footer) {
-  padding: 0.8rem 1.1rem 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent 28%);
-  background: color-mix(in srgb, var(--light) 94%, var(--dark) 6%);
-}
-
 .icono-image-edit-shell {
   display: grid;
   gap: 0.85rem;
-  padding: 0.95rem 1.1rem 1.1rem;
 }
 
 .icono-image-edit-status {
@@ -1349,24 +1295,7 @@ img-comparison-slider.rendered [slot="second"] {
   background: var(--icono-context-color, transparent);
 }
 
-.icono-image-edit-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem;
-  width: 100%;
-}
-
 @media (max-width: 760px) {
-  .icono-image-edit-dialog {
-    width: calc(100vw - 1rem);
-    --width: calc(100vw - 1rem);
-  }
-
-  .icono-image-edit-dialog::part(panel) {
-    max-height: calc(100vh - 1rem);
-  }
-
   .icono-image-edit-body,
   .icono-image-edit-before-after {
     grid-template-columns: 1fr;
@@ -1451,14 +1380,10 @@ img-comparison-slider.rendered [slot="second"] {
    A grid of 3:4 style cards beside a "Your batch" tray, inside a dialog of
    fixed height. Only the dialog title and the method tabs stay put; the view
    switch, search and cards scroll together in [data-icono-request-browse]. */
-.icono-request-dialog::part(panel) {
-  height: min(48rem, calc(100dvh - 2rem));
-}
-
-.icono-request-dialog::part(body) {
+.icono-request-dialog .icono-dialog__body {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  overflow: hidden;
 }
 
 .icono-request-dialog .icono-request-dialog-shell,
@@ -1926,16 +1851,8 @@ img-comparison-slider.rendered [slot="second"] {
 /* Phones: narrower gutters, so the grid gains width and the footer holds
    "Select all N" beside "Queue 20 candidates" on one line down to 360 px. */
 @media (max-width: 599px) {
-  .icono-request-dialog {
-    --width: calc(100vw - 1rem);
-  }
-
-  .icono-request-dialog::part(body) {
-    padding: 0.85rem 0.75rem 0;
-  }
-
-  .icono-request-dialog::part(footer) {
-    padding: 0.7rem 0.75rem 0.8rem;
+  .icono-request-dialog .icono-dialog__body {
+    padding-bottom: 0;
   }
 
   .icono-request-select-all-noun {
@@ -4744,56 +4661,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   cursor: wait;
   transform: none;
 }
-
-html:has(.icono-candidate-delete-dialog[open]),
-body:has(.icono-candidate-delete-dialog[open]) {
-  overflow: hidden;
-}
-
-.icono-candidate-delete-dialog {
-  position: fixed;
-  inset: 0;
-  width: min(29rem, calc(100% - 2rem));
-  max-height: calc(100dvh - 2rem);
-  margin: auto;
-  padding: 0;
-  overflow: auto;
-  border: 1px solid color-mix(in srgb, #8f2b24 35%, var(--ui-border) 65%);
-  border-radius: 18px;
-  background: var(--light);
-  color: var(--dark);
-  box-shadow: 0 28px 80px rgba(28, 17, 12, 0.3);
-  color-scheme: light;
-  --light: oklch(96% 0.015 75);
-  --dark: oklch(20% 0.035 50);
-  --ui-border: oklch(82% 0.02 70);
-}
-
-.icono-candidate-delete-dialog,
-.icono-candidate-delete-dialog * {
-  box-sizing: border-box;
-}
-
-.icono-candidate-delete-dialog::backdrop {
-  background: color-mix(in srgb, #211912 72%, transparent);
-  backdrop-filter: blur(3px);
-}
-
-.icono-candidate-delete-panel {
-  display: grid;
-  gap: 0.8rem;
-  padding: clamp(1.25rem, 4vw, 1.75rem);
-}
-
-.icono-candidate-delete-title {
-  margin: 0;
-  color: var(--dark);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: clamp(1.2rem, 5vw, 1.55rem);
-  line-height: 1.15;
-  text-wrap: balance;
-}
-
 .icono-candidate-delete-identity {
   justify-self: start;
   margin: 0.1rem 0 0;
@@ -4822,16 +4689,15 @@ body:has(.icono-candidate-delete-dialog[open]) {
 
 .icono-candidate-delete-status {
   padding: 0.7rem 0.8rem;
-  border-left: 3px solid #a8342c;
-  background: color-mix(in srgb, #fff0ed 86%, white 14%);
-  color: #74221c;
+  border-left: 3px solid var(--icono-reject);
+  background: color-mix(in srgb, var(--icono-reject) 8%, var(--light) 92%);
+  color: color-mix(in srgb, var(--icono-reject) 72%, var(--dark) 28%);
 }
 
-.icono-candidate-delete-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.65rem;
-  margin-top: 0.35rem;
+/* The delete dialog's body: the asset, then what deleting does. */
+.icono-candidate-delete-body {
+  display: grid;
+  gap: 0.8rem;
 }
 
 .icono-candidate-delete-notice {
@@ -4870,17 +4736,6 @@ body:has(.icono-candidate-delete-dialog[open]) {
   from {
     opacity: 0;
     transform: translateY(0.5rem);
-  }
-}
-
-@media (max-width: 520px) {
-  .icono-candidate-delete-actions {
-    flex-direction: column-reverse;
-  }
-
-  .icono-candidate-delete-cancel,
-  .icono-candidate-delete-confirm {
-    width: 100%;
   }
 }
 

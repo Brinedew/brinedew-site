@@ -51,7 +51,12 @@ function dossier({ visible = false, state = "active" } = {}) {
 test("the title names the task and the gene, not a record", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.equal(html.includes("Caretaker record"), false)
-  assert.equal(/<h2 id="icono-caretaker-title">Caring for STAT5A<\/h2>/.test(html), true)
+  assert.equal(
+    /<h2 class="icono-dialog__title" id="icono-caretaker-title"[^>]*>Caring for STAT5A<\/h2>/.test(
+      html,
+    ),
+    true,
+  )
 })
 
 test("an active role shows no state pill; exceptional states still do", () => {
