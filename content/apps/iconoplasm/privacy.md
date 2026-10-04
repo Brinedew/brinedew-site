@@ -1,7 +1,7 @@
 ---
 title: "Privacy Policy"
 description: "How Iconoplasm handles your data"
-date: 2026-10-03
+date: 2026-10-04
 dateLabel: "Last updated"
 draft: false
 schemaType: WebPage
@@ -118,6 +118,8 @@ You can:
 - **Clear all local data** by removing the extension or clearing its storage in your browser's extension settings.
 - **Remove website settings** such as saved image API keys and your user emulsion in Iconoplasm settings.
 - **Request deletion** of server-side account, discovery, generation, or settings data by emailing **support@brinedew.bio**. We'll respond within 30 days.
+
+Your public comments, and the published images and text generated at your request, will be anonymized by having the username replaced by a generic term. Please note that any information that we have copied may remain in back-up storage for up to 30 days after your deletion request.
 
 ## Children's Privacy
 
