@@ -222,3 +222,32 @@ test("a brick batch is answered from the stable catalog rows (B-898)", async () 
   )
   assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`])
 })
+
+// Real catalog rows (2026-10-04): "insulin" is INS's exact full name, and twelve other genes'
+// names start with it. Ranked as a mere prefix, INS sorted after IDE and every IGF gene and fell
+// off the 12-row dropdown, so a search for "insulin" did not show insulin.
+test("an exact full name ranks first, like an exact symbol", async () => {
+  const row = (symbol, name) => [symbol, name, "", "#888888", 0, null, 10, 1, 1990, ""]
+  const { reader } = recordingReader((parsed) =>
+    parsed.pathname === "/catalog/v3/index.json"
+      ? new Response(
+          JSON.stringify({
+            schema: 3,
+            generated_at: "2026-10-04T00:00:00.000Z",
+            watermark_event_id: 1,
+            genes: [
+              row("IDE", "insulin degrading enzyme"),
+              row("IGF1", "insulin like growth factor 1"),
+              row("IGF1R", "insulin like growth factor 1 receptor"),
+              row("INS", "insulin"),
+              row("INSR", "insulin receptor"),
+            ],
+          }),
+          { status: 200 },
+        )
+      : new Response(null, { status: 404 }),
+  )
+  const found = await reader.search("insulin", { limit: 12 })
+  assert.equal(found.genes[0].symbol, "INS")
+  assert.equal((await reader.search("INS", { limit: 12 })).genes[0].symbol, "INS")
+})

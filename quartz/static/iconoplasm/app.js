@@ -51,8 +51,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=d572b8cf5ac52831"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=1248540b8dc10d31"
+} from "./diagram-studio.js?v=0de15710773ab056"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -8790,9 +8790,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
     resetCollection(false)
 
+    // Search covers the whole catalog; only the portrait waits for discovery (owner decision
+    // 2026-10-04, "Iconoplasm decisions and lessons"). Opening a gene discovers it, the same
+    // as typing its address, so a known name never answers "No results".
     function activeSearchScope() {
       if (useClassicGallery) return "catalog"
-      return galleryState.sharedDiscoveries ? "shared" : "discoveries"
+      return galleryState.sharedDiscoveries ? "shared" : "catalog"
+    }
+
+    function discoveredSearchSymbols() {
+      if (useClassicGallery || galleryState.sharedDiscoveries) return null
+      var symbols = new Set()
+      var entries = galleryState.authenticated
+        ? galleryState.discoveryEntries
+        : guestDiscoveryEntries().concat(
+            websiteGuestDiscoveries.pendingSymbols().map(function (symbol) {
+              return { gene_symbol: symbol }
+            }),
+          )
+      for (var i = 0; i < entries.length; i++) {
+        var symbol = normalizedSymbol(entries[i] && (entries[i].gene_symbol || entries[i].symbol))
+        if (symbol) symbols.add(symbol)
+      }
+      return symbols
     }
 
     function refreshSearchResults() {
@@ -8817,7 +8837,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         .then(function (data) {
           if (requestId !== activeSearchRequest || input.value.trim() !== query) return
           currentSearchResults = data.genes || []
-          renderSearchResults(resultsEl, currentSearchResults)
+          renderSearchResults(resultsEl, currentSearchResults, {
+            discovered: discoveredSearchSymbols(),
+          })
         })
         .catch(function () {
           if (requestId !== activeSearchRequest) return
@@ -8872,7 +8894,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     else input.removeAttribute("aria-activedescendant")
   }
 
-  function renderSearchResults(container, genes) {
+  function renderSearchResults(container, genes, options) {
+    var discovered = options && options.discovered ? options.discovered : null
     var input = container.closest(".icono-search-wrapper").querySelector("input")
     input.setAttribute("aria-expanded", "true")
     input.removeAttribute("aria-activedescendant")
@@ -8884,18 +8907,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
-      var portraitUrl = publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")
-      var mediaHtml = portraitUrl
-        ? '<span class="icono-search-result-media icono-search-result-media--portrait">' +
-          '<img class="icono-search-result-portrait icono-thumbnail-viewport-image" src="' +
-          esc(portraitUrl) +
-          '" alt="' +
-          esc(g.symbol) +
-          ' blot" loading="eager" decoding="async">' +
-          "</span>"
-        : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
+      var undiscovered = !!discovered && !discovered.has(normalizedSymbol(g.symbol))
+      var portraitUrl = undiscovered
+        ? ""
+        : publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")
+      var mediaHtml = undiscovered
+        ? '<span class="icono-search-result-media icono-search-result-media--undiscovered" style="--icono-search-gene-color:' +
           esc(g.color) +
           '"></span>'
+        : portraitUrl
+          ? '<span class="icono-search-result-media icono-search-result-media--portrait">' +
+            '<img class="icono-search-result-portrait icono-thumbnail-viewport-image" src="' +
+            esc(portraitUrl) +
+            '" alt="' +
+            esc(g.symbol) +
+            ' blot" loading="eager" decoding="async">' +
+            "</span>"
+          : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
+            esc(g.color) +
+            '"></span>'
       html +=
         '<a class="icono-search-result" id="icono-search-result-' +
         i +
@@ -8910,6 +8940,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<span class="icono-search-result-name">' +
         esc(g.full_name) +
         "</span>" +
+        (undiscovered ? '<span class="icono-search-result-note">Undiscovered gene</span>' : "") +
         "</span>" +
         "</a>"
     }
