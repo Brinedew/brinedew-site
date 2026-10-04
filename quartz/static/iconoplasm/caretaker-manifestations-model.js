@@ -94,6 +94,8 @@ export function normalizedDossier(payload, symbol) {
   })
   return {
     enabled: source.enabled !== false,
+    // B-995: the server switches the Tags helper off (kill switch, or no AI binding).
+    taggerizer_enabled: source.taggerizer_enabled === true,
     gene: {
       gene_id: String(source.gene?.gene_id || ""),
       symbol: normalizedSymbol(source.gene?.symbol || symbol),

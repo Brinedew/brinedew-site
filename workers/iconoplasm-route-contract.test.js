@@ -51,6 +51,7 @@ const PATTERN_EXAMPLES = Object.freeze({
     "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/tags-derivatives",
   caretaker_manifestation_tags_select:
     "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/tags-derivative-head",
+  caretaker_taggerize: "/api/iconoplasm/caretaker/genes/TP53/taggerize",
   caretaker_canonical_selection: "/api/iconoplasm/caretaker/genes/TP53/canonical-selections",
   caretaker_manifestation_withdraw:
     "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001",

@@ -1,8 +1,9 @@
 import {
+  applyCaretakerTagSuggestion,
   mountCaretakerTagEditor,
   readTagFields,
-} from "./caretaker-tag-editor.js?v=60f6751d353dfad7"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=c8e008f0aa8cd76b"
+} from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=33f49789be67069e"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -14,9 +15,9 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
+} from "./caretaker-manifestations-model.js?v=061f1b27d6945213"
 import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=ad73b60c0b58be62"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=0030fec43bebc033"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -160,6 +161,7 @@ export function createCaretakerManifestationPanel({
     mountCaretakerTagEditor(state.host.querySelector("[data-icono-caretaker-editor]"))
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
+    holdSuggestion(state, state.suggestionHold === true)
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
     if (wasOpen) openDialog(dialog)
   }
@@ -533,6 +535,8 @@ export function createCaretakerManifestationPanel({
   function scheduleAutosave(state) {
     globalThis.clearTimeout(state.autosaveTimer)
     if (state.autosaveFailed) return autosaveIndicator(state, "failed")
+    // B-995: a filled-in suggestion waits for the caretaker's own Save.
+    if (state.suggestionHold) return autosaveIndicator(state, "unsaved")
     autosaveIndicator(state, "unsaved")
     state.autosaveTimer = globalThis.setTimeout(function () {
       void autosave(state)
@@ -672,6 +676,103 @@ export function createCaretakerManifestationPanel({
     }
   }
 
+  function holdSuggestion(state, hold) {
+    state.suggestionHold = hold
+    const save = state.host.querySelector("[data-icono-caretaker-save-suggestion]")
+    if (save) save.hidden = !hold
+  }
+
+  function saveSuggestion(state) {
+    holdSuggestion(state, false)
+    scheduleAutosave(state)
+  }
+
+  // B-995: ask the server for a suggestion, fill it into the editor, save nothing.
+  // The fill goes through the same input event typing does, so the draft and the
+  // "Unsaved changes" mark follow; the Save button then releases it to autosave.
+  async function taggerize(state, direction) {
+    if (state.busy || state.taggerizing) return
+    const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
+    const tagsControl = state.host.querySelector("[data-icono-caretaker-tags]")
+    const form = state.host.querySelector("[data-icono-caretaker-editor]")
+    if (!proseControl || !tagsControl || !form) return
+    if (state.autosaving) {
+      return setStatus(state, "Saving right now. Try again in a moment.", "warn")
+    }
+    const fromProse = direction === "tags_from_prose"
+    const replaced = fromProse ? tagsControl.value.trim() : proseControl.value.trim()
+    if (
+      replaced &&
+      !confirmAction(
+        fromProse
+          ? "Replace the current Tags with a suggestion made from your prose? You can still edit it before saving."
+          : "Replace your prose with a rewrite that matches the Tags? You can still edit it before saving.",
+      )
+    )
+      return
+    const sentProse = proseControl.value
+    const sentTags = tagsControl.value
+    const sentFields = JSON.stringify(readTagFields(tagsControl))
+    const buttons = [...state.host.querySelectorAll("[data-icono-caretaker-taggerize]")]
+    const labels = buttons.map(function (button) {
+      return button.textContent
+    })
+    state.taggerizing = true
+    buttons.forEach(function (button) {
+      button.disabled = true
+      if (button.getAttribute("data-icono-caretaker-taggerize") === direction) {
+        button.textContent = "Working…"
+      }
+    })
+    setStatus(state, "")
+    try {
+      const result = await request(state, "/taggerize", {
+        method: "POST",
+        body: JSON.stringify({
+          direction,
+          prose: sentProse,
+          tags_fields: JSON.parse(sentFields),
+        }),
+      })
+      if (
+        proseControl.value !== sentProse ||
+        tagsControl.value !== sentTags ||
+        JSON.stringify(readTagFields(tagsControl)) !== sentFields
+      ) {
+        return setStatus(
+          state,
+          "You changed the editor while the suggestion was loading, so it was not filled in. Try again.",
+          "warn",
+        )
+      }
+      const suggestion = result?.suggestion
+      // Hold first: the fill below raises the input event that would schedule an autosave.
+      holdSuggestion(state, true)
+      if (fromProse) {
+        if (!applyCaretakerTagSuggestion(form, suggestion?.fields_json, suggestion?.tags_text)) {
+          holdSuggestion(state, false)
+          throw new Error("The Tags editor is not ready.")
+        }
+      } else {
+        proseControl.value = String(suggestion?.prose || "")
+        proseControl.dispatchEvent(new Event("input", { bubbles: true }))
+      }
+      setStatus(state, "Suggestion filled in. Review it, then save.", "success")
+    } catch (error) {
+      setStatus(
+        state,
+        String(error?.message || "The suggestion could not be made. Try again."),
+        "error",
+      )
+    } finally {
+      state.taggerizing = false
+      buttons.forEach(function (button, index) {
+        button.disabled = false
+        button.textContent = labels[index]
+      })
+    }
+  }
+
   const wire = createCaretakerManifestationEventWiring({
     clearDraft,
     confirmAction,
@@ -685,8 +786,10 @@ export function createCaretakerManifestationPanel({
       state.autosaveFailed && state.autosaveRetryable ? retryAutosave(state) : null,
     scheduleAutosave,
     saveDraft,
+    saveSuggestion,
     setStatus,
     showBasis,
+    taggerize,
     updateCount,
     wiredHosts,
   })

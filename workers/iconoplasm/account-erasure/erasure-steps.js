@@ -587,6 +587,8 @@ export const EXEMPT_COLUMNS = Object.freeze({
   "brinedew_authority_account_projection_outbox.account_id": "opaque account id, retained",
   "icono_caretaker_assignment_notifications.account_id":
     "opaque account id; the authority ends the assignment from the account projection",
+  "icono_taggerizer_daily_calls.account_id":
+    "opaque account id on a per-day call count (B-995); it holds no content, one row a caretaker a day",
   "icono_caretaker_supervote_events.caretaker_account_id":
     "opaque account id; signed vote history, retained like the caretaker's manifestations",
   "icono_caretaker_supervote_projection.caretaker_account_id": "opaque account id, retained",
