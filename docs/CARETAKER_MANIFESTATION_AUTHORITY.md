@@ -60,10 +60,21 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
 - `account_id` and `gene_id` are permanent. Symbols are aliases that can be renamed or merged, and
   tenure and history follow the gene ID. An erased author shows as a stable anonymous name.
 
+## Where the seed text came from
+
+- Each gene's system seed was imported once, on 2026-08-31, from the primary D1's old
+  `icono_gene_essence.manifestation` column. That column had been written through a 4,000-character
+  cut since June, so about 6,900 seeds are the first 4,000 characters of a longer text (B-977).
+- The full original texts are in the workstation's `D:\Coding\Datasets\iconoplasm\prompts.db`
+  (`manifestations` table). It is a frozen archive: nothing has written to it since 2026-08-30, and
+  the workstation reads prose only from this authority.
+- No route writes seed text. Prose changes only through a caretaker's save; the workstation's
+  essence upload carries no prose (B-831, B-949).
+
 ## The size limit
 
-Prose is at most 4,000 code points and 16 KiB, checked the same way in the browser and in the
-authority. A caretaker's lineage holds at most 256 revisions, 512 Tags derivatives and 2 MiB of
+Prose is at most 10,000 code points and 16 KiB, checked the same way in the browser and in the
+authority. 99.9% of the original texts fit (measured on `prompts.db`, B-977). A caretaker's lineage holds at most 256 revisions, 512 Tags derivatives and 2 MiB of
 bodies, and the store admits at most 350 MB of bodies in all. Admission counts every byte before
 metadata commits, so a refused save keeps the draft. An upload that starts and never finishes
 (a phone losing signal mid-save) keeps its reservation only until its lease ends. The same
