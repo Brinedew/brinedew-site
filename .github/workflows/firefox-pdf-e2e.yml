@@ -1,0 +1,66 @@
+name: Firefox PDF E2E
+
+# Drives a real Firefox with the real Firefox validation package through the
+# Selenium suite in iconoplasm-extension/e2e. Nothing is mocked: the suite talks
+# to the production Iconoplasm API for gene data and portraits.
+on:
+  pull_request:
+    paths:
+      - "iconoplasm-extension/**"
+      - "scripts/package-iconoplasm-extension.mjs"
+      - ".github/workflows/firefox-pdf-e2e.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  firefox-pdf-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          pnpm config set minimumReleaseAge 1440
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+      - name: Package the Firefox validation build
+        run: pnpm run package:iconoplasm-firefox
+      - name: Install Firefox
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Probe the production endpoints the suite depends on
+        run: |
+          echo "iconoplasm host: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasm.brinedew.bio/ || echo unreachable)"
+          echo "portrait cdn: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasmportraits.b-cdn.net/ || echo unreachable)"
+      - uses: astral-sh/setup-uv@v6
+      - name: Run the Firefox PDF suite
+        working-directory: iconoplasm-extension/e2e
+        env:
+          FIREFOX_BINARY: ${{ steps.firefox.outputs.firefox-path }}
+        run: |
+          set -euo pipefail
+          artifacts="$GITHUB_WORKSPACE/iconoplasm-extension/artifacts/firefox-pdf-e2e"
+          mkdir -p "$artifacts"
+          cp "$GITHUB_WORKSPACE/iconoplasm-extension/dist/validation/firefox/iconoplasm-firefox-validation.zip" "$artifacts/iconoplasm-firefox-under-test.xpi"
+          uv sync --frozen
+          xvfb-run -a uv run pytest \
+            "--firefox-binary=$FIREFOX_BINARY" \
+            "--xpi=$artifacts/iconoplasm-firefox-under-test.xpi" \
+            "--artifacts=$artifacts"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: firefox-pdf-e2e
+          path: iconoplasm-extension/artifacts/firefox-pdf-e2e/
+          if-no-files-found: warn
