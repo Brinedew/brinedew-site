@@ -2,6 +2,8 @@
 // built from this template and styled by `.icono-dialog` in styles.css; no dialog
 // has its own header, close button, radius or footer. Native <dialog> supplies
 // the focus trap, Escape, the inert page behind the modal and focus restore.
+// Header and footer are divs, not <header>/<footer>: Quartz styles those tags
+// globally (a 4rem footer margin pushed the bar off the dialog floor).
 // This module adds the three things it does not: one markup template, a close
 // icon button, and a backdrop click that never fires from a text-selection drag.
 //
@@ -55,7 +57,7 @@ export function dialogInnerMarkup(options = {}) {
     '<div class="' +
     classNames("icono-dialog__panel", options.panelClass) +
     '">' +
-    '<header class="icono-dialog__header">' +
+    '<div class="icono-dialog__header">' +
     '<h2 class="icono-dialog__title" id="' +
     escapeText(titleId) +
     '" data-icono-dialog-title>' +
@@ -65,7 +67,7 @@ export function dialogInnerMarkup(options = {}) {
     '<button type="button" class="icono-button icono-button--icon icono-dialog__close" data-icono-dialog-close aria-label="Close">' +
     CLOSE_ICON +
     "</button>" +
-    "</header>" +
+    "</div>" +
     (options.afterHeader || "") +
     '<div class="' +
     classNames("icono-dialog__body", options.bodyClass) +
@@ -73,11 +75,11 @@ export function dialogInnerMarkup(options = {}) {
     (options.body || "") +
     "</div>" +
     (options.footer
-      ? '<footer class="' +
+      ? '<div class="' +
         classNames("icono-dialog__footer", options.footerClass) +
         '">' +
         options.footer +
-        "</footer>"
+        "</div>"
       : "") +
     "</div>"
   )

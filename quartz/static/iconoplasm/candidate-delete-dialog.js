@@ -1,4 +1,4 @@
-import { bindDialog, createDialogElement } from "./dialog.js?v=57a3c00198f06598"
+import { bindDialog, createDialogElement } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 const CANDIDATE_DELETE_DIALOG_SELECTOR = "[data-icono-candidate-delete-dialog]"
 const CANDIDATE_DELETE_NOTICE_SELECTOR = "[data-icono-candidate-delete-notice]"

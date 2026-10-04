@@ -76,7 +76,7 @@ test("dialogMarkup renders the one header, body and footer shape", () => {
     /<button type="button" class="icono-button icono-button--icon icono-dialog__close" data-icono-dialog-close aria-label="Close">/,
   )
   assert.match(html, /<div class="icono-dialog__body"><p>Body<\/p><\/div>/)
-  assert.match(html, /<footer class="icono-dialog__footer"><button>Go<\/button><\/footer>/)
+  assert.match(html, /<div class="icono-dialog__footer"><button>Go<\/button><\/div>/)
   const bare = dialogMarkup({ title: "No actions", size: "nonsense" })
   assert.match(bare, /icono-dialog--standard/, "an unknown size falls back to standard")
   assert.doesNotMatch(bare, /icono-dialog__footer/, "no footer without actions")

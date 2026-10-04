@@ -1,4 +1,4 @@
-import { bindDialog, createDialogElement, setDialogTitle } from "./dialog.js?v=57a3c00198f06598"
+import { bindDialog, createDialogElement, setDialogTitle } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 const VOTE_LOGIN_DIALOG_SELECTOR = "[data-icono-vote-login-prompt]"
 const VOTE_LOGIN_DIALOG_BODY = `

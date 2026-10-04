@@ -38,14 +38,14 @@ import {
   dialogMarkup,
   openDialog,
   setDialogTitle,
-} from "./dialog.js?v=57a3c00198f06598"
-import { openVoteLoginDialog } from "./vote-login-dialog.js?v=c97b2923822b205a"
+} from "./dialog.js?v=a5c98f9ed0ae3eb6"
+import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installIconoplasmLightbox } from "./lightbox.js?v=c176444f4b2570e4"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=b5de8d2c76af07f1"
+} from "./candidate-delete-dialog.js?v=e9b90dccfb37810b"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
@@ -315,9 +315,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=72eca99f472c9ac8"),
+      import("./caretaker-manifestations.js?v=9ebd7a1e80884305"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=00f960b7e0e82f58"),
+      import("./caretaker-candidate-sources.js?v=e6ce7ed31fd8a395"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({

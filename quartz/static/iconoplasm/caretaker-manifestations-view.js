@@ -5,7 +5,7 @@ import {
   manifestationWordDiff,
   ownManifestation,
 } from "./caretaker-manifestations-model.js?v=d16d8d63c53963c3"
-import { dialogMarkup } from "./dialog.js?v=57a3c00198f06598"
+import { dialogMarkup } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
 // quotes. The iconoplasm app passes a text-node escaper that leaves raw
