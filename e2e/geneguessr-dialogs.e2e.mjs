@@ -16,6 +16,8 @@
 //     button that opened it
 //  5. the practice dialog's label is not tied to its box, Validate does not say what it found,
 //     Play does not start a practice game from the pasted genes, or the list is lost on reopen
+//  6. Validate makes a request to the Worker (B-934: a paste resolves in the browser from the
+//     static protein index and costs no D1 read and no Worker request)
 // Needs an installed Chrome. A screenshot of each dialog lands in artifacts/e2e/ (E2E_OUT).
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
@@ -112,6 +114,11 @@ before(async () => {
         })
         return response.end(Buffer.from(await answer.arrayBuffer()))
       }
+      if (url.pathname === "/static/geneguessr/protein-index.json") {
+        // The static file the page downloads; its rows are the seeded proteins.
+        response.writeHead(200, { "content-type": TYPES[".json"] })
+        return response.end(JSON.stringify(proteinIndex()))
+      }
       if (url.pathname === "/") {
         response.writeHead(200, { "content-type": TYPES[".html"], "content-security-policy": CSP })
         return response.end(PAGE)
@@ -143,6 +150,17 @@ after(async () => {
   await new Promise((resolve) => server?.close(resolve))
   await dispose?.()
 })
+
+// The page's static protein index for the seeded catalog: every seeded protein has a structure
+// source, so each is playable; no symbol is listed as recognized but unplayable.
+function proteinIndex() {
+  return {
+    schema_version: 1,
+    fields: ["uniprot", "hgnc", "gene_surname", "full_name", "length", "synonyms"],
+    rows: rows.slice(0, 400).map((row) => [row.uniprot, row.gene, null, row.gene, 100, []]),
+    recognized_unplayable: [],
+  }
+}
 
 // A visitor's tab. `seenTutorial` is a visitor who has already been through the steps (the
 // page stores a bitmask of the three steps in localStorage), so no step opens by itself.
@@ -292,6 +310,12 @@ test("the practice dialog: label, Validate, Play from the pasted genes, and the 
     // Three genes of the catalog and one symbol that no protein has.
     const genes = playable.slice(0, 3).map((row) => row.gene)
     await box.fill([...genes, "ZZZ99"].join("\n"))
+    // Opening the dialog already downloaded the index; Validate needs the network for nothing,
+    // so no request to the Worker may follow it.
+    const apiRequests = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname.startsWith("/api/")) apiRequests.push(request.url())
+    })
     await dialog.getByRole("button", { name: "Validate" }).click()
     const results = dialog.locator(".pg-practice-results")
     await page.waitForFunction(
@@ -302,6 +326,7 @@ test("the practice dialog: label, Validate, Play from the pasted genes, and the 
     assert.match(verdict, /3 playable/, verdict)
     assert.match(verdict, /1 unrecognized/, "the unknown symbol is counted, not silently dropped")
     assert.equal(await results.getAttribute("role"), "status")
+    assert.deepEqual(apiRequests, [], "Validate makes no request to the Worker")
 
     // Play starts a practice game whose target is one of the pasted genes.
     await dialog.getByRole("button", { name: "Play" }).click()

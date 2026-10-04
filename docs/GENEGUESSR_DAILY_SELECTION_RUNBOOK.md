@@ -541,15 +541,19 @@ Worker on the same production-shaped local D1 with R2 unbound and `fetch` counte
   pick;
 - a browser with no session cookie reads no session.
 
-`workers/practice-resolve-cost.test.js` must prove, through the real Worker on the
-production-shaped local D1, that `POST /api/game/practice/resolve` runs one
-statement per hundred symbols, each an index search on `idx_proteins_gene`, reads at
-most three rows per symbol (2 rows for one symbol, about 30,000 for the
-10,000-symbol maximum, where the `upper(gene)` statement read 19,110 rows per
-statement and 1.9M for the maximum), classifies playable, unplayable and unknown
-symbols as the `upper(gene)` statement did, and keeps its answers for lower-case,
-padded, punctuated and duplicate symbols, an empty paste, the 10,000-symbol cut and a
-D1 error.
+The practice "paste your own gene list" box resolves in the browser (B-934) from the
+static `protein-index.json`: its `rows` are the playable symbols and its
+`recognized_unplayable` list holds the symbols the catalog knows but a game cannot use
+(no structure source, or a recorded structure failure). A paste costs no D1 read and no
+Worker request at any traffic level; opening the practice dialog starts the download of
+the index the autocomplete already uses.
+`workers/practice-resolve-golden.test.js` compares the browser module
+`quartz/static/geneguessr/practice-resolve.js` with answers recorded from the route it
+replaced (lower-case, padded, punctuated and duplicate symbols, aliases left
+unrecognized, an empty paste, the 10,000-symbol cut) and pins that a recorded structure
+failure reads as "recognized but missing structure". Refresh the list with
+`node scripts/export-geneguessr-protein-index.mjs` after the protein set or structure
+failures change.
 
 `workers/structure-cached-key-lookup-cost.test.js` must prove that an
 `/api/structure-cached?key=` request for a SWISS-MODEL or AlphaFold structure
