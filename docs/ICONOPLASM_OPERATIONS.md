@@ -222,21 +222,18 @@ for (const endpoint of endpoints) {
 '@ | node -
 ```
 
-All three public responses must name the same stable-object version and portrait SHA.
+Both public responses must name the same stable-object version and portrait SHA.
 An uncached `503` with `X-Iconoplasm-Portrait-Source: artifact-unavailable` is a
 publication failure, not permission to query D1 for substitute public bytes.
 
-After current provider and operation admission, an exact-key D1 read shows
-whether D1's winner is ahead of the published object. This remote query
-consumes shared D1 capacity:
-
-```powershell
-pnpm exec wrangler d1 execute iconoplasm --remote --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --command "SELECT gene_symbol, current_asset_sha256, updated_at FROM icono_publish_state WHERE gene_symbol = 'PRL' LIMIT 1"
-```
-
-A different D1 SHA is expected only until the republish after the vote that
-changed it, or the next Actions publisher run, rewrites the gene's stable
-object; every public surface reads that one object.
+Do not read production D1 from a shell to see whether D1's winner is ahead of
+the published object; agent shells refuse it (B-1002). Republish the gene
+instead (`docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, "Publication
+diagnosis and safe repair", step 2): it publishes D1's winner and writes nothing
+back, so it is both the check and the repair. A different D1 winner is expected
+only until the republish after the vote that changed it, or the next Actions
+publisher run, rewrites the gene's stable object; every public surface reads
+that one object.
 
 ### recover exact publication without reviving global sync
 
@@ -273,7 +270,7 @@ Avoid these even if they look faster:
 
 ## sanity checks
 
-- If a result looks wrong, confirm you used `--remote`.
+- If a data answer looks wrong, check the date `scripts/d1-local.mjs` printed: the nightly copy is up to five days old, so live state comes from the public objects and the admin routes.
 - If an authenticated homepage shows `0 discovered`, treat that as a bug, not a harmless edge case.
 - If admin classic gallery mode is involved, confirm the page is using the classic gallery route before debugging the shelf API.
 - If names look stale or absent, compare `icono_gene_essence` and `icono_gene_catalog` instead of trusting one blindly.
