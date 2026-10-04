@@ -423,7 +423,14 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
         "the card closed when the pointer moved into it"
     )
-    ActionChains(driver, duration=0).click().perform()
+    # Click the card's top-left padding, not its centre: the centre is a link
+    # that opens the gene page in a new tab, which legitimately closes the card.
+    handles_before = driver.window_handles
+    size = frame.size
+    ActionChains(driver, duration=0).move_to_element_with_offset(
+        frame, 3 - size["width"] // 2, 3 - size["height"] // 2
+    ).click().perform()
+    assert driver.window_handles == handles_before, "the click opened another tab"
     # Prove the click really moved focus into the card's iframe.
     assert driver.execute_script("return document.activeElement?.tagName") == "IFRAME"
     # Give a dismiss-on-blur handler time to fire before asserting.
