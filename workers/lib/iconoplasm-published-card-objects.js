@@ -74,14 +74,6 @@ export function canonicalPublishedJson(value) {
     .join(",")}}`
 }
 
-// The object exactly as a reader parses it back from the bytes writeStable
-// stores: the canonical serialization, UTF-8 encoded and decoded. Anything
-// that must agree with what a reader sees (the print-copy fingerprint)
-// derives from this, not from the in-memory value.
-export function publishedObjectAsRead(value) {
-  return JSON.parse(new TextDecoder().decode(encoder.encode(canonicalPublishedJson(value))))
-}
-
 export async function publishedObjectHash(bytes) {
   const digest = await crypto.subtle.digest("SHA-256", bytes)
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("")

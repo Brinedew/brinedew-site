@@ -1429,12 +1429,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       button.removeAttribute("href")
       button.removeAttribute("target")
       button.removeAttribute("rel")
+      // "waiting": the page stopped polling and the render is still queued (B-997: at most 8
+      // renders a day, so a busy day parks a request until the next one). Say so plainly.
       button.textContent =
         state === "queued"
           ? "preparing " + key + " print copy…"
-          : state === "failed"
-            ? "retry " + key + " print copy"
-            : "request print copy"
+          : state === "waiting"
+            ? key + " print copy queued, check back later"
+            : state === "failed"
+              ? "retry " + key + " print copy"
+              : "request print copy"
     })
   }
 
@@ -1599,7 +1603,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           setPrintCopyTriggerState(key, "ready", payload)
           beginPrintCopyDownload(payload)
         } else {
-          setPrintCopyTriggerState(key, "queued")
+          setPrintCopyTriggerState(key, "waiting")
         }
       })
       .catch(function (error) {

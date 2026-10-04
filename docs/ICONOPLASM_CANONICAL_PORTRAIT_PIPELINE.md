@@ -197,12 +197,11 @@ bounds.
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
 
-The print-copy fingerprint leaves out vote counts and the stable object's
-envelope (candidate pool, `published_at`, `vote_version`), so a vote that only
-moves counts never queues a browser render; a winner change still does. The
-publisher fingerprints the object as storage holds it
-(`publishedObjectAsRead`), which is what the queue consumer reads back through
-the card route.
+A print copy is rendered only when a reader requests it (B-997); publication
+never queues a browser render. Its fingerprint leaves out vote counts and the
+stable object's envelope (candidate pool, `published_at`, `vote_version`), and
+the status and PNG routes serve only a PNG whose fingerprint matches the current
+card, so a reader never gets a stale copy: their click enrols the current card.
 
 The workstation drain polls the authenticated `blots/backlog` route, which
 answers from D1 and the stable objects, renders the missing blots for the
