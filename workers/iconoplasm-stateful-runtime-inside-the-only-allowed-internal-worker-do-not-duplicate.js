@@ -205,6 +205,7 @@ import {
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { eraseBrinedewAccountOnRequest } from "./iconoplasm/account-erasure/erase-account-data.js"
+import { commentMirrorContent } from "./lib/iconoplasm-comment-discord-mirror.js"
 import {
   BrinedewAccountIdentityError,
   readBrinedewAccount,
@@ -25453,17 +25454,21 @@ export async function postIconoplasmGeneCommentToDiscord(
     if (!botToken || !channelId) return
 
     const safeSymbol = String(symbol || "").trim()
-    const safeUser = String(username || "").trim() || "Anonymous"
     const rawBody = String(body || "").trim()
     if (!safeSymbol || !rawBody) return
 
-    // Discord caps content at 2000 chars; leave room for the header + link lines.
-    const trimmedBody = rawBody.length > 1500 ? `${rawBody.slice(0, 1500)}…` : rawBody
-    // Header line carries the gene + link (wrapped in <> so Discord renders no
+    // The header line carries the gene + link (wrapped in <> so Discord renders no
     // link-preview embed — we attach the actual gene-card image instead), then a
     // blank line, then the comment with the author's name bolded inline in front.
+    // B-992: the account erasure finds this message again by the same shape and
+    // swaps the author for the anonymous label, so the shape lives in one module.
     const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(safeSymbol)}`
-    const content = `New comment on **${safeSymbol}** gene: <${geneUrl}>\n\n**${safeUser}**: ${trimmedBody}`
+    const content = commentMirrorContent({
+      symbol: safeSymbol,
+      link: geneUrl,
+      username,
+      body: rawBody,
+    })
     const payloadJson = JSON.stringify({ content, allowed_mentions: { parse: [] } })
 
     const hasImage = imageBytes instanceof Uint8Array && imageBytes.byteLength > 0
@@ -26407,6 +26412,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
           commandId: payload?.command_id,
           reasonCode: payload?.reason_code || "erasure_request",
           maxRowsWritten: payload?.max_rows_written,
+          skipDiscordMirror: payload?.skip_discord_mirror === true,
         },
         { geneCommentsCacheKey, userKvKeyScopes: iconoplasmUserKvKeyScopes },
       )

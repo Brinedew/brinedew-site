@@ -326,7 +326,9 @@ export async function putPortraitStorageObject(
   return { ok: true }
 }
 
-export async function deletePortraitStorageObject(env, key) {
+// `maxAttempts` bounds the requests one delete may send (each retry is another subrequest); a
+// caller with a subrequest budget passes 1 and repeats the whole delete itself.
+export async function deletePortraitStorageObject(env, key, { maxAttempts } = {}) {
   if (env?.ICONOPLASM_PORTRAITS && typeof env.ICONOPLASM_PORTRAITS.delete === "function") {
     return env.ICONOPLASM_PORTRAITS.delete(key)
   }
@@ -337,7 +339,7 @@ export async function deletePortraitStorageObject(env, key) {
     env,
     writeUrl,
     { method: "DELETE", headers: { AccessKey: password } },
-    { operation: "DELETE", key },
+    { operation: "DELETE", key, ...(maxAttempts ? { maxAttempts } : {}) },
   )
   if (response.status === 404) return null
   if (!response.ok)
