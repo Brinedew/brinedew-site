@@ -1,9 +1,4 @@
 const CATALOG_COLUMNS = "gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json"
-const ESSENCE_COLUMNS = `gene_symbol, full_name, weight_kg, molecular_weight_kda, height_cm, sex, age,
-  age_years, first_publication_year, faction, skin_hex, skin_name, tissue_tau, primary_tissue,
-  loeuf, constraint_percentile, leakage_percent, leakage_hits, leakage_total,
-  aesthetics_json, aesthetics_origin_json, politics_origin_json, family_surname, family_members,
-  family_feature, manifestation, sample_label, sample_number, sample_text_hash, updated_at`
 
 function stateSql(table, columns, scoped) {
   if (!scoped) return `SELECT ${columns} FROM ${table} ORDER BY gene_symbol ASC`
@@ -13,7 +8,6 @@ function stateSql(table, columns, scoped) {
 }
 
 export const CATALOG_STATE_SCOPED_SQL = stateSql("icono_gene_catalog", CATALOG_COLUMNS, true)
-export const ESSENCE_STATE_SCOPED_SQL = stateSql("icono_gene_essence", ESSENCE_COLUMNS, true)
 
 async function readStateRows(db, table, columns, symbols) {
   // The existing explicit whole-state contract remains separate. It still
@@ -41,8 +35,4 @@ async function readStateRows(db, table, columns, symbols) {
 
 export function readCatalogStateRows(db, symbols) {
   return readStateRows(db, "icono_gene_catalog", CATALOG_COLUMNS, symbols)
-}
-
-export function readEssenceStateRows(db, symbols) {
-  return readStateRows(db, "icono_gene_essence", ESSENCE_COLUMNS, symbols)
 }

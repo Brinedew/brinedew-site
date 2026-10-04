@@ -15,7 +15,6 @@ function publicationServices(overrides = {}) {
     actor: async () => "admin",
     coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
     fetchCatalogStateRows: async () => [],
-    fetchEssenceStateRows: async () => [],
     isAdmin: async () => true,
     json,
     mutationLimiterSnapshot: () => ({ active: true }),
@@ -65,13 +64,12 @@ test("publication handler registry is immutable and domain-complete", () => {
     "admin_publication.catalog_reconcile",
     "admin_publication.catalog_state",
     "admin_publication.catalog_upsert",
-    "admin_publication.essence_state",
     "admin_publication.essence_upsert",
     "admin_publication.shared_discoveries",
   ])
 })
 
-test("catalog and essence state require explicit valid scopes without touching D1 otherwise", async () => {
+test("catalog state requires explicit valid scopes without touching D1 otherwise", async () => {
   const calls = []
   const handlers = createIconoplasmAdminPublicationHandlers(
     publicationServices({
@@ -79,17 +77,10 @@ test("catalog and essence state require explicit valid scopes without touching D
         calls.push({ route: "catalog", symbols })
         return []
       },
-      fetchEssenceStateRows: async (_env, symbols) => {
-        calls.push({ route: "essence", symbols })
-        return []
-      },
     }),
   )
   const forbiddenDb = new Proxy({}, { get: () => assert.fail("invalid state scope touched D1") })
-  for (const handler of [
-    handlers["admin_publication.catalog_state"],
-    handlers["admin_publication.essence_state"],
-  ]) {
+  for (const handler of [handlers["admin_publication.catalog_state"]]) {
     for (const body of [{}, { symbols: null }, { symbols: [] }, { symbols: ["", null] }]) {
       const response = await responseFrom(handler, { body, env: { ICONOPLASM_DB: forbiddenDb } })
       assert.equal(response.status, 400)
@@ -105,10 +96,7 @@ test("catalog and essence state require explicit valid scopes without touching D
   assert.deepEqual(calls, [])
 
   const symbols = Array.from({ length: 1001 }, (_, index) => `GENE${index}`)
-  for (const [route, handler] of [
-    ["catalog", handlers["admin_publication.catalog_state"]],
-    ["essence", handlers["admin_publication.essence_state"]],
-  ]) {
+  for (const [route, handler] of [["catalog", handlers["admin_publication.catalog_state"]]]) {
     const response = await responseFrom(handler, {
       body: { symbols: [" tp53 ", "TP53", ...symbols] },
       env: { ICONOPLASM_DB: {} },
