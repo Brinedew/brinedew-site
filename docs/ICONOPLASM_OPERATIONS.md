@@ -32,22 +32,9 @@ publish first to bounded immutable KV history; they are not a Website Ops catalo
 publication. Anonymous manifest, search, and resolver paths split one atomic
 alias/blocklist recognition-pair bundle and remain KV-only.
 
-## where to run queries
+## Investigating production data
 
-Run these from `d:\Coding\Website`.
-
-Only when the installed mode and fresh provider-level admission permit it, use
-the remote database for an explicitly bounded retained-state question.
-First verify that the selected table is authoritative for that gene and state
-category. A `LIMIT` bounds returned rows, not scanned rows; use an indexed exact
-key and verify query plans offline. Broad analyses belong on a retained local
-snapshot instead of the production database.
-
-The executor, rather than the owner, runs approved technical operations:
-
-- `pnpm exec wrangler d1 execute iconoplasm --remote --command "..."`
-
-If you skip `--remote`, you are not looking at the live data.
+Investigate production data with `node scripts/d1-local.mjs <database> "<sql>" [--json]`, run from `d:\Coding\Website`. It answers from the newest nightly dump in `D:\Backups\brinedew-d1\<database>\` (written by `scripts/backup-d1-rotation.mjs`, so a copy up to about five days old, and its first line of output gives the dump's date), opens it read-only, runs one SELECT, EXPLAIN, PRAGMA or WITH ... SELECT statement, prints at most 1,000 rows, and costs nothing on Cloudflare. The databases are `iconoplasm`, `iconoplasm-authoring`, `geneguessr`, `iconoplasm-audit` and `iconoplasm-authority-event-archive-20260831`. Agents have no production D1 credential, by design (B-1002): one hand-run query can spend the whole account's daily D1 read allowance, and only a missing credential, not a rule in a document, prevents that.
 
 ## tables you usually want
 

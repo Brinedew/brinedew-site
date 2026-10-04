@@ -36,6 +36,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -273,11 +274,21 @@ export function d1HttpQuery({ accountId, token, databaseId, fetcher = fetch }) {
   }
 }
 
+// The backup has its own token, D1 Read plus Account Analytics Read, in a file next to the
+// dumps (B-1002). The token every agent shell inherits has no D1 permission, so an agent's
+// hand-run SQL cannot reach production. The environment token is the fallback until that file
+// exists.
+export function backupToken(root, env = process.env) {
+  const file = env.D1_BACKUP_TOKEN_FILE || path.join(root, "backup-token.txt")
+  const fromFile = existsSync(file) ? readFileSync(file, "utf8").trim() : ""
+  return fromFile || env.CLOUDFLARE_API_TOKEN || ""
+}
+
 async function main() {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-  const token = process.env.CLOUDFLARE_API_TOKEN
-  if (!accountId || !token) throw new Error("D1_BACKUP_CREDENTIALS_MISSING")
   const root = process.env.D1_BACKUP_ROOT || "D:\\Backups\\brinedew-d1"
+  const token = backupToken(root)
+  if (!accountId || !token) throw new Error("D1_BACKUP_CREDENTIALS_MISSING")
   const only = process.argv.find((a) => a.startsWith("--db="))?.slice(5)
   const database = only ? BACKUP_ROTATION.find((d) => d.name === only) : undefined
   if (only && !database) throw new Error(`D1_BACKUP_UNKNOWN_DB ${only}`)
