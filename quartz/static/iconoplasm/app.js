@@ -2522,8 +2522,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sharedDisabled = false
     var guestStorageCopy =
       collectionState && !collectionState.authenticated
-        ? // A newcomer does not know a "dossier"; say how the collection grows and how to keep it.
-          " · open any gene to find it · sign in to keep what you find"
+        ? " · dossier visits stay in this browser until you sign in"
         : ""
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
