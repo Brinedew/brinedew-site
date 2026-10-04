@@ -13,14 +13,10 @@ import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 // 2. The prose and Tags limits stop being enforced now that nothing encrypts.
 
 test("plain bytes that hash to the row are the text, and anything else is refused", async () => {
-  const bytes = new TextEncoder().encode("A caretaker-written line.
-A second line with café.")
+  const text = "A caretaker-written line.\nA second line with café."
+  const bytes = new TextEncoder().encode(text)
   const ids = { bodySha256: await sha256Hex(bytes), bodyBytes: bytes.byteLength }
-  assert.equal(
-    new TextDecoder().decode(await openManifestationBody(bytes, ids)),
-    "A caretaker-written line.
-A second line with café.",
-  )
+  assert.equal(new TextDecoder().decode(await openManifestationBody(bytes, ids)), text)
 
   const damaged = Uint8Array.from(bytes)
   damaged[0] ^= 1

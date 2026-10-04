@@ -4,9 +4,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { hydratePublicCanonicalGeneRecords } from "../../iconoplasm-public-canonical-runtime.js"
-import {
-  plainBodyObject,
-} from "../../lib/iconoplasm-body-object-test-support.js"
+import { plainBodyObject } from "../../lib/iconoplasm-body-object-test-support.js"
 import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { composeStableGeneObject } from "../../lib/iconoplasm-stable-gene-object.js"

@@ -12,9 +12,7 @@ import {
   resolveCanonicalGenerationSource,
   validateExactGenerationSource,
 } from "./lib/iconoplasm-generation-provenance.js"
-import {
-  plainBodyObject,
-} from "./lib/iconoplasm-body-object-test-support.js"
+import { plainBodyObject } from "./lib/iconoplasm-body-object-test-support.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 import { createManifestationBodyObjectKey } from "./lib/iconoplasm-manifestation-body-storage.js"
 import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
@@ -180,12 +178,7 @@ async function plainStoredBody(prose) {
   return { ...body, prose: body.text, ciphertext: body.bytes }
 }
 
-async function insertAcceptedTags(
-  database,
-  env,
-  objects,
-  { revision, tags, imported = false },
-) {
+async function insertAcceptedTags(database, env, objects, { revision, tags, imported = false }) {
   const derivativeId = "derivative_0001"
   const recipeId = imported ? null : "tagger-v1"
   const recipeVersion = imported ? null : "1"
@@ -292,10 +285,7 @@ function selectCanonical(
     )
 }
 
-async function authorityFixture({
-  sampleNumber = 1,
-  sampleTextSha256 = "c".repeat(64),
-} = {}) {
+async function authorityFixture({ sampleNumber = 1, sampleTextSha256 = "c".repeat(64) } = {}) {
   const database = new DatabaseSync(":memory:")
   database.exec(
     readFileSync(
