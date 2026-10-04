@@ -39,8 +39,70 @@
       const matcher = getMatcher()
       if (!text || !matcher || typeof matcher.findMatches !== "function") return 0
 
-      const matches = matcher.findMatches(text)
+      const surroundings =
+        typeof matcher.hasBlocklist === "function" && matcher.hasBlocklist()
+          ? { before: visibleText(textNode, false), after: visibleText(textNode, true) }
+          : null
+      const matches = matcher.findMatches(text, surroundings)
       return annotations.update(textNode, matches)
+    }
+
+    // B-1005: the text a reader sees just before or after this node on the same
+    // line, so a protected phrase split by markup (PIP<sub>3</sub>) still matches.
+    // It walks only through inline elements and stops at a block edge, after
+    // SURROUNDING_CHARACTERS characters, or after SURROUNDING_STEPS nodes.
+    const INLINE_TAGS = new Set([
+      "A",
+      "ABBR",
+      "B",
+      "BDI",
+      "BDO",
+      "CITE",
+      "CODE",
+      "DFN",
+      "EM",
+      "FONT",
+      "I",
+      "KBD",
+      "MARK",
+      "Q",
+      "S",
+      "SAMP",
+      "SMALL",
+      "SPAN",
+      "STRONG",
+      "SUB",
+      "SUP",
+      "TIME",
+      "U",
+      "VAR",
+    ])
+    const SURROUNDING_CHARACTERS = 48
+    const SURROUNDING_STEPS = 16
+
+    function isInlineElement(node) {
+      return node?.nodeType === 1 && INLINE_TAGS.has(String(node.tagName).toUpperCase())
+    }
+
+    function visibleText(textNode, forward) {
+      let collected = ""
+      let current = textNode
+      for (let steps = 0; steps < SURROUNDING_STEPS; steps += 1) {
+        if (collected.length >= SURROUNDING_CHARACTERS) break
+        let next = forward ? current.nextSibling : current.previousSibling
+        while (!next) {
+          current = current.parentNode
+          if (!isInlineElement(current)) return collected
+          next = forward ? current.nextSibling : current.previousSibling
+        }
+        if (next.nodeType === 1 && !isInlineElement(next)) return collected
+        const data = String(next.textContent || "")
+        collected = forward ? collected + data : data + collected
+        current = next
+      }
+      return forward
+        ? collected.slice(0, SURROUNDING_CHARACTERS)
+        : collected.slice(-SURROUNDING_CHARACTERS)
     }
 
     function scanPage(rootNode) {

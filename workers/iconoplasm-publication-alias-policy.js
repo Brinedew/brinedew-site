@@ -468,6 +468,18 @@ function mutableOwners(source, key, cache) {
 }
 
 const RECOGNITION_BOUNDARY_CHARACTER_RE = /[\p{L}\p{N}]/u
+const LETTER_RE = /\p{L}/u
+const NUMBER_RE = /\p{N}/u
+
+// Where a gene label inside a protected phrase may end: at a word boundary, as
+// in the extension, or where a letter meets a number (B-1005). Pages write the
+// lipid PIP3 as PIP<sub>3</sub>, so the extension sees "PIP" as a whole word,
+// and the admin must be able to protect "PIP3". This only decides which phrases
+// the admin panel accepts; it never hides a highlight on its own.
+function nestedLabelCanEnd(previous, next) {
+  if (!next || !RECOGNITION_BOUNDARY_CHARACTER_RE.test(next)) return true
+  return LETTER_RE.test(previous) && NUMBER_RE.test(next)
+}
 
 function containsRecognizedNestedTerm(term, context, publishedOwners) {
   const characters = Array.from(term)
@@ -475,9 +487,7 @@ function containsRecognizedNestedTerm(term, context, publishedOwners) {
     if (start > 0 && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[start - 1])) continue
     for (let end = start + 1; end <= characters.length; end += 1) {
       if (start === 0 && end === characters.length) continue
-      if (end < characters.length && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[end])) {
-        continue
-      }
+      if (!nestedLabelCanEnd(characters[end - 1], characters[end])) continue
       const candidate = publishedAliasTermKey(characters.slice(start, end).join(""))
       if (!candidate) continue
       if (context.canonicalSymbols.has(candidate)) return true
@@ -670,7 +680,7 @@ function recognizedBoundaryContains(term, candidate) {
     const after = offset + candidate.length < term.length ? term[offset + candidate.length] : ""
     if (
       (!before || !RECOGNITION_BOUNDARY_CHARACTER_RE.test(before)) &&
-      (!after || !RECOGNITION_BOUNDARY_CHARACTER_RE.test(after))
+      nestedLabelCanEnd(term[offset + candidate.length - 1], after)
     ) {
       return true
     }
@@ -685,9 +695,7 @@ function recognitionCandidates(term) {
   for (let start = 0; start < characters.length; start += 1) {
     if (start > 0 && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[start - 1])) continue
     for (let end = start + 1; end <= characters.length; end += 1) {
-      if (end < characters.length && RECOGNITION_BOUNDARY_CHARACTER_RE.test(characters[end])) {
-        continue
-      }
+      if (!nestedLabelCanEnd(characters[end - 1], characters[end])) continue
       const candidate = publishedAliasTermKey(characters.slice(start, end).join(""))
       if (candidate) candidates.add(candidate)
     }

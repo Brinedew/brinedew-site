@@ -501,11 +501,25 @@
       filterCandidates(candidates) {
         return filterCandidates(candidates, matcherOptions)
       },
-      findMatches(text) {
+      hasBlocklist() {
+        return !!blocklistTrie
+      },
+      findMatches(text, surroundings = null) {
         // A blocklist entry protects its complete source span. This is stronger
         // than candidate equality: APC/C suppresses the otherwise-valid APC
         // symbol inside it, while a standalone APC remains eligible.
-        const blockedSpans = collectBlockedSpans(text, blocklistTrie)
+        // `surroundings` is the visible text just before and after this text node
+        // (B-1005): a page that writes PIP<sub>3</sub> splits the protected phrase
+        // PIP3 across two nodes. Only protected phrases read it; gene candidates
+        // still come from this node's own text.
+        const before = String(surroundings?.before || "")
+        const after = String(surroundings?.after || "")
+        const blockedSpans =
+          before || after
+            ? collectBlockedSpans(before + text + after, blocklistTrie).map((span) =>
+                Object.assign({}, span, { index: span.index - before.length }),
+              )
+            : collectBlockedSpans(text, blocklistTrie)
         const acceptedExact = sortCandidates(
           filterCandidates(collectCandidates(text, exactTrie), matcherOptions),
         ).filter((candidate) => !overlapsBlockedSpan(candidate, blockedSpans))
