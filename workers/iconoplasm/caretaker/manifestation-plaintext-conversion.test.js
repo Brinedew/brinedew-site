@@ -2,7 +2,9 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  PLAINTEXT_CHECK_MAX_BODIES,
   PLAINTEXT_CONVERSION_MAX_BODIES,
+  PLAINTEXT_CONVERSION_WORST_CASE_FETCHES,
   convertManifestationBodies,
 } from "./manifestation-plaintext-conversion.js"
 import {
@@ -32,15 +34,25 @@ import {
 //    stores garbage, and the object is neither readable as before nor restored.
 // 4. A read-after-write that still shows the old envelope is taken as a
 //    failure of the write (it is Bunny's documented stale window), or as proof
-//    of success.
+//    of success. Bunny can acknowledge a PUT and keep serving the old object,
+//    so ONE PUT is not enough: the first night's single PUT left 1,499 of 1,500
+//    bodies as envelopes. The identical PUT is repeated until a read shows the
+//    plain text, and a store that never applies it leaves the old envelope
+//    untouched and reports "unverified".
 // 5. One call spends more subrequests than a free-plan Worker has (50), or the
-//    response carries body text.
+//    response carries body text. A call that writes converts ONE body: six PUTs
+//    and their read-backs need 41 fetches.
 // 6. Check mode writes, or counts an envelope as plain.
 
 const NO_WAIT = { sleep: async () => {} }
 const PROSE = "A legacy manifestation with café and\nan interior line break."
 
-async function sweep(context, env, kind, { limit = 3, execute = true, ...options } = {}) {
+async function sweep(
+  context,
+  env,
+  kind,
+  { execute = true, limit = execute ? 1 : 10, ...options } = {},
+) {
   const calls = []
   let after = ""
   for (let guard = 0; guard < 50; guard += 1) {
@@ -64,6 +76,7 @@ async function sweep(context, env, kind, { limit = 3, execute = true, ...options
     converted: total("converted"),
     legacy: total("legacy"),
     unverified: total("unverified"),
+    puts: total("puts"),
     failed: calls.flatMap((call) => call.failed),
   }
 }
@@ -107,6 +120,18 @@ async function mixedGene(t, suffix) {
     lineageVersion(context, `manifestation_legacy_${suffix}a`),
   )
   return { bunny, context, keyed, keyless, first, second, tagsA, tagsB, plain, human }
+}
+
+// The cursor that makes a one-body call land on this legacy revision.
+function cursorBefore(context, revisionId) {
+  return (
+    row(
+      context.db,
+      `SELECT manifestation_revision_id AS id FROM icono_manifestation_revision_storage_secrets
+        WHERE manifestation_revision_id < ? ORDER BY manifestation_revision_id DESC LIMIT 1`,
+      revisionId,
+    )?.id ?? ""
+  )
 }
 
 function objectKeyOf(context, table, idColumn, id) {
@@ -184,13 +209,13 @@ test("every legacy body of both kinds is rewritten as exact plain text and reads
 
 test("a second pass writes nothing, and a pass can resume from any cursor", async (t) => {
   const g = await mixedGene(t, "8202")
-  await sweep(g.context, g.keyed, "revision", { limit: 2 })
-  await sweep(g.context, g.keyed, "derivative", { limit: 2 })
+  await sweep(g.context, g.keyed, "revision")
+  await sweep(g.context, g.keyed, "derivative")
   g.bunny.clearLog()
 
-  const again = await sweep(g.context, g.keyed, "revision", { limit: 1 })
+  const again = await sweep(g.context, g.keyed, "revision")
   assert.deepEqual([again.converted, again.plaintext, again.failed], [0, 4, []])
-  const againTags = await sweep(g.context, g.keyed, "derivative", { limit: 4 })
+  const againTags = await sweep(g.context, g.keyed, "derivative")
   assert.deepEqual([againTags.converted, againTags.plaintext, againTags.failed], [0, 2, []])
   assert.equal(g.bunny.count("PUT"), 0, "already-plain objects are never written again")
   assert.equal(g.bunny.count("DELETE"), 0)
@@ -260,6 +285,12 @@ test("a refused write leaves the old envelope in place and readable", async (t) 
   )
   assert.equal(result.converted, 2, "the other legacy bodies were still converted")
   assert.deepEqual(g.bunny.objects.get(g.first.objectKey), original)
+  assert.equal(
+    g.bunny.log.filter((entry) => entry.method === "PUT" && entry.objectKey === g.first.objectKey)
+      .length,
+    6,
+    "a refused PUT spends one of the six attempts, then the body is reported",
+  )
 
   const workstation = workstationHandler(g.context, g.keyed)
   const body = await readJson(
@@ -273,16 +304,33 @@ test("a refused write leaves the old envelope in place and readable", async (t) 
   assert.equal(body.body_plain, g.first.prose)
 })
 
-test("a write that stores garbage is rolled back to the old envelope", async (t) => {
+test("a write that lands corrupted is repaired by the repeated PUT", async (t) => {
   const g = await mixedGene(t, "8205")
+  let puts = 0
+  g.bunny.rules.push(({ method, objectKey, init, objects }) => {
+    if (method !== "PUT" || objectKey !== g.first.objectKey) return undefined
+    puts += 1
+    // The first PUT lands corrupted; the second is stored as sent.
+    objects.set(objectKey, puts === 1 ? new Uint8Array([1, 2, 3, 4]) : Uint8Array.from(init.body))
+    return new Response(null, { status: 201 })
+  })
+  const result = await sweep(g.context, g.keyed, "revision")
+  assert.deepEqual(result.failed, [])
+  assert.equal(result.converted, 3, "all three legacy bodies are plain text in the end")
+  assert.equal(puts, 2)
+  assert.equal(new TextDecoder().decode(g.bunny.objects.get(g.first.objectKey)), g.first.prose)
+})
+
+test("when every write lands corrupted the old envelope is put back", async (t) => {
+  const g = await mixedGene(t, "8210")
   const original = Uint8Array.from(g.bunny.objects.get(g.first.objectKey))
   let puts = 0
   g.bunny.rules.push(({ method, objectKey, init, objects }) => {
     if (method !== "PUT" || objectKey !== g.first.objectKey) return undefined
     puts += 1
-    // The first PUT (the conversion) lands corrupted; the second (the
-    // rollback) is stored as sent.
-    objects.set(objectKey, puts === 1 ? new Uint8Array([1, 2, 3, 4]) : Uint8Array.from(init.body))
+    // Six conversion PUTs land corrupted; the seventh, the rollback, is stored
+    // as sent.
+    objects.set(objectKey, puts <= 6 ? new Uint8Array([1, 2, 3, 4]) : Uint8Array.from(init.body))
     return new Response(null, { status: 201 })
   })
   const result = await sweep(g.context, g.keyed, "revision")
@@ -290,7 +338,7 @@ test("a write that stores garbage is rolled back to the old envelope", async (t)
     result.failed.map((entry) => [entry.id, entry.code]),
     [[g.first.revisionId, "rolled_back"]],
   )
-  assert.equal(puts, 2)
+  assert.equal(puts, 7)
   assert.deepEqual(g.bunny.objects.get(g.first.objectKey), original)
 })
 
@@ -310,57 +358,120 @@ test("a rollback that cannot be verified is reported as the one object to repair
   )
 })
 
-test("a read that still shows the old envelope after the write is reported, not trusted", async (t) => {
-  const g = await mixedGene(t, "8207")
-  const original = Uint8Array.from(g.bunny.objects.get(g.first.objectKey))
-  // Bunny's documented window: the write is acknowledged but replicas keep
-  // serving the previous bytes of that object.
-  let written = false
-  g.bunny.rules.push(({ method, objectKey }) => {
-    if (objectKey !== g.first.objectKey) return undefined
-    if (method === "PUT") written = true
-    return method === "GET" && written ? new Response(original, { status: 200 }) : undefined
-  })
-  const result = await sweep(g.context, g.keyed, "revision")
-  assert.equal(result.unverified, 1)
-  assert.equal(result.converted, 2)
-  assert.deepEqual(result.failed, [])
+test("a store that acknowledges PUTs without applying them is repeated until it does, and reported when it never does", async (t) => {
+  // Bunny's documented failure (bunny-storage-consistency.js): the PUT is
+  // acknowledged and the old object keeps being served. Replicate it for one
+  // object: the first `ignored` PUTs are acknowledged and dropped.
+  async function oneBody(suffix, ignored) {
+    const g = await mixedGene(t, suffix)
+    const original = Uint8Array.from(g.bunny.objects.get(g.first.objectKey))
+    let puts = 0
+    g.bunny.rules.push(({ method, objectKey, init, objects }) => {
+      if (method !== "PUT" || objectKey !== g.first.objectKey) return undefined
+      puts += 1
+      if (puts > ignored) objects.set(objectKey, Uint8Array.from(init.body))
+      return new Response(null, { status: 201 })
+    })
+    const result = await sweep(g.context, g.keyed, "revision")
+    return { g, original, result, puts: () => puts }
+  }
+
+  // Every number of dropped PUTs below the attempt cap still converts.
+  for (const [suffix, ignored] of [
+    ["8207", 1],
+    ["8211", 3],
+    ["8212", 5],
+  ]) {
+    const { g, result, puts } = await oneBody(suffix, ignored)
+    assert.deepEqual(result.failed, [], `${ignored} dropped PUTs`)
+    assert.equal(result.unverified, 0, `${ignored} dropped PUTs`)
+    assert.equal(result.converted, 3, `${ignored} dropped PUTs`)
+    assert.equal(puts(), ignored + 1, "the body converts on the first PUT that is applied")
+    assert.equal(new TextDecoder().decode(g.bunny.objects.get(g.first.objectKey)), g.first.prose)
+  }
+
+  // A store that never applies the PUT leaves the old envelope, reported as
+  // unverified and not as damaged, after exactly six PUTs.
+  const never = await oneBody("8213", Infinity)
+  assert.equal(never.puts(), 6)
+  assert.equal(never.result.unverified, 1)
+  assert.deepEqual(never.result.failed, [])
+  assert.equal(never.result.converted, 2, "the other legacy bodies were still converted")
+  assert.deepEqual(never.g.bunny.objects.get(never.g.first.objectKey), never.original)
+  assert.equal(
+    never.result.calls.flatMap((call) => call.unverified_ids).join(),
+    never.g.first.revisionId,
+    "the call names the body that did not take",
+  )
 
   // Both versions read correctly, so the unverified object is still safe.
-  g.bunny.rules.length = 0
-  const workstation = workstationHandler(g.context, g.keyed)
+  const workstation = workstationHandler(never.g.context, never.g.keyed)
   const body = await readJson(
     await workstation(
       new Request(
-        `https://iconoplasm.test/api/iconoplasm/authority/revisions/${g.first.revisionId}/body`,
+        `https://iconoplasm.test/api/iconoplasm/authority/revisions/${never.g.first.revisionId}/body`,
         { headers: { authorization: "Bearer test-service" } },
       ),
     ),
   )
-  assert.equal(body.body_plain, g.first.prose)
+  assert.equal(body.body_plain, never.g.first.prose)
 })
 
-test("one call stays inside the free plan's 50 subrequests even when every write and rollback fails", async (t) => {
-  const g = await mixedGene(t, "8208")
-  // The worst case: every PUT lands as garbage, so each legacy body takes its
-  // read, its write, three read-backs, its rollback and three more read-backs.
-  g.bunny.rules.push(({ method, objectKey, objects }) => {
+test("one call stays inside the free plan's 50 subrequests in every case, and the worst case is the one counted in the module", async (t) => {
+  assert.equal(PLAINTEXT_CONVERSION_WORST_CASE_FETCHES, 41)
+  assert.ok(PLAINTEXT_CONVERSION_WORST_CASE_FETCHES <= 45, "a margin under 50 is kept")
+
+  // The worst case: every PUT lands as garbage, so the body takes its read, six
+  // PUTs with five read-backs each, then its rollback (one PUT, three reads).
+  const worst = await mixedGene(t, "8208")
+  worst.bunny.rules.push(({ method, objectKey, objects }) => {
     if (method !== "PUT") return undefined
     objects.set(objectKey, new Uint8Array([7, 7, 7]))
     return new Response(null, { status: 201 })
   })
-  g.bunny.clearLog()
-  const result = await convertManifestationBodies(g.context.db, g.keyed, {
+  worst.bunny.clearLog()
+  const result = await convertManifestationBodies(worst.context.db, worst.keyed, {
     kind: "revision",
-    after: "",
+    after: cursorBefore(worst.context, worst.first.revisionId),
     limit: PLAINTEXT_CONVERSION_MAX_BODIES,
     execute: true,
     ...NO_WAIT,
   })
-  assert.equal(result.scanned, PLAINTEXT_CONVERSION_MAX_BODIES)
-  assert.equal(result.failed.length, 3, "all three legacy bodies failed to restore")
-  // One D1 read and the admin check come on top; 50 is the hard ceiling.
-  assert.ok(g.bunny.log.length <= 44, `${g.bunny.log.length} storage requests in one call`)
+  assert.equal(result.scanned, 1)
+  assert.deepEqual(
+    result.failed.map((entry) => entry.code),
+    ["restore_failed"],
+  )
+  assert.equal(worst.bunny.log.length, PLAINTEXT_CONVERSION_WORST_CASE_FETCHES)
+
+  // A store that refuses every PUT: no rollback, so fewer.
+  const refused = await mixedGene(t, "8214")
+  refused.bunny.rules.push(({ method }) =>
+    method === "PUT" ? new Response(null, { status: 503 }) : undefined,
+  )
+  refused.bunny.clearLog()
+  await convertManifestationBodies(refused.context.db, refused.keyed, {
+    kind: "revision",
+    after: cursorBefore(refused.context, refused.first.revisionId),
+    limit: 1,
+    execute: true,
+    ...NO_WAIT,
+  })
+  assert.ok(refused.bunny.log.length <= PLAINTEXT_CONVERSION_WORST_CASE_FETCHES)
+
+  // The usual case: read, one PUT, one read-back.
+  const usual = await mixedGene(t, "8215")
+  usual.bunny.clearLog()
+  const converted = await convertManifestationBodies(usual.context.db, usual.keyed, {
+    kind: "revision",
+    after: cursorBefore(usual.context, usual.first.revisionId),
+    limit: 1,
+    execute: true,
+    ...NO_WAIT,
+  })
+  assert.equal(converted.converted, 1)
+  assert.equal(usual.bunny.log.length, 3)
+  assert.equal(converted.puts, 1)
 })
 
 test("the call refuses bad input and never returns body text", async (t) => {
@@ -376,7 +487,11 @@ test("the call refuses bad input and never returns body text", async (t) => {
     })
   await assert.rejects(call({ kind: "tags" }), /kind/)
   await assert.rejects(call({ limit: 0 }), /limit/)
-  await assert.rejects(call({ limit: PLAINTEXT_CONVERSION_MAX_BODIES + 1 }), /limit/)
+  // A call that writes converts one body; a call that only reads may scan ten.
+  await assert.rejects(call({ execute: true, limit: PLAINTEXT_CONVERSION_MAX_BODIES + 1 }), /limit/)
+  await assert.rejects(call({ limit: PLAINTEXT_CHECK_MAX_BODIES + 1 }), /limit/)
+  assert.equal(PLAINTEXT_CONVERSION_MAX_BODIES, 1)
+  assert.equal((await call({ limit: PLAINTEXT_CHECK_MAX_BODIES })).scanned, 4)
   await assert.rejects(call({ after: "a b; DROP TABLE x" }), /after/)
 
   const result = await sweep(g.context, g.keyed, "revision")

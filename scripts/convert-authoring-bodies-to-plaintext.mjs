@@ -6,18 +6,57 @@
 // Bodies are stored as plain text now, and a small reader still opens the old
 // envelopes. Only the Worker holds the key and the Bunny password, so the
 // rewrite runs there: this script calls the admin route
-// POST /api/iconoplasm/admin/caretakers/plaintext-bodies, a few bodies a call.
-// For each body the Worker reads the object, opens the envelope, writes the
-// plain text to the same object key, reads it back, and puts the old envelope
-// back if the read-back shows a damaged object. It writes no D1 row: the cursor
-// is the storage row's id, which this script keeps in a local file. It is a
-// one-shot, not a cron. Delete it with the route, the conversion and the legacy
-// envelope reader once `--verify` reports nothing left (B-958).
+// POST /api/iconoplasm/admin/caretakers/plaintext-bodies, ONE body per call.
+// For each body the Worker reads the object, opens the envelope, and repeats the
+// identical PUT of the plain text, with read-after-write delays, until a read
+// shows the plain text (up to 6 PUTs, the same envelope every other body write
+// uses). It puts the old envelope back if the last read shows a missing or
+// damaged object. It writes no D1 row: the cursor is the storage row's id, which
+// this script keeps in a local file. It is a one-shot, not a cron. Delete it with
+// the route, the conversion and the legacy envelope reader once `--verify`
+// reports nothing left (B-958).
+//
+// WHY ONE BODY A CALL, AND WHAT IT COSTS. The first night (2026-10-03) sent one
+// PUT per body, three bodies a call: 1,499 of 1,500 bodies came back
+// "unverified" and a read-only verify 27 minutes later still found the old
+// envelopes. Bunny can acknowledge a PUT and keep serving the old object. Six
+// PUTs and their read-backs need 41 of a free-plan Worker's 50 fetches for one
+// body (workers/iconoplasm/caretaker/manifestation-plaintext-conversion.js has
+// the count), so a call converts one body. That makes the full pass 38,487
+// Worker requests, not 12.8k. The Workers free plan allows 100,000 requests a
+// day for the whole account and the site and our tooling used 9,000 to 27,000 on
+// 2026-10-02 and 2026-10-03 (Cloudflare GraphQL), so the pass takes TWO OR THREE
+// NIGHTS: the default night is 15,000 bodies (about 15,000
+// Worker requests and 37,500 D1 rows read), `--max-bodies 20000` is the most a
+// night may take, and every night starts after 20:00 UTC. When Bunny behaves a
+// body costs 3 fetches (read, PUT, one read-back). D1 is never written.
+//
+// THE SAVED CURSOR FROM THE FIRST NIGHT IS WRONG. It sits after 1,500 bodies
+// that are still envelopes. The next run MUST use `--from-start`; a cursor file
+// from before this version is refused with a message saying so, and `--from-start`
+// replaces it. After that, run it without `--from-start` and it continues from
+// the saved cursor.
+//
+// TONIGHT, IN THIS ORDER (after 20:00 UTC; each step needs
+// ICONOPLASM_ADMIN_TOKEN):
+//   1. node scripts/convert-authoring-bodies-to-plaintext.mjs --execute --from-start --max-bodies 30
+//        The canary: 30 bodies, about 2 minutes. The receipt's `converted` should
+//        be 30 and `puts` close to 30. `puts` far above `converted` means Bunny
+//        needed repeat PUTs; `unverified` means it did not show the new bytes
+//        within the six tries, and the run stops after 10 of those.
+//   2. Wait 3 to 5 minutes, then: node scripts/convert-authoring-bodies-to-plaintext.mjs --verify --max-bodies 60
+//        A read-only look at the first bodies of each kind: `legacy` should be
+//        0. If it is not, stop and read the receipt; do not run step 3.
+//   3. node scripts/convert-authoring-bodies-to-plaintext.mjs --execute
+//        The night's slice (15,000 bodies). Run the same command on the next two
+//        nights; the third night stops by itself when every body was visited.
+//   4. When every body was visited: node scripts/convert-authoring-bodies-to-plaintext.mjs --verify
+//        The whole check, about 3,850 Worker requests, and it must say clean.
 //
 //   node scripts/convert-authoring-bodies-to-plaintext.mjs                          # dry run: the plan and its cost
 //   node scripts/convert-authoring-bodies-to-plaintext.mjs --verify                 # read every object, write nothing
-//   node scripts/convert-authoring-bodies-to-plaintext.mjs --execute --max-bodies 1500   # a night's slice
-//   node scripts/convert-authoring-bodies-to-plaintext.mjs --execute                # the next night, from the saved cursor
+//   node scripts/convert-authoring-bodies-to-plaintext.mjs --execute --from-start --max-bodies 30   # the canary
+//   node scripts/convert-authoring-bodies-to-plaintext.mjs --execute                # a night, from the saved cursor
 //   node scripts/convert-authoring-bodies-to-plaintext.mjs --execute --from-start   # a full pass again (idempotent)
 //
 // Dry run is the default and sends nothing to the Worker. `--execute` and
@@ -25,9 +64,10 @@
 // `--allow-early "<incident reason>"` is given (AGENTS.md: spend the daily
 // allowance at the end of the UTC day, never right after the reset). Every run
 // is idempotent: an object that is already plain text is recognised by its hash
-// and skipped. A run stops when too many objects fail, when the token is
-// refused, or when a slice keeps failing, saves where it stopped, and writes a
-// receipt to artifacts/authoring-plaintext-backfill/.
+// and skipped. A run stops when too many objects fail or stay unverified (10
+// together by default, `--max-failures`), when the token is refused, or when a
+// slice keeps failing, saves where it stopped, and writes a receipt to
+// artifacts/authoring-plaintext-backfill/.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
@@ -37,9 +77,18 @@ export const LATE_UTC_HOUR = 20
 export const ORIGIN = "https://iconoplasm.brinedew.bio"
 export const ROUTE = "/api/iconoplasm/admin/caretakers/plaintext-bodies"
 export const KINDS = Object.freeze(["revision", "derivative"])
-export const DEFAULT_SLICE_BODIES = 3
-export const DEFAULT_NIGHT_BODIES = 20_000
-export const MAX_NIGHT_BODIES = 50_000
+// A call that writes converts one body (the Worker's 50-fetch cap, see the
+// header). A check call only reads, so it may scan a few more; it stays small
+// because the stateful Worker has little CPU headroom on the free plan.
+export const DEFAULT_SLICE_BODIES = 1
+export const VERIFY_SLICE_BODIES = 10
+export const DEFAULT_NIGHT_BODIES = 15_000
+export const MAX_NIGHT_BODIES = 20_000
+export const CANARY_BODIES = 30
+// The cursor file records which version of this script wrote it. The first
+// night's version (no `cursor_version`) saved a cursor after 1,500 bodies that
+// were still envelopes.
+export const CURSOR_VERSION = 2
 const CURSOR = /^[A-Za-z0-9_-]{0,128}$/
 const MAX_LISTED_FAILURES = 200
 
@@ -55,9 +104,12 @@ export const MEASURED_BODIES = Object.freeze({
 // schema, at 3 bodies a call: 9 rows for prose (3 a body: the storage row, its
 // revision, its manifestation) and 6 for Tags (2 a body: the storage row and
 // its derivative). The 2.5 below is that mix over the 19,245 and 19,242 bodies.
+// Point lookups, so the per-body figure does not depend on the slice size (one
+// body a call is unmeasured on production; the first night's receipt says 2.49).
 // Each receipt reports the real figure the production D1 returned. The Bunny
-// requests per body are one read, one write and one read-back; storage requests
-// carry no fee. Nothing is written to D1.
+// requests per body are one read, one PUT and one read-back when Bunny behaves,
+// and up to 6 PUTs and 36 reads when it does not; storage requests carry no fee.
+// Nothing is written to D1.
 const D1_ROWS_READ_PER_BODY = 2.5
 
 function fail(code, message) {
@@ -66,12 +118,17 @@ function fail(code, message) {
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// The cost of converting `bodies` bodies: one Worker request each, because a
+// call that writes converts one body. `bunny_*` are the typical case (read, PUT,
+// read-back); `bunny_storage_puts_at_most` is six PUTs a body.
 export function conversionCost(bodies) {
   return {
     bodies,
     worker_requests: Math.ceil(bodies / DEFAULT_SLICE_BODIES),
+    verify_worker_requests: Math.ceil(bodies / VERIFY_SLICE_BODIES),
     bunny_storage_gets: bodies * 2,
     bunny_storage_puts: bodies,
+    bunny_storage_puts_at_most: bodies * 6,
     d1_rows_read_estimate: Math.round(bodies * D1_ROWS_READ_PER_BODY),
     d1_rows_written: 0,
   }
@@ -103,6 +160,12 @@ export function loadState(file) {
       throw fail("CURSOR_FILE_DAMAGED", `the cursor file ${file} has no valid ${kind} cursor`)
     }
   }
+  if (value.cursor_version !== CURSOR_VERSION) {
+    throw fail(
+      "CURSOR_FILE_FROM_THE_FIRST_NIGHT",
+      `the cursor file ${file} was saved by the one-PUT version of this script (2026-10-03), whose cursor sits after bodies that are still envelopes. Run with --from-start; that replaces it`,
+    )
+  }
   return { revision: value.revision, derivative: value.derivative }
 }
 
@@ -110,7 +173,8 @@ export function saveState(file, state) {
   mkdirSync(path.dirname(file), { recursive: true })
   writeFileSync(
     file,
-    `${JSON.stringify({ revision: state.revision, derivative: state.derivative }, null, 2)}\n`,
+    `${JSON.stringify({ cursor_version: CURSOR_VERSION, revision: state.revision, derivative: state.derivative }, null, 2)}
+`,
   )
 }
 
@@ -127,7 +191,9 @@ export function writeReceipt(dir, receipt) {
 
 // One lane per kind. A slice is retried, then retried at one body, then the
 // lane stops: a Worker that fails three times in a row is not helped by a
-// fourth. A refused token stops everything.
+// fourth. A refused token stops everything. Failed and unverified bodies count
+// together toward `maxFailures`: a Bunny that keeps acknowledging PUTs without
+// serving them would otherwise be walked through the whole night.
 export async function convertBodies({
   post = null,
   mode = "dry-run",
@@ -170,6 +236,8 @@ export async function convertBodies({
     converted: 0,
     legacy: 0,
     unverified: 0,
+    puts: 0,
+    unverified_ids: [],
     failed: [],
     d1_rows_read: 0,
     stopped: null,
@@ -221,7 +289,11 @@ export async function convertBodies({
         stopped ??= "too_many_failures"
         return
       }
-      const limit = Math.min(DEFAULT_SLICE_BODIES, budget.left)
+      if (receipt.unverified >= maxFailures) {
+        stopped ??= "too_many_unverified"
+        return
+      }
+      const limit = Math.min(verify ? VERIFY_SLICE_BODIES : DEFAULT_SLICE_BODIES, budget.left)
       if (limit < 1) {
         stopped ??= "max_bodies"
         return
@@ -242,6 +314,10 @@ export async function convertBodies({
       receipt.converted += body.converted
       receipt.legacy += body.legacy
       receipt.unverified += body.unverified
+      receipt.puts += Number(body.puts) || 0
+      for (const id of Array.isArray(body.unverified_ids) ? body.unverified_ids : [])
+        if (receipt.unverified_ids.length < MAX_LISTED_FAILURES)
+          receipt.unverified_ids.push({ kind, id: String(id) })
       receipt.d1_rows_read += Number(body.d1_rows_read) || 0
       for (const entry of body.failed)
         if (receipt.failed.length < MAX_LISTED_FAILURES)
@@ -251,9 +327,14 @@ export async function convertBodies({
         state[kind] = body.next_after
         onProgress(state)
       }
-      log(
-        `${kind}: ${receipt.scanned[kind]} scanned, ${receipt.converted} converted in total, ${receipt.failed.length} failed`,
-      )
+      // One line every 100 bodies of a kind, and at once for anything that
+      // needs a look: a night is 15,000 calls.
+      const scanned = receipt.scanned[kind]
+      const crossed = Math.floor(scanned / 100) !== Math.floor((scanned - body.scanned) / 100)
+      if (crossed || body.unverified || body.failed.length || body.done)
+        log(
+          `${kind}: ${scanned} scanned; ${receipt.converted} converted with ${receipt.puts} PUTs, ${receipt.unverified} unverified, ${receipt.failed.length} failed`,
+        )
       if (body.done) {
         receipt.done[kind] = true
         return
@@ -265,6 +346,9 @@ export async function convertBodies({
   receipt.stopped = stopped
   receipt.next_after = { ...cursors }
   receipt.finished_at = new Date().toISOString()
+  receipt.elapsed_seconds = Math.round(
+    (Date.parse(receipt.finished_at) - Date.parse(startedAt)) / 1000,
+  )
   if (verify) {
     receipt.complete = receipt.done.revision && receipt.done.derivative
     receipt.clean =
@@ -273,17 +357,22 @@ export async function convertBodies({
   return receipt
 }
 
-// What a night is, for the dry run: the canary first, then the rest.
+// What the whole job is, for the dry run: the canary, then nights of at most
+// DEFAULT_NIGHT_BODIES (the first night starts with the canary).
 function nightsPlan(total) {
   const nights = []
   let remaining = total
-  for (const bodies of [1500, DEFAULT_NIGHT_BODIES, DEFAULT_NIGHT_BODIES, DEFAULT_NIGHT_BODIES]) {
-    if (remaining <= 0) break
-    const take = Math.min(bodies, remaining)
+  while (remaining > 0) {
+    const take = Math.min(DEFAULT_NIGHT_BODIES, remaining)
     nights.push({ night: nights.length + 1, bodies: take, ...conversionCost(take) })
     remaining -= take
   }
-  return nights
+  const full = conversionCost(total)
+  return {
+    summary: `A full pass is ${total.toLocaleString("en-US")} bodies and about ${full.worker_requests.toLocaleString("en-US")} Worker requests, one per body, so it takes ${nights.length} nights of up to ${DEFAULT_NIGHT_BODIES.toLocaleString("en-US")} bodies, or ${Math.ceil(total / MAX_NIGHT_BODIES)} nights at the most a night (--max-bodies ${MAX_NIGHT_BODIES}), each started after ${LATE_UTC_HOUR}:00 UTC. D1 is read about ${full.d1_rows_read_estimate.toLocaleString("en-US")} rows in all and never written. The check at the end is about ${full.verify_worker_requests.toLocaleString("en-US")} requests.`,
+    canary: `First: --execute --from-start --max-bodies ${CANARY_BODIES}, then --verify --max-bodies 60 a few minutes later, before any big night.`,
+    nights,
+  }
 }
 
 function wholeNumber(flag, value, { min, max }) {
@@ -332,7 +421,12 @@ async function main() {
   const mode = options.execute ? "execute" : options.verify ? "verify" : "dry-run"
   const post =
     mode === "dry-run" ? null : createRoutePoster({ token: process.env.ICONOPLASM_ADMIN_TOKEN })
-  const state = options.fromStart ? { revision: "", derivative: "" } : loadState(cursorFile)
+  // Only a run that writes uses the saved cursor; a verify always scans from the
+  // start and a dry run touches nothing.
+  const state =
+    mode !== "execute" || options.fromStart
+      ? { revision: "", derivative: "" }
+      : loadState(cursorFile)
   const receipt = await convertBodies({
     post,
     mode,
@@ -347,7 +441,15 @@ async function main() {
   if (mode === "execute") saveState(cursorFile, state)
   receipt.file = writeReceipt(dir, receipt)
   console.log(JSON.stringify(receipt, null, 2))
+  if (mode === "dry-run") console.error(receipt.plan.summary)
   if (mode === "execute") {
+    console.error(
+      `${receipt.converted} converted with ${receipt.puts} PUTs, ${receipt.unverified} unverified, ${receipt.failed.length} failed, in ${receipt.elapsed_seconds} s.`,
+    )
+    if (receipt.unverified)
+      console.error(
+        "Unverified bodies still read as envelopes, which is safe. Run --verify a few minutes later; a later --execute pass visits them again only after --from-start.",
+      )
     if (receipt.stopped)
       console.error(`Stopped (${receipt.stopped}). Run it again to resume from the saved cursor.`)
     else if (!(receipt.done.revision && receipt.done.derivative))

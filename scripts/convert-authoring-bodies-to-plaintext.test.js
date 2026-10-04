@@ -34,14 +34,32 @@
 //       cursor.
 //  F11  The receipt or the log carries a body's text, or the token.
 //  F12  A damaged cursor file silently restarts the job, or a missing one
-//       breaks it.
+//       breaks it. A cursor saved by the first night's one-PUT script (which sits
+//       after 1,500 bodies that are still envelopes) is used silently and the
+//       job skips them.
+//  F13  Bunny acknowledges a PUT and keeps serving the old object (documented in
+//       workers/lib/bunny-storage-consistency.js; the first night left 1,499 of
+//       1,500 bodies as envelopes this way). One PUT per body leaves them
+//       unconverted; the identical PUT must be repeated until a read shows the
+//       plain text. A store that never applies it ends "unverified", with every
+//       body still a valid envelope, never damaged.
+//  F14  A store that never applies the PUT is walked through the whole night
+//       at six PUTs and 36 reads a body. Unverified bodies count toward the
+//       stop.
+//  F15  One call goes over the free plan's 50 fetches, or the plan understates
+//       the Worker requests (one per body, so 38,487 for a pass, two or three
+//       nights at 15,000 a night after 20:00 UTC).
 import assert from "node:assert/strict"
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { PLAINTEXT_CONVERSION_MAX_BODIES } from "../workers/iconoplasm/caretaker/manifestation-plaintext-conversion.js"
+import {
+  PLAINTEXT_CHECK_MAX_BODIES,
+  PLAINTEXT_CONVERSION_MAX_BODIES,
+  PLAINTEXT_CONVERSION_WORST_CASE_FETCHES,
+} from "../workers/iconoplasm/caretaker/manifestation-plaintext-conversion.js"
 import { createIconoplasmCaretakerAdminHandlers } from "../workers/iconoplasm-caretaker-admin-routes.js"
 import {
   bodyEnvironment,
@@ -51,9 +69,12 @@ import {
   seedLegacyTags,
 } from "../workers/iconoplasm/caretaker/manifestation-plaintext-test-support.js"
 import {
+  CURSOR_VERSION,
   DEFAULT_NIGHT_BODIES,
   DEFAULT_SLICE_BODIES,
   LATE_UTC_HOUR,
+  MAX_NIGHT_BODIES,
+  VERIFY_SLICE_BODIES,
   convertBodies,
   conversionCost,
   createRoutePoster,
@@ -101,6 +122,7 @@ async function world(t, { legacyRevisions = 4, legacyTags = 3 } = {}) {
     json: (body, status = 200) => Response.json(body, { status }),
     resolveActiveAccount: async () => ({ account_id: "account_admin_plain" }),
     wakeAuthorityProjection: async () => ({ ok: true, results: [] }),
+    sleep: noSleep,
   })
   const world = {
     bunny,
@@ -158,19 +180,47 @@ test("F1 a dry run sends nothing, needs no token, and prices the job", async (t)
   assert.equal(w.bunny.log.length, 0)
   const cost = receipt.cost
   assert.equal(cost.d1_rows_written, 0, "the job writes nothing to D1")
-  assert.ok(cost.worker_requests > 12_000 && cost.worker_requests < 14_000)
+  // One Worker request per body: a call that writes converts one body.
+  assert.equal(DEFAULT_SLICE_BODIES, 1)
+  assert.equal(cost.worker_requests, 38_487)
+  assert.equal(cost.verify_worker_requests, 3_849)
   assert.equal(cost.bunny_storage_puts, 38_487)
-  assert.deepEqual(conversionCost(DEFAULT_NIGHT_BODIES).worker_requests, 6_667)
+  assert.equal(cost.bunny_storage_puts_at_most, 38_487 * 6)
+  assert.equal(conversionCost(DEFAULT_NIGHT_BODIES).worker_requests, 15_000)
+  assert.ok(MAX_NIGHT_BODIES <= 20_000, "a night is at most about 20k Worker requests")
+  const plan = receipt.plan
+  assert.deepEqual(
+    plan.nights.map((night) => night.bodies),
+    [15_000, 15_000, 8_487],
+    "three nights at the default size",
+  )
+  assert.match(plan.summary, /38,487 bodies and about 38,487 Worker requests/)
+  assert.match(plan.summary, /3 nights/)
+  assert.match(plan.summary, /after 20:00 UTC/)
+  assert.match(plan.canary, /--from-start --max-bodies 30/)
 })
 
-test("F2 slices never exceed the route's own cap, which the real route enforces", async (t) => {
+test("F2 slices never exceed the route's own caps, which the real route enforces", async (t) => {
   const w = await world(t)
-  assert.ok(DEFAULT_SLICE_BODIES <= PLAINTEXT_CONVERSION_MAX_BODIES)
+  assert.equal(DEFAULT_SLICE_BODIES, PLAINTEXT_CONVERSION_MAX_BODIES)
+  assert.ok(VERIFY_SLICE_BODIES <= PLAINTEXT_CHECK_MAX_BODIES)
   await run(w)
   assert.ok(w.requests.length > 0)
   assert.ok(w.requests.every((request) => request.body.limit <= PLAINTEXT_CONVERSION_MAX_BODIES))
-  const refused = await w.post({ kind: "revision", after: "", limit: 5, execute: false })
-  assert.equal(refused.status, 400)
+  const refusedRead = await w.post({
+    kind: "revision",
+    after: "",
+    limit: PLAINTEXT_CHECK_MAX_BODIES + 1,
+    execute: false,
+  })
+  assert.equal(refusedRead.status, 400)
+  const refusedWrite = await w.post({
+    kind: "revision",
+    after: "",
+    limit: PLAINTEXT_CONVERSION_MAX_BODIES + 1,
+    execute: true,
+  })
+  assert.equal(refusedWrite.status, 400, "a call that writes converts one body")
 })
 
 test("F3 execute converges: verify finds no envelope, and a second pass writes nothing", async (t) => {
@@ -349,12 +399,16 @@ test("F9 mistyped options are refused", () => {
     allowEarlyReason: null,
   })
   assert.equal(parseConvertArgs(["--execute", "--max-bodies", "1500"]).maxBodies, 1500)
+  assert.equal(
+    parseConvertArgs(["--execute", "--max-bodies", String(MAX_NIGHT_BODIES)]).maxBodies,
+    MAX_NIGHT_BODIES,
+  )
   for (const argv of [
     ["--bogus"],
     ["--max-bodies"],
     ["--max-bodies", "0"],
     ["--max-bodies", "abc"],
-    ["--max-bodies", "100000"],
+    ["--max-bodies", String(MAX_NIGHT_BODIES + 1)],
     ["--max-failures", "0"],
     ["--execute", "--verify"],
     ["--allow-early"],
@@ -379,6 +433,10 @@ test("F10 verify is read-only, never saves a cursor, and is clean only for a com
   })
   assert.deepEqual(saved, [], "verify saves no cursor")
   assert.ok(w.requests.every((request) => request.body.execute === false))
+  assert.ok(
+    w.requests.some((request) => request.body.limit === VERIFY_SLICE_BODIES),
+    "a read-only pass scans several bodies a call, not one",
+  )
   assert.equal(w.bunny.count("PUT"), 0)
   assert.deepEqual(
     Object.fromEntries(
@@ -431,10 +489,125 @@ test("F12 a missing cursor file starts at the beginning and a damaged one refuse
   assert.deepEqual(loadState(file), { revision: "", derivative: "" })
   saveState(file, { revision: "revision_a", derivative: "derivative_b" })
   assert.deepEqual(loadState(file), { revision: "revision_a", derivative: "derivative_b" })
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).cursor_version, CURSOR_VERSION)
+
+  // The first night's cursor (no version) sits after bodies that are still
+  // envelopes. It is refused by name, never used.
+  writeFileSync(
+    file,
+    JSON.stringify({
+      revision: "revision_09dd3066306e4901fde7ad3593925a3cc9e639fe8c749493",
+      derivative: "derivative_0a43b90fdfcccfd9b7325fd8425cf95243349da29b0cea71",
+    }),
+  )
+  assert.throws(
+    () => loadState(file),
+    (error) =>
+      error.code === "CURSOR_FILE_FROM_THE_FIRST_NIGHT" && /--from-start/.test(error.message),
+  )
   writeFileSync(file, "{not json")
   assert.throws(() => loadState(file), /cursor file/)
   writeFileSync(file, JSON.stringify({ revision: 7, derivative: "x" }))
   assert.throws(() => loadState(file), /cursor file/)
   writeFileSync(file, JSON.stringify({ revision: "bad id!", derivative: "" }))
   assert.throws(() => loadState(file), /cursor file/)
+})
+
+// Bunny's documented failure, for every object at once: the first `ignored` PUTs
+// to a key are acknowledged (201) and dropped; later ones are applied.
+function dropFirstPuts(w, ignored) {
+  const seen = new Map()
+  w.bunny.rules.push(({ method, objectKey, init, objects }) => {
+    if (method !== "PUT") return undefined
+    const count = (seen.get(objectKey) ?? 0) + 1
+    seen.set(objectKey, count)
+    if (count > ignored) objects.set(objectKey, Uint8Array.from(init.body))
+    return new Response(null, { status: 201 })
+  })
+  return seen
+}
+
+const snapshot = (w) =>
+  Object.fromEntries(
+    [...w.bunny.objects].map(([key, bytes]) => [key, Buffer.from(bytes).toString("hex")]),
+  )
+
+test("F13 a store that acknowledges PUTs without applying them is repeated until it does, through the real route", async (t) => {
+  for (const ignored of [1, 3, 5, 0]) {
+    const w = await world(t)
+    dropFirstPuts(w, ignored)
+    const receipt = await run(w)
+    const label = `${ignored} dropped PUTs a body`
+    assert.equal(receipt.stopped, null, label)
+    assert.deepEqual(
+      [receipt.converted, receipt.unverified, receipt.failed.length],
+      [8, 0, 0],
+      label,
+    )
+    assert.equal(receipt.puts, 8 * (ignored + 1), "every body converts on the first applied PUT")
+    const after = await convertBodies({
+      post: w.post,
+      mode: "verify",
+      state: {},
+      now: EVENING,
+      sleep: noSleep,
+    })
+    assert.equal(after.clean, true, `${label}: a later verify finds no envelope left`)
+  }
+})
+
+test("F13b a store that never applies the PUT ends unverified with every body still a valid envelope", async (t) => {
+  const w = await world(t)
+  const before = snapshot(w)
+  dropFirstPuts(w, Infinity)
+  const receipt = await run(w)
+  assert.equal(receipt.stopped, null)
+  assert.deepEqual(
+    [receipt.converted, receipt.unverified, receipt.failed.length],
+    [0, 8, 0],
+    "unverified, not failed and not damaged",
+  )
+  assert.equal(receipt.puts, 8 * 6, "six identical PUTs a body, then it is reported")
+  assert.equal(receipt.unverified_ids.length, 8, "the receipt names each body that did not take")
+  assert.deepEqual(snapshot(w), before, "no object changed")
+  const check = await convertBodies({
+    post: w.post,
+    mode: "verify",
+    state: {},
+    now: EVENING,
+    sleep: noSleep,
+  })
+  assert.equal(check.legacy, 8, "every body still reads as a valid envelope")
+  assert.deepEqual(check.failed, [])
+  assert.equal(check.clean, false)
+
+  // The same store once it starts applying PUTs: a second pass converts them.
+  w.bunny.rules.length = 0
+  const second = await run(w)
+  assert.deepEqual([second.converted, second.unverified, second.failed.length], [8, 0, 0])
+})
+
+test("F14 unverified bodies count toward the stop, so a store that never applies is not walked through the night", async (t) => {
+  const w = await world(t)
+  dropFirstPuts(w, Infinity)
+  const receipt = await run(w, { maxFailures: 2 })
+  assert.equal(receipt.stopped, "too_many_unverified")
+  assert.ok(receipt.unverified >= 2 && receipt.unverified <= 4, `${receipt.unverified} unverified`)
+  assert.ok(receipt.unverified < 8, "the rest were not visited")
+  assert.equal(receipt.converted, 0)
+  assert.deepEqual(receipt.failed, [])
+  assert.ok(receipt.elapsed_seconds >= 0)
+})
+
+test("F15 one call stays under 50 fetches even for a store that never applies a PUT, and the plan counts one Worker request a body", async (t) => {
+  const w = await world(t)
+  dropFirstPuts(w, Infinity)
+  w.bunny.clearLog()
+  const reply = await w.post({ kind: "revision", after: "", limit: 1, execute: true })
+  assert.equal(reply.status, 200)
+  assert.equal(reply.body.unverified, 1)
+  assert.equal(w.bunny.log.length, 1 + 6 * (1 + 5), "one read, then six PUTs with five read-backs")
+  assert.ok(w.bunny.log.length <= PLAINTEXT_CONVERSION_WORST_CASE_FETCHES)
+  assert.ok(PLAINTEXT_CONVERSION_WORST_CASE_FETCHES <= 45)
+  assert.equal(conversionCost(38_487).worker_requests, 38_487)
 })

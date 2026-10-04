@@ -1606,7 +1606,8 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_blots_upload" ||
     // B-898: about four subrequests and a few D1 rows per gene, bounded per call.
     family === "admin_publication_republish" ||
-    // B-859: at most 4 bodies per call, one D1 read and at most 9 storage requests each.
+    // B-859: a call that writes converts one body (one D1 query, at most 41 storage
+    // requests); a call that only reads scans at most ten.
     family === "admin_plaintext_bodies" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert" ||
