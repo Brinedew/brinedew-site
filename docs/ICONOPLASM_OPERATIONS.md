@@ -572,8 +572,10 @@ checks it against the schema), and seed the person in the fixture
 
 `scripts/reap-authoring-residue.mjs --target receipts|backup-entries` deletes the authoring D1's
 two one-time leftovers: command receipts older than 30 days that no event references (the 38,338
-whose events were archived), and the index rows of the abandoned cutover backup (B-859). It sends
-only SELECTs unless `--execute` is given. `--execute` refuses before 20:00 UTC without
+whose events were archived), and the index rows of the abandoned cutover backup (B-859). It runs
+from the `Reap authoring residue` workflow (`workflow_dispatch`, inputs `target`, `execute`,
+`from_rowid`, `max_writes`, `allow_early_reason`), because only the CI token has production D1
+permission (B-1002). It sends only SELECTs unless `--execute` is given. `--execute` refuses before 20:00 UTC without
 `--allow-early "<incident reason>"`, stops at `--max-writes` (default 15,000 rows written) and
 prints the `--from-rowid` to resume from. A dry run reads about 2 rows per receipt (116,564 for
 all 58,461 on 2026-10-03) and 1 per backup entry (23,906); D1 bills a delete as one write for the
