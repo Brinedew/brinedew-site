@@ -7,9 +7,9 @@ import {
 // A body object is plain text, so its row records the object's own hash and the
 // envelope columns stay empty. The storage tables are shaped for AES-GCM
 // envelopes (ciphertext_sha256, ciphertext_bytes, body_iv_base64,
-// wrapped_dek_base64, wrap_iv_base64, key_version, aad_version), and the objects
-// not yet converted still are envelopes, so the columns keep those names until
-// the tables are rebuilt. Two schema rules decide what a plain row holds:
+// wrapped_dek_base64, wrap_iv_base64, key_version, aad_version) that bodies
+// used before B-859, so the columns keep those names until the tables are
+// rebuilt. Two schema rules decide what a plain row holds:
 // ciphertext_bytes must be at least 17, and the revision insert trigger requires
 // it to be the text length plus 16. A plain row therefore records that
 // envelope-shaped size, which no reader uses for a plain body, so a one-byte

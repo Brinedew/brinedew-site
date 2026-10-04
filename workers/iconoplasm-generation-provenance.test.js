@@ -13,8 +13,6 @@ import {
   validateExactGenerationSource,
 } from "./lib/iconoplasm-generation-provenance.js"
 import {
-  encryptLegacyProse,
-  encryptLegacyTags,
   plainBodyObject,
 } from "./lib/iconoplasm-body-object-test-support.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
@@ -66,7 +64,6 @@ test("generation source fingerprint matches the frozen Website/workstation vecto
 })
 
 const AUTHORING_ENV = Object.freeze({
-  ICONOPLASM_AUTHORING_BODY_KEK_V1: Buffer.from(new Uint8Array(32).fill(7)).toString("base64"),
   ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
   ICONOPLASM_AUTHORING_STORAGE_ZONE: "authoring-test-zone",
   ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authoring-test-password",
@@ -111,12 +108,9 @@ async function insertRevision(
     sampleLabel = `TP53-${revisionNumber}`,
     sampleNumber = revisionNumber,
     sampleTextSha256 = "c".repeat(64),
-    plain = false,
   },
 ) {
-  const encrypted = plain
-    ? await plainStoredBody(prose)
-    : await encryptLegacyProse(env, { revisionId, geneId: "gene_tp53", prose })
+  const encrypted = await plainStoredBody(prose)
   const objectKey = await createManifestationBodyObjectKey()
   database
     .prepare(
@@ -180,7 +174,7 @@ async function insertRevision(
   }
 }
 
-// The stored shape of a plain body, in the field names the encryptor returns.
+// The stored shape of a plain body.
 async function plainStoredBody(prose) {
   const body = await plainBodyObject(prose)
   return { ...body, prose: body.text, ciphertext: body.bytes }
@@ -190,7 +184,7 @@ async function insertAcceptedTags(
   database,
   env,
   objects,
-  { revision, tags, imported = false, plain = false },
+  { revision, tags, imported = false },
 ) {
   const derivativeId = "derivative_0001"
   const recipeId = imported ? null : "tagger-v1"
@@ -208,14 +202,7 @@ async function insertAcceptedTags(
     tagsSha256,
     fieldsSha256,
   })
-  const encrypted = plain
-    ? await plainStoredBody(prepared.output_plain)
-    : await encryptLegacyTags(env, {
-        derivativeId,
-        revisionId: revision.revisionId,
-        sourceBodySha256: revision.hash,
-        tags: prepared.output_plain,
-      })
+  const encrypted = await plainStoredBody(prepared.output_plain)
   const objectKey = await createManifestationBodyObjectKey()
   database
     .prepare(
@@ -308,7 +295,6 @@ function selectCanonical(
 async function authorityFixture({
   sampleNumber = 1,
   sampleTextSha256 = "c".repeat(64),
-  plain = false,
 } = {}) {
   const database = new DatabaseSync(":memory:")
   database.exec(
@@ -343,7 +329,6 @@ async function authorityFixture({
     prose: "The first immutable manifestation.",
     sampleNumber,
     sampleTextSha256,
-    plain,
   })
   selectCanonical(database, {
     selectionId: "selection_0001",
@@ -357,14 +342,12 @@ async function authorityFixture({
 // generator must read the exact prose and Tags the row hashes, and refuse bytes
 // that miss the hash.
 test("plain prose and Tags are read exactly, and bytes that miss the hash are refused", async () => {
-  const fixture = await authorityFixture({ plain: true })
+  const fixture = await authorityFixture()
   const derivative = await insertAcceptedTags(fixture.database, fixture.env, fixture.objects, {
     revision: fixture.first,
     tags: "dense chromatin, guarded checkpoint, quiet nuclear tension",
-    plain: true,
   })
-  const keyless = { ...fixture.env }
-  delete keyless.ICONOPLASM_AUTHORING_BODY_KEK_V1
+  const keyless = fixture.env
   const restoreFetch = installStorageFetch(fixture.objects)
   try {
     const queued = await resolveCanonicalGenerationSource(keyless, {

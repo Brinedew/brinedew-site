@@ -14,9 +14,11 @@ The storage tables keep the columns of an older envelope format
 `wrap_iv_base64`, `key_version`, `aad_version`). A plain body fills them like
 this: `ciphertext_sha256` is the object's hash, `ciphertext_bytes` is the text
 length plus 16 (the table's `>= 17` check and the revision insert trigger need
-exactly that), the three key fields are empty, and both versions are 1. Older
-rows hold real envelope values. A reader tells the two apart by hashing the
-object, never by a flag (`workers/lib/iconoplasm-manifestation-body-reader.js`).
+exactly that), the three key fields are empty, and both versions are 1. Rows
+written before B-859 still carry envelope values in those columns; nothing
+reads them, and every object is plain text. The reader trusts an object only
+when it hashes to the row's body hash
+(`workers/lib/iconoplasm-manifestation-body-reader.js`).
 
 The numbered SQL files here are the complete, append-only migration history;
 the production D1 migration journal records what has actually run. Use the

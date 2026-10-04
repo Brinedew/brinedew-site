@@ -30,7 +30,6 @@ function base64(bytes) {
 
 function serviceEnvironment() {
   return {
-    ICONOPLASM_AUTHORING_BODY_KEK_V1: base64(new Uint8Array(32).fill(11)),
     ICONOPLASM_AUTHORING_STORAGE_ZONE: "authority-test-zone",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authority-test-password",
   }

@@ -8,33 +8,24 @@ import {
   geneRevision,
   humanHandler,
   installBunnyFake,
-  lineageVersion,
   readJson,
   row,
   saveProse,
-  seedLegacyRevision,
-  seedLegacyTags,
   serviceRequest,
   sha256,
   workstationHandler,
 } from "./manifestation-plaintext-test-support.js"
 
 // B-859: a caretaker's prose and Tags are published or fed to image generation,
-// so the private object zone holds them as plain UTF-8, not as AES-GCM
-// envelopes. Production wrote 38,487 envelope objects before this change, so a
-// small reader keeps handling them until the one-shot conversion has rewritten
-// every one. Failure modes, written before the code:
-// 1. A new save still encrypts (the stored object is not the text, or the save
-//    needs the key secret).
-// 2. A legacy envelope object stops reading: the editor, the workstation's
-//    body route or the dossier return nothing, or the key is demanded of a
-//    plaintext object.
-// 3. A gene that holds both kinds reads one of them wrong.
-// 4. A damaged object is accepted: plaintext whose bytes differ from the hash
-//    in its row, or a legacy envelope read with no key, must be refused loudly.
-// 5. The authority schema refuses a plain row: its size CHECK needs at least 17
-//    bytes and its insert trigger needs the plaintext length + 16, so the
-//    shortest bodies are the ones that would fail.
+// so the private object zone holds them as plain UTF-8. Failure modes, written
+// before the code:
+// 1. A save encrypts (the stored object is not the text, or the save needs a
+//    key secret).
+// 2. A damaged object is accepted: plain bytes that differ from the hash in
+//    their row must be refused loudly.
+// 3. The authority schema refuses a plain row: its size CHECK needs at least 17
+//    bytes and its insert trigger needs the text length + 16, so the shortest
+//    bodies are the ones that would fail.
 
 const ENCODER = new TextEncoder()
 
@@ -46,10 +37,10 @@ function sameBytes(left, right) {
   return Buffer.from(left).equals(Buffer.from(right))
 }
 
-test("a new caretaker save stores the prose as plain text and needs no encryption key", async (t) => {
+test("a new caretaker save stores the prose as plain text and needs no key", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8101", bunny)
-  const env = bodyEnvironment({ withKey: false })
+  const env = bodyEnvironment()
   const handler = humanHandler(context, env)
   const prose = "A caretaker's manifestation.\r\nSecond line, with café."
 
@@ -95,7 +86,7 @@ test("a new caretaker save stores the prose as plain text and needs no encryptio
 test("new Tags saves, from the caretaker panel and from the workstation, store plain text", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8102", bunny)
-  const env = bodyEnvironment({ withKey: false })
+  const env = bodyEnvironment()
   const human = humanHandler(context, env)
   const workstation = workstationHandler(context, env)
   const { manifestation_revision_id: revisionId } = await saveProse(
@@ -215,181 +206,24 @@ test("new Tags saves, from the caretaker panel and from the workstation, store p
   assert.equal(failures.at(-1).entity_id, posted.manifestation_derivative_id)
 })
 
-test("a legacy encrypted body still reads through the editor, the workstation and the dossier", async (t) => {
-  const bunny = installBunnyFake(t)
-  const context = await bootstrap(t, "8103", bunny)
-  const env = bodyEnvironment()
-  const legacy = await seedLegacyRevision(context, env, bunny, {
-    name: "8103",
-    prose: "A manifestation written before the vault was removed.",
-  })
-  const tags = await seedLegacyTags(context, env, bunny, {
-    name: "8103",
-    revisionId: legacy.revisionId,
-    sourceBodySha256: legacy.body_sha256,
-    tagsText: "silver braid, ink-stained cuffs",
-    fieldsJson: { hair: ["silver braid"], outfit: ["ink-stained cuffs"] },
-  })
-  assert.notEqual(
-    await sha256(new TextDecoder().decode(bunny.objects.get(legacy.objectKey))),
-    legacy.body_sha256,
-    "the fixture object really is ciphertext",
-  )
-  const failures = []
-  const human = humanHandler(context, env, {
-    onIntegrityFailure: async (d) => {
-      failures.push(d)
-    },
-  })
-  const workstation = workstationHandler(context, env, {
-    onIntegrityFailure: async (d) => {
-      failures.push(d)
-    },
-  })
-
-  const editor = await readJson(
-    await human(
-      new Request(
-        `https://iconoplasm.test/api/iconoplasm/caretaker/genes/P8103/revisions/${legacy.revisionId}/body`,
-      ),
-    ),
-  )
-  assert.equal(editor.prose, legacy.prose)
-  const editorTags = await readJson(
-    await human(
-      new Request(
-        `https://iconoplasm.test/api/iconoplasm/caretaker/genes/P8103/derivatives/${tags.derivativeId}/body`,
-      ),
-    ),
-  )
-  assert.equal(editorTags.tags.tags_text, "silver braid, ink-stained cuffs")
-
-  const replica = await readJson(
-    await workstation(
-      serviceRequest(`/api/iconoplasm/authority/revisions/${legacy.revisionId}/body`),
-    ),
-  )
-  assert.equal(replica.body_plain, legacy.prose)
-  assert.equal(replica.body_plain_sha256, legacy.body_sha256)
-  const replicaTags = await readJson(
-    await workstation(
-      serviceRequest(`/api/iconoplasm/authority/derivatives/${tags.derivativeId}/body`),
-    ),
-  )
-  assert.deepEqual(replicaTags.fields_json, {
-    hair: ["silver braid"],
-    outfit: ["ink-stained cuffs"],
-  })
-
-  const dossier = await readJson(
-    await human(new Request("https://iconoplasm.test/api/iconoplasm/caretaker/genes/P8103")),
-  )
-  const shown = dossier.manifestations.flatMap((entry) => entry.revisions)
-  assert.equal(
-    shown.find((entry) => entry.manifestation_revision_id === legacy.revisionId)?.body,
-    legacy.prose,
-  )
-  assert.deepEqual(failures, [])
-})
-
-test("a gene with a legacy revision and a plain revision reads both correctly", async (t) => {
-  const bunny = installBunnyFake(t)
-  const context = await bootstrap(t, "8104", bunny)
-  const env = bodyEnvironment()
-  const legacy = await seedLegacyRevision(context, env, bunny, {
-    name: "8104",
-    prose: "The first draft, written while the vault still stood.",
-  })
-  const failures = []
-  const human = humanHandler(context, env, {
-    onIntegrityFailure: async (d) => {
-      failures.push(d)
-    },
-  })
-  const newer = await saveProse(
-    human,
-    "P8104",
-    "browser_mixed_save_8104",
-    "The second draft, saved as plain text.",
-    lineageVersion(context, "manifestation_legacy_8104"),
-  )
-  const storedNew = row(
-    context.db,
-    "SELECT object_key FROM icono_manifestation_revision_storage_secrets WHERE manifestation_revision_id = ?",
-    newer.manifestation_revision_id,
-  )
-  assert.equal(
-    new TextDecoder().decode(bunny.objects.get(storedNew.object_key)),
-    "The second draft, saved as plain text.",
-  )
-
-  const dossier = await readJson(
-    await human(new Request("https://iconoplasm.test/api/iconoplasm/caretaker/genes/P8104")),
-  )
-  const shown = new Map(
-    dossier.manifestations
-      .flatMap((entry) => entry.revisions)
-      .map((entry) => [entry.manifestation_revision_id, entry.body]),
-  )
-  assert.equal(
-    shown.get(legacy.revisionId),
-    "The first draft, written while the vault still stood.",
-  )
-  assert.equal(shown.get(newer.manifestation_revision_id), "The second draft, saved as plain text.")
-  assert.deepEqual(failures, [])
-})
-
-test("damaged bodies are refused: plain bytes that miss their hash, and an envelope with no key", async (t) => {
+test("a plain body whose bytes miss the hash in its row is refused", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8105", bunny)
-  const withKey = bodyEnvironment()
-  const legacy = await seedLegacyRevision(context, withKey, bunny, {
-    name: "8105",
-    prose: "Prose that must not be read from a damaged object.",
-  })
   const failures = []
   const record = async (descriptor) => {
     failures.push(descriptor)
   }
 
-  // No key: the envelope cannot be opened, and nothing falls back to a guess.
-  const keyless = workstationHandler(context, bodyEnvironment({ withKey: false }), {
-    onIntegrityFailure: record,
-  })
-  const noKey = await keyless(
-    serviceRequest(`/api/iconoplasm/authority/revisions/${legacy.revisionId}/body`),
-  )
-  assert.equal(noKey.status, 503)
-  assert.equal((await noKey.json()).error.code, "REVISION_BODY_UNAVAILABLE")
-  assert.equal(failures.at(-1).entity_id, legacy.revisionId)
-
-  // One flipped byte in an object that is the right length: neither the
-  // plaintext hash nor the envelope hash matches, so it is refused.
-  const damaged = Uint8Array.from(bunny.objects.get(legacy.objectKey))
-  damaged[0] ^= 0xff
-  bunny.objects.set(legacy.objectKey, damaged)
-  const damagedRead = await workstationHandler(context, withKey, { onIntegrityFailure: record })(
-    serviceRequest(`/api/iconoplasm/authority/revisions/${legacy.revisionId}/body`),
-  )
-  assert.equal(damagedRead.status, 503)
-  assert.equal(failures.length, 2)
-
   // Plain bytes of the right length whose content is not what the row hashed.
-  const human = humanHandler(context, bodyEnvironment({ withKey: false }))
-  const saved = await saveProse(
-    human,
-    "P8105",
-    "browser_damaged_save_8105",
-    "Exact words.",
-    lineageVersion(context, "manifestation_legacy_8105"),
-  )
+  const human = humanHandler(context, bodyEnvironment())
+  const saved = await saveProse(human, "P8105", "browser_damaged_save_8105", "Exact words.")
   const plainKey = row(
     context.db,
     "SELECT object_key FROM icono_manifestation_revision_storage_secrets WHERE manifestation_revision_id = ?",
     saved.manifestation_revision_id,
   ).object_key
   bunny.objects.set(plainKey, ENCODER.encode("Wrong words."))
-  const tampered = await workstationHandler(context, bodyEnvironment({ withKey: false }), {
+  const tampered = await workstationHandler(context, bodyEnvironment(), {
     onIntegrityFailure: record,
   })(serviceRequest(`/api/iconoplasm/authority/revisions/${saved.manifestation_revision_id}/body`))
   assert.equal(tampered.status, 503)
@@ -399,10 +233,10 @@ test("damaged bodies are refused: plain bytes that miss their hash, and an envel
 // The storage tables require ciphertext_bytes of at least 17 and an insert
 // trigger requires plaintext length + 16, a rule written for envelopes. A plain
 // row has to satisfy both, so the shortest bodies are the ones that would break.
-test("a one-byte manifestation and a four-byte Tags body save, read back and convert", async (t) => {
+test("a one-byte manifestation and a four-byte Tags body save and read back", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8106", bunny)
-  const env = bodyEnvironment({ withKey: false })
+  const env = bodyEnvironment()
   const human = humanHandler(context, env)
   const workstation = workstationHandler(context, env)
 
