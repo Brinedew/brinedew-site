@@ -74,7 +74,24 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
                 """,
                 addon_id,
             )
+        # A fresh profile has no gene catalog, and readers refuse to mount
+        # without one. Download it from production once, up front, so a slow
+        # first download cannot masquerade as a PDF routing failure.
+        driver.set_script_timeout(120)
+        driver.get(f"moz-extension://{runtime_uuid}/popup.html")
+        gene_count = driver.execute_async_script(
+            """
+            const done = arguments[arguments.length - 1];
+            chrome.runtime.sendMessage({ type: "GET_GENE_DATA" }).then(
+              payload => done(Object.keys(payload?.genes || {}).length),
+              error => done(-1),
+            );
+            """
+        )
+        assert gene_count > 1000, f"gene catalog did not download: {gene_count}"
+        driver.get("about:blank")
         identity = {
+            "geneCount": gene_count,
             "addonId": addon_id,
             "runtimeUuid": runtime_uuid,
             "browserVersion": driver.capabilities.get("browserVersion"),
