@@ -66,6 +66,19 @@ def pause(driver, milliseconds: int) -> None:
     )
 
 
+def activate_browser_window(driver) -> None:
+    # A Marionette-driven window is not OS-active under a bare X server, so
+    # document.hasFocus() is false everywhere. Make it active like a user's
+    # window is before any focus-dependent behavior is judged.
+    with driver.context(driver.CONTEXT_CHROME):
+        driver.execute_script(
+            """
+            window.focus();
+            try { Services.focus.activeWindow = window; } catch (error) {}
+            """
+        )
+
+
 def reader_is_mounted(driver) -> bool:
     try:
         return driver.execute_script(
@@ -418,6 +431,7 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     # pointer into the card and focuses the iframe's document.
     # duration=0: Selenium's default 250 ms glide outlasts the card's 220 ms
     # leave grace, which no human pointer move into an adjacent card does.
+    activate_browser_window(driver)
     ActionChains(driver, duration=0).move_to_element(frame).perform()
     pause(driver, 600)
     assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), (
@@ -431,4 +445,5 @@ def test_card_keeps_focus_when_its_iframe_is_focused(firefox, pdf_server) -> Non
     assert driver.find_elements(By.CSS_SELECTOR, tooltip_selector), {
         "message": "the card closed when its iframe took focus",
         "documentHasFocus": driver.execute_script("return document.hasFocus()"),
+        "activeElement": driver.execute_script("return document.activeElement?.tagName"),
     }
