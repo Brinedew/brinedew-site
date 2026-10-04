@@ -99,6 +99,7 @@ import {
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
+import { BOT_TOKEN, CHANNEL_ID, FakeNetwork } from "./test-helpers/fake-discord-and-bunny.js"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const VOTE_TABLES = [
@@ -2047,6 +2048,63 @@ test("29: gene comments hide hidden ones, need a sign-in to write, and only the 
     db.rows("SELECT status FROM icono_gene_comments WHERE id = ?", mine.id)[0].status,
     "deleted",
   )
+})
+
+// B-1001. Failure modes, written before the code:
+// 1. An author edits a comment and the public Discord copy keeps the old text.
+// 2. An author deletes a comment and its Discord copy stays.
+// 3. Another person's post, or the author's other post on the gene, is touched.
+// 4. A refused edit (someone else's comment) reaches Discord.
+test("B-1001: the public Discord copy follows the author's own edit and delete, and nothing else", async (t) => {
+  const network = new FakeNetwork()
+  network.clock = Date.now()
+  network.install()
+  t.after(() => network.restore())
+  const db = new SqliteD1()
+  db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('A1BG', 'alpha-1-B')")
+  const discord = { DISCORD_BOT_TOKEN: BOT_TOKEN, DISCORD_ICONOPLASM_CHANNEL_ID: CHANNEL_ID }
+  const post = (body, user) =>
+    routeRequest(db, "POST", "/api/iconoplasm/comments", {
+      body: { symbol: "A1BG", body },
+      user,
+      bindings: discord,
+    })
+  assert.equal((await post("Please add a lab stamp.")).status, 200)
+  assert.equal(
+    (await post("Keep the pen.", { user_id: "reader-2", username: "other" })).status,
+    200,
+  )
+  assert.equal((await post("A second thought on this gene.")).status, 200)
+  const posts = () => network.messages.map((message) => message.content.split("\n\n")[1])
+  assert.deepEqual(posts(), [
+    "**reader**: Please add a lab stamp.",
+    "**other**: Keep the pen.",
+    "**reader**: A second thought on this gene.",
+  ])
+  const idOf = (body) => db.rows("SELECT id FROM icono_gene_comments WHERE body = ?", body)[0].id
+  const commentsPath = "/api/iconoplasm/genes/A1BG/comments"
+
+  const refused = await routeRequest(db, "PATCH", commentsPath, {
+    body: { id: idOf("Keep the pen."), body: "Rewritten by someone else." },
+    bindings: discord,
+  })
+  assert.equal(refused.status, 403)
+
+  const edited = await routeRequest(db, "PATCH", commentsPath, {
+    body: { id: idOf("Please add a lab stamp."), body: "Please add a lab stamp, in red." },
+    bindings: discord,
+  })
+  assert.equal(edited.status, 200)
+  const removed = await routeRequest(db, "DELETE", commentsPath, {
+    body: { id: idOf("A second thought on this gene.") },
+    bindings: discord,
+  })
+  assert.equal(removed.status, 200)
+
+  assert.deepEqual(posts(), [
+    "**reader**: Please add a lab stamp, in red.",
+    "**other**: Keep the pen.",
+  ])
 })
 
 // 30. The request picker is read by every signed-in reader who opens it. Its answer is

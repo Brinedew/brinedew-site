@@ -156,7 +156,10 @@ it into `#iconoplasm`.
     The image re-renders only when the blot actually changes; otherwise it's
     served from cache — at most one render per (gene, canonical version).
   - If the render fails, the mirror degrades to a clean text-only post.
-- New comments only. Edits and deletes are not mirrored.
+- The author's own edit rewrites the post's text and their delete removes the post (B-1001),
+  after the response and best-effort. Only a post that quotes the comment's previous text
+  exactly is touched, so a post that cannot be found (one from before the mirror, or a post a
+  moderator removed) is left alone.
 - The post's message id is not stored. An account erasure
   (`workers/iconoplasm/account-erasure/discord-comment-mirror.js`) finds the post again, as the
   bot's message that follows the comment row by seconds, and rewrites its author to the anonymous

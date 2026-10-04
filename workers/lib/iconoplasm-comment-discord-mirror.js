@@ -44,6 +44,17 @@ export function commentMirrorPostPattern({ symbol, username }) {
   )
 }
 
+/** The same message, same author, with new comment text (B-1001: an edit on the site). */
+export function commentMirrorWithText(content, { symbol, username, text }) {
+  const pattern = commentMirrorPostPattern({ symbol, username })
+  return pattern.test(content)
+    ? content.replace(pattern, (_whole, head, separator) => {
+        const author = commentMirrorAuthor(username)
+        return `${head}${author}${separator}${text}`
+      })
+    : null
+}
+
 /** The same message with another author in front of the unchanged comment text. */
 export function commentMirrorWithAuthor(content, { symbol, username, author }) {
   const pattern = commentMirrorPostPattern({ symbol, username })
