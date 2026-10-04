@@ -231,12 +231,6 @@
     win.addEventListener("resize", refresh, { passive: true })
     win.visualViewport?.addEventListener("resize", refresh, { passive: true })
     doc.fonts?.addEventListener("loadingdone", refresh)
-    // B-986: a pill is measured once, from the word's on-screen box. A word that
-    // animates (Zanagrams pops each new word to 110% and back) is measured
-    // mid-animation, and nothing else changes when the animation ends, so the
-    // pill stayed oversized and off to the side. Re-measure when one ends.
-    doc.addEventListener("animationend", refresh, { capture: true, passive: true })
-    doc.addEventListener("transitionend", refresh, { capture: true, passive: true })
 
     function inspectOccurrence(symbol, occurrence = 0) {
       if (!Number.isInteger(occurrence) || occurrence < 0 || occurrence > 1000) return null
