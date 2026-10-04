@@ -830,5 +830,5 @@ test("the Tags helper buttons are hidden when the server switches it off (B-995)
     authResolved: true,
   })
   assert.ok(host.querySelector("[data-icono-caretaker-prose]"))
-  assert.equal(host.querySelector("[data-icono-caretaker-taggerize]"), null)
+  assert.equal(host.querySelector("[data-icono-caretaker-taggerize]") === null, true)
 })
