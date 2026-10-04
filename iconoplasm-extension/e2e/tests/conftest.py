@@ -89,3 +89,33 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
         yield driver, runtime_uuid
     finally:
         driver.quit()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+    if "firefox" not in item.fixturenames:
+        return
+    driver, _runtime_uuid = item.funcargs["firefox"]
+    artifacts = Path(item.config.getoption("--artifacts")).resolve()
+    stem = item.name
+    try:
+        driver.save_screenshot(str(artifacts / f"FAILED-{stem}.png"))
+        state = driver.execute_script(
+            """
+            return {
+              url: location.href,
+              readerState: document.body?.dataset?.readerState || null,
+              status: document.getElementById('reader-status-message')?.innerText || null,
+              html: document.documentElement.outerHTML.slice(0, 4000),
+            };
+            """
+        )
+        (artifacts / f"FAILED-{stem}.json").write_text(
+            json.dumps(state, indent=2), encoding="utf-8"
+        )
+    except Exception as error:  # diagnostics must never mask the real failure
+        (artifacts / f"FAILED-{stem}.json").write_text(str(error), encoding="utf-8")
