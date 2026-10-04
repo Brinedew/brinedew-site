@@ -134,10 +134,12 @@ export async function anonymiseCommentPost(config, budget, comment, { label, rem
         Date.parse(message.timestamp) <= createdMs + WINDOW_MS,
     )
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
-  // Two comments by one person on one gene within minutes: take the post that quotes this one.
+  // Only the post that quotes this comment is acted on. Falling back to the nearest post by the same
+  // person on the same gene could edit or delete a different comment's post: a comment from before
+  // the mirror has no post of its own, and an earlier run may already have handled this one. A text
+  // that no longer matches (an edit on the site, B-1001) is reported as not found and fixed by hand.
   const text = commentMirrorText(comment.body)
-  const post =
-    candidates.find((message) => message.content.match(pattern)?.[3] === text) || candidates[0]
+  const post = candidates.find((message) => message.content.match(pattern)?.[3] === text)
   if (!post) return "not_found"
   const messagePath = `/channels/${encodeURIComponent(config.channelId)}/messages/${encodeURIComponent(post.id)}`
   if (remove) {
