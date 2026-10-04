@@ -11,6 +11,13 @@ import { GameSession } from "../the-only-allowed-internal-stateful-worker-runtim
 import { setGeneVote } from "../iconoplasm/votes/gene-votes.js"
 import { readLeaderboard } from "../lib/leaderboard-streaks.js"
 import { resolveBrinedewAccountIdentity } from "../lib/brinedew-account-identity.js"
+import {
+  BOT_TOKEN,
+  CHANNEL_ID,
+  FakeNetwork,
+  STORAGE_PASSWORD,
+  STORAGE_ZONE,
+} from "./fake-discord-and-bunny.js"
 
 const MIGRATION_ROOT = new URL("../../", import.meta.url)
 
@@ -22,6 +29,15 @@ export const ADMIN_TOKEN = "secret-admin-token"
 
 const sha = (character) => character.repeat(64)
 export const ASSET = { alice: sha("a"), bob: sha("b"), alice2: sha("c"), workstation: sha("d") }
+// Result images of unpublished jobs (B-993): the erased person's, and the other person's.
+export const IMAGE = { candidate: sha("1"), edit: sha("2"), oddKey: sha("3"), bob: sha("4") }
+
+/** The three renditions the portrait storage keeps for one image hash. */
+export function renditionKeys(hash) {
+  return ["full", "medium", "thumb"].map(
+    (rendition) => `portraits/v1/${hash.slice(0, 2)}/${hash}/${rendition}.webp`,
+  )
+}
 
 // --- D1 surface -------------------------------------------------------------------------------
 
@@ -394,7 +410,13 @@ export async function seedWorld() {
     ICONOPLASM_AUDIT_DB: audit,
     ICONOPLASM_AUTHORING_DB: authoring,
     KV: kv,
+    // The Discord bot and the Bunny storage the erasure reaches through the fake network below.
+    DISCORD_BOT_TOKEN: BOT_TOKEN,
+    DISCORD_ICONOPLASM_CHANNEL_ID: CHANNEL_ID,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
   }
+  const network = new FakeNetwork()
   const sessions = gameSessionNamespace(env)
   env.GAME_SESSIONS = sessions
 
@@ -439,34 +461,46 @@ export async function seedWorld() {
   }
 
   // Comments: two visible and one the author removed, and the other person's.
-  const commentColumns = (user, name, body, status, gene) => ({
+  // Each comment has the time it was written, so the Discord channel (seedDiscordMirror) can hold
+  // the posts the way the poster left them: a few seconds after the row. Alice's second TP53
+  // comment is written seconds after the first, and she removed it: the erasure has to tell her two
+  // posts apart.
+  const commentColumns = (user, name, body, status, gene, createdAt) => ({
     gene_symbol: gene,
     user_id: user,
     username: name,
     body,
     status,
     avatar_url: `https://cdn.discordapp.com/avatars/${user}/abcdef.png`,
+    created_at: createdAt,
+    updated_at: "",
   })
-  insert(
-    iconoplasm,
-    "icono_gene_comments",
-    commentColumns(ERASED_USER, ERASED_NAME, "Alice on TP53", "visible", "TP53"),
-  )
-  insert(
-    iconoplasm,
-    "icono_gene_comments",
-    commentColumns(ERASED_USER, ERASED_NAME, "Alice on SOX11", "visible", "SOX11"),
-  )
-  insert(
-    iconoplasm,
-    "icono_gene_comments",
-    commentColumns(ERASED_USER, ERASED_NAME, "Alice removed this", "deleted", "TP53"),
-  )
-  insert(
-    iconoplasm,
-    "icono_gene_comments",
-    commentColumns(OTHER_USER, OTHER_NAME, "Bob on TP53", "visible", "TP53"),
-  )
+  for (const comment of [
+    [ERASED_USER, ERASED_NAME, "Alice on TP53", "visible", "TP53", "2026-09-01T10:00:00.000Z"],
+    [ERASED_USER, ERASED_NAME, "Alice on SOX11", "visible", "SOX11", "2026-09-01T11:00:00.000Z"],
+    [ERASED_USER, ERASED_NAME, "Alice removed this", "deleted", "TP53", "2026-09-01T10:00:20.000Z"],
+    [OTHER_USER, OTHER_NAME, "Bob on TP53", "visible", "TP53", "2026-09-01T10:00:10.000Z"],
+    // Her post says "first draft"; she edited the comment afterwards.
+    [
+      ERASED_USER,
+      ERASED_NAME,
+      "Alice on EZH2, edited",
+      "visible",
+      "EZH2",
+      "2026-09-01T12:00:00.000Z",
+    ],
+    // From before the mirror existed: there is no post of it in the channel.
+    [
+      ERASED_USER,
+      ERASED_NAME,
+      "Alice before the mirror",
+      "visible",
+      "TP53",
+      "2026-05-01T09:00:00.000Z",
+    ],
+  ]) {
+    insert(iconoplasm, "icono_gene_comments", commentColumns(...comment))
+  }
   for (const gene of ["TP53", "SOX11"]) {
     kv.map.set(
       `iconoplasm:gene-comments:${gene}`,
@@ -595,6 +629,74 @@ export async function seedWorld() {
       published_at: publishedAt,
     })
   }
+  // Jobs that wrote an image nobody published (B-993). The result images of a job are three
+  // objects under the hash's canonical keys; every job below has them in the storage.
+  const imageKeys = (hash) => ({
+    result_asset_sha256: hash,
+    result_r2_key_full: renditionKeys(hash)[0],
+    result_r2_key_medium: renditionKeys(hash)[1],
+    result_r2_key_thumb: renditionKeys(hash)[2],
+  })
+  insert(iconoplasm, "icono_candidate_generation_jobs", {
+    id: "cand-alice-image",
+    user_id: ERASED_USER,
+    provider_id: "openai",
+    gene_symbol: "TP53",
+    status: "succeeded",
+    ...imageKeys(IMAGE.candidate),
+  })
+  insert(iconoplasm, "icono_image_edit_jobs", {
+    id: "edit-alice-image",
+    user_id: ERASED_USER,
+    provider_id: "openai",
+    source_gene_symbol: "TP53",
+    source_asset_sha256: ASSET.bob,
+    status: "succeeded",
+    ...imageKeys(IMAGE.edit),
+  })
+  // The same bytes were published for SOX11 (the hash of alice2): the objects are the published
+  // portrait's and must survive the job.
+  insert(iconoplasm, "icono_image_edit_jobs", {
+    id: "edit-alice-same-bytes-as-published",
+    user_id: ERASED_USER,
+    provider_id: "openai",
+    source_gene_symbol: "SOX11",
+    source_asset_sha256: ASSET.workstation,
+    status: "succeeded",
+    ...imageKeys(ASSET.alice2),
+  })
+  // A row that names a path that is not its own hash's canonical key (here a gene's published
+  // object) must never make the erasure delete that path.
+  insert(iconoplasm, "icono_candidate_generation_jobs", {
+    id: "cand-alice-foreign-key",
+    user_id: ERASED_USER,
+    provider_id: "openai",
+    gene_symbol: "TP53",
+    status: "succeeded",
+    ...imageKeys(IMAGE.oddKey),
+    result_r2_key_full: "genes/v3/TP53.json",
+  })
+  insert(iconoplasm, "icono_candidate_generation_jobs", {
+    id: "cand-bob-image",
+    user_id: OTHER_USER,
+    provider_id: "openai",
+    gene_symbol: "TP53",
+    status: "succeeded",
+    ...imageKeys(IMAGE.bob),
+  })
+  for (const key of [
+    ...renditionKeys(IMAGE.candidate),
+    ...renditionKeys(IMAGE.edit),
+    ...renditionKeys(IMAGE.oddKey),
+    ...renditionKeys(IMAGE.bob),
+    // The published portraits' objects, and a gene's published object.
+    ...renditionKeys(ASSET.alice),
+    ...renditionKeys(ASSET.alice2),
+    ...renditionKeys(ASSET.bob),
+    "genes/v3/TP53.json",
+  ]) {
+    network.storeObject(key)
+  }
   for (const [user, provider] of [
     [ERASED_USER, "openai"],
     [ERASED_USER, "krea"],
@@ -678,7 +780,48 @@ export async function seedWorld() {
   }
 
   // KV keys that embed a Discord id, and an unrelated one.
-  return { env, accounts, iconoplasm, audit, authoring, kv, sessions, erasedAccount, otherAccount }
+  return {
+    env,
+    accounts,
+    iconoplasm,
+    audit,
+    authoring,
+    kv,
+    sessions,
+    network,
+    erasedAccount,
+    otherAccount,
+  }
+}
+
+/**
+ * The public #iconoplasm channel as the real poster leaves it: every comment row has its post, a
+ * few seconds after the row, between other people's messages. `postComment` is the production
+ * poster (postIconoplasmGeneCommentToDiscord). The "before the mirror" comment has no post; the
+ * post of the edited comment carries the text it had when it was posted.
+ */
+export async function seedDiscordMirror(world, postComment) {
+  const { network } = world
+  const comments = world.iconoplasm.database
+    .prepare("SELECT gene_symbol, username, body, created_at FROM icono_gene_comments")
+    .all()
+    .filter((comment) => comment.body !== "Alice before the mirror")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  for (const comment of comments) {
+    const at = Date.parse(comment.created_at) + 4_000
+    // Somebody else talks in the channel, and the bot posts something that is not a comment.
+    network.addMessage({ content: `morning, ${comment.gene_symbol}?`, at: at - 3_000, bot: false })
+    network.addMessage({ content: "GeneGuessr recap: nobody solved it", at: at - 2_000 })
+    network.clock = at
+    await postComment(world.env, {
+      symbol: comment.gene_symbol,
+      username: comment.username,
+      body: comment.body === "Alice on EZH2, edited" ? "Alice on EZH2, first draft" : comment.body,
+    })
+  }
+  // A person copying a post by hand is not the bot's post and is never touched.
+  const copied = network.messages.find((message) => message.content.includes("**Alice"))
+  network.addMessage({ content: copied.content, at: network.clock + 60_000, bot: false })
 }
 
 /** Game state and sessions need the KV key builder of the runtime, so the test seeds them. */

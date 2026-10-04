@@ -10,8 +10,9 @@
 //
 // "Delete" means the row is personal and nothing public needs it: discoveries and discovery
 // state, favourites, emulsions and provider keys, the inbox, unpublished or pending generation
-// and edit jobs and requests, the caretaker delivery outbox, GeneGuessr stats and the leaderboard
-// row. Every step is one bounded slice repeated by the runner (erase-account-data.js).
+// and edit jobs (with their result images in the portrait storage) and requests, the caretaker
+// delivery outbox, GeneGuessr stats and the leaderboard row. Every step is one bounded slice
+// repeated by the runner (erase-account-data.js).
 //
 // Adding a table that holds a Discord id, a username or an avatar? The integration test fails
 // until the table is listed here (a step, or EXEMPT_COLUMNS with the reason), so a new feature
@@ -27,7 +28,9 @@ export const ERASURE_DATABASES = Object.freeze({
 export const ERASURE_SLICE_ROWS = 100
 
 // Every step is `{ id, database, table, action: "delete" | "update", key, where, set?, weight,
-// covers, scan? }`.
+// covers, scan? }`. Two custom actions have their own runner and no `where`: "comments" (public
+// comments and their Discord posts) and "job_images" (an unpublished job's stored images, then its
+// row; deleting a row weighs like "delete").
 //   key     "rowid", or the primary key columns of a WITHOUT ROWID table; the slice picks at most
 //           ERASURE_SLICE_ROWS rows by it, so one statement never touches more.
 //   weight  the most D1 rows one changed row can write: the row, every index entry the statement
@@ -139,6 +142,28 @@ export const ERASURE_STEPS = Object.freeze(
         "icono_generation_requests.requester_user_id",
         "icono_generation_requests.requester_username",
       ],
+    },
+    {
+      // B-993: an unpublished job's result images are deleted from the portrait storage before the
+      // job row goes (job-result-images.js). A custom step that runs before every other step of the
+      // Iconoplasm database, so no unpublished job that wrote an image is ever deleted by the
+      // generic steps below without its objects.
+      id: "candidate_job_images",
+      database: "iconoplasm",
+      table: "icono_candidate_generation_jobs",
+      action: "job_images",
+      geneColumn: "gene_symbol",
+      weight: 6,
+      covers: [],
+    },
+    {
+      id: "edit_job_images",
+      database: "iconoplasm",
+      table: "icono_image_edit_jobs",
+      action: "job_images",
+      geneColumn: "source_gene_symbol",
+      weight: 5,
+      covers: [],
     },
     {
       id: "candidate_jobs_unpublished",
@@ -302,26 +327,18 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_vote_events.user_id"],
     },
     {
-      // A comment its author already removed is hidden, not gone: the body is still in the row.
-      id: "comments_removed_by_author",
-      database: "iconoplasm",
-      table: "icono_gene_comments",
-      action: "delete",
-      key: "rowid",
-      where: "user_id = ? AND status = 'deleted'",
-      whereBinds: [U],
-      weight: 4,
-      covers: [],
-    },
-    {
-      // Public comments stay under the anonymous label. A custom step: each slice first drops
-      // the gene's cached comment list from KV, which carries the old name and avatar.
+      // Public comments stay under the anonymous label; a comment its author had already removed
+      // is hidden, not gone (the body is still in the row), so it is deleted. A custom step
+      // (runCommentsStep): each slice first drops the gene's cached comment list from KV, which
+      // carries the old name and avatar, and then fixes the comment's copy in the public Discord
+      // channel (B-992): the post's author becomes the label, or the post goes when the comment was
+      // removed. The rows change only after their Discord post has been dealt with.
       id: "comments",
       database: "iconoplasm",
       table: "icono_gene_comments",
       action: "comments",
       set: "user_id = ?, username = ?, avatar_url = ''",
-      weight: 3,
+      weight: 4,
       covers: [
         "icono_gene_comments.user_id",
         "icono_gene_comments.username",

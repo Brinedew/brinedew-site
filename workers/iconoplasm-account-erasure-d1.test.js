@@ -7,6 +7,7 @@ import {
   ERASED_USER,
   OTHER_NAME,
   OTHER_USER,
+  seedDiscordMirror,
   seedSessionsAndKv,
   seedWorld,
 } from "./test-helpers/account-erasure-fixture.js"
@@ -15,7 +16,10 @@ import {
   eraseBrinedewAccountOnRequest,
 } from "./iconoplasm/account-erasure/erase-account-data.js"
 import { ERASURE_STEPS } from "./iconoplasm/account-erasure/erasure-steps.js"
-import { iconoplasmUserKvKeyScopes } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  iconoplasmUserKvKeyScopes,
+  postIconoplasmGeneCommentToDiscord,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   brinedewFormerAuthorLabel,
   brinedewProviderSubjectFingerprint,
@@ -124,6 +128,9 @@ test(
   async (t) => {
     const world = await seedWorld()
     await seedSessionsAndKv(world, iconoplasmUserKvKeyScopes)
+    // Bunny and Discord stay a fake at the fetch boundary; only D1 is the real thing here.
+    world.network.install()
+    await seedDiscordMirror(world, postIconoplasmGeneCommentToDiscord)
     const runtime = new Miniflare(
       convertV4MiniflareOptions({
         modules: true,
@@ -258,9 +265,11 @@ test(
             .bind(world.erasedAccount, label)
             .first()
         ).n,
-        2,
+        4,
+        "her four public comments stay under the label; the one she removed is gone",
       )
     } finally {
+      world.network.restore()
       await runtime.dispose()
     }
   },
