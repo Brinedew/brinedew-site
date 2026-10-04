@@ -116,6 +116,17 @@ export function normalizedDossier(payload, symbol) {
       gene_revision: Math.max(0, Number(head.gene_revision || 0) || 0),
     },
     manifestations,
+    // B-724: which saved version made each candidate image (bound images only).
+    candidate_sources: (Array.isArray(source.candidate_sources) ? source.candidate_sources : [])
+      .map(function normalizeCandidateSource(entry) {
+        return {
+          asset_sha256: String(entry?.asset_sha256 || "").toLowerCase(),
+          source_manifestation_revision_id: String(entry?.source_manifestation_revision_id || ""),
+        }
+      })
+      .filter(function hasBoth(entry) {
+        return entry.asset_sha256 && entry.source_manifestation_revision_id
+      }),
     history: {
       next_cursor: String(source.history?.next_cursor || ""),
       total_count: Math.max(0, Number(source.history?.total_count || 0) || 0),

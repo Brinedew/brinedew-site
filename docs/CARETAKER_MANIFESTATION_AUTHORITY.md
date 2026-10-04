@@ -84,6 +84,12 @@ body is deleted.
 
 ## Images and the replica use exact sources, and releases are proven in a browser
 
+A caretaker can go from a candidate image to the saved version that made it. Each candidate on
+the gene page shows "Made from version N", which opens that version in History, including after
+later edits. The link comes from the stored source of the image and appears only in the
+caretaker's own dossier (`candidate_sources`), never in the public gene object. An image from
+before sources were recorded shows no link, and nothing is guessed for it.
+
 An image request captures its source at acceptance: gene, canonical selection, manifestation and
 revision IDs, plaintext SHA-256 and length, accepted Tags derivative, recipe and model. A later
 canonical change, departure or new revision does not alter it, and a withdrawn source fails closed;
