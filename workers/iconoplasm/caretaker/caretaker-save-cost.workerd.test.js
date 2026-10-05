@@ -50,12 +50,13 @@ import {
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 
 // Rows written (`meta.rows_written`) by one ordinary autosave on a lineage that
-// already exists, summed over the four POSTs and the projection they wake.
-const MAX_SAVE_ROWS_AUTHORING = 117
-const MAX_SAVE_ROWS_PRIMARY = 34
+// already exists, summed over the POST and the projection it wakes. Measured
+// 2026-10-05: 117 + 34 as four commands (#508), 66 + 18 as one (B-859 step 3).
+const MAX_SAVE_ROWS_AUTHORING = 66
+const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 122
-const MAX_FIRST_SAVE_ROWS_PRIMARY = 34
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 71
+const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
 const USER = "account_user_b859cost1"
