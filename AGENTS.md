@@ -41,8 +41,6 @@ From a feature worktree, merge with `gh pr merge <number> --squash` and clean up
 
 The executable registry is `architecture-fences.json`: every entry carries its full decision, reason, change control, linked runbook and required markers, and `scripts/architecture-fences.test.js` enforces those markers across instructions, runbooks, source, tests and deploy. Read the registry entry and the runbook it names before changing a fence's domain; replace a fence only by an explicit migration that updates every enforcement point together.
 
-**ARCHITECTURE FENCE [BPC-001]** — Brinedew Prose Checker has one local lane and one explicit remote lane: remote checks run only after an explicit user command against an immutable document snapshot on the free Zen model; absence of that model stops the run. Registry: `architecture-fences.json`; runbook: `docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md`.
-
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait accelerator; direct delivery avoids charging each image to the Worker budget, and a failed probe changes only that tab. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract: every deploy builds the static sitemap and one document per gene from the catalog object, and eligibility follows the one stable gene object and the one catalog object. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
