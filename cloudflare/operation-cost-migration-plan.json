@@ -18,6 +18,14 @@
     "iconoplasm/0116_restore_cropped_seed_projection_part1.sql": {
       "online": true,
       "prediction": { "rows_read": 20000, "rows_written": 3400, "requests": 1 }
+    },
+    "iconoplasm-authoring/0021_restore_cropped_seed_bodies_part2.sql": {
+      "online": true,
+      "prediction": { "rows_read": 70000, "rows_written": 15200, "requests": 1 }
+    },
+    "iconoplasm/0117_restore_cropped_seed_projection_part2.sql": {
+      "online": true,
+      "prediction": { "rows_read": 20000, "rows_written": 3400, "requests": 1 }
     }
   }
 }
