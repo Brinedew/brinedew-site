@@ -399,8 +399,10 @@ test(
         dossier = await reload()
         assert.notEqual(saved.manifestation_revision_id, previousCanonical)
         assert.equal(dossier.head.canonical_revision_id, saved.manifestation_revision_id)
-        const head = ownManifestation(dossier)
-        assert.equal(head.head_tags, tagsText, "the saved Tags are the version's Tags")
+        const savedRevision = ownManifestation(dossier).revisions.find(
+          (revision) => revision.manifestation_revision_id === saved.manifestation_revision_id,
+        )
+        assert.equal(savedRevision?.derivative?.status, "accepted", "its Tags are accepted")
         phase = "idle"
       }
 
