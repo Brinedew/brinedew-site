@@ -45,7 +45,10 @@ import {
   withdrawOwnManifestation,
 } from "./manifestation-lifecycle-commands.js"
 import { endCaretakerAssignment } from "./caretaker-assignment-end-command.js"
-import { saveManifestationRevision } from "./manifestation-write-commands.js"
+import {
+  saveManifestationRevision,
+  saveManifestationWithTags,
+} from "./manifestation-write-commands.js"
 import { setManifestationPageVisibility } from "./manifestation-visibility-commands.js"
 import {
   selectTagsDerivativeHead,
@@ -295,6 +298,9 @@ function createCaretakerManifestationHttpHandler({
       }
 
       const save = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions$/)
+      // B-859 step 3: the editor's autosave in one command (revision, Tags, Tags head,
+      // canonical selection) instead of four.
+      const saveAll = path.match(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/saves$/)
       const saveTags = path.match(
         /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivatives$/,
       )
@@ -321,6 +327,7 @@ function createCaretakerManifestationHttpHandler({
         (request.method === "POST" &&
           (claim ||
             save ||
+            saveAll ||
             saveTags ||
             taggerize ||
             selectTags ||
@@ -337,7 +344,7 @@ function createCaretakerManifestationHttpHandler({
       // The verified Tags payload allows 32 KiB; its JSON command envelope is larger.
       const parsed = await readBoundedJson(
         request,
-        saveTags ? 72 * 1024 : taggerize ? 96 * 1024 : undefined,
+        saveTags ? 72 * 1024 : saveAll || taggerize ? 96 * 1024 : undefined,
       )
       const body = parsed.value
       const command = await commandEnvelope(request, parsed.raw, body, "account", session.accountId)
@@ -533,6 +540,116 @@ function createCaretakerManifestationHttpHandler({
           ...command,
         })
         await requireAdoptedManifestationUpload(db, "revision", revisionId)
+        return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
+      }
+
+      if (saveAll) {
+        const { assignment } = await requireRouteCurrentAssignment(
+          db,
+          segment(saveAll[1]),
+          session.accountId,
+        )
+        if (assignment.status !== "active") {
+          throw authorityError("ASSIGNMENT_NOT_ACTIVE", "Caretaker assignment is not active", 409)
+        }
+        const assignmentId = assignment.caretaker_assignment_id
+        rejectMismatchedBodyId(body, "caretaker_assignment_id", assignmentId)
+        const replay = await resolveCommandReplay(db, command, command)
+        if (replay) return jsonResponse(replay)
+        if (
+          body.revision_id != null ||
+          body.manifestation_id != null ||
+          body.source_revision_id != null
+        ) {
+          throw authorityError(
+            "UNSUPPORTED_ENTITY_ID_FIELD",
+            "Entity IDs are server-derived; use based_on_revision_id only for ancestry",
+            400,
+          )
+        }
+        const tagsText = String(body.tags_text || "")
+        if (!tagsText.trim()) {
+          throw authorityError("TAGS_REQUIRED", "A save with Tags needs at least one tag", 400)
+        }
+        const fieldsJson = body.fields_json ?? {}
+        const encoder = new TextEncoder()
+        const prose = await prepareManifestationProse(body.prose)
+        const output = await prepareManifestationTagsPayload({
+          tagsText,
+          tagsSha256: await sha256Hex(
+            encoder.encode(tagsText.normalize("NFC").replace(/\r\n?/g, "\n")),
+          ),
+          fieldsJson,
+          fieldsSha256: await sha256Hex(
+            encoder.encode(canonicalManifestationFieldsJson(fieldsJson)),
+          ),
+        })
+        const revisionId = idFactory("revision")
+        const derivativeId = idFactory("derivative")
+        const proseKey = await createManifestationBodyObjectKey()
+        const tagsKey = await createManifestationBodyObjectKey()
+        for (const [entityKind, entityId, objectKey, sha256, bytes] of [
+          ["revision", revisionId, proseKey, prose.body_sha256, prose.body_bytes],
+          [
+            "derivative",
+            derivativeId,
+            tagsKey,
+            output.output_plain_sha256,
+            output.output_plain_bytes,
+          ],
+        ]) {
+          await admitManifestationUploadIntent(db, env, {
+            entityKind,
+            entityId,
+            assignmentId,
+            objectKey,
+            ciphertextSha256: sha256,
+            bodyBytes: bytes,
+            actorKind: "account",
+            actorAccountId: session.accountId,
+            idFactory,
+          })
+        }
+        const [proseUpload, tagsUpload] = await Promise.all([
+          putManifestationBodyObject(env, proseKey, prose.bytes, {
+            expectedSha256: prose.body_sha256,
+          }),
+          putManifestationBodyObject(env, tagsKey, output.output_bytes, {
+            expectedSha256: output.output_plain_sha256,
+          }),
+        ])
+        result = await saveManifestationWithTags(db, {
+          assignmentId,
+          expectedAssignmentVersion: body.expected_assignment_version,
+          expectedManifestationVersion: body.expected_manifestation_version,
+          expectedHeadVersion: body.expected_head_version,
+          expectedCanonicalRevisionId: body.expected_canonical_revision_id,
+          sourceRevisionId: body.based_on_revision_id,
+          revisionId,
+          eventUuid: body.event_id,
+          storage: plainStorageDescriptor(prose, proseKey, proseUpload),
+          tags: {
+            derivativeId,
+            tagsSha256: output.tags_sha256,
+            tagsBytes: output.tags_bytes,
+            fieldsSha256: output.fields_sha256,
+            fieldsBytes: output.fields_bytes,
+            storage: plainStorageDescriptor(
+              { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
+              tagsKey,
+              tagsUpload,
+            ),
+            recipeId: "caretaker-manual-tags",
+            recipeVersion: "1",
+            providerId: "caretaker",
+            modelId: "manual",
+            taggerConfigSha256: await sha256Hex("iconoplasm.caretaker.manual-tags.v1"),
+          },
+          idFactory,
+          ...command,
+        })
+        await requireAdoptedManifestationUpload(db, "revision", revisionId)
+        await requireAdoptedManifestationUpload(db, "derivative", derivativeId)
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
       }
 

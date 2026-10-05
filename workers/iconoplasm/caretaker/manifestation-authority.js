@@ -13,6 +13,7 @@ export {
 } from "./caretaker-assignment-commands.js"
 export {
   saveManifestationRevision,
+  saveManifestationWithTags,
   seedSystemManifestation,
 } from "./manifestation-write-commands.js"
 export { selectManifestationRevision } from "./manifestation-selection-commands.js"

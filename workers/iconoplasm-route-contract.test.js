@@ -47,6 +47,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   caretaker_derivative_body:
     "/api/iconoplasm/caretaker/genes/TP53/derivatives/derivative_0001/body",
   caretaker_revision_create: "/api/iconoplasm/caretaker/genes/TP53/revisions",
+  caretaker_save_with_tags: "/api/iconoplasm/caretaker/genes/TP53/saves",
   caretaker_manifestation_tags_save:
     "/api/iconoplasm/caretaker/genes/TP53/revisions/revision_0001/tags-derivatives",
   caretaker_manifestation_tags_select:
