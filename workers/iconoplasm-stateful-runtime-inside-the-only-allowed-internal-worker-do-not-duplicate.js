@@ -10803,8 +10803,97 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
   return collapsed ? [collapsed] : []
 }
 
+const GENERATION_REQUEST_STRENGTH_COLUMNS = `vision_id, emulsion_id, artist_tag, artist_name,
+       workflow_id, workflow_label, prompt_version, variant_slot, image_count, live_count,
+       score, vote_h_index, preview_assets_json`
+const GENERATION_REQUEST_FIRST_PAGE = 120
+const GENERATION_REQUEST_NEXT_PAGE = 60
+
+// B-1014: "All styles" pages through every style in strength order (votes,
+// canonical portraits, score, blots, then vision ID). The cursor is the last
+// row's sort key. The order mixes DESC columns with an ascending tie-break, so
+// no single range seeks to it; five statements do, each an index seek on
+// idx_icono_generation_request_vision_option_rollup_priority that starts at
+// the cursor (checked with EXPLAIN on the 2026-09-29 copy). They run in order
+// and stop once the page is full, so a page reads its own size plus one, at any
+// depth: deep in the list one tie group (no votes, one blot) fills it alone.
+// Not one UNION: D1 refuses a compound SELECT of this many terms.
+function parseGenerationRequestStrengthCursor(raw) {
+  let value
+  try {
+    value = JSON.parse(String(raw || ""))
+  } catch {
+    return null
+  }
+  if (!Array.isArray(value) || value.length !== 5) return null
+  const numbers = value.slice(0, 4).map(Number)
+  if (!numbers.every(Number.isFinite)) return null
+  const visionId = validAdminRollupVisionId(value[4])
+  return visionId ? [...numbers, visionId] : null
+}
+
+function generationRequestStrengthCursor(row) {
+  return JSON.stringify([
+    Number(row?.vote_h_index || 0),
+    Number(row?.live_count || 0),
+    Number(row?.score || 0),
+    Number(row?.image_count || 0),
+    String(row?.vision_id || ""),
+  ])
+}
+
+async function readGenerationRequestStrengthPage(env, cursor, size) {
+  const base = `SELECT ${GENERATION_REQUEST_STRENGTH_COLUMNS}
+     FROM icono_generation_request_vision_option_rollup
+     WHERE builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+       AND vision_id <> ''`
+  const order = "vote_h_index DESC, live_count DESC, score DESC, image_count DESC, vision_id ASC"
+  const limit = size + 1
+  let rows
+  if (!cursor) {
+    const response = await env.ICONOPLASM_DB.prepare(
+      `${base} ORDER BY ${order} LIMIT ${limit}`,
+    ).all()
+    rows = response?.results || []
+  } else {
+    const [h, live, score, images, visionId] = cursor
+    const seeks = [
+      [
+        "vote_h_index = ? AND live_count = ? AND score = ? AND image_count = ? AND vision_id > ?",
+        [h, live, score, images, visionId],
+      ],
+      [
+        "vote_h_index = ? AND live_count = ? AND score = ? AND image_count < ?",
+        [h, live, score, images],
+      ],
+      ["vote_h_index = ? AND live_count = ? AND score < ?", [h, live, score]],
+      ["vote_h_index = ? AND live_count < ?", [h, live]],
+      ["vote_h_index < ?", [h]],
+    ]
+    rows = []
+    for (const [where, binds] of seeks) {
+      if (rows.length >= limit) break
+      const response = await env.ICONOPLASM_DB.prepare(
+        `${base} AND ${where} ORDER BY ${order} LIMIT ${limit - rows.length}`,
+      )
+        .bind(...binds)
+        .all()
+      rows.push(...(response?.results || []))
+    }
+  }
+  const page = rows.slice(0, size)
+  return {
+    rows: page,
+    nextCursor: rows.length > size ? generationRequestStrengthCursor(page[page.length - 1]) : "",
+  }
+}
+
 async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds = []) {
-  if (!env.ICONOPLASM_DB) return []
+  return (await listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)).options
+}
+
+async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
+  if (!env.ICONOPLASM_DB) return { options: [], nextCursor: "" }
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
     url?.searchParams?.get("query") || "",
   )
@@ -10816,7 +10905,10 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
         url,
         factorySearchIntent,
       )
-      return annotateFavoriteGenerationRequestOptions(imageOptions, favoriteEmulsionIds)
+      return {
+        options: annotateFavoriteGenerationRequestOptions(imageOptions, favoriteEmulsionIds),
+        nextCursor: "",
+      }
     }
     const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
     const emulsionPrefix = generationRequestEmulsionFamilyId(
@@ -10883,56 +10975,54 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
       mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
     )
-    return annotateFavoriteGenerationRequestOptions(
-      [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],
-      favoriteEmulsionIds,
-    )
+    return {
+      options: annotateFavoriteGenerationRequestOptions(
+        [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],
+        favoriteEmulsionIds,
+      ),
+      nextCursor: "",
+    }
+  }
+  const afterParam = url?.searchParams?.get("after")
+  if (afterParam) {
+    const cursor = parseGenerationRequestStrengthCursor(afterParam)
+    if (!cursor) return { options: [], nextCursor: "" }
+    const page = await readGenerationRequestStrengthPage(env, cursor, GENERATION_REQUEST_NEXT_PAGE)
+    return {
+      options: annotateFavoriteGenerationRequestOptions(
+        groupGenerationRequestVisionOptions(
+          mapGenerationRequestVisionOptionRows(env, url, page.rows),
+        ),
+        favoriteEmulsionIds,
+      ),
+      nextCursor: page.nextCursor,
+    }
   }
   const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
-  const [favoriteRows, favoriteFactoryOptions, resp] = await Promise.all([
+  const [favoriteRows, favoriteFactoryOptions, firstPage] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
     listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-       vision_id,
-       emulsion_id,
-       artist_tag,
-       artist_name,
-       workflow_id,
-       workflow_label,
-       prompt_version,
-       variant_slot,
-       image_count,
-       live_count,
-       score,
-       vote_h_index,
-       preview_assets_json
-     FROM icono_generation_request_vision_option_rollup
-     WHERE COALESCE(vision_id, '') <> ''
-       AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
-     ORDER BY vote_h_index DESC, live_count DESC, score DESC, image_count DESC, vision_id ASC
-     LIMIT 120`,
-    ).all(),
+    readGenerationRequestStrengthPage(env, null, GENERATION_REQUEST_FIRST_PAGE),
   ])
   const groupedVisionOptions = groupGenerationRequestVisionOptions(
-    mapGenerationRequestVisionOptionRows(env, url, [
-      ...favoriteRows,
-      ...(Array.isArray(resp?.results) ? resp.results : []),
-    ]),
+    mapGenerationRequestVisionOptionRows(env, url, [...favoriteRows, ...firstPage.rows]),
   )
   const factoryFavoriteFamilies = new Set(
     favoriteFactoryOptions.map((option) => option.emulsion_family_id),
   )
-  return annotateFavoriteGenerationRequestOptions(
-    [
-      ...favoriteFactoryOptions,
-      ...groupedVisionOptions.filter(
-        (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
-      ),
-      ...(await sharedUserOptionsPromise),
-    ],
-    favoriteEmulsionIds,
-  )
+  return {
+    options: annotateFavoriteGenerationRequestOptions(
+      [
+        ...favoriteFactoryOptions,
+        ...groupedVisionOptions.filter(
+          (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
+        ),
+        ...(await sharedUserOptionsPromise),
+      ],
+      favoriteEmulsionIds,
+    ),
+    nextCursor: firstPage.nextCursor,
+  }
 }
 
 async function generationRequestSummaryPayload(env, request, symbol) {
@@ -11059,7 +11149,9 @@ async function generationRequestOptionsPayload(env, url, request) {
       username: sessionUser.username || null,
     },
     favorite_count: favoriteEmulsionIds.length,
-    request_options: await listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds),
+    ...(await listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds).then(
+      (page) => ({ request_options: page.options, next_cursor: page.nextCursor }),
+    )),
   }
 }
 

@@ -35,7 +35,9 @@
 // 16. the list keeps failing and the grid offers no way to try again, or the
 //     Try again button does not load the styles once the server recovers;
 // 17. one gene shows on two cards (B-896: every style below also has an
-//     ACVR2B candidate, as the owner's Favorites did on 2026-10-05).
+//     ACVR2B candidate, as the owner's Favorites did on 2026-10-05);
+// 18. All styles stops at the first answer: scrolling to the end of the grid
+//     does not load the next page, or the label claims a count (B-1014).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -102,10 +104,38 @@ const OPTIONS = SLOTS.map((slot, index) => ({
   is_favorite: FAVORITES.includes(`0-${slot}`),
 }))
 
+// B-1014: the first answer carries a cursor at its weakest style; the next
+// page is weaker still (no votes), so it lands after every first-page card.
+const NEXT_SLOTS = Array.from({ length: 30 }, (_, i) => 70001 + i)
+const NEXT_OPTIONS = NEXT_SLOTS.map((slot) => ({
+  vision_id: `anima-v1-${slot}`,
+  label: String(slot),
+  primary_label: String(slot),
+  secondary_label: "",
+  search_text: `0-${slot} anima-v1-${slot}`,
+  emulsion_id: `0-${slot}`,
+  emulsion_family_id: `0-${slot}`,
+  image_count: 2,
+  live_count: 0,
+  score: 0,
+  vote_h_index: 0,
+  preview_assets: previewAssets(slot),
+  is_favorite: false,
+}))
+const LAST = OPTIONS[OPTIONS.length - 1]
+const FIRST_CURSOR = JSON.stringify([
+  LAST.vote_h_index,
+  LAST.live_count,
+  LAST.score,
+  LAST.image_count,
+  LAST.vision_id,
+])
+
 // `options.failFirst` answers that many style-list requests with the edge's
 // 503; `options.failing()` keeps answering 503 while it returns true.
 function createApi(posts, options = {}) {
   let optionsCalls = 0
+  let pageCalls = 0
   const api = (pathname, request) => {
     if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(pathname)) {
       const specific = {
@@ -124,6 +154,11 @@ function createApi(posts, options = {}) {
       }
     }
     if (pathname === "/api/iconoplasm/requests/options") {
+      if (new URL(request.url()).searchParams.get("after") === FIRST_CURSOR) {
+        pageCalls += 1
+        if (options.pagesFailing?.()) return new HttpStatus(503, { error: "unavailable" })
+        return { request_options: NEXT_OPTIONS, next_cursor: "" }
+      }
       optionsCalls += 1
       if (optionsCalls <= (options.failFirst || 0) || options.failing?.()) {
         return new HttpStatus(503, {
@@ -131,7 +166,7 @@ function createApi(posts, options = {}) {
           code: "THE_ONLY_ALLOWED_STATEFUL_WORKER_UNAVAILABLE",
         })
       }
-      return { request_options: OPTIONS }
+      return { request_options: OPTIONS, next_cursor: FIRST_CURSOR }
     }
     if (pathname === "/api/iconoplasm/emulsion-favorites") {
       return { favorite_emulsion_ids: FAVORITES }
@@ -148,6 +183,7 @@ function createApi(posts, options = {}) {
     return undefined
   }
   api.optionsCalls = () => optionsCalls
+  api.pageCalls = () => pageCalls
   return api
 }
 
@@ -493,13 +529,32 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         await page.fill("[data-icono-request-query]", "")
         await page.waitForTimeout(350)
 
-        // All styles shows every style, not six.
+        // All styles shows every style, not six: 18. scrolling to the end of the
+        // grid loads the next page, and the label claims no count.
         m = await page.evaluate(measurePicker)
-        const allCount = await page.$$eval("[data-icono-request-card]", (els) => els.length)
-        assert.equal(allCount, OPTIONS.length, `${where}: All styles count`)
         assert.equal(m.browseScrolls, true, `${where}: 24 styles do not scroll inside the dialog`)
         assert.ok(m.browse.bottom <= m.panel.bottom + 0.5, `${where}: the grid overflows the panel`)
-        assert.match(m.views[1].text, new RegExp(`${OPTIONS.length}`), `${where}: All count`)
+        assert.equal(m.views[1].text, "All styles", `${where}: All styles label`)
+        await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, el.scrollHeight))
+        await page.waitForFunction(
+          (total) => document.querySelectorAll("[data-icono-request-card]").length === total,
+          OPTIONS.length + NEXT_OPTIONS.length,
+          { timeout: 5_000 },
+        )
+        const allLabels = await page.$$eval("[data-icono-request-card]", (els) =>
+          els.map((el) => el.getAttribute("data-icono-request-card")),
+        )
+        assert.deepEqual(
+          allLabels.slice(-NEXT_OPTIONS.length),
+          NEXT_SLOTS.map(String),
+          `${where}: the next page is not after the first`,
+        )
+        m = await page.evaluate(measurePicker)
+        const pagedGenes = m.images.map((image) =>
+          GENE_BY_SHA.get((/[0-9a-f]{64}/.exec(image.src) || [""])[0]),
+        )
+        assert.equal(new Set(pagedGenes).size, pagedGenes.length, `${where}: paged repeats`)
+        await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 0))
 
         // 12. The card star toggles a favorite.
         // ...and does not pick or un-pick the card it sits on.
@@ -570,7 +625,8 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     const context = await browser.newContext({ viewport: { width, height } })
     await context.addInitScript(() => localStorage.setItem("iconoplasm.new-candidate-tab", "free"))
     let failing = true
-    const api = createApi([], { failing: () => failing })
+    let pagesFailing = false
+    const api = createApi([], { failing: () => failing, pagesFailing: () => pagesFailing })
     await routeProduction(context, origin, api)
     await routePortraits(context)
     const page = await context.newPage()
@@ -595,10 +651,20 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     )
 
     failing = false
+    pagesFailing = true
     await page.click("[data-icono-request-retry]")
     await page.waitForSelector("[data-icono-request-card]", { timeout: 15_000 })
     m = await page.evaluate(measurePicker)
     assert.ok(m.visibleCards >= 4, `only ${m.visibleCards} cards after Try again`)
+
+    // 18 again (B-1014): a next page that keeps failing is asked for once plus two
+    // retries, not in a loop; the cards already shown stay.
+    await page.click("[data-icono-request-view='all']")
+    await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, el.scrollHeight))
+    await page.waitForTimeout(5_000)
+    assert.equal(api.pageCalls(), 3, `a failing page was asked ${api.pageCalls()} times`)
+    m = await page.evaluate(measurePicker)
+    assert.ok(m.visibleCards >= 4, "the failed page cleared the grid")
     await context.close()
   } finally {
     server.close()

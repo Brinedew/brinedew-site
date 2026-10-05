@@ -5539,7 +5539,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-request-browse" data-icono-request-browse>' +
       '<div class="icono-request-views" role="group" aria-label="Show">' +
       '<button type="button" class="icono-request-view" data-icono-request-view="favorites" aria-pressed="false">Favorites <span data-icono-request-view-count></span></button>' +
-      '<button type="button" class="icono-request-view" data-icono-request-view="all" aria-pressed="true">All styles <span data-icono-request-view-count></span></button>' +
+      '<button type="button" class="icono-request-view" data-icono-request-view="all" aria-pressed="true">All styles</button>' +
       "</div>" +
       '<div class="icono-request-find-dock">' +
       '<label class="icono-request-find">' +
@@ -6888,6 +6888,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var requestOptionsLoadingByQuery = Object.create(null)
       var numericRequestHydrationTimer = null
       var optionsLoaded = false
+      // B-1014: where "All styles" continues. The server sends the strongest
+      // 120 first and a cursor (the last style's sort key) while more exist.
+      var requestOptionsNextCursor = ""
+      var requestOptionsMoreLoading = null
+      // After a failed page, the next scroll may try again only after this.
+      var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
       var requestSelectionLimit = 20
       var filteredOptions = []
@@ -7333,6 +7339,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             rememberRequestOptions(loadedOptions)
             if (!queryKey) {
               requestOptions = loadedOptions
+              requestOptionsNextCursor = String((payload && payload.next_cursor) || "")
               optionsLoaded = true
             }
             delete requestOptionsLoadingByQuery[queryKey]
@@ -7349,6 +7356,81 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             throw error
           })
         return requestOptionsLoadingByQuery[queryKey]
+      }
+
+      function requestOptionKey(option) {
+        return String(
+          (option && (option.emulsion_family_id || option.emulsion_id || option.vision_id)) || "",
+        ).toUpperCase()
+      }
+
+      function loadMoreRequestOptions() {
+        if (requestOptionsMoreLoading || !requestOptionsNextCursor) return requestOptionsMoreLoading
+        if (Date.now() < requestOptionsMoreRetryAt) return null
+        var cursor = requestOptionsNextCursor
+        requestOptionsMoreLoading = fetchRequestOptionsWithRetry(
+          "/api/iconoplasm/requests/options?after=" + encodeURIComponent(cursor),
+        )
+          .then(function (payload) {
+            if (requestOptionsNextCursor !== cursor) return
+            var known = new Set(requestOptions.map(requestOptionKey))
+            var page = (
+              Array.isArray(payload && payload.request_options) ? payload.request_options : []
+            ).filter(function (option) {
+              var key = requestOptionKey(option)
+              if (!key || known.has(key)) return false
+              known.add(key)
+              return true
+            })
+            requestOptions = requestOptions.concat(page)
+            requestOptionsByQuery[""] = requestOptions
+            rememberRequestOptions(page)
+            requestOptionsNextCursor = String((payload && payload.next_cursor) || "")
+            return true
+          })
+          .catch(function () {
+            // The styles already shown stay usable. No repaint, so nothing
+            // asks again by itself: a scroll at least 10 s later does.
+            requestOptionsMoreRetryAt = Date.now() + 10000
+            return false
+          })
+          .then(function (loaded) {
+            requestOptionsMoreLoading = null
+            if (loaded && requestView === "all" && !String(queryInput.value || "").trim()) {
+              paintRequestResults("", requestOptions)
+            }
+          })
+        return requestOptionsMoreLoading
+      }
+
+      // Loads the next page when the grid is near its end, or when the first
+      // page does not fill the box.
+      function maybeLoadMoreRequestOptions() {
+        if (!browse || !requestOptionsNextCursor || requestView !== "all") return
+        if (String(queryInput.value || "").trim()) return
+        if (browse.scrollTop + browse.clientHeight < browse.scrollHeight - 800) return
+        void loadMoreRequestOptions()
+      }
+
+      // Strength order, the server's (SQL compares vision IDs bytewise).
+      function isBeyondRequestCursor(option) {
+        if (!requestOptionsNextCursor) return false
+        var key
+        try {
+          key = JSON.parse(requestOptionsNextCursor)
+        } catch (error) {
+          return false
+        }
+        var values = [
+          Number((option && option.vote_h_index) || 0),
+          Number((option && option.live_count) || 0),
+          Number((option && option.score) || 0),
+          Number((option && option.image_count) || 0),
+        ]
+        for (var i = 0; i < 4; i++) {
+          if (values[i] !== Number(key[i])) return values[i] < Number(key[i])
+        }
+        return String((option && option.vision_id) || "") > String(key[4] || "")
       }
 
       function scoreRequestOption(option, query) {
@@ -7444,7 +7526,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var terms = cleanedQuery ? cleanedQuery.split(/\s+/g).filter(Boolean) : []
         var list = (Array.isArray(loadedOptions) ? loadedOptions : []).filter(function (option) {
           if (!isQueueRequestOption(option)) return false
-          if (!terms.length) return requestView !== "favorites" || isFavoriteRequestOption(option)
+          if (!terms.length) {
+            if (requestView === "favorites") return isFavoriteRequestOption(option)
+            return !isBeyondRequestCursor(option)
+          }
           var haystack = (
             requestOptionPrimaryLabel(option) +
             " " +
@@ -7472,13 +7557,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var favoriteCount = requestOptions.filter(function (option) {
           return isQueueRequestOption(option) && isFavoriteRequestOption(option)
         }).length
-        var allCount = requestOptions.filter(isQueueRequestOption).length
         var views = body.querySelectorAll("[data-icono-request-view]")
         for (var i = 0; i < views.length; i++) {
           var key = views[i].getAttribute("data-icono-request-view")
           views[i].setAttribute("aria-pressed", key === requestView ? "true" : "false")
           var count = views[i].querySelector("[data-icono-request-view-count]")
-          if (count) count.textContent = String(key === "favorites" ? favoriteCount : allCount)
+          if (count) count.textContent = String(favoriteCount)
         }
       }
 
@@ -7511,6 +7595,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         results.removeAttribute("aria-busy")
         paintRequestViews()
         paintRequestBatch()
+        maybeLoadMoreRequestOptions()
       }
 
       function paintRequestBatch() {
@@ -7802,6 +7887,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       panel._iconoFavoriteViewsHandler = paintRequestViews
       document.addEventListener("icono-emulsion-favorites-change", paintRequestViews)
+      if (browse) browse.addEventListener("scroll", maybeLoadMoreRequestOptions, { passive: true })
       var viewButtons = body.querySelectorAll("[data-icono-request-view]")
       for (var viewIndex = 0; viewIndex < viewButtons.length; viewIndex++) {
         viewButtons[viewIndex].addEventListener("click", function (event) {
