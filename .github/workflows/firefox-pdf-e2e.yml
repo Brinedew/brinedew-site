@@ -42,7 +42,7 @@ jobs:
         run: |
           echo "iconoplasm host: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasm.brinedew.bio/ || echo unreachable)"
           echo "portrait cdn: $(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://iconoplasmportraits.b-cdn.net/ || echo unreachable)"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - name: Run the Firefox PDF suite
         working-directory: iconoplasm-extension/e2e
         env:
@@ -59,7 +59,7 @@ jobs:
             "--artifacts=$artifacts"
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: firefox-pdf-e2e
           path: iconoplasm-extension/artifacts/firefox-pdf-e2e/
