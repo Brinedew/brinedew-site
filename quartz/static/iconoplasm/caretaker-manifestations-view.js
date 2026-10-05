@@ -29,6 +29,63 @@ export function diffMarkup(before, after, escapeHtml) {
     .join("")
 }
 
+function tagLines(fields) {
+  return Object.entries(fields || {}).flatMap(function ([category, tags]) {
+    return Array.isArray(tags)
+      ? tags.map(function (tag) {
+          return `${category}: ${tag}`
+        })
+      : []
+  })
+}
+
+// Owner, 2026-10-05: after an Auto button the caretaker saw "Unsaved changes" and a
+// 4,000-character box that looked the same; nothing said what had changed. The
+// suggestion now shows as a diff where the text is, with VS Code's two choices for
+// an AI edit (chatEditingEditorActions.ts: "Keep" / "Undo"). Nothing is saved
+// until Keep.
+export function suggestionReviewMarkup(review, escapeHtml) {
+  let changes = ""
+  let added = 0
+  let removed = 0
+  if (review.kind === "prose") {
+    changes =
+      review.before === review.after
+        ? escapeHtml(review.after)
+        : diffMarkup(review.before, review.after, escapeHtml)
+    ;({ added, removed } = wordDelta(review.before, review.after))
+  } else {
+    const before = new Set(tagLines(review.before))
+    const after = new Set(tagLines(review.after))
+    const gone = [...before].filter((line) => !after.has(line))
+    const fresh = [...after].filter((line) => !before.has(line))
+    added = fresh.length
+    removed = gone.length
+    changes = gone
+      .map((line) => `<del>${escapeHtml(line)}</del>`)
+      .concat(fresh.map((line) => `<ins>${escapeHtml(line)}</ins>`))
+      .join("\n")
+  }
+  return (
+    '<div class="icono-caretaker-review" data-icono-caretaker-review="' +
+    escapeHtml(review.kind) +
+    '">' +
+    '<div class="icono-caretaker-preview__text icono-caretaker-review__changes" tabindex="0">' +
+    changes +
+    "</div>" +
+    '<div class="icono-caretaker-editor__meta">' +
+    '<span class="icono-caretaker-timeline__delta"><span class="icono-caretaker-delta-add">+' +
+    added +
+    '</span> <span class="icono-caretaker-delta-remove">−' +
+    removed +
+    "</span></span>" +
+    '<span class="icono-actions">' +
+    '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-review-keep>Keep</button>' +
+    '<button type="button" class="icono-button" data-icono-caretaker-review-undo>Undo</button>' +
+    "</span></div></div>"
+  )
+}
+
 function provenanceMarkup(revision, escapeHtml) {
   const provenance = revision?.generation_provenance
   if (!provenance || typeof provenance !== "object") return ""
@@ -703,8 +760,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
     (canWrite
       ? '<span data-icono-caretaker-autosave-state data-state="saved" role="status">' +
         "<span data-icono-caretaker-autosave-label>Saved</span></span>" +
-        '<button type="button" class="icono-caretaker-link-button" data-icono-caretaker-retry-save hidden>Retry</button>' +
-        '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-save-suggestion hidden>Save</button>'
+        '<button type="button" class="icono-caretaker-link-button" data-icono-caretaker-retry-save hidden>Retry</button>'
       : "") +
     '<button type="button" class="icono-button" data-icono-dialog-close>Close</button>' +
     "</div>"

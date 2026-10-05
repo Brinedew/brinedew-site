@@ -742,25 +742,25 @@ test("B-740 saved tag fields stay parseable under a text-only attribute escaper"
   assert.deepEqual(readTagFields(source), withFields.prefill_fields)
 })
 
-// B-995: the Tags helper fills a suggestion in and saves nothing until the caretaker presses Save.
-test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-995)", async () => {
+// Owner, 2026-10-05, on DCD: after Auto-correct the panel said "Unsaved changes"
+// over a 4,000-character box that looked the same, and History showed nothing.
+// A suggestion now shows as a diff with Keep / Undo (VS Code's AI-edit choices),
+// and nothing changes or saves until Keep.
+async function mountWithTaggerizer(reply) {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
-  let finishSuggestion
+  let finish
+  const withFields = { ...dossier(), taggerizer_enabled: true }
+  withFields.manifestations[0].head_fields = { outfit: ["cream_camisole"] }
+  withFields.manifestations[0].head_tags = "cream_camisole"
   const panel = createCaretakerManifestationPanel({
     fetchJSON: async function (path, init) {
       calls.push({ path, init })
-      if ((init?.method || "GET") === "GET") return { ...dossier(), taggerizer_enabled: true }
+      if ((init?.method || "GET") === "GET") return withFields
       if (path.endsWith("/taggerize")) {
-        await new Promise((resolve) => (finishSuggestion = resolve))
-        return {
-          ok: true,
-          suggestion: {
-            tags_text: "second_body, red_coat",
-            fields_json: { archetype: ["second_body"], outfit: ["red_coat"] },
-          },
-        }
+        await new Promise((resolve) => (finish = resolve))
+        return { ok: true, suggestion: reply }
       }
       if (path.endsWith("/revisions")) {
         return { ok: true, manifestation_id: "manifestation_own", manifestation_revision_id: "r9" }
@@ -776,41 +776,152 @@ test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-
     currentUser: { account_id: "acct_1" },
     authResolved: true,
   })
-  const button = host.querySelector('[data-icono-caretaker-taggerize="tags_from_prose"]')
-  assert.ok(button)
-  assert.ok(host.querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]'))
-  button.dispatchEvent(new Event("click", { bubbles: true }))
-  assert.equal(button.getAttribute("aria-busy"), "true")
-  assert.equal(button.textContent, "Auto-extract tags from prose")
-  assert.equal(button.disabled, true)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  finishSuggestion()
-  await new Promise((resolve) => setTimeout(resolve, 20))
+  async function press(direction) {
+    const button = host.querySelector(`[data-icono-caretaker-taggerize="${direction}"]`)
+    button.dispatchEvent(new Event("click", { bubbles: true }))
+    assert.equal(button.getAttribute("aria-busy"), "true")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    finish()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  const click = (selector) =>
+    host.querySelector(selector).dispatchEvent(new Event("click", { bubbles: true }))
+  const saves = () => calls.filter((call) => call.path.endsWith("/revisions")).length
+  return { host, calls, press, click, saves, Event }
+}
 
-  const request = JSON.parse(calls.find((call) => call.path.endsWith("/taggerize")).init.body)
-  assert.equal(request.direction, "tags_from_prose")
-  assert.equal(request.prose, "Second body")
+test("Auto-extract shows the Tag changes for review and applies them only on Keep (B-995)", async () => {
+  const { host, press, click, saves } = await mountWithTaggerizer({
+    tags_text: "red_coat",
+    fields_json: { outfit: ["red_coat"] },
+  })
   const tags = host.querySelector("[data-icono-caretaker-tags]")
-  assert.equal(tags.value, "second_body, red_coat")
-  assert.deepEqual(JSON.parse(tags.dataset.fieldsJson).outfit, ["red_coat"])
-  assert.equal(button.hasAttribute("aria-busy"), false)
-  assert.equal(host.querySelector("[data-icono-caretaker-status]").hidden, true)
-  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").dataset.state, "unsaved")
-
-  // Nothing is saved on its own, even after the autosave delay.
+  const before = tags.value
+  await press("tags_from_prose")
+  const review = host.querySelector('[data-icono-caretaker-review="tags"]')
+  assert.equal(review === null, false)
+  assert.equal(review.innerHTML.includes("<del>outfit: cream_camisole</del>"), true)
+  assert.equal(review.innerHTML.includes("<ins>outfit: red_coat</ins>"), true)
+  assert.equal(tags.value, before)
+  assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").dataset.state, "saved")
   await new Promise((resolve) => setTimeout(resolve, 1300))
-  assert.equal(
-    calls.some((call) => call.path.endsWith("/revisions")),
-    false,
-  )
-  const save = host.querySelector("[data-icono-caretaker-save-suggestion]")
-  assert.equal(save.hidden, false)
-  save.dispatchEvent(new Event("click", { bubbles: true }))
+  assert.equal(saves(), 0)
+
+  click("[data-icono-caretaker-review-keep]")
+  assert.equal(host.querySelector("[data-icono-caretaker-review]") === null, true)
+  assert.equal(tags.value, "red_coat")
   await new Promise((resolve) => setTimeout(resolve, 1400))
-  assert.equal(
-    calls.some((call) => call.path.endsWith("/revisions")),
-    true,
+  assert.equal(saves(), 1)
+})
+
+test("Auto-correct shows the prose diff, Undo changes nothing, Keep applies and saves (B-995)", async () => {
+  const { host, calls, press, click, saves, Event } = await mountWithTaggerizer({
+    prose: "Second body in a red coat",
+  })
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  const tags = host.querySelector("[data-icono-caretaker-tags]")
+
+  // The DCD case: the caretaker changes a Tag and autosave stores it on its own.
+  tags.dataset.fieldsJson = JSON.stringify({ outfit: ["red_coat"] })
+  tags.value = "red_coat"
+  tags.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1400))
+  assert.equal(saves(), 1)
+
+  await press("prose_from_tags")
+  const request = JSON.parse(
+    calls.filter((call) => call.path.endsWith("/taggerize")).at(-1).init.body,
   )
+  // Compared with the Tags the prose was written against, not the last save.
+  assert.deepEqual(request.previous_tags_fields.outfit, ["cream_camisole"])
+  assert.deepEqual(request.tags_fields.outfit, ["red_coat"])
+
+  const review = host.querySelector('[data-icono-caretaker-review="prose"]')
+  assert.equal(review === null, false)
+  assert.equal(review.innerHTML.includes("<ins>"), true)
+  assert.equal(prose.hidden, true)
+  assert.equal(prose.value, "Second body")
+
+  click("[data-icono-caretaker-review-undo]")
+  assert.equal(host.querySelector("[data-icono-caretaker-review]") === null, true)
+  assert.equal(prose.hidden, false)
+  assert.equal(prose.value, "Second body")
+  await new Promise((resolve) => setTimeout(resolve, 1300))
+  assert.equal(saves(), 1)
+
+  await press("prose_from_tags")
+  click("[data-icono-caretaker-review-keep]")
+  assert.equal(prose.hidden, false)
+  assert.equal(prose.value, "Second body in a red coat")
+  await new Promise((resolve) => setTimeout(resolve, 1400))
+  assert.equal(saves(), 2)
+})
+test("Auto-correct compares with the Tags of the version where the prose was written, across sessions (B-995)", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  const withHistory = { ...dossier(), taggerizer_enabled: true }
+  const own = withHistory.manifestations[0]
+  own.manifestation_head_revision_id = "revision_3"
+  own.head_body = "Second body"
+  own.revisions = [
+    {
+      manifestation_revision_id: "revision_3",
+      revision_number: 3,
+      lifecycle: "active",
+      body: "Second body",
+      derivative: { manifestation_derivative_id: "derivative_3" },
+    },
+    {
+      manifestation_revision_id: "revision_2",
+      revision_number: 2,
+      lifecycle: "active",
+      body: "Second body",
+      derivative: { manifestation_derivative_id: "derivative_2" },
+    },
+    {
+      manifestation_revision_id: "revision_1",
+      revision_number: 1,
+      lifecycle: "active",
+      body: "First body",
+      derivative: { manifestation_derivative_id: "derivative_1" },
+    },
+  ]
+  const tagsOf = {
+    derivative_3: { outfit: ["red_coat"] },
+    derivative_2: { outfit: ["cream_camisole"] },
+    derivative_1: { outfit: ["grey_smock"] },
+  }
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      calls.push({ path, init })
+      const derivative = path.match(/\/derivatives\/([^/]+)\/body$/)?.[1]
+      if (derivative)
+        return {
+          tags: { tags_text: tagsOf[derivative].outfit[0], fields_json: tagsOf[derivative] },
+        }
+      if ((init?.method || "GET") === "GET") return withHistory
+      if (path.endsWith("/taggerize"))
+        return { ok: true, suggestion: { prose: "Second body in red" } }
+      return { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  host
+    .querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]')
+    .dispatchEvent(new Event("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  const request = JSON.parse(calls.find((call) => call.path.endsWith("/taggerize")).init.body)
+  // Version 3 only changed Tags (in an earlier session); the prose dates from version 2.
+  assert.deepEqual(request.previous_tags_fields.outfit, ["cream_camisole"])
+  assert.deepEqual(request.tags_fields.outfit, ["red_coat"])
 })
 
 // Owner, 2026-10-05: an Auto-correct click during a save looked ignored. The
