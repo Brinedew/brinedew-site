@@ -17,6 +17,17 @@ On 2026-10-04 (B-996, the caretaker sidebar) an agent made two mockups the owner
 11. Paper's free plan allows 100 MCP calls a week. Don't spend them on capability tests or throwaway variants, and test any assumption about a tool before announcing a switch away from it.
 
 
+### Judge the type in every screenshot
+
+On 2026-10-05 (B-1022) an agent sent the owner before-and-after pictures of the homepage install panel after a CSS refactor and checked only that "after" matched what the app's CSS asked for. Both pictures showed five instructions set centred, in Special Elite at 19 px, about 25 characters to a line, with the step numbers floating far from their text. The owner: "atrocious … my eyes are popping out." Every screenshot you show is a design claim, even when the change wasn't meant to be visual. Before sending one, check:
+
+1. **Voice.** Is each text in the voice its job calls for (see Type below)? Running text is never Special Elite.
+2. **Alignment.** Text that wraps is left-aligned. Centre a single short line (a title, a tagline, a button label) at most.
+3. **Line length.** Reading text runs 45–90 characters a line ([Butterick](https://practicaltypography.com/line-length.html)). If a card is too narrow for that, say so instead of shrinking the type.
+4. **One reading size.** Code chips sit at about 0.9–0.95× the words around them, as [Chrome's](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world) and [GitHub's](https://docs.github.com/en/get-started/start-your-journey/hello-world) docs set them, never a different scale.
+5. **Numbers.** List markers hang and align with the text they number.
+6. **Where a rule comes from.** If something looks wrong, find the rule that produced it before fixing it: the install panel was centred by a blog rule in `quartz/static/custom.css` written for a different card.
+
 ### The design landscape moves faster than agent training
 
 An agent's training data ends months before the work happens. On 2026-10-04 an agent assumed pro asset packs were paid and that buying one was the owner's call; both assumptions were stale. Before designing, run a dated search on the current practice and asset market, and trust only sources you opened. Checked 2026-10-04:
@@ -98,7 +109,12 @@ Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Re
 
 **Color.** A warm, low-chroma **paper-and-ink** palette: cream paper (`#f4ede5`), dark-roast ink (`#20120b`), with exactly **one accent** — a muted **teal "pen"** (`#1b7269`) used for handwritten annotations and primary actions. A **rust-red stamp** (`#a24834`) appears sparingly for stamped/QC marks. Beyond that, the only saturated color on any card is the **per-gene color** (server-assigned, unique per gene) used for highlights and the portrait base tint. Optional dark skins exist: **neo-drab** (olive `#171a14` paper + sodium-yellow `#d7b642`) and a near-black **promo stage** (`#161616`).
 
-**Type.** Four voices, strict jobs (see colors_and_type.css): League Spartan 800 = gene symbol; IBM Plex Mono = pre-printed labels; Special Elite = typewritten values; Caveat = handwritten teal notes. Never mix their roles.
+**Type.** Four voices, strict jobs (see colors_and_type.css): League Spartan 800 = gene symbol; IBM Plex Mono = pre-printed form text; Special Elite = typewritten values; Caveat = handwritten teal notes. Never mix their roles.
+
+The metaphor decides which voice a text takes. On real lab paperwork, everything printed on the form is in the form's own face, and the typewriter only fills in the blanks (checked 2026-10-05 on the University of Iowa State Hygienic Lab's [Clinical Specimen Test Request Form Instructions](https://shl.uiowa.edu/sites/shl.uiowa.edu/files/2025-04/ClinicalTRFInstructs.pdf): instructions in the printed face, left-aligned, section labels as bold caps, no typewriter text at all). So:
+
+- **IBM Plex Mono** is the pre-printed form: field labels, titles, instructions, notes, empty states, sign-in prompts, buttons and tabs. It's also the app's default (`#iconoplasm-root`), so any text that sets no face of its own is printed text.
+- **Special Elite** is what was typed into the form: a gene's full name, family, serial and metric values, clan names, and text a person typed in (a suggestion, the character text). Its designer calls it ["a little bit of inked up grunge"](https://fonts.google.com/specimen/Special+Elite/about): a texture for values, never a face for instructions. The one-line hero tagline is the only exception.
 
 **Backgrounds / texture.** Subtle, never flashy. A faint **fractal-noise SVG grain** overlays the simple-tooltip surface. The lab sheet uses hairline **ruled column lines** and gentle vertical paper gradients. Portraits are full illustrated character art (warm, painterly, varied palettes) sitting in a bordered "specimen viewport." **No gradients-as-decoration, no glossy web affordances.**
 
