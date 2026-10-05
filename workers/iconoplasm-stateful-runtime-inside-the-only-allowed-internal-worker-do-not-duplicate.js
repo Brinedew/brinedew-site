@@ -14537,7 +14537,10 @@ async function upsertStorageAuditQueueRowsForSymbols(env, rawSymbols) {
            WHEN icono_storage_audit_queue.audit_state = 'unknown' THEN CURRENT_TIMESTAMP
            ELSE icono_storage_audit_queue.next_attempt_at
          END
-     WHERE EXISTS (
+     -- B-1020: seek the scoped genes' rows by primary key. EXISTS alone was
+     -- tested against every queue row: 100,894 rows read for one gene.
+     WHERE icono_storage_audit_queue.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)
+       AND EXISTS (
        SELECT 1
        FROM current_assets ca
        WHERE ca.gene_symbol = icono_storage_audit_queue.gene_symbol
@@ -14967,7 +14970,7 @@ function buildAdminAssetSummaryScope(summaryRow, publicStatsPayload) {
   return { public_scope: publicScope, ledger_scope: ledgerScope }
 }
 
-async function selectStorageAuditQueueRowsToProcess(
+export async function selectStorageAuditQueueRowsToProcess(
   env,
   { requestedSymbols = null, limit = 100 } = {},
 ) {
@@ -14975,7 +14978,12 @@ async function selectStorageAuditQueueRowsToProcess(
   const wantedSymbols = Array.isArray(requestedSymbols)
     ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
     : []
-  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  // B-1020: "? = 0 OR gene_symbol IN (...)" can't use an index, so a
+  // one-gene request scanned the whole queue (50,433 rows). Scoped requests
+  // get the IN clause alone; the unscoped backlog keeps its full ordering.
+  const scopeClause = wantedSymbols.length
+    ? "AND q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)"
+    : ""
   const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, 100, 500)
   const response = await env.ICONOPLASM_DB.prepare(
     `WITH incoming_scope AS (
@@ -15000,7 +15008,7 @@ async function selectStorageAuditQueueRowsToProcess(
          OR datetime(COALESCE(q.last_audited_at, '')) <= datetime('now', '-' || ? || ' days')
        )
        AND q.next_attempt_at <= CURRENT_TIMESTAMP
-       AND (? = 0 OR q.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+       ${scopeClause}
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
      ORDER BY
@@ -15013,7 +15021,7 @@ async function selectStorageAuditQueueRowsToProcess(
        q.asset_sha256 ASC
      LIMIT ?`,
   )
-    .bind(JSON.stringify(wantedSymbols), ICONO_STORAGE_AUDIT_RECHECK_DAYS, applyScope, cleanedLimit)
+    .bind(JSON.stringify(wantedSymbols), ICONO_STORAGE_AUDIT_RECHECK_DAYS, cleanedLimit)
     .all()
   return Array.isArray(response?.results) ? response.results : []
 }
@@ -15507,7 +15515,10 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
   const wantedSymbols = Array.isArray(requestedSymbols)
     ? normalizeAdminAssetMaintenanceSymbols(requestedSymbols, 5000)
     : []
-  const applyScope = wantedSymbols.length > 0 ? 1 : 0
+  // B-1020: scoped requests seek their genes; see selectStorageAuditQueueRowsToProcess.
+  const scopeClause = wantedSymbols.length
+    ? "AND ps.gene_symbol IN (SELECT gene_symbol FROM incoming_scope)"
+    : ""
   const cleanedLimit = normalizeAdminAssetMaintenanceLimit(limit, 50, 250)
   // Chesterton's fence: repairing only the already-broken audit backlog turns
   // Website Ops into a hall pass for inaction. The real missing-image problem
@@ -15541,7 +15552,7 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
        ON q.gene_symbol = ps.gene_symbol
       AND q.asset_sha256 = ps.current_asset_sha256
      WHERE COALESCE(ps.current_asset_sha256, '') <> ''
-       AND (? = 0 OR ps.gene_symbol IN (SELECT gene_symbol FROM incoming_scope))
+       ${scopeClause}
        AND COALESCE(pa.is_legacy, 0) = 0
        AND lower(COALESCE(pa.status, 'draft')) <> 'rejected'
       AND COALESCE(q.audit_state, 'unknown') NOT IN ('renderable', 'regionally_divergent')
@@ -15557,7 +15568,7 @@ async function fetchKnownBrokenStorageAuditRows(env, { requestedSymbols = null, 
        ps.current_asset_sha256 ASC
      LIMIT ?`,
   )
-    .bind(JSON.stringify(wantedSymbols), applyScope, cleanedLimit)
+    .bind(JSON.stringify(wantedSymbols), cleanedLimit)
     .all()
   return (Array.isArray(response?.results) ? response.results : []).map((row) => ({
     symbol: normalizeSymbol(row?.gene_symbol || "") || "",
@@ -15594,7 +15605,10 @@ async function fetchAdminAssetStorageAudit(env, { requestedSymbols = null, limit
   }
 }
 
-async function fetchAdminAssetRepairScope(env, { requestedSymbols = null, limit = 50 } = {}) {
+export async function fetchAdminAssetRepairScope(
+  env,
+  { requestedSymbols = null, limit = 50 } = {},
+) {
   await seedStorageAuditQueueStep(env, {
     requestedSymbols,
     symbolBatch: ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH,
