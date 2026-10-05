@@ -58,6 +58,10 @@
      draws a bar: on Windows an empty scrollbar track sat under the tabs. */
   overflow: auto hidden;
   scrollbar-width: none;
+  /* The dialog panel is a flex column, and a scrolling row may shrink to nothing
+     there: with a tall History the row was 22 px over 42 px buttons, and on a
+     phone the tabs vanished (seen 2026-10-05). */
+  flex-shrink: 0;
 }
 
 .icono-caretaker-tabs button {
