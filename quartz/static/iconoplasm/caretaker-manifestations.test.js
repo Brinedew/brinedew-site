@@ -808,7 +808,7 @@ test("Auto-extract shows the Tag changes for review and applies them only on Kee
   assert.equal(saves(), 0)
 
   click("[data-icono-caretaker-review-keep]")
-  assert.equal(host.querySelector("[data-icono-caretaker-review]"), null)
+  assert.equal(host.querySelector("[data-icono-caretaker-review]") === null, true)
   assert.equal(tags.value, "red_coat")
   await new Promise((resolve) => setTimeout(resolve, 1400))
   assert.equal(saves(), 1)
@@ -843,7 +843,7 @@ test("Auto-correct shows the prose diff, Undo changes nothing, Keep applies and 
   assert.equal(prose.value, "Second body")
 
   click("[data-icono-caretaker-review-undo]")
-  assert.equal(host.querySelector("[data-icono-caretaker-review]"), null)
+  assert.equal(host.querySelector("[data-icono-caretaker-review]") === null, true)
   assert.equal(prose.hidden, false)
   assert.equal(prose.value, "Second body")
   await new Promise((resolve) => setTimeout(resolve, 1300))
