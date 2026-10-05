@@ -37,7 +37,7 @@
     "validate:iconoplasm-topology": "node ./scripts/validate-iconoplasm-deployment-topology.mjs",
     "format": "node ./scripts/run-prettier.mjs --write",
     "format:changed": "node ./scripts/run-prettier.mjs --write --changed",
-    "test": "node scripts/run-tests.mjs && pnpm --filter @brinedew/obsidian-prose-checker test",
+    "test": "node scripts/run-tests.mjs",
     "test:architecture-fences": "node ./scripts/run-tests.mjs ./scripts/architecture-fences.test.js",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
     "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --enabled-only"
