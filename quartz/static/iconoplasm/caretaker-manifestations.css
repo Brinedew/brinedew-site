@@ -621,6 +621,19 @@
   min-height: 0;
 }
 
+.icono-caretaker-timeline,
+.icono-caretaker-session__versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.icono-caretaker-timeline li {
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+}
+
 .icono-caretaker-timeline {
   display: grid;
   gap: 0.15rem;
