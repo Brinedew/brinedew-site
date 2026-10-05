@@ -136,3 +136,7 @@ iconoplasm-extension/.wxt-*/
 # Local plugin install leftovers
 .quartz/local-plugins/**/node_modules/
 
+
+# Agent scratch checkouts (Claude Code worktree isolation). Never project source;
+# the pre-push Prettier check would otherwise format their dist files.
+.claude/worktrees/
