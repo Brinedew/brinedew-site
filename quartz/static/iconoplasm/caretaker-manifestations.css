@@ -27,16 +27,14 @@
   scrollbar-width: thin;
 }
 
-/* The autosave state on the left, Close on the right. */
+/* The save state, Save and Close together on the right. */
 .icono-caretaker-panel__footer {
   flex-wrap: nowrap;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: flex-end;
 }
 
-.icono-caretaker-footer__status {
-  color: var(--darkgray);
-  font-size: 0.78rem;
+.icono-caretaker-footer__actions {
+  align-items: center;
 }
 
 .icono-caretaker-link-button {
@@ -364,61 +362,45 @@
   font: 0.76rem/1.45 var(--icono-action-font);
 }
 
-/* B-874: the save state is a cloud glyph (Google Docs convention), never a word.
-   Hollow = unsaved, arrow = saving, check = saved, slash = failed. */
+/* The save state sits beside Save and Close: a spinner with "Saving…", a check
+   with "Saved" (WordPress's editor), red "Not saved" with Retry. The spinner is
+   the gallery's loading ring (icono-feed-spin in styles.css). */
 [data-icono-caretaker-autosave-state] {
   display: inline-flex;
   align-items: center;
-  vertical-align: middle;
+  gap: 0.45rem;
+  margin-right: 0.4rem;
   color: var(--darkgray);
+  font: 0.8rem/1 var(--icono-action-font);
+  white-space: nowrap;
 }
 
-.icono-caretaker-cloud {
-  width: 1.35rem;
-  height: 1.35rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+[data-icono-caretaker-autosave-state][data-state="saving"]::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
 }
 
-.icono-caretaker-cloud__mark {
-  display: none;
+@media (prefers-reduced-motion: no-preference) {
+  [data-icono-caretaker-autosave-state][data-state="saving"]::before {
+    animation: icono-feed-spin 0.8s linear infinite;
+  }
 }
 
-[data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"],
-[data-icono-caretaker-autosave-state][data-state="saved"] [data-mark="saved"],
-[data-icono-caretaker-autosave-state][data-state="failed"] [data-mark="failed"] {
-  display: inline;
-}
-
-[data-icono-caretaker-autosave-state][data-state="unsaved"],
-[data-icono-caretaker-autosave-state][data-state="saving"] {
-  color: var(--secondary);
-}
-
-[data-icono-caretaker-autosave-state][data-state="unsaved"] .icono-caretaker-cloud__shape {
-  stroke-dasharray: 2.4 2.2;
+[data-icono-caretaker-autosave-state][data-state="saved"]::before {
+  content: "";
+  width: 0.75rem;
+  height: 0.4rem;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: rotate(-45deg) translate(1px, -2px);
 }
 
 [data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  [data-icono-caretaker-autosave-state][data-state="saving"] [data-mark="saving"] {
-    animation: icono-caretaker-cloud-lift 0.9s ease-in-out infinite alternate;
-  }
-}
-
-@keyframes icono-caretaker-cloud-lift {
-  from {
-    transform: translateY(1px);
-  }
-  to {
-    transform: translateY(-1.5px);
-  }
 }
 
 .icono-caretaker-editor__actions {

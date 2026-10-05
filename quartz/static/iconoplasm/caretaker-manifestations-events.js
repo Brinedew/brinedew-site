@@ -5,7 +5,7 @@ import {
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=42864a0b98779a3f"
+} from "./caretaker-manifestations-view.js?v=9241dc2a16d8eba3"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
