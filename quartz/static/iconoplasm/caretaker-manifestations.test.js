@@ -780,7 +780,8 @@ test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-
   assert.ok(button)
   assert.ok(host.querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]'))
   button.dispatchEvent(new Event("click", { bubbles: true }))
-  assert.equal(button.textContent, "Working…")
+  assert.equal(button.getAttribute("aria-busy"), "true")
+  assert.equal(button.textContent, "Auto-extract tags from prose")
   assert.equal(button.disabled, true)
   await new Promise((resolve) => setTimeout(resolve, 0))
   finishSuggestion()
@@ -792,11 +793,8 @@ test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-
   const tags = host.querySelector("[data-icono-caretaker-tags]")
   assert.equal(tags.value, "second_body, red_coat")
   assert.deepEqual(JSON.parse(tags.dataset.fieldsJson).outfit, ["red_coat"])
-  assert.equal(button.textContent, "Auto-extract tags from prose")
-  assert.equal(
-    host.querySelector("[data-icono-caretaker-status]").textContent,
-    "Suggestion filled in. Review it, then save.",
-  )
+  assert.equal(button.hasAttribute("aria-busy"), false)
+  assert.equal(host.querySelector("[data-icono-caretaker-status]").hidden, true)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").dataset.state, "unsaved")
 
   // Nothing is saved on its own, even after the autosave delay.

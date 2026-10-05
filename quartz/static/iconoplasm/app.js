@@ -299,7 +299,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=769ccc5e9990804d", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=54d2ff42610964a2", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -315,7 +315,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=1739a3b567a78a2d"),
+      import("./caretaker-manifestations.js?v=defb02c63ea7119c"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
       import("./caretaker-candidate-sources.js?v=afc907911f7064a2"),
     ]).then(function (modules) {
