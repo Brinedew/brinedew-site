@@ -639,14 +639,14 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       MAX_PROSE_CODE_POINTS.toLocaleString() +
       "</span>" +
       (helper
-        ? '<button type="button" class="icono-button" data-icono-caretaker-taggerize="tags_from_prose">Tags from prose</button>'
+        ? '<button type="button" class="icono-button" data-icono-caretaker-taggerize="tags_from_prose">Auto-extract tags from prose</button>'
         : "") +
       "</div>" +
       "</section>" +
       '<section class="icono-caretaker-pane icono-caretaker-pane--tags">' +
       '<div class="icono-caretaker-pane__label icono-caretaker-tags-heading">Generation tags</div><div class="icono-caretaker-tag-scroll" data-icono-caretaker-tag-categories></div>' +
       (helper
-        ? '<div class="icono-caretaker-editor__meta"><button type="button" class="icono-button" data-icono-caretaker-taggerize="prose_from_tags">Prose from Tags</button></div>'
+        ? '<div class="icono-caretaker-editor__meta"><button type="button" class="icono-button" data-icono-caretaker-taggerize="prose_from_tags">Auto-correct prose from tags</button></div>'
         : "") +
       '<textarea id="icono-caretaker-tags" class="icono-caretaker-tags-source" data-icono-caretaker-tags aria-hidden="true" tabindex="-1"' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
