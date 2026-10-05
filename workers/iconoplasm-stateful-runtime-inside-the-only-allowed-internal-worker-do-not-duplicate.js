@@ -96,6 +96,9 @@ import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
   createPublishedCardObjectStore,
+  canonicalPublishedJson,
+  PUBLISHED_OBJECT_STORAGE_UNAVAILABLE,
+  REQUEST_PICKER_OBJECT_KEY,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
@@ -10435,150 +10438,6 @@ function mapGenerationRequestVisionOptionRows(env, url, rows) {
     .filter(Boolean)
 }
 
-function mapSharedUserEmulsionOptionRows(env, url, userRows, rollupRows) {
-  const rollupByEmulsionId = new Map()
-  for (const row of Array.isArray(rollupRows) ? rollupRows : []) {
-    const emulsionId = sanitizeText(row?.emulsion_id || "", 64) || ""
-    if (emulsionId) rollupByEmulsionId.set(emulsionId, row)
-  }
-  return (Array.isArray(userRows) ? userRows : [])
-    .map((row) => {
-      const mapped = mapUserEmulsionVersionRow(row)
-      if (!mapped.text || mapped.revision <= 0) return null
-      const emulsionId = mapped.id
-      const ownerUsername =
-        sanitizeText(row?.username || "", 80) ||
-        sanitizeText(row?.user_id || row?.discord_id || "", 80) ||
-        ""
-      const rollup = rollupByEmulsionId.get(emulsionId) || {}
-      const pseudoVisionId = sanitizeVoteVisionId(`user-emulsion:${emulsionId}`)
-      if (!pseudoVisionId) return null
-      const publicLabel = mapped.slot > 0 ? `Emulsion ${mapped.slot}` : "Saved emulsion"
-      return {
-        option_type: "user_emulsion",
-        vision_id: pseudoVisionId,
-        emulsion_id: emulsionId,
-        user_emulsion_id: emulsionId,
-        label: publicLabel,
-        primary_label: publicLabel,
-        secondary_label: ownerUsername || "User emulsion",
-        owner_username: ownerUsername,
-        search_text: [emulsionId, ownerUsername].filter(Boolean).join(" "),
-        image_count: Math.max(0, Number(rollup?.image_count || 0) || 0),
-        live_count: Math.max(0, Number(rollup?.live_count || 0) || 0),
-        score: Math.max(0, Number(rollup?.live_count || 0) || 0),
-        vote_h_index: 0,
-        preview_assets: materializeGenerationRequestPreviewAssetsForPublic(
-          url,
-          env,
-          rollup?.preview_assets_json || "[]",
-        ),
-      }
-    })
-    .filter(Boolean)
-}
-
-async function listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds = []) {
-  if (!env.DB || !env.ICONOPLASM_DB) return []
-  const searchQuery = normalizeGenerationRequestOptionSearchQuery(
-    url?.searchParams?.get("query") || "",
-  )
-  let userRows = []
-  if (searchQuery) {
-    const usernamePrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "lower")
-      .replace(/^@+/, "")
-      .replace(/-\d+$/g, "")
-      .slice(0, 40)
-    const usernameUpper = textPrefixUpperBound(usernamePrefix)
-    const emulsionPrefix = compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper")
-    const emulsionUpper = textPrefixUpperBound(emulsionPrefix)
-    const resp = await env.DB.prepare(
-      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
-              COALESCE(s.slot, 0) AS public_slot
-       FROM iconoplasm_user_emulsion_versions v
-       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
-       WHERE v.revision > 0
-         AND COALESCE(v.emulsion_text, '') <> ''
-         AND (
-           (v.username >= ? AND v.username < ?)
-           OR (v.public_id >= ? AND v.public_id < ?)
-         )
-       ORDER BY v.revision DESC, v.created_at DESC
-       LIMIT 80`,
-    )
-      .bind(usernamePrefix, usernameUpper, emulsionPrefix, emulsionUpper)
-      .all()
-    userRows = Array.isArray(resp?.results) ? resp.results : []
-  } else {
-    const resp = await env.DB.prepare(
-      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
-              COALESCE(s.slot, 0) AS public_slot
-       FROM iconoplasm_user_emulsion_versions v
-       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
-       WHERE v.revision > 0
-         AND COALESCE(v.emulsion_text, '') <> ''
-       ORDER BY v.revision DESC, v.created_at DESC
-       LIMIT 40`,
-    ).all()
-    userRows = Array.isArray(resp?.results) ? resp.results : []
-  }
-  const favoriteIds = Array.from(
-    new Set(
-      (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
-        .map(normalizeFavoriteEmulsionFamilyId)
-        .filter(Boolean),
-    ),
-  )
-  if (!searchQuery && favoriteIds.length) {
-    const favoriteResp = await env.DB.prepare(
-      `SELECT v.user_id, v.username, v.public_id, v.revision, v.emulsion_text, v.created_at,
-              COALESCE(s.slot, 0) AS public_slot
-       FROM iconoplasm_user_emulsion_versions v
-       LEFT JOIN iconoplasm_user_emulsion_public_slots s ON s.public_id = v.public_id
-       WHERE v.revision > 0
-         AND COALESCE(v.emulsion_text, '') <> ''
-         AND upper(v.public_id) IN (
-           SELECT value FROM json_each(?)
-         )
-       ORDER BY v.revision DESC, v.created_at DESC`,
-    )
-      .bind(JSON.stringify(favoriteIds))
-      .all()
-    const seenFavoriteRows = new Set(
-      userRows.map((row) => normalizeFavoriteEmulsionFamilyId(mapUserEmulsionVersionRow(row).id)),
-    )
-    for (const row of Array.isArray(favoriteResp?.results) ? favoriteResp.results : []) {
-      const id = normalizeFavoriteEmulsionFamilyId(mapUserEmulsionVersionRow(row).id)
-      if (!id || seenFavoriteRows.has(id)) continue
-      seenFavoriteRows.add(id)
-      userRows.push(row)
-    }
-  }
-  const emulsionIds = Array.from(
-    new Set(
-      userRows
-        .map((row) => mapUserEmulsionVersionRow(row).id)
-        .filter((value) => sanitizeText(value, 64)),
-    ),
-  )
-  let rollupRows = []
-  if (emulsionIds.length) {
-    const placeholders = emulsionIds.map(() => "?").join(", ")
-    const rollupResp = await env.ICONOPLASM_DB.prepare(
-      // Request options must stay on this compact rollup. The migration and
-      // mutation hooks above keep it fresh; do not replace this with a live join
-      // over icono_portrait_assets in the picker path.
-      `SELECT emulsion_id, image_count, live_count, preview_assets_json
-       FROM icono_user_emulsion_option_rollup
-       WHERE emulsion_id IN (${placeholders})`,
-    )
-      .bind(...emulsionIds)
-      .all()
-    rollupRows = Array.isArray(rollupResp?.results) ? rollupResp.results : []
-  }
-  return mapSharedUserEmulsionOptionRows(env, url, userRows, rollupRows)
-}
-
 function annotateFavoriteGenerationRequestOptions(options, favoriteEmulsionIds) {
   const favorites = new Set(
     (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
@@ -10892,6 +10751,47 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
   return (await listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)).options
 }
 
+function generationRequestFirstPageOptions(env, url, rows) {
+  return groupGenerationRequestVisionOptions(mapGenerationRequestVisionOptionRows(env, url, rows))
+}
+
+// B-896: the picker's first page is the same for every player, so it lives on
+// the CDN (picker/v1/styles.json) and an open reads no D1 for it. Sized for a
+// viral day: 6,000 opens at 120 rows each was 720,000 reads; this job reads
+// 121 rows four times an hour, 11,616 a day, whatever the traffic. It writes
+// only when the bytes changed, the leaderboard's pattern (B-965).
+export async function publishRequestPickerObject(env) {
+  if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
+  const url = new URL(`${ICONOPLASM_CANONICAL_ORIGIN}/api/iconoplasm/requests/options`)
+  const firstPage = await readGenerationRequestStrengthPage(
+    env,
+    null,
+    GENERATION_REQUEST_FIRST_PAGE,
+  )
+  const object = {
+    request_options: generationRequestFirstPageOptions(env, url, firstPage.rows),
+    next_cursor: firstPage.nextCursor,
+  }
+  const bytes = new TextEncoder().encode(canonicalPublishedJson(object))
+  const summary = { styles: object.request_options.length, bytes: bytes.byteLength }
+  const objects = createPublishedCardObjectStore(env)
+  let stored
+  try {
+    stored = await objects.readStable(REQUEST_PICKER_OBJECT_KEY)
+  } catch (error) {
+    if (error?.code === PUBLISHED_OBJECT_STORAGE_UNAVAILABLE) {
+      return { ok: false, reason: "storage_unconfigured", ...summary }
+    }
+    throw error
+  }
+  const same =
+    stored?.bytes?.byteLength === bytes.byteLength &&
+    stored.bytes.every((value, index) => value === bytes[index])
+  if (same) return { ok: true, published: false, ...summary }
+  await objects.writeStable(REQUEST_PICKER_OBJECT_KEY, object)
+  return { ok: true, published: true, ...summary }
+}
+
 async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
   if (!env.ICONOPLASM_DB) return { options: [], nextCursor: "" }
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
@@ -10910,7 +10810,6 @@ async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
         nextCursor: "",
       }
     }
-    const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
     const emulsionPrefix = generationRequestEmulsionFamilyId(
       compactGenerationRequestOptionIdentityPrefix(searchQuery, "upper"),
     )
@@ -10977,7 +10876,7 @@ async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
     )
     return {
       options: annotateFavoriteGenerationRequestOptions(
-        [...groupedDatabaseOptions, ...(await sharedUserOptionsPromise)],
+        groupedDatabaseOptions,
         favoriteEmulsionIds,
       ),
       nextCursor: "",
@@ -10998,11 +10897,16 @@ async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
       nextCursor: page.nextCursor,
     }
   }
-  const sharedUserOptionsPromise = listSharedUserEmulsionOptions(env, url, favoriteEmulsionIds)
+  // `scope=favorites`: the player's own styles only. The picker reads the first
+  // page from the CDN (picker/v1/styles.json) and asks this only for favourites
+  // the page lacks: one index seek per favourite (B-896).
+  const favoritesOnly = url?.searchParams?.get("scope") === "favorites"
   const [favoriteRows, favoriteFactoryOptions, firstPage] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
     listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds),
-    readGenerationRequestStrengthPage(env, null, GENERATION_REQUEST_FIRST_PAGE),
+    favoritesOnly
+      ? { rows: [], nextCursor: "" }
+      : readGenerationRequestStrengthPage(env, null, GENERATION_REQUEST_FIRST_PAGE),
   ])
   const groupedVisionOptions = groupGenerationRequestVisionOptions(
     mapGenerationRequestVisionOptionRows(env, url, [...favoriteRows, ...firstPage.rows]),
@@ -11017,7 +10921,6 @@ async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
         ...groupedVisionOptions.filter(
           (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
         ),
-        ...(await sharedUserOptionsPromise),
       ],
       favoriteEmulsionIds,
     ),

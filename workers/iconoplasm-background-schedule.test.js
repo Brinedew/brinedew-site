@@ -59,6 +59,7 @@ test("every configured background event invokes exactly its one job, including d
   assert.equal(totals.manifestations, 120)
   assert.equal(totals.gallery, 97)
   assert.equal(totals.geneguessrBoard, 144)
+  assert.equal(totals.requestPicker, 96)
   assert.equal(totals.archive, 1)
   assert.equal(totals.canonRepair, 1)
 })
@@ -81,6 +82,15 @@ test("background schedules retain bounded cadence and never repeat nightly work 
       minutes.forEach((minute, i) =>
         assert.ok(
           minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 12,
+        ),
+      )
+      continue
+    }
+    if (job === "requestPicker") {
+      // The picker's first page (B-896) also takes free minutes: never 20 minutes stale.
+      minutes.forEach((minute, i) =>
+        assert.ok(
+          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 20,
         ),
       )
       continue
