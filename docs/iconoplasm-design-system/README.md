@@ -1,5 +1,33 @@
 # Iconoplasm — Design System
 
+## Before designing
+
+On 2026-10-04 (B-996, the caretaker sidebar) an agent made two mockups the owner rejected. The first was a timid reskin inside this document's rules. The second pasted the owner's reference posters on literally and decorated them with hand-drawn SVG stars. Neither changed the UX. Earlier strikes of the same kind came on 2026-09-25 and 2026-09-26. Work in this order:
+
+1. Read this document, the [Caretakers Handbook](../../content/wiki/Iconoplasm%20-%20Caretakers%20Handbook.md) and the live page: fonts, motifs, and the words already on screen.
+2. Measure real usage on the nightly D1 copy (`node scripts/d1-local.mjs <db> "<sql>"`): who uses the feature, the volumes and extremes, the churn, and which other channel (Discord, for example) already delivers the same thing. Write down the user's actual job and at least ten edge cases taken from those extremes, agree the need and don't-need lists with the owner, and record them on the issue as acceptance cases that every mockup must show. On B-996 the inbox was designed for "1 unread" from one screenshot; the data said 36 unread across 6 genes, 18-image batches, 162 requests in a day, and a caretaker switching genes four times in one night.
+3. List about ten mistakes in the current foundation, including the rules below, and decide which to break. The rules below were written by earlier agents. They are evidence, not law, and following them to the letter produces a reskin.
+4. Copy the interaction from one comparable product (a collection game for a collection game). Change the interaction, not just the paint.
+5. Translate the owner's references into Iconoplasm's own metaphor; never paste them on. The card already speaks of emulsion numbers, glass plates and print copies, so generating an image is developing a plate.
+6. Make textures and ornaments at print fidelity, never crude flat shapes such as SVG stars or checker rectangles. In 2026 professional packs are mostly free, so check the licence, not the price. Opus 5.5 practitioners also generate the material in code: grain, off-registration, halftone, shader paper.
+7. Write a brief, not a wish: a mood with exclusions, named type families, one memorable thing, explicit bans and named libraries. Then make several variants and choose between them; never show a single attempt.
+8. Mock it up in Paper. Before showing it, answer three questions: Did the UX change? Does it fit the theme? Does it look like a professional asset pack, or homemade from basic vector shapes?
+9. Never conclude the current design is "roughly right". The owner opened the issue because it isn't; find what's wrong, functionally and emotionally, before drawing.
+10. Compare every mockup with the live version and every variant already rejected. A restyled copy of the same layout isn't a new design.
+11. Paper's free plan allows 100 MCP calls a week. Don't spend them on capability tests or throwaway variants, and test any assumption about a tool before announcing a switch away from it.
+
+
+### The design landscape moves faster than agent training
+
+An agent's training data ends months before the work happens. On 2026-10-04 an agent assumed pro asset packs were paid and that buying one was the owner's call; both assumptions were stale. Before designing, run a dated search on the current practice and asset market, and trust only sources you opened. Checked 2026-10-04:
+
+- [Muzli, 2026-09-28](https://muz.li/blog/claude-opus-5-5-for-designers/): Opus 5.5 draws assets in code at print fidelity ("two-colour risograph prints … down to the slightly-off registration and paper grain"), with WebGL shaders, GSAP and Lenis, and screenshots its own work to critique it. Its brief pattern bans a cream background as a default look.
+- [Thomas Wiegold, 2026-08-21](https://thomas-wiegold.com/blog/best-llm-frontend-design/): generate variants and pick on taste; the judgment moved from drawing to choosing.
+- [Speckyboy, 2026](https://speckyboy.com/free-high-resolution-texture-packs/) and [Creative Market free goods](https://creativemarket.com/free-goods): professional texture packs are widely free.
+
+---
+
+
 > *"19,000+ gene portraits. Every human gene gets a unique color and portrait. Hover any symbol on any page for instant context."*
 
 Iconoplasm is a **wet-lab gene blot archive where each human protein-coding gene is a character.** It gives every gene a stable unique color, an illustrated portrait, and a mnemonic backstory — then surfaces that identity wherever you read about biology on the web.
