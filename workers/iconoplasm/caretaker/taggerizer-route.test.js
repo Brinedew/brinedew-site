@@ -271,6 +271,32 @@ test("Tags from prose returns exactly the shape the Tags save accepts, and Prose
     ok: true,
     suggestion: { prose: "A tall archivist." },
   })
+
+  // Gemma 4 thinks first unless told not to, and the thinking spends the
+  // completion budget. Both directions must switch it off (B-995, 2026-10-05).
+  assert.equal(calls[0].input.chat_template_kwargs?.enable_thinking, false)
+  assert.equal(rewrite.calls[0].input.chat_template_kwargs?.enable_thinking, false)
+})
+
+test("the reply production gave while thinking was on fails the way the caretaker saw it (golden, SOX11)", async (t) => {
+  // Workers AI, 2026-10-05, SOX11's 4,000-character prose with thinking on: the
+  // whole 1,200-token budget went to reasoning, the answer was empty.
+  const { handler } = await bootstrap(t, {
+    aiReply: {
+      choices: [
+        {
+          finish_reason: "length",
+          message: { role: "assistant", content: "", reasoning_content: "The user wants tags…" },
+        },
+      ],
+      usage: { prompt_tokens: 1188, completion_tokens: 1200 },
+    },
+  })
+  const response = await handler(
+    post(`${BASE}/taggerize`, { direction: "tags_from_prose", prose: PROSE }),
+  )
+  assert.equal(response.status, 502)
+  assert.equal((await response.json()).error.code, "TAGGERIZER_BAD_REPLY")
 })
 
 test("a model answer that is not JSON gets a plain 502 sentence, not a 500", async (t) => {

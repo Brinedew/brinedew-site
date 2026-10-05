@@ -1,5 +1,5 @@
 // B-995: the on-site taggerizer behind the caretaker editor's two buttons,
-// "Tags from prose" and "Prose from Tags". Both return a SUGGESTION; nothing is
+// "Auto-extract tags from prose" and "Auto-correct prose from tags". Both return a SUGGESTION; nothing is
 // saved here. The editor's own save path stores what the caretaker accepts.
 //
 // Engine: Cloudflare Workers AI through the `AI` binding.
@@ -229,6 +229,16 @@ export function taggerizerDisabled(env) {
   return String(env?.ICONOPLASM_TAGGERIZER_DISABLED || "") === "1" || !env?.AI
 }
 
+// Gemma 4 thinks before it answers unless the chat template is told not to, and the
+// thinking counts against max_completion_tokens. Measured on production Workers AI,
+// 2026-10-05, on SOX11's 4,000-character prose: Tags with thinking on spent all 1,200
+// tokens on 4,141 characters of reasoning and returned an empty answer
+// (finish_reason "length"), so every press failed with TAGGERIZER_BAD_REPLY; Prose
+// did the same at 4,096 tokens after 81 s and 122 neurons. With thinking off: Tags
+// 6 s, 202 tokens, 16 neurons; Prose 17 s, 815 tokens, 33 neurons, both parsed. A
+// bigger budget with thinking on also parses, at 98 s and 127 neurons a call.
+const NO_THINKING = Object.freeze({ enable_thinking: false })
+
 export function taggerizerRequest({ direction, prose, fields }) {
   if (direction === "tags_from_prose") {
     return {
@@ -240,6 +250,7 @@ export function taggerizerRequest({ direction, prose, fields }) {
         type: "json_schema",
         json_schema: tagsSchema(),
       },
+      chat_template_kwargs: NO_THINKING,
       max_completion_tokens: 1200,
       temperature: 0.2,
     }
@@ -257,6 +268,7 @@ export function taggerizerRequest({ direction, prose, fields }) {
         required: ["prose"],
       },
     },
+    chat_template_kwargs: NO_THINKING,
     max_completion_tokens: 4096,
     temperature: 0.3,
   }

@@ -792,7 +792,7 @@ test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-
   const tags = host.querySelector("[data-icono-caretaker-tags]")
   assert.equal(tags.value, "second_body, red_coat")
   assert.deepEqual(JSON.parse(tags.dataset.fieldsJson).outfit, ["red_coat"])
-  assert.equal(button.textContent, "Tags from prose")
+  assert.equal(button.textContent, "Auto-extract tags from prose")
   assert.equal(
     host.querySelector("[data-icono-caretaker-status]").textContent,
     "Suggestion filled in. Review it, then save.",
