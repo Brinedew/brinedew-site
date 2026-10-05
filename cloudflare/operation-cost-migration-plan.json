@@ -11,19 +11,6 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0115_taggerizer_daily_calls.sql": {
-      "online": true,
-      "guards": [
-        {
-          "sql": "SELECT COUNT(*) AS n FROM sqlite_schema WHERE name = 'icono_taggerizer_daily_calls'",
-          "max": 0
-        }
-      ],
-      "adapter_id": "iconoplasm-migration-0115",
-      "arguments": { "max_schema_rows": 512 },
-      "migration_protocol": "one-migration-per-release-v1",
-      "prediction": { "rows_read": 3000, "rows_written": 16, "requests": 1 }
-    },
     "iconoplasm-authoring/0020_restore_cropped_seed_bodies_part1.sql": {
       "online": true,
       "prediction": { "rows_read": 70000, "rows_written": 15200, "requests": 1 }
