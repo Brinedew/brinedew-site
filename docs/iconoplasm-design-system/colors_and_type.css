@@ -64,7 +64,7 @@
 :root {
   /* ---- 2. FONT FAMILY TOKENS --------------------------------------------- */
   --font-symbol: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif; /* gene symbol */
-  --font-label:  "IBM Plex Mono", ui-monospace, monospace;  /* pre-printed chrome */
+  --font-label:  "IBM Plex Mono", ui-monospace, monospace;  /* pre-printed form: labels, titles, instructions */
   --font-type:   "Special Elite", "IBM Plex Mono", monospace; /* typewritten values */
   --font-hand:   "Caveat", "Segoe Script", cursive;          /* pen annotations */
 
@@ -162,7 +162,7 @@
   transform-origin: left center;
 }
 
-/* Body / UI copy — plain mono. */
+/* Body / UI copy: the pre-printed form text (instructions, notes, empty states), left-aligned. */
 .t-body {
   font-family: var(--font-label);
   font-weight: 400;
