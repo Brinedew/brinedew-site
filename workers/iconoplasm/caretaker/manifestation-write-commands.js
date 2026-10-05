@@ -24,6 +24,11 @@ import {
   runCommand,
 } from "./manifestation-authority-repository.js"
 import { storageFields } from "./manifestation-storage-contract.js"
+import {
+  derivativeHeadSnapshot,
+  derivativeSnapshot,
+  manualTagsDerivative,
+} from "./manifestation-derivative-commands.js"
 
 function requireOpaqueObjectLocator(storage, revisionId) {
   const locator =
@@ -331,7 +336,11 @@ export async function seedSystemManifestation(
   }
 }
 
-export async function saveManifestationRevision(
+// Everything a caretaker save checks, and the rows its revision writes: the
+// lineage (new, or advanced to the new head), the revision, its storage (which
+// adopts the upload intent) and its lifecycle. The revision save and the
+// combined save (B-859 step 3) share it, so the rules exist once.
+async function prepareRevisionSave(
   db,
   {
     assignmentId,
@@ -341,7 +350,6 @@ export async function saveManifestationRevision(
     sourceRevisionId = null,
     manifestationId,
     revisionId,
-    eventUuid,
     idFactory = defaultIdFactory,
     now,
     ...command
@@ -352,7 +360,7 @@ export async function saveManifestationRevision(
     actorKind: "account",
     actorAccountId: command.actorAccountId,
   })
-  if (replay) return replay
+  if (replay) return { replay }
   const assignment = await requireAssignment(db, assignmentId)
   const actor = await requireActiveAccount(db, command.actorAccountId)
   if (assignment.account_id !== actor.account_id) {
@@ -497,14 +505,21 @@ export async function saveManifestationRevision(
         ),
       ]
     : []
-  try {
-    return await runCommand({
-      db,
-      ...cmd,
-      commandType: "manifestation.save",
-      geneId: gene.gene_id,
-      response,
-      guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
+  return {
+    actor,
+    assignment,
+    cmd,
+    gene,
+    head,
+    nextHead,
+    nextManifestation,
+    revision,
+    response,
+    timestamp,
+    manifestationId: manifestationIdNorm,
+    revisionId: revisionIdNorm,
+    sourceRevisionId: sourceRevisionIdNorm,
+    guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
       SELECT ?, CASE WHEN EXISTS (
         SELECT 1
           FROM icono_caretaker_assignments a
@@ -526,65 +541,251 @@ export async function saveManifestationRevision(
               )
             )
       ) THEN 1 ELSE 0 END`,
-      guardParams: [
-        cmd.commandId,
-        assignment.caretaker_assignment_id,
-        actor.account_id,
-        expectedAssignment,
-        expectedManifestation,
-        expectedManifestation,
-      ],
+    guardParams: [
+      cmd.commandId,
+      assignment.caretaker_assignment_id,
+      actor.account_id,
+      expectedAssignment,
+      expectedManifestation,
+      expectedManifestation,
+    ],
+    statements: [
+      ...manifestationStatements,
+      ...revisionInsertStatements(db, {
+        manifestationId: manifestationIdNorm,
+        revisionId: revisionIdNorm,
+        revisionNumber,
+        parentRevisionId: previousRevision?.manifestation_revision_id || null,
+        sourceRevisionId: sourceRevisionIdNorm,
+        baseSelectionId: head.canonical_selection_id,
+        actorAccountId: actor.account_id,
+        assignmentId: assignment.caretaker_assignment_id,
+        storage,
+        timestamp,
+      }),
+      prepared(
+        db,
+        `UPDATE icono_manifestations
+            SET manifestation_head_revision_id = ?, row_version = row_version + ?,
+                updated_at = ?
+          WHERE manifestation_id = ?`,
+        revisionIdNorm,
+        isNewManifestation ? 0 : 1,
+        timestamp,
+        manifestationIdNorm,
+      ),
+    ],
+  }
+}
+
+export async function saveManifestationRevision(
+  db,
+  { eventUuid, idFactory = defaultIdFactory, ...input } = {},
+) {
+  const save = await prepareRevisionSave(db, { idFactory, ...input })
+  if (save.replay) return save.replay
+  try {
+    return await runCommand({
+      db,
+      ...save.cmd,
+      commandType: "manifestation.save",
+      geneId: save.gene.gene_id,
+      response: save.response,
+      guardSql: save.guardSql,
+      guardParams: save.guardParams,
       statements: [
-        ...manifestationStatements,
-        ...revisionInsertStatements(db, {
-          manifestationId: manifestationIdNorm,
-          revisionId: revisionIdNorm,
-          revisionNumber,
-          parentRevisionId: previousRevision?.manifestation_revision_id || null,
-          sourceRevisionId: sourceRevisionIdNorm,
-          baseSelectionId: head.canonical_selection_id,
-          actorAccountId: actor.account_id,
-          assignmentId: assignment.caretaker_assignment_id,
-          storage,
-          timestamp,
-        }),
-        prepared(
-          db,
-          `UPDATE icono_manifestations
-              SET manifestation_head_revision_id = ?, row_version = row_version + ?,
-                  updated_at = ?
-            WHERE manifestation_id = ?`,
-          revisionIdNorm,
-          isNewManifestation ? 0 : 1,
-          timestamp,
-          manifestationIdNorm,
-        ),
+        ...save.statements,
         prepared(
           db,
           `UPDATE icono_manifestation_heads
               SET gene_revision = gene_revision + 1, updated_at = ?
             WHERE gene_id = ? AND gene_revision = ?`,
+          save.timestamp,
+          save.gene.gene_id,
+          Number(save.head.gene_revision),
+        ),
+        eventStatement(db, {
+          eventUuid: createId(eventUuid, "event_uuid", "event", idFactory),
+          commandId: save.cmd.commandId,
+          geneId: save.gene.gene_id,
+          geneRevision: save.nextHead.gene_revision,
+          manifestationId: save.manifestationId,
+          revisionId: save.revisionId,
+          assignmentId: save.assignment.caretaker_assignment_id,
+          payloadJson: eventPayload({
+            cause: save.sourceRevisionId
+              ? "manifestation.revision_forked"
+              : "manifestation.revision_saved",
+            gene: save.gene,
+            head: save.nextHead,
+            assignment: save.assignment,
+            manifestation: save.nextManifestation,
+            revision: save.revision,
+          }),
+        }),
+      ],
+    })
+  } catch (error) {
+    throw commitFailure(error)
+  }
+}
+
+// B-859 step 3: one caretaker autosave as one command. The editor used to send
+// four (revision, Tags, Tags head, canonical selection); each wrote its own
+// guard, receipt and event and woke its own projection drain, 151 rows in all
+// (caretaker-save-cost.workerd.test.js). This writes the revision, its Tags,
+// the Tags head and the canonical selection in one batch, under one guard,
+// receipt and event. The event is one gene snapshot carrying every change; the
+// workstation replica applies an event's records whatever produced them
+// (Iconoplasm manifestation_authority_replica_events.apply_event_page).
+//
+// The canonical selection insert bumps the gene revision (its trigger requires
+// head + 1), so nothing else in the batch touches it. A stale head aborts the
+// batch through that trigger, which runCommand reports as STALE_AUTHORITY_STATE.
+export async function saveManifestationWithTags(
+  db,
+  {
+    tags,
+    expectedHeadVersion,
+    expectedCanonicalRevisionId,
+    selectionId,
+    eventUuid,
+    idFactory = defaultIdFactory,
+    ...input
+  } = {},
+) {
+  const save = await prepareRevisionSave(db, { idFactory, ...input })
+  if (save.replay) return save.replay
+  const { actor, assignment, cmd, gene, head, timestamp } = save
+  const expectedHead = normalizeVersion(expectedHeadVersion, "expected_head_version")
+  const expectedCanonical = normalizeOptionalId(
+    expectedCanonicalRevisionId,
+    "expected_canonical_revision_id",
+  )
+  if (
+    expectedHead !== Number(head.head_version) ||
+    expectedCanonical !== (head.canonical_revision_id || null)
+  ) {
+    throw authorityError(
+      "STALE_AUTHORITY_STATE",
+      "The gene's canonical version changed before this save was prepared",
+      409,
+    )
+  }
+  const derivativeId = createId(
+    tags?.derivativeId,
+    "manifestation_derivative_id",
+    "derivative",
+    idFactory,
+  )
+  const { derivative, statements: derivativeStatements } = manualTagsDerivative(db, {
+    ...tags,
+    derivativeId,
+    revisionId: save.revisionId,
+    sourceBodySha256: save.revision.body_sha256,
+    timestamp,
+  })
+  // The revision insert's trigger creates its Tags head at version 0.
+  const derivativeHead = {
+    manifestation_revision_id: save.revisionId,
+    accepted_derivative_id: derivativeId,
+    derivative_head_version: 1,
+  }
+  const selectionIdNorm = createId(selectionId, "canonical_selection_id", "selection", idFactory)
+  const nextHead = {
+    ...head,
+    canonical_manifestation_id: save.manifestationId,
+    canonical_revision_id: save.revisionId,
+    canonical_selection_id: selectionIdNorm,
+    head_version: Number(head.head_version) + 1,
+    gene_revision: Number(head.gene_revision) + 1,
+  }
+  const changedSelection = canonicalSelectionRecord({
+    selectionId: selectionIdNorm,
+    geneId: gene.gene_id,
+    head,
+    nextHead,
+    manifestationId: save.manifestationId,
+    revisionId: save.revisionId,
+    actorAccountId: actor.account_id,
+    assignmentId: assignment.caretaker_assignment_id,
+    reason: "select",
+    commandId: cmd.commandId,
+    timestamp,
+  })
+  try {
+    return await runCommand({
+      db,
+      ...cmd,
+      commandType: "manifestation.save_with_tags",
+      geneId: gene.gene_id,
+      response: {
+        ...save.response,
+        canonical_changed: true,
+        canonical_revision_id: save.revisionId,
+        canonical_selection_id: selectionIdNorm,
+        head_version: nextHead.head_version,
+        gene_revision: nextHead.gene_revision,
+        manifestation_derivative_id: derivativeId,
+        derivative_head_version: derivativeHead.derivative_head_version,
+        tags_storage_adoption: {
+          status: "adopted",
+          manifestation_derivative_id: derivativeId,
+        },
+      },
+      guardSql: save.guardSql,
+      guardParams: save.guardParams,
+      statements: [
+        ...save.statements,
+        ...derivativeStatements,
+        prepared(
+          db,
+          `UPDATE icono_manifestation_derivative_heads
+              SET accepted_derivative_id = ?, derivative_head_version = 1, updated_at = ?
+            WHERE manifestation_revision_id = ? AND derivative_head_version = 0`,
+          derivativeId,
           timestamp,
+          save.revisionId,
+        ),
+        prepared(
+          db,
+          `INSERT INTO icono_manifestation_canonical_selections (
+             canonical_selection_id, gene_id, previous_selection_id, previous_revision_id,
+             selected_manifestation_id, selected_revision_id, actor_account_id,
+             caretaker_assignment_id, reason, command_id, head_version, gene_revision, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'select', ?, ?, ?, ?)`,
+          selectionIdNorm,
           gene.gene_id,
-          Number(head.gene_revision),
+          head.canonical_selection_id,
+          head.canonical_revision_id,
+          save.manifestationId,
+          save.revisionId,
+          actor.account_id,
+          assignment.caretaker_assignment_id,
+          cmd.commandId,
+          nextHead.head_version,
+          nextHead.gene_revision,
+          timestamp,
         ),
         eventStatement(db, {
           eventUuid: createId(eventUuid, "event_uuid", "event", idFactory),
           commandId: cmd.commandId,
           geneId: gene.gene_id,
           geneRevision: nextHead.gene_revision,
-          manifestationId: manifestationIdNorm,
-          revisionId: revisionIdNorm,
+          manifestationId: save.manifestationId,
+          revisionId: save.revisionId,
+          selectionId: selectionIdNorm,
           assignmentId: assignment.caretaker_assignment_id,
           payloadJson: eventPayload({
-            cause: sourceRevisionIdNorm
-              ? "manifestation.revision_forked"
-              : "manifestation.revision_saved",
+            cause: "manifestation.saved_with_tags",
             gene,
             head: nextHead,
             assignment,
-            manifestation: nextManifestation,
-            revision,
+            manifestation: save.nextManifestation,
+            revision: save.revision,
+            changedSelection,
+            changedDerivative: derivativeSnapshot(derivative),
+            derivativeHead: derivativeHeadSnapshot(derivativeHead),
           }),
         }),
       ],
