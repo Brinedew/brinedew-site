@@ -33,6 +33,8 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 ## Pull requests from feature worktrees
 
+**Before and after every push.** The repository's pre-push hook (`.githooks/pre-push`) runs the two cheap checks CI's `build-and-test` runs first: `pnpm run check:format` (Prettier) and `pnpm run check:stamps` (module stamps). It runs on every branch, plus the full `pnpm check` on `main`. Enable it once per clone with `git config core.hooksPath .githooks`; worktrees share the setting. After pushing, watch the PR's `build-and-test` until it passes before calling the work ready. On 2026-10-04, #497 and #498 failed on Prettier alone and sat red for about six hours, with hooks off, while they were described as proven. Had it run on, B-977's merge night would have been lost.
+
 From a feature worktree, merge with `gh pr merge <number> --squash` and clean up the local worktree separately. GitHub CLI's `--delete-branch` can complete the remote merge and then exit with a local checkout error because `main` is in the primary worktree. After any uncertain merge result, read `gh pr view <number> --json state,mergeCommit` before retrying or reporting failure; `MERGED` and the merge commit are the source of truth.
 
 ## Architecture fence registry
