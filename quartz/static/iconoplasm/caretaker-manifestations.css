@@ -58,6 +58,10 @@
      draws a bar: on Windows an empty scrollbar track sat under the tabs. */
   overflow: auto hidden;
   scrollbar-width: none;
+  /* The dialog panel is a flex column, and a scrolling row may shrink to nothing
+     there: with a tall History the row was 22 px over 42 px buttons, and on a
+     phone the tabs vanished (seen 2026-10-05). */
+  flex-shrink: 0;
 }
 
 .icono-caretaker-tabs button {
@@ -397,6 +401,20 @@
   border-bottom: 1.5px solid currentColor;
   border-left: 1.5px solid currentColor;
   transform: rotate(-45deg) translate(1px, -2px);
+}
+
+/* The pressed Auto button while its suggestion loads: the same ring, no word. */
+[data-icono-caretaker-taggerize][aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.45rem;
+  vertical-align: -0.1rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: icono-feed-spin 0.8s linear infinite;
 }
 
 [data-icono-caretaker-autosave-state][data-state="failed"] {

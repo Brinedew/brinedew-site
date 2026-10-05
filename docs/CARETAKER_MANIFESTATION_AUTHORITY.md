@@ -84,11 +84,14 @@ body is deleted.
 
 ## The Tags helper only suggests
 
-The editor's "Tags from prose" and "Prose from Tags" buttons call
+The editor's "Auto-extract tags from prose" and "Auto-correct prose from tags" buttons call
 `POST /api/iconoplasm/caretaker/genes/<gene>/taggerize`
 (`workers/iconoplasm/caretaker/taggerizer.js`). The route answers with a suggestion and
 saves nothing; the editor fills it in, marks it unsaved and waits for the caretaker's
-Save, which uses the ordinary revision and Tags-derivative commands. Only the gene's
+Save, which uses the ordinary revision and Tags-derivative commands. For prose, the
+editor also sends the Tags last saved with it; the model is told only what changed and
+returns find/replace edits, which the route applies, so text no edit touches stays
+exactly as the caretaker wrote it. Only the gene's
 active caretaker may call it. It runs Cloudflare Workers AI (`AI` binding, model id in
 the module header) on the free plan's 10,000 Neurons a day, so each caretaker gets 30
 calls per UTC day (`icono_taggerizer_daily_calls`, one upsert per call) and
