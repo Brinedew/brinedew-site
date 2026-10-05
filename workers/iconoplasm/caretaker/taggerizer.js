@@ -83,18 +83,74 @@ export const TAGS_FROM_PROSE_SYSTEM_PROMPT = [
     '"background":[],"composition":[]}',
 ].join("\n")
 
+// B-995, 2026-10-05: the model used to retype the whole prose to change a few words,
+// and the retyping drifted. On SOX11 it changed cream to emerald as asked, but also
+// slight to slender, added "curvy" and "combat orchestrator", doubled the paragraph
+// breaks and finished the cut-off ending. It now returns find/replace edits (the
+// search/replace-block pattern code-editing assistants use), and applyProseEdits()
+// applies them, so text no edit touches stays byte-for-byte the caretaker's.
 export const PROSE_FROM_TAGS_SYSTEM_PROMPT = [
-  "You edit a caretaker's written description of a character so that it agrees with the character's Tags.",
+  "You correct a caretaker's written description of a character where it disagrees with the character's Tags.",
   "The Tags were corrected by the caretaker and are the source of truth.",
   "",
+  "Return the smallest set of edits. Each edit replaces one exact passage of the prose:",
+  '- "find" is copied from the prose character for character, just long enough to occur only once.',
+  '- "replace" is the corrected passage.',
+  "",
   "Rules:",
-  "- Rewrite the given prose as little as possible: change only what contradicts the Tags, and add short mentions of Tags the prose never covers.",
-  "- Keep the caretaker's voice, tense, sentence style and paragraph breaks.",
-  "- Do not invent features that neither the prose nor the Tags state.",
-  "- If the prose is empty, write one short descriptive paragraph from the Tags alone.",
-  `- Never exceed ${ICONOPLASM_MANIFESTATION_PROSE_MAX_CODE_POINTS} characters.`,
-  '- Return ONLY a JSON object of the form {"prose": "<the full rewritten prose>"}. No markdown, no commentary.',
+  "- Edit only words that contradict a Tag: the prose states one value and a Tag states a different value for the same thing.",
+  "- A detail the Tags do not mention is not a contradiction. Keep it: never delete, move or shorten it.",
+  "- A Tag the prose already expresses, in any words, needs no edit.",
+  "- A Tag the prose never mentions at all gets a few words added to the most fitting existing sentence; add words, never replace them.",
+  "- Keep the caretaker's voice. Never invent features that neither the prose nor the Tags state.",
+  "- Never touch text that does not contradict a Tag: no rephrasing, no finishing, no reformatting.",
+  "- If nothing contradicts the Tags, return no edits.",
+  '- If the prose is empty, return one edit whose "find" is "" and whose "replace" is one short paragraph written from the Tags.',
+  '- Return ONLY a JSON object of the form {"edits": [{"find": "...", "replace": "..."}]}. No markdown, no commentary.',
 ].join("\n")
+
+// The usual case: the caretaker changed some Tags and wants the prose to follow.
+// Owner's idea, 2026-10-05: send only what changed. Measured on SOX11, 3 runs
+// each: cream to emerald camisole, platinum hair, an added pearl_earrings, and a
+// skirt swap plus earrings were all right 12 of 12, against 0 of 3 for the added
+// earrings when the model got every Tag and had to spot the difference itself.
+export const PROSE_FROM_TAG_CHANGES_SYSTEM_PROMPT = [
+  "You update a caretaker's written description of a character after the caretaker changed some of its Tags.",
+  "You are given the Tags that were removed and the Tags that were added. Only those changes matter.",
+  "",
+  "Return the smallest set of edits. Each edit replaces one exact passage of the prose:",
+  '- "find" is copied from the prose character for character, just long enough to occur only once.',
+  '- "replace" is the corrected passage.',
+  "",
+  "Rules:",
+  "- For a removed Tag, change the words that express it; if an added Tag replaces it, use the added Tag's value.",
+  "- For an added Tag the prose does not yet express, add a few words to the most fitting existing sentence; add words, never replace them.",
+  "- Touch nothing else: no rephrasing, no finishing, no reformatting, even where the prose and the other Tags differ.",
+  "- Keep the caretaker's voice. Never invent features.",
+  '- Return ONLY a JSON object of the form {"edits": [{"find": "...", "replace": "..."}]}. No markdown, no commentary.',
+].join("\n")
+
+// Applies the model's edits to the caretaker's prose. An edit whose "find" is not
+// in the prose exactly once is skipped: a guessed or ambiguous passage must never
+// rewrite the wrong sentence.
+export function applyProseEdits(prose, edits) {
+  const source = String(prose || "")
+  const list = Array.isArray(edits) ? edits : []
+  if (!source.trim()) {
+    const first = list.find((edit) => typeof edit?.replace === "string" && edit.replace.trim())
+    return first ? first.replace.trim() : source
+  }
+  let result = source
+  for (const edit of list) {
+    const find = typeof edit?.find === "string" ? edit.find : ""
+    const replace = typeof edit?.replace === "string" ? edit.replace : null
+    if (!find || replace == null || find === replace) continue
+    const at = result.indexOf(find)
+    if (at < 0 || result.indexOf(find, at + 1) >= 0) continue
+    result = result.slice(0, at) + replace + result.slice(at + find.length)
+  }
+  return result
+}
 
 // Fields the editor already holds, as the lines the model reads: "face: square_jaw, crooked_nose".
 function tagLines(fields) {
@@ -184,10 +240,13 @@ export function parseTaggerReply(reply) {
   return { tags_text: tags.join(", "), fields_json: fields }
 }
 
-export function parseProseReply(reply) {
+export function parseProseReply(reply, prose) {
   const value = modelJson(reply)
+  if (!Array.isArray(value?.edits)) {
+    throw new TaggerizerError("TAGGERIZER_BAD_REPLY", TAGGERIZER_MESSAGES.badReply, 502)
+  }
   try {
-    return { prose: normalizeManifestationProse(value?.prose).prose }
+    return { prose: normalizeManifestationProse(applyProseEdits(prose, value.edits)).prose }
   } catch {
     throw new TaggerizerError("TAGGERIZER_BAD_REPLY", TAGGERIZER_MESSAGES.badReply, 502)
   }
@@ -209,20 +268,46 @@ export function readTaggerizerInput(body) {
     }
     return { direction, prose, fields: null }
   }
-  // The editor can hold string-valued or extra metadata fields; only tag lists count here.
   const source = body.tags_fields
   if (!source || typeof source !== "object" || Array.isArray(source)) {
     throw new TaggerizerError("TAGGERIZER_TAGS_INVALID", TAGGERIZER_MESSAGES.needTags, 400)
   }
+  const fields = tagListFields(source)
+  if (!Object.values(fields).some((tags) => tags.length)) {
+    throw new TaggerizerError("TAGGERIZER_TAGS_REQUIRED", TAGGERIZER_MESSAGES.needTags, 400)
+  }
+  // The Tags as last saved with this prose. Optional: without them the model checks
+  // the prose against every Tag.
+  const previous = body.previous_tags_fields
+  const previousFields =
+    previous && typeof previous === "object" && !Array.isArray(previous)
+      ? tagListFields(previous)
+      : null
+  return { direction, prose, fields, previousFields }
+}
+
+// The editor can hold string-valued or extra metadata fields; only tag lists count here.
+function tagListFields(source) {
   const fields = {}
   for (const [category, value] of Object.entries(source)) {
     const list = Array.isArray(value) ? value : typeof value === "string" ? [value] : []
     fields[category] = list.filter((tag) => typeof tag === "string" && tag.trim()).slice(0, 200)
   }
-  if (!Object.values(fields).some((tags) => tags.length)) {
-    throw new TaggerizerError("TAGGERIZER_TAGS_REQUIRED", TAGGERIZER_MESSAGES.needTags, 400)
+  return fields
+}
+
+// What the caretaker changed since the last save, as "category: tag" lines.
+export function tagDelta(previousFields, fields) {
+  const missingFrom = (from, other) =>
+    Object.entries(from).flatMap(([category, tags]) =>
+      tags
+        .filter((tag) => !(other[category] || []).includes(tag))
+        .map((tag) => `${category}: ${tag}`),
+    )
+  return {
+    removed: missingFrom(previousFields, fields),
+    added: missingFrom(fields, previousFields),
   }
-  return { direction, prose, fields }
 }
 
 export function taggerizerDisabled(env) {
@@ -239,7 +324,26 @@ export function taggerizerDisabled(env) {
 // bigger budget with thinking on also parses, at 98 s and 127 neurons a call.
 const NO_THINKING = Object.freeze({ enable_thinking: false })
 
-export function taggerizerRequest({ direction, prose, fields }) {
+function proseMessages(prose, fields, previousFields) {
+  const changes = previousFields && prose.trim() ? tagDelta(previousFields, fields) : null
+  if (changes && (changes.removed.length || changes.added.length)) {
+    return [
+      { role: "system", content: PROSE_FROM_TAG_CHANGES_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content:
+          `Removed Tags:\n${changes.removed.join("\n") || "(none)"}\n\n` +
+          `Added Tags:\n${changes.added.join("\n") || "(none)"}\n\nProse:\n${prose}`,
+      },
+    ]
+  }
+  return [
+    { role: "system", content: PROSE_FROM_TAGS_SYSTEM_PROMPT },
+    { role: "user", content: `Tags:\n${tagLines(fields)}\n\nProse:\n${prose || "(empty)"}` },
+  ]
+}
+
+export function taggerizerRequest({ direction, prose, fields, previousFields = null }) {
   if (direction === "tags_from_prose") {
     return {
       messages: [
@@ -256,21 +360,28 @@ export function taggerizerRequest({ direction, prose, fields }) {
     }
   }
   return {
-    messages: [
-      { role: "system", content: PROSE_FROM_TAGS_SYSTEM_PROMPT },
-      { role: "user", content: `Tags:\n${tagLines(fields)}\n\nProse:\n${prose || "(empty)"}` },
-    ],
+    messages: proseMessages(prose, fields, previousFields),
     response_format: {
       type: "json_schema",
       json_schema: {
         type: "object",
-        properties: { prose: { type: "string" } },
-        required: ["prose"],
+        properties: {
+          edits: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { find: { type: "string" }, replace: { type: "string" } },
+              required: ["find", "replace"],
+            },
+          },
+        },
+        required: ["edits"],
       },
     },
     chat_template_kwargs: NO_THINKING,
-    max_completion_tokens: 4096,
-    temperature: 0.3,
+    // Room for a from-scratch paragraph when the prose is empty; edits use far less.
+    max_completion_tokens: 2048,
+    temperature: 0.2,
   }
 }
 
@@ -302,7 +413,9 @@ export async function runTaggerizer(env, input, nowMs = Date.now()) {
     }
     throw new TaggerizerError("TAGGERIZER_UNAVAILABLE", TAGGERIZER_MESSAGES.unavailable, 502)
   }
-  return input.direction === "tags_from_prose" ? parseTaggerReply(reply) : parseProseReply(reply)
+  return input.direction === "tags_from_prose"
+    ? parseTaggerReply(reply)
+    : parseProseReply(reply, input.prose)
 }
 
 // One caretaker-day counter, one D1 upsert per admitted call. Over the limit, the

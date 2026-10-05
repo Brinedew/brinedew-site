@@ -692,6 +692,15 @@ export function createCaretakerManifestationPanel({
     scheduleAutosave(state)
   }
 
+  function savedTagFields(state, tagsControl) {
+    try {
+      if (state.lastSavedFingerprint) return JSON.parse(state.lastSavedFingerprint)[2] || null
+      return JSON.parse(tagsControl.dataset.initialFieldsJson || "null")
+    } catch {
+      return null
+    }
+  }
+
   // B-995: ask the server for a suggestion, fill it into the editor, save nothing.
   // The fill goes through the same input event typing does, so the draft and the
   // "Unsaved changes" mark follow; the Save button then releases it to autosave.
@@ -724,6 +733,9 @@ export function createCaretakerManifestationPanel({
           direction,
           prose: sentProse,
           tags_fields: JSON.parse(sentFields),
+          // The Tags last saved with this prose (or opened with it), so the
+          // server can send the model only what the caretaker changed.
+          previous_tags_fields: savedTagFields(state, tagsControl),
         }),
       })
       // Typing while it loaded means the person moved on; their text wins.

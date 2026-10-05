@@ -259,18 +259,29 @@ test("Tags from prose returns exactly the shape the Tags save accepts, and Prose
   assert.equal(body.tags.tags_text, suggestion.tags_text)
   assert.deepEqual(body.tags.fields_json, suggestion.fields_json)
 
-  const rewrite = await bootstrap(t, { aiReply: modelReply({ prose: "A tall archivist." }) })
+  // Prose from Tags: the model returns edits, and only what they touch changes.
+  // The caretaker swapped red_coat for blue_coat, so the model is told just that.
+  const rewrite = await bootstrap(t, {
+    aiReply: modelReply({ edits: [{ find: "a red coat", replace: "a blue coat" }] }),
+  })
   const proseResponse = await rewrite.handler(
     post(`${BASE}/taggerize`, {
       direction: "prose_from_tags",
       prose: PROSE,
-      tags_fields: { outfit: ["red_coat"] },
+      tags_fields: { outfit: ["blue_coat", "gloves"] },
+      previous_tags_fields: { outfit: ["red_coat", "gloves"] },
     }),
   )
   assert.deepEqual(await proseResponse.json(), {
     ok: true,
-    suggestion: { prose: "A tall archivist." },
+    suggestion: {
+      prose: "A tall archivist in a blue coat with a careful gaze and ink-stained gloves.",
+    },
   })
+  const asked = rewrite.calls[0].input.messages[1].content
+  assert.equal(asked.includes("Removed Tags:\noutfit: red_coat"), true)
+  assert.equal(asked.includes("Added Tags:\noutfit: blue_coat"), true)
+  assert.equal(asked.includes("outfit: gloves"), false)
 
   // Gemma 4 thinks first unless told not to, and the thinking spends the
   // completion budget. Both directions must switch it off (B-995, 2026-10-05).
@@ -297,6 +308,43 @@ test("the reply production gave while thinking was on fails the way the caretake
   )
   assert.equal(response.status, 502)
   assert.equal((await response.json()).error.code, "TAGGERIZER_BAD_REPLY")
+})
+
+// Golden, SOX11, 2026-10-05. Before edits, "prose from Tags" retyped all 4,000
+// characters and drifted (slight to slender, an invented "combat orchestrator",
+// doubled paragraph breaks, a finished cut-off ending). These are the edits Gemma 4
+// returned live for cream_silk_camisole -> emerald_silk_camisole; the test proves
+// everything outside them comes back byte for byte, and that an edit whose passage
+// is missing or ambiguous is skipped rather than guessed.
+test("prose edits change only their passages (golden, SOX11)", async () => {
+  const { applyProseEdits } = await import("./taggerizer.js")
+  const golden = JSON.parse(
+    readFileSync(
+      new URL("../../fixtures/caretaker-history-diff-sox11-golden.json", import.meta.url),
+      "utf8",
+    ),
+  )
+  const prose = golden.before
+  const edits = [
+    {
+      find: "beneath it sits a cream silk camisole with delicate lace trim at the neckline",
+      replace: "beneath it sits an emerald silk camisole with delicate lace trim at the neckline",
+    },
+    {
+      find: "the color story lives in black, cream, and faded teal with burgundy accents",
+      replace: "the color story lives in black, emerald, and faded teal with burgundy accents",
+    },
+    { find: "cream", replace: "ivory" }, // gone after the edits above: skipped
+    { find: "no such passage", replace: "anything" },
+  ]
+  const result = applyProseEdits(prose, edits)
+  assert.equal(result.includes("cream"), false)
+  assert.equal(result.includes("ivory"), false)
+  assert.equal(
+    result.replace("an emerald silk", "a cream silk").replace("black, emerald,", "black, cream,"),
+    prose,
+  )
+  assert.equal(applyProseEdits("", [{ find: "", replace: " A red coat. " }]), "A red coat.")
 })
 
 test("a model answer that is not JSON gets a plain 502 sentence, not a 500", async (t) => {
