@@ -1,5 +1,5 @@
-// B-874 walkthrough, items 3 and 6: the modal names the task, not a database
-// object, and says what the caretaker's text does at the moment they read it.
+// B-874 walkthrough: the modal is named in the owner's words (2026-10-05),
+// not after a database object, and history speaks plainly.
 // String assertions only; no DOM nodes reach an assertion.
 import assert from "node:assert/strict"
 import test from "node:test"
@@ -48,11 +48,11 @@ function dossier({ visible = false, state = "active" } = {}) {
   }
 }
 
-test("the title names the task and the gene, not a record", () => {
+test("the title is the panel and the gene, not a record", () => {
   const html = renderCaretakerManifestationPanel(dossier(), escapeHtml)
   assert.equal(html.includes("Caretaker record"), false)
   assert.equal(
-    /<h2 class="icono-dialog__title" id="icono-caretaker-title"[^>]*>Caring for STAT5A<\/h2>/.test(
+    /<h2 class="icono-dialog__title" id="icono-caretaker-title"[^>]*>Caretaker panel: STAT5A<\/h2>/.test(
       html,
     ),
     true,
@@ -71,19 +71,6 @@ test("an active role shows no state pill; exceptional states still do", () => {
     /icono-caretaker-panel__state" data-state="suspended">suspended</.test(suspended),
     true,
   )
-})
-
-test("the editor says what the text feeds and whether readers see it", () => {
-  const hidden = renderCaretakerManifestationPanel(dossier({ visible: false }), escapeHtml)
-  assert.equal(
-    hidden.includes("New pictures of STAT5A are drawn from this text and its tags."),
-    true,
-  )
-  assert.equal(hidden.includes("Readers don’t see it; you can show it in Settings."), true)
-  const shown = renderCaretakerManifestationPanel(dossier({ visible: true }), escapeHtml)
-  assert.equal(shown.includes("Readers also see it on the gene page."), true)
-  // The sentence is tied to the textarea for screen readers.
-  assert.equal(/aria-describedby="icono-caretaker-prose-purpose"/.test(hidden), true)
 })
 
 test("history speaks plainly about how tags were made", () => {

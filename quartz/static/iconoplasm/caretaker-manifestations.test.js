@@ -815,6 +815,32 @@ test("Tags from prose fills the editor, marks it unsaved, and waits for Save (B-
   )
 })
 
+// Owner, 2026-10-05: an Auto-correct click during a save looked ignored. The
+// save state now says "Saving…" beside Close and the Auto buttons grey out.
+test("while a save is in flight the state says Saving… and the Auto buttons grey out", async () => {
+  let finishSave
+  const { host, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return { ...dossier(), taggerizer_enabled: true }
+    if (path.endsWith("/revisions")) {
+      await new Promise((resolve) => (finishSave = resolve))
+      return { manifestation_revision_id: "revision_3" }
+    }
+    return { ok: true }
+  })
+  assert.equal(autosaveState(), "Saving…")
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  const helper = host.querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]')
+  assert.equal(typeof finishSave, "function")
+  assert.equal(autosaveState(), "Saving…")
+  assert.equal(helper.disabled, true)
+  assert.equal(host.querySelector("[data-icono-caretaker-prose]").disabled, false)
+  assert.equal(host.querySelector("[data-icono-dialog-close]").disabled, false)
+  finishSave()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(autosaveState(), "Saved")
+  assert.equal(helper.disabled, false)
+})
+
 test("the Tags helper buttons are hidden when the server switches it off (B-995)", async () => {
   const { document } = parseHTML('<div id="host"></div>')
   globalThis.document = document

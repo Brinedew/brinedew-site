@@ -3,7 +3,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=546fbff437444cf7"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=247b87dc07affc85"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,9 +15,9 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=061f1b27d6945213"
+} from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
 import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=20456045b4ad1d9d"
+import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=9241dc2a16d8eba3"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -101,8 +101,11 @@ export function createCaretakerManifestationPanel({
     state.host.querySelectorAll("button, textarea, input").forEach(function (control) {
       // B-874: an autosave never greys out the editor, the tabs or Close. Closing
       // mid-save is safe: the save finishes in the background and the draft is local.
+      // The Auto buttons do grey out: taggerize() refuses mid-save, and its refusal
+      // used to be a status line below the fold, so the click looked ignored (B-995).
       const editing =
         state.autosaving &&
+        !control.hasAttribute("data-icono-caretaker-taggerize") &&
         control.closest(
           "[data-icono-caretaker-editor], [data-icono-caretaker-tab], [data-icono-dialog-close]",
         )
@@ -484,7 +487,9 @@ export function createCaretakerManifestationPanel({
     }
   }
 
-  // B-874: the glyph carries the state; the word stays for screen readers and the tooltip.
+  // The word is the state (WordPress's editor says "Saving" and "Saved"); CSS adds
+  // a spinner or a check. "Unsaved changes" shows only while a filled-in
+  // suggestion waits for the caretaker's Save.
   const AUTOSAVE_LABELS = Object.freeze({
     unsaved: "Unsaved changes",
     saving: "Saving…",
@@ -497,7 +502,6 @@ export function createCaretakerManifestationPanel({
     if (!target) return
     const label = AUTOSAVE_LABELS[kind]
     target.dataset.state = kind
-    target.title = label
     const text = target.querySelector("[data-icono-caretaker-autosave-label]")
     if (text) text.textContent = label
     else target.textContent = label
@@ -537,7 +541,8 @@ export function createCaretakerManifestationPanel({
     if (state.autosaveFailed) return autosaveIndicator(state, "failed")
     // B-995: a filled-in suggestion waits for the caretaker's own Save.
     if (state.suggestionHold) return autosaveIndicator(state, "unsaved")
-    autosaveIndicator(state, "unsaved")
+    // The save starts in 1.1 s; Google Docs also says "Saving…" from the keystroke.
+    autosaveIndicator(state, "saving")
     state.autosaveTimer = globalThis.setTimeout(function () {
       void autosave(state)
     }, 1100)
