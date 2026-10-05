@@ -233,6 +233,14 @@ export function generationCompletionWriteUnits(requestCount) {
 // authority (isReplicaCostRoute), which admits it against its own declared bound.
 export const TAGS_DERIVATIVE_SUBMIT_ROWS = 54
 
+// A workstation regeneration (B-1011): one system revision with its Tags, the
+// Tags head and, while the system text is canonical, the selection, as one
+// command. The same statements as the caretaker's combined save, measured at 66
+// authoring + 18 primary rows on workerd (caretaker-save-cost.workerd.test.js,
+// B-859); the system lineage's row_version update and margin bring it to 96.
+// Derived from that sibling measurement, not measured on this route itself.
+export const SYSTEM_REVISION_APPEND_ROWS = 96
+
 // Per route: the rows one admitted request may write, from its parsed body.
 //   units 0     no reservation: the route writes no row (material is reads only)
 //   perCall     every request is a new operation (a claim takes new leases, so
@@ -268,6 +276,10 @@ const LAPTOP_ROUTE_SIZING = Object.freeze({
   authority_tags_derivative_submit: Object.freeze({
     perCall: false,
     units: () => atLeastFloor(TAGS_DERIVATIVE_SUBMIT_ROWS),
+  }),
+  authority_system_revision_append: Object.freeze({
+    perCall: false,
+    units: () => atLeastFloor(SYSTEM_REVISION_APPEND_ROWS),
   }),
 })
 

@@ -907,6 +907,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "manifestation_authority_service",
+    id: "authority_system_revision_append",
+    match: pattern(/^\/api\/iconoplasm\/authority\/genes\/([^/]+)\/system-revisions$/, ["gene_id"]),
+    methods: POST,
+    auth: "authority-replica-bearer",
+    budgetFamily: "authority_workstation_write",
+  }),
+  iconoplasmApiContract({
+    apiHandler: "manifestation_authority_service",
     id: "authority_tags_derivative_submit",
     match: pattern(/^\/api\/iconoplasm\/authority\/revisions\/([^/]+)\/tags-derivatives$/, [
       "revision_id",
