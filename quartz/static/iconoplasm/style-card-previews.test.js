@@ -13,7 +13,10 @@ import { assignStyleCardPreviews } from "./style-card-previews.js"
 //    left out;
 // 4. another card's canonical gene is taken as somebody's candidate;
 // 5. a card shows two or three portraits (the art is a 2x2 mosaic or one);
-// 6. a style with portraits ends up with an empty card.
+// 6. a style with portraits ends up with an empty card;
+// 7. a card that falls back takes a later card's own canonical portrait away
+//    (2026-10-05: three tiny styles fell back to STAT5A, shown 4 times);
+// 8. fallbacks pile onto one gene instead of spreading.
 const { options } = JSON.parse(
   readFileSync(
     new URL("../../../workers/fixtures/style-picker-options-2026-10-05.json", import.meta.url),
@@ -36,6 +39,13 @@ function check(list) {
     }
   })
   const cardsByGene = new Map()
+  // 7. Every card shows its own best canonical portrait.
+  list.forEach((option, index) => {
+    const own = option.preview_assets.find(
+      (preview) => preview.is_current && canonicalOwner.get(geneOf(preview)) === index,
+    )
+    if (own) assert.equal(shown[index][0]?.asset_sha256, own.asset_sha256, `card ${index}`)
+  })
   shown.forEach((previews, index) => {
     assert.ok([0, 1, 4].includes(previews.length), `card ${index}: ${previews.length} portraits`)
     if (list[index].preview_assets.length) assert.ok(previews.length > 0, `card ${index} empty`)
@@ -83,9 +93,11 @@ test("Favorites: the owner's sixteen styles show each gene once", () => {
   assert.equal(favorites.length, 16)
   const { shown, repeats } = check(favorites)
   // Before: STAT5A x4, ACVR2B x3, SRC x3 and seven more genes on two cards.
-  // After: only the 2- and 7-blot styles drawn on STAT5A and GAB1 repeat,
-  // because every gene they have is already on screen.
-  assert.deepEqual(repeats.sort(), ["GAB1", "STAT5A"])
+  // After: only the 2- to 7-blot styles whose every gene is already on screen
+  // repeat one, and 8. no gene shows more than twice.
+  assert.deepEqual(repeats.sort(), ["ATR", "GAB1", "STAT5A"])
+  const times = (gene) => shown.flat().filter((preview) => preview.gene_symbol === gene).length
+  for (const gene of repeats) assert.ok(times(gene) <= 2, `${gene} shows ${times(gene)} times`)
   const acvr2b = shown.flat().filter((preview) => preview.gene_symbol === "ACVR2B")
   assert.equal(acvr2b.length, 1)
   // 0-255 and 0-343 have four canonical portraits each and keep them all.
@@ -98,7 +110,7 @@ test("Favorites: the owner's sixteen styles show each gene once", () => {
 
 test("All styles: 127 cards, no repeats beyond the tiny shared-gene styles", () => {
   const { shown, repeats } = check(options)
-  assert.deepEqual(repeats.sort(), ["GAB1", "STAT5A"])
+  assert.deepEqual(repeats.sort(), ["ATR", "GAB1", "STAT5A"])
   assert.ok(shown.filter((previews) => previews.length === 4).length >= 100)
 })
 
