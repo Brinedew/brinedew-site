@@ -73,10 +73,16 @@ const SHA = /^[0-9a-f]{64}$/
 
 function newestCopy(database) {
   const pattern = new RegExp(`^${database}-[0-9a-f]{64}\\.sqlite$`)
-  const files = existsSync(LOCAL_COPIES) ? readdirSync(LOCAL_COPIES).filter((name) => pattern.test(name)) : []
+  const files = existsSync(LOCAL_COPIES)
+    ? readdirSync(LOCAL_COPIES).filter((name) => pattern.test(name))
+    : []
   if (!files.length)
-    throw new Error(`No unpacked ${database} copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs ${database} "SELECT 1"`)
-  return files.map((name) => path.join(LOCAL_COPIES, name)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
+    throw new Error(
+      `No unpacked ${database} copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs ${database} "SELECT 1"`,
+    )
+  return files
+    .map((name) => path.join(LOCAL_COPIES, name))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
 }
 
 export function readTriggers(databasePath, names) {
@@ -84,8 +90,11 @@ export function readTriggers(databasePath, names) {
   try {
     return Object.fromEntries(
       names.map((name) => {
-        const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?").get(name)
-        if (!row?.sql) throw new Error(`Trigger ${name} is missing from ${path.basename(databasePath)}`)
+        const row = db
+          .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+          .get(name)
+        if (!row?.sql)
+          throw new Error(`Trigger ${name} is missing from ${path.basename(databasePath)}`)
         return [name, row.sql]
       }),
     )
@@ -115,7 +124,11 @@ export function readLineage(authoring, symbol) {
 }
 
 // One rewrite against its lineage: validated with the Worker's own preparers.
-export async function planRewrite(lineage, rewrite, idFactory = (prefix) => `${prefix}_${randomUUID().replaceAll("-", "")}`) {
+export async function planRewrite(
+  lineage,
+  rewrite,
+  idFactory = (prefix) => `${prefix}_${randomUUID().replaceAll("-", "")}`,
+) {
   if (!lineage) return { skip: "no_system_seed_lineage" }
   let prose
   try {
@@ -137,7 +150,8 @@ export async function planRewrite(lineage, rewrite, idFactory = (prefix) => `${p
   }
   for (const key of ["recipe_id", "recipe_version", "provider_id", "model_id"])
     if (!TOKEN.test(String(rewrite[key] ?? ""))) return { skip: "provenance_invalid", detail: key }
-  if (!SHA.test(String(rewrite.tagger_config_sha256 ?? ""))) return { skip: "provenance_invalid", detail: "tagger_config_sha256" }
+  if (!SHA.test(String(rewrite.tagger_config_sha256 ?? "")))
+    return { skip: "provenance_invalid", detail: "tagger_config_sha256" }
   const select =
     lineage.canonical_revision_id === lineage.head_revision_id &&
     lineage.canonical_manifestation_id === lineage.manifestation_id
@@ -187,12 +201,35 @@ function chunks(list, size) {
 }
 
 const FIX_COLUMNS = Object.freeze([
-  "gene_id", "manifestation_id", "old_revision_id", "new_revision_id", "new_revision_number",
-  "base_selection_id", "old_head_version", "old_gene_revision", "do_select", "selection_id",
-  "command_id", "body_sha256", "body_bytes", "prose_key", "prose_etag", "derivative_id",
-  "tags_body_sha256", "tags_body_bytes", "tags_sha256", "tags_bytes", "fields_sha256",
-  "fields_bytes", "recipe_id", "recipe_version", "provider_id", "model_id",
-  "tagger_config_sha256", "tags_key", "tags_etag",
+  "gene_id",
+  "manifestation_id",
+  "old_revision_id",
+  "new_revision_id",
+  "new_revision_number",
+  "base_selection_id",
+  "old_head_version",
+  "old_gene_revision",
+  "do_select",
+  "selection_id",
+  "command_id",
+  "body_sha256",
+  "body_bytes",
+  "prose_key",
+  "prose_etag",
+  "derivative_id",
+  "tags_body_sha256",
+  "tags_body_bytes",
+  "tags_sha256",
+  "tags_bytes",
+  "fields_sha256",
+  "fields_bytes",
+  "recipe_id",
+  "recipe_version",
+  "provider_id",
+  "model_id",
+  "tagger_config_sha256",
+  "tags_key",
+  "tags_etag",
 ])
 
 function fixRow(u) {
@@ -300,7 +337,9 @@ SELECT fix.selection_id, fix.gene_id, h.canonical_selection_id, h.canonical_revi
                   AND dh.accepted_derivative_id = fix.derivative_id);`,
     )
   }
-  lines.push(...BYPASSED_TRIGGERS.map((name) => `${String(triggers[name]).trim().replace(/;$/, "")};`))
+  lines.push(
+    ...BYPASSED_TRIGGERS.map((name) => `${String(triggers[name]).trim().replace(/;$/, "")};`),
+  )
   return `${lines.join("\n\n")}\n`
 }
 
@@ -308,10 +347,26 @@ SELECT fix.selection_id, fix.gene_id, h.canonical_selection_id, h.canonical_revi
 // on the copy's canonical revision, head version and gene revision.
 export function projectionMigrationSql({ uploads, triggers }) {
   const columns = [
-    "gene_id", "old_revision_id", "old_head_version", "old_gene_revision", "new_revision_id",
-    "selection_id", "body_sha256", "body_bytes", "derivative_id", "tags_body_sha256",
-    "tags_body_bytes", "tags_sha256", "tags_bytes", "fields_sha256", "fields_bytes",
-    "recipe_id", "recipe_version", "provider_id", "model_id", "tagger_config_sha256",
+    "gene_id",
+    "old_revision_id",
+    "old_head_version",
+    "old_gene_revision",
+    "new_revision_id",
+    "selection_id",
+    "body_sha256",
+    "body_bytes",
+    "derivative_id",
+    "tags_body_sha256",
+    "tags_body_bytes",
+    "tags_sha256",
+    "tags_bytes",
+    "fields_sha256",
+    "fields_bytes",
+    "recipe_id",
+    "recipe_version",
+    "provider_id",
+    "model_id",
+    "tagger_config_sha256",
   ]
   const lines = [
     "-- B-994: the canonical projection follows the appended rewrites",
@@ -319,8 +374,13 @@ export function projectionMigrationSql({ uploads, triggers }) {
     "-- The event-replay guard is dropped for this batch (no event rows) and recreated verbatim.",
     ...BYPASSED_PROJECTION_TRIGGERS.map((name) => `DROP TRIGGER IF EXISTS ${name};`),
   ]
-  for (const part of chunks(uploads.filter((u) => u.select), STATEMENT_ROWS)) {
-    const values = part.map((u) => `(${columns.map((column) => sqlValue(u[column])).join(", ")})`).join(",\n  ")
+  for (const part of chunks(
+    uploads.filter((u) => u.select),
+    STATEMENT_ROWS,
+  )) {
+    const values = part
+      .map((u) => `(${columns.map((column) => sqlValue(u[column])).join(", ")})`)
+      .join(",\n  ")
     lines.push(`WITH fix(${columns.join(", ")}) AS (VALUES
   ${values}
 )
@@ -344,7 +404,11 @@ UPDATE icono_manifestation_canonical_projection AS p
  WHERE p.gene_id = fix.gene_id AND p.canonical_revision_id = fix.old_revision_id
    AND p.head_version = fix.old_head_version AND p.gene_revision = fix.old_gene_revision;`)
   }
-  lines.push(...BYPASSED_PROJECTION_TRIGGERS.map((name) => `${String(triggers[name]).trim().replace(/;$/, "")};`))
+  lines.push(
+    ...BYPASSED_PROJECTION_TRIGGERS.map(
+      (name) => `${String(triggers[name]).trim().replace(/;$/, "")};`,
+    ),
+  )
   return `${lines.join("\n\n")}\n`
 }
 
@@ -409,15 +473,19 @@ async function putVerified(env, key, bytes, expectedSha256) {
 
 async function upload({ maxGenes }) {
   const planned = readJson(path.join(OUT, "plan.json"))
-  const rewrites = new Map(readRewrites(planned.rewrites).map((r) => [String(r.symbol).toUpperCase(), r]))
+  const rewrites = new Map(
+    readRewrites(planned.rewrites).map((r) => [String(r.symbol).toUpperCase(), r]),
+  )
   const receiptPath = path.join(OUT, "uploads.json")
   const receipt = existsSync(receiptPath) ? readJson(receiptPath) : { uploads: [] }
   const done = new Set(receipt.uploads.map((u) => u.new_revision_id))
   const env = {
-    ICONOPLASM_AUTHORING_STORAGE_ZONE: process.env.ICONOPLASM_AUTHORING_STORAGE_ZONE || "iconoplasm-authoring",
+    ICONOPLASM_AUTHORING_STORAGE_ZONE:
+      process.env.ICONOPLASM_AUTHORING_STORAGE_ZONE || "iconoplasm-authoring",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: process.env.ICONOPLASM_AUTHORING_STORAGE_PASSWORD,
   }
-  if (!env.ICONOPLASM_AUTHORING_STORAGE_PASSWORD) throw new Error("Set ICONOPLASM_AUTHORING_STORAGE_PASSWORD to upload")
+  if (!env.ICONOPLASM_AUTHORING_STORAGE_PASSWORD)
+    throw new Error("Set ICONOPLASM_AUTHORING_STORAGE_PASSWORD to upload")
   let sent = 0
   try {
     for (const gene of planned.genes) {
@@ -425,14 +493,16 @@ async function upload({ maxGenes }) {
       if (sent >= maxGenes) break
       const rewrite = rewrites.get(gene.symbol.toUpperCase())
       const prose = await prepareManifestationProse(rewrite?.prose ?? "")
-      if (prose.body_sha256 !== gene.body_sha256) throw new Error(`${gene.symbol}: the rewrite changed since plan`)
+      if (prose.body_sha256 !== gene.body_sha256)
+        throw new Error(`${gene.symbol}: the rewrite changed since plan`)
       const tags = await prepareManifestationTagsPayload({
         tagsText: rewrite.tags_text,
         tagsSha256: rewrite.tags_sha256,
         fieldsJson: rewrite.fields_json,
         fieldsSha256: rewrite.fields_sha256,
       })
-      if (tags.output_plain_sha256 !== gene.tags_body_sha256) throw new Error(`${gene.symbol}: the Tags changed since plan`)
+      if (tags.output_plain_sha256 !== gene.tags_body_sha256)
+        throw new Error(`${gene.symbol}: the Tags changed since plan`)
       const proseKey = await createManifestationBodyObjectKey()
       const tagsKey = await createManifestationBodyObjectKey()
       const proseResult = await putVerified(env, proseKey, prose.bytes, gene.body_sha256)
@@ -453,7 +523,13 @@ async function upload({ maxGenes }) {
   } finally {
     writeJson(receiptPath, receipt)
   }
-  console.log(JSON.stringify({ uploaded_now: sent, uploaded_total: receipt.uploads.length, planned: planned.genes.length }))
+  console.log(
+    JSON.stringify({
+      uploaded_now: sent,
+      uploaded_total: receipt.uploads.length,
+      planned: planned.genes.length,
+    }),
+  )
 }
 
 // A D1-shaped wrapper over node:sqlite, enough for the authority and public readers.
@@ -462,9 +538,15 @@ function sqliteD1(raw) {
     bind: (...p) => statement(sql, p),
     first: async () => raw.prepare(sql).get(...params) || null,
     all: async () => ({ results: raw.prepare(sql).all(...params) }),
-    run: async () => ({ success: true, meta: { changes: Number(raw.prepare(sql).run(...params).changes) } }),
+    run: async () => ({
+      success: true,
+      meta: { changes: Number(raw.prepare(sql).run(...params).changes) },
+    }),
   })
-  return { prepare: (sql) => statement(sql), batch: async (list) => Promise.all(list.map((s) => s.run())) }
+  return {
+    prepare: (sql) => statement(sql),
+    batch: async (list) => Promise.all(list.map((s) => s.run())),
+  }
 }
 
 // Local only: applies the real generated SQL to copies of the nightly production
@@ -472,12 +554,13 @@ function sqliteD1(raw) {
 // planned gene. Bodies are served from memory under rehearsal keys; no network.
 async function rehearse({ authoringPath, mainPath }) {
   const { splitMigrationSql } = await import("./generate-operation-cost-migrations.mjs")
-  const { readPublicCanonicalMaterial } = await import(
-    "../workers/iconoplasm/caretaker/manifestation-public-canonical-material.js"
-  )
+  const { readPublicCanonicalMaterial } =
+    await import("../workers/iconoplasm/caretaker/manifestation-public-canonical-material.js")
   const { copyFileSync } = await import("node:fs")
   const planned = readJson(path.join(OUT, "plan.json"))
-  const rewrites = new Map(readRewrites(planned.rewrites).map((r) => [String(r.symbol).toUpperCase(), r]))
+  const rewrites = new Map(
+    readRewrites(planned.rewrites).map((r) => [String(r.symbol).toUpperCase(), r]),
+  )
   const objects = new Map()
   const uploads = []
   for (const gene of planned.genes) {
@@ -486,7 +569,13 @@ async function rehearse({ authoringPath, mainPath }) {
     const proseKey = await createManifestationBodyObjectKey()
     const tagsKey = await createManifestationBodyObjectKey()
     objects.set(proseKey, prose.bytes)
-    uploads.push({ ...gene, prose_key: proseKey, prose_etag: '"r"', tags_key: tagsKey, tags_etag: '"r"' })
+    uploads.push({
+      ...gene,
+      prose_key: proseKey,
+      prose_etag: '"r"',
+      tags_key: tagsKey,
+      tags_etag: '"r"',
+    })
   }
   const work = path.join(os.tmpdir(), "b994-rehearsal")
   mkdirSync(work, { recursive: true })
@@ -498,8 +587,15 @@ async function rehearse({ authoringPath, mainPath }) {
   const main = new DatabaseSync(mainCopy)
   const now = new Date().toISOString()
   try {
-    const authoringSql = authoringMigrationSql({ uploads, triggers: readTriggers(authoringCopy, BYPASSED_TRIGGERS), now })
-    const projectionSql = projectionMigrationSql({ uploads, triggers: readTriggers(mainCopy, BYPASSED_PROJECTION_TRIGGERS) })
+    const authoringSql = authoringMigrationSql({
+      uploads,
+      triggers: readTriggers(authoringCopy, BYPASSED_TRIGGERS),
+      now,
+    })
+    const projectionSql = projectionMigrationSql({
+      uploads,
+      triggers: readTriggers(mainCopy, BYPASSED_PROJECTION_TRIGGERS),
+    })
     const before = authoring.prepare("SELECT total_changes() AS n").get().n
     for (const s of splitMigrationSql(authoringSql, PARTS.authoring)) authoring.exec(s)
     const authoringRows = authoring.prepare("SELECT total_changes() AS n").get().n - before
@@ -509,7 +605,9 @@ async function rehearse({ authoringPath, mainPath }) {
       const parts = new URL(String(url)).pathname.split("/").filter(Boolean)
       parts.shift()
       const bytes = objects.get(parts.join("/"))
-      return bytes ? new Response(bytes, { status: 200, headers: { etag: '"r"' } }) : new Response(null, { status: 404 })
+      return bytes
+        ? new Response(bytes, { status: 200, headers: { etag: '"r"' } })
+        : new Response(null, { status: 404 })
     }
     const env = {
       ICONOPLASM_AUTHORING_STORAGE_HOST: "rehearsal.invalid",
@@ -528,7 +626,10 @@ async function rehearse({ authoringPath, mainPath }) {
             env,
             geneId: u.gene_id,
           })
-          if (material.canonical?.manifestation_revision_id !== (u.select ? u.new_revision_id : material.canonical?.manifestation_revision_id))
+          if (
+            material.canonical?.manifestation_revision_id !==
+            (u.select ? u.new_revision_id : material.canonical?.manifestation_revision_id)
+          )
             failures.push({ symbol: u.symbol, error: "canonical_not_switched" })
           else served++
         } catch (error) {
@@ -562,8 +663,12 @@ async function main(argv) {
   }
   if (step === "plan") {
     const rewritesPath = flag("--rewrites")
-    if (!rewritesPath) throw new Error("plan needs --rewrites <file.jsonl> from export_pending_rewrites.py")
-    await plan({ rewritesPath, authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")) })
+    if (!rewritesPath)
+      throw new Error("plan needs --rewrites <file.jsonl> from export_pending_rewrites.py")
+    await plan({
+      rewritesPath,
+      authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")),
+    })
   } else if (step === "rehearse") {
     await rehearse({
       authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")),
@@ -575,9 +680,14 @@ async function main(argv) {
     const planned = readJson(path.join(OUT, "plan.json"))
     const { uploads } = readJson(path.join(OUT, "uploads.json"))
     if (uploads.length !== planned.genes.length)
-      throw new Error(`Only ${uploads.length} of ${planned.genes.length} genes are uploaded; finish upload first`)
+      throw new Error(
+        `Only ${uploads.length} of ${planned.genes.length} genes are uploaded; finish upload first`,
+      )
     const now = new Date().toISOString()
-    const projectionTriggers = readTriggers(flag("--main", newestCopy("iconoplasm")), BYPASSED_PROJECTION_TRIGGERS)
+    const projectionTriggers = readTriggers(
+      flag("--main", newestCopy("iconoplasm")),
+      BYPASSED_PROJECTION_TRIGGERS,
+    )
     writeFileSync(
       path.join(ROOT, "migrations-iconoplasm-authoring", PARTS.authoring),
       authoringMigrationSql({ uploads, triggers: planned.triggers, now }),
@@ -586,9 +696,17 @@ async function main(argv) {
       path.join(ROOT, "migrations-iconoplasm", PARTS.projection),
       projectionMigrationSql({ uploads, triggers: projectionTriggers }),
     )
-    console.log(JSON.stringify({ ...PARTS, genes: uploads.length, selected: uploads.filter((u) => u.select).length }))
+    console.log(
+      JSON.stringify({
+        ...PARTS,
+        genes: uploads.length,
+        selected: uploads.filter((u) => u.select).length,
+      }),
+    )
   } else {
-    throw new Error("Usage: append-rewritten-system-revisions.mjs plan --rewrites FILE | upload [--max-genes N] | sql")
+    throw new Error(
+      "Usage: append-rewritten-system-revisions.mjs plan --rewrites FILE | upload [--max-genes N] | sql",
+    )
   }
 }
 
