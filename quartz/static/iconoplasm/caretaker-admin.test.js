@@ -9,6 +9,7 @@ const CONTROLLER_SOURCE_NAMES = [
   "caretaker-admin-registry.js",
   "caretaker-admin-detail.js",
   "caretaker-admin-offer.js",
+  "caretaker-admin-cooldown.js",
   "caretaker-admin.js",
 ]
 const CONTROLLER_SOURCES = await Promise.all(

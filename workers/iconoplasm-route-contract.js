@@ -1094,6 +1094,13 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_image_edit_prompts",
   }),
   iconoplasmApiContract({
+    id: "admin_caretaker_switch_cooldown",
+    match: exact("/api/iconoplasm/admin/caretaker-switch-cooldown"),
+    methods: GET_POST,
+    auth: "administrator",
+    budgetFamily: "admin_caretaker_switch_cooldown",
+  }),
+  iconoplasmApiContract({
     id: "image_edit_providers",
     match: exact("/api/iconoplasm/image-edit/providers"),
     methods: GET_POST,

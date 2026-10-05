@@ -455,3 +455,16 @@
     width: 100%;
   }
 }
+
+/* B-1021: gene change cooldown setting. */
+.caretaker-admin__cooldown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.caretaker-admin__cooldown input {
+  width: 6rem;
+}

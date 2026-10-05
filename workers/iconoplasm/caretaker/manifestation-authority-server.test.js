@@ -16,6 +16,12 @@ import {
 } from "./manifestation-authority.js"
 
 import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
+import {
+  CARETAKER_SWITCH_COOLDOWN_KV_KEY,
+  createCaretakerSwitchPolicy,
+  readCaretakerSwitchCooldown,
+  writeCaretakerSwitchCooldown,
+} from "./caretaker-switch-cooldown.js"
 import { createD1InvocationBudget } from "../../lib/d1-invocation-budget.js"
 
 const NOW = "2026-08-30T00:00:00.000Z"
@@ -593,6 +599,171 @@ test("a browser caretaker switch keeps the old tenure if the new claim cannot co
     row(context.db, "SELECT count(*) AS total FROM icono_manifestation_events").total,
     eventCount,
   )
+})
+
+// B-1021: a caretaker takes a new gene at most once per cooldown (15 minutes
+// unless the admin changes it); the admin account is exempt. Ways it can fail:
+// 1. a caretaker inside the cooldown is still offered a switch;
+// 2. a direct POST switches anyway;
+// 3. ending one role and claiming another gene dodges the cooldown;
+// 4. the admin is held by it;
+// 5. after the cooldown, claiming stays refused;
+// 6. a replay of an accepted switch is refused by the cooldown it started;
+// 7. the setting accepts junk, isn't 15 minutes while unset, or 0 doesn't disable it.
+test("B-1021: the gene switch cooldown holds caretakers, closes the end-and-claim gap and exempts the admin", async (t) => {
+  const context = await bootstrap(t, "7021")
+  const seedTarget = async (suffix) => {
+    const geneId = `gene_cool_${suffix}`
+    const symbol = `CL${suffix}`
+    await registerGeneIdentity(context.db, { geneId, canonicalSymbol: symbol, now: NOW })
+    await seedSystemManifestation(context.db, {
+      geneId,
+      storage: storage(Number(suffix)),
+      expectedHeadVersion: 0,
+      expectedCanonicalRevisionId: null,
+      manifestationId: `manifestation_cool_seed_${suffix}`,
+      revisionId: `revision_cool_seed_${suffix}`,
+      selectionId: `selection_cool_seed_${suffix}`,
+      eventUuid: `event_cool_seed_${suffix}`,
+      now: NOW,
+      ...command(`command_cool_seed_${suffix}`, "4", null, "migration"),
+    })
+    return { geneId, path: `/api/iconoplasm/caretaker/genes/${symbol}/claim` }
+  }
+  const first = await seedTarget("7022")
+  const second = await seedTarget("7023")
+  const third = await seedTarget("7024")
+  context.db.raw
+    .prepare(
+      "UPDATE icono_authority_state SET authority_mode = 'authoritative' WHERE singleton = 1",
+    )
+    .run()
+
+  // 7. The setting: 15 minutes while unset, junk refused.
+  const kv = new Map()
+  const env = {
+    ADMIN_DISCORD_USER_ID: "discord_admin_1",
+    KV: {
+      get: async (key, options) => {
+        const value = kv.get(key)
+        if (value == null) return null
+        return options?.type === "json" ? JSON.parse(value) : value
+      },
+      put: async (key, value) => {
+        kv.set(key, value)
+      },
+    },
+  }
+  assert.deepEqual(await readCaretakerSwitchCooldown(env), { minutes: 15, is_default: true })
+  assert.equal((await writeCaretakerSwitchCooldown(env, { minutes: -1 })).ok, false)
+  assert.equal((await writeCaretakerSwitchCooldown(env, { minutes: 2.5 })).ok, false)
+  assert.equal((await writeCaretakerSwitchCooldown(env, { minutes: "abc" })).ok, false)
+  assert.equal(kv.has(CARETAKER_SWITCH_COOLDOWN_KV_KEY), false)
+
+  let clock = "2026-08-30T00:05:00.000Z"
+  let discordUser = "discord_user_1"
+  const handler = createCaretakerManifestationHttpHandler({
+    db: context.db,
+    env: {},
+    resolveSession: async () => ({ account_id: USER, user_id: discordUser }),
+    onAuthorityEvent: async () => {},
+    idFactory: ids(),
+    now: () => clock,
+    caretakerSwitchPolicy: createCaretakerSwitchPolicy(env),
+  })
+  const availability = async (target) =>
+    (await handler(new Request(`https://iconoplasm.test${target.path}`))).json()
+  const claimBody = (claim, commandId, switchFrom = claim.switch_from) => ({
+    command_id: commandId,
+    expected_gene_revision: claim.gene_revision,
+    terms_version_id: claim.terms.terms_version_id,
+    terms_accepted: true,
+    entitlement_policy_version: claim.entitlement_policy_version,
+    default_leave_policy: "retain",
+    ...(switchFrom
+      ? {
+          previous_assignment_id: switchFrom.caretaker_assignment_id,
+          expected_previous_assignment_version: switchFrom.assignment_version,
+          expected_previous_gene_revision: switchFrom.gene_revision,
+        }
+      : {}),
+  })
+
+  // 1. Five minutes after taking the bootstrap gene, no switch is offered.
+  const held = await availability(first)
+  assert.equal(held.claim.available, false)
+  assert.equal(held.claim.reason, "switch_cooldown")
+  assert.equal(held.claim.available_at, "2026-08-30T00:15:00.000Z")
+
+  // 2. A direct POST is refused with the seconds left, and nothing moves.
+  const forced = await handler(
+    browserRequest(
+      first.path,
+      claimBody(held.claim, "browser_cool_force", {
+        caretaker_assignment_id: context.assignmentId,
+        assignment_version: 2,
+        gene_revision: 0,
+      }),
+    ),
+  )
+  assert.equal(forced.status, 429)
+  assert.equal(forced.headers.get("Retry-After"), "600")
+  assert.equal((await forced.json()).error.code, "CARETAKER_SWITCH_COOLDOWN")
+  assert.equal(
+    row(
+      context.db,
+      "SELECT status FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?",
+      context.assignmentId,
+    ).status,
+    "active",
+  )
+
+  // 4. The admin account is exempt and switches straight away.
+  discordUser = "discord_admin_1"
+  const open = await availability(first)
+  assert.equal(open.claim.available, true)
+  assert.equal(open.claim.mode, "switch")
+  const switchedBody = claimBody(open.claim, "browser_cool_admin")
+  const switched = await handler(browserRequest(first.path, switchedBody))
+  assert.ok([200, 202].includes(switched.status), String(switched.status))
+
+  // 6. Replaying that accepted switch still answers, inside the new cooldown.
+  discordUser = "discord_user_1"
+  const replay = await handler(browserRequest(first.path, switchedBody))
+  assert.ok([200, 202].includes(replay.status), String(replay.status))
+  assert.equal((await replay.json()).replayed, true)
+
+  // 3. Ending the role and claiming another gene is held by the same cooldown.
+  clock = "2026-08-30T00:06:00.000Z"
+  context.db.raw
+    .prepare(
+      `UPDATE icono_caretaker_assignments
+          SET status = 'ended', assignment_version = assignment_version + 1,
+              relinquish_policy = 'retain', end_reason = 'caretaker_resigned',
+              ended_by_account_id = account_id, ended_at = ?, updated_at = ?
+        WHERE gene_id = ? AND status = 'active'`,
+    )
+    .run(clock, clock, first.geneId)
+  const reclaim = await availability(second)
+  assert.equal(reclaim.claim.reason, "switch_cooldown")
+  assert.equal(reclaim.claim.mode, "claim")
+  assert.equal(reclaim.claim.available_at, "2026-08-30T00:20:00.000Z")
+
+  // 5. After the cooldown the claim opens again.
+  clock = "2026-08-30T00:20:00.000Z"
+  const reopened = await availability(second)
+  assert.equal(reopened.claim.available, true)
+  const claimed = await handler(
+    browserRequest(second.path, claimBody(reopened.claim, "browser_cool_after")),
+  )
+  assert.ok([200, 202].includes(claimed.status), String(claimed.status))
+
+  // 7. Zero minutes turns the cooldown off.
+  assert.equal((await writeCaretakerSwitchCooldown(env, { minutes: 0 })).ok, true)
+  clock = "2026-08-30T00:20:30.000Z"
+  const unlimited = await availability(third)
+  assert.equal(unlimited.claim.available, true)
+  assert.equal(unlimited.claim.mode, "switch")
 })
 
 test("caretaker browser routes persist manual Tags on the exact autosaved revision", async (t) => {
