@@ -1155,6 +1155,11 @@ const SAMPLE_PATHS = {
     GENERATION_TOKEN,
     { publication_id: "publication-guard-0001", items: [{ request_ids: [1] }] },
   ],
+  authority_system_revision_append: [
+    "/api/iconoplasm/authority/genes/gene_0001/system-revisions",
+    REPLICA_TOKEN,
+    { command_id: "command_guard_0003", prose: "A regenerated text." },
+  ],
   authority_tags_derivative_submit: [
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivatives",
     REPLICA_TOKEN,
