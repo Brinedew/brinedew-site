@@ -399,6 +399,20 @@
   transform: rotate(-45deg) translate(1px, -2px);
 }
 
+/* The pressed Auto button while its suggestion loads: the same ring, no word. */
+[data-icono-caretaker-taggerize][aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.45rem;
+  vertical-align: -0.1rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: icono-feed-spin 0.8s linear infinite;
+}
+
 [data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
 }

@@ -700,33 +700,20 @@ export function createCaretakerManifestationPanel({
     const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
     const tagsControl = state.host.querySelector("[data-icono-caretaker-tags]")
     const form = state.host.querySelector("[data-icono-caretaker-editor]")
-    if (!proseControl || !tagsControl || !form) return
-    if (state.autosaving) {
-      return setStatus(state, "Saving right now. Try again in a moment.", "warn")
-    }
+    // The buttons are greyed out during a save; the replaced text is already a saved
+    // version in History, and nothing is saved until Save, so no confirm is needed.
+    if (!proseControl || !tagsControl || !form || state.autosaving) return
     const fromProse = direction === "tags_from_prose"
-    const replaced = fromProse ? tagsControl.value.trim() : proseControl.value.trim()
-    if (
-      replaced &&
-      !confirmAction(
-        fromProse
-          ? "Replace the current Tags with a suggestion made from your prose? You can still edit it before saving."
-          : "Replace your prose with a rewrite that matches the Tags? You can still edit it before saving.",
-      )
-    )
-      return
     const sentProse = proseControl.value
     const sentTags = tagsControl.value
     const sentFields = JSON.stringify(readTagFields(tagsControl))
     const buttons = [...state.host.querySelectorAll("[data-icono-caretaker-taggerize]")]
-    const labels = buttons.map(function (button) {
-      return button.textContent
-    })
     state.taggerizing = true
     buttons.forEach(function (button) {
       button.disabled = true
+      // A spinner on the pressed button, not a word.
       if (button.getAttribute("data-icono-caretaker-taggerize") === direction) {
-        button.textContent = "Working…"
+        button.setAttribute("aria-busy", "true")
       }
     })
     setStatus(state, "")
@@ -739,16 +726,13 @@ export function createCaretakerManifestationPanel({
           tags_fields: JSON.parse(sentFields),
         }),
       })
+      // Typing while it loaded means the person moved on; their text wins.
       if (
         proseControl.value !== sentProse ||
         tagsControl.value !== sentTags ||
         JSON.stringify(readTagFields(tagsControl)) !== sentFields
       ) {
-        return setStatus(
-          state,
-          "You changed the editor while the suggestion was loading, so it was not filled in. Try again.",
-          "warn",
-        )
+        return
       }
       const suggestion = result?.suggestion
       // Hold first: the fill below raises the input event that would schedule an autosave.
@@ -762,7 +746,6 @@ export function createCaretakerManifestationPanel({
         proseControl.value = String(suggestion?.prose || "")
         proseControl.dispatchEvent(new Event("input", { bubbles: true }))
       }
-      setStatus(state, "Suggestion filled in. Review it, then save.", "success")
     } catch (error) {
       setStatus(
         state,
@@ -771,9 +754,9 @@ export function createCaretakerManifestationPanel({
       )
     } finally {
       state.taggerizing = false
-      buttons.forEach(function (button, index) {
+      buttons.forEach(function (button) {
         button.disabled = false
-        button.textContent = labels[index]
+        button.removeAttribute("aria-busy")
       })
     }
   }
