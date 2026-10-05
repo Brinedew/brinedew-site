@@ -148,7 +148,40 @@ function rejectMismatchedBodyId(body, key, routeValue) {
   }
 }
 
-async function readCaretakerClaimAvailability(db, geneLocator, accountId, currentTimestamp) {
+// B-1021: an account takes a new gene (a switch, or ending one role and claiming
+// another) at most once per cooldown, counted from when it took its latest gene.
+// The admin sets the length; switchPolicy answers { seconds, exempt } for the
+// session, and the admin account is exempt. Only an account that has held a gene
+// pays for the policy read.
+async function readCaretakerSwitchCooldown(db, switchPolicy, browserSession, accountId, timestamp) {
+  if (typeof switchPolicy !== "function") return null
+  const latest = await first(
+    db,
+    `SELECT MAX(started_at) AS started_at FROM icono_caretaker_assignments
+      WHERE account_id = ? AND started_at IS NOT NULL`,
+    accountId,
+  )
+  const startedMs = Date.parse(latest?.started_at || "")
+  if (!Number.isFinite(startedMs)) return null
+  const policy = (await switchPolicy(browserSession)) || {}
+  const seconds = Number(policy.seconds)
+  if (policy.exempt === true || !Number.isFinite(seconds) || seconds <= 0) return null
+  const availableMs = startedMs + seconds * 1000
+  const nowMs = Date.parse(timestamp)
+  if (!(availableMs > nowMs)) return null
+  return {
+    available_at: new Date(availableMs).toISOString(),
+    retry_after_seconds: Math.ceil((availableMs - nowMs) / 1000),
+  }
+}
+
+async function readCaretakerClaimAvailability(
+  db,
+  geneLocator,
+  accountId,
+  currentTimestamp,
+  { switchPolicy, browserSession } = {},
+) {
   const account = await requireActiveAccount(db, accountId)
   const gene = await resolveGene(db, geneLocator)
   const head = await readHead(db, gene.gene_id)
@@ -192,6 +225,17 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
   } else if (!terms) {
     reason = "terms_unavailable"
   }
+  const cooldown =
+    reason == null
+      ? await readCaretakerSwitchCooldown(
+          db,
+          switchPolicy,
+          browserSession,
+          account.account_id,
+          currentTimestamp,
+        )
+      : null
+  if (cooldown) reason = "switch_cooldown"
   return {
     enabled: true,
     gene: { gene_id: gene.gene_id, canonical_symbol: gene.canonical_symbol },
@@ -200,6 +244,7 @@ async function readCaretakerClaimAvailability(db, geneLocator, accountId, curren
       reason,
       mode: switchFrom && reason == null ? "switch" : "claim",
       switch_from: switchFrom,
+      ...(cooldown ? { available_at: cooldown.available_at } : {}),
       gene_revision: Number(head.gene_revision || 0),
       entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
       terms: terms
@@ -226,6 +271,7 @@ function createCaretakerManifestationHttpHandler({
   onIntegrityFailure,
   idFactory = defaultIdFactory,
   now = () => new Date().toISOString(),
+  caretakerSwitchPolicy,
 } = {}) {
   if (!db || !env) throw new TypeError("Caretaker HTTP handler requires db and env")
 
@@ -248,7 +294,10 @@ function createCaretakerManifestationHttpHandler({
         const session = await requireBrowserSession(request, env, resolveSession)
         if (claim) {
           return jsonResponse(
-            await readCaretakerClaimAvailability(db, segment(claim[1]), session.accountId, now()),
+            await readCaretakerClaimAvailability(db, segment(claim[1]), session.accountId, now(), {
+              switchPolicy: caretakerSwitchPolicy,
+              browserSession: session.session,
+            }),
           )
         }
         if (dossier) {
@@ -397,12 +446,27 @@ function createCaretakerManifestationHttpHandler({
         }
         const replay = await resolveCommandReplay(db, command, command)
         if (replay) return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, replay)
+        // One clock for the cooldown check and the started_at it measures from.
+        const claimedAt = now()
         const availability = await readCaretakerClaimAvailability(
           db,
           segment(claim[1]),
           session.accountId,
-          now(),
+          claimedAt,
+          { switchPolicy: caretakerSwitchPolicy, browserSession: session.session },
         )
+        if (availability.claim.reason === "switch_cooldown") {
+          const refusal = authorityError(
+            "CARETAKER_SWITCH_COOLDOWN",
+            "This account took a gene too recently to take another",
+            429,
+          )
+          refusal.retryAfterSeconds = Math.max(
+            1,
+            Math.ceil((Date.parse(availability.claim.available_at) - Date.parse(claimedAt)) / 1000),
+          )
+          throw refusal
+        }
         if (!availability.claim.available) {
           throw authorityError(
             "CARETAKER_CLAIM_UNAVAILABLE",
@@ -439,6 +503,7 @@ function createCaretakerManifestationHttpHandler({
           expectedPreviousGeneRevision: body.expected_previous_gene_revision,
           ...auditIds(body),
           idFactory,
+          now: claimedAt,
           ...command,
         })
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)

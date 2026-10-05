@@ -52,6 +52,7 @@
     offerController.bindEvents()
     registryController.renderPolicy()
     offerController.renderState()
+    if (modules.cooldown) modules.cooldown.bind(nextRoot)
     Promise.allSettled([registryController.loadTerms(), registryController.load()])
     return true
   }
