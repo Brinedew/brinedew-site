@@ -159,12 +159,14 @@ tier's share, at the start and again before every statement, so a diagnostic
 admitted just under its share stops on its next query:
 
 - critical, refused only when the day is spent: player-requested portraits
-  (`authority_generation_executor`) and caretaker moderation;
+  (`authority_generation_executor`) and moderation (caretaker actions, and
+  publishing, rejecting or removing a portrait);
 - sheddable_plus, refused at 85%: batch work (ingest, publication, replication,
   system-text rewrites, finalization) and any budgeted family not named
   otherwise. The write-heavy admin limiter's default target is this same share;
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
-  coverage, assets, storage audit, repair scope, blots backlog, gallery).
+  coverage, assets, storage audit, repair scope, blots backlog, the gallery
+  listing).
 
 The refusal is the usual `ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED` 503, retried
 after the reset, and `budget.exhausted_by` names the tier

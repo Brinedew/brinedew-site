@@ -49,7 +49,9 @@ export const D1_CRITICALITY_SHARES = Object.freeze({
   sheddable: 0.6,
 })
 
-// Player-requested portraits, and moderation that can't wait for the reset.
+// Player-requested portraits, and moderation that can't wait for the reset:
+// suspending a caretaker, and publishing, rejecting or removing a portrait
+// (admin_gallery_mutation*, one family for every gallery action).
 const CRITICAL_ROUTE_FAMILIES = new Set([
   "authority_generation_executor",
   "admin_caretaker_mutation",
@@ -73,9 +75,9 @@ const SHEDDABLE_ROUTE_FAMILIES = new Set([
 // rewrites, finalization): it retries after the reset.
 export function d1CriticalityOfRouteFamily(routeFamily) {
   const family = String(routeFamily || "").trim()
-  if (CRITICAL_ROUTE_FAMILIES.has(family)) return "critical"
-  if (SHEDDABLE_ROUTE_FAMILIES.has(family) || family.startsWith("admin_gallery_mutation"))
-    return "sheddable"
+  if (CRITICAL_ROUTE_FAMILIES.has(family) || family.startsWith("admin_gallery_mutation"))
+    return "critical"
+  if (SHEDDABLE_ROUTE_FAMILIES.has(family)) return "sheddable"
   return "sheddable_plus"
 }
 

@@ -15,7 +15,8 @@ import { realBudgetLedger } from "../test-helpers/reservation-receipts-harness.j
 // 2. A diagnostic admitted just under 60% keeps querying past it (the audit was
 //    two statements of 100k and 50k).
 // 3. Batch runs past 85%.
-// 4. A delivery is refused below 100%, which is the bug this replaces.
+// 4. A delivery, or moderation (rejecting a portrait), is refused below 100%:
+//    the bug this replaces.
 // 5. A refused request still touches D1, or a refused claim holds a write
 //    reservation that crowds the next delivery.
 // 6. The refusal doesn't say which tier was shed, so nobody can tell a
@@ -123,6 +124,13 @@ function fixture(t, { rowsRead, rowsReadPerStatement = 1 }) {
         headers: { "Content-Type": "application/json", "x-iconoplasm-admin-token": ADMIN_TOKEN },
         body: "{}",
       }),
+    // Moderation, pulling a portrait: CRITICAL.
+    moderation: () =>
+      send("/api/iconoplasm/admin/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-iconoplasm-admin-token": ADMIN_TOKEN },
+        body: JSON.stringify({ gene_symbol: "C10ORF62", asset_sha256: "0".repeat(64) }),
+      }),
     // A player's portrait: CRITICAL.
     delivery: () =>
       send("/api/iconoplasm/authority/generation-leases/claim", {
@@ -168,6 +176,9 @@ test("at 86% batch is refused and holds no reservation, while a delivery still r
   assert.ok(!shed(claimed), JSON.stringify(claimed))
   assert.equal(delivery.reservations.length, 1, "the admitted claim reserved its writes")
   assert.ok(delivery.d1.calls.length > 0)
+
+  const moderation = await fixture(t, { rowsRead: 0.86 * OPERATOR_READS }).moderation()
+  assert.ok(!shed(moderation), JSON.stringify(moderation))
 })
 
 test("a spent day still refuses deliveries, before reserving any writes", async (t) => {
