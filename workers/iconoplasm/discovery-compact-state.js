@@ -227,23 +227,11 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
         shared_deltas: [],
       }
     }
-    const expectedSequence = priorDevice ? priorDevice.batch.sequence + 1 : 1
-    if (sequence.sequence !== expectedSequence) {
-      throw Object.assign(new Error("Discovery batch sequence gap"), {
-        code: "DISCOVERY_BATCH_SEQUENCE_GAP",
-        expected_sequence: expectedSequence,
-      })
-    }
-    const knownDevices = new Set(
-      state.recent_receipts
-        .map((receipt) => sequencedBatch(receipt.batch_id)?.device_id)
-        .filter(Boolean),
-    )
-    if (!priorDevice && knownDevices.size >= DISCOVERY_DEVICE_RECEIPT_LIMIT) {
-      throw Object.assign(new Error("Discovery device receipt capacity exceeded"), {
-        code: "DISCOVERY_DEVICE_LIMIT",
-      })
-    }
+    // B-1013: a forward gap is accepted. Both clients (site and extension) count a
+    // batch as sent when the server answers "not signed in", without a receipt,
+    // so the next batch skips a number. Refusing it healed nothing (the skipped
+    // encounters went to the guest shelf, not to this queue) and wedged that
+    // device for good: every later batch queued behind the refused one.
   }
 
   const normalized = encounters.map((encounter) => normalizeEncounter(encounter, dictionary))
@@ -323,12 +311,21 @@ export function applyDiscoveryBatch(rawState, { batchId, dictionary, encounters 
   }
   let recentReceipts
   if (sequence) {
-    recentReceipts = [
-      ...state.recent_receipts.filter(
-        (item) => sequencedBatch(item.batch_id)?.device_id !== sequence.device_id,
+    // Receipts sit in recency order, so the first ones belong to the devices
+    // heard from longest ago. Past the limit the oldest device is forgotten
+    // (B-1013); refusing new devices instead wedged anyone who had cleared
+    // site data sixteen times, since each clear mints a new device id.
+    const others = state.recent_receipts.filter(
+      (item) => sequencedBatch(item.batch_id)?.device_id !== sequence.device_id,
+    )
+    const otherSequenced = others.filter((item) => sequencedBatch(item.batch_id))
+    const drop = new Set(
+      otherSequenced.slice(
+        0,
+        Math.max(0, otherSequenced.length - (DISCOVERY_DEVICE_RECEIPT_LIMIT - 1)),
       ),
-      receipt,
-    ]
+    )
+    recentReceipts = [...others.filter((item) => !drop.has(item)), receipt]
   } else {
     const sequenced = state.recent_receipts.filter((item) => sequencedBatch(item.batch_id))
     const generic = state.recent_receipts
