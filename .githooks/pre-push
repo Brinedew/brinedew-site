@@ -11,25 +11,24 @@ cd "$repo_root"
 
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
-# Only guard production pushes from main.
-# This hook is deliberately cheap: a types + prettier pass, not a full
-# Quartz build. The full build is owned by .github/workflows/deploy-quartz.yml
-# (the canonical production deploy path). Running `npx quartz build` here
-# as well used to double-build on every push to main and added ~20s of
-# laptop time per push for no benefit — the CI build is the source of
-# truth and the GitHub Actions deploy path is what the user dispatches
-# via scripts/deploy-cloudflare-prod.ps1.
-if [ "$current_branch" != "main" ]; then
-  exit 0
-fi
-
-echo "[pre-push] Running pnpm check (types + prettier) for main..."
-
 if [ ! -d node_modules ]; then
   pnpm install --frozen-lockfile --no-audit --no-fund
 fi
 
-pnpm run check
+# Every branch: the two cheap checks CI's build-and-test runs first. On
+# 2026-10-04 two PRs (B-977 #497, B-994 #498) failed CI on Prettier alone and sat
+# red for about six hours before anyone looked; a third (#500) failed on stale
+# module stamps. Both checks take seconds here and fail the same way CI would.
+echo "[pre-push] Prettier and module-stamp checks..."
+pnpm run check:format
+pnpm run check:stamps
+
+# Main only: the full types + prettier pass. Not a Quartz build: the CI build in
+# .github/workflows/deploy-quartz.yml is the canonical production path, and
+# building here as well added about 20 s of laptop time per push for nothing.
+if [ "$current_branch" = "main" ]; then
+  echo "[pre-push] Running pnpm check (types + prettier) for main..."
+  pnpm run check
+fi
 
 echo "[pre-push] Check passed."
-echo "[pre-push] Canonical production deploy path: scripts/deploy-cloudflare-prod.ps1 -> .github/workflows/deploy-quartz.yml."
