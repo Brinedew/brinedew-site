@@ -71,25 +71,6 @@ test("serialized device receipts survive other-device traffic without an evictio
   assert.equal(replay.replay, true)
   assert.equal(replay.stale, undefined)
 
-  assert.throws(
-    () =>
-      applyDiscoveryBatch(state, {
-        batchId: "device-xx:1",
-        dictionary,
-        encounters: [{ symbol: "TP53", at: 1000 }],
-      }),
-    { code: "DISCOVERY_DEVICE_LIMIT" },
-  )
-  assert.throws(
-    () =>
-      applyDiscoveryBatch(state, {
-        batchId: "device-a:3",
-        dictionary,
-        encounters: [{ symbol: "TP53", at: 1001 }],
-      }),
-    { code: "DISCOVERY_BATCH_SEQUENCE_GAP", expected_sequence: 2 },
-  )
-
   const second = applyDiscoveryBatch(state, {
     batchId: "device-a:2",
     dictionary,
@@ -109,6 +90,64 @@ test("serialized device receipts survive other-device traffic without an evictio
   assert.equal(stale.stale, true)
   assert.equal(stale.receipt.superseded_by, "device-a:2")
   assert.equal(stale.shared_deltas.length, 0)
+})
+
+// B-1013, seen 2026-10-05 00:45 UTC: the owner's browser sent batch 9 after the
+// server's last receipt for it was 7 (batch 8 was answered "not signed in" and
+// counted as sent). The server refused 9 with DISCOVERY_BATCH_SEQUENCE_GAP on
+// every visit, and every later discovery from that browser queued behind it.
+test("a device that skipped a sequence number keeps syncing (B-1013)", () => {
+  let state = null
+  for (const sequence of [1, 2, 3, 4, 5, 6, 7]) {
+    state = applyDiscoveryBatch(state, {
+      batchId: `41db9ccfb8f31e7f7695cbc7:${sequence}`,
+      dictionary,
+      encounters: [{ symbol: "BRCA1", at: sequence }],
+    }).state
+  }
+  const ninth = applyDiscoveryBatch(state, {
+    batchId: "41db9ccfb8f31e7f7695cbc7:9",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 100, source: "gene_page_visit" }],
+  })
+  assert.equal(ninth.replay, false)
+  assert.equal(hasDiscoveryOrdinal(ninth.state.membership_b64, 0), true)
+  const tenth = applyDiscoveryBatch(ninth.state, {
+    batchId: "41db9ccfb8f31e7f7695cbc7:10",
+    dictionary,
+    encounters: [{ symbol: "EGFR", at: 101 }],
+  })
+  assert.equal(tenth.replay, false)
+  assert.equal(tenth.state.member_count, 3)
+  // A batch from before the skip is still recognised as stale, not applied twice.
+  const late = applyDiscoveryBatch(tenth.state, {
+    batchId: "41db9ccfb8f31e7f7695cbc7:8",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 99 }],
+  })
+  assert.equal(late.stale, true)
+})
+
+test("a seventeenth device is accepted and the longest-silent one is forgotten (B-1013)", () => {
+  let state = null
+  for (let index = 0; index < DISCOVERY_DEVICE_RECEIPT_LIMIT; index++) {
+    state = applyDiscoveryBatch(state, {
+      batchId: `device-${String(index).padStart(2, "0")}:1`,
+      dictionary,
+      encounters: [{ symbol: "BRCA1", at: 10 + index }],
+    }).state
+  }
+  const fresh = applyDiscoveryBatch(state, {
+    batchId: "device-new:1",
+    dictionary,
+    encounters: [{ symbol: "TP53", at: 1000 }],
+  })
+  assert.equal(fresh.replay, false)
+  const devices = fresh.state.recent_receipts.map((receipt) => receipt.device_id)
+  assert.equal(devices.length, DISCOVERY_DEVICE_RECEIPT_LIMIT)
+  assert.equal(devices.includes("device-00"), false)
+  assert.equal(devices.includes("device-01"), true)
+  assert.equal(devices.at(-1), "device-new")
 })
 
 test("later batches set new bits without moving earlier ordinals", () => {

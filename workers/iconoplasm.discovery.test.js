@@ -364,6 +364,41 @@ test("a ten-hover batch commits one compact state and replays without duplicates
   )
 })
 
+// B-1013: the owner's browser, 2026-10-05. Batch 2 arrives while the session has
+// lapsed; the server answers "not signed in", the browser counts it as sent and
+// keeps the encounter on its guest shelf. Batch 3 after signing back in used to
+// get 400 DISCOVERY_BATCH_SEQUENCE_GAP forever.
+test("a device that sent a batch while signed out keeps syncing after signing back in", async () => {
+  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const first = await postBatch(env, {
+    userId: "reader",
+    batchId: "41db9ccfb8f31e7f7695cbc7:1",
+    encounters: [hoverEncounter("BRCA1", 1000)],
+  })
+  assert.equal(first.payload.ok, true)
+
+  const signedOut = await invoke(
+    post("/api/iconoplasm/discoveries/batch", {
+      body: { batch_id: "41db9ccfb8f31e7f7695cbc7:2", encounters: [hoverEncounter("EGFR", 1001)] },
+    }),
+    env,
+  )
+  assert.equal((await signedOut.json()).authenticated, false)
+
+  const back = await postBatch(env, {
+    userId: "reader",
+    batchId: "41db9ccfb8f31e7f7695cbc7:3",
+    encounters: [hoverEncounter("TP53", 1002, { source: "gene_page_visit" })],
+  })
+  assert.equal(back.response.status, 200)
+  assert.equal(back.payload.ok, true)
+  assert.equal(back.payload.replay, false)
+  const row = await env.gatewayDb
+    .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+    .first()
+  assert.equal(Number(row.member_count), 2)
+})
+
 test("activation blocks incomplete legacy migration, then migrated membership remains visible without request-time scans", async () => {
   const env = await buildEnv({ sessions: sessionFor("reader"), migrationComplete: false })
   env.gatewayDb.raw
