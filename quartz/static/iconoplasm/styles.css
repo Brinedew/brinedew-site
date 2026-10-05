@@ -15,7 +15,10 @@
   margin: 0 auto;
   padding: 0 1rem 2rem;
   overflow-anchor: none;
-  font-family: "Special Elite", Georgia, serif;
+  /* B-1022: text that sets no face of its own is pre-printed form text, so the
+     default is IBM Plex Mono. Special Elite is only for typewritten values
+     (docs/iconoplasm-design-system/README.md, "Type"). */
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 /* On :root, not #iconoplasm-root: dialogs appended to <body> need them too. */
@@ -2849,8 +2852,9 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-install-footnote {
   margin: 0;
   max-width: 56rem;
-  font-size: 0.9rem;
-  line-height: 1.36;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: var(--secondary, var(--darkgray));
   text-wrap: pretty;
 }
@@ -2858,8 +2862,6 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-install-tab-note {
   max-width: 48rem;
   margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.36;
 }
 
 .icono-install-card-copy {
@@ -2884,14 +2886,22 @@ img-comparison-slider.rendered [slot="second"] {
 
 .icono-install-steps {
   margin: 0;
-  padding-left: 1.35rem;
+  padding-left: 1.7em;
   display: grid;
-  gap: 0.36rem;
+  gap: 0.6rem;
   color: var(--dark);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.86rem;
 }
 
 .icono-install-steps li {
-  line-height: 1.36;
+  padding-left: 0.25em;
+  line-height: 1.55;
+}
+
+.icono-install-steps li::marker {
+  color: var(--secondary, var(--darkgray));
+  font-variant-numeric: tabular-nums;
 }
 
 .icono-install-step-copy {
@@ -2923,7 +2933,7 @@ img-comparison-slider.rendered [slot="second"] {
   background: color-mix(in srgb, var(--ui-bg) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--ui-border) 64%, transparent);
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.84rem;
+  font-size: 0.95em;
   color: var(--dark);
 }
 
@@ -5225,16 +5235,8 @@ html[data-theme="dark"] .icono-card--brick {
     justify-content: space-between;
   }
 
-  .icono-install-tablist {
-    gap: 0.45rem;
-  }
-
   .icono-install-tab {
     min-width: 0;
-  }
-
-  .icono-install-steps li {
-    line-height: 1.34;
   }
 
   .icono-install-actions {
@@ -5515,7 +5517,7 @@ html[data-theme="dark"] .icono-card--brick {
   transition: width 0.5s var(--icono-ease-out);
 }
 .icono-clans-note {
-  font-family: "Special Elite", Georgia, serif;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.92rem;
   color: var(--darkgray);
   margin: 0.6rem 2px;
@@ -5758,7 +5760,7 @@ a.icono-clan-ae:hover {
 }
 .icono-suggest-signin {
   margin: 0;
-  font-family: "Special Elite", Georgia, serif;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.9rem;
   color: var(--darkgray);
 }
@@ -5859,7 +5861,7 @@ a.icono-clan-ae:hover {
 }
 .icono-suggest-empty {
   margin: 0.4rem 0 0;
-  font-family: "Special Elite", Georgia, serif;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.88rem;
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
 }

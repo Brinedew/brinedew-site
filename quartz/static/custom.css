@@ -1720,8 +1720,11 @@
     display: none;
   }
 
-  /* Card copied from iconoplasm styles.css .icono-card.icono-guest-login-card */
-  .icono-card.icono-guest-login-card {
+  /* The draft call-to-action card (DefaultFrame.tsx #draft-cta) borrows the
+     Iconoplasm card classes. Every rule here is scoped to #draft-cta: Iconoplasm
+     pages load this stylesheet too, and the unscoped centred copy used to centre
+     the app's install panel (B-1022). */
+  #draft-cta.icono-card.icono-guest-login-card {
     display: grid;
     align-content: start;
     justify-items: start;
@@ -1739,7 +1742,7 @@
       0 10px 24px rgba(45, 33, 20, 0.08);
   }
 
-  .icono-guest-login-card-title {
+  #draft-cta .icono-guest-login-card-title {
     font-family: "Monaspace Xenon Web", monospace;
     font-size: 1.12rem;
     font-weight: 600;
@@ -1747,7 +1750,7 @@
     letter-spacing: 0;
   }
 
-  .icono-card.icono-guest-login-card {
+  #draft-cta.icono-card.icono-guest-login-card {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1759,7 +1762,7 @@
     margin: 0;
   }
 
-  .icono-guest-login-card-button {
+  #draft-cta .icono-guest-login-card-button {
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -1779,11 +1782,11 @@
     cursor: pointer;
   }
 
-  .icono-guest-login-card-button[hidden] {
+  #draft-cta .icono-guest-login-card-button[hidden] {
     display: none;
   }
 
-  .icono-guest-login-card-button:hover {
+  #draft-cta .icono-guest-login-card-button:hover {
     background: var(--accent);
     color: var(--light);
   }
