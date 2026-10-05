@@ -5,7 +5,7 @@ import {
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=9241dc2a16d8eba3"
+} from "./caretaker-manifestations-view.js?v=4be0f4300149ed5d"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -19,7 +19,8 @@ export function createCaretakerManifestationEventWiring({
   retrySave,
   scheduleAutosave,
   saveDraft,
-  saveSuggestion,
+  keepReview,
+  undoReview,
   taggerize,
   setStatus,
   showBasis,
@@ -72,8 +73,12 @@ export function createCaretakerManifestationEventWiring({
         void taggerize(state, direction)
         return
       }
-      if (target.hasAttribute("data-icono-caretaker-save-suggestion")) {
-        saveSuggestion(state)
+      if (target.hasAttribute("data-icono-caretaker-review-keep")) {
+        keepReview(state)
+        return
+      }
+      if (target.hasAttribute("data-icono-caretaker-review-undo")) {
+        undoReview(state)
         return
       }
       if (target.hasAttribute("data-icono-caretaker-retry-tags")) {

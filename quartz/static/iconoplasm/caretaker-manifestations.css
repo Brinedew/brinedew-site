@@ -711,6 +711,36 @@
   color: var(--icono-reject);
 }
 
+/* A suggestion under review takes the prose box's place (or sits under the Tags):
+   the History diff styles, an accent outline, then +/− and Keep / Undo. */
+.icono-caretaker-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.icono-caretaker-pane--prose .icono-caretaker-review {
+  flex: 1;
+}
+
+.icono-caretaker-review__changes {
+  flex: 1;
+  min-height: 6rem;
+  max-height: 100%;
+  overflow: auto;
+  padding: 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--icono-radius-md);
+  background: var(--light);
+  color: var(--dark);
+}
+
+.icono-caretaker-pane--tags .icono-caretaker-review__changes {
+  flex: none;
+  max-height: 12rem;
+}
+
 .icono-caretaker-preview__text ins {
   background: color-mix(in srgb, oklch(62% 0.13 150) 22%, transparent);
   color: inherit;
