@@ -10,6 +10,9 @@ draft: false
 
 ## Unreleased
 
+## 0.5.10 - 2026-10-05
+
+* Improved highlight robustness on animated text
 ## 0.5.9 - 2026-10-01
 
 * Hover cards now load each gene from a single always-current file on the free CDN, so hovering never spends metered server requests and reflects portrait changes within minutes.
