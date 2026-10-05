@@ -53,6 +53,8 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-012]** — The Website is the sole command authority for caretaker manifestation history and canonical selection; prose and Tags bodies live as plain-text objects in the private Bunny zone, and authoring D1 holds their hashes. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
+Before any Iconoplasm visual or UX design work (a mockup, a restyle, a new panel), read the "Before designing" section at the top of `docs/iconoplasm-design-system/README.md`. Its rules below that section are evidence from earlier agents, not law.
+
 Before changing manifestation prose, its size limit, the seed texts or the caretaker editor, read `docs/CARETAKER_MANIFESTATION_AUTHORITY.md`. It says which system owns the text, where the seeds came from (cut at 4,000 characters at import) and where the full originals are.
 
 Caretaker autosave creates the caretaker's own version; new image requests use the selected canonical version. The caretaker editor shows when those differ and offers the existing canonical-selection action. Do not assume “Saved” means the next image uses that edit, or add a second generation-source path.
