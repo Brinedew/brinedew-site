@@ -1,0 +1,3272 @@
+{
+  "source": "GET /api/iconoplasm/requests/options, signed in as the owner, 2026-10-05T09:10:38.573Z; queue styles in server order (127 cards, 16 favorites); previews trimmed to gene, sha and canonical flag",
+  "options": [
+    {
+      "emulsion_family_id": "0-36978",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "COX5A",
+          "asset_sha256": "0aca1c077346413c9d12276b27a115ecc9baa6defe600a46a8e881290f1f9627",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GINS4",
+          "asset_sha256": "60f7cc5eaaff68c028bb744a9ab28dd09bcf20f0a9575eabc62ec0c74fd008b0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DCD",
+          "asset_sha256": "7ce1ac1a70a3811269779ea009be95a96d31d8c65f64ec21cf45d5d8de36124a",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "ACVR2B",
+          "asset_sha256": "6e31e4b084e61badbb2b844887b964c1638bc8bea0924edec73193f497bba502",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-51084",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "TRIM63",
+          "asset_sha256": "422c5ea4ed932a1a23e8b5d89979f7ffe117bee8a51dcdc67ac1f16b8170f386",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SRC",
+          "asset_sha256": "6c20cafac8be89da9b3532333d9cf0bf143e5f0b04ef65e9839f2bd7f2087961",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "GINS3",
+          "asset_sha256": "55e0c00b993ece181233fd0655876b757b01c5b87268275cab3abffc07745f3f",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "MVP",
+          "asset_sha256": "258cb492f96173c2018d4084bbb0edcc06b335f59d55968037c42ae423be06e1",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31261",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "CTHRC1",
+          "asset_sha256": "fde1e2eef83e1249f44679192c8c629c4d2794d0b8bb51935ae641a4e85d6b70",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DLL3",
+          "asset_sha256": "ae0c05e037da04a9cd7dc6bb6a2bee3a2bf931115069f91adcfdeb369da7bc99",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "FBXO32",
+          "asset_sha256": "1d9e67bc75f7eeb831faae724c7646f2cbd44bd3a8a1905f11d3bb20f9743b70",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "GINS2",
+          "asset_sha256": "2aa3325b3c9de4f2349138169cc14d07f1e57ddba72cb666a5457eb8a7f6bb08",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1184",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "STAT5A",
+          "asset_sha256": "e85ec1b3009e86a7f44f81581fc5b4b78cdfae0ea7df3b5ec3eb5598465f6588",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "02532168065cbb4cf24b11a3e27f4c74f22ea4c661eee08767b8cfa902a15d50",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21006",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "STAT5A",
+          "asset_sha256": "50184e579d177f03c6412ae6151c5fe581853a607d8c0447d1e184c322868865",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "9082731347aae2d09aa0e01652035c1c4119660074749d9fc2a4dee6125240d1",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "CREM",
+          "asset_sha256": "f9f11267e9e6a3cbda51346758f0a27971d66d67451ed7c290783ce287852395",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-22811",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "STAT5A",
+          "asset_sha256": "a5e796a8741da995204244f22b225a23a3b1aa83bf1cae442590a2277b598a62",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "f6141db6e7f61ffcf281739661797783cdf669ba9821c0602216c28e89e29e00",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "CREM",
+          "asset_sha256": "2604be6b4e69804a0279a25525e6afe655a6b1ca206326b24c5c8afed0ce85e1",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20128",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "CREM",
+          "asset_sha256": "868683ffaaeb26408c9fcd02a718cc24ea096d0bf6b4a9dcc0ed7a963d35e255",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "8f01385efd6c14020fca65911f4c5dcc11160656778bd924a83f0be675f5b2b9",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20910",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "STAT5A",
+          "asset_sha256": "bf128c6dcf324d205a2032f3b2d554005b9988430786ff23d22ca741bc205767",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "c418a56d278f2bb3c67ae2e612c38b1c27263d2fda522b1d4c4f71eddb2a9c3b",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "CREM",
+          "asset_sha256": "8bc951b266ca956041fb4cc1d6a9cc2d838913098abf957c1262489b47e1b409",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-55908",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "TH",
+          "asset_sha256": "c7a9468bd85a2af2e85b775d952dffab11b05ae8fdec00e88f43113f550fbbf9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATM",
+          "asset_sha256": "52a4b2d9fec1fc783a9c36a3fdccd8bff53486572027150c94519ec821a0e909",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SRC",
+          "asset_sha256": "6a65a6eb06b177dc9f8d34b36050e56bb422e1e38a8c7c4363636a71f92201f7",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "ACVR2B",
+          "asset_sha256": "ea6310bdde9602877250090ead821a83a7689d33acdf3aec25d6418c99927c13",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2561",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "cb25661de93a85cfd407eadfd1c491fa4dc44a88b6120f310108913c31c19ef5",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "PALB2",
+          "asset_sha256": "14f04223234dbb1108b093e8c5e0d40b17733d2f45559a1f11090ffb20a1bca9",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "ATR",
+          "asset_sha256": "6821f586820e3fc90191ccb202f98f87677a7d1d2c8b6eda47681698a4fe8726",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "ATM",
+          "asset_sha256": "ffb475cddc033ccf20a0ffee5d65b806000f03de0cfcfa294dcae21ed173524d",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21404",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "PALB2",
+          "asset_sha256": "23ae59e28db6a679fa51fc9ceadd454347db3cecae127c368351c223c92bda7f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CLSPN",
+          "asset_sha256": "cce2317ea7d588c4bad958cb8aa25ba58c7208a267018f37fe1217b47863877d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GAB1",
+          "asset_sha256": "5a732254e8c07dae7af92972d70bef3e29a4db1075d77f23a71ae117c6e377ae",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "CREM",
+          "asset_sha256": "43d0df14433fa0f4ec6794a15b56523f9f36e7abc5196b8c6f40def6478bdb8e",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-30593",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "TRPM8",
+          "asset_sha256": "77170e6310030194ffd7af96320702615186ec432412053bc1fe291048943c98",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ABCC11",
+          "asset_sha256": "26a38687c46353fdc7c01743a5efbb3a8187655b6a49044f4dc1fdad921866c2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NES",
+          "asset_sha256": "b635d5c16273acf79a887a27f64d7cfe3923ab7aef5584176290fe3f9e362799",
+          "is_current": false
+        },
+        {
+          "gene_symbol": "SRC",
+          "asset_sha256": "0fd417056ec55b695dc1e5ed8a6d76e1d97bf882fb5c492b6cd7be59413cd025",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-255",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "FBXO32",
+          "asset_sha256": "f7006dee7c2a846f022372dfdc5c448de43506c6568f35df5c7aa4719307ac7d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PREP",
+          "asset_sha256": "5bacfe9285165119528c0443f198be787ba8fe1306b542fd0168cb2f8d925f6d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DNAH11",
+          "asset_sha256": "3010f296cd753fe08d54529021522f7da7fcefeed66235aa8202fb0a46cec2b8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATR",
+          "asset_sha256": "70eec69a713b5669797735e0026e5cad886035cf13de1042d41aef146773cce5",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21329",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "ESPN",
+          "asset_sha256": "09607ca34125bfb5066cc4e0835707235c6335f903e72f5eff7c3a45b9ba5e75",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LIN9",
+          "asset_sha256": "eb6d275a401e8bdde02a99707570442dc1aff8f719680ca8a6db9bd5702602d0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ADO",
+          "asset_sha256": "c29dad4d66b298a87b90d8da582e58b3071501b4d7d32678566f9e5e1afd324a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NES",
+          "asset_sha256": "0e734eb277cf49aa263fe033df46fc092ab39cad98555301d4fa3d60697fd7a3",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21103",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "NELFB",
+          "asset_sha256": "02eed9af1dd7e0bad411aff5f922a0fdb24def1c348a5b3de7f9e2d76bdb3976",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LRP6",
+          "asset_sha256": "ca564b12671c7bf2a89e05e27e636c6e333d318baaa46ba273241765ceac9ed0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ACR",
+          "asset_sha256": "c3ac52b2d899b056d3a3852ec83629325bd0d83e4f91723ea1452c63a9223394",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ACVR2B",
+          "asset_sha256": "2e8dbfbdd4b995d97c3fa3eb99bb9d1a0366ea0559c7e7d8fbe78aed1056999c",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-343",
+      "is_favorite": true,
+      "preview_assets": [
+        {
+          "gene_symbol": "JARID2",
+          "asset_sha256": "f42a17aa81097ac809e808d0373098b492678bcaa4f1e22cf09c01102987631c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NHS",
+          "asset_sha256": "f7872d0e932345d5d5f8499c1532c9066541f90c5390c7abf1aeee28ec97b8ab",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RBBP7",
+          "asset_sha256": "a55712c9822d17b29de2f1e75bb6c8d5c677b1e35547a028978f77625b3ea86e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AEBP2",
+          "asset_sha256": "949891031b785011237e2329b4eec61ac8c70bd8de930ec7a2013f6036c30fe6",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-34047",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CHRNA5",
+          "asset_sha256": "dc14c74ce53eef6702c85ad7f51ad397420f436136b0bca19146718d3bfc14ce",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GRB10",
+          "asset_sha256": "4b66f6d33461e7a60f2b1fdc96b0973aa68abc5fc94404c5d9ed106413adca8c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PDK1",
+          "asset_sha256": "fc816c75e5f91fc0767af2a9954d5ddb1fff2f843dbe2eadcd7737cce812cd98",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CTNNA1",
+          "asset_sha256": "83b5c7d2afe72b8398c1e38f1f3df400535e3006f46045671d84de855e1a43a3",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25482",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "DCD",
+          "asset_sha256": "cbfef83b63d2275e28faf1d192935b4d9769fbe924c09bf9c38181bdbd29e72a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TSLP",
+          "asset_sha256": "df4edfcab8e1bf309b397efae2015364b34d4c912bff85addd3cc411f9139bf3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PACRG",
+          "asset_sha256": "e036e7f3b9ac36984c57d34e1208e88f0c27111b64bb9b4061d7c257f3494ef6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SKP1",
+          "asset_sha256": "db0d873508679b0c5cd944451cbbcfcb35198fece1c11359d9de3c73f1734ce1",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-45472",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "DUSP1",
+          "asset_sha256": "44787dcab426d87fa9a48fa947d106b1b1a5606f6b841d8de7e05cb97940b7d3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CSNK1A1",
+          "asset_sha256": "8ba4de3c3b8158b0dded07918e2de9323041776ad8bcfa813fd574e5be176411",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IL23A",
+          "asset_sha256": "55e182c80e601f08a6c81220c950593b899a1ca73082443400b4653555c1e7a0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZEB2",
+          "asset_sha256": "2e40a0f502ceca4a0fd394433c0abddb04ae2ff6ad7ef430bc7290e892bdaa7c",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4297",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SMC1A",
+          "asset_sha256": "0aa1038203a4eda7b373f3af0e43ef6f2d79356e930b157af8fb4b4356fc8bfb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CCNG1",
+          "asset_sha256": "20bc59dba8087c3d5bde794978f26fced12ec0d81255163d2cd89721ffac2256",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ANKH",
+          "asset_sha256": "8e6e54f7227648fa7b864b21e2330a98a38f52715d0faebc880a0f193b20dae5",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DUSP4",
+          "asset_sha256": "9e69b3406b20ceb8b5d3f3dda4c22b26d8869bb9ff2ee1c831ea207ab3780d15",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-24210",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ANAPC10",
+          "asset_sha256": "7b63793741353efe1b665a40604007a97db636aeb8effca277fa5a97d985183b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IGKC",
+          "asset_sha256": "8ffa56a60471f743602920f4a5dbeda3be79499c440ec4d439190e13a55eebb9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TOMM20",
+          "asset_sha256": "c4f59947e0afa8a1dfb4924f7a26ff08c7544bf9c20ac1607e298914abf7d01b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDKN1B",
+          "asset_sha256": "f0e2824759a725d7589b0f26c7a1f0cd4992ff5cc1112006f20b179479ba115b",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-28999",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CTCF",
+          "asset_sha256": "436609c296a2f35f6b05fc1c93f1667658ad02e01e7933cd87557919515c40b4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IK",
+          "asset_sha256": "4661a824da247528e33205095df6a759653f39dda3910e33021dfc302a2c11df",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NANOG",
+          "asset_sha256": "99d69f1f918718b54e8941da01545ed0fa26d95f7133554c0e51a3181769ef61",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MVD",
+          "asset_sha256": "ec52367db84c5d606f501260389ba90f9db04bc00480d45eedfc5bbb8c7a8072",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1051",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "HOXD13",
+          "asset_sha256": "b1a5acc318c8030223dde00785277c519212096cdaf07b50d45b4683f58e0a69",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EAF1",
+          "asset_sha256": "8e514485d01622e9a0153e16a1546b1f37869d7e6afef464215f2cb0d0bb1a2c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TMPRSS11D",
+          "asset_sha256": "7daef13c46b00eaf7855b9a9e05ebfccd41c215d6859f9151402bcacd8a12862",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LPAR3",
+          "asset_sha256": "c4427fa89befdcafdf244b1f3057bd992cd9d84080244698892d2e73f2119866",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-29469",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TCF7L2",
+          "asset_sha256": "7e183c534643cc5e7a4371adc1b2444de0469b6dc6187b0a836e2efeb5b0032b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FZD7",
+          "asset_sha256": "2b5f30ce1bbda925a44cd71db92e9281229a1f43c8e29bb9ddad7174ac235e43",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZEB1",
+          "asset_sha256": "f663f7e9d0bbda65ecca4e3c196e374e47217ce1379f7f2babfd586de338c58d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDK2",
+          "asset_sha256": "8b1d55d71d016cb1be4e843bbfc136b94d795c9b139146225586768185693b2a",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20439",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TP53",
+          "asset_sha256": "b85a9223982c9774df9d1a7144a62cfed8780426bc1c0f9e843e162505ca91e1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BRD4",
+          "asset_sha256": "ff749c35c9ccc3fb414c3cbd7a9662782d77f5e72bd4783d4d13868f478961f0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MCM3",
+          "asset_sha256": "5c3b6b8365b0bff919b6da1c3d39901932bd71417fb79c7beffe259869dc12d9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BMP6",
+          "asset_sha256": "71371463321acd0b3e1c4ba11f608ce9940900954291089331a365e1948d0e00",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-23877",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "GINS3",
+          "asset_sha256": "7a81917d2f7d3cb047054b3b06d2da0ec53336d69631ed74702e32414c2f8989",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDC25C",
+          "asset_sha256": "b6589f41ce507a0f3efe4399aeb9e6ed61811348b69d9ef389f7902b781112a9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EPYC",
+          "asset_sha256": "23c251bed9ef9bf40327b66dfa649d6bf64b2e5a6ef406122588d99df496bdaa",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ACHE",
+          "asset_sha256": "73eb2a503bb1cf0001fc6f39357180c5f2dc06e1721200ff68e407e8e1ff4c26",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21150",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ARID1A",
+          "asset_sha256": "3685803d8e177cfd66aa27669083acdccb03f04bc7c068fb90ed0ea448ac1c1f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MPL",
+          "asset_sha256": "ef9d505c552ba2c0246485694e929ec2d207c18cf8e195d95afdbc929d4961c0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DSP",
+          "asset_sha256": "b9bc416989a768795cfb4d0949230ed410b90fc1b3f16c3dbb010f16a0279bd1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TYK2",
+          "asset_sha256": "3e8d873fe82f67fb8bc5c872ee737c40aef7b0fb71e2b2b115b91e5d58cb19ae",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-29164",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "LIN37",
+          "asset_sha256": "7a5feb9556923d944d472792e4ba7c5199b6bb4df6351bfa3fdee7d9159aa2e6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "HR",
+          "asset_sha256": "2e185b1225371df4ac3c2efa3da851663beb66d90c1b918cc31c828cbfc00099",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TOX",
+          "asset_sha256": "4e4eac9907905eb55802128beae3c2152841b42081176f4f8896376bbc10cc77",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ADK",
+          "asset_sha256": "69850bb9a14eaa28166825db0057eabddf656be00dd8b1ded3c0d8607075a8bd",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2318",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SRC",
+          "asset_sha256": "f39ee90ebcc2ee85a5dbad0d87e12ddb7d1152c57dfa3d29627a2e2e6b13609d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF233",
+          "asset_sha256": "e780a3f7fdcee37f5d054ba61b6d5d03e1eb1ed057d3e0637523284c7471f67a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GINS2",
+          "asset_sha256": "089a5264d36595b3f29eca72092b267ec61c634470e1f6096cd4be01d449676d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TAS2R40",
+          "asset_sha256": "c529043d4b361f40e8623949d24662ea9cb87ae324667ab395fd2462029e2860",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25040",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CRBN",
+          "asset_sha256": "dce7e732b745fe73745d5aa9d77dc1312b98505f885ae6f2200a70947ea8d5ab",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "UPK2",
+          "asset_sha256": "c5fefeda748188c0a5106b6b77d2cf3c4b385cf7687df1a05f9a21fed09d6cba",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SFI1",
+          "asset_sha256": "4beea9d2a8191877c7ba001e39e8052ce10cd9b47e7eb437c43f0de29fa2cc6a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CALR",
+          "asset_sha256": "c2e6f2ed5d67edfcd40f7aab67b623c7b6dab70552ffb039d05b1adb8945ecea",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20680",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "APC",
+          "asset_sha256": "333e5d23383ef3c51b872920d3fcac33c0ae7fddb89f1f594a95973875ab632a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TUBD1",
+          "asset_sha256": "b60943a534542c4d95eafd920f51a8a8782c3de5f39eab53bcc4bf145615c876",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "VWCE",
+          "asset_sha256": "56815824d61ab4025fa35a6dd9293fd507424e25c05a6edf1090ab46dfc9d402",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PLD5",
+          "asset_sha256": "52e778c95ff9bca49db29336ea56e3144c403e41c9bfcc5185fe2d2841fa48b5",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2542",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RECQL",
+          "asset_sha256": "9bcb58e5f5b56363a7d3f307222c621119410a0486dc8ca57694b30a1b50ea0a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "YIPF5",
+          "asset_sha256": "ecb235e960725d36cc702f527b474e9b7c38395f43a7a5ee1404a900d89b6935",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CHRNB3",
+          "asset_sha256": "8b24da60abae9df76a7e8a8e12f0ae6d9de9d39031f32ded5075da4fd3523849",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MDFIC",
+          "asset_sha256": "0a55b0dab76df12f9988556d37f20b065c52bf8a449b6e9c42a0a309f24df48f",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-38085",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "GMNN",
+          "asset_sha256": "544e7f7aadc310e58fcb1d957cd36fc92ce067c0ab840a2b2d561136f7b4321f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ARL4D",
+          "asset_sha256": "9f2071c962eec74b2cfe300118a5193f59538d94b24e81fe7b0669650e25134b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PCDHGA8",
+          "asset_sha256": "c1ec5fdc63510ea8b53b7ffce6cc007cd43536d459e5f2adf07ab5011bbc66fb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LCE1B",
+          "asset_sha256": "bd8bf5af65fe26fdc5b43015b450708126f3056eef5765f05b5ccbc798733255",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2495",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CDKN2B",
+          "asset_sha256": "0a04e6731f9473ff09e0ed16bd1521d6c8e86efed4da0c6377806fdf3760d4d9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RUNX1",
+          "asset_sha256": "6e245e1cae9311ef639d50de107acd0eca770dc3b286941d57f501f71532c121",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GLRA3",
+          "asset_sha256": "98783cccb43940676cedb6c7477661f8368c908edae4f1cbb6e9dfaa6bf2688b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KRTAP19-4",
+          "asset_sha256": "30fe051961731dd0c5a3a543b307e2e916c8ab2092505d3714bb8b7565f9b51a",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-32799",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ACVR2B",
+          "asset_sha256": "a0316f952aec8145f66ae04b87f1afe27f01a7203259f938f52f6e4541ed46ae",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TUSC2",
+          "asset_sha256": "bd04d74a06ccf26d937e1b5bf4dcfa593336d0639c9889a87cba910cef1bae91",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GLB1",
+          "asset_sha256": "7089d454ed3fad03e37d643749901a87f8743387e4a8176c1435023523396377",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WNT3",
+          "asset_sha256": "c10ea1ab048f0aa17736a1c49f7af880f8708682a02d241c92a039f519bbf51a",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-30953",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CD320",
+          "asset_sha256": "0fa6e72f76157c34148b392c25840e56c455a0550b65da14bd9123d0df02a9b1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PCNA",
+          "asset_sha256": "91c60b7441d104bd06055497242043a3a6b261ef8e6d4b279148117e8d5c0d87",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BMP5",
+          "asset_sha256": "17a2341839f01917e1df44dc781cff778089205e569e6c8e43d6f70e514f6291",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TBK1",
+          "asset_sha256": "226afd94db367370bf14633927c66b0cdd17f9a3d7bafce2c69241056a0b34b8",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-34551",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "PFKM",
+          "asset_sha256": "5a8558ecfe179ec268c8151715fa6df1e6f4e124333b631f8caa05958732ff36",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DNA2",
+          "asset_sha256": "9c78f890d052d8f6e16214ad2743b3336c2b9acbd6a8cbbbd7f3339bd7d43655",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PHF7",
+          "asset_sha256": "71d2c0031ee2ced749828a2f25a1c6fe9e6f0785eaf5e604959c159b3fce56ed",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OR52N5",
+          "asset_sha256": "5a89f39563466a5bf4eea3f36074be4063b48432892cc5b3742276eb02ede1d2",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2219",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CTNNB1",
+          "asset_sha256": "0075996be28f1ab13aa12caa3b40e12d2ff6b72d36100d9bc1e1544332fd00a9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NEK4",
+          "asset_sha256": "52924a95a60d1398ea25e8772e8f7faad384be92c852b537a94074699b6b3c5b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "VSX2",
+          "asset_sha256": "da12f835e57e48a9e5f3e4a2f33c28ef47cbc26af2ff524820d6f45fa1563173",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CRTC2",
+          "asset_sha256": "403fc15ec62d5dd83390b9b6104fbb4a5e73a472ae173a73dcfcbe96f8dd420d",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2899",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MC3R",
+          "asset_sha256": "a38ed4874d6a01140dfda36ccd5ee0ba0b2f5bec7b71b515a1fce6d422556f8b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OR13C6P",
+          "asset_sha256": "5b17322ce294f4432698843dfc63df56e498b297192f580a15f125d747f9d2fe",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KRTAP21-3",
+          "asset_sha256": "bc948c42ebe2e6de1d818e2d11679fc46ee8dbaa0b5eb4e2ab01d442c9057cdd",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LPAR5",
+          "asset_sha256": "f7f3dc277501dcfce90406137164254487d77acb461404856f1411d84553225e",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3696",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MTRNR2L7",
+          "asset_sha256": "51381c2fbdc98884333531631a33c27f982fce6ab514fb00c010eefc350178e0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CEP112",
+          "asset_sha256": "04650061d0a2a232e3473a795d41145e8c8eca22dcbac9c35b963f0ef5abe9ef",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PUF60",
+          "asset_sha256": "8c9ba96237f5383c03bf55f5fc1841c5d0cf700678ba52c2e9c04eece7bf162d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FAM234B",
+          "asset_sha256": "9e1e0c523ea735793a40410a6dc3d31d25a530bdb3354a16ff82cff6d5f97f98",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-979",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MC1R",
+          "asset_sha256": "cf868a641b33157472dcac9b10975b8e36323c1522a377be6e3bf3db635d59b5",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "COX18",
+          "asset_sha256": "be23e8c2ed57cbf7156fb7ebebd03f56c50f54f0b2369a0378b266d30c819ee6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FABP7",
+          "asset_sha256": "2bb277038f8d132b88daa5bf47004f0cd51e419ae62b73d62b313f3d602933e7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WDR45",
+          "asset_sha256": "ea705b17f99d6b5dad479b5856e6cc999118ba2f6649c0e38308ab8c17168623",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2349",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "AFG2B",
+          "asset_sha256": "0cd2d7e6548b2ce6ddb413ec2e1a4952d098ae319fec11b77a6fc21351855ff6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GPNMB",
+          "asset_sha256": "80a6a534ea4abb4f49341b29afb183028ce6e58f2db06b3b08c37ba102884763",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "UBE2D3",
+          "asset_sha256": "91d28d9b489f0444fdfd97d92bc29a2544a05d7b71402909562613fc71046e4b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PRRT1",
+          "asset_sha256": "0ef1b1feefa2db3ca3f0fc620a82d79a6c556d240297bbc8d6d1500bf11ad6bc",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3156",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SST",
+          "asset_sha256": "ffafd6c18b15e2f2bba2cc06295ed687b514551e7311b0909f5ecf06f0d14994",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DPY19L2P1",
+          "asset_sha256": "51834d86534e095e751813d7c4fa8c5579a15d7f027ef90a74d6d5a57ebd96b9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDYL",
+          "asset_sha256": "92bb7cbd6573ee4a58e7dca0c7e6f90eec0c6dd98bc5b844dc250dec24b3b520",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ITIH4",
+          "asset_sha256": "c712f751e706855996e7df3b6f5060c03bf5603390a8f1fa84c3f408327d78f5",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-34741",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RHO",
+          "asset_sha256": "8b32fcf9f4721257a26172042ed898e0bae8f1d45234be1afda45df57273a044",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IL17A",
+          "asset_sha256": "c2dd5592e90e049dc30023b17784a6ac1253e2176d94f5c67d664c3b53bd9f8a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NUP214",
+          "asset_sha256": "609783ce68d30d6455497ef07260758e2d570ecb1c3a668f112135e925bafbbb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ST18",
+          "asset_sha256": "59a213061cc90ccdf93d7d76af27c66cd93481f9e7c9708840926fb3a2adec33",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3589",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "NPPA",
+          "asset_sha256": "2663e7554f039bb73d5e85898cec8c04b0107946b63171611eceba5e78c21a85",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "XRN1",
+          "asset_sha256": "44d0e2dcc24fdf1c1dbdeb4d4ec2fd0daf2239c3b1c63f007566b6704b40fc66",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TMEM269",
+          "asset_sha256": "3a1ef6b2b0dae0789f726cee4763d0fbce815913c87a5a4c81d32adaadc01666",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LINC00482",
+          "asset_sha256": "e1b31fc205429a5b607440d0bd40e09a1eca095172c23b5fc5aecf045bc77564",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3040",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "KNCN",
+          "asset_sha256": "1dda3ec3397ab6af1be4a421bd0f5bc511225d5c2e08283c51be356135fa605b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FAM162B",
+          "asset_sha256": "f0bb0cc4a7586b8dc7d5afc4605507febfa504e7bda91f05fd02b5bb0eff3d3b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PCDHA8",
+          "asset_sha256": "610de44ff17a8f2b206e11e32c9f742df75dd57751f74b61c2c6187806c3a722",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EPHA10",
+          "asset_sha256": "1a94b7c849f04e2719675b35e124f71c4c7ca64a2370ec209017735742712ae0",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20228",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SOX4",
+          "asset_sha256": "ccc555cc08ae5049896f7c4b07fe8a186069cdc236d27a33ca25547aaabf049d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDK4",
+          "asset_sha256": "e4c6cca6df3423f62973e7fa678ed43dd72762bfe4749b7dde4a64850fde6f0c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IGHV7-81",
+          "asset_sha256": "c397da78dcfe2e09dc4a6aa736e6a9466bf8ecb94f543acb4a8218e0e96275db",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PAK1IP1",
+          "asset_sha256": "00a19d06f6e96f5a37b2a170f7ccee0678f76e3b9ec9374b73a4573d266f4848",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1702",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RB1",
+          "asset_sha256": "5b2522466d89c551c31683730449d35a8183863dca7b96cbef5c4dd09210bff9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WDR82",
+          "asset_sha256": "3cf29be155261bad8994e806e84a665c13ad9675d59c8bc1f6f6cb1333b592fb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PRPS2",
+          "asset_sha256": "a9a97a4e8edf5b623822a8cdd658379944fa33a734705704de099c2e1ea9ae7a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TACC3",
+          "asset_sha256": "22a8889cd8c2661e59d4338cf0af246f8e691445e98cbb4e25f55f4d0a158116",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2965",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ITGAM",
+          "asset_sha256": "43f69b263ec0a226792e68149f9e5f72286e7c6d00c28524a8e857228ad52957",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RGS3",
+          "asset_sha256": "2bd19f5278b7161f8cd34ab034c3d3054b5e0552435bcda69ad356d82941d856",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SDK2",
+          "asset_sha256": "44ba13b36af31583e44c3718ba815bf75c26309861ecea7858d3abe8e7258463",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GSX1",
+          "asset_sha256": "2b43a117a055b7eaa4707a3c97ff0726179470fad2ede751d67a643390581f2a",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1659",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "KIF3C",
+          "asset_sha256": "331a6aca672ca3481661faf1e03f2a3c0629d5af80ed52e124c49948b935270d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF723",
+          "asset_sha256": "963d4a9b70f109d2b0b846ff9ca51c582990f53eec65a7266bb4dfdeaf9c5f3f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TFEC",
+          "asset_sha256": "fde9f5d2df0cf2e0953a509e49d8ab68ab33d14e2b68206cc3999ee5649fbef4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC12A5",
+          "asset_sha256": "082b8de55f54e50bedae3685102e2e3bc1ce8b8bd7526a8c255815d03f224661",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2852",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "KIFAP3",
+          "asset_sha256": "1167275d64748c5aca2685b1fd9a0da0ee427e3711e8828f84c7412c851883e8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SMURF1",
+          "asset_sha256": "5cfca85dfaccddf249be9e6d8f0c22d653366fb290a4191a337e12b4026ec278",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "H2BC13",
+          "asset_sha256": "d8902740c4a5ce1abbdd68bb3ccb3abeffb2661f4f5b3fc1d80a52ea198a99e1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KRR1",
+          "asset_sha256": "9ade6245fe478873802c4f8947d3045999ec4985f54a1495ff9956826751bed1",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-307",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "FOXP3",
+          "asset_sha256": "89dd083bf59ce393e5ab45d5ff5e0fb1ac1f9c4ccb0078b5cbd4d2fecfe36164",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PARP8",
+          "asset_sha256": "4a2cf07e631beb2e6c2f0c6675c8c555992ecc83cf3f0cbdf03ccd468d0ab903",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FEM1A",
+          "asset_sha256": "eeb5b59ad40f1c1956e2fba548d80c916cbd0eb2fe688d48821b49c9692d12bd",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "POMT2",
+          "asset_sha256": "e48ef543de46ff70d06008f9ed5aa6f62524f089a251d706363cf347322c1937",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3597",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CENPC",
+          "asset_sha256": "0868e64378e3ca1ea7cfb57cff093cdd6bcee563295449998d546a5935ce64c2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ADGRG2",
+          "asset_sha256": "14736d0128603d8d4cd4479e30d4f259379c0323d6ebc7cfa1476e0a2500eadf",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NPR3",
+          "asset_sha256": "3dc13517fbcf0f296edb1ae9eb6b474b3e43378f0bacee6fe3713946d7c7c4e0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF544",
+          "asset_sha256": "4c860e956b2f7586f47ffd40f07eec43268cffe3192d1a0ed04b3c91b192f4eb",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2637",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CYP1A2",
+          "asset_sha256": "ff03dff9be9016d24b76287981e700bd58cd1d2e1fd6a11ab10ebd4ef801ca19",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SRSF5",
+          "asset_sha256": "9a44fbd6347958eef02d26c2d7696e801992a3043541d713615fecff474911d5",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF320",
+          "asset_sha256": "beeefbf62a77fdd7e66b25c8ccceb9f8b18e232275f31bdb65a228724b1fa952",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EOMES",
+          "asset_sha256": "f434eb124bdd4e6c463f2175ac9342748f15a1223d131302be20e94e518e4e4c",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4454",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "DNAH11",
+          "asset_sha256": "5a513afcc44ed1e92b9e4b291ded109a629471c024f77827988c8ba0d9a5cf86",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KLF16",
+          "asset_sha256": "6d639d512c392927be2d24946e4e79d2ea6b691a5b28673752e995e4bac033df",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MMP24",
+          "asset_sha256": "0c5073f2e53b60f290152dde5af080284024bc20acbae3530c926f64d7c5623e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TRIM75",
+          "asset_sha256": "3d87d90493100d0ef9e98c94ad0dff539c6027d538a4e52502727ee15b5fab0e",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-580",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CRHBP",
+          "asset_sha256": "0f50f29dd9424ff27922e5db341cf6a6078ae7e3fad2929e9e845586167c445b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PIGF",
+          "asset_sha256": "767636c3efb5d9b31eddbae0b6064efe809e915590fde3efc6673ebf6d0e9ac3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SPEM3",
+          "asset_sha256": "a6ca49801924dc750e21a78e89f3678b36f9ba3de55fdfe6feb22ae7b1931862",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC25A24",
+          "asset_sha256": "8c48d6105ffa880156d4f6178e16991bc8a8d7327e9ba3b1b973a44bc18fc2da",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1894",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "KLK3",
+          "asset_sha256": "5345e12f77e11b9dd00cf83dfc64232bfddbc96d9d1bea238f49625d5182add7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MC2R",
+          "asset_sha256": "a89d25a3926cbe670c345ce3645ed7d562dd09e84da8d529588d2ef1a8e6b447",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "XPA",
+          "asset_sha256": "9b96c50717488be321a36da96e7be2d15174ed76886fbed0865792a784396a53",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TEX30",
+          "asset_sha256": "1086d0efa1a14d8006fd3c0b43fd479ccebef6abd3985c0089d7b368e6755247",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25436",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SNCA",
+          "asset_sha256": "d07f630b6bdb2cff6aaa4a15fe263d448205263d867230a9b936c2ade2e6a5af",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KCTD14",
+          "asset_sha256": "651e0094c1016b3f0dc8bc49296f7e0f04535adfb64fbfb51a7bf1ec299841ef",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RPGRIP1",
+          "asset_sha256": "630768dfdc8e02946cd7dc2a19ccf86b83517278ecc2d093e9538594a891839f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATP5F1B",
+          "asset_sha256": "71266eeba337379b21ffd600f51eeadd7cdad9486bb4fd2d38cb34621037eba4",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25451",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "BCL2",
+          "asset_sha256": "cce86f72a509a56424f792d1df44869ab6b720aeab9436e150f4ecca8210f8d5",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FAM98C",
+          "asset_sha256": "a6a197631811a025a4dc32920f468ad05728fd42c2d20ef899d49ecec9e38a53",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DLX4",
+          "asset_sha256": "043457af32127ddb69fd323abdaae6eb826386a359e178363db0812f5ae4e7f7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BORCS8-MEF2B",
+          "asset_sha256": "0f28983bc4e73709b9d4760dbe39c4f2a03fdb7ad84989800efde9d33c2f5895",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-27155",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "POPDC3",
+          "asset_sha256": "65da56e6786739d0dabcc51778a0f3c2dc18307327b1cd811bdccfa470d9ea36",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RTL3",
+          "asset_sha256": "1e41621c9ad46844e9ec782cfdd6adcf839bae78a9ce7767aa81104817357332",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDH8",
+          "asset_sha256": "13e7e85591282499b0fc56f078a4a045009be55acb4c05dc67b669b544e65b9f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC3A2",
+          "asset_sha256": "8e22ca5dad6042b9bccd24ccf67918c75482dabd1da30ea4068c28abbfbd0c79",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-29512",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SKAP2",
+          "asset_sha256": "8a439154c452c7d3d1e894ca70913e10a03b80c5e4e04d554561a9d2f8db4a55",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CACNG5",
+          "asset_sha256": "5642fa7336f782d7b0be145f82957bbb7b37349679912651d842cd1ff672a3d9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC35F5",
+          "asset_sha256": "85d4471b14904991bd04b240414c8d8d57dd04ddbebccf4321a7f7babf46a249",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "VPS4B",
+          "asset_sha256": "c6fb2a92d86bb8a4e34f9293c5283b3bed9fcaef872d54461a904077a2617852",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31827",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SOX1",
+          "asset_sha256": "77c91c1847e1cfa78b1db27a2b86ae543c4b47db655944352069372f2c45e2e2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PLEKHA5",
+          "asset_sha256": "e6f32e729288b1eaa4fc4f1f8f7cd362a9c2a4b8dfe734a12c7a018ea3dbb97d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PCDHAC2",
+          "asset_sha256": "55ea6c646393197f6d5f03ce413f6ebec1c079d4f9685fe3091b037bfd44e0dc",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "POU2F1",
+          "asset_sha256": "0e955bbd6ad1fa7797795c278e73f67118f6af82399f5d81cb65b124101a7761",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-32301",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TGFBR1",
+          "asset_sha256": "24a33bec3e29982a431e5a8f04a36adb4d1d9f641f5b0c9b5dad806c770c2086",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TYW1B",
+          "asset_sha256": "e69d0d1ab4f08795342c4aad4b708be7798617aac2ed863cf031dd2f520131ad",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LRATD2",
+          "asset_sha256": "35e86b0907dc23c120b19805dcb6872bc3f9cc84e1ea619f1b454266daebe383",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DPH5",
+          "asset_sha256": "7cdb724897680d4a10ab17dc6c66322c78d6bec77a9e39bc040895875261e78e",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-35542",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RNF212",
+          "asset_sha256": "31f5cb616476b54cffc4db3f44bc03d19bc5744a20298d0d7bf3ef7b4d4ffd43",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NARF",
+          "asset_sha256": "d2da321232ff7091556a626b711b1fc1673279915002ff3ff8fd340e001b09f4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC24A5",
+          "asset_sha256": "ac694585578afcedfc44c95973c1c3062c1a5ef89980d972ae61f416dfdf9e34",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GRIK3",
+          "asset_sha256": "7b67b2220eb211248af4c734654a2efe9568192530b7a62dbd35e4f2f69e072d",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3894",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SOX3",
+          "asset_sha256": "98b19ad84b09283b3168f769f0a11ab2997c45cae01ad567b7b6b5c1837de34a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ABCA9",
+          "asset_sha256": "7a00a0c2dd4ac89ffae19790bfb0e3666778cfff5651c7e5e7afb8887cff3971",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PLPPR1",
+          "asset_sha256": "8d7965639f21f0ecb8c05721475800d5132c4c9c873186928e4f6dbde135abef",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DNMT3L",
+          "asset_sha256": "69341402c6f410c47ecbf938a27657443b5f62d959fa4a5d762f3a9ad2eb87ca",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4349",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "NBN",
+          "asset_sha256": "e72eb14c4ab28492ab6729d4fca35a0c679aa4b2e8d93edfe0683ed73c774403",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DOK1",
+          "asset_sha256": "f0a490357ec5904ed83f189b89f17cd01e40fafaac31a234dbe4d1a13e064813",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SRF",
+          "asset_sha256": "4fbd425a86f0878ce8313ddf1d5bd6369f788617b564a0c1f276094ae1998eba",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NBPF11",
+          "asset_sha256": "e105fbb2c90cd542a5b158335d5758f76645d2c48197ab57ae8aa20b2762e669",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1209",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CRH",
+          "asset_sha256": "0a6ee4a87a6b7bcdb8b8ef6888cd8fd96d3d2d92fc91c77789e0bfec83520989",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATP5MG",
+          "asset_sha256": "ed44ddc2b42f5c68479eb4e7e39bc2bdc4181578a7e26cb9f8d49397ec0a59c8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDHR3",
+          "asset_sha256": "cec8cd2f1b28231267b75b88cbbd48a538d127f3611b5b57dfe426c225aa3051",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FOXD4L6",
+          "asset_sha256": "2b472e252ec1eebf66b7682877ea8a74e707f9ff069c0340f93e6515f87b617f",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2119",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "IGKJ1",
+          "asset_sha256": "e3d5dcd357bd4c7cdcf210bb390f7b07316d1eda5a51e57e4e62a80af0e29d0f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GCGR",
+          "asset_sha256": "28b67677650830206899c40f92ac44357f73f4e7732cd2d848c11509afd9fb16",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TCEAL6",
+          "asset_sha256": "2157e94020514cd783e96a61ea8f573cf5a6821e7f304d04f0b4931ce7796d84",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NSG1",
+          "asset_sha256": "bac297745598f3ab109e75e3597011c315c6b24df8c9cf1d44fbfe1e7e3be48c",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25937",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "NOVA2",
+          "asset_sha256": "4e11c5b6c4935cdf56fa22a6fc0af84ceda7c1821578f3f39859b0cb071a8584",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "HACL1",
+          "asset_sha256": "a3a5d6f037f9705b521ba25ab6401cd1b428bd6d7d7c2aea20afcf74135e257f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CGREF1",
+          "asset_sha256": "2fead0c17b082ef869bda89c8fc94c37876b2e88d97b976c552dad4f98578090",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OR2AK2",
+          "asset_sha256": "42cf294a1608d3c7b09d22491d6c7de7f9b0c87f1b2643d59794c32f5f1d4325",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-30365",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "BDNF",
+          "asset_sha256": "74bda74223d535b510869a82f655bbcaea535e208cbb27a6540d86e4e2063b26",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GPR173",
+          "asset_sha256": "e637ee1d3165b4194cb107902361814bc625206c7e28d2e92bfb4f07d2d422f6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DENND2B",
+          "asset_sha256": "a222eb4f789e7d2c9223e7f8bbe4e7a7886525ea9d54a2ea5c43cc34d08aadf7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SPAG5",
+          "asset_sha256": "3f5b56a1778379d2cbf438c026b0621cc99c633d2bda896cbf4dc344f9b1e2a9",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3524",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "DNAH10",
+          "asset_sha256": "a20c8135e48599497c218e5b7309184d866a061bba462d4c8177a50b36df90fe",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DENND1C",
+          "asset_sha256": "323046024c70771f10adb33b71e9f344804c3f3c15fa959ec92f3d7d1390c85d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TSPAN19",
+          "asset_sha256": "91177222af19c53edbe234264f108b22f527174f86a2cc0e1c9bf182f4d0af0e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF213",
+          "asset_sha256": "893bf17b2076d544d0a93d8bc40c9a61d99c961c50b1d4da0eedb6c392f6d52f",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-507",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "NBPF19",
+          "asset_sha256": "153617d8ef0b3ced8f54c2d56b7cda4324a267943efbf2789fc799ed69559ef0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IGKV2D-29",
+          "asset_sha256": "447608d2a8d545b79fe627772489fd3b5d06d4e07d6a131c15e1e6b04bdf1967",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BTG4",
+          "asset_sha256": "dd528844c21a5381172f33bfa03d8a70699d9198dd47acf42312fcd2d947744a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SAMD1",
+          "asset_sha256": "e2674ab7f8fe0b476fa0ab61af81b85e245c195cd43377e4a9077bec0b0d6fcf",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-977",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "LIMK1",
+          "asset_sha256": "960d3afb7a9a28e0cfde20fd17e8439485ab943d7bcab1a5aed3bf1d09c11dbe",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TAPBP",
+          "asset_sha256": "a97b81235dbcec88018769aa162a5a83d2f100bb8a1faa9b189b212b32638cf3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "UROC1",
+          "asset_sha256": "062c86c3447016cd06f2b752d799c7deb98985d5fa19746cedd55c16fc54158e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OR5M9",
+          "asset_sha256": "6598bc83212eb4b37031e02a8b72526c04c5d47b82813a4268607d0ec016d91e",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1891",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "F8",
+          "asset_sha256": "6d5fcc502cb4e717c2b049f499cb7987c5a294c4f8f6f780c5787b4d76a07ee7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SVIP",
+          "asset_sha256": "5b7581f7379dbf2f25f7b8bdbf614ac76bc95c8dbc222d919dba113e43802a86",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AADAC",
+          "asset_sha256": "d65faab2fea6a0791fd1326d7386b1399cedb8660cfd7d68640653324db4bd5b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZFAT",
+          "asset_sha256": "3aa1d1d78871e498afbd46a673df8fb4428b46ec87bfca4560c7aee8658e6e84",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-30501",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TULP2",
+          "asset_sha256": "dae984d2e1f366f7f196560d90a45b28d37d0b31fd38d322fc2089853e96cab3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DHRS7B",
+          "asset_sha256": "a3b4e005bfb03526f1acd539fc10bee2a54e947cdb9ade33896a7fcf570999cf",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF776",
+          "asset_sha256": "583447b9742449611604a963a730a83da8d57a818ca0307ac58485ea4ebfcc50",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NCF2",
+          "asset_sha256": "ff7fed1e5ec791f6b7695e1594b6f2c568694c308faad6a54c1f58a2bbd60e64",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3232",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SOX5",
+          "asset_sha256": "02f607b3fe67aba4cecd7aaf1a809f0c13648aae0f0d0b4ff6cd85e5c6d0562d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "VASH1",
+          "asset_sha256": "4b63f74de7cc28e42587c6cab3cee7a17e72abcf7f3ed07bb33eb28e8a8fdf30",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SCIMP",
+          "asset_sha256": "df6eb4cab4a578d7866ce3c9c07b7fb93d70bc99d9c14e080d067c03b13343a6",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PHB",
+          "asset_sha256": "cce9c203452a542864cc7c92fa251882573c4d0477bc06b38fb585e7b9c29401",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-33126",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "GHRL",
+          "asset_sha256": "8a84ed5e1b97a601051074cd8d10658e226c524d84b680686a24ffcc8b7b9ef9",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TCF7L1",
+          "asset_sha256": "4b042aa56165a0b186545bcd144cfe930aab854b72ad435e08d0233d3f53924f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NOD1",
+          "asset_sha256": "47b0449944e6aa482b162d71d8a0585ea672b977d7474e6385e176f792549d79",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KRABD2",
+          "asset_sha256": "b974b66cf8f8c579303b9d22bd349b7eda936e5563e4d2de16ff7f25fbebc8df",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4239",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MCM2",
+          "asset_sha256": "23abd07f41f816edbd13c56976068b73adcf23ead3263816354def796b3c6538",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SPMIP9",
+          "asset_sha256": "17deee50042d47551c1e28f33b10acbdb8c34c96e6048cdb8ae1664de6590cac",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GOLGA8J",
+          "asset_sha256": "539f810931b23fdf5b7bf1a48bde45b038fb98ee54fcf84e73ebe75232b3954b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "HCRTR1",
+          "asset_sha256": "b7e44fee526ea7b2704bbabaad5fc8e7d8df48e410f883e6f6d3fbe1b29b659b",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-329",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TG",
+          "asset_sha256": "592365bda05474519b30547ae358bb315e550744eac94f0b2685bbb7a36253f2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MMUT",
+          "asset_sha256": "94b829894b1917b71425c3f751fc261193d738b669909890c62b0066322080fb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "H2BC9",
+          "asset_sha256": "e716b35f0a685221f6cb73fdb783ccc6148740de6fbaa5489019b668fe31c761",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NPC2",
+          "asset_sha256": "902647a2b81f7014c61b96985eea3c752614347ca264478cfe32473b5b2d579d",
+          "is_current": true
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31574",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MVP",
+          "asset_sha256": "c52d2bdfeace562c8c7a6fccb446ae2e3d2a37e531fe8236273613c91fa10bbe",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "APOE",
+          "asset_sha256": "d69ff0e39c67ad2781300dcd478f8c2980f80206937989a22d33f7fa775be96d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AZI2",
+          "asset_sha256": "fdfcb0957a607894491786fe6d953a514b3735c1babfd38e358e9e6757292c18",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TRIM63",
+          "asset_sha256": "5ebf7a07517ed2e0f2ba3d9612f467bf951ae6fc38fdf455c2c49b4f80db85cd",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3868",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MMP3",
+          "asset_sha256": "8edcaafe3e3c94639ba2b758dc2b1666209d837a896331f329e44c02e7237e2a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATP6V0E2",
+          "asset_sha256": "5d7cae2eb67dfd5608944196374978406e654deb2e6bf06622c1ebce930ed907",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EVL",
+          "asset_sha256": "fd2d14deb0681d421872617ab8fce6d699f5d39758d3591f6b0909d9aa32491a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RGS3",
+          "asset_sha256": "479d32dac964b7bfe4ddca82941c2b8c5bafb6eb47178c3026a2fbb32707edde",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1275",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SIVA1",
+          "asset_sha256": "dc99f50d644ae5939816d325e47cc9585e114430ccdfc8fcb69418f672b074b2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NCAPG2",
+          "asset_sha256": "2d7dc2e0d74cd27af124149fcff2f8b133973f203bbbc596f036466a2afbe502",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TXN",
+          "asset_sha256": "b076ca790bf6eaa187a371cee5fcbbf89227078e2b2dcd3bffee49f49e29a842",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "APOM",
+          "asset_sha256": "d183ed992e5288edcbaf01f8fe0242dcefc50c26edf82432d28d46e2732c8970",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-23304",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MMP9",
+          "asset_sha256": "dd0d05dd5f919729406d33fd3700b0a17449263d86410b269e116324e7e1a46a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MAFB",
+          "asset_sha256": "dace02e5dda75abc5aeb16a8b08ac271ec928c1ae46c579dae0ea22423028eae",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TSTA3",
+          "asset_sha256": "2dc02553b1088bbe1288e27b4cf788d7e39d33a82c759061af6d84a12c9c3cca",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GPX2",
+          "asset_sha256": "899a80474a6a6df1d676c25c7a02df4819e46645edd1357d4cc47694ed8edbe6",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-27799",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MSTO1",
+          "asset_sha256": "0158408ad32cbc61f11221f8b54d9101e8ab61f5eb6c9e116f668eb95df61d61",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "C8ORF74",
+          "asset_sha256": "43678ff35afab5dad0ebaef4e950131e1b24731dc5f839445c253f191c14adc7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KIF6",
+          "asset_sha256": "281412d09f0534626fd29dfc5b7673bb3f111880634ee8e4e9ae93465458fa40",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "USH1G",
+          "asset_sha256": "9c6a260c5314af86b71440704a35dc60ba65f0b11988fc05678957ed25657aa1",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1230",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "PLEKHG5",
+          "asset_sha256": "4ee7a6bf35941321938f63642fef6f8ffdbafed57c4c6ecda69217b2847a5d4c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC35B1",
+          "asset_sha256": "e51627cca173f91cebb6af420c6f798b827a96b226c051c55bca02e1d576807e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF451",
+          "asset_sha256": "95cddd1fac7dc98520ae46b29735d08cc81ec761ba2a95da15a340f7b8912843",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PPP1R14A",
+          "asset_sha256": "6228161638ff1760c1f00a2b7a88c33955f07711ac36139d996d12d2bbb19c28",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-28478",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SPX",
+          "asset_sha256": "edf7ae223085538d4951367e6370a9bf246bf09ee7face8859b0f43d4379f2b2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LPA",
+          "asset_sha256": "e83a8c01dd8eb0762d1875ab0afda9ae2c1b6ce9d1ceeb1fc60e086c56320a6b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LENG1",
+          "asset_sha256": "71f6f9e41e26e0ea984738c6623f411800761acc210d6324f33e8614d83feb4b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DCD",
+          "asset_sha256": "8b13974eae9d45dab26390d5d3a6aa951a26b5a3cf910e8a6dbc09c0ed47ebf0",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-34054",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "XIRP1",
+          "asset_sha256": "d4348f4c18466871fd3cfa03b362e0df0b7ad3d7febb033e3b9f23f90b054bd8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "H1-9P",
+          "asset_sha256": "c111a705557fa386ba0f067e23e1da9452e1eb383fec39806f9f633c773860c3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GMPS",
+          "asset_sha256": "d03db28141e510d983253c76f2478a300b06e0c51409c0e4a5d8da8c3be5f6fe",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RGS3",
+          "asset_sha256": "dc6efe382999be9703557dfc9ff225d59f9284be5414fea2dcd9eb149fd2040c",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-147",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CD8A",
+          "asset_sha256": "28d58d0a797b116157cdc7937163d707d3e90f64babe532b8723f43d319358f8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SOS2",
+          "asset_sha256": "9a536d9711fcce1d36447fb7ad4e8b184757664eb766a68ffa97dbc2f86ec785",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ARHGEF5",
+          "asset_sha256": "0cdeef3488e690c8442e16a476c0b5120b80b94fc0ab6b612ddc4b3be37e47ff",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TMEM202",
+          "asset_sha256": "319ef5ad9dec71fe384ceb53f30e3b2928817c20b4db783c8e40eec5cb57f631",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1582",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "EYS",
+          "asset_sha256": "eb05e540a70ff336885ae377977215f05e5c6c405d3bdb2bba94590a056475a8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "UQCRFS1P1",
+          "asset_sha256": "dc6d5ff7be78191b7a04de64470f5be459737238c777f3bd0f09267f27292fee",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLC7A8",
+          "asset_sha256": "7f0f06092a0185eeee6d089e5a05b4f134e4a91e7d31308f2f9a104c4cc4f138",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PRDM1",
+          "asset_sha256": "19ede0d444127208581b3ca43ffb51ac34a319b9a8406df502c170c0c8a866ff",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-23212",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "PER2",
+          "asset_sha256": "2ff3e2c037c9d080db5f01fb07bf0242d8b1061208d25db6bcb725dfdd3b4499",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF584",
+          "asset_sha256": "fffe540729734757ad2ac66cd0bd1f7e1c80e2f1e5b79e53d21880dd4684d813",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PPP1R26",
+          "asset_sha256": "11c688cb8ea713e28d188ec5a39d59c1b09a50cbe16cc938a7c6f9dac4b9b71d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SOX4",
+          "asset_sha256": "719729b330244e1eeee6651fa8ca0ecac0e637476138a9637ccf7cf2d6205b9d",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-26571",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "HMGCR",
+          "asset_sha256": "048885a8c0ca6d414bff778d9f29a87be7df20db1b4a07feb7b97ec887aeb41f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NAT1",
+          "asset_sha256": "0246ac199a6262ad8c09690a1572b198068096126602e82c7cc78a2306a0548b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SH3BGRL",
+          "asset_sha256": "a7ff0ac98c2103186c9686c10ff6425db6556d8c95f0737ee37c4204dad7b18b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CACNA1I",
+          "asset_sha256": "e329dd4c28b3d66f4dc86b33b3f3195f6231cc6790a0d2df2bfb1717ecbc8fc5",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4418",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RPP25",
+          "asset_sha256": "025c2729d96dc7e27203d1a04c7644bb0bfa210ca59aaf4ca9b7741ab0b8ac1c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "UGT1A8",
+          "asset_sha256": "7b93bc5d9ec4b2f210701065c337ce067c6a89365b06eba2eac76a62cb154c9b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EEF1B2",
+          "asset_sha256": "50fdb0c64e08c311f3dfc89dea8d6d668208b5c10c36546fb8f479e7592eb8fa",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MYC",
+          "asset_sha256": "7628e4b800574ea074d3d32601355355780a587b54685bdff47492cc9e27550f",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-614",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CATSPERT",
+          "asset_sha256": "d0f1bf9a41c316fa7a4c4c97b73ca4886496a1780907bcebf17133d63e473803",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SHISA3",
+          "asset_sha256": "21e2ef1491be47c233f91cf97f16102ac36a926360982f38b13ce0fdd2542f9c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IFNA8",
+          "asset_sha256": "3dfe6c036f495d740ea955b9dcfc51293800d6299feaa150acbe3374fe5d7bb0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MB",
+          "asset_sha256": "96eeb8467acd9a019e69508a4c18cc80e81e93152c44641b3a73a5706c160c38",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20213",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "GLP1R",
+          "asset_sha256": "161ef245fd6cb216a56965f10ddfa03541d350b7adac6c48f43a7c05d938801b",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF549",
+          "asset_sha256": "d08e3d29d96387d936c9b8bd33a72af44431f1116929bd08a4140a2b12bcecbb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FUS",
+          "asset_sha256": "a156a4c81de3773774db2abc868f5fd3c1be0235c901930c858dfda0fa6cd857",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "HUS1B",
+          "asset_sha256": "ae27f8776b2e615992ec11e62b4ce676abcfbead0b8f03b35a153f89f6c095b4",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-21108",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CASP9",
+          "asset_sha256": "038e62ef5236b10be13e273f072d7a9bdca2c662e098d5549e42bd96466b0a22",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FDXACB1",
+          "asset_sha256": "0bd150a1396afeab5d353981385bc06cffa2f302bfa81b692b04d97d94ada01e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FLOT1",
+          "asset_sha256": "b59802d5dab21b0099152a274ff60022efdc7991916fd8021a804e63f9ec7982",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "GPHRB",
+          "asset_sha256": "5d55d82c1c065b97093d0b8846d3c888f8dbc1dde48a382920f14404b3ee250c",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3260",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "UBE2L5",
+          "asset_sha256": "0647ff23694bf43671a7f2a0e8618218e1b5b6b1f1323de8b974676e777a5bea",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WASH2P",
+          "asset_sha256": "43bf2c73618f16a05c96445b898d14520130347a8f74c40195f47783efb70c92",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OARD1",
+          "asset_sha256": "0f446cdd94ba4be4b9fa27cdcdc8ab6494e60e19ea0c237795a5f7a1bd13081c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TFDP2",
+          "asset_sha256": "7c0b4334ac1a339b5c6ad54671c9f2b4d6a868bb387044be5a5a7c5359c6089b",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3270",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MAPKAP1",
+          "asset_sha256": "95260b36012c2abaf9b8d629468da5cd5123478c6c40771c8c02d79dd474cb9c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "THADA",
+          "asset_sha256": "bbd50a1f4d391213a06eabe25d7a2d1708bd17a30dfbf6eef6e64aced8c006a4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FDFT1",
+          "asset_sha256": "24cd2b1757cb92d75c7d714afc6c840aba1a0ba79358f96967766e518b2262ae",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AKT1",
+          "asset_sha256": "6de877b5aaa8eff37d1b93e3c39913fd8c13c621c7973151afbbd5637565936e",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-4002",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TGFB1",
+          "asset_sha256": "c398a74d9466cc2b0dd4268169f8339ec90aed23145be5144b77d84a1aa1dffb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "S100Z",
+          "asset_sha256": "65269237aeb088b71f6273fa5814bb47d0af8a5e49a4c220f8c97275e1884795",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CYB5R4",
+          "asset_sha256": "d9fb979a12cfe1e7d634efe191b2271b61c7f03f84ddffeb1e6f54b81e67260a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MC1R",
+          "asset_sha256": "6e4d7a5bf777a437d17b55c61aa80e3c89ef5058d9c7ae2aa29e34b8e8bb3f63",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-490",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CTSL",
+          "asset_sha256": "ebbd791fc4755cb0390056a2835b67cef392822e5e68b602afe75abd8ba79cd3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PRR7",
+          "asset_sha256": "fdc73e77b8e11d5baf91def2944810371861e626dd4855cb88a9116ee6cd26d1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BORCS7",
+          "asset_sha256": "986dad2d9d5112e66656b356d0ff9b67ee09e2d6ef3041651829425276a74d82",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NPPB",
+          "asset_sha256": "ef798a04f41ddba7181d70627e6b316d8348cf07b4eb7d037e39f24692a360e8",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-875",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MTRNR2L9",
+          "asset_sha256": "4ba941103b4b96c0303c17e6d2ede3a9f99de1ac9ef2766abf7e4225664b3b9a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DYNC1I1",
+          "asset_sha256": "100020d7ffd22e80956df65bff3ca322130e8c3002fb8e8744b33309643fcec7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AMBP",
+          "asset_sha256": "678e8d82c7b965e1554a964dc1bc00e4991da6d97f7ec6ca7c8eab329ca5c22f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "THAP7",
+          "asset_sha256": "e8acbf2ccd38e3137997487e0a88a50b660c5b22cc58c1a6cb0185fad6718964",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-90",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RTEL1",
+          "asset_sha256": "f15c1669c41ce0aa77f766a5a6b59e8d4e7b121d5ece1e4a489fed57a140fb48",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CDA",
+          "asset_sha256": "6f76d7696dfdb60a16cf9f728ad4758c2ee624f3ccc404d2b2164ca68545a78a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EFL1",
+          "asset_sha256": "89b426aeb793d9f92536807dc30fc2997dabcee19c156e21f375cd05631bdbdf",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FIS1",
+          "asset_sha256": "44d9c6034b8cbccff8e7f4be9c7933363d9c1971307d293aa8862b53426803d2",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-944",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "HSPG2",
+          "asset_sha256": "4e49bce8227b5b165b16e12e12d4b20979ee4f29461fb71e231e9a6f1419388a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RNF214",
+          "asset_sha256": "5d2d57932b907c4c604f27c50ed5b96a59c197d3563bf2d305e5f4a409456fab",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CLIC2",
+          "asset_sha256": "ee52b46db0bc04f8431d9584c58de553f0d7eb7705e0f1663b31cf31261712a3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ABCC11",
+          "asset_sha256": "c04c4f5f7f148e807edbd843089e5cebe67e1c51bee1c4e30e4054214a4933e4",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-130",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CD74",
+          "asset_sha256": "4912e35a42a50ffb4f2db8af92070368758e5873c75a525b812d2eaf34746d01",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DCAF12",
+          "asset_sha256": "4d12d842c6ccd91574f27b82138a931f70fa25b563ce33e0d94e9d52a061fdec",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "XPO6",
+          "asset_sha256": "d83bc26db1d7e88d63924af00fe5107bd4531f44b19aabf7dbeca20f8ce058b3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CD1E",
+          "asset_sha256": "5c84a405d9a82564fa6c52ffa77e938b910886de2a4039234deb9c0259868d6d",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1424",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "HOXD11",
+          "asset_sha256": "4336ac9b2ddd03f8f47cb6c650ebacb0dde821a44312ea5e7471465ca5bfcb69",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OPN1LW",
+          "asset_sha256": "ef5809567df70cad1877f719b21e69d93e5909ce4f48a249cc057b3431527098",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FAM170B",
+          "asset_sha256": "88f74c68801806c4c283e20f8d8bef686bbd8a60ebce6d46248601d45f19fd92",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CARD17P",
+          "asset_sha256": "95bb0f019822b3a079718f5984d49068adc27451cafcf025abdb7b7649aed854",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1916",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SMS",
+          "asset_sha256": "61373565aab19c59b2989963f8d3745422901eec11eeb9a96761a11d8ccc79c5",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "POLR2A",
+          "asset_sha256": "80bb69beb76921a6e109ac11318b448983f40f12a0415f9e27f64b2ef9f40dbb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SMPD4",
+          "asset_sha256": "d8fe5b0408df2c6e3d3939fd3069d9a75eeac01e12478d6375298f5586757579",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WNT5B",
+          "asset_sha256": "0dc97f356db0e31c7422318d43fa2f880ae7d570451156f35d3f459d3ea65f14",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20131",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "REL",
+          "asset_sha256": "c80c92694228706cf122eb3e84a6e67c8b1bcec9c870d7436017188e15e40216",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SYNPO2",
+          "asset_sha256": "ceb8e7abe4a28b5425417ff71d241c530cb01b7ea410bcadd136284c70075be1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FTSJ1",
+          "asset_sha256": "b182ab9d8b4afe643a160358c9b7b7300eb7f646f371fed8b81339d002356a80",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "USP25",
+          "asset_sha256": "f69b65435aee8f0ecafc082030142f6373d2a9e3bb00b3db28096dd63a3b75b9",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-20787",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ITGAE",
+          "asset_sha256": "a3d0ab9f3d291bef91232fe853588adf695565507fd6435d90ab90b3a0daf999",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FLYWCH2",
+          "asset_sha256": "e626b0fd9a423c95499905d3b6be13dd1e08fcdd5ed929937a02dd8083bf7e20",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PPP6C",
+          "asset_sha256": "c8007eb8e7492a2c084aa07c04a865674d5203e682208312d5c0e0a5a8263dcd",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "USP28",
+          "asset_sha256": "263fb380ee0c6cf30149e84213388704698e497deda26cb312160cf23729a271",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-22963",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CXCL1",
+          "asset_sha256": "4444905e6b231b72ebe929b1875efc3f5f6b6e439f124f4d692ab201958f3522",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TFIP11",
+          "asset_sha256": "e6a58095043b499f8c5a12e21f523363a107cfec579a3c4bbcc8830442537eef",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF362",
+          "asset_sha256": "7d4c2d8afdb7f879ab9eac351364da2f918c4d4ac023d28cd4228880921dbbea",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BAGE4",
+          "asset_sha256": "179c28f66fef839a79c3bf98fdcc000e8d8633100bce1a9ba1599a1f44974cb5",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-25237",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "GTF2IRD1",
+          "asset_sha256": "7eaeb90966a4a4a871e615e6d41b5e9f6d286d20db7639b20c79008ebe8dc15f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BMPR1A",
+          "asset_sha256": "3c0ebd25460601e09001de29a3fdc13b5ffd2eed82ab5ed09e6ae62b0acce275",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CFAP77",
+          "asset_sha256": "036060dea938b71437d15537248fc0cea9220be20a870aea18c467de03b974e8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CYP27B1",
+          "asset_sha256": "ac422c08f79611a6e9bba66754c95fd49ba394aca14c086d1b24a2343a8f8914",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-26347",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "HAL",
+          "asset_sha256": "67eadc8c998bdeafa444e6e7406b4105e7ca447c38797d01539b9488009f8d18",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KRTAP5-3",
+          "asset_sha256": "ccf4607fd5b9b12db940c2ff416a6123da814b1b9e954e2ebec7ce23f3550356",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ARG1",
+          "asset_sha256": "f71cd8802be29e13c827204c37da8533d86578902bb35aaba12ecaeb4c017aa4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PCOLCE",
+          "asset_sha256": "a2488133d04da23293a6986d2047ec215a2425b2f5cc4bc9ed4e12c037d96e01",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-3057",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RAD21",
+          "asset_sha256": "4dfbd8e992b87ef529f57058eb8d53c7cbee852dfcf83564392913a86677faf1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NBPF14",
+          "asset_sha256": "3e8711aa8df654d8b50dd89b767928145a23923c82db16022b04f0c77e4211a4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CPN1",
+          "asset_sha256": "361dd966d31694a40e512e9c349a69ebe71bdd4c52cb1c002ddf244fd2e56fc4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MYH2",
+          "asset_sha256": "7e1dfbb4c4ae06569f6fae2788043b10de35d2b365e423f94db49025477fd1e7",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31055",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "MYL10",
+          "asset_sha256": "236918bc5e4256f7b591ea7360042a8fc7c6752fc3db20f5948ec267f029277d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MTFMT",
+          "asset_sha256": "4e40c95cf5bd1cde61b6fbef967b6a56d9860c147d5aee5897bf18e9da32c2cb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TTF1",
+          "asset_sha256": "8a98cc1a96b8259d0fb7608f2898e4d4b0656e1f2cf60229b4d58b324f079e37",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ACSS2",
+          "asset_sha256": "4dbdb995299eb3dcde24f0a1422db1242d1b0b41b2e47b5eb0a272d8c948e2f4",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31688",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "TSN",
+          "asset_sha256": "31da786d0339dbdc390dbefa094304638e152aed3c32feb092c1d842ee08976c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TRIM13",
+          "asset_sha256": "54afa714ebb12ae744be8f6fc53b1e0893953171d1490c0c803ff23b93ccecce",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SV2A",
+          "asset_sha256": "5c2a6d324e144a29c29c7211df02cd1f49682afecff7b6a70f92b604ba312b87",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EEF1AKMT1",
+          "asset_sha256": "846e350eb2b433d71aae67abf80feb55fae750c66ec85185c182c1b22f504042",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-32702",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SON",
+          "asset_sha256": "102654f97bafeaab6c16fbb640f1d832986a406186f9c5116868e0bfa7e27942",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DCLRE1B",
+          "asset_sha256": "64cca57b0aa12a7c976da0b164b6603e1b188f94700d57918e8cce387ce0c2eb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MIA3",
+          "asset_sha256": "302dc4738f529d1495b32fa5ea6978d8c251a3a82347ef6139221b2726da4cc1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ABCE1",
+          "asset_sha256": "f64cb675f4d9f36d3094c6927ce1de2d3fcf84de1518c65869fca6858f6e50c3",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-897",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "STK4",
+          "asset_sha256": "4b36aad92e397c4e92755ca420de69cc422592f757e9270cd03caee2fbf22acf",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MRAS",
+          "asset_sha256": "50f18c5d6340088665a577aad16150af4c0fd895ba3c79a87772d9a6625b524c",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FGFBP2",
+          "asset_sha256": "2a9f5ec1297e9d8ea7ed6511b755a3a99abb3f7b1efda0d57fe05bb65de2a534",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IGF1",
+          "asset_sha256": "93252a138242b378ad418a55f97834a6e12332d052f3a0290ff9ddbdedd173b6",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1304",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SLC16A8",
+          "asset_sha256": "dae395d5cd1fbf66acbf27285e44da340595d70b9d37548677b944c74ff523e7",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CCDC88B",
+          "asset_sha256": "e39c7c1603ad37ca4fa1e6ae1115c6bd99da902f155fa896736b58073ea30bda",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "AXIN2",
+          "asset_sha256": "78809d6db849d777fd887fe65581e76a6a0c2b46312acc4c28a1225ca3a5e7c1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MB",
+          "asset_sha256": "2f167c7848c1a2c2fde48d866a29184cb8d006f4058fc6fa9327981e5ac217f2",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-1970",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SMAD3",
+          "asset_sha256": "fc0f3d031225c32beeb456f1d08b9443c18e77528e9fcda7c45b1ff30738bb40",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "PDHA2",
+          "asset_sha256": "9492b393bf36e38f34fb37a2f6e4aa45c3a53d35b1c0aea12717c401b214d848",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SLA",
+          "asset_sha256": "af4d34bdf94855e0eb0d0933c1224129f196dc56956188fec96a0d9a3e321366",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ABCD2",
+          "asset_sha256": "f25250b1fb8c555ebf9bbfe56a9a05f98508cde414b96841810036139c018b76",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2185",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "PDGFB",
+          "asset_sha256": "7172796381151dc35fe0ecef8e30ea6ab0dba5750a97ab6b1bf3106cbdf6f667",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NUDT2",
+          "asset_sha256": "4dca91a0b1c84da575a3e22a816323b4ef76471988dcd7a34c32c6495ae148ae",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "WDR83OS",
+          "asset_sha256": "69b106e8325ed636e08ffe1fb26bc8316097cb6577aa05be0f1569d1baa5a486",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FBN2",
+          "asset_sha256": "499a631f2c74ab02008c7e828dc6680b2093b96f7036c7d9d9ccb184be8a6c69",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-22209",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "ABCA3",
+          "asset_sha256": "a7f2209adedb8d4eac1d706dac150457806382d6b315509c1f507d272d11f7a1",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "EPB41L5",
+          "asset_sha256": "5970c5270a36cbce8cd87ae229f9549e1aee2417dbef1a4635f1ae5e30c64833",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KIAA1210",
+          "asset_sha256": "eccac5af5e222abfd1154f11ae912953e4e2145a3fbf5a1f412f9bbdf329e4cd",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SPX",
+          "asset_sha256": "f34cda60947f71d298323a0a4f43ce16708733463aeaef7596c019e9139d7f7b",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-23083",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "FGF10",
+          "asset_sha256": "8677b80e85be262f1ae77e02ed0abb5b6cd26c3b56b8d97f15d7a1be18518534",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FAM81B",
+          "asset_sha256": "8a859e0c1ed776af823797f10d7d1512943bc690f28dc9d23a17127fb3e7ecd0",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ATP8A2",
+          "asset_sha256": "9e0883b5b9ea7248a3158acd70f19d3044ef4931ffc07a66023a18b686a665a2",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SHTN1",
+          "asset_sha256": "1a0fdf773be39e5d7b361927bf19c7b7a18440e6ff8837a0be6e5896048751f5",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-23238",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "LEP",
+          "asset_sha256": "7c93b444dedea68a87aafa0e23b4bfb3c7eaa3aa9492bb3788d6e10cb6d42181",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RPS6KC1",
+          "asset_sha256": "9b82207b36fe2da98e4beb71733c08203f6d14e03c25008cef914db51f6b9635",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "LETMD1",
+          "asset_sha256": "621b378af27126ae47f9cd1e46ecd3095188f06977d6ba7f1d08dcac21b71da4",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MBP",
+          "asset_sha256": "a44f927729b3c7f523515c5ca7669fa246506e6c16c3cbbd8106e1ba40294d21",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-24824",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "CD34",
+          "asset_sha256": "443b52bc3b9018d15ba7f91945cfc221065ea86bf426675920602b5cfa75416a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "HEATR9",
+          "asset_sha256": "6d15d4659b97baabb10c32eb3a1b889bbf3a01c85cfa7794f3bc3102d83114a3",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MIDEAS",
+          "asset_sha256": "363239e2e7d6f21bff62914e477c4aee5a3920f747596fde562c0ab555ec0b31",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TMEM183A",
+          "asset_sha256": "8dd6c7cabbfce32126b2c465189dbd5d9cdae4d9abade64d027144202f8ba2eb",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-2948",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "DNASE2",
+          "asset_sha256": "31bdebcb517f3fd17edf692d81946e06998691da19970aa8f0d73f804bbc2c4e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TYW2",
+          "asset_sha256": "fa4f37498eb6dce08972b82aed9e12b837b7e4575265073e24afaab23505a6b8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OSBP2",
+          "asset_sha256": "0e485a510227e22be9b3808d138b92aeb37f35037b552465831527279b116e61",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "IL12A",
+          "asset_sha256": "cce7032ee65761c71f7f82c6248f28e6b29147d4b131dce02c54184e6acc3745",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-30861",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "SIRT6",
+          "asset_sha256": "455f77b14117c76964f21a63c91146cc4a9454e08187c393f1aa2990aa966f3f",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "FBXL13",
+          "asset_sha256": "f4723cf93de98664bcef32b55d99e54b89494fcdec097eb2e0ba59f3f9030a5d",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "RNASEL",
+          "asset_sha256": "d98021f74332ce0e09d4872272629047e1932c8042cccc5c5b4026bfb2a2b399",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "MS4A5",
+          "asset_sha256": "1ae99c5744fb3c56c5e90981b65301c2f596f3a3c8432e1ac6154a0ce0e46c81",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-31935",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "PIK3CA",
+          "asset_sha256": "d765e5b0c1aacaa863ba7ec334b0dde39aede59f949454128cbfdcf3c3d8bb58",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "KIF14",
+          "asset_sha256": "e7464a5d6e6494981531363b9b5fac7e2b724610f90c67d2795ed2df99fb129e",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "CLPTM1L",
+          "asset_sha256": "49ca813309f92d429d94a44970487887e441a5d17e811967374dec71db59dc88",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "SOD1",
+          "asset_sha256": "5ea3279c442db60bc9331d2735484add4f36e79bce534d4cb06afeb13286b839",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-33243",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "RIPK1",
+          "asset_sha256": "c92ddf0009683e0cbb89f7dae9eb921336d3e2b8460fff78759c97dde5a7e888",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "ZNF615",
+          "asset_sha256": "439536bef8c5b58a5060cf1423a1ee2c25cc3e2a981d24aa81f773a73aa4c3bb",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "BRDT",
+          "asset_sha256": "754cca299094506ca3bd5161f9a97c2ba86fffe18d1a6a9b1e45397c07bef929",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "OSTC",
+          "asset_sha256": "6f44af3d25fcdc62892e0dc17f5a230b9478300ebb4d6cc2f480ceebb2bf3b36",
+          "is_current": false
+        }
+      ]
+    },
+    {
+      "emulsion_family_id": "0-34909",
+      "is_favorite": false,
+      "preview_assets": [
+        {
+          "gene_symbol": "FGF1",
+          "asset_sha256": "edf94a7bd7445e232e1d64ea3168203f55506acd502edca200ce03cc6cbc241a",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "NRXN1",
+          "asset_sha256": "ca4701b01722d319568f43883ae74b9a1182979035312fe5f368f84711b2fa28",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "DUX4L2",
+          "asset_sha256": "afe0b4381483147fc932314f36b51c46fce79b0e67565642adc5cefddb9adfc8",
+          "is_current": true
+        },
+        {
+          "gene_symbol": "TNFSF8",
+          "asset_sha256": "21d815a7265e6b0d7e9ff559d6e75ea3a17e335ce91ce760ab4b5254e04d8cd7",
+          "is_current": false
+        }
+      ]
+    }
+  ]
+}

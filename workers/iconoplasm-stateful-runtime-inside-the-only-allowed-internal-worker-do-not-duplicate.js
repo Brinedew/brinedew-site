@@ -9564,11 +9564,13 @@ function parseGenerationRequestPreviewAssetsJson(raw) {
 }
 
 // A style card shows at most four 3:4 previews (B-883), so the options list
-// ships four medium URLs per style and nothing else image-shaped. It used to
-// ship every rollup preview with both renditions: 318 KB per dialog open,
-// 257 KB of it unrendered, on a route the free plan's 10 ms CPU cap already
-// kills now and then (B-884).
-const GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT = 4
+// ships medium URLs only and nothing else image-shaped. It used to ship every
+// rollup preview with both renditions: 318 KB per dialog open, 257 KB of it
+// unrendered, on a route the free plan's 10 ms CPU cap already kills now and
+// then (B-884). Five, not four: the picker never shows one gene twice on a
+// screen (B-896), so a card needs a spare when another card already shows one
+// of its genes. Five is also every rollup's stored depth.
+const GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT = 5
 
 function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreviewRows) {
   const base = portraitBase(url, env)
@@ -10672,20 +10674,29 @@ function mapGenerationRequestFactoryOptionRows(env, url, rows) {
     .filter(Boolean)
 }
 
-function collapseGenerationRequestFactorySlotOptions(slot, sources) {
+// One factory style is several recipe codes (A9-21103, C9-21103, ...), each
+// with its own ranked previews. The style's previews are every code's
+// canonical portraits before any code's candidates, one per gene (B-896:
+// 21103 showed an ACVR2B candidate from its first code while its second code
+// held two more canonical portraits).
+export function collapseGenerationRequestFactorySlotOptions(slot, sources) {
   const option = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
   if (!option) return null
+  const merged = (Array.isArray(sources) ? sources : []).flatMap((source) =>
+    Array.isArray(source?.preview_assets) ? source.preview_assets : [],
+  )
   const previewAssets = []
-  const seenAssets = new Set()
-  for (const source of Array.isArray(sources) ? sources : []) {
-    for (const preview of Array.isArray(source?.preview_assets) ? source.preview_assets : []) {
-      const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
-      if (!assetSha || seenAssets.has(assetSha)) continue
-      seenAssets.add(assetSha)
-      previewAssets.push(preview)
-      if (previewAssets.length >= 4) break
-    }
-    if (previewAssets.length >= 4) break
+  const seenGenes = new Set()
+  for (const preview of [
+    ...merged.filter((preview) => preview?.is_current),
+    ...merged.filter((preview) => !preview?.is_current),
+  ]) {
+    const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+    const gene = normalizeSymbol(preview?.gene_symbol || "") || assetSha
+    if (!assetSha || seenGenes.has(gene)) continue
+    seenGenes.add(gene)
+    previewAssets.push(preview)
+    if (previewAssets.length >= GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT) break
   }
   const collapsed = {
     ...option,

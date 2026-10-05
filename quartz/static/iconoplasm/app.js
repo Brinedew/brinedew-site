@@ -15,6 +15,7 @@ import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
 } from "./emulsion-favorites.js?v=9dc72d17f083e4ba"
+import { assignStyleCardPreviews } from "./style-card-previews.js?v=4bf7db60df71c1cc"
 import { createCollectionFeedController } from "./collection-feed.js?v=1d50b8633919419d"
 import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=35d012ba1da0d6a4"
 import {
@@ -299,7 +300,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=769ccc5e9990804d", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=c1bc19eac49565b5", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -315,9 +316,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=1739a3b567a78a2d"),
+      import("./caretaker-manifestations.js?v=ceeccbcaae9f0adf"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=afc907911f7064a2"),
+      import("./caretaker-candidate-sources.js?v=90acce4c5e642b95"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -5564,11 +5565,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // the number, the favorite star right after it (as on the gene page's
   // "Emulsion 21329 ☆") and the count or queued badge. The star is never
   // nested in the toggle; a click anywhere else on the card toggles it.
-  function renderRequestStyleCardMarkup(option, isSelected, queuedCount) {
+  function renderRequestStyleCardMarkup(option, isSelected, queuedCount, assignedPreviews) {
     var item = option || {}
     var visionId = String(item.vision_id || "").trim()
     var label = requestOptionPrimaryLabel(item)
-    var previews = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
+    var previews = (
+      Array.isArray(assignedPreviews)
+        ? assignedPreviews
+        : Array.isArray(item.preview_assets)
+          ? item.preview_assets
+          : []
+    )
       .map(requestOptionPreviewUrl)
       .filter(Boolean)
     // Portraits are 3:4. Four previews make a 2x2 mosaic that keeps 3:4;
@@ -7479,12 +7486,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!requestView) requestView = emulsionFavorites.ids().length ? "favorites" : "all"
         filteredOptions = styleGridOptions(renderQuery, loadedOptions)
         rememberRequestOptions(filteredOptions)
+        var cardPreviews = assignStyleCardPreviews(filteredOptions)
         var html = filteredOptions
-          .map(function (option) {
+          .map(function (option, index) {
             return renderRequestStyleCardMarkup(
               option,
               selectedRequestVisionIds.has(String(option.vision_id || "").trim()),
               styleQueuedCount(option),
+              cardPreviews[index],
             )
           })
           .join("")

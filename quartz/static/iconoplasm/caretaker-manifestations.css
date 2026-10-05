@@ -58,6 +58,10 @@
      draws a bar: on Windows an empty scrollbar track sat under the tabs. */
   overflow: auto hidden;
   scrollbar-width: none;
+  /* The dialog panel is a flex column, and a scrolling row may shrink to nothing
+     there: with a tall History the row was 22 px over 42 px buttons, and on a
+     phone the tabs vanished (seen 2026-10-05). */
+  flex-shrink: 0;
 }
 
 .icono-caretaker-tabs button {
@@ -399,6 +403,20 @@
   transform: rotate(-45deg) translate(1px, -2px);
 }
 
+/* The pressed Auto button while its suggestion loads: the same ring, no word. */
+[data-icono-caretaker-taggerize][aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.45rem;
+  vertical-align: -0.1rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: icono-feed-spin 0.8s linear infinite;
+}
+
 [data-icono-caretaker-autosave-state][data-state="failed"] {
   color: var(--icono-reject);
 }
@@ -691,6 +709,36 @@
 
 .icono-caretaker-delta-remove {
   color: var(--icono-reject);
+}
+
+/* A suggestion under review takes the prose box's place (or sits under the Tags):
+   the History diff styles, an accent outline, then +/− and Keep / Undo. */
+.icono-caretaker-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.icono-caretaker-pane--prose .icono-caretaker-review {
+  flex: 1;
+}
+
+.icono-caretaker-review__changes {
+  flex: 1;
+  min-height: 6rem;
+  max-height: 100%;
+  overflow: auto;
+  padding: 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--icono-radius-md);
+  background: var(--light);
+  color: var(--dark);
+}
+
+.icono-caretaker-pane--tags .icono-caretaker-review__changes {
+  flex: none;
+  max-height: 12rem;
 }
 
 .icono-caretaker-preview__text ins {
