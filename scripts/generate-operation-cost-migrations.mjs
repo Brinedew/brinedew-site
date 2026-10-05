@@ -17,7 +17,9 @@ export function splitMigrationSql(source, name) {
     if (!line.trim() || line.trimStart().startsWith("--")) continue
     if (!current.length) trigger = /^CREATE TRIGGER\b/i.test(line)
     current.push(line)
-    if (trigger ? /^END;\s*$/.test(line) : /;\s*$/.test(line)) {
+    // SQLite keywords are case-insensitive; a trigger copied verbatim from
+    // sqlite_schema may close with "end;" (B-977).
+    if (trigger ? /^END;\s*$/i.test(line) : /;\s*$/.test(line)) {
       statements.push(current.join("\n"))
       current = []
     }
@@ -45,13 +47,7 @@ export function reviewedMigrationStatements(directory, name, expectedTriggers, e
 // the generated `<PREFIX>_MIGRATION_NAME` and `<PREFIX>_MIGRATION_STATEMENTS`.
 // The entry is deleted once the deploy shows the migration applied.
 function pendingMigrations() {
-  return [
-    [
-      "TAGGERIZER_DAILY_CALLS",
-      "0115_taggerizer_daily_calls.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0115_taggerizer_daily_calls.sql", 0, 1),
-    ],
-  ]
+  return []
 }
 
 function output() {
