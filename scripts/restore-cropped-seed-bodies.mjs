@@ -55,8 +55,14 @@ export const STATEMENT_ROWS = 150
 // Each half pairs its authority file with its projection file, so a release
 // never leaves the projection disagreeing with the authority.
 export const PARTS = Object.freeze([
-  { authoring: "0020_restore_cropped_seed_bodies_part1.sql", projection: "0116_restore_cropped_seed_projection_part1.sql" },
-  { authoring: "0021_restore_cropped_seed_bodies_part2.sql", projection: "0117_restore_cropped_seed_projection_part2.sql" },
+  {
+    authoring: "0020_restore_cropped_seed_bodies_part1.sql",
+    projection: "0116_restore_cropped_seed_projection_part1.sql",
+  },
+  {
+    authoring: "0021_restore_cropped_seed_bodies_part2.sql",
+    projection: "0117_restore_cropped_seed_projection_part2.sql",
+  },
 ])
 // The triggers an in-place correction has to pass. Each is dropped and then
 // recreated from the schema text the copy holds, so production keeps exactly
@@ -88,9 +94,13 @@ export function normalizeProse(text) {
 // The newest unpacked copy of a database that scripts/d1-local.mjs left behind.
 function newestCopy(database) {
   const pattern = new RegExp(`^${database}-[0-9a-f]{64}\\.sqlite$`)
-  const files = existsSync(LOCAL_COPIES) ? readdirSync(LOCAL_COPIES).filter((name) => pattern.test(name)) : []
+  const files = existsSync(LOCAL_COPIES)
+    ? readdirSync(LOCAL_COPIES).filter((name) => pattern.test(name))
+    : []
   if (!files.length)
-    throw new Error(`No unpacked ${database} copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs ${database} "SELECT 1"`)
+    throw new Error(
+      `No unpacked ${database} copy in ${LOCAL_COPIES}; run: node scripts/d1-local.mjs ${database} "SELECT 1"`,
+    )
   return files
     .map((name) => path.join(LOCAL_COPIES, name))
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
@@ -101,8 +111,11 @@ export function readTriggers(databasePath, names) {
   try {
     return Object.fromEntries(
       names.map((name) => {
-        const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?").get(name)
-        if (!row?.sql) throw new Error(`Trigger ${name} is missing from ${path.basename(databasePath)}`)
+        const row = db
+          .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+          .get(name)
+        if (!row?.sql)
+          throw new Error(`Trigger ${name} is missing from ${path.basename(databasePath)}`)
         return [name, row.sql]
       }),
     )
@@ -143,7 +156,8 @@ export function planGene(seed, fullText) {
   if (sha256(bytes) === seed.body_sha256) return { skip: "already_full" }
   if (sha256(ENCODER.encode(codePoints.slice(0, CROP_CODE_POINTS).join(""))) !== seed.body_sha256)
     return { skip: "not_a_crop" }
-  if (codePoints.length > MAX_CODE_POINTS) return { skip: "over_limit", code_points: codePoints.length }
+  if (codePoints.length > MAX_CODE_POINTS)
+    return { skip: "over_limit", code_points: codePoints.length }
   if (bytes.byteLength > 16_384) return { skip: "over_byte_limit" }
   return {
     gene: {
@@ -184,7 +198,13 @@ export function buildPlan({ authoringPath, promptsPath }) {
       }
     }
     const triggers = readTriggers(authoringPath, BYPASSED_TRIGGERS)
-    return { authoring_copy: path.basename(authoringPath), genes, skipped, over_limit: overLimit, triggers }
+    return {
+      authoring_copy: path.basename(authoringPath),
+      genes,
+      skipped,
+      over_limit: overLimit,
+      triggers,
+    }
   } finally {
     authoring.close()
     prompts.close()
@@ -271,7 +291,10 @@ export function projectionMigrationSql({ uploads, triggers }) {
     STATEMENT_ROWS,
   )) {
     const values = part
-      .map((u) => `(${[u.revision_id, u.old_sha256, u.new_sha256].map(sqlText).join(", ")}, ${u.new_bytes})`)
+      .map(
+        (u) =>
+          `(${[u.revision_id, u.old_sha256, u.new_sha256].map(sqlText).join(", ")}, ${u.new_bytes})`,
+      )
       .join(",\n  ")
     lines.push(`WITH fix(revision_id, old_sha256, new_sha256, new_bytes) AS (VALUES
   ${values}
@@ -284,7 +307,11 @@ UPDATE icono_manifestation_canonical_projection AS p
   FROM fix
  WHERE p.canonical_revision_id = fix.revision_id AND p.canonical_body_sha256 = fix.old_sha256;`)
   }
-  lines.push(...BYPASSED_PROJECTION_TRIGGERS.map((name) => `${String(triggers[name]).trim().replace(/;$/, "")};`))
+  lines.push(
+    ...BYPASSED_PROJECTION_TRIGGERS.map(
+      (name) => `${String(triggers[name]).trim().replace(/;$/, "")};`,
+    ),
+  )
   return `${lines.join("\n\n")}\n`
 }
 
@@ -304,7 +331,8 @@ async function upload({ maxGenes, promptsPath }) {
   const done = new Set(receipt.uploads.map((u) => u.revision_id))
   const prompts = new DatabaseSync(promptsPath, { readOnly: true })
   const env = {
-    ICONOPLASM_AUTHORING_STORAGE_ZONE: process.env.ICONOPLASM_AUTHORING_STORAGE_ZONE || "iconoplasm-authoring",
+    ICONOPLASM_AUTHORING_STORAGE_ZONE:
+      process.env.ICONOPLASM_AUTHORING_STORAGE_ZONE || "iconoplasm-authoring",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: process.env.ICONOPLASM_AUTHORING_STORAGE_PASSWORD,
   }
   if (!env.ICONOPLASM_AUTHORING_STORAGE_PASSWORD)
@@ -318,14 +346,17 @@ async function upload({ maxGenes, promptsPath }) {
         .prepare("SELECT manifestation FROM manifestations WHERE gene_symbol = ?")
         .get(gene.symbol)
       const bytes = ENCODER.encode(normalizeProse(row?.manifestation ?? ""))
-      if (sha256(bytes) !== gene.new_sha256) throw new Error(`${gene.symbol}: the full text changed since plan`)
+      if (sha256(bytes) !== gene.new_sha256)
+        throw new Error(`${gene.symbol}: the full text changed since plan`)
       const key = await createManifestationBodyObjectKey()
       // A slow Bunny request aborts after its own timeout (2026-10-04: once in
       // 1,207 genes). Retry the same key; the PUT is idempotent.
       let result
       for (let attempt = 1; ; attempt++) {
         try {
-          result = await putManifestationBodyObject(env, key, bytes, { expectedSha256: gene.new_sha256 })
+          result = await putManifestationBodyObject(env, key, bytes, {
+            expectedSha256: gene.new_sha256,
+          })
           break
         } catch (error) {
           if (attempt >= 4) throw error
@@ -343,7 +374,13 @@ async function upload({ maxGenes, promptsPath }) {
     prompts.close()
     writeJson(receiptPath, receipt)
   }
-  console.log(JSON.stringify({ uploaded_now: sent, uploaded_total: receipt.uploads.length, planned: plan.genes.length }))
+  console.log(
+    JSON.stringify({
+      uploaded_now: sent,
+      uploaded_total: receipt.uploads.length,
+      planned: plan.genes.length,
+    }),
+  )
 }
 
 async function main(argv) {
@@ -354,10 +391,17 @@ async function main(argv) {
   }
   const promptsPath = flag("--prompts", DEFAULT_PROMPTS_DB)
   if (step === "plan") {
-    const plan = buildPlan({ authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")), promptsPath })
+    const plan = buildPlan({
+      authoringPath: flag("--authoring", newestCopy("iconoplasm-authoring")),
+      promptsPath,
+    })
     writeJson(path.join(OUT, "plan.json"), plan)
     console.log(
-      JSON.stringify({ genes: plan.genes.length, skipped: plan.skipped, over_limit: plan.over_limit.length }),
+      JSON.stringify({
+        genes: plan.genes.length,
+        skipped: plan.skipped,
+        over_limit: plan.over_limit.length,
+      }),
     )
   } else if (step === "upload") {
     await upload({ maxGenes: Number(flag("--max-genes", Infinity)), promptsPath })
@@ -365,9 +409,14 @@ async function main(argv) {
     const plan = readJson(path.join(OUT, "plan.json"))
     const { uploads } = readJson(path.join(OUT, "uploads.json"))
     if (uploads.length !== plan.genes.length)
-      throw new Error(`Only ${uploads.length} of ${plan.genes.length} genes are uploaded; finish upload first`)
+      throw new Error(
+        `Only ${uploads.length} of ${plan.genes.length} genes are uploaded; finish upload first`,
+      )
     const verifiedAt = new Date().toISOString()
-    const projectionTriggers = readTriggers(flag("--main", newestCopy("iconoplasm")), BYPASSED_PROJECTION_TRIGGERS)
+    const projectionTriggers = readTriggers(
+      flag("--main", newestCopy("iconoplasm")),
+      BYPASSED_PROJECTION_TRIGGERS,
+    )
     const half = Math.ceil(uploads.length / PARTS.length)
     const written = PARTS.map((part, index) => {
       const slice = uploads.slice(index * half, (index + 1) * half)
