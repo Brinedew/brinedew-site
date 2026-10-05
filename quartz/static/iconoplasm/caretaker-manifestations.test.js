@@ -336,7 +336,7 @@ test("a text-only save without Tags is not yet a source for new images (B-874)",
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
-test("autosave persists Tags, then makes the new version the one new images use (B-874)", async () => {
+test("autosave persists prose, Tags and the image source in one command (B-874, B-859)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
@@ -346,22 +346,13 @@ test("autosave persists Tags, then makes the new version the one new images use 
     fetchJSON: async function (path, init) {
       calls.push({ path, init })
       if ((init?.method || "GET") === "GET") return dossier()
-      if (path.endsWith("/revisions")) {
-        // The real save response names both the lineage and the new revision.
-        return {
-          ok: true,
-          manifestation_id: "manifestation_own",
-          manifestation_revision_id: "revision_3",
-        }
+      return {
+        ok: true,
+        manifestation_id: "manifestation_own",
+        manifestation_revision_id: "revision_3",
+        manifestation_derivative_id: "derivative_3",
+        canonical_revision_id: "revision_3",
       }
-      if (path.endsWith("/tags-derivatives")) {
-        return {
-          ok: true,
-          manifestation_derivative_id: "derivative_3",
-          derivative_head_version: 0,
-        }
-      }
-      return { ok: true }
     },
     escapeHtml,
     storage: null,
@@ -384,50 +375,40 @@ test("autosave persists Tags, then makes the new version the one new images use 
   tags.dispatchEvent(new Event("input", { bubbles: true }))
   await new Promise((resolve) => setTimeout(resolve, 1200))
 
-  const tagSave = calls.find((call) => call.path.endsWith("/tags-derivatives"))
-  const tagSelect = calls.find((call) => call.path.endsWith("/tags-derivative-head"))
-  assert.ok(tagSave)
-  assert.equal(JSON.parse(tagSave.init.body).tags_text, "red coat, careful gaze")
-  assert.deepEqual(JSON.parse(tagSave.init.body).fields_json, {
+  // B-859: one command, not four (revision, Tags, Tags head, canonical selection).
+  // B-874: no second "Use my version" step; the saved version is the image source.
+  const mutations = calls.filter((call) => (call.init?.method || "GET") !== "GET")
+  assert.deepEqual(
+    mutations.map((call) => call.path.split("/").pop()),
+    ["saves"],
+  )
+  const body = JSON.parse(mutations[0].init.body)
+  assert.equal(body.prose, "Third body")
+  assert.equal(body.tags_text, "red coat, careful gaze")
+  assert.deepEqual(body.fields_json, {
     outfit: ["red coat"],
     face: ["careful gaze"],
     bespoke: [],
   })
-  assert.ok(tagSelect)
-  assert.equal(JSON.parse(tagSelect.init.body).manifestation_derivative_id, "derivative_3")
-
-  // B-874: no second "Use my version" step. Once the version is complete, it is
-  // what new images are drawn from, through the same authority command.
-  const mutations = calls.filter((call) => (call.init?.method || "GET") !== "GET")
-  assert.deepEqual(
-    mutations.map((call) => call.path.split("/").pop()),
-    ["revisions", "tags-derivatives", "tags-derivative-head", "canonical-selections"],
-  )
-  const selection = JSON.parse(mutations[3].init.body)
-  assert.equal(selection.manifestation_revision_id, "revision_3")
-  assert.equal(selection.manifestation_id, "manifestation_own")
-  assert.equal(selection.expected_canonical_revision_id, "revision_1")
-  assert.equal(selection.expected_head_version, 4)
-  assert.equal(selection.expected_assignment_version, 3)
+  assert.equal(body.expected_canonical_revision_id, "revision_1")
+  assert.equal(body.expected_head_version, 4)
+  assert.equal(body.expected_assignment_version, 3)
+  assert.match(body.command_id, /^cmd_/)
   assert.deepEqual(publicRefreshes, ["TP53"])
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
-test("Retry resumes a failed Tags upload without creating another revision", async () => {
+test("Retry resends the identical save, so a dropped connection cannot make a second version", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
   const calls = []
-  let uploads = 0
+  let attempts = 0
   const panel = createCaretakerManifestationPanel({
     fetchJSON: async (path, init) => {
       if ((init?.method || "GET") === "GET") return dossier()
       calls.push({ path, body: JSON.parse(init.body) })
-      if (path.endsWith("/revisions")) return { manifestation_revision_id: "revision_retry" }
-      if (path.endsWith("/tags-derivatives")) {
-        if (++uploads === 1) throw new TypeError("connection reset")
-        return { manifestation_derivative_id: "derivative_retry", derivative_head_version: 0 }
-      }
-      return { ok: true }
+      if (++attempts === 1) throw new TypeError("connection reset")
+      return { manifestation_revision_id: "revision_retry", manifestation_derivative_id: "d" }
     },
     escapeHtml,
     storage: null,
@@ -447,13 +428,16 @@ test("Retry resumes a failed Tags upload without creating another revision", asy
   assert.equal(host.querySelector("[data-icono-caretaker-editor]") === form, true)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Not saved")
   await new Promise((resolve) => setTimeout(resolve, 1200))
-  assert.equal(uploads, 1, "the first automatic retry waits 2 seconds (B-874)")
+  assert.equal(attempts, 1, "the first automatic retry waits 2 seconds (B-874)")
   host.querySelector("[data-icono-caretaker-retry-save]").click()
   await new Promise((resolve) => setTimeout(resolve, 25))
-  assert.equal(calls.filter((c) => c.path.endsWith("/revisions")).length, 1)
-  const retries = calls.filter((c) => c.path.endsWith("/tags-derivatives"))
-  assert.equal(retries.length, 2)
-  assert.deepEqual(retries[0].body, retries[1].body)
+  assert.equal(calls.length, 2)
+  assert.equal(
+    calls.every((call) => call.path.endsWith("/saves")),
+    true,
+  )
+  // The same command ID: the server replays the first commit instead of adding one.
+  assert.deepEqual(calls[0].body, calls[1].body)
   assert.equal(host.querySelector("[data-icono-caretaker-autosave-state]").textContent, "Saved")
 })
 
@@ -762,10 +746,12 @@ async function mountWithTaggerizer(reply) {
         await new Promise((resolve) => (finish = resolve))
         return { ok: true, suggestion: reply }
       }
-      if (path.endsWith("/revisions")) {
-        return { ok: true, manifestation_id: "manifestation_own", manifestation_revision_id: "r9" }
+      return {
+        ok: true,
+        manifestation_id: "manifestation_own",
+        manifestation_revision_id: "r9",
+        manifestation_derivative_id: "derivative_9",
       }
-      return { ok: true, manifestation_derivative_id: "derivative_9", derivative_head_version: 0 }
     },
     escapeHtml,
     storage: null,
@@ -786,7 +772,7 @@ async function mountWithTaggerizer(reply) {
   }
   const click = (selector) =>
     host.querySelector(selector).dispatchEvent(new Event("click", { bubbles: true }))
-  const saves = () => calls.filter((call) => call.path.endsWith("/revisions")).length
+  const saves = () => calls.filter((call) => /\/(revisions|saves)$/.test(call.path)).length
   return { host, calls, press, click, saves, Event }
 }
 

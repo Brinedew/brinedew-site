@@ -132,6 +132,130 @@ function derivativeHeadSnapshot(row) {
   }
 }
 
+// The rows that record one Tags derivative: the derivative and, when it has a
+// body, its storage row (whose trigger adopts the upload intent). Shared by the
+// Tags submit command and the combined caretaker save (B-859 step 3), so the
+// SQL exists once.
+function derivativeInsertStatements(db, derivative, storage) {
+  const statements = [
+    prepared(
+      db,
+      `INSERT INTO icono_manifestation_derivatives (
+         manifestation_derivative_id, manifestation_revision_id, derivative_kind,
+         status, source_body_sha256, body_sha256, body_bytes,
+         tags_sha256, tags_bytes, fields_sha256, fields_bytes, recipe_id,
+         recipe_version, provider_id, model_id, tagger_config_sha256,
+         provenance_status, failure_code, created_at, completed_at
+       ) VALUES (?, ?, 'tags', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      derivative.manifestation_derivative_id,
+      derivative.manifestation_revision_id,
+      derivative.status,
+      derivative.source_body_sha256,
+      derivative.body_sha256,
+      derivative.body_bytes,
+      derivative.tags_sha256,
+      derivative.tags_bytes,
+      derivative.fields_sha256,
+      derivative.fields_bytes,
+      derivative.recipe_id,
+      derivative.recipe_version,
+      derivative.provider_id,
+      derivative.model_id,
+      derivative.tagger_config_sha256,
+      derivative.provenance_status,
+      derivative.failure_code,
+      derivative.created_at,
+      derivative.completed_at,
+    ),
+  ]
+  if (storage) {
+    statements.push(
+      prepared(
+        db,
+        `INSERT INTO icono_manifestation_derivative_storage_secrets (
+           manifestation_derivative_id, object_key, ciphertext_sha256, ciphertext_bytes,
+           body_iv_base64, wrapped_dek_base64, wrap_iv_base64, key_version,
+           aad_version, object_etag, verified_at, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+        derivative.manifestation_derivative_id,
+        storage.object_key,
+        storage.ciphertext_sha256,
+        storage.ciphertext_bytes,
+        storage.body_iv_base64,
+        storage.wrapped_dek_base64,
+        storage.wrap_iv_base64,
+        storage.key_version,
+        storage.object_etag,
+        storage.verified_at,
+        derivative.created_at,
+      ),
+    )
+  }
+  return statements
+}
+
+// A caretaker's own Tags for a revision that does not exist yet (the combined
+// save, B-859 step 3): the same validation submitTagsDerivative applies to a
+// complete manual derivative, the derivative row, and its statements.
+function manualTagsDerivative(
+  db,
+  {
+    derivativeId,
+    revisionId,
+    sourceBodySha256,
+    tagsSha256,
+    tagsBytes,
+    fieldsSha256,
+    fieldsBytes,
+    storage: rawStorage,
+    recipeId,
+    recipeVersion,
+    providerId,
+    modelId,
+    taggerConfigSha256,
+    timestamp,
+  },
+) {
+  const storage = derivativeStorage(rawStorage)
+  const output = {
+    tagsSha256: normalizeSha256(tagsSha256, "tags_sha256"),
+    tagsBytes: Number(tagsBytes),
+    fieldsSha256: normalizeSha256(fieldsSha256, "fields_sha256"),
+    fieldsBytes: Number(fieldsBytes),
+  }
+  if (
+    !Number.isSafeInteger(output.tagsBytes) ||
+    output.tagsBytes < 1 ||
+    !Number.isSafeInteger(output.fieldsBytes) ||
+    output.fieldsBytes < 2 ||
+    storage.body_bytes !== output.tagsBytes + 1 + output.fieldsBytes
+  ) {
+    throw authorityError("INVALID_DERIVATIVE_BODY_SIZE", "Tags output framing sizes are invalid")
+  }
+  const derivative = {
+    manifestation_derivative_id: derivativeId,
+    manifestation_revision_id: revisionId,
+    status: "complete",
+    source_body_sha256: normalizeSha256(sourceBodySha256, "source_body_sha256"),
+    body_sha256: storage.body_sha256,
+    body_bytes: storage.body_bytes,
+    tags_sha256: output.tagsSha256,
+    tags_bytes: output.tagsBytes,
+    fields_sha256: output.fieldsSha256,
+    fields_bytes: output.fieldsBytes,
+    recipe_id: boundedToken(recipeId, "recipe_id"),
+    recipe_version: boundedToken(recipeVersion, "recipe_version"),
+    provider_id: boundedToken(providerId, "provider_id"),
+    model_id: boundedToken(modelId, "model_id"),
+    tagger_config_sha256: normalizeSha256(taggerConfigSha256, "tagger_config_sha256"),
+    provenance_status: "generated",
+    failure_code: null,
+    created_at: timestamp,
+    completed_at: timestamp,
+  }
+  return { derivative, statements: derivativeInsertStatements(db, derivative, storage) }
+}
+
 export async function submitTagsDerivative(
   db,
   {
@@ -287,60 +411,7 @@ export async function submitTagsDerivative(
   if (!derivativeHead)
     throw authorityError("DERIVATIVE_HEAD_MISSING", "Derivative head is missing", 500)
   const nextHead = { ...head, gene_revision: Number(head.gene_revision) + 1 }
-  const statements = [
-    prepared(
-      db,
-      `INSERT INTO icono_manifestation_derivatives (
-         manifestation_derivative_id, manifestation_revision_id, derivative_kind,
-         status, source_body_sha256, body_sha256, body_bytes,
-         tags_sha256, tags_bytes, fields_sha256, fields_bytes, recipe_id,
-         recipe_version, provider_id, model_id, tagger_config_sha256,
-         provenance_status, failure_code, created_at, completed_at
-       ) VALUES (?, ?, 'tags', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      derivativeIdNorm,
-      revision.manifestation_revision_id,
-      statusNorm,
-      sourceHash,
-      derivative.body_sha256,
-      derivative.body_bytes,
-      derivative.tags_sha256,
-      derivative.tags_bytes,
-      derivative.fields_sha256,
-      derivative.fields_bytes,
-      provenance.recipeId,
-      provenance.recipeVersion,
-      provenance.providerId,
-      provenance.modelId,
-      provenance.taggerConfigSha256,
-      provenance.status,
-      failure,
-      timestamp,
-      timestamp,
-    ),
-  ]
-  if (storage) {
-    statements.push(
-      prepared(
-        db,
-        `INSERT INTO icono_manifestation_derivative_storage_secrets (
-           manifestation_derivative_id, object_key, ciphertext_sha256, ciphertext_bytes,
-           body_iv_base64, wrapped_dek_base64, wrap_iv_base64, key_version,
-           aad_version, object_etag, verified_at, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-        derivativeIdNorm,
-        storage.object_key,
-        storage.ciphertext_sha256,
-        storage.ciphertext_bytes,
-        storage.body_iv_base64,
-        storage.wrapped_dek_base64,
-        storage.wrap_iv_base64,
-        storage.key_version,
-        storage.object_etag,
-        storage.verified_at,
-        timestamp,
-      ),
-    )
-  }
+  const statements = derivativeInsertStatements(db, derivative, storage)
   statements.push(
     prepared(
       db,
@@ -528,6 +599,6 @@ export async function selectTagsDerivativeHead(
   })
 }
 
-export { derivativeHeadSnapshot, derivativeSnapshot }
+export { derivativeHeadSnapshot, derivativeSnapshot, manualTagsDerivative }
 
 // ARCHITECTURE FENCE [IPD-012]

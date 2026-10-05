@@ -88,6 +88,30 @@ function fakeAuthority({
     const suffix = pathname.slice(base.length)
     const body = JSON.parse(request.postData() || "{}")
     state.posts.push({ suffix, body })
+    // B-859 step 3: a save with Tags is one command: the revision, its Tags,
+    // the Tags head and the canonical selection.
+    if (suffix === "/saves") {
+      const number = revisions.length + 1
+      sequence++
+      revisions.unshift({
+        manifestation_revision_id: `revision_${number}`,
+        revision_number: number,
+        event_sequence: sequence,
+        lifecycle: "active",
+        created_at: new Date().toISOString(),
+        body: body.prose,
+        based_on_revision_id: body.based_on_revision_id,
+        derivative: { status: "accepted", tags_sha256: "c".repeat(64) },
+      })
+      state.head.canonical_revision_id = `revision_${number}`
+      state.head.head_version++
+      return {
+        manifestation_id: "manifestation_current",
+        manifestation_revision_id: `revision_${number}`,
+        manifestation_derivative_id: `derivative_revision_${number}`,
+        canonical_revision_id: `revision_${number}`,
+      }
+    }
     if (suffix === "/revisions") {
       const number = revisions.length + 1
       sequence++
@@ -190,7 +214,7 @@ test("after a bad handover, the previous caretaker's text is one row away and co
       null,
       { timeout: 20_000 },
     )
-    const saved = authority.state.posts.find((post) => post.suffix === "/revisions").body
+    const saved = authority.state.posts.find((post) => post.suffix === "/saves").body
     assert.equal(saved.prose, ADA, "Ada's text is saved as the newest version")
     assert.equal(saved.based_on_revision_id, "ada_2", "and records that it came from Ada's")
     assert.equal(authority.state.head.canonical_revision_id, "revision_4", "images use it")
@@ -238,7 +262,7 @@ test("a caretaker restores an older wording and the newer one stays in History",
     const editor = page.locator("[data-icono-caretaker-prose]")
     assert.equal(await editor.inputValue(), OLD, "1: the old text is in the editor")
 
-    // Autosave runs after 1.1 s of quiet: four authority calls, then Saved.
+    // Autosave runs after 1.1 s of quiet: one authority call (B-859), then Saved.
     await page.waitForFunction(
       () =>
         document.querySelector("[data-icono-caretaker-autosave-state]")?.dataset.state === "saved",
@@ -246,16 +270,7 @@ test("a caretaker restores an older wording and the newer one stays in History",
       { timeout: 20_000 },
     )
     const suffixes = authority.state.posts.map((post) => post.suffix.replace(/revision_\d+/, "R"))
-    assert.deepEqual(
-      suffixes,
-      [
-        "/revisions",
-        "/revisions/R/tags-derivatives",
-        "/revisions/R/tags-derivative-head",
-        "/canonical-selections",
-      ],
-      "2: one save appends one version",
-    )
+    assert.deepEqual(suffixes, ["/saves"], "2: one save appends one version")
     const saved = authority.state.posts[0].body
     assert.equal(saved.prose, OLD, "2: the saved text is the old wording")
     assert.equal(saved.based_on_revision_id, "revision_1", "3: it records where it started")
