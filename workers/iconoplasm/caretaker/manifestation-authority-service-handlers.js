@@ -25,6 +25,8 @@ import {
   requireAdoptedManifestationUpload,
 } from "./manifestation-upload-intents.js"
 import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
+import { prepareManifestationProse } from "../../lib/iconoplasm-manifestation-prose.js"
+import { appendSystemRevisionWithTags } from "./manifestation-write-commands.js"
 import {
   prepareManifestationTagsPayload,
   splitManifestationTagsPayload,
@@ -225,7 +227,11 @@ export function createManifestationAuthorityServiceHandler({
       const select = url.pathname.match(
         /^\/api\/iconoplasm\/authority\/revisions\/([^/]+)\/tags-derivative-head$/,
       )
-      const matched = revisionBody || derivativeBody || submit || select
+      // B-1011: the workstation's regenerated system text with its Tags.
+      const systemRevision = url.pathname.match(
+        /^\/api\/iconoplasm\/authority\/genes\/([^/]+)\/system-revisions$/,
+      )
+      const matched = revisionBody || derivativeBody || submit || select || systemRevision
       if (!matched) return null
       const actor = await requireAuthorityBearer(request, env, authorizeReplicaBearer)
       if (request.method === "GET" && revisionBody) {
@@ -260,8 +266,99 @@ export function createManifestationAuthorityServiceHandler({
       }
       if (request.method !== "POST") return null
       requireJson(request)
-      const parsed = await readBoundedJson(request, 48 * 1024)
+      // Prose (16 KiB at most) and Tags (32 KiB) travel together on a system revision.
+      const parsed = await readBoundedJson(request, systemRevision ? 96 * 1024 : 48 * 1024)
       const body = parsed.value
+
+      if (systemRevision) {
+        const geneId = routeId(systemRevision[1])
+        if (body.gene_id != null && body.gene_id !== geneId) {
+          throw authorityError("ROUTE_ENTITY_MISMATCH", "Body entity does not match route", 400)
+        }
+        const command = await commandEnvelope(
+          request,
+          parsed.raw,
+          body,
+          actor.actorKind,
+          actor.actorAccountId,
+        )
+        const replay = await resolveCommandReplay(db, command, actor)
+        if (replay) return mutationResponse(db, onAuthorityEvent, replay)
+        const prose = await prepareManifestationProse(body.prose)
+        const output = await prepareManifestationTagsPayload({
+          tagsText: body.tags_text,
+          tagsSha256: body.tags_sha256,
+          fieldsJson: body.fields_json,
+          fieldsSha256: body.fields_sha256,
+        })
+        const revisionId = idFactory("revision")
+        const derivativeId = idFactory("derivative")
+        const proseKey = await createManifestationBodyObjectKey()
+        const tagsKey = await createManifestationBodyObjectKey()
+        for (const [entityKind, entityId, objectKey, sha256, bytes] of [
+          ["revision", revisionId, proseKey, prose.body_sha256, prose.body_bytes],
+          [
+            "derivative",
+            derivativeId,
+            tagsKey,
+            output.output_plain_sha256,
+            output.output_plain_bytes,
+          ],
+        ]) {
+          await admitManifestationUploadIntent(db, env, {
+            entityKind,
+            entityId,
+            assignmentId: null,
+            objectKey,
+            ciphertextSha256: sha256,
+            bodyBytes: bytes,
+            actorKind: actor.actorKind,
+            actorAccountId: actor.actorAccountId,
+            idFactory,
+          })
+        }
+        const [proseUpload, tagsUpload] = await Promise.all([
+          putManifestationBodyObject(env, proseKey, prose.bytes, {
+            expectedSha256: prose.body_sha256,
+          }),
+          putManifestationBodyObject(env, tagsKey, output.output_bytes, {
+            expectedSha256: output.output_plain_sha256,
+          }),
+        ])
+        const value = await appendSystemRevisionWithTags(db, {
+          geneId,
+          revisionId,
+          storage: plainStorageDescriptor(prose, proseKey, proseUpload),
+          tags: {
+            derivativeId,
+            tagsSha256: output.tags_sha256,
+            tagsBytes: output.tags_bytes,
+            fieldsSha256: output.fields_sha256,
+            fieldsBytes: output.fields_bytes,
+            storage: plainStorageDescriptor(
+              { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
+              tagsKey,
+              tagsUpload,
+            ),
+            recipeId: body.recipe_id,
+            recipeVersion: body.recipe_version,
+            providerId: body.provider_id,
+            modelId: body.model_id,
+            taggerConfigSha256: body.tagger_config_sha256,
+          },
+          expectedHeadVersion: body.expected_head_version,
+          expectedCanonicalRevisionId: body.expected_canonical_revision_id,
+          expectedSystemRevisionId: body.expected_system_revision_id,
+          eventUuid: body.event_id,
+          idFactory,
+          actorKind: actor.actorKind,
+          actorAccountId: actor.actorAccountId,
+          ...command,
+        })
+        await requireAdoptedManifestationUpload(db, "revision", revisionId)
+        await requireAdoptedManifestationUpload(db, "derivative", derivativeId)
+        return mutationResponse(db, onAuthorityEvent, value)
+      }
 
       const revisionId = routeId((submit || select)[1])
       const revision = await exactRevision(db, revisionId)

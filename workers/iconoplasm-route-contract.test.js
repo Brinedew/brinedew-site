@@ -70,6 +70,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   authority_snapshot_complete: "/api/iconoplasm/authority/snapshots/snapshot_0001/complete",
   authority_revision_body: "/api/iconoplasm/authority/revisions/revision_0001/body",
   authority_derivative_body: "/api/iconoplasm/authority/derivatives/derivative_0001/body",
+  authority_system_revision_append: "/api/iconoplasm/authority/genes/gene_0001/system-revisions",
   authority_tags_derivative_submit:
     "/api/iconoplasm/authority/revisions/revision_0001/tags-derivatives",
   authority_tags_derivative_select:
@@ -174,6 +175,7 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_snapshot_complete",
       "authority_revision_body",
       "authority_derivative_body",
+      "authority_system_revision_append",
       "authority_tags_derivative_submit",
       "authority_tags_derivative_select",
     ],
