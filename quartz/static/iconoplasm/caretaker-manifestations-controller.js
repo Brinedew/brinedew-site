@@ -599,63 +599,35 @@ export function createCaretakerManifestationPanel({
     const job = (state.autosaveJob ||= { snapshot })
     try {
       const own = ownManifestation(state.dossier)
-      const revision = (job.revision ||= await mutate(
-        state,
-        "/revisions",
-        {
-          prose: snapshot.prose,
-          expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-          expected_manifestation_version: Number(own?.row_version || 0),
-          based_on_revision_id: state.basedOnRevisionId || null,
-        },
-        { preserveDraft: true },
-      ))
-      if (!revision) throw new Error("Revision save needs an explicit retry")
+      const lineage = {
+        prose: snapshot.prose,
+        expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
+        expected_manifestation_version: Number(own?.row_version || 0),
+        based_on_revision_id: state.basedOnRevisionId || null,
+      }
       if (snapshot.tags.trim()) {
-        const submitted = (job.submitted ||= await mutate(
+        // B-859 step 3: prose, Tags and "draw new images from this" in one command.
+        // B-874: the saved version is what new images are drawn from; there is no
+        // second "Use my version" step.
+        const head = state.dossier.head
+        const saved = (job.saved ||= await mutate(
           state,
-          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivatives`,
+          "/saves",
           {
+            ...lineage,
             tags_text: snapshot.tags,
             fields_json: snapshot.fieldsJson,
-            expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
+            expected_head_version: head.head_version,
+            expected_canonical_revision_id: head.canonical_revision_id || null,
           },
-          { preserveDraft: true },
+          { preserveDraft: true, refreshPublic: true },
         ))
-        if (!submitted) throw new Error("Tags save needs an explicit retry")
-        const selected = (job.tagsSelected ||= await mutate(
-          state,
-          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivative-head`,
-          {
-            manifestation_derivative_id: submitted.manifestation_derivative_id,
-            expected_derivative_head_version: Number(submitted.derivative_head_version || 0),
-            expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
-          },
-          { preserveDraft: true },
-        ))
-        if (!selected) throw new Error("Tags selection needs an explicit retry")
-        // B-874: the saved version is what new images are drawn from. There is no
-        // second "Use my version" step; it read as "save again" right after "Saved",
-        // and a caretaker who closed on "Saved" never reached a single new image.
-        // Only a version with Tags is a complete generation source, so this waits for them.
-        const head = state.dossier.head
-        if (head.canonical_revision_id !== revision.manifestation_revision_id) {
-          const source = (job.source ||= await mutate(
-            state,
-            "/canonical-selections",
-            {
-              manifestation_id: revision.manifestation_id,
-              manifestation_revision_id: revision.manifestation_revision_id,
-              expected_assignment_version: Number(
-                state.dossier.assignment?.assignment_version || 0,
-              ),
-              expected_head_version: head.head_version,
-              expected_canonical_revision_id: head.canonical_revision_id || null,
-            },
-            { preserveDraft: true, refreshPublic: true },
-          ))
-          if (!source) throw new Error("Image source update needs an explicit retry")
-        }
+        if (!saved) throw new Error("Save needs an explicit retry")
+      } else {
+        const revision = (job.revision ||= await mutate(state, "/revisions", lineage, {
+          preserveDraft: true,
+        }))
+        if (!revision) throw new Error("Revision save needs an explicit retry")
       }
       state.lastSavedFingerprint = fingerprint
       if (snapshot.prose !== proseBaseline(state, proseControl, tagsControl).prose) {

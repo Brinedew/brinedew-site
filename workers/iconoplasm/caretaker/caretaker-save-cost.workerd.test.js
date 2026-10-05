@@ -1,12 +1,10 @@
 // B-859 step 1: a cost ratchet for one ordinary caretaker save.
 //
-// What this measures. A caretaker's editor autosaves with four POSTs
-// (quartz/static/iconoplasm/caretaker-manifestations-controller.js, `autosave`):
-//   1. POST .../revisions                       the new prose revision
-//   2. POST .../revisions/:id/tags-derivatives  the Tags derivative submit
-//   3. POST .../revisions/:id/tags-derivative-head  Tags head selection
-//   4. POST .../canonical-selections            canonical selection
-// and re-reads the dossier (GET) after each one. This test drives exactly that
+// What this measures. A caretaker's editor autosaves prose with Tags in one
+// POST .../saves (quartz/static/iconoplasm/caretaker-manifestations-controller.js,
+// `autosave`): the revision, its Tags, the Tags head and the canonical selection
+// as one command (B-859 step 3; it used to be four POSTs, 151 rows measured),
+// then re-reads the dossier (GET). This test drives exactly that
 // through the real caretaker HTTP handler, the real authority commands, and the
 // real scheduled-projection drain that production wakes after every accepted
 // event (`projectAcceptedManifestationAuthorityEvent` in the stateful runtime).
@@ -52,12 +50,13 @@ import {
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 
 // Rows written (`meta.rows_written`) by one ordinary autosave on a lineage that
-// already exists, summed over the four POSTs and the projection they wake.
-const MAX_SAVE_ROWS_AUTHORING = 117
-const MAX_SAVE_ROWS_PRIMARY = 34
+// already exists, summed over the POST and the projection it wakes. Measured
+// 2026-10-05: 117 + 34 as four commands (#508), 66 + 18 as one (B-859 step 3).
+const MAX_SAVE_ROWS_AUTHORING = 66
+const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 122
-const MAX_FIRST_SAVE_ROWS_PRIMARY = 34
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 71
+const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
 const USER = "account_user_b859cost1"
@@ -381,58 +380,30 @@ test(
         return JSON.parse(text)
       }
 
-      // The same four calls, in the same order, with the same expected values
-      // that the editor reads from its last dossier.
+      // The editor's call, with the same expected values it reads from its last dossier.
       async function autosave(label, prose, tagsText, fieldsJson) {
         let dossier = await reload()
         const own = ownManifestation(dossier)
-        phase = `${label} 1 revision`
-        const revision = await mutate("/revisions", {
+        const previousCanonical = dossier.head.canonical_revision_id
+        phase = `${label} save`
+        const saved = await mutate("/saves", {
           prose,
+          tags_text: tagsText,
+          fields_json: fieldsJson,
           expected_assignment_version: Number(dossier.assignment?.assignment_version || 0),
           expected_manifestation_version: Number(own?.row_version || 0),
           based_on_revision_id: null,
-        })
-        phase = `${label} (reload)`
-        dossier = await reload()
-        phase = `${label} 2 tags-derivative`
-        const submitted = await mutate(
-          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivatives`,
-          {
-            tags_text: tagsText,
-            fields_json: fieldsJson,
-            expected_gene_revision: Number(dossier.head.gene_revision || 0),
-          },
-        )
-        phase = `${label} (reload)`
-        dossier = await reload()
-        phase = `${label} 3 tags-head`
-        await mutate(
-          `/revisions/${encodeURIComponent(revision.manifestation_revision_id)}/tags-derivative-head`,
-          {
-            manifestation_derivative_id: submitted.manifestation_derivative_id,
-            expected_derivative_head_version: Number(submitted.derivative_head_version || 0),
-            expected_gene_revision: Number(dossier.head.gene_revision || 0),
-          },
-        )
-        phase = `${label} (reload)`
-        dossier = await reload()
-        assert.notEqual(
-          dossier.head.canonical_revision_id,
-          revision.manifestation_revision_id,
-          "the editor only selects a revision that is not canonical yet",
-        )
-        phase = `${label} 4 canonical`
-        await mutate("/canonical-selections", {
-          manifestation_id: revision.manifestation_id,
-          manifestation_revision_id: revision.manifestation_revision_id,
-          expected_assignment_version: Number(dossier.assignment?.assignment_version || 0),
           expected_head_version: dossier.head.head_version,
-          expected_canonical_revision_id: dossier.head.canonical_revision_id || null,
+          expected_canonical_revision_id: previousCanonical || null,
         })
         phase = `${label} (reload)`
         dossier = await reload()
-        assert.equal(dossier.head.canonical_revision_id, revision.manifestation_revision_id)
+        assert.notEqual(saved.manifestation_revision_id, previousCanonical)
+        assert.equal(dossier.head.canonical_revision_id, saved.manifestation_revision_id)
+        const savedRevision = ownManifestation(dossier).revisions.find(
+          (revision) => revision.manifestation_revision_id === saved.manifestation_revision_id,
+        )
+        assert.equal(savedRevision?.derivative?.status, "accepted", "its Tags are accepted")
         phase = "idle"
       }
 
