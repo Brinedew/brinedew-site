@@ -67,8 +67,39 @@ const DAILY_READ_CAP = 5_000_000
 const DAY_MS = 86_400_000
 const quote = (name) => `"${String(name).replaceAll('"', '""')}"`
 
-export function rotationDatabase(now = Date.now()) {
-  return BACKUP_ROTATION[Math.floor(now / DAY_MS) % BACKUP_ROTATION.length]
+function newestDumpDate(root, database) {
+  const dir = path.join(root, database.name)
+  if (!existsSync(dir)) return ""
+  return (
+    readdirSync(dir)
+      .map((file) => /^(\d{4}-\d{2}-\d{2})\.sqlite\.gz$/.exec(file)?.[1] || "")
+      .filter(Boolean)
+      .sort()
+      .at(-1) || ""
+  )
+}
+
+// The database due today: the one whose newest dump is oldest. Picking by day
+// number alone left a skipped day to wait a whole cycle. On 2026-10-04 the
+// budget gate skipped iconoplasm (B-998 had read 4.3M rows), so its next turn
+// was 10-09, ten days after its 09-29 dump, while agents investigate from these
+// copies (B-1002). Now a skipped database is first in line the next day. Still
+// one database per UTC day: once a dump is dated today, that database is the
+// answer and runRotation reports already_done. Ties go in day-number order, so
+// a fresh root still cycles through every database.
+export function dueDatabase(root, now = Date.now()) {
+  const today = new Date(now).toISOString().slice(0, 10)
+  const count = BACKUP_ROTATION.length
+  const offset = Math.floor(now / DAY_MS) % count
+  const dated = BACKUP_ROTATION.map((database, index) => ({
+    database,
+    newest: newestDumpDate(root, database),
+    order: (index - offset + count) % count,
+  }))
+  const doneToday = dated.find((entry) => entry.newest === today)
+  if (doneToday) return doneToday.database
+  dated.sort((a, b) => a.newest.localeCompare(b.newest) || a.order - b.order)
+  return dated[0].database
 }
 
 function toLocalValue(value) {
@@ -202,7 +233,7 @@ async function sha256File(file) {
 export async function runRotation({
   root,
   now = Date.now(),
-  database = rotationDatabase(now),
+  database = dueDatabase(root, now),
   queryFor,
   readUsage,
   pageSize,
