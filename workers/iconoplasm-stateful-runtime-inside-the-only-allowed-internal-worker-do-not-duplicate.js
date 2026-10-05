@@ -205,6 +205,10 @@ import {
   resolveCaretakerCommentRecipient,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
+import {
+  readCaretakerSwitchCooldown,
+  writeCaretakerSwitchCooldown,
+} from "./iconoplasm/caretaker/caretaker-switch-cooldown.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import { eraseBrinedewAccountOnRequest } from "./iconoplasm/account-erasure/erase-account-data.js"
 import { commentMirrorContent } from "./lib/iconoplasm-comment-discord-mirror.js"
@@ -1637,6 +1641,7 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_requests_open" ||
     family === "admin_requests_drain_plan" ||
     family === "admin_image_edit_prompts" ||
+    family === "admin_caretaker_switch_cooldown" ||
     family === "admin_factory_recipe" ||
     family === "admin_diagnostic_matrix" ||
     family === "admin_extension_blocklist" ||
@@ -26276,7 +26281,9 @@ async function resolveActiveCaretakerAccountSession(request, env) {
       })
     },
   })
-  return Object.freeze({ account_id: accountId })
+  // user_id lets the caretaker routes recognise the site admin (B-1021: the
+  // admin account is exempt from the gene switch cooldown).
+  return Object.freeze({ account_id: accountId, user_id: String(session?.user_id || "") })
 }
 
 const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecutorHandler({
@@ -27539,6 +27546,36 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         created.ok ? "admin_diagnostic_matrix" : "admin_diagnostic_matrix_400",
         json(created, created.ok ? 201 : 400, { "Cache-Control": "no-store" }),
       )
+    }
+
+    // B-1021: the caretaker gene switch cooldown (minutes), owned by
+    // workers/iconoplasm/caretaker/caretaker-switch-cooldown.js.
+    if (path === "/api/iconoplasm/admin/caretaker-switch-cooldown") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_caretaker_switch_cooldown_403", json({ error: "Unauthorized" }, 403))
+      if (request.method === "GET" || request.method === "HEAD") {
+        return done(
+          "admin_caretaker_switch_cooldown",
+          json(await readCaretakerSwitchCooldown(env), 200, { "Cache-Control": "no-store" }),
+        )
+      }
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_caretaker_switch_cooldown_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const sessionUser = await iconoplasmSessionUser(request, env)
+        const saved = await writeCaretakerSwitchCooldown(env, {
+          minutes: p?.minutes,
+          updatedBy: sessionUser?.user_id || "admin-token",
+        })
+        return done(
+          saved.ok ? "admin_caretaker_switch_cooldown" : "admin_caretaker_switch_cooldown_400",
+          json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+        )
+      }
     }
 
     if (

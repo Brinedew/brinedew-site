@@ -1,4 +1,5 @@
 import { authorizeIconoplasmAuthorityReplicaBearer } from "./iconoplasm-authority-service-auth.js"
+import { createCaretakerSwitchPolicy } from "./iconoplasm/caretaker/caretaker-switch-cooldown.js"
 import { createManifestationAuthorityRouteHandler } from "./iconoplasm/caretaker/manifestation-authority.js"
 
 export function createIconoplasmManifestationAuthorityRuntimeHandler({
@@ -25,5 +26,6 @@ export function createIconoplasmManifestationAuthorityRuntimeHandler({
     onAuthorityEvent,
     onIntegrityFailure,
     scheduleBackground,
+    caretakerSwitchPolicy: createCaretakerSwitchPolicy(env),
   })
 }

@@ -66,6 +66,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <button type="button" class="secondary" data-caretaker-refresh>Reload registry</button>
         </header>
         <p class="caretaker-admin__status" data-caretaker-status role="status"></p>
+        <form class="caretaker-admin__cooldown" data-caretaker-cooldown>
+          <label for="caretaker-cooldown-minutes">Gene change cooldown</label>
+          <input id="caretaker-cooldown-minutes" type="number" min="0" max="10080" step="1" inputmode="numeric" required data-caretaker-cooldown-minutes />
+          <span>minutes</span>
+          <button type="submit" class="secondary" data-caretaker-cooldown-save>Save</button>
+          <span class="small" data-caretaker-cooldown-status role="status"></span>
+        </form>
 
         <section class="caretaker-admin__registry" aria-labelledby="caretaker-registry-heading">
           <div class="section-head">

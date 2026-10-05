@@ -28,7 +28,12 @@ function safeErrorResponse(error) {
       Number.isInteger(error.status) && error.status >= 400 && error.status < 600
         ? error.status
         : 400
-    return jsonResponse({ error: { code: error.code } }, status)
+    const retry = Number.isInteger(error.retryAfterSeconds) ? error.retryAfterSeconds : null
+    return jsonResponse(
+      { error: { code: error.code }, ...(retry ? { retry_after_seconds: retry } : {}) },
+      status,
+      retry ? { "Retry-After": String(retry) } : {},
+    )
   }
   return jsonResponse({ error: { code: "MANIFESTATION_AUTHORITY_INTERNAL_ERROR" } }, 500)
 }
