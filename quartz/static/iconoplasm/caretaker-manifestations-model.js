@@ -1,3 +1,5 @@
+import "./vendor/diff.min.js?v=b51a9d2885f2c090"
+
 // Same limit as workers/lib/iconoplasm-manifestation-prose.js; the rules behind it are in
 // docs/CARETAKER_MANIFESTATION_AUTHORITY.md.
 export const MAX_PROSE_CODE_POINTS = 10000
@@ -195,71 +197,22 @@ export function revisionById(dossier, revisionId) {
   })
 }
 
-function diffTokens(value) {
-  return String(value || "").match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu) || []
-}
-
-function commonEdgeDiff(before, after) {
-  let prefix = 0
-  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) {
-    prefix += 1
-  }
-  let suffix = 0
-  while (
-    suffix < before.length - prefix &&
-    suffix < after.length - prefix &&
-    before[before.length - suffix - 1] === after[after.length - suffix - 1]
-  ) {
-    suffix += 1
-  }
-  return [
-    { kind: "same", text: before.slice(0, prefix).join("") },
-    { kind: "removed", text: before.slice(prefix, before.length - suffix).join("") },
-    { kind: "added", text: after.slice(prefix, after.length - suffix).join("") },
-    { kind: "same", text: before.slice(before.length - suffix).join("") },
-  ].filter(function (part) {
-    return part.text
-  })
-}
-
+// History diffs come from jsdiff's diffWords (npm `diff` 9.0.0, BSD-3, see
+// vendor/diff.LICENSE.txt), the Myers word diff most JavaScript diff views use.
+// Its browser build sets globalThis.Diff. The homemade LCS it replaced gave up
+// above 160,000 token pairs, about two 700-word texts, and fell back to striking
+// out the whole text: every full-length manifestation showed one mega diff.
+// Whitespace is ignored when matching words; the "same" parts keep the newer
+// text's spacing, so the preview reads like the version being shown.
 export function manifestationWordDiff(beforeValue, afterValue) {
-  const before = diffTokens(beforeValue)
-  const after = diffTokens(afterValue)
-  if (before.length * after.length > 160000) return commonEdgeDiff(before, after)
-  const rows = Array.from({ length: before.length + 1 }, function () {
-    return new Uint16Array(after.length + 1)
-  })
-  for (let left = before.length - 1; left >= 0; left -= 1) {
-    for (let right = after.length - 1; right >= 0; right -= 1) {
-      rows[left][right] =
-        before[left] === after[right]
-          ? rows[left + 1][right + 1] + 1
-          : Math.max(rows[left + 1][right], rows[left][right + 1])
-    }
-  }
-  const parts = []
-  function append(kind, text) {
-    if (!text) return
-    const last = parts.at(-1)
-    if (last?.kind === kind) last.text += text
-    else parts.push({ kind, text })
-  }
-  let left = 0
-  let right = 0
-  while (left < before.length && right < after.length) {
-    if (before[left] === after[right]) {
-      append("same", before[left])
-      left += 1
-      right += 1
-    } else if (rows[left + 1][right] >= rows[left][right + 1]) {
-      append("removed", before[left])
-      left += 1
-    } else {
-      append("added", after[right])
-      right += 1
-    }
-  }
-  while (left < before.length) append("removed", before[left++])
-  while (right < after.length) append("added", after[right++])
-  return parts
+  return globalThis.Diff.diffWords(String(beforeValue || ""), String(afterValue || ""))
+    .map(function (part) {
+      return {
+        kind: part.added ? "added" : part.removed ? "removed" : "same",
+        text: part.value,
+      }
+    })
+    .filter(function (part) {
+      return part.text
+    })
 }

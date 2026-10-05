@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=061f1b27d6945213"
+} from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
 import { dialogMarkup } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
@@ -522,10 +522,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   // B-849: the frame is the shared dialog. What the caretaker record adds is the
   // state pill beside the title, the notices and tabs under the header, the tab
   // panels as the scrolling body, and the autosave state beside Close.
-  // B-874 walkthrough: the title names the task, not a database object, and the
+  // Owner, 2026-10-05: the title is "Caretaker panel: <gene>", in those words. The
   // state pill appears only when the state is news (never for "active").
-  const title =
-    (dossier.viewer.can_accept ? "Invitation to care for " : "Caring for ") + dossier.gene.symbol
+  const title = "Caretaker panel: " + dossier.gene.symbol
   const headerExtra =
     assignmentState && assignmentState !== "active"
       ? '<span class="icono-caretaker-panel__state" data-state="' +
@@ -618,21 +617,11 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       '<label class="icono-caretaker-pane__label" for="icono-caretaker-prose">Manifestation</label>' +
       '<textarea id="icono-caretaker-prose" rows="8" maxlength="' +
       MAX_PROSE_CODE_POINTS +
-      '" data-icono-caretaker-prose autofocus aria-describedby="icono-caretaker-prose-purpose"' +
+      '" data-icono-caretaker-prose autofocus' +
       (tagsUnavailable ? " disabled data-icono-caretaker-disabled" : "") +
       ">" +
       esc(currentBody) +
       "</textarea>" +
-      // B-874 walkthrough, item 3: what this text is for used to live only in a
-      // grey footer sentence the eye reached last. It now sits under the box.
-      '<p class="icono-caretaker-editor__purpose" id="icono-caretaker-prose-purpose">' +
-      esc(
-        `New pictures of ${dossier.gene.symbol} are drawn from this text and its tags. ` +
-          (own?.public_page_visible
-            ? "Readers also see it on the gene page."
-            : "Readers don’t see it; you can show it in Settings."),
-      ) +
-      "</p>" +
       '<div class="icono-caretaker-editor__meta"><span data-icono-caretaker-count>' +
       codePointLength(currentBody).toLocaleString() +
       " / " +
