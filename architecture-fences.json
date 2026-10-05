@@ -516,37 +516,6 @@
           "token": "ARCHITECTURE FENCE [GG-002]"
         }
       ]
-    },
-    {
-      "id": "BPC-001",
-      "title": "Remote prose checks are explicit, snapshot-bound, and free-Zen-only",
-      "decision": "Remote prose checking runs only after an explicit command against one immutable complete-document snapshot, using the approved free provider path.",
-      "reason": "Background remote traffic and mutable partial input violate privacy, cost, and review integrity.",
-      "change_control": "A replacement must preserve explicit initiation, snapshot identity, narrow credentials, and fail-closed cost behavior. Provider and implementation may change with owner approval.",
-      "runbook": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",
-      "additional_required_marker_categories": [],
-      "markers": [
-        {
-          "category": "instructions",
-          "file": "AGENTS.md",
-          "token": "ARCHITECTURE FENCE [BPC-001]"
-        },
-        {
-          "category": "runbook",
-          "file": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",
-          "token": "ARCHITECTURE FENCE [BPC-001]"
-        },
-        {
-          "category": "source",
-          "file": "tools/obsidian-prose-checker/src/main.ts",
-          "token": "ARCHITECTURE FENCE [BPC-001]"
-        },
-        {
-          "category": "test",
-          "file": "tools/obsidian-prose-checker/tests/architectureFence.test.ts",
-          "token": "ARCHITECTURE FENCE [BPC-001]"
-        }
-      ]
     }
   ]
 }

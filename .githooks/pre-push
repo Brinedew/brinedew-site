@@ -12,7 +12,7 @@ cd "$repo_root"
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [ ! -d node_modules ]; then
-  pnpm install --frozen-lockfile --no-audit --no-fund
+  pnpm install --frozen-lockfile
 fi
 
 # Every branch: the two cheap checks CI's build-and-test runs first. On
