@@ -37,7 +37,10 @@
 // 17. one gene shows on two cards (B-896: every style below also has an
 //     ACVR2B candidate, as the owner's Favorites did on 2026-10-05);
 // 18. All styles stops at the first answer: scrolling to the end of the grid
-//     does not load the next page, or the label claims a count (B-1014).
+//     does not load the next page, or the label claims a count (B-1014);
+// 19. opening the picker asks the Worker for the style list although the CDN
+//     object has it and every favourite (B-896), or the picker shows nothing
+//     when the CDN cannot be reached.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -188,6 +191,19 @@ function createApi(posts, options = {}) {
 }
 
 // Every portrait is served as a 384x512 (3:4) picture, a distinct hue per URL.
+// The picker's first page on the CDN (B-896): served, or unreachable.
+async function routePicker(context, reachable) {
+  await context.route("https://iconoplasmportraits.b-cdn.net/picker/v1/styles.json", (route) =>
+    reachable
+      ? route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ request_options: OPTIONS, next_cursor: FIRST_CURSOR }),
+        })
+      : route.abort("namenotresolved"),
+  )
+}
+
 async function routePortraits(context) {
   await context.route(/\/portraits\/.+\.webp(\?.*)?$/, (route) => {
     const url = route.request().url()
@@ -330,9 +346,12 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         await context.addInitScript(() =>
           localStorage.setItem("iconoplasm.new-candidate-tab", "free"),
         )
-        // 15. Every run starts with the edge's 503 on the first style-list load.
-        const api = createApi(posts, { failFirst: 1 })
+        // 19. Light runs read the first page from the CDN. Dark runs cannot
+        // reach the CDN, and 15. the Worker's first answer is the edge's 503.
+        const cdn = theme === "light"
+        const api = createApi(posts, { failFirst: cdn ? 0 : 1 })
         await routeProduction(context, origin, api)
+        await routePicker(context, cdn)
         await routePortraits(context)
         const page = await context.newPage()
         await page.goto(`${HOST}/gene/TP53`)
@@ -343,7 +362,11 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         const first = await page.evaluate(measurePicker)
         report.push({ where, moment: "open", ...first })
 
-        assert.ok(api.optionsCalls() >= 2, `${where}: the failed load was not retried`)
+        if (cdn) {
+          assert.equal(api.optionsCalls(), 0, `${where}: the Worker was asked for the list`)
+        } else {
+          assert.ok(api.optionsCalls() >= 2, `${where}: the failed load was not retried`)
+        }
         assert.equal(first.bareHttpStatus, false, `${where}: the dialog shows a bare HTTP status`)
 
         // 1. 3:4 cards from 3:4 previews, never the square thumb crop.
@@ -628,6 +651,7 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     let pagesFailing = false
     const api = createApi([], { failing: () => failing, pagesFailing: () => pagesFailing })
     await routeProduction(context, origin, api)
+    await routePicker(context, false)
     await routePortraits(context)
     const page = await context.newPage()
     await page.goto(`${HOST}/gene/TP53`)

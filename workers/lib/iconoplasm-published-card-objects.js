@@ -6,8 +6,9 @@ import {
 
 // THE ONLY writer and first-party reader of the published objects on Bunny
 // Storage: one stable object per gene (genes/v3/<SYMBOL>.json), the catalog
-// object (catalog/v3/index.json), and GeneGuessr's "Top Streaks" board
-// (leaderboard/v1/top.json, B-965). Readers outside the Worker fetch them from
+// object (catalog/v3/index.json), GeneGuessr's "Top Streaks" board
+// (leaderboard/v1/top.json, B-965), and the style picker's first page
+// (picker/v1/styles.json, B-896). Readers outside the Worker fetch them from
 // the CDN. ARCHITECTURE FENCE [IPD-011].
 // A deployment without object storage cannot hold any published object.
 // Distinguish that definitive absence from a transient read failure so
@@ -26,8 +27,8 @@ export const STABLE_GENE_OBJECT_PREFIX = "genes/v3"
 export const STABLE_GENE_OBJECT_LIMIT = 1024 * 1024
 export const STABLE_GENE_OBJECT_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=86400"
 // The pull zone ignores this header and applies its own expiration. What bounds
-// staleness after a rewrite is the zone's edge rule for genes/v3, catalog/v3 and
-// leaderboard/v1 (bunny/the-only-iconoplasm-pull-zone-policy.json): a 60 s edge
+// staleness after a rewrite is the zone's edge rule for genes/v3, catalog/v3,
+// leaderboard/v1 and picker/v1 (bunny/the-only-iconoplasm-pull-zone-policy.json): a 60 s edge
 // and browser cache time, so a rewrite shows within replication lag plus 60 s.
 // No rewrite purges: a purge re-pulls a replica that may not have the new bytes
 // yet, and Bunny's API answers 429 once a bulk republish sends a purge per gene
@@ -53,8 +54,15 @@ export const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
 export const LEADERBOARD_OBJECT_KEY = "leaderboard/v1/top.json"
 export const LEADERBOARD_OBJECT_LIMIT = 128 * 1024
 
+// B-896: the Free queue picker's first page, the 120 strongest styles with five
+// previews each (about 90 KB). The same for every player, so it is read from the
+// CDN instead of 120 D1 rows per open; a background job rebuilds it.
+export const REQUEST_PICKER_OBJECT_KEY = "picker/v1/styles.json"
+export const REQUEST_PICKER_OBJECT_LIMIT = 512 * 1024
+
 function stableGeneObjectIdentity(key) {
   if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
+  if (key === REQUEST_PICKER_OBJECT_KEY) return { symbol: "", limit: REQUEST_PICKER_OBJECT_LIMIT }
   if (key === LEADERBOARD_OBJECT_KEY) return { symbol: "", limit: LEADERBOARD_OBJECT_LIMIT }
   const prefix = `${STABLE_GENE_OBJECT_PREFIX}/`
   if (typeof key !== "string" || !key.startsWith(prefix) || !key.endsWith(".json"))

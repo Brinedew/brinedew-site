@@ -7322,6 +7322,76 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return run()
       }
 
+      // B-896: the first page of styles is the same for every player, so it is
+      // a CDN object (picker/v1/styles.json) and opening the picker reads no D1
+      // for it. The API answers only favourites the page lacks. If the CDN
+      // cannot be reached (a resolver that cannot see Bunny, 27 Sep 2026), the
+      // API's full answer stands in: one Worker request, only on that failure.
+      var REQUEST_PICKER_URL = "https://iconoplasmportraits.b-cdn.net/picker/v1/styles.json"
+
+      function fetchRequestPickerObject() {
+        var controller = typeof AbortController === "function" ? new AbortController() : null
+        var timer = controller
+          ? window.setTimeout(function () {
+              controller.abort()
+            }, 4000)
+          : 0
+        return fetch(REQUEST_PICKER_URL, {
+          cache: "no-cache",
+          signal: controller ? controller.signal : undefined,
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error("Picker object HTTP " + response.status)
+            return response.json()
+          })
+          .then(function (picker) {
+            if (!picker || !Array.isArray(picker.request_options)) {
+              throw new Error("Picker object is malformed")
+            }
+            return picker
+          })
+          .finally(function () {
+            if (timer) window.clearTimeout(timer)
+          })
+      }
+
+      function familyOf(option) {
+        return normalizeEmulsionFamilyId(
+          (option && (option.emulsion_family_id || option.emulsion_id)) || "",
+        )
+      }
+
+      function loadFirstRequestOptions() {
+        return fetchRequestPickerObject()
+          .then(function (picker) {
+            var page = picker.request_options
+            var inPage = new Set(page.map(familyOf))
+            var missing = emulsionFavorites.ids().some(function (id) {
+              return !inPage.has(normalizeEmulsionFamilyId(id))
+            })
+            var favorites = missing
+              ? fetchRequestOptionsWithRetry("/api/iconoplasm/requests/options?scope=favorites")
+              : Promise.resolve({ request_options: [] })
+            return favorites.then(function (payload) {
+              var seen = new Set()
+              var merged = (
+                Array.isArray(payload && payload.request_options) ? payload.request_options : []
+              )
+                .concat(page)
+                .filter(function (option) {
+                  var key = familyOf(option) || String((option && option.vision_id) || "")
+                  if (!key || seen.has(key)) return false
+                  seen.add(key)
+                  return true
+                })
+              return { request_options: merged, next_cursor: picker.next_cursor || "" }
+            })
+          })
+          .catch(function () {
+            return fetchRequestOptionsWithRetry("/api/iconoplasm/requests/options")
+          })
+      }
+
       function ensureRequestOptionsLoaded(query, options) {
         var config = options || {}
         var queryKey = requestOptionsQueryKey(query)
@@ -7330,7 +7400,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (requestOptionsLoadingByQuery[queryKey]) return requestOptionsLoadingByQuery[queryKey]
         var requestOptionsUrl = "/api/iconoplasm/requests/options"
         if (queryKey) requestOptionsUrl += "?query=" + encodeURIComponent(queryKey)
-        requestOptionsLoadingByQuery[queryKey] = fetchRequestOptionsWithRetry(requestOptionsUrl)
+        requestOptionsLoadingByQuery[queryKey] = (
+          queryKey ? fetchRequestOptionsWithRetry(requestOptionsUrl) : loadFirstRequestOptions()
+        )
           .then(function (payload) {
             var loadedOptions = Array.isArray(payload && payload.request_options)
               ? payload.request_options
