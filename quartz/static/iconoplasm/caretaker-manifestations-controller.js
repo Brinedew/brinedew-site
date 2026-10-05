@@ -659,7 +659,7 @@ export function createCaretakerManifestationPanel({
       }
       state.lastSavedFingerprint = fingerprint
       if (snapshot.prose !== proseBaseline(state, proseControl, tagsControl).prose) {
-        state.proseBaseline = { prose: snapshot.prose, fields: snapshot.fieldsJson }
+        state.proseBaseline = { prose: snapshot.prose, fields: snapshot.fieldsJson, fromSave: true }
       }
       state.autosaveJob = null
       state.autosaveRetries = 0
@@ -704,6 +704,52 @@ export function createCaretakerManifestationPanel({
     return state.proseBaseline
   }
 
+  // The version where the saved prose first appeared: walk back from the newest
+  // version while the text stays the same. Its Tags are what the prose was written
+  // against, even when the Tags were changed in an earlier session.
+  function proseOriginRevision(state, prose) {
+    const own = ownManifestation(state.dossier)
+    const mine = [...(own?.revisions || [])].sort(function (left, right) {
+      return Number(right.revision_number || 0) - Number(left.revision_number || 0)
+    })
+    let origin = null
+    for (const revision of mine) {
+      if (String(revision.body ?? "") !== prose) break
+      origin = revision
+    }
+    if (origin && origin !== mine.at(-1)) return origin
+    // Every version of mine has this text: it came from the gene's earlier text
+    // (the seed or a previous caretaker), whose Tags it was written against.
+    const earlier = allRevisions(state.dossier).find(function (item) {
+      return item.manifestation !== own && String(item.revision?.body ?? "") === prose
+    })
+    return earlier?.revision || origin
+  }
+
+  async function writtenAgainstFields(state, proseControl, tagsControl) {
+    const baseline = proseBaseline(state, proseControl, tagsControl)
+    if (baseline.fromSave || baseline.fromHistory) return baseline.fields
+    const derivative = proseOriginRevision(state, baseline.prose)?.derivative
+    if (!derivative?.manifestation_derivative_id || derivative.body_available === false) {
+      return baseline.fields
+    }
+    try {
+      const material = await request(
+        state,
+        `/derivatives/${encodeURIComponent(derivative.manifestation_derivative_id)}/body`,
+        { method: "GET" },
+      )
+      const fields = material?.tags?.fields_json
+      if (fields && typeof fields === "object") {
+        state.proseBaseline = { prose: baseline.prose, fields, fromHistory: true }
+        return fields
+      }
+    } catch (_error) {
+      // The Tags the panel opened with are the next best guess.
+    }
+    return baseline.fields
+  }
+
   function endReview(state) {
     const review = state.host.querySelector("[data-icono-caretaker-review]")
     review?.remove()
@@ -738,7 +784,7 @@ export function createCaretakerManifestationPanel({
     if (review.kind === "prose" && proseControl) {
       proseControl.value = review.after
       // The prose now matches these Tags, whatever the next save turns out to be.
-      state.proseBaseline = { prose: review.after, fields: review.fields }
+      state.proseBaseline = { prose: review.after, fields: review.fields, fromSave: true }
       proseControl.dispatchEvent(new Event("input", { bubbles: true }))
     } else if (review.kind === "tags" && form) {
       if (!applyCaretakerTagSuggestion(form, review.after, review.afterText)) {
@@ -764,7 +810,6 @@ export function createCaretakerManifestationPanel({
     // changes until Keep, so no confirm is needed.
     if (!proseControl || !tagsControl || !form || state.autosaving || state.review) return
     const fromProse = direction === "tags_from_prose"
-    const baseline = proseBaseline(state, proseControl, tagsControl)
     const sentProse = proseControl.value
     const sentTags = tagsControl.value
     const sentFields = JSON.stringify(readTagFields(tagsControl))
@@ -787,7 +832,9 @@ export function createCaretakerManifestationPanel({
           tags_fields: JSON.parse(sentFields),
           // The Tags this prose was written against, so the server can send the
           // model only what the caretaker changed since.
-          previous_tags_fields: baseline.fields,
+          previous_tags_fields: fromProse
+            ? null
+            : await writtenAgainstFields(state, proseControl, tagsControl),
         }),
       })
       // Typing while it loaded means the person moved on; their text wins.

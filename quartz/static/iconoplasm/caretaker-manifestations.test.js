@@ -856,6 +856,74 @@ test("Auto-correct shows the prose diff, Undo changes nothing, Keep applies and 
   await new Promise((resolve) => setTimeout(resolve, 1400))
   assert.equal(saves(), 2)
 })
+test("Auto-correct compares with the Tags of the version where the prose was written, across sessions (B-995)", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const calls = []
+  const withHistory = { ...dossier(), taggerizer_enabled: true }
+  const own = withHistory.manifestations[0]
+  own.manifestation_head_revision_id = "revision_3"
+  own.head_body = "Second body"
+  own.revisions = [
+    {
+      manifestation_revision_id: "revision_3",
+      revision_number: 3,
+      lifecycle: "active",
+      body: "Second body",
+      derivative: { manifestation_derivative_id: "derivative_3" },
+    },
+    {
+      manifestation_revision_id: "revision_2",
+      revision_number: 2,
+      lifecycle: "active",
+      body: "Second body",
+      derivative: { manifestation_derivative_id: "derivative_2" },
+    },
+    {
+      manifestation_revision_id: "revision_1",
+      revision_number: 1,
+      lifecycle: "active",
+      body: "First body",
+      derivative: { manifestation_derivative_id: "derivative_1" },
+    },
+  ]
+  const tagsOf = {
+    derivative_3: { outfit: ["red_coat"] },
+    derivative_2: { outfit: ["cream_camisole"] },
+    derivative_1: { outfit: ["grey_smock"] },
+  }
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      calls.push({ path, init })
+      const derivative = path.match(/\/derivatives\/([^/]+)\/body$/)?.[1]
+      if (derivative)
+        return {
+          tags: { tags_text: tagsOf[derivative].outfit[0], fields_json: tagsOf[derivative] },
+        }
+      if ((init?.method || "GET") === "GET") return withHistory
+      if (path.endsWith("/taggerize"))
+        return { ok: true, suggestion: { prose: "Second body in red" } }
+      return { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  host
+    .querySelector('[data-icono-caretaker-taggerize="prose_from_tags"]')
+    .dispatchEvent(new Event("click", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  const request = JSON.parse(calls.find((call) => call.path.endsWith("/taggerize")).init.body)
+  // Version 3 only changed Tags (in an earlier session); the prose dates from version 2.
+  assert.deepEqual(request.previous_tags_fields.outfit, ["cream_camisole"])
+  assert.deepEqual(request.tags_fields.outfit, ["red_coat"])
+})
+
 // Owner, 2026-10-05: an Auto-correct click during a save looked ignored. The
 // save state now says "Saving…" beside Close and the Auto buttons grey out.
 test("while a save is in flight the state says Saving… and the Auto buttons grey out", async () => {
