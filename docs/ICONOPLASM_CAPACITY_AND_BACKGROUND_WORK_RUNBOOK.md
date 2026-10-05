@@ -149,6 +149,31 @@ Exact ceilings live in executable policy
 (`workers/lib/iconoplasm-mutation-lane-reservations.js`), not this runbook.
 Tests must fail when a new path bypasses that policy.
 
+The operator ledger (the shared daily D1 budget that admin, workstation and
+background routes spend, `D1_OPERATOR_DAILY_LIMITS`) is shed by criticality,
+lowest tier first, after Google SRE's
+[Handling Overload](https://sre.google/sre-book/handling-overload/) and Stripe's
+reserved share for critical requests (B-1026). Each budgeted route family has a
+tier; a request is refused once the day's operator reads or writes reach its
+tier's share, at the start and again before every statement, so a diagnostic
+admitted just under its share stops on its next query:
+
+- critical, refused only when the day is spent: player-requested portraits
+  (`authority_generation_executor`) and caretaker moderation;
+- sheddable_plus, refused at 85%: batch work (ingest, publication, replication,
+  system-text rewrites, finalization) and any budgeted family not named
+  otherwise. The write-heavy admin limiter's default target is this same share;
+- sheddable, refused at 60%: admin diagnostics and summaries (overview,
+  coverage, assets, storage audit, repair scope, blots backlog, gallery).
+
+The refusal is the usual `ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED` 503, retried
+after the reset, and `budget.exhausted_by` names the tier
+(`rows_read_sheddable`, `rows_written_sheddable_plus`, ...). Tiers and shares
+live in `shared/iconoplasm-d1-budget-policy.js`; a new family that player
+deliveries depend on must be added to the critical set there.
+`workers/iconoplasm/budget-criticality-shedding.test.js` drives the real gateway
+against the real ledger at each share.
+
 A refusal states when the same request is worth sending again, in the standard
 `Retry-After` header and as `retry_after_seconds` in the body, always the same
 whole number of seconds. Every daily-budget 503 the gateway answers
