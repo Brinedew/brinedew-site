@@ -6892,6 +6892,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // 120 first and a cursor (the last style's sort key) while more exist.
       var requestOptionsNextCursor = ""
       var requestOptionsMoreLoading = null
+      // After a failed page, the next scroll may try again only after this.
+      var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
       var requestSelectionLimit = 20
       var filteredOptions = []
@@ -7364,6 +7366,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function loadMoreRequestOptions() {
         if (requestOptionsMoreLoading || !requestOptionsNextCursor) return requestOptionsMoreLoading
+        if (Date.now() < requestOptionsMoreRetryAt) return null
         var cursor = requestOptionsNextCursor
         requestOptionsMoreLoading = fetchRequestOptionsWithRetry(
           "/api/iconoplasm/requests/options?after=" + encodeURIComponent(cursor),
@@ -7383,13 +7386,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             requestOptionsByQuery[""] = requestOptions
             rememberRequestOptions(page)
             requestOptionsNextCursor = String((payload && payload.next_cursor) || "")
+            return true
           })
           .catch(function () {
-            // The next scroll tries again; the styles already shown stay usable.
+            // The styles already shown stay usable. No repaint, so nothing
+            // asks again by itself: a scroll at least 10 s later does.
+            requestOptionsMoreRetryAt = Date.now() + 10000
+            return false
           })
-          .then(function () {
+          .then(function (loaded) {
             requestOptionsMoreLoading = null
-            if (requestView === "all" && !String(queryInput.value || "").trim()) {
+            if (loaded && requestView === "all" && !String(queryInput.value || "").trim()) {
               paintRequestResults("", requestOptions)
             }
           })

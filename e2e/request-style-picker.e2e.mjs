@@ -135,6 +135,7 @@ const FIRST_CURSOR = JSON.stringify([
 // 503; `options.failing()` keeps answering 503 while it returns true.
 function createApi(posts, options = {}) {
   let optionsCalls = 0
+  let pageCalls = 0
   const api = (pathname, request) => {
     if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(pathname)) {
       const specific = {
@@ -154,6 +155,8 @@ function createApi(posts, options = {}) {
     }
     if (pathname === "/api/iconoplasm/requests/options") {
       if (new URL(request.url()).searchParams.get("after") === FIRST_CURSOR) {
+        pageCalls += 1
+        if (options.pagesFailing?.()) return new HttpStatus(503, { error: "unavailable" })
         return { request_options: NEXT_OPTIONS, next_cursor: "" }
       }
       optionsCalls += 1
@@ -180,6 +183,7 @@ function createApi(posts, options = {}) {
     return undefined
   }
   api.optionsCalls = () => optionsCalls
+  api.pageCalls = () => pageCalls
   return api
 }
 
@@ -621,7 +625,8 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     const context = await browser.newContext({ viewport: { width, height } })
     await context.addInitScript(() => localStorage.setItem("iconoplasm.new-candidate-tab", "free"))
     let failing = true
-    const api = createApi([], { failing: () => failing })
+    let pagesFailing = false
+    const api = createApi([], { failing: () => failing, pagesFailing: () => pagesFailing })
     await routeProduction(context, origin, api)
     await routePortraits(context)
     const page = await context.newPage()
@@ -646,10 +651,20 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     )
 
     failing = false
+    pagesFailing = true
     await page.click("[data-icono-request-retry]")
     await page.waitForSelector("[data-icono-request-card]", { timeout: 15_000 })
     m = await page.evaluate(measurePicker)
     assert.ok(m.visibleCards >= 4, `only ${m.visibleCards} cards after Try again`)
+
+    // 18 again (B-1014): a next page that keeps failing is asked for once plus two
+    // retries, not in a loop; the cards already shown stay.
+    await page.click("[data-icono-request-view='all']")
+    await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, el.scrollHeight))
+    await page.waitForTimeout(5_000)
+    assert.equal(api.pageCalls(), 3, `a failing page was asked ${api.pageCalls()} times`)
+    m = await page.evaluate(measurePicker)
+    assert.ok(m.visibleCards >= 4, "the failed page cleared the grid")
     await context.close()
   } finally {
     server.close()
