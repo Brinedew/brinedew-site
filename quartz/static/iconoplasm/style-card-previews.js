@@ -7,8 +7,9 @@
 // A gene that is canonical in a visible card belongs to that card. Every card
 // first gets its best free portrait; then, in screen order, a card becomes a
 // 2x2 mosaic only if three more free genes remain for it. A card whose every
-// gene is already on screen keeps its own best portrait rather than going
-// blank: tiny styles drawn on the same few genes have nothing else to show.
+// gene is already on screen shows its least-shown one rather than going blank:
+// tiny styles drawn on the same few genes have nothing else to show, and on
+// 2026-10-05 three of them all fell back to STAT5A, which then showed 4 times.
 export const STYLE_CARD_MOSAIC_SIZE = 4
 
 function geneKey(preview) {
@@ -54,6 +55,22 @@ export function assignStyleCardPreviews(options, mosaicSize) {
       })
   })
   var used = new Set()
+  // How often each gene is on screen, for the fallback. A card's best canonical
+  // portrait always shows, so it counts from the start.
+  var shownCount = new Map()
+  function count(preview) {
+    shownCount.set(geneKey(preview), (shownCount.get(geneKey(preview)) || 0) + 1)
+  }
+  lists.forEach(function (list, index) {
+    var canonical = list.find(function (preview) {
+      return preview.is_current && owner.get(geneKey(preview)) === index
+    })
+    if (canonical) count(canonical)
+  })
+  function show(preview) {
+    used.add(geneKey(preview))
+    count(preview)
+  }
   function free(preview, index) {
     var key = geneKey(preview)
     if (used.has(key)) return false
@@ -63,9 +80,20 @@ export function assignStyleCardPreviews(options, mosaicSize) {
     var lead = list.find(function (preview) {
       return free(preview, index)
     })
-    if (!lead) return { previews: list.slice(0, 1), own: false }
-    used.add(geneKey(lead))
-    return { previews: [lead], own: true }
+    if (lead) {
+      if (!(lead.is_current && owner.get(geneKey(lead)) === index)) count(lead)
+      used.add(geneKey(lead))
+      return { previews: [lead], own: true }
+    }
+    var fallback = list.reduce(function (best, preview) {
+      return (shownCount.get(geneKey(preview)) || 0) < (shownCount.get(geneKey(best)) || 0)
+        ? preview
+        : best
+    }, list[0])
+    if (!fallback) return { previews: [], own: false }
+    // Counted, never claimed: the gene may be a later card's own canonical.
+    count(fallback)
+    return { previews: [fallback], own: false }
   })
   lists.forEach(function (list, index) {
     if (!shown[index].own) return
@@ -74,7 +102,7 @@ export function assignStyleCardPreviews(options, mosaicSize) {
     })
     if (rest.length < size - 1) return
     rest.slice(0, size - 1).forEach(function (preview) {
-      used.add(geneKey(preview))
+      show(preview)
       shown[index].previews.push(preview)
     })
   })
