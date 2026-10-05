@@ -1,126 +1,136 @@
-/* Figure captions: use darkgray instead of gray for readability */
-.image-with-caption > figcaption {
-  color: var(--darkgray);
-}
+/* B-848: the blog's rules live in the `blog` layer, ordered above Quartz's
+   own CSS and the palette fallback (`base`) and below every unlayered
+   stylesheet. App CSS (Iconoplasm, GeneGuessr, Settings) is unlayered, so it
+   beats a blog element rule whatever the selector's specificity, and no app
+   component has to defend itself against prose styles again. */
+@layer quartz-base, base, blog;
 
-/* Right sidebar: account above table of contents — keep at top, before CSS nesting blocks */
-.right.sidebar .brd-sidebar-stack {
-  order: -1;
-}
+@layer blog {
+  /* Figure captions: use darkgray instead of gray for readability */
+  .image-with-caption > figcaption {
+    color: var(--darkgray);
+  }
 
-/* Crimson Pro is declared in Head.tsx. Iconoplasm installs embedded FontFace
+  /* Right sidebar: account above table of contents — keep at top, before CSS nesting blocks */
+  .right.sidebar .brd-sidebar-stack {
+    order: -1;
+  }
+
+  /* Crimson Pro is declared in Head.tsx. Iconoplasm installs embedded FontFace
    objects before reveal; other pages receive the normal network-backed faces. */
-@font-face {
-  font-family: "Monaspace Xenon Web";
-  src: url("/static/fonts/xenon/MonaspaceXenon-Var.woff2") format("woff2");
-  font-weight: 200 800;
-  font-stretch: 100% 125%;
-  font-style: normal;
-  font-display: swap;
-}
+  @font-face {
+    font-family: "Monaspace Xenon Web";
+    src: url("/static/fonts/xenon/MonaspaceXenon-Var.woff2") format("woff2");
+    font-weight: 200 800;
+    font-stretch: 100% 125%;
+    font-style: normal;
+    font-display: swap;
+  }
 
-/* Screen-reader only utility - visually hidden but accessible to screen readers and crawlers */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
+  /* Screen-reader only utility - visually hidden but accessible to screen readers and crawlers */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 
-/* Apply fonts directly - no variables, no fights */
-html,
-body,
-article {
-  font-family: "Crimson Pro", serif;
-}
-/* Headings, nav and buttons default to Crimson Pro. No !important: element
+  /* Apply fonts directly - no variables, no fights */
+  html,
+  body,
+  article {
+    font-family: "Crimson Pro", serif;
+  }
+  /* Headings, nav and buttons default to Crimson Pro. No !important: element
    selectors lose to any class, so an app (Iconoplasm) styles its own controls
    without fighting this rule. Measured before removing it: 0 of 77 headings,
    nav and buttons on brinedew.bio and GeneGuessr changed font (B-835). */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-h2.page-title,
-.breadcrumbs,
-nav,
-button {
-  font-family: "Crimson Pro", serif;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  h2.page-title,
+  .breadcrumbs,
+  nav,
+  button {
+    font-family: "Crimson Pro", serif;
+  }
+
+  /* Logo: mask using page-title link, not page-title wrapper (v5 wraps in h2) */
+  h2.page-title a::before {
+    content: "";
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    margin-right: 0.5rem;
+    background-color: currentColor;
+    mask-image: url("/static/logo-mask.png");
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: url("/static/logo-mask.png");
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    vertical-align: middle;
+  }
+  .page-title a {
+    color: var(--dark);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0;
+  }
+  /* Toolbar: align all flex children vertically center, equal height */
+  .flex-component {
+    align-items: center;
+    width: 100%;
+  }
+  .flex-component > div {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+  }
+  .flex-component .page-title {
+    margin: 0 !important;
+    display: flex;
+    align-items: center;
+  }
+  .flex-component .search {
+    flex: 1;
+  }
+  .page-title a::before {
+    font-size: 19px;
+  }
+  .page-title a:hover {
+    color: var(--accent);
+  }
+  code,
+  pre {
+    font-family: "Monaspace Xenon Web", monospace;
+  }
+
+  /* Also override Quartz variable so any var(--headerFont) usages resolve to Crimson Pro */
+  :root {
+    --headerFont: "Crimson Pro", serif;
+    --codeFont: "Monaspace Xenon Web", monospace;
+  }
+
+  body {
+    font-synthesis: none;
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  /* Dark Academia OKLCH Color System - 2025 */
 }
 
-/* Logo: mask using page-title link, not page-title wrapper (v5 wraps in h2) */
-h2.page-title a::before {
-  content: "";
-  display: inline-block;
-  width: 28px;
-  height: 28px;
-  margin-right: 0.5rem;
-  background-color: currentColor;
-  mask-image: url("/static/logo-mask.png");
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  -webkit-mask-image: url("/static/logo-mask.png");
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  vertical-align: middle;
-}
-.page-title a {
-  color: var(--dark);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  font-size: 0;
-}
-/* Toolbar: align all flex children vertically center, equal height */
-.flex-component {
-  align-items: center;
-  width: 100%;
-}
-.flex-component > div {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-}
-.flex-component .page-title {
-  margin: 0 !important;
-  display: flex;
-  align-items: center;
-}
-.flex-component .search {
-  flex: 1;
-}
-.page-title a::before {
-  font-size: 19px;
-}
-.page-title a:hover {
-  color: var(--accent);
-}
-code,
-pre {
-  font-family: "Monaspace Xenon Web", monospace;
-}
-
-/* Also override Quartz variable so any var(--headerFont) usages resolve to Crimson Pro */
-:root {
-  --headerFont: "Crimson Pro", serif;
-  --codeFont: "Monaspace Xenon Web", monospace;
-}
-
-body {
-  font-synthesis: none;
-  font-size: 19px;
-  font-weight: 400;
-  line-height: 1.45;
-}
-
-/* Dark Academia OKLCH Color System - 2025 */
 @layer base {
   :root {
     /* Light mode: Rich paper tones with sufficient contrast */
@@ -161,7 +171,8 @@ body {
   }
 }
 
-/* =============================================================
+@layer blog {
+  /* =============================================================
    THIS IS THE ONLY PLACE WHERE YOU SHOULD EDIT RUNTIME COLORS
    -------------------------------------------------------------
    Edit the explicit theme palettes below. These control the
@@ -176,102 +187,102 @@ body {
    affect those generated assets; rebuild with updated config if
    you want them to match.
    ============================================================= */
-/* User choice ALWAYS wins */
-:root[data-theme="light"] {
-  --light: oklch(96% 0.015 75);
-  --lightgray: oklch(85% 0.02 65);
-  --gray: oklch(70% 0.025 60);
-  --darkgray: oklch(45% 0.03 55);
-  --dark: oklch(20% 0.035 50);
-  --accent: oklch(50% 0.08 185);
-  --ui-border: oklch(82% 0.02 70);
-  --ui-bg: oklch(92% 0.01 75);
-  --secondary: oklch(40% 0.04 55);
-  --tertiary: var(--accent);
-}
+  /* User choice ALWAYS wins */
+  :root[data-theme="light"] {
+    --light: oklch(96% 0.015 75);
+    --lightgray: oklch(85% 0.02 65);
+    --gray: oklch(70% 0.025 60);
+    --darkgray: oklch(45% 0.03 55);
+    --dark: oklch(20% 0.035 50);
+    --accent: oklch(50% 0.08 185);
+    --ui-border: oklch(82% 0.02 70);
+    --ui-bg: oklch(92% 0.01 75);
+    --secondary: oklch(40% 0.04 55);
+    --tertiary: var(--accent);
+  }
 
-:root[data-theme="dark"] {
-  /* Dark mode: doubled background brightness while preserving contrast offsets */
-  --light: oklch(16% 0.01 45); /* was 8% */
-  --lightgray: oklch(36% 0.02 50); /* was 18% (bg+10) */
-  --gray: oklch(58% 0.025 55); /* was 40% (bg+32) */
-  --darkgray: oklch(80% 0.02 60); /* was 62% (bg+54) */
-  --dark: oklch(85% 0.015 65); /* body text unchanged */
-  --accent: oklch(68% 0.08 185); /* unchanged */
-  --ui-border: oklch(38% 0.025 50); /* was 20% (bg+12) */
-  --ui-bg: oklch(30% 0.02 45); /* was 12% (bg+4) */
-  --secondary: oklch(70% 0.02 60); /* unchanged */
-  --tertiary: var(--accent);
-}
+  :root[data-theme="dark"] {
+    /* Dark mode: doubled background brightness while preserving contrast offsets */
+    --light: oklch(16% 0.01 45); /* was 8% */
+    --lightgray: oklch(36% 0.02 50); /* was 18% (bg+10) */
+    --gray: oklch(58% 0.025 55); /* was 40% (bg+32) */
+    --darkgray: oklch(80% 0.02 60); /* was 62% (bg+54) */
+    --dark: oklch(85% 0.015 65); /* body text unchanged */
+    --accent: oklch(68% 0.08 185); /* unchanged */
+    --ui-border: oklch(38% 0.025 50); /* was 20% (bg+12) */
+    --ui-bg: oklch(30% 0.02 45); /* was 12% (bg+4) */
+    --secondary: oklch(70% 0.02 60); /* unchanged */
+    --tertiary: var(--accent);
+  }
 
-/* Headlines that actually create hierarchy */
-h1 {
-  font-size: 2.4em;
-  font-weight: 300; /* Light weight at large size */
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
+  /* Headlines that actually create hierarchy */
+  h1 {
+    font-size: 2.4em;
+    font-weight: 300; /* Light weight at large size */
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
 
-h2 {
-  font-size: 1.4em;
-  font-weight: 600;
-  margin-top: 2em;
-  margin-bottom: 1em;
-}
+  h2 {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin-top: 2em;
+    margin-bottom: 1em;
+  }
 
-h3 {
-  font-size: 1.2em;
-  font-weight: 600;
-  margin-top: 1.5em;
-  margin-bottom: 0.6em;
-}
+  h3 {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.6em;
+  }
 
-h4 {
-  font-size: 1.1em;
-  font-weight: 600;
-  color: var(--dark);
-  margin-top: 1.2em;
-  margin-bottom: 0.5em;
-}
+  h4 {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--dark);
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+  }
 
-/* Body text with proper contrast and personality */
-body {
-  background-color: var(--light);
-  color: var(--dark);
-  /* Ensure smooth font rendering across all browsers */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  /* Body text with proper contrast and personality */
+  body {
+    background-color: var(--light);
+    color: var(--dark);
+    /* Ensure smooth font rendering across all browsers */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-article {
-  font-size: 19px;
-  font-weight: 400;
-  color: var(--dark); /* Explicit color for better contrast */
-}
+  article {
+    font-size: 19px;
+    font-weight: 400;
+    color: var(--dark); /* Explicit color for better contrast */
+  }
 
-article p,
-article li,
-article ul,
-article ol,
-article td,
-article th,
-article blockquote {
-  color: var(--dark);
-}
-article p {
-  margin-bottom: 0.75em;
-  text-wrap: pretty;
-}
+  article p,
+  article li,
+  article ul,
+  article ol,
+  article td,
+  article th,
+  article blockquote {
+    color: var(--dark);
+  }
+  article p {
+    margin-bottom: 0.75em;
+    text-wrap: pretty;
+  }
 
-/* Essay furniture: publication date under the title (content-meta plugin). */
-.content-meta {
-  margin: 0 0 1.1rem;
-  color: var(--gray);
-  font-size: 0.92rem;
-  letter-spacing: 0.01em;
-}
+  /* Essay furniture: publication date under the title (content-meta plugin). */
+  .content-meta {
+    margin: 0 0 1.1rem;
+    color: var(--gray);
+    font-size: 0.92rem;
+    letter-spacing: 0.01em;
+  }
 
-/*
+  /*
  * Essay spacing is parent-owned, not stacked child margins.
  *
  * Top-level blocks: flex column + gap (safe — not list boxes).
@@ -279,1559 +290,1560 @@ article p {
  * siblings is ONLY via `X + X { margin-top }` (one edge, one owner). Children
  * never carry margin-bottom, so collapse/stacking cannot invent uneven air.
  */
-.markdown-preview-view.markdown-rendered {
-  /*
+  .markdown-preview-view.markdown-rendered {
+    /*
    * Editorial rhythm contract. Keep these values explicit: inline furniture
    * must not be able to renegotiate the height or spacing of a prose block.
   */
-  --essay-leading: 1.6rem;
-  --essay-block-gap: 0.7em;
-  --essay-caption-gap: 0.35em;
-  display: flex;
-  flex-direction: column;
-  gap: var(--essay-block-gap);
-  line-height: var(--essay-leading);
-  font-kerning: normal;
-  text-rendering: optimizeLegibility;
-}
+    --essay-leading: 1.6rem;
+    --essay-block-gap: 0.7em;
+    --essay-caption-gap: 0.35em;
+    display: flex;
+    flex-direction: column;
+    gap: var(--essay-block-gap);
+    line-height: var(--essay-leading);
+    font-kerning: normal;
+    text-rendering: optimizeLegibility;
+  }
 
-.markdown-preview-view.markdown-rendered > * {
-  margin: 0;
-}
+  .markdown-preview-view.markdown-rendered > * {
+    margin: 0;
+  }
 
-.markdown-preview-view.markdown-rendered > :is(h1, h2, h3, h4, h5, h6) {
-  padding-top: 0.55em;
-}
+  .markdown-preview-view.markdown-rendered > :is(h1, h2, h3, h4, h5, h6) {
+    padding-top: 0.55em;
+  }
 
-.markdown-preview-view.markdown-rendered > :is(h1, h2):first-child {
-  padding-top: 0;
-}
+  .markdown-preview-view.markdown-rendered > :is(h1, h2):first-child {
+    padding-top: 0;
+  }
 
-.markdown-preview-view.markdown-rendered > hr {
-  padding-top: 0.5em;
-}
+  .markdown-preview-view.markdown-rendered > hr {
+    padding-top: 0.5em;
+  }
 
-/*
+  /*
  * Prose uses one line box regardless of whether a line contains links,
  * emphasis, list markers, blockquotes, footnotes, or citation markers.
  */
-.markdown-preview-view.markdown-rendered :is(p, li, blockquote) {
-  line-height: var(--essay-leading);
-}
+  .markdown-preview-view.markdown-rendered :is(p, li, blockquote) {
+    line-height: var(--essay-leading);
+  }
 
-/*
+  /*
  * Native vertical-align:super/sub contributes the marker's own line-height to
  * the parent line box. Position the smaller glyph visually instead, with a
  * zero-height inline box, so annotations cannot add stray vertical pixels.
  */
-.markdown-preview-view.markdown-rendered :is(sup, sub),
-.markdown-preview-view.markdown-rendered :is(sup, sub) > * {
-  line-height: 0;
-}
+  .markdown-preview-view.markdown-rendered :is(sup, sub),
+  .markdown-preview-view.markdown-rendered :is(sup, sub) > * {
+    line-height: 0;
+  }
 
-.markdown-preview-view.markdown-rendered :is(sup, sub) {
-  position: relative;
-  vertical-align: baseline;
-  font-size: 0.75em;
-}
+  .markdown-preview-view.markdown-rendered :is(sup, sub) {
+    position: relative;
+    vertical-align: baseline;
+    font-size: 0.75em;
+  }
 
-.markdown-preview-view.markdown-rendered sup {
-  top: -0.42em;
-}
+  .markdown-preview-view.markdown-rendered sup {
+    top: -0.42em;
+  }
 
-.markdown-preview-view.markdown-rendered sub {
-  bottom: -0.2em;
-}
+  .markdown-preview-view.markdown-rendered sub {
+    bottom: -0.2em;
+  }
 
-/* Kill every global margin that could stack inside essays. */
-.markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table, img) {
-  margin: 0;
-}
+  /* Kill every global margin that could stack inside essays. */
+  .markdown-preview-view.markdown-rendered :is(p, ul, ol, li, blockquote, figure, pre, table, img) {
+    margin: 0;
+  }
 
-/* Figures are top-level essay blocks; caption sits under the image via gap. */
-.markdown-preview-view.markdown-rendered figure.image-with-caption,
-.markdown-preview-view.markdown-rendered figure {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--essay-caption-gap);
-  width: 100%;
-}
+  /* Figures are top-level essay blocks; caption sits under the image via gap. */
+  .markdown-preview-view.markdown-rendered figure.image-with-caption,
+  .markdown-preview-view.markdown-rendered figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--essay-caption-gap);
+    width: 100%;
+  }
 
-.markdown-preview-view.markdown-rendered figure > img,
-.markdown-preview-view.markdown-rendered figure > picture {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 0;
-  /* Replaced media already has intrinsic dimensions. Quartz's global
+  .markdown-preview-view.markdown-rendered figure > img,
+  .markdown-preview-view.markdown-rendered figure > picture {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0;
+    /* Replaced media already has intrinsic dimensions. Quartz's global
      content-visibility:auto skips off-screen image layout and collapses long
      essays until the reader scrolls near each image, causing large jumps. */
-  content-visibility: visible;
-}
+    content-visibility: visible;
+  }
 
-.markdown-preview-view.markdown-rendered figure > figcaption {
-  text-align: center;
-  font-size: 0.82em;
-  line-height: 1.35;
-  color: var(--darkgray);
-  text-wrap: balance;
-  max-width: 34rem;
-  margin: 0;
-}
+  .markdown-preview-view.markdown-rendered figure > figcaption {
+    text-align: center;
+    font-size: 0.82em;
+    line-height: 1.35;
+    color: var(--darkgray);
+    text-wrap: balance;
+    max-width: 34rem;
+    margin: 0;
+  }
 
-/* Native list boxes — flex on ul/li kills markers; do not use it here. */
-.markdown-preview-view.markdown-rendered :is(ul, ol) {
-  display: block;
-  list-style: revert;
-  padding-inline-start: 1.6em;
-}
+  /* Native list boxes — flex on ul/li kills markers; do not use it here. */
+  .markdown-preview-view.markdown-rendered :is(ul, ol) {
+    display: block;
+    list-style: revert;
+    padding-inline-start: 1.6em;
+  }
 
-.markdown-preview-view.markdown-rendered li {
-  display: list-item;
-  list-style: inherit;
-}
+  .markdown-preview-view.markdown-rendered li {
+    display: list-item;
+    list-style: inherit;
+  }
 
-/* One owner of list-item separation: adjacent sibling top margin only. */
-.markdown-preview-view.markdown-rendered :is(ul, ol) > li + li {
-  margin-top: 0.4em;
-}
+  /* One owner of list-item separation: adjacent sibling top margin only. */
+  .markdown-preview-view.markdown-rendered :is(ul, ol) > li + li {
+    margin-top: 0.4em;
+  }
 
-/* Title + nested list inside one li: one gap between consecutive children. */
-.markdown-preview-view.markdown-rendered li > * + * {
-  margin-top: 0.35em;
-}
+  /* Title + nested list inside one li: one gap between consecutive children. */
+  .markdown-preview-view.markdown-rendered li > * + * {
+    margin-top: 0.35em;
+  }
 
-.markdown-preview-view.markdown-rendered :is(ul, ol) :is(ul, ol) > li + li {
-  margin-top: 0.28em;
-}
+  .markdown-preview-view.markdown-rendered :is(ul, ol) :is(ul, ol) > li + li {
+    margin-top: 0.28em;
+  }
 
-.draft-warning-wrap {
-  margin: 0 0 1rem;
-}
+  .draft-warning-wrap {
+    margin: 0 0 1rem;
+  }
 
-.draft-warning-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--dark) 45%);
-  border-left: 6px solid var(--accent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 20%, var(--light) 80%);
-  color: var(--dark);
-}
+  .draft-warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--dark) 45%);
+    border-left: 6px solid var(--accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--accent) 20%, var(--light) 80%);
+    color: var(--dark);
+  }
 
-.draft-warning-banner__badge {
-  width: 1.2rem;
-  height: 1.2rem;
-  min-width: 1.2rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--light);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: "Monaspace Xenon Web", monospace;
-  font-size: 0.9rem;
-  font-weight: 700;
-  line-height: 1;
-  margin-top: 0.1rem;
-}
+  .draft-warning-banner__badge {
+    width: 1.2rem;
+    height: 1.2rem;
+    min-width: 1.2rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--light);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Monaspace Xenon Web", monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
 
-.brd-sidebar-stack {
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+  .brd-sidebar-stack {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
 
-/* Quartz caps every right-sidebar child at 24rem below the desktop breakpoint.
+  /* Quartz caps every right-sidebar child at 24rem below the desktop breakpoint.
    The account + request inbox stack is real document content, so that cap makes
    it paint through the footer as soon as the user has a few requests. */
-@media (max-width: 1199px) {
-  .page > #quartz-body .sidebar.right > .brd-sidebar-stack {
-    flex: 1 1 auto;
+  @media (max-width: 1199px) {
+    .page > #quartz-body .sidebar.right > .brd-sidebar-stack {
+      flex: 1 1 auto;
+      width: 100%;
+      max-height: none;
+    }
+  }
+
+  .brd-sidebar-panel {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    font-size: 0.875rem;
+  }
+
+  .brd-sidebar-panel + .brd-sidebar-panel {
+    padding-top: 0.95rem;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
+  }
+
+  .brd-sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .brd-sidebar-panel-title {
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--secondary);
+  }
+
+  .brd-user-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .brd-user-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .brd-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--ui-border);
+    flex-shrink: 0;
+  }
+
+  .brd-user-avatar--fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ui-bg);
+    color: var(--secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .brd-user-identity {
+    min-width: 0;
+  }
+
+  .brd-user-name {
+    color: var(--dark);
+    font-size: 0.92rem;
+    font-weight: 650;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .brd-user-tier {
+    margin-top: 0.1rem;
+    color: var(--secondary);
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .brd-user-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .brd-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    text-decoration: none;
+    opacity: 0.8;
+    transition:
+      color 0.2s ease,
+      opacity 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .brd-icon-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .brd-icon-btn:hover {
+    color: var(--accent);
+    opacity: 1;
+    transform: rotate(20deg);
+  }
+
+  .brd-sidebar-btn {
+    display: inline-flex;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 32px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: var(--ui-bg);
+    color: var(--dark);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .brd-sidebar-btn:hover {
+    background: var(--light);
+    border-color: var(--secondary);
+    color: var(--dark);
+  }
+
+  .brd-sidebar-btn--quiet {
+    border-color: var(--ui-border);
+  }
+
+  .brd-sidebar-btn--community {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--ui-border));
+  }
+
+  .brd-sidebar-rowlist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .brd-sidebar-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .brd-sidebar-row-label {
+    color: var(--secondary);
+    font-size: 0.8rem;
+  }
+
+  .brd-sidebar-row-value {
+    color: var(--dark);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .icono-request-inbox {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    container-type: inline-size;
+  }
+
+  .icono-request-inbox__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .icono-request-inbox__head {
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.075em;
+    text-transform: uppercase;
+  }
+
+  .icono-request-inbox__groups {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+  }
+
+  .icono-request-inbox__group {
+    display: block;
+  }
+
+  .icono-request-inbox__group::part(base) {
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .icono-request-inbox__group::part(header) {
+    min-height: 44px;
+    padding: 0 0.1rem;
+    color: var(--dark);
+  }
+
+  .icono-request-inbox__group::part(header):hover {
+    color: var(--accent);
+  }
+
+  .icono-request-inbox__group::part(summary) {
+    min-width: 0;
     width: 100%;
-    max-height: none;
   }
-}
 
-.brd-sidebar-panel {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  font-size: 0.875rem;
-}
+  .icono-request-inbox__group::part(summary-icon) {
+    color: var(--secondary);
+    font-size: 0.74rem;
+  }
 
-.brd-sidebar-panel + .brd-sidebar-panel {
-  padding-top: 0.95rem;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 70%, transparent);
-}
+  .icono-request-inbox__group::part(content) {
+    padding: 0;
+  }
 
-.brd-sidebar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
+  .icono-request-inbox__group-summary,
+  .icono-request-inbox__group-meta {
+    display: flex;
+    align-items: center;
+  }
 
-.brd-sidebar-panel-title {
-  font-weight: 700;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--secondary);
-}
+  .icono-request-inbox__group-summary {
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.65rem;
+  }
 
-.brd-user-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
+  .icono-request-inbox__group-label {
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.075em;
+    text-transform: uppercase;
+  }
 
-.brd-user-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-width: 0;
-}
+  .icono-request-inbox__group-meta {
+    justify-content: flex-end;
+    gap: 0.45rem;
+    min-width: 2rem;
+  }
 
-.brd-user-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--ui-border);
-  flex-shrink: 0;
-}
+  .icono-request-inbox__group-count {
+    min-width: 1.2rem;
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.64rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
 
-.brd-user-avatar--fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ui-bg);
-  color: var(--secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
+  .icono-request-inbox__unread-dot {
+    display: inline-flex;
+  }
 
-.brd-user-identity {
-  min-width: 0;
-}
+  .icono-request-inbox__unread-dot::part(base) {
+    box-sizing: border-box;
+    width: 0.52rem;
+    min-width: 0.52rem;
+    height: 0.52rem;
+    padding: 0;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--light) 90%, transparent);
+  }
 
-.brd-user-name {
-  color: var(--dark);
-  font-size: 0.92rem;
-  font-weight: 650;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  .icono-request-inbox__group-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-height: min(31rem, 58vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
 
-.brd-user-tier {
-  margin-top: 0.1rem;
-  color: var(--secondary);
-  font-size: 0.75rem;
-  line-height: 1.2;
-}
+  .icono-request-inbox__group-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.2rem 0 0.3rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+  }
 
-.brd-user-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
-}
+  .icono-request-inbox__group-actions button {
+    min-height: 44px;
+    padding: 0 0.35rem;
+    border: 0;
+    background: transparent;
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.61rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--secondary) 35%, transparent);
+    text-underline-offset: 0.18em;
+    cursor: pointer;
+  }
 
-.brd-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  text-decoration: none;
-  opacity: 0.8;
-  transition:
-    color 0.2s ease,
-    opacity 0.2s ease,
-    transform 0.2s ease;
-}
+  .icono-request-inbox__group-actions button:hover,
+  .icono-request-inbox__group-actions button:focus-visible {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+  }
 
-.brd-icon-btn svg {
-  width: 18px;
-  height: 18px;
-}
+  .icono-request-inbox__loading {
+    color: var(--secondary);
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
 
-.brd-icon-btn:hover {
-  color: var(--accent);
-  opacity: 1;
-  transform: rotate(20deg);
-}
+  .icono-request-inbox__item {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+    min-height: 56px;
+    padding: 0.38rem 0;
+    color: var(--dark);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+    transition:
+      background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
 
-.brd-sidebar-btn {
-  display: inline-flex;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  min-height: 32px;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--accent);
-  background: var(--ui-bg);
-  color: var(--dark);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
-}
+  .icono-request-inbox__item:hover,
+  .icono-request-inbox__item:focus-visible {
+    background: color-mix(in srgb, var(--light) 88%, var(--accent) 12%);
+    transform: translateX(3px);
+  }
 
-.brd-sidebar-btn:hover {
-  background: var(--light);
-  border-color: var(--secondary);
-  color: var(--dark);
-}
+  .icono-request-inbox__item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
-.brd-sidebar-btn--quiet {
-  border-color: var(--ui-border);
-}
+  .icono-request-inbox__item--unread {
+    background: color-mix(in srgb, var(--light) 82%, #d6b45e 18%);
+  }
 
-.brd-sidebar-btn--community {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--ui-border));
-}
+  .icono-request-inbox__receipt {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.42rem;
+    padding: 0.62rem 0.35rem;
+  }
 
-.brd-sidebar-rowlist {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
+  .icono-request-inbox__receipt-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
 
-.brd-sidebar-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
+  .icono-request-inbox__receipt-count {
+    flex: 0 0 auto;
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.61rem;
+    font-variant-numeric: tabular-nums;
+  }
 
-.brd-sidebar-row-label {
-  color: var(--secondary);
-  font-size: 0.8rem;
-}
+  .icono-request-inbox__previews {
+    display: grid;
+    gap: 3px;
+    overflow: hidden;
+  }
 
-.brd-sidebar-row-value {
-  color: var(--dark);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
+  .icono-request-inbox__previews--1 {
+    grid-template-columns: minmax(0, 46%);
+  }
 
-.icono-request-inbox {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  container-type: inline-size;
-}
+  .icono-request-inbox__previews--2,
+  .icono-request-inbox__previews--3 {
+    grid-template-columns: repeat(var(--icono-request-preview-count, 3), minmax(0, 1fr));
+  }
 
-.icono-request-inbox__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
+  .icono-request-inbox__previews--2 {
+    --icono-request-preview-count: 2;
+  }
 
-.icono-request-inbox__head {
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
+  .icono-request-inbox__previews--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
-.icono-request-inbox__groups {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
-}
+  .icono-request-inbox__preview {
+    position: relative;
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    /* Match Iconoplasm's established 48x64 and 96x128 thumbnail viewports. */
+    aspect-ratio: 3 / 4;
+    background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
+  }
 
-.icono-request-inbox__group {
-  display: block;
-}
+  .icono-request-inbox__receipt .icono-request-inbox__preview img,
+  .icono-request-inbox__receipt
+    .icono-request-inbox__preview
+    .icono-request-inbox__photo-placeholder {
+    width: 100%;
+    height: 100%;
+  }
 
-.icono-request-inbox__group::part(base) {
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 72%, transparent);
-  border-radius: 0;
-  background: transparent;
-}
+  .icono-request-inbox__preview-more {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--dark) 68%, transparent);
+    color: var(--light);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.78rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
 
-.icono-request-inbox__group::part(header) {
-  min-height: 44px;
-  padding: 0 0.1rem;
-  color: var(--dark);
-}
-
-.icono-request-inbox__group::part(header):hover {
-  color: var(--accent);
-}
-
-.icono-request-inbox__group::part(summary) {
-  min-width: 0;
-  width: 100%;
-}
-
-.icono-request-inbox__group::part(summary-icon) {
-  color: var(--secondary);
-  font-size: 0.74rem;
-}
-
-.icono-request-inbox__group::part(content) {
-  padding: 0;
-}
-
-.icono-request-inbox__group-summary,
-.icono-request-inbox__group-meta {
-  display: flex;
-  align-items: center;
-}
-
-.icono-request-inbox__group-summary {
-  justify-content: space-between;
-  width: 100%;
-  gap: 0.65rem;
-}
-
-.icono-request-inbox__group-label {
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
-
-.icono-request-inbox__group-meta {
-  justify-content: flex-end;
-  gap: 0.45rem;
-  min-width: 2rem;
-}
-
-.icono-request-inbox__group-count {
-  min-width: 1.2rem;
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.64rem;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.icono-request-inbox__unread-dot {
-  display: inline-flex;
-}
-
-.icono-request-inbox__unread-dot::part(base) {
-  box-sizing: border-box;
-  width: 0.52rem;
-  min-width: 0.52rem;
-  height: 0.52rem;
-  padding: 0;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--light) 90%, transparent);
-}
-
-.icono-request-inbox__group-body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  max-height: min(31rem, 58vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.icono-request-inbox__group-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.2rem 0 0.3rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
-}
-
-.icono-request-inbox__group-actions button {
-  min-height: 44px;
-  padding: 0 0.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.61rem;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--secondary) 35%, transparent);
-  text-underline-offset: 0.18em;
-  cursor: pointer;
-}
-
-.icono-request-inbox__group-actions button:hover,
-.icono-request-inbox__group-actions button:focus-visible {
-  color: var(--accent);
-  text-decoration-color: currentColor;
-}
-
-.icono-request-inbox__loading {
-  color: var(--secondary);
-  font-size: 0.65rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.icono-request-inbox__item {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 0.65rem;
-  align-items: center;
-  min-height: 56px;
-  padding: 0.38rem 0;
-  color: var(--dark);
-  text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
-  transition:
-    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.icono-request-inbox__item:hover,
-.icono-request-inbox__item:focus-visible {
-  background: color-mix(in srgb, var(--light) 88%, var(--accent) 12%);
-  transform: translateX(3px);
-}
-
-.icono-request-inbox__item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.icono-request-inbox__item--unread {
-  background: color-mix(in srgb, var(--light) 82%, #d6b45e 18%);
-}
-
-.icono-request-inbox__receipt {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.42rem;
-  padding: 0.62rem 0.35rem;
-}
-
-.icono-request-inbox__receipt-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.65rem;
-}
-
-.icono-request-inbox__receipt-count {
-  flex: 0 0 auto;
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.61rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.icono-request-inbox__previews {
-  display: grid;
-  gap: 3px;
-  overflow: hidden;
-}
-
-.icono-request-inbox__previews--1 {
-  grid-template-columns: minmax(0, 46%);
-}
-
-.icono-request-inbox__previews--2,
-.icono-request-inbox__previews--3 {
-  grid-template-columns: repeat(var(--icono-request-preview-count, 3), minmax(0, 1fr));
-}
-
-.icono-request-inbox__previews--2 {
-  --icono-request-preview-count: 2;
-}
-
-.icono-request-inbox__previews--4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.icono-request-inbox__preview {
-  position: relative;
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  /* Match Iconoplasm's established 48x64 and 96x128 thumbnail viewports. */
-  aspect-ratio: 3 / 4;
-  background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
-}
-
-.icono-request-inbox__receipt .icono-request-inbox__preview img,
-.icono-request-inbox__receipt
-  .icono-request-inbox__preview
+  .icono-request-inbox__item img,
   .icono-request-inbox__photo-placeholder {
-  width: 100%;
-  height: 100%;
-}
-
-.icono-request-inbox__preview-more {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--dark) 68%, transparent);
-  color: var(--light);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.78rem;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-}
-
-.icono-request-inbox__item img,
-.icono-request-inbox__photo-placeholder {
-  display: block;
-  width: 44px;
-  height: 56px;
-  object-fit: cover;
-  background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dark) 18%, transparent);
-}
-
-.icono-request-inbox__copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.08rem;
-}
-
-.icono-request-inbox__receipt-head strong,
-.icono-request-inbox__copy strong {
-  font-family: "League Spartan", sans-serif;
-  font-size: 0.95rem;
-  letter-spacing: 0.025em;
-}
-
-.icono-request-inbox__copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.icono-request-inbox__copy small {
-  color: var(--secondary);
-  font-size: 0.64rem;
-}
-
-.icono-request-inbox__item--queued {
-  grid-template-columns: 14px minmax(0, 1fr);
-  min-height: 42px;
-}
-
-.icono-request-inbox__caretaker-summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.42rem 0.1rem;
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.61rem;
-  font-variant-numeric: tabular-nums;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
-}
-
-.icono-request-inbox__caretaker-summary strong {
-  color: var(--dark);
-  font-weight: 700;
-}
-
-.icono-request-inbox__caretaker-item {
-  position: relative;
-  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
-}
-
-.icono-request-inbox__caretaker-item > .icono-request-inbox__item {
-  border-bottom: 0;
-}
-
-.icono-request-inbox__item--caretaker {
-  grid-template-columns: 30px minmax(0, 1fr);
-  min-height: 56px;
-  padding-right: 4.5rem;
-}
-
-.icono-request-inbox__caretaker-portrait {
-  display: block;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  border-radius: 4px;
-  background: var(--lightgray);
-  object-fit: cover;
-}
-
-.icono-request-inbox__caretaker-read {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  right: 0.25rem;
-  min-height: 36px;
-  padding: 0 0.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.58rem;
-  font-weight: 650;
-  text-decoration: underline;
-  text-underline-offset: 0.16em;
-  transform: translateY(-50%);
-  cursor: pointer;
-}
-
-.icono-request-inbox__caretaker-read:hover,
-.icono-request-inbox__caretaker-read:focus-visible {
-  color: var(--accent);
-}
-
-.icono-request-inbox__caretaker-read:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.icono-request-inbox__caretaker-read:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.icono-request-inbox__caretaker-comments {
-  display: block;
-  margin: 0 0 0.65rem 2.75rem;
-  color: var(--accent);
-  font-size: 0.76rem;
-  text-decoration: none;
-}
-
-.icono-request-inbox__caretaker-comments:hover,
-.icono-request-inbox__caretaker-comments:focus-visible {
-  text-decoration: underline;
-}
-
-.icono-request-inbox__caretaker-supervote-alert {
-  display: inline-block;
-  margin: -0.15rem 0 0.75rem 3.25rem;
-  padding: 0.12rem 0.45rem;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  color: var(--accent);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.68rem;
-  font-weight: 600;
-  line-height: 1.45;
-  text-decoration: none;
-}
-
-.icono-request-inbox__caretaker-supervote-alert:hover,
-.icono-request-inbox__caretaker-supervote-alert:focus-visible {
-  color: var(--accent);
-}
-
-.icono-request-inbox__group-body > :last-child {
-  border-bottom: 0;
-}
-
-.icono-request-inbox__queue-mark {
-  width: 8px;
-  height: 28px;
-  background: repeating-linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--secondary) 65%, transparent) 0 2px,
-    transparent 2px 5px
-  );
-}
-
-.icono-request-inbox__empty {
-  padding: 0.75rem 0;
-  color: var(--secondary);
-  font-size: 0.72rem;
-  line-height: 1.45;
-  text-wrap: pretty;
-}
-
-.icono-request-inbox__empty strong {
-  display: block;
-  margin-bottom: 0.12rem;
-  color: var(--dark);
-}
-
-.icono-request-inbox__limit-note,
-.icono-request-inbox__cancelled-count {
-  color: var(--secondary);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.61rem;
-  line-height: 1.45;
-  font-variant-numeric: tabular-nums;
-}
-
-.icono-request-inbox__limit-note {
-  padding: 0.7rem 0.1rem;
-  text-wrap: pretty;
-}
-
-.icono-request-inbox__cancelled-count {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.18rem 0.1rem 0;
-}
-
-.icono-request-inbox__cancelled-count span {
-  min-width: 1.2rem;
-  text-align: right;
-}
-
-.icono-request-ready-notice {
-  position: fixed;
-  z-index: 10000;
-  right: clamp(1rem, 3vw, 2.5rem);
-  bottom: clamp(1rem, 3vw, 2.5rem);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: center;
-  width: min(22rem, calc(100vw - 2rem));
-  padding: 0.8rem 1rem;
-  background: color-mix(in srgb, var(--light) 94%, #d6b45e 6%);
-  color: var(--dark);
-  border: 1px solid color-mix(in srgb, var(--dark) 24%, transparent);
-  box-shadow: 0 18px 55px color-mix(in srgb, var(--dark) 18%, transparent);
-  text-decoration: none;
-  opacity: 0;
-  transform: translateY(12px);
-  transition:
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.icono-request-ready-notice--visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.icono-request-ready-notice__stamp {
-  padding: 0.2rem 0.42rem;
-  background: var(--dark);
-  color: var(--light);
-  font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.icono-request-ready-notice strong,
-.icono-request-ready-notice small {
-  display: block;
-}
-
-.icono-request-ready-notice small {
-  margin-top: 0.12rem;
-  color: var(--secondary);
-  font-size: 0.72rem;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .icono-request-inbox__item,
-  .icono-request-ready-notice {
-    transition: none;
+    display: block;
+    width: 44px;
+    height: 56px;
+    object-fit: cover;
+    background: color-mix(in srgb, var(--ui-bg) 82%, var(--dark) 18%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dark) 18%, transparent);
   }
-}
 
-.draft-warning-banner__content {
-  min-width: 0;
-}
+  .icono-request-inbox__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+  }
 
-.draft-warning-banner__title {
-  margin: 0;
-  font-family: "Monaspace Xenon Web", monospace;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.25;
-  text-transform: uppercase;
-}
+  .icono-request-inbox__receipt-head strong,
+  .icono-request-inbox__copy strong {
+    font-family: "League Spartan", sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.025em;
+  }
 
-.draft-warning-banner__body {
-  margin: 0.2rem 0 0;
-  font-size: 0.9rem;
-  line-height: 1.35;
-}
+  .icono-request-inbox__copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-/* Links: quiet by default, teal only on hover.
+  .icono-request-inbox__copy small {
+    color: var(--secondary);
+    font-size: 0.64rem;
+  }
+
+  .icono-request-inbox__item--queued {
+    grid-template-columns: 14px minmax(0, 1fr);
+    min-height: 42px;
+  }
+
+  .icono-request-inbox__caretaker-summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.42rem 0.1rem;
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.61rem;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+  }
+
+  .icono-request-inbox__caretaker-summary strong {
+    color: var(--dark);
+    font-weight: 700;
+  }
+
+  .icono-request-inbox__caretaker-item {
+    position: relative;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 58%, transparent);
+  }
+
+  .icono-request-inbox__caretaker-item > .icono-request-inbox__item {
+    border-bottom: 0;
+  }
+
+  .icono-request-inbox__item--caretaker {
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: 56px;
+    padding-right: 4.5rem;
+  }
+
+  .icono-request-inbox__caretaker-portrait {
+    display: block;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    background: var(--lightgray);
+    object-fit: cover;
+  }
+
+  .icono-request-inbox__caretaker-read {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 0.25rem;
+    min-height: 36px;
+    padding: 0 0.35rem;
+    border: 0;
+    background: transparent;
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.58rem;
+    font-weight: 650;
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+    transform: translateY(-50%);
+    cursor: pointer;
+  }
+
+  .icono-request-inbox__caretaker-read:hover,
+  .icono-request-inbox__caretaker-read:focus-visible {
+    color: var(--accent);
+  }
+
+  .icono-request-inbox__caretaker-read:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .icono-request-inbox__caretaker-read:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
+
+  .icono-request-inbox__caretaker-comments {
+    display: block;
+    margin: 0 0 0.65rem 2.75rem;
+    color: var(--accent);
+    font-size: 0.76rem;
+    text-decoration: none;
+  }
+
+  .icono-request-inbox__caretaker-comments:hover,
+  .icono-request-inbox__caretaker-comments:focus-visible {
+    text-decoration: underline;
+  }
+
+  .icono-request-inbox__caretaker-supervote-alert {
+    display: inline-block;
+    margin: -0.15rem 0 0.75rem 3.25rem;
+    padding: 0.12rem 0.45rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    color: var(--accent);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.45;
+    text-decoration: none;
+  }
+
+  .icono-request-inbox__caretaker-supervote-alert:hover,
+  .icono-request-inbox__caretaker-supervote-alert:focus-visible {
+    color: var(--accent);
+  }
+
+  .icono-request-inbox__group-body > :last-child {
+    border-bottom: 0;
+  }
+
+  .icono-request-inbox__queue-mark {
+    width: 8px;
+    height: 28px;
+    background: repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--secondary) 65%, transparent) 0 2px,
+      transparent 2px 5px
+    );
+  }
+
+  .icono-request-inbox__empty {
+    padding: 0.75rem 0;
+    color: var(--secondary);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .icono-request-inbox__empty strong {
+    display: block;
+    margin-bottom: 0.12rem;
+    color: var(--dark);
+  }
+
+  .icono-request-inbox__limit-note,
+  .icono-request-inbox__cancelled-count {
+    color: var(--secondary);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.61rem;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .icono-request-inbox__limit-note {
+    padding: 0.7rem 0.1rem;
+    text-wrap: pretty;
+  }
+
+  .icono-request-inbox__cancelled-count {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.18rem 0.1rem 0;
+  }
+
+  .icono-request-inbox__cancelled-count span {
+    min-width: 1.2rem;
+    text-align: right;
+  }
+
+  .icono-request-ready-notice {
+    position: fixed;
+    z-index: 10000;
+    right: clamp(1rem, 3vw, 2.5rem);
+    bottom: clamp(1rem, 3vw, 2.5rem);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+    width: min(22rem, calc(100vw - 2rem));
+    padding: 0.8rem 1rem;
+    background: color-mix(in srgb, var(--light) 94%, #d6b45e 6%);
+    color: var(--dark);
+    border: 1px solid color-mix(in srgb, var(--dark) 24%, transparent);
+    box-shadow: 0 18px 55px color-mix(in srgb, var(--dark) 18%, transparent);
+    text-decoration: none;
+    opacity: 0;
+    transform: translateY(12px);
+    transition:
+      opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .icono-request-ready-notice--visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .icono-request-ready-notice__stamp {
+    padding: 0.2rem 0.42rem;
+    background: var(--dark);
+    color: var(--light);
+    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .icono-request-ready-notice strong,
+  .icono-request-ready-notice small {
+    display: block;
+  }
+
+  .icono-request-ready-notice small {
+    margin-top: 0.12rem;
+    color: var(--secondary);
+    font-size: 0.72rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icono-request-inbox__item,
+    .icono-request-ready-notice {
+      transition: none;
+    }
+  }
+
+  .draft-warning-banner__content {
+    min-width: 0;
+  }
+
+  .draft-warning-banner__title {
+    margin: 0;
+    font-family: "Monaspace Xenon Web", monospace;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1.25;
+    text-transform: uppercase;
+  }
+
+  .draft-warning-banner__body {
+    margin: 0.2rem 0 0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  /* Links: quiet by default, teal only on hover.
    Brand principle (CLAUDE.md): teal is an accent for interaction, not default
    decoration. Links read as muted text with a faint dotted underline; the accent
    appears when the reader engages. */
-a {
-  color: var(--darkgray);
-  text-decoration: none;
-  font-weight: 400;
-  transition:
-    color 0.15s ease,
-    text-decoration-color 0.15s ease;
-}
+  a {
+    color: var(--darkgray);
+    text-decoration: none;
+    font-weight: 400;
+    transition:
+      color 0.15s ease,
+      text-decoration-color 0.15s ease;
+  }
 
-a:hover {
-  color: var(--accent);
-}
+  a:hover {
+    color: var(--accent);
+  }
 
-/* Content links (internal + external): subtle dotted underline, muted; teal on hover */
-a.internal,
-a.external {
-  text-decoration: underline dotted;
-  text-decoration-color: color-mix(in srgb, var(--gray) 50%, transparent);
-  text-underline-offset: 0.18em;
-}
+  /* Content links (internal + external): subtle dotted underline, muted; teal on hover */
+  a.internal,
+  a.external {
+    text-decoration: underline dotted;
+    text-decoration-color: color-mix(in srgb, var(--gray) 50%, transparent);
+    text-underline-offset: 0.18em;
+  }
 
-a.internal:hover,
-a.external:hover {
-  color: var(--accent);
-  text-decoration-color: var(--accent);
-}
+  a.internal:hover,
+  a.external:hover {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
 
-/* Hide external link glyph (also disabled in config) */
-a.external .external-icon {
-  display: none !important;
-}
+  /* Hide external link glyph (also disabled in config) */
+  a.external .external-icon {
+    display: none !important;
+  }
 
-/* Image links: no underline (would draw a rule under the image) */
-a:has(> img),
-a:has(> picture),
-a.internal:has(> img),
-a.internal:has(> picture),
-a.external:has(> img),
-a.external:has(> picture) {
-  text-decoration: none;
-}
+  /* Image links: no underline (would draw a rule under the image) */
+  a:has(> img),
+  a:has(> picture),
+  a.internal:has(> img),
+  a.internal:has(> picture),
+  a.external:has(> img),
+  a.external:has(> picture) {
+    text-decoration: none;
+  }
 
-/* Navigation chrome: clean, no dotted underline */
-.page-title a,
-header a,
-footer a,
-.explorer a,
-.toc a,
-.tag-sections a,
-.folder-container a,
-.homepage-crawl-frontier h2 a {
-  text-decoration: none;
-}
+  /* Navigation chrome: clean, no dotted underline */
+  .page-title a,
+  header a,
+  footer a,
+  .explorer a,
+  .toc a,
+  .tag-sections a,
+  .folder-container a,
+  .homepage-crawl-frontier h2 a {
+    text-decoration: none;
+  }
 
-/* Homepage crawl frontier — editorial section treatment.
+  /* Homepage crawl frontier — editorial section treatment.
    Layout from nathan.rs: section boxes flow into a 2-column CSS grid (not
    stacked vertically, not an auto-fit grid). Each box has a left-justified
    muted uppercase header on a hairline rule, with a single-column link list
    below. Same four boxes (Posts / Wiki / Drafts / Apps), only restyled. */
-.homepage-crawl-frontier {
-  margin: 2.5rem 0 0;
-}
+  .homepage-crawl-frontier {
+    margin: 2.5rem 0 0;
+  }
 
-.homepage-crawl-frontier__sections {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(1.5rem, 4vw, 3rem);
-  align-items: start;
-}
-
-.homepage-crawl-frontier section {
-  min-width: 0;
-}
-
-.homepage-crawl-frontier h2 {
-  color: var(--gray);
-  font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 0 0 0.5rem;
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.homepage-crawl-frontier h2 a {
-  color: inherit;
-}
-
-.homepage-crawl-frontier h2 a:hover {
-  color: var(--accent);
-}
-
-.homepage-crawl-frontier ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.homepage-crawl-frontier li {
-  margin: 0;
-  padding: 0.3rem 0;
-  line-height: 1.35;
-}
-
-.homepage-crawl-frontier li > a {
-  display: inline-block;
-  line-height: 1.3;
-}
-
-.homepage-crawl-frontier p {
-  color: var(--gray);
-  font-size: 0.9rem;
-  line-height: 1.35;
-  margin: 0.2rem 0 0;
-}
-
-/* Single column on narrow screens */
-@media all and (max-width: 800px) {
   .homepage-crawl-frontier__sections {
-    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(1.5rem, 4vw, 3rem);
+    align-items: start;
   }
-}
 
-/* Text selection highlighting with proper contrast */
-::selection {
-  background-color: oklch(from var(--accent) l c h / 0.25); /* Accent color with 25% opacity */
-  color: var(--dark); /* Ensure text remains readable */
-}
+  .homepage-crawl-frontier section {
+    min-width: 0;
+  }
 
-::-moz-selection {
-  background-color: oklch(from var(--accent) l c h / 0.25);
-  color: var(--dark);
-}
+  .homepage-crawl-frontier h2 {
+    color: var(--gray);
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--ui-border);
+  }
 
-/* Search button - positioned with other header buttons */
-.search {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0 0.5rem;
-  position: relative;
-  height: 20px;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
+  .homepage-crawl-frontier h2 a {
+    color: inherit;
+  }
 
-.search svg {
-  width: 20px;
-  height: 20px;
-  fill: currentColor;
-  transition: opacity 0.1s ease;
-}
+  .homepage-crawl-frontier h2 a:hover {
+    color: var(--accent);
+  }
 
-/* Hide placeholder text inside the search input */
-.search-bar::placeholder {
-  color: transparent;
-}
-/* Vendor placeholders for broader support */
-.search-bar::-webkit-input-placeholder {
-  color: transparent;
-}
-.search-bar::-moz-placeholder {
-  color: transparent;
-}
-.search-bar:-ms-input-placeholder {
-  color: transparent;
-}
-.search-bar:-moz-placeholder {
-  color: transparent;
-}
+  .homepage-crawl-frontier ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
 
-/* Make backlinks subtle, not dominant */
-.backlinks {
-  margin-top: 4rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--ui-border);
-}
+  .homepage-crawl-frontier li {
+    margin: 0;
+    padding: 0.3rem 0;
+    line-height: 1.35;
+  }
 
-.backlinks h3 {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: var(--darkgray);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
+  .homepage-crawl-frontier li > a {
+    display: inline-block;
+    line-height: 1.3;
+  }
 
-.backlinks ul {
-  list-style: none;
-  padding: 0;
-}
+  .homepage-crawl-frontier p {
+    color: var(--gray);
+    font-size: 0.9rem;
+    line-height: 1.35;
+    margin: 0.2rem 0 0;
+  }
 
-.backlinks li {
-  padding: 0.25em 0;
-  font-size: 0.95em;
-}
-
-/* NetLogo embed styling */
-.netlogo-embed {
-  margin: 2rem 0;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.netlogo-embed iframe {
-  width: 100%;
-  height: 600px;
-  border: none;
-}
-
-/* Image captions: match v4's .image-with-caption > figcaption styling */
-figure {
-  margin: 1.5em 0;
-}
-figure > img,
-figure > picture {
-  margin-bottom: 0;
-}
-figure > figcaption {
-  text-align: center;
-  font-size: 0.82em;
-  color: var(--darkgray);
-  text-wrap: balance;
-  max-width: 34rem;
-  margin: 0.3rem auto 0;
-}
-
-/* View Transitions - Crossfade everything except persistent UI */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 250ms;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Keep header/nav stable */
-header {
-  view-transition-name: header;
-}
-
-/* Keep sidebar elements stable during theme transitions */
-.explorer,
-.toc,
-.tag-explorer {
-  view-transition-name: none;
-}
-
-/* Prevent any transitions on sidebar text during theme changes */
-.explorer *,
-.toc *,
-.tag-explorer * {
-  transition: none !important;
-}
-
-/* Lazy loading for all images is handled by HTML attributes */
-
-/* Hide heading anchor link icons (v5 uses <a role="anchor" href="#id"> inside heading) */
-h1[id] > a[role="anchor"],
-h2[id] > a[role="anchor"],
-h3[id] > a[role="anchor"],
-h4[id] > a[role="anchor"],
-h5[id] > a[role="anchor"],
-h6[id] > a[role="anchor"] {
-  display: none;
-}
-
-/* Content width override */
-:root {
-  --content-width: 750px;
-  --right-sidebar-width: 250px;
-}
-
-/* Fix: Table headers should use site font (Crimson Pro) */
-article table th {
-  font-family: "Crimson Pro", serif !important;
-  font-weight: 600;
-  color: inherit;
-}
-
-/* Fix: Task list strike-through should match current text color */
-article li:has(> input[type="checkbox"]:checked) {
-  text-decoration: line-through;
-  text-decoration-color: currentColor !important;
-  text-decoration-thickness: 1px;
-  color: inherit;
-}
-
-/* Fix Explorer Sidebar - Remove Blue Colors and Bold Text */
-.explorer-content {
-  /* Override Quartz's blue secondary color for sidebar links */
-
-  & ul li > a {
-    color: var(--dark) !important;
-    opacity: 0.85 !important; /* Match consistent opacity */
-    font-weight: 400 !important; /* Normal weight, not bold */
-    font-family: "Crimson Pro", serif !important; /* Serif for consistency */
-    font-size: 0.9rem !important; /* Explicit size override */
-    line-height: 1.4;
-
-    &:hover {
-      opacity: 1 !important;
-      color: var(--accent);
-    }
-
-    &.active {
-      opacity: 1 !important;
-      color: var(--accent);
+  /* Single column on narrow screens */
+  @media all and (max-width: 800px) {
+    .homepage-crawl-frontier__sections {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
-}
 
-/* Fix folder container styling */
-.folder-container {
-  /* Folder names (like "Core Concepts") */
-  & div > a {
-    color: var(--darkgray) !important; /* Slightly muted for hierarchy */
-    font-weight: 500 !important; /* Medium weight, not semibold */
-    font-size: 0.9rem !important;
-    font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
-    opacity: 0.9;
+  /* Text selection highlighting with proper contrast */
+  ::selection {
+    background-color: oklch(from var(--accent) l c h / 0.25); /* Accent color with 25% opacity */
+    color: var(--dark); /* Ensure text remains readable */
+  }
 
-    &:hover {
+  ::-moz-selection {
+    background-color: oklch(from var(--accent) l c h / 0.25);
+    color: var(--dark);
+  }
+
+  /* Search button - positioned with other header buttons */
+  .search {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    position: relative;
+    height: 20px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .search svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    transition: opacity 0.1s ease;
+  }
+
+  /* Hide placeholder text inside the search input */
+  .search-bar::placeholder {
+    color: transparent;
+  }
+  /* Vendor placeholders for broader support */
+  .search-bar::-webkit-input-placeholder {
+    color: transparent;
+  }
+  .search-bar::-moz-placeholder {
+    color: transparent;
+  }
+  .search-bar:-ms-input-placeholder {
+    color: transparent;
+  }
+  .search-bar:-moz-placeholder {
+    color: transparent;
+  }
+
+  /* Make backlinks subtle, not dominant */
+  .backlinks {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--ui-border);
+  }
+
+  .backlinks h3 {
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--darkgray);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .backlinks ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .backlinks li {
+    padding: 0.25em 0;
+    font-size: 0.95em;
+  }
+
+  /* NetLogo embed styling */
+  .netlogo-embed {
+    margin: 2rem 0;
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .netlogo-embed iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+  }
+
+  /* Image captions: match v4's .image-with-caption > figcaption styling */
+  figure {
+    margin: 1.5em 0;
+  }
+  figure > img,
+  figure > picture {
+    margin-bottom: 0;
+  }
+  figure > figcaption {
+    text-align: center;
+    font-size: 0.82em;
+    color: var(--darkgray);
+    text-wrap: balance;
+    max-width: 34rem;
+    margin: 0.3rem auto 0;
+  }
+
+  /* View Transitions - Crossfade everything except persistent UI */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 250ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Keep header/nav stable */
+  header {
+    view-transition-name: header;
+  }
+
+  /* Keep sidebar elements stable during theme transitions */
+  .explorer,
+  .toc,
+  .tag-explorer {
+    view-transition-name: none;
+  }
+
+  /* Prevent any transitions on sidebar text during theme changes */
+  .explorer *,
+  .toc *,
+  .tag-explorer * {
+    transition: none !important;
+  }
+
+  /* Lazy loading for all images is handled by HTML attributes */
+
+  /* Hide heading anchor link icons (v5 uses <a role="anchor" href="#id"> inside heading) */
+  h1[id] > a[role="anchor"],
+  h2[id] > a[role="anchor"],
+  h3[id] > a[role="anchor"],
+  h4[id] > a[role="anchor"],
+  h5[id] > a[role="anchor"],
+  h6[id] > a[role="anchor"] {
+    display: none;
+  }
+
+  /* Content width override */
+  :root {
+    --content-width: 750px;
+    --right-sidebar-width: 250px;
+  }
+
+  /* Fix: Table headers should use site font (Crimson Pro) */
+  article table th {
+    font-family: "Crimson Pro", serif !important;
+    font-weight: 600;
+    color: inherit;
+  }
+
+  /* Fix: Task list strike-through should match current text color */
+  article li:has(> input[type="checkbox"]:checked) {
+    text-decoration: line-through;
+    text-decoration-color: currentColor !important;
+    text-decoration-thickness: 1px;
+    color: inherit;
+  }
+
+  /* Fix Explorer Sidebar - Remove Blue Colors and Bold Text */
+  .explorer-content {
+    /* Override Quartz's blue secondary color for sidebar links */
+
+    & ul li > a {
       color: var(--dark) !important;
-      opacity: 1;
+      opacity: 0.85 !important; /* Match consistent opacity */
+      font-weight: 400 !important; /* Normal weight, not bold */
+      font-family: "Crimson Pro", serif !important; /* Serif for consistency */
+      font-size: 0.9rem !important; /* Explicit size override */
+      line-height: 1.4;
+
+      &:hover {
+        opacity: 1 !important;
+        color: var(--accent);
+      }
+
+      &.active {
+        opacity: 1 !important;
+        color: var(--accent);
+      }
     }
   }
 
-  /* Folder buttons */
-  & div > button span {
-    color: var(--darkgray) !important;
-    font-weight: 500 !important;
-    font-size: 0.9rem !important;
-    font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
-  }
+  /* Fix folder container styling */
+  .folder-container {
+    /* Folder names (like "Core Concepts") */
+    & div > a {
+      color: var(--darkgray) !important; /* Slightly muted for hierarchy */
+      font-weight: 500 !important; /* Medium weight, not semibold */
+      font-size: 0.9rem !important;
+      font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
+      opacity: 0.9;
 
-  /* Folder icons */
-  .folder-icon {
-    color: var(--gray) !important;
-
-    &:hover {
-      color: var(--accent) !important;
+      &:hover {
+        color: var(--dark) !important;
+        opacity: 1;
+      }
     }
-  }
-}
 
-/* Ensure consistent visual hierarchy in sidebar */
-.explorer {
-  /* Top-level items - consistent size and opacity */
-  & > .explorer-content > ul > li > .folder-container a,
-  & > .explorer-content > ul > li > a {
-    font-size: 0.9rem !important; /* Match TOC size for consistency */
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important; /* Normal weight for consistency */
-    opacity: 0.85 !important; /* Match TOC opacity */
-
-    &:hover {
-      opacity: 1 !important;
+    /* Folder buttons */
+    & div > button span {
+      color: var(--darkgray) !important;
+      font-weight: 500 !important;
+      font-size: 0.9rem !important;
+      font-family: "Crimson Pro", serif !important; /* Use serif, not headerFont */
     }
-  }
 
-  /* Nested items smaller for hierarchy */
-  .folder-outer ul li a {
-    font-size: 0.85rem !important;
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important;
-    opacity: 0.85 !important; /* Consistent with top-level */
+    /* Folder icons */
+    .folder-icon {
+      color: var(--gray) !important;
 
-    &:hover {
-      opacity: 1 !important;
+      &:hover {
+        color: var(--accent) !important;
+      }
     }
   }
 
-  /* Third level and deeper even smaller */
-  .folder-outer .folder-outer ul li a {
-    font-size: 0.8rem !important;
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important;
-    opacity: 0.85 !important; /* Consistent opacity across all levels */
+  /* Ensure consistent visual hierarchy in sidebar */
+  .explorer {
+    /* Top-level items - consistent size and opacity */
+    & > .explorer-content > ul > li > .folder-container a,
+    & > .explorer-content > ul > li > a {
+      font-size: 0.9rem !important; /* Match TOC size for consistency */
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important; /* Normal weight for consistency */
+      opacity: 0.85 !important; /* Match TOC opacity */
 
-    &:hover {
-      opacity: 1 !important;
+      &:hover {
+        opacity: 1 !important;
+      }
+    }
+
+    /* Nested items smaller for hierarchy */
+    .folder-outer ul li a {
+      font-size: 0.85rem !important;
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important;
+      opacity: 0.85 !important; /* Consistent with top-level */
+
+      &:hover {
+        opacity: 1 !important;
+      }
+    }
+
+    /* Third level and deeper even smaller */
+    .folder-outer .folder-outer ul li a {
+      font-size: 0.8rem !important;
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important;
+      opacity: 0.85 !important; /* Consistent opacity across all levels */
+
+      &:hover {
+        opacity: 1 !important;
+      }
     }
   }
-}
 
-/* Sidebar: match v4 behavior - static position, no sticky scroll */
-.page > #quartz-body .sidebar {
-  position: static;
-  height: auto;
-}
+  /* Sidebar: match v4 behavior - static position, no sticky scroll */
+  .page > #quartz-body .sidebar {
+    position: static;
+    height: auto;
+  }
 
-/* Sidebar: match v4 static position */
-.page > #quartz-body .sidebar {
-  position: static;
-  height: auto;
-}
+  /* Sidebar: match v4 static position */
+  .page > #quartz-body .sidebar {
+    position: static;
+    height: auto;
+  }
 
-/* Posts and Wiki are editorial archives, not reading pages. Their empty right
+  /* Posts and Wiki are editorial archives, not reading pages. Their empty right
    rail is removed at desktop widths so the two-column index can use the page.
    This belongs in the unlayered site stylesheet: the project sidebar rule
    above intentionally outranks component-layer CSS. */
-@media (min-width: 1200px) {
-  body[data-slug="tags/content/post"] .page > #quartz-body,
-  body[data-slug="tags/content/wiki"] .page > #quartz-body {
-    grid-template-columns: 17rem minmax(0, 1fr);
-    grid-template-areas:
-      "grid-sidebar-left grid-header"
-      "grid-sidebar-left grid-center"
-      "grid-sidebar-left grid-footer";
+  @media (min-width: 1200px) {
+    body[data-slug="tags/content/post"] .page > #quartz-body,
+    body[data-slug="tags/content/wiki"] .page > #quartz-body {
+      grid-template-columns: 17rem minmax(0, 1fr);
+      grid-template-areas:
+        "grid-sidebar-left grid-header"
+        "grid-sidebar-left grid-center"
+        "grid-sidebar-left grid-footer";
+    }
+
+    body[data-slug="tags/content/post"] .page > #quartz-body .sidebar.right,
+    body[data-slug="tags/content/wiki"] .page > #quartz-body .sidebar.right {
+      display: none;
+    }
   }
 
-  body[data-slug="tags/content/post"] .page > #quartz-body .sidebar.right,
-  body[data-slug="tags/content/wiki"] .page > #quartz-body .sidebar.right {
+  /* Iconoplasm + GeneGuessr: hide folder-page listing (app pages are not folder pages) */
+  body[data-slug^="apps/iconoplasm"] .page-listing,
+  body[data-slug^="apps/geneguessr"] .page-listing {
     display: none;
   }
-}
 
-/* Iconoplasm + GeneGuessr: hide folder-page listing (app pages are not folder pages) */
-body[data-slug^="apps/iconoplasm"] .page-listing,
-body[data-slug^="apps/geneguessr"] .page-listing {
-  display: none;
-}
-
-/* Fix Table of Contents - Remove Progressive Dimming and Bold Fonts */
-.toc {
-  /* TOC header */
-  button.toc-header h3 {
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 500 !important; /* Medium weight, not bold */
+  /* Fix Table of Contents - Remove Progressive Dimming and Bold Fonts */
+  .toc {
+    /* TOC header */
+    button.toc-header h3 {
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 500 !important; /* Medium weight, not bold */
+    }
   }
-}
 
-ul.toc-content.overflow {
-  margin-bottom: 0.25em;
-  line-height: 1.075;
-  /* Remove progressive dimming - all TOC items same opacity */
-  & > li > a {
+  ul.toc-content.overflow {
+    margin-bottom: 0.25em;
+    line-height: 1.075;
+    /* Remove progressive dimming - all TOC items same opacity */
+    & > li > a {
+      color: var(--dark) !important;
+      opacity: 0.85 !important; /* Match left sidebar consistency */
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important;
+      font-size: 0.9rem !important; /* Much smaller - TOC shouldn't compete with body text */
+      transition: none !important; /* Remove opacity transitions */
+
+      &:hover {
+        opacity: 1 !important;
+        color: var(--accent) !important;
+      }
+
+      &.in-view {
+        opacity: 0.85 !important; /* Same as default, no special highlighting */
+      }
+    }
+  }
+
+  /* Fix inconsistent fonts in left sidebar - make everything serif */
+  .explorer-content ul li {
+    /* Regular page links like "About", "Graph" etc */
+    & > a {
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important;
+      font-size: 0.9rem !important; /* Consistent size */
+      opacity: 0.85 !important; /* Consistent opacity */
+
+      &:hover {
+        opacity: 1 !important;
+      }
+    }
+
+    /* Make sure nested items also use serif */
+    ul li a {
+      font-family: "Crimson Pro", serif !important;
+      font-weight: 400 !important;
+      opacity: 0.85 !important; /* Consistent opacity for nested items too */
+
+      &:hover {
+        opacity: 1 !important;
+      }
+    }
+  }
+
+  /* Draft gate — copied from icono-card icono-guest-login-card */
+  .draft-indicator {
+    display: inline-block;
+    margin-bottom: 1rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    font-family: "Monaspace Xenon Web", monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .draft-locked {
+    display: none;
+  }
+  .draft-unlocked .draft-locked {
+    display: block;
+  }
+
+  /* Fadeout gradient on truncated draft content for unauthorized users */
+  body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after {
+    content: "";
+    display: block;
+    height: 5rem;
+    margin-top: -5rem;
+    background: linear-gradient(transparent, var(--light));
+    position: relative;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .draft-cta-msg[hidden] {
+    display: none;
+  }
+
+  /* Card copied from iconoplasm styles.css .icono-card.icono-guest-login-card */
+  .icono-card.icono-guest-login-card {
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 0.75rem;
+    padding: 1.05rem 1.1rem;
+    border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+    border-radius: 12px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--light) 95%, #e9dfcf 5%) 0%,
+      color-mix(in srgb, var(--light) 98%, #d9cbb8 2%) 100%
+    );
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, white 60%, transparent),
+      0 10px 24px rgba(45, 33, 20, 0.08);
+  }
+
+  .icono-guest-login-card-title {
+    font-family: "Monaspace Xenon Web", monospace;
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.22;
+    letter-spacing: 0;
+  }
+
+  .icono-card.icono-guest-login-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.5rem;
+  }
+
+  .draft-cta-msg {
+    margin: 0;
+  }
+
+  .icono-guest-login-card-button {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 10.9rem;
+    min-height: 2.15rem;
+    padding: 0.35rem 1rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--icono-control-radius, 0);
+    background: transparent;
+    color: var(--accent);
+    font-family: "Crimson Pro", serif;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .icono-guest-login-card-button[hidden] {
+    display: none;
+  }
+
+  .icono-guest-login-card-button:hover {
+    background: var(--accent);
+    color: var(--light);
+  }
+
+  /* Sidebar links — match v4 sizing and colors */
+  .tag-sections h4 {
+    font-size: 0.85rem !important;
+    color: var(--secondary) !important;
+  }
+  .tag-sections h4 a.section-link {
+    color: var(--secondary) !important;
+  }
+  .tag-sections a.tag-link {
     color: var(--dark) !important;
-    opacity: 0.85 !important; /* Match left sidebar consistency */
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important;
-    font-size: 0.9rem !important; /* Much smaller - TOC shouldn't compete with body text */
-    transition: none !important; /* Remove opacity transitions */
-
-    &:hover {
-      opacity: 1 !important;
-      color: var(--accent) !important;
-    }
-
-    &.in-view {
-      opacity: 0.85 !important; /* Same as default, no special highlighting */
-    }
+    font-size: 0.9rem !important;
   }
-}
-
-/* Fix inconsistent fonts in left sidebar - make everything serif */
-.explorer-content ul li {
-  /* Regular page links like "About", "Graph" etc */
-  & > a {
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important;
-    font-size: 0.9rem !important; /* Consistent size */
-    opacity: 0.85 !important; /* Consistent opacity */
-
-    &:hover {
-      opacity: 1 !important;
-    }
+  .tag-sections a.tag-link:hover {
+    color: var(--tertiary) !important;
   }
 
-  /* Make sure nested items also use serif */
-  ul li a {
-    font-family: "Crimson Pro", serif !important;
-    font-weight: 400 !important;
-    opacity: 0.85 !important; /* Consistent opacity for nested items too */
-
-    &:hover {
-      opacity: 1 !important;
-    }
+  /* TOC: reduce line-height on wrapped links, tighten item spacing */
+  .toc ul.toc-content.overflow > li {
+    margin-bottom: 0.5rem !important;
+    line-height: 1 !important;
   }
-}
+  .toc ul.toc-content.overflow > li > a {
+    line-height: 1 !important;
+  }
 
-/* Draft gate — copied from icono-card icono-guest-login-card */
-.draft-indicator {
-  display: inline-block;
-  margin-bottom: 1rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-  font-family: "Monaspace Xenon Web", monospace;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.draft-locked {
-  display: none;
-}
-.draft-unlocked .draft-locked {
-  display: block;
-}
+  /* v5 darkmode uses saved-theme, not data-theme */
+  :root[saved-theme="dark"] {
+    --light: oklch(16% 0.01 45);
+    --lightgray: oklch(36% 0.02 50);
+    --gray: oklch(58% 0.025 55);
+    --darkgray: oklch(80% 0.02 60);
+    --dark: oklch(85% 0.015 65);
+    --accent: oklch(68% 0.08 185);
+    --ui-border: oklch(38% 0.025 50);
+    --ui-bg: oklch(30% 0.02 45);
+    --secondary: oklch(70% 0.02 60);
+    --tertiary: var(--accent);
+  }
+  :root[saved-theme="light"] {
+    --light: oklch(96% 0.015 75);
+    --lightgray: oklch(85% 0.02 65);
+    --gray: oklch(70% 0.025 60);
+    --darkgray: oklch(45% 0.03 55);
+    --dark: oklch(20% 0.035 50);
+    --accent: oklch(50% 0.08 185);
+    --ui-border: oklch(82% 0.02 70);
+    --ui-bg: oklch(92% 0.01 75);
+    --secondary: oklch(40% 0.04 55);
+    --tertiary: var(--accent);
+  }
 
-/* Fadeout gradient on truncated draft content for unauthorized users */
-body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after {
-  content: "";
-  display: block;
-  height: 5rem;
-  margin-top: -5rem;
-  background: linear-gradient(transparent, var(--light));
-  position: relative;
-  pointer-events: none;
-  z-index: 1;
-}
-.draft-cta-msg[hidden] {
-  display: none;
-}
-
-/* Card copied from iconoplasm styles.css .icono-card.icono-guest-login-card */
-.icono-card.icono-guest-login-card {
-  display: grid;
-  align-content: start;
-  justify-items: start;
-  gap: 0.75rem;
-  padding: 1.05rem 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: 12px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--light) 95%, #e9dfcf 5%) 0%,
-    color-mix(in srgb, var(--light) 98%, #d9cbb8 2%) 100%
-  );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, white 60%, transparent),
-    0 10px 24px rgba(45, 33, 20, 0.08);
-}
-
-.icono-guest-login-card-title {
-  font-family: "Monaspace Xenon Web", monospace;
-  font-size: 1.12rem;
-  font-weight: 600;
-  line-height: 1.22;
-  letter-spacing: 0;
-}
-
-.icono-card.icono-guest-login-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.5rem;
-}
-
-.draft-cta-msg {
-  margin: 0;
-}
-
-.icono-guest-login-card-button {
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 10.9rem;
-  min-height: 2.15rem;
-  padding: 0.35rem 1rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--icono-control-radius, 0);
-  background: transparent;
-  color: var(--accent);
-  font-family: "Crimson Pro", serif;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.3;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.icono-guest-login-card-button[hidden] {
-  display: none;
-}
-
-.icono-guest-login-card-button:hover {
-  background: var(--accent);
-  color: var(--light);
-}
-
-/* Sidebar links — match v4 sizing and colors */
-.tag-sections h4 {
-  font-size: 0.85rem !important;
-  color: var(--secondary) !important;
-}
-.tag-sections h4 a.section-link {
-  color: var(--secondary) !important;
-}
-.tag-sections a.tag-link {
-  color: var(--dark) !important;
-  font-size: 0.9rem !important;
-}
-.tag-sections a.tag-link:hover {
-  color: var(--tertiary) !important;
-}
-
-/* TOC: reduce line-height on wrapped links, tighten item spacing */
-.toc ul.toc-content.overflow > li {
-  margin-bottom: 0.5rem !important;
-  line-height: 1 !important;
-}
-.toc ul.toc-content.overflow > li > a {
-  line-height: 1 !important;
-}
-
-/* v5 darkmode uses saved-theme, not data-theme */
-:root[saved-theme="dark"] {
-  --light: oklch(16% 0.01 45);
-  --lightgray: oklch(36% 0.02 50);
-  --gray: oklch(58% 0.025 55);
-  --darkgray: oklch(80% 0.02 60);
-  --dark: oklch(85% 0.015 65);
-  --accent: oklch(68% 0.08 185);
-  --ui-border: oklch(38% 0.025 50);
-  --ui-bg: oklch(30% 0.02 45);
-  --secondary: oklch(70% 0.02 60);
-  --tertiary: var(--accent);
-}
-:root[saved-theme="light"] {
-  --light: oklch(96% 0.015 75);
-  --lightgray: oklch(85% 0.02 65);
-  --gray: oklch(70% 0.025 60);
-  --darkgray: oklch(45% 0.03 55);
-  --dark: oklch(20% 0.035 50);
-  --accent: oklch(50% 0.08 185);
-  --ui-border: oklch(82% 0.02 70);
-  --ui-bg: oklch(92% 0.01 75);
-  --secondary: oklch(40% 0.04 55);
-  --tertiary: var(--accent);
-}
-
-/* Code blocks scroll inside the column. A blog rule makes their <figure> a flex
+  /* Code blocks scroll inside the column. A blog rule makes their <figure> a flex
    container, and a flex item's default min-width:auto let the <pre> grow to its
    longest line: /developers scrolled the whole page 332 px sideways on phones. */
-figure[data-rehype-pretty-code-figure] > pre {
-  min-width: 0;
-  max-width: 100%;
+  figure[data-rehype-pretty-code-figure] > pre {
+    min-width: 0;
+    max-width: 100%;
+  }
 }

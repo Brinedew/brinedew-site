@@ -352,7 +352,7 @@ function sessionMarkup(session, open, visible, context) {
   )
   const [head, ...inner] = session.items
   return (
-    '<div role="listitem" class="icono-caretaker-session" data-icono-caretaker-session="' +
+    '<li class="icono-caretaker-session" data-icono-caretaker-session="' +
     escapeHtml(session.id) +
     '">' +
     timelineItemMarkup(head, previousOf(head), context, {
@@ -368,24 +368,24 @@ function sessionMarkup(session, open, visible, context) {
         '">' +
         escapeHtml(`${session.items.length} saves`) +
         "</button>" +
-        '<div role="list" class="icono-caretaker-session__versions" data-icono-caretaker-session-versions' +
+        '<ol class="icono-caretaker-session__versions" data-icono-caretaker-session-versions' +
         (isOpen ? "" : " hidden") +
         ">" +
         inner
           .map(
             (item) =>
-              '<div role="listitem">' +
+              "<li>" +
               timelineItemMarkup(
                 item,
                 context.revisions[context.revisions.indexOf(item) + 1] || null,
                 context,
               ) +
-              "</div>",
+              "</li>",
           )
           .join("") +
-        "</div>"
+        "</ol>"
       : "") +
-    "</div>"
+    "</li>"
   )
 }
 
@@ -496,11 +496,9 @@ export function historyMarkup(dossier, selectedId, escapeHtml, expandedSessions)
   const context = { dossier, selectedId, escapeHtml, revisions }
   return (
     '<div class="icono-caretaker-history" data-icono-caretaker-history>' +
-    // role=list divs, not <ol>: the blog's .markdown-preview-view :is(ul, ol) rule
-    // outranks app classes and re-adds numbering (see Linear pet-peeves doc, #2).
-    '<nav class="icono-caretaker-timeline-pane" aria-label="Versions"><div class="icono-caretaker-timeline" role="list">' +
+    '<nav class="icono-caretaker-timeline-pane" aria-label="Versions"><ol class="icono-caretaker-timeline">' +
     sessions.map((session) => sessionMarkup(session, open, visible, context)).join("") +
-    "</div>" +
+    "</ol>" +
     (dossier.history?.next_cursor
       ? '<button type="button" class="icono-button icono-button--small icono-caretaker-history-more" data-icono-caretaker-history-more>Load older versions</button>'
       : "") +
