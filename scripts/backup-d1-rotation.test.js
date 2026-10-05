@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readdirSync, writeFileSync, utimesSync, existsSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync, utimesSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
@@ -8,8 +8,8 @@ import test from "node:test"
 import {
   BACKUP_ROTATION,
   exportD1Database,
+  dueDatabase,
   pruneBackups,
-  rotationDatabase,
   runRotation,
 } from "./backup-d1-rotation.mjs"
 
@@ -152,12 +152,49 @@ test("10: the backup never runs in the first half of a UTC budget day", async ()
   assert.deepEqual(readdirSync(dir), [])
 })
 
-test("rotation visits every database once per cycle", () => {
-  const day = Date.parse("2026-09-25T01:00:00Z")
-  const seen = new Set()
-  for (let i = 0; i < BACKUP_ROTATION.length; i++)
-    seen.add(rotationDatabase(day + i * 86400000).name)
-  assert.equal(seen.size, BACKUP_ROTATION.length)
+// 11. B-1002: a day the budget gate skips is retried the next day, not a cycle
+//     later (iconoplasm went 09-29 -> 10-09 by day number), and still only one
+//     database is dumped per UTC day.
+function dumpOn(root, database, date) {
+  const dir = path.join(root, database.name)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(path.join(dir, `${date}.sqlite.gz`), "x")
+}
+
+test("11: every database is dumped once per cycle when no day is skipped", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "d1bk-"))
+  const seen = []
+  for (let i = 0; i < BACKUP_ROTATION.length; i++) {
+    const now = Date.parse("2026-09-25T13:00:00Z") + i * 86400000
+    const due = dueDatabase(root, now)
+    seen.push(due.name)
+    dumpOn(root, due, new Date(now).toISOString().slice(0, 10))
+  }
+  assert.equal(new Set(seen).size, BACKUP_ROTATION.length)
+})
+
+test("11: a skipped database is first in line the next day, and a day holds one dump", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "d1bk-"))
+  // The real state on 2026-10-05: iconoplasm last dumped 09-29, its 10-04 turn skipped.
+  const dates = {
+    iconoplasm: "2026-09-29",
+    "iconoplasm-authoring": "2026-09-30",
+    geneguessr: "2026-10-01",
+    "iconoplasm-audit": "2026-10-02",
+    "iconoplasm-authority-event-archive-20260831": "2026-10-03",
+  }
+  for (const database of BACKUP_ROTATION) dumpOn(root, database, dates[database.name])
+  const morning = Date.parse("2026-10-05T12:00:00Z")
+  assert.equal(dueDatabase(root, morning).name, "iconoplasm")
+  dumpOn(
+    root,
+    BACKUP_ROTATION.find((d) => d.name === "iconoplasm"),
+    "2026-10-05",
+  )
+  // Later runs the same day land on the database already dumped today.
+  assert.equal(dueDatabase(root, morning + 2 * 3600000).name, "iconoplasm")
+  // Tomorrow the oldest dump is next.
+  assert.equal(dueDatabase(root, morning + 86400000).name, "iconoplasm-authoring")
 })
 
 test("8: retention drops dumps older than 30 days but keeps the newest two", () => {
