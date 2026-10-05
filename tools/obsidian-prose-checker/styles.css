@@ -93,6 +93,64 @@
   line-height: var(--line-height-tight);
 }
 
+.bpc-echo-observe {
+  margin-top: var(--size-4-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+}
+
+.bpc-request {
+  position: relative;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+.bpc-request > summary {
+  cursor: var(--cursor);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+.bpc-request-copy {
+  float: right;
+  margin: var(--size-4-2) 0;
+}
+
+.bpc-request-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  max-height: 32rem;
+  overflow-y: auto;
+  user-select: text;
+}
+
+.bpc-request-section + .bpc-request-section {
+  margin-top: var(--size-4-4);
+}
+
+.bpc-request-modal {
+  width: min(56rem, 92vw);
+}
+
+.bpc-echo-template-setting {
+  flex-wrap: wrap;
+}
+
+.bpc-echo-template-setting > .setting-item-control,
+.bpc-echo-template-setting > .bpc-request-body {
+  flex-basis: 100%;
+}
+
+.bpc-echo-template {
+  width: 100%;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+}
+
 @keyframes bpc-spin {
   to {
     transform: rotate(360deg);

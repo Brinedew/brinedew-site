@@ -1,10 +1,17 @@
 # Brinedew Prose Checker
 
-Brinedew Prose Checker is a desktop Obsidian plugin with two deliberately
+Brinedew Prose Checker is a desktop Obsidian plugin with three deliberately
 separate lanes:
 
 - Harper 2.7 provides fast local spelling and grammar diagnostics after editor
   idle.
+- Echo (Fulcrum) reviews the note as a chosen writer, Scott Alexander by
+  default. The feather button in the note header sends three requests, one
+  per level (macro, meso, micro). Each of the writer's notes lands on the
+  passage it quotes: a margin bar for macro, a tint for meso, an underline for
+  micro. Hover a note to read the comment and the suggested change, then
+  Accept or Reject it. The writer, reasoning effort and each level's full
+  request are settings, and every request sent is shown byte-for-byte.
 - Sixty atomic DeepSeek agents are available for explicit whole-note checks.
   The proof-of-concept defaults to three enabled agents; the rest remain
   searchable in “Run one agent” and can be enabled individually.
@@ -15,6 +22,7 @@ Results appear independently as agents finish.
 
 ## Commands
 
+- **Review selection or note with Echo** (runs the three-level review)
 - **Check active note with all enabled agents**
 - **Check active note with one agent…**
 - **Open prose-check progress**

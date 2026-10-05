@@ -10,10 +10,33 @@ import {
 } from "obsidian"
 import { AGENTS, AGENT_BY_ID } from "./agents"
 import { validateAndResolveFindings } from "./anchors"
+import {
+  DEFAULT_ECHO_PERSONA,
+  DEFAULT_ECHO_REASONING_EFFORT,
+  DEFAULT_ECHO_TEMPLATES,
+  EchoClient,
+  buildEchoBody,
+} from "./echoClient"
+import {
+  ECHO_LEVELS,
+  echoAgentId,
+  echoLevelOf,
+  locateQuote,
+  parseReview,
+  reviewFindings,
+} from "./echoReview"
+import {
+  ECHO_VIEW_TYPE,
+  EchoView,
+  type EchoCall,
+  type EchoScope,
+  type EchoSession,
+} from "./echoView"
 import { HarperGrammarService } from "./harperEditor"
-import { hashDocument } from "./hash"
+import { createId, hashDocument } from "./hash"
 import { OpenCodeClient } from "./openCodeClient"
 import { RemoteEditorBridge } from "./remoteEditor"
+import { RequestLog } from "./requestLog"
 import { RunCoordinator } from "./runCoordinator"
 import type {
   AgentDefinition,
@@ -35,6 +58,10 @@ import {
 
 const DEFAULT_SETTINGS: ProseCheckerSettings = {
   remoteConsentAccepted: false,
+  echoConsentAccepted: false,
+  echoPersona: DEFAULT_ECHO_PERSONA,
+  echoTemplates: { ...DEFAULT_ECHO_TEMPLATES },
+  echoReasoningEffort: DEFAULT_ECHO_REASONING_EFFORT,
   localHarperEnabled: true,
   harperDelayMs: 750,
   maxConcurrency: 24,
@@ -53,6 +80,7 @@ function normalizeData(raw: unknown): ProseCheckerData {
         ...DEFAULT_SETTINGS.enabledAgents,
         ...(settings.enabledAgents ?? {}),
       },
+      echoTemplates: { ...DEFAULT_ECHO_TEMPLATES, ...(settings.echoTemplates ?? {}) },
     },
     cachedDocuments: candidate.cachedDocuments ?? {},
   }
@@ -81,6 +109,11 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
   settings: ProseCheckerSettings = { ...DEFAULT_SETTINGS }
   private data: ProseCheckerData = normalizeData(null)
   private client!: OpenCodeClient
+  private echo!: EchoClient
+  private readonly requestLog = new RequestLog()
+  private echoSession: EchoSession | null = null
+  private echoController: AbortController | null = null
+  private readonly echoActions = new Set<HTMLElement>()
   private coordinator!: RunCoordinator
   private remoteEditor!: RemoteEditorBridge
   private harper!: HarperGrammarService
@@ -97,7 +130,8 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
 
     // ARCHITECTURE FENCE [BPC-001]: constructing these objects must not read the
     // API key, probe a model, inspect a document, or schedule a remote request.
-    this.client = new OpenCodeClient()
+    this.client = new OpenCodeClient({ log: this.requestLog })
+    this.echo = new EchoClient({ log: this.requestLog })
     this.remoteEditor = new RemoteEditorBridge({
       initialFindings: (filePath, documentText) => this.initialFindings(filePath, documentText),
       documentEdited: (filePath, documentText, findings, sourceView) =>
@@ -106,6 +140,7 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
         this.handleApplied(filePath, finding, documentText),
       dismissed: (filePath, finding) => this.handleDismissed(filePath, finding),
       disableAgent: (filePath, agentId) => void this.disableAgent(filePath, agentId),
+      showEchoRequest: () => void this.openEcho(),
     })
     this.harper = new HarperGrammarService({
       enabled: () => this.settings.localHarperEnabled,
@@ -127,8 +162,34 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
     this.registerView(
       PROGRESS_VIEW_TYPE,
       (leaf: WorkspaceLeaf) =>
-        new ProseProgressView(leaf, this.coordinator, (filePath, agentId) => {
-          void this.runFileWithAgents(filePath, [agentId])
+        new ProseProgressView(
+          leaf,
+          this.coordinator,
+          (filePath, agentId) => {
+            void this.runFileWithAgents(filePath, [agentId])
+          },
+          this.requestLog,
+        ),
+    )
+    this.registerView(
+      ECHO_VIEW_TYPE,
+      (leaf: WorkspaceLeaf) =>
+        new EchoView(leaf, {
+          current: () => this.echoSession,
+          cancel: () => this.echoController?.abort(),
+          retry: (session) => void this.sendEcho(session),
+          rejectAll: () => {
+            this.echoController?.abort()
+            const session = this.echoSession
+            if (session) {
+              for (const level of ECHO_LEVELS) {
+                this.remoteEditor.removeAgent(session.filePath, echoAgentId(level))
+              }
+            }
+            this.echoSession = null
+            this.statusBar.setText("Prose check: idle")
+            this.renderEcho()
+          },
         }),
     )
     this.addSettingTab(
@@ -140,6 +201,7 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
           saveSettings: () => this.saveSettings(),
           probeConnection: () => this.probeConnection(),
           setAgentEnabled: (agentId, enabled) => this.setAgentEnabled(agentId, enabled),
+          checkEcho: () => this.echo.checkConnection(new AbortController().signal),
         },
         AGENTS,
       ),
@@ -150,7 +212,8 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
     this.statusBar.addClass("bpc-status-bar", "mod-clickable")
     this.statusBar.setText("Prose check: idle")
     this.registerDomEvent(this.statusBar, "click", () => {
-      if (this.latestProgress) void this.openProgress(this.latestProgress.runId)
+      if (this.statusBar.getText().startsWith("Echo")) void this.openEcho()
+      else if (this.latestProgress) void this.openProgress(this.latestProgress.runId)
     })
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
@@ -172,6 +235,7 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
       }),
     )
     this.register(() => this.coordinator.destroy())
+    this.register(() => this.echoController?.abort())
     this.register(() => this.harper.dispose())
     this.register(() => {
       if (this.statusTimer !== null) window.clearInterval(this.statusTimer)
@@ -194,6 +258,7 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
 
   onunload(): void {
     void this.app.workspace.detachLeavesOfType(PROGRESS_VIEW_TYPE)
+    void this.app.workspace.detachLeavesOfType(ECHO_VIEW_TYPE)
   }
 
   private harperEnginePath(): string {
@@ -225,6 +290,16 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
       },
     })
     this.addCommand({
+      id: "rewrite-with-echo",
+      name: "Review selection or note with Echo",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView)
+        if (!view?.file) return false
+        if (!checking) void this.runEcho(view)
+        return true
+      },
+    })
+    this.addCommand({
       id: "open-prose-check-progress",
       name: "Open prose-check progress",
       callback: () => {
@@ -250,6 +325,238 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
         event.stopPropagation()
         this.openAgentSelector(view)
       })
+      const echoAction = view.addAction("feather", this.echoActionLabel(), () => {
+        void this.runEcho(view)
+      })
+      this.echoActions.add(echoAction)
+      this.register(() => {
+        echoAction.remove()
+        this.echoActions.delete(echoAction)
+      })
+    }
+  }
+
+  private echoActionLabel(): string {
+    return `Echo · ${this.settings.echoPersona.trim() || "no writer set"}: review selection or note`
+  }
+
+  private async ensureEchoConsent(): Promise<boolean> {
+    if (this.settings.echoConsentAccepted) return true
+    return new Promise((resolve) => {
+      new RemoteConsentModal(
+        this.app,
+        (accepted) => {
+          if (!accepted) {
+            resolve(false)
+            return
+          }
+          this.settings.echoConsentAccepted = true
+          void this.saveSettings().then(() => resolve(true))
+        },
+        {
+          title: "Send this text to Echo?",
+          body: "A review sends the selected text, or the complete active Markdown note without its frontmatter, to Fulcrum's Echo API. Nothing is sent while typing or at startup.",
+          accept: "Allow explicit reviews",
+        },
+      ).open()
+    })
+  }
+
+  /** The selection, or the note body after its frontmatter. */
+  private echoSource(view: MarkdownView): { scope: EchoScope; text: string } | null {
+    const editor = view.editor
+    if (editor.getSelection().trim().length > 0) {
+      return { scope: "selection", text: editor.getSelection() }
+    }
+    const value = editor.getValue()
+    const frontmatterEnd =
+      view.file && this.app.metadataCache.getFileCache(view.file)?.frontmatterPosition?.end.offset
+    let from = typeof frontmatterEnd === "number" ? frontmatterEnd : 0
+    while (from < value.length && (value[from] === "\n" || value[from] === "\r")) from += 1
+    const text = value.slice(from)
+    return text.trim().length > 0 ? { scope: "note", text } : null
+  }
+
+  private async runEcho(view: MarkdownView): Promise<void> {
+    const file = view.file
+    if (!file) return
+    if (this.echoSession?.calls.some((call) => call.status === "running")) {
+      new Notice(`Echo is still reviewing ${this.echoSession.filePath}.`)
+      return
+    }
+    const source = this.echoSource(view)
+    if (!source) {
+      new Notice("This note has no text to send to Echo.")
+      return
+    }
+    const persona = this.settings.echoPersona.trim()
+    let calls: EchoCall[]
+    try {
+      calls = ECHO_LEVELS.map((level) => ({
+        level,
+        body: buildEchoBody(
+          {
+            persona,
+            template: this.settings.echoTemplates[level],
+            reasoningEffort: this.settings.echoReasoningEffort,
+          },
+          source.text,
+        ),
+        record: null,
+        status: "running",
+        startedAt: Date.now(),
+        finishedAt: null,
+        result: null,
+        placed: 0,
+        unplaced: [],
+        error: null,
+      }))
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error), 10_000)
+      return
+    }
+    if (!(await this.ensureEchoConsent())) return
+    await this.sendEcho({
+      id: createId("echo"),
+      filePath: file.path,
+      persona,
+      scope: source.scope,
+      sourceText: source.text,
+      startedAt: Date.now(),
+      calls,
+    })
+  }
+
+  /** Sends each level's recorded body unchanged; "Try again" resends the same bytes. */
+  private async sendEcho(previous: EchoSession): Promise<void> {
+    this.echoController?.abort()
+    const controller = new AbortController()
+    this.echoController = controller
+    const session: EchoSession = {
+      ...previous,
+      id: createId("echo"),
+      startedAt: Date.now(),
+      calls: previous.calls.map((call) => ({
+        ...call,
+        record: null,
+        status: "running",
+        startedAt: Date.now(),
+        finishedAt: null,
+        result: null,
+        placed: 0,
+        unplaced: [],
+        error: null,
+      })),
+    }
+    this.echoSession = session
+    for (const level of ECHO_LEVELS) {
+      this.remoteEditor.removeAgent(session.filePath, echoAgentId(level))
+    }
+    const tick = window.setInterval(() => this.renderEchoStatus(session), 1_000)
+    this.renderEchoStatus(session)
+    await Promise.all(session.calls.map((call) => this.sendEchoCall(session, call, controller)))
+    window.clearInterval(tick)
+    if (this.echoController === controller) this.echoController = null
+    if (this.echoSession === session) {
+      this.renderEchoStatus(session)
+      this.renderEcho()
+      const failed = session.calls.filter((call) => call.error)
+      if (failed.length > 0) {
+        new Notice(failed.map((call) => `${call.level}: ${call.error}`).join("\n"), 10_000)
+      }
+    }
+  }
+
+  private async sendEchoCall(
+    session: EchoSession,
+    call: EchoCall,
+    controller: AbortController,
+  ): Promise<void> {
+    try {
+      call.result = await this.echo.rewrite(
+        call.body,
+        session.persona,
+        controller.signal,
+        (record) => {
+          call.record = record
+          this.renderEcho()
+        },
+      )
+      const documentText = await this.currentDocumentText(session.filePath)
+      if (documentText === null) throw new Error(`${session.filePath} is no longer open.`)
+      const placed = reviewFindings({
+        items: parseReview(call.result.text),
+        level: call.level,
+        documentText,
+        documentHash: hashDocument(documentText),
+        filePath: session.filePath,
+        persona: session.persona,
+      })
+      call.placed = placed.findings.length
+      call.unplaced = placed.unplaced
+      if (this.echoSession === session) {
+        this.remoteEditor.replaceAgentFindings(
+          session.filePath,
+          echoAgentId(call.level),
+          placed.findings,
+        )
+        // Save the notes so they survive closing the note or Obsidian.
+        const agentId = echoAgentId(call.level)
+        const entry = this.data.cachedDocuments[session.filePath]
+        this.data.cachedDocuments[session.filePath] = {
+          documentHash: hashDocument(documentText),
+          findings: [
+            ...(entry && entry.documentHash === hashDocument(documentText)
+              ? entry.findings.filter((finding) => finding.agentId !== agentId)
+              : []),
+            ...placed.findings.map(toCachedFinding),
+          ],
+          savedAt: Date.now(),
+        }
+        await this.savePluginData()
+      }
+      call.status = "done"
+    } catch (error) {
+      call.status = controller.signal.aborted ? "cancelled" : "failed"
+      call.error = controller.signal.aborted
+        ? null
+        : error instanceof Error
+          ? error.message
+          : String(error)
+    } finally {
+      call.finishedAt = Date.now()
+      if (this.echoSession === session) {
+        this.renderEchoStatus(session)
+        this.renderEcho()
+      }
+    }
+  }
+
+  private renderEchoStatus(session: EchoSession): void {
+    const done = session.calls.filter((call) => call.status !== "running").length
+    const notes = session.calls.reduce((sum, call) => sum + call.placed, 0)
+    const elapsed = Math.round((Date.now() - session.startedAt) / 1_000)
+    const state =
+      done < session.calls.length
+        ? `${done}/${session.calls.length} levels · ${notes} notes · ${elapsed}s`
+        : `${notes} notes`
+    this.statusBar.setText(`Echo · ${session.persona}: ${state}`)
+    this.statusBar.setAttr("aria-label", "Show the Echo requests")
+  }
+
+  private async openEcho(): Promise<void> {
+    let leaf = this.app.workspace.getLeavesOfType(ECHO_VIEW_TYPE)[0]
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("tab")
+      await leaf.setViewState({ type: ECHO_VIEW_TYPE, active: true })
+    }
+    this.app.workspace.revealLeaf(leaf)
+    this.renderEcho()
+  }
+
+  private renderEcho(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(ECHO_VIEW_TYPE)) {
+      if (leaf.view instanceof EchoView) leaf.view.render()
     }
   }
 
@@ -398,6 +705,21 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
   ): ResolvedFinding[] {
     const documentHash = hashDocument(documentText)
     return cached.flatMap((finding) => {
+      if (echoLevelOf(finding.agentId) !== null) {
+        const at = locateQuote(documentText, finding.exactText)
+        if (!at || documentText.slice(at.from, at.to) !== finding.exactText) return []
+        return [
+          {
+            ...finding,
+            filePath,
+            from: at.from,
+            to: at.to,
+            sourceDocumentHash: documentHash,
+            visualState: "fresh" as const,
+            canApply: finding.replacement !== null,
+          },
+        ]
+      }
       const agent = AGENT_BY_ID.get(finding.agentId)
       if (
         !agent ||
@@ -511,6 +833,7 @@ export default class BrinedewProseCheckerPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     this.data.settings = this.settings
+    for (const action of this.echoActions) action.setAttr("aria-label", this.echoActionLabel())
     this.coordinator.updateMaxConcurrency(this.settings.maxConcurrency)
     await this.savePluginData()
   }

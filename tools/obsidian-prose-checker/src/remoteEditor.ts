@@ -7,7 +7,9 @@ import {
   ViewPlugin,
   WidgetType,
 } from "@codemirror/view"
+import { diffSentences, diffWordsWithSpace } from "diff"
 import { editorInfoField } from "obsidian"
+import { echoLevelOf } from "./echoReview"
 import type { ResolvedFinding } from "./types"
 
 interface ReplaceAgentPayload {
@@ -72,8 +74,37 @@ class RemoteLineMarkerWidget extends WidgetType {
   }
 }
 
-function buildDecorations(findings: readonly ResolvedFinding[]): DecorationSet {
-  const ranges = findings.map((finding) => {
+function buildDecorations(
+  findings: readonly ResolvedFinding[],
+  doc: {
+    lineAt: (pos: number) => { from: number; number: number }
+    line: (n: number) => { from: number }
+  },
+): DecorationSet {
+  const ranges = findings.flatMap((finding) => {
+    const level = echoLevelOf(finding.agentId)
+    if (level === "macro") {
+      // Macro: a bar in the margin beside every line of the passage.
+      const first = doc.lineAt(finding.from).number
+      const last = doc.lineAt(Math.max(finding.from, finding.to - 1)).number
+      const lines = []
+      for (let number = first; number <= last; number += 1) {
+        lines.push(
+          Decoration.line({ class: `bpc-echo-macro bpc-${finding.visualState}` }).range(
+            doc.line(number).from,
+          ),
+        )
+      }
+      return lines
+    }
+    if (level !== null) {
+      return [
+        Decoration.mark({
+          class: `bpc-echo-${level} bpc-${finding.visualState}`,
+          attributes: { "data-bpc-finding": finding.id },
+        }).range(finding.from, finding.to),
+      ]
+    }
     if (finding.anchorKind === "line") {
       return Decoration.widget({
         widget: new RemoteLineMarkerWidget(finding.id, finding.visualState),
@@ -122,7 +153,10 @@ const remoteFindingField = StateField.define<ResolvedFinding[]>({
     }
     return deduplicate(findings)
   },
-  provide: (field) => EditorView.decorations.from(field, buildDecorations),
+  provide: (field) =>
+    EditorView.decorations.compute([field], (state) =>
+      buildDecorations(state.field(field), state.doc),
+    ),
 })
 
 export interface RemoteEditorCallbacks {
@@ -136,6 +170,7 @@ export interface RemoteEditorCallbacks {
   applied: (filePath: string, finding: ResolvedFinding, documentText: string) => void
   dismissed: (filePath: string, finding: ResolvedFinding) => void
   disableAgent: (filePath: string, agentId: string) => void
+  showEchoRequest: () => void
 }
 
 function appendText(parent: HTMLElement, className: string, text: string): HTMLElement {
@@ -158,17 +193,47 @@ function renderFindingCard(
   const card = document.createElement("li")
   card.className = `bpc-diagnostic bpc-${finding.visualState}`
 
-  const badge = appendText(card, "bpc-agent-badge", finding.agentLabel)
+  const level = echoLevelOf(finding.agentId)
+  const isEcho = level !== null
+  const badge = appendText(
+    card,
+    `bpc-agent-badge${isEcho ? ` bpc-echo-badge-${level}` : ""}`,
+    finding.agentLabel,
+  )
   badge.title = finding.agentDefinition
-  appendText(card, "bpc-agent-definition", finding.agentDefinition)
-  appendText(card, "bpc-explanation", finding.explanation)
 
-  const passage = document.createElement("code")
-  passage.className = "bpc-passage"
-  passage.textContent = finding.exactText
-  card.appendChild(passage)
+  if (isEcho) {
+    // Scott's comment first, then his change for this passage only, with
+    // removals struck through and additions highlighted.
+    appendText(card, "bpc-explanation", finding.explanation)
+  }
+  if (isEcho && finding.replacement !== null) {
+    const change = document.createElement("div")
+    change.className = "bpc-echo-change"
+    // Micro changes read best word by word; a reworked passage reads best
+    // sentence by sentence (whole old sentence struck, whole new one added).
+    const parts =
+      level === "micro"
+        ? diffWordsWithSpace(finding.exactText, finding.replacement)
+        : diffSentences(finding.exactText, finding.replacement)
+    for (const part of parts) {
+      const span = document.createElement(part.added ? "ins" : part.removed ? "del" : "span")
+      span.textContent = part.value
+      change.appendChild(span)
+    }
+    card.appendChild(change)
+  } else if (!isEcho) {
+    appendText(card, "bpc-agent-definition", finding.agentDefinition)
+    appendText(card, "bpc-explanation", finding.explanation)
+    const passage = document.createElement("code")
+    passage.className = "bpc-passage"
+    passage.textContent = finding.exactText
+    card.appendChild(passage)
+  }
 
-  if (finding.replacement !== null) {
+  if (isEcho) {
+    // Rendered above.
+  } else if (finding.replacement !== null) {
     const replacement = document.createElement("div")
     replacement.className = "bpc-replacement"
     const arrow = document.createElement("span")
@@ -195,7 +260,7 @@ function renderFindingCard(
   if (finding.canApply && finding.replacement !== null && finding.visualState === "fresh") {
     const apply = document.createElement("button")
     apply.type = "button"
-    apply.textContent = finding.replacement === "" ? "Delete" : "Apply"
+    apply.textContent = isEcho ? "Accept" : finding.replacement === "" ? "Delete" : "Apply"
     apply.addEventListener("mousedown", (event) => {
       event.preventDefault()
       const mapped = currentFinding(view, finding.id)
@@ -226,7 +291,7 @@ function renderFindingCard(
 
   const dismiss = document.createElement("button")
   dismiss.type = "button"
-  dismiss.textContent = "Dismiss"
+  dismiss.textContent = isEcho ? "Reject" : "Dismiss"
   dismiss.addEventListener("mousedown", (event) => {
     event.preventDefault()
     const mapped = currentFinding(view, finding.id)
@@ -237,16 +302,27 @@ function renderFindingCard(
   })
   actions.appendChild(dismiss)
 
-  const disable = document.createElement("button")
-  disable.type = "button"
-  disable.textContent = "Disable agent"
-  disable.addEventListener("mousedown", (event) => {
-    event.preventDefault()
-    view.dispatch({ effects: removeAgentEffect.of(finding.agentId) })
-    const filePath = filePathForView(view)
-    if (filePath) callbacks.disableAgent(filePath, finding.agentId)
-  })
-  actions.appendChild(disable)
+  if (isEcho) {
+    const show = document.createElement("button")
+    show.type = "button"
+    show.textContent = "Show request"
+    show.addEventListener("mousedown", (event) => {
+      event.preventDefault()
+      callbacks.showEchoRequest()
+    })
+    actions.appendChild(show)
+  } else {
+    const disable = document.createElement("button")
+    disable.type = "button"
+    disable.textContent = "Disable agent"
+    disable.addEventListener("mousedown", (event) => {
+      event.preventDefault()
+      view.dispatch({ effects: removeAgentEffect.of(finding.agentId) })
+      const filePath = filePathForView(view)
+      if (filePath) callbacks.disableAgent(filePath, finding.agentId)
+    })
+    actions.appendChild(disable)
+  }
   card.appendChild(actions)
   return card
 }
@@ -264,16 +340,25 @@ function remoteTooltip(callbacks: RemoteEditorCallbacks): Extension {
       )
     })
     if (matching.length === 0) return null
-    const from = Math.min(...matching.map((finding) => finding.from))
-    const to = Math.max(...matching.map((finding) => finding.to))
+    // Anchor the card at the start of the hovered visual line: a long passage
+    // (a macro paragraph run) can start off screen, which hides the card, and
+    // anchoring at the pointer pushes the card past the editor's right edge.
+    const coords = view.coordsAtPos(position)
+    const left = view.contentDOM.getBoundingClientRect().left + 1
+    const anchor =
+      coords === null ? position : (view.posAtCoords({ x: left, y: coords.top + 2 }) ?? position)
     return {
-      pos: from,
-      end: to,
-      above: view.state.doc.lineAt(from).to < to,
+      pos: anchor,
+      end: anchor,
+      above: false,
       create(tooltipView) {
         const list = document.createElement("ul")
         list.className = "bpc-tooltip"
-        for (const finding of matching) {
+        // Keep the card inside the editor pane, which clips anything wider.
+        list.style.maxWidth = `${Math.max(280, Math.min(560, tooltipView.contentDOM.clientWidth))}px`
+        const order = (finding: ResolvedFinding): number =>
+          ["echo-micro", "echo-meso", "echo-macro"].indexOf(finding.agentId)
+        for (const finding of [...matching].sort((left, right) => order(left) - order(right))) {
           list.appendChild(renderFindingCard(tooltipView, finding, callbacks))
         }
         return { dom: list }
@@ -357,6 +442,45 @@ const remoteTheme = EditorView.baseTheme({
     gap: "8px",
   },
   ".bpc-replacement-arrow": { color: "#8b5cf6", fontWeight: "700" },
+  ".bpc-echo-macro": {
+    boxShadow: "inset 3px 0 0 var(--color-purple)",
+    paddingLeft: "6px !important",
+  },
+  ".bpc-echo-meso": {
+    background: "rgba(var(--color-yellow-rgb), 0.14)",
+    borderRadius: "2px",
+  },
+  ".bpc-echo-micro": {
+    textDecoration: "underline wavy var(--color-blue)",
+    textDecorationSkipInk: "none",
+    textUnderlineOffset: "3px",
+  },
+  ".bpc-echo-macro.bpc-stale, .bpc-echo-meso.bpc-stale, .bpc-echo-micro.bpc-stale": {
+    opacity: "0.5",
+  },
+  ".bpc-echo-macro.bpc-resolved": { boxShadow: "none" },
+  ".bpc-echo-meso.bpc-resolved": { background: "none" },
+  ".bpc-echo-micro.bpc-resolved": { textDecoration: "none" },
+  ".bpc-echo-badge-macro": { background: "var(--color-purple)" },
+  ".bpc-echo-badge-meso": {
+    background: "var(--color-yellow)",
+    color: "var(--text-on-accent-inverted, #000)",
+  },
+  ".bpc-echo-badge-micro": { background: "var(--color-blue)" },
+  ".bpc-echo-change": {
+    whiteSpace: "pre-wrap",
+    userSelect: "text",
+    lineHeight: "var(--line-height-normal)",
+  },
+  ".bpc-echo-change del": {
+    color: "var(--text-muted)",
+    textDecorationColor: "var(--text-error)",
+  },
+  ".bpc-echo-change ins": {
+    textDecoration: "none",
+    background: "rgba(var(--color-green-rgb), 0.22)",
+    borderRadius: "2px",
+  },
   ".bpc-no-replacement, .bpc-resolved-label": { color: "var(--text-muted)", fontStyle: "italic" },
   ".bpc-actions": { display: "flex", flexWrap: "wrap", gap: "var(--size-4-2)" },
   ".bpc-actions button": { cursor: "var(--cursor)" },

@@ -1,6 +1,7 @@
 import * as https from "node:https"
 import type { IncomingHttpHeaders } from "node:http"
 import { buildAgentPrompt, buildJsonRepairPrompt, type AgentPrompt } from "./prompt"
+import { describedHeaders, type RequestLog } from "./requestLog"
 import type { AgentDefinition, AgentFinding, ModelCatalogInfo } from "./types"
 
 // ARCHITECTURE FENCE [BPC-001]: this explicit free Zen route has no paid or Go
@@ -69,7 +70,7 @@ export type OpenCodeTransport = (
   timeoutMs?: number,
 ) => Promise<HttpResponse>
 
-function httpRequest(
+export function httpRequest(
   url: URL,
   method: "GET" | "POST",
   apiKey: string,
@@ -177,7 +178,11 @@ function httpRequest(
 function classifyHttpError(response: HttpResponse): OpenCodeError {
   const detail = response.body.slice(0, 1_000).trim()
   if (response.status === 401 || response.status === 403) {
-    return new OpenCodeError("OpenCode rejected the API key.", "invalid-key", response.status)
+    return new OpenCodeError(
+      `OpenCode refused the request (HTTP ${response.status})${detail ? `: ${detail}` : "."}`,
+      "invalid-key",
+      response.status,
+    )
   }
   if (response.status === 402 || response.status === 410) {
     return new OpenCodeError(
@@ -287,6 +292,7 @@ export interface OpenCodeClientOptions {
   keyProvider?: () => string
   now?: () => number
   transport?: OpenCodeTransport
+  log?: RequestLog
 }
 
 export class OpenCodeClient {
@@ -295,6 +301,7 @@ export class OpenCodeClient {
   private readonly keyProvider: () => string
   private readonly now: () => number
   private readonly transport: OpenCodeTransport
+  private readonly log: RequestLog | null
   private catalogCache: ModelCatalogInfo | null = null
 
   constructor(options: OpenCodeClientOptions = {}) {
@@ -303,6 +310,7 @@ export class OpenCodeClient {
     this.keyProvider = options.keyProvider ?? (() => process.env.OPENCODE_API_KEY?.trim() ?? "")
     this.now = options.now ?? Date.now
     this.transport = options.transport ?? httpRequest
+    this.log = options.log ?? null
   }
 
   private apiKey(): string {
@@ -383,27 +391,51 @@ export class OpenCodeClient {
     }
   }
 
-  private async completion(prompt: AgentPrompt, signal: AbortSignal): Promise<string> {
-    const payload = JSON.stringify({
-      model: this.model,
-      temperature: 0,
-      // DeepSeek V4 defaults to thinking mode. The prose checker needs the
-      // bounded 8,192-token budget for the JSON result rather than hidden
-      // reasoning that can exhaust the budget and yield empty content.
-      reasoning_effort: "none",
-      max_tokens: OPENCODE_MAX_OUTPUT_TOKENS,
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
-    })
-    const response = await this.transport(
-      new URL(`${this.baseUrl}/chat/completions`),
-      "POST",
-      this.apiKey(),
-      payload,
-      signal,
+  private async completion(
+    prompt: AgentPrompt,
+    signal: AbortSignal,
+    agentId: string,
+    label: string,
+  ): Promise<string> {
+    // The body is pretty-printed so the request inspector can show it
+    // byte-for-byte as sent; JSON whitespace does not reach the model.
+    const payload = JSON.stringify(
+      {
+        model: this.model,
+        temperature: 0,
+        // DeepSeek V4 defaults to thinking mode. The prose checker needs the
+        // bounded 8,192-token budget for the JSON result rather than hidden
+        // reasoning that can exhaust the budget and yield empty content.
+        reasoning_effort: "none",
+        max_tokens: OPENCODE_MAX_OUTPUT_TOKENS,
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+      },
+      null,
+      2,
     )
+    const url = new URL(`${this.baseUrl}/chat/completions`)
+    const key = this.apiKey()
+    const record =
+      this.log?.start({
+        lane: "agent",
+        subject: agentId,
+        label,
+        method: "POST",
+        url: url.toString(),
+        headers: describedHeaders("OPENCODE_API_KEY", payload),
+        body: payload,
+      }) ?? null
+    let response: HttpResponse
+    try {
+      response = await this.transport(url, "POST", key, payload, signal)
+    } catch (error) {
+      if (record) this.log?.fail(record, error)
+      throw error
+    }
+    if (record) this.log?.finish(record, response.status, response.body)
     if (response.status < 200 || response.status >= 300) throw classifyHttpError(response)
     const parsed = parseJson<ChatCompletionResponse>(response.body, "malformed-chat-response")
     const text = extractText(parsed)
@@ -428,7 +460,7 @@ export class OpenCodeClient {
       )
     }
 
-    const raw = await this.completion(prompt, signal)
+    const raw = await this.completion(prompt, signal, definition.id, definition.label)
     try {
       return parseFindingsJson(raw)
     } catch (error) {
@@ -438,7 +470,12 @@ export class OpenCodeClient {
       ) {
         throw error
       }
-      const repaired = await this.completion(buildJsonRepairPrompt(raw), signal)
+      const repaired = await this.completion(
+        buildJsonRepairPrompt(raw),
+        signal,
+        definition.id,
+        `${definition.label} (JSON repair)`,
+      )
       return parseFindingsJson(repaired)
     }
   }

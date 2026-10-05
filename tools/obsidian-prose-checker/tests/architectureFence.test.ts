@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
+import { DEFAULT_ECHO_TEMPLATES, EchoClient, buildEchoBody } from "../src/echoClient"
 import { OPENCODE_FREE_MODEL, OPENCODE_ZEN_BASE_URL } from "../src/openCodeClient"
+import { RequestLog } from "../src/requestLog"
 
 // ARCHITECTURE FENCE [BPC-001]
 const websiteRoot = resolve(process.cwd(), "..", "..")
@@ -39,5 +41,60 @@ describe("BPC-001 explicit free-Zen-only boundary", () => {
     expect(onload).not.toMatch(/\.probeModel\(/)
     expect(onload).not.toMatch(/\.runAgent\(/)
     expect(onload).not.toContain("OPENCODE_API_KEY")
+    expect(onload).not.toMatch(/\.rewrite\(/)
+    expect(onload).not.toMatch(/\.checkConnection\(/)
+    expect(onload).not.toContain("ECHO_API_KEY")
+  })
+
+  test("sends Echo only the person's template, text and settings", () => {
+    const template = "Before.\n{{text}}\nBetween {{text}} after."
+    const text = 'A draft with "quotes", a {{brace}} and\nnewlines.'
+    const body = buildEchoBody(
+      { persona: " Scott Alexander ", template, reasoningEffort: "low" },
+      text,
+    )
+    expect(JSON.parse(body)).toStrictEqual({
+      model: "echo",
+      persona: "Scott Alexander",
+      reasoning_effort: "low",
+      messages: [{ role: "user", content: template.split("{{text}}").join(text) }],
+    })
+    expect(() =>
+      buildEchoBody(
+        { persona: "Scott Alexander", template: "no slot", reasoningEffort: "low" },
+        text,
+      ),
+    ).toThrow("{{text}}")
+  })
+
+  test("records each request byte-for-byte as it is sent", async () => {
+    const log = new RequestLog()
+    const sent: Array<string | null> = []
+    const client = new EchoClient({
+      log,
+      keyProvider: () => "test-key",
+      transport: async (_url, _method, _key, body) => {
+        sent.push(body)
+        return {
+          status: 200,
+          headers: {},
+          body: JSON.stringify({ choices: [{ message: { content: "Rewritten." } }] }),
+        }
+      },
+    })
+    const body = buildEchoBody(
+      {
+        persona: "Scott Alexander",
+        template: DEFAULT_ECHO_TEMPLATES.macro,
+        reasoningEffort: "low",
+      },
+      "Draft.",
+    )
+    await client.rewrite(body, "Scott Alexander", new AbortController().signal)
+    const [record] = log.forSubject("echo", "Scott Alexander")
+    expect(sent).toStrictEqual([body])
+    expect(record?.body).toBe(body)
+    expect(record?.headers.Authorization).toBe("Bearer <ECHO_API_KEY>")
+    expect(JSON.stringify(record)).not.toContain("test-key")
   })
 })

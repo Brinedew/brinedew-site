@@ -16,6 +16,15 @@ import type {
   RunProgressSnapshot,
 } from "./types"
 import type { RunCoordinator } from "./runCoordinator"
+import { ECHO_LEVELS } from "./echoReview"
+import {
+  ECHO_REASONING_EFFORTS,
+  ECHO_TEXT_PLACEHOLDER,
+  buildEchoBody,
+  type EchoReasoningEffort,
+} from "./echoClient"
+import type { RequestLog } from "./requestLog"
+import { RequestInspectorModal } from "./requestInspector"
 
 export const PROGRESS_VIEW_TYPE = "brinedew-prose-checker-progress"
 
@@ -60,22 +69,25 @@ export class RemoteConsentModal extends Modal {
   constructor(
     app: App,
     private readonly resolveChoice: (accepted: boolean) => void,
+    private readonly copy: { title: string; body: string; accept: string } = {
+      title: "Send this note to DeepSeek V4 Flash Free?",
+      body: "A check sends the complete active Markdown note to OpenCode Zen. The free model may retain free-tier inputs for model improvement. Nothing is sent while typing or at startup.",
+      accept: "Allow explicit checks",
+    },
   ) {
     super(app)
   }
 
   onOpen(): void {
-    this.titleEl.setText("Send this note to DeepSeek V4 Flash Free?")
-    this.contentEl.createEl("p", {
-      text: "A check sends the complete active Markdown note to OpenCode Zen. The free model may retain free-tier inputs for model improvement. Nothing is sent while typing or at startup.",
-    })
+    this.titleEl.setText(this.copy.title)
+    this.contentEl.createEl("p", { text: this.copy.body })
     this.contentEl.createEl("p", {
       text: "Accepting records one consent choice for this personal plugin. You can revoke it in settings.",
     })
     const actions = this.contentEl.createDiv({ cls: "bpc-consent-actions" })
     const cancel = actions.createEl("button", { text: "Cancel" })
     cancel.addEventListener("click", () => this.finish(false))
-    const accept = actions.createEl("button", { cls: "mod-cta", text: "Allow explicit checks" })
+    const accept = actions.createEl("button", { cls: "mod-cta", text: this.copy.accept })
     accept.addEventListener("click", () => this.finish(true))
   }
 
@@ -112,6 +124,7 @@ export class ProseProgressView extends ItemView {
     leaf: WorkspaceLeaf,
     private readonly coordinator: RunCoordinator,
     private readonly runOne: (filePath: string, agentId: string) => void,
+    private readonly requestLog: RequestLog,
   ) {
     super(leaf)
   }
@@ -211,6 +224,17 @@ export class ProseProgressView extends ItemView {
       if (state.error) details.createDiv({ cls: "bpc-progress-error", text: state.error })
 
       const actions = row.createDiv({ cls: "bpc-progress-row-actions" })
+      const inspect = actions.createEl("button", {
+        attr: { "aria-label": `Show request sent by ${state.label}` },
+      })
+      setIcon(inspect, "file-code-2")
+      inspect.addEventListener("click", () =>
+        new RequestInspectorModal(
+          this.app,
+          state.label,
+          this.requestLog.forSubject("agent", state.agentId, snapshot.startedAt),
+        ).open(),
+      )
       if (state.status === "queued" || state.status === "running") {
         const cancel = actions.createEl("button", {
           attr: { "aria-label": `Cancel ${state.label}` },
@@ -241,6 +265,7 @@ export interface SettingsHost {
   saveSettings: () => Promise<void>
   probeConnection: () => Promise<ModelCatalogInfo>
   setAgentEnabled: (agentId: string, enabled: boolean) => Promise<void>
+  checkEcho: () => Promise<string>
 }
 
 export class ProseCheckerSettingTab extends PluginSettingTab {
@@ -267,6 +292,10 @@ export class ProseCheckerSettingTab extends PluginSettingTab {
           await this.host.saveSettings()
         }),
       )
+
+    this.displayEcho(containerEl)
+
+    containerEl.createEl("h3", { text: "Atomic agents (OpenCode)" })
 
     new Setting(containerEl)
       .setName("Allow explicit remote checks")
@@ -308,7 +337,7 @@ export class ProseCheckerSettingTab extends PluginSettingTab {
         }),
       )
 
-    containerEl.createEl("h3", { text: `Atomic agents (${this.agents.length})` })
+    containerEl.createEl("h4", { text: `Agents (${this.agents.length})` })
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text: "The main check button runs every enabled agent. Each toggle controls one independent model call.",
@@ -323,5 +352,107 @@ export class ProseCheckerSettingTab extends PluginSettingTab {
             .onChange((value) => this.host.setAgentEnabled(agent.id, value)),
         )
     }
+  }
+  private displayEcho(containerEl: HTMLElement): void {
+    const settings = this.host.settings
+    containerEl.createEl("h3", { text: "Echo (Fulcrum)" })
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "The feather button sends your selection, or the whole note without its frontmatter, to Echo three times, once per level, with the requests below. Nothing else is added to them.",
+    })
+
+    const previews: Array<() => void> = []
+    const refreshPreviews = (): void => previews.forEach((refresh) => refresh())
+
+    new Setting(containerEl)
+      .setName("Writer")
+      .setDesc("Sent to Echo as the persona.")
+      .addText((text) =>
+        text.setValue(settings.echoPersona).onChange(async (value) => {
+          settings.echoPersona = value
+          refreshPreviews()
+          await this.host.saveSettings()
+        }),
+      )
+
+    new Setting(containerEl)
+      .setName("Reasoning effort")
+      .setDesc("Echo's default is low. Higher efforts often take a minute or more.")
+      .addDropdown((dropdown) => {
+        for (const effort of ECHO_REASONING_EFFORTS) dropdown.addOption(effort, effort)
+        dropdown.setValue(settings.echoReasoningEffort).onChange(async (value) => {
+          settings.echoReasoningEffort = value as EchoReasoningEffort
+          refreshPreviews()
+          await this.host.saveSettings()
+        })
+      })
+
+    for (const level of ECHO_LEVELS) {
+      const template = new Setting(containerEl)
+        .setName(`${level[0]?.toUpperCase()}${level.slice(1)} request`)
+        .setDesc(
+          `${ECHO_TEXT_PLACEHOLDER} is replaced by your text. This is the whole message Echo receives for the ${level} level.`,
+        )
+        .addTextArea((area) => {
+          area.inputEl.rows = 12
+          area.inputEl.addClass("bpc-echo-template")
+          area.setValue(settings.echoTemplates[level]).onChange(async (value) => {
+            settings.echoTemplates[level] = value
+            refreshPreviews()
+            await this.host.saveSettings()
+          })
+        })
+      template.settingEl.addClass("bpc-echo-template-setting")
+      const preview = template.settingEl.createEl("details", { cls: "bpc-request" })
+      preview.createEl("summary", { text: "Exact JSON body this sends" })
+      const body = preview.createEl("pre", { cls: "bpc-request-body" })
+      const refresh = (): void => {
+        try {
+          body.setText(
+            buildEchoBody(
+              {
+                persona: settings.echoPersona,
+                template: settings.echoTemplates[level],
+                reasoningEffort: settings.echoReasoningEffort,
+              },
+              "<your selection or note>",
+            ),
+          )
+          body.removeClass("bpc-progress-error")
+        } catch (error) {
+          body.setText(error instanceof Error ? error.message : String(error))
+          body.addClass("bpc-progress-error")
+        }
+      }
+      previews.push(refresh)
+      refresh()
+    }
+
+    new Setting(containerEl)
+      .setName("Allow explicit Echo reviews")
+      .setDesc("A button press sends text to Fulcrum's Echo API.")
+      .addToggle((toggle) =>
+        toggle.setValue(settings.echoConsentAccepted).onChange(async (value) => {
+          settings.echoConsentAccepted = value
+          await this.host.saveSettings()
+        }),
+      )
+
+    new Setting(containerEl)
+      .setName("Echo connection")
+      .setDesc(
+        "The API key is read from ECHO_API_KEY in the Windows user environment and never stored in this plugin.",
+      )
+      .addButton((button) =>
+        button.setButtonText("Check now").onClick(async () => {
+          button.setDisabled(true).setButtonText("Checking…")
+          try {
+            new Notice(await this.host.checkEcho(), 8_000)
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : String(error), 10_000)
+          }
+          button.setDisabled(false).setButtonText("Check now")
+        }),
+      )
   }
 }

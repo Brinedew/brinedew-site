@@ -270,6 +270,9 @@ importers:
 
   tools/obsidian-prose-checker:
     dependencies:
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       harper.js:
         specifier: 2.7.0
         version: 2.7.0
@@ -2419,6 +2422,10 @@ packages:
 
   diff3@0.0.3:
     resolution: {integrity: sha512-iSq8ngPOt0K53A6eVr4d5Kn6GNrM2nQZtC740pzIriHtn4pOQ2lyzEXQMBeVcWERN0ye7fhBsk9PbLLQOnUx/g==}
+
+  diff@9.0.0:
+    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
+    engines: {node: '>=0.3.1'}
 
   dom-align@1.12.4:
     resolution: {integrity: sha512-R8LUSEay/68zE5c8/3BDxiTEvgb4xZTF0RKmAHfiEVN3klfIpXfi2/QCoiWPccVQ0J/ZGdz9OjzL4uJEP/MRAw==}
@@ -5817,6 +5824,8 @@ snapshots:
   devtools-protocol@0.0.1299070: {}
 
   diff3@0.0.3: {}
+
+  diff@9.0.0: {}
 
   dom-align@1.12.4: {}
 

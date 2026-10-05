@@ -519,8 +519,8 @@
     },
     {
       "id": "BPC-001",
-      "title": "Remote prose checks are explicit, snapshot-bound, and free-Zen-only",
-      "decision": "Remote prose checking runs only after an explicit command against one immutable complete-document snapshot, using the approved free provider path.",
+      "title": "Remote prose checks are explicit, snapshot-bound, free-Zen-only for agents, and fully visible for Echo",
+      "decision": "Remote prose checking runs only after an explicit command. Agent checks use one immutable complete-document snapshot on the approved free provider path. Echo reviews send only the person's visible per-level template, text and settings to Echo, and every request is inspectable byte-for-byte.",
       "reason": "Background remote traffic and mutable partial input violate privacy, cost, and review integrity.",
       "change_control": "A replacement must preserve explicit initiation, snapshot identity, narrow credentials, and fail-closed cost behavior. Provider and implementation may change with owner approval.",
       "runbook": "docs/OBSIDIAN_PROSE_CHECKER_RUNBOOK.md",

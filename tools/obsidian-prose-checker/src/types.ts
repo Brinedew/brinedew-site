@@ -95,6 +95,10 @@ export type OpenCodeConnectionStatus =
 
 export interface ProseCheckerSettings {
   remoteConsentAccepted: boolean
+  echoConsentAccepted: boolean
+  echoPersona: string
+  echoTemplates: { macro: string; meso: string; micro: string }
+  echoReasoningEffort: "low" | "medium" | "high" | "max"
   localHarperEnabled: boolean
   harperDelayMs: number
   maxConcurrency: number
