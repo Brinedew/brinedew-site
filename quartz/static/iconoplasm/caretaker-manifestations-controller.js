@@ -3,7 +3,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=72536f02bc2c96b8"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=a208ba9756da6194"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -20,7 +20,7 @@ import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import {
   renderCaretakerManifestationPanel,
   suggestionReviewMarkup,
-} from "./caretaker-manifestations-view.js?v=4be0f4300149ed5d"
+} from "./caretaker-manifestations-view.js?v=d29ae7ed94735d65"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,

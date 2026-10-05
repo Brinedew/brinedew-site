@@ -5429,6 +5429,9 @@ html[data-theme="dark"] .icono-card--brick {
 @media (max-width: 800px) {
   .icono-mobile-switcher {
     display: flex;
+    /* Its parent centres children, so auto margins alone shrink the bar to
+       its labels; the tabs are flex: 1 and meant to span the column. */
+    width: 100%;
     max-width: 960px;
     margin: 0 auto 0.4rem;
     border-bottom: 1px solid var(--ui-border);

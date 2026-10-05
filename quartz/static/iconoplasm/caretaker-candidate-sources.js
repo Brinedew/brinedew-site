@@ -2,7 +2,7 @@
 // prose made it, and one click opens that version in the History tab. The link comes
 // only from the caretaker dossier (candidate_sources); the public gene object has no
 // such field, and a candidate without a recorded source gets no link at all.
-import { versionLabelForRevision } from "./caretaker-manifestations-view.js?v=4be0f4300149ed5d"
+import { versionLabelForRevision } from "./caretaker-manifestations-view.js?v=d29ae7ed94735d65"
 
 const CARD_SELECTOR = "[data-icono-candidate-asset]"
 const LINK_SELECTOR = "[data-icono-candidate-source]"
