@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 import test from "node:test"
 import {
+  collapseGenerationRequestFactorySlotOptions,
   rebuildGenerationRequestFactoryOptionRollupsBatch,
   rebuildUserEmulsionOptionRollupsBatch,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -182,4 +183,40 @@ test("a style with fewer genes than slots still fills them, best per gene first"
     assert.deepEqual(genes.slice(0, 2).sort(), ["LPA", "W"])
     assert.equal(genes.length, 5)
   })
+})
+
+// Golden, from the nightly copy of 2026-09-29: style 21103's recipe codes in
+// the favorites query's order (live_count, then blots). Its card showed C9's
+// three canonical portraits and a candidate, while H9 and G9 held two more
+// canonical portraits (2026-10-05, owner's Favorites).
+test("a factory style shows every code's canonical portraits before any candidate", () => {
+  const preview = (gene_symbol, sha, is_current) => ({
+    gene_symbol,
+    asset_sha256: sha.padEnd(64, "0"),
+    is_current,
+  })
+  const sources = [
+    [
+      preview("NELFB", "02ee", true),
+      preview("LRP6", "ca56", true),
+      preview("ACR", "c3ac", true),
+      preview("TH", "f6bc", false),
+      preview("HR", "5804", false),
+    ],
+    [
+      preview("EED", "7130", true),
+      preview("SUZ12", "eb6d", false),
+      preview("RBBP7", "1d80", false),
+      preview("JARID2", "7d4d", false),
+      preview("EZH2", "649a", false),
+    ],
+    [preview("KIN", "e6ff", true)],
+    [preview("MAPK1", "4554", false), preview("MAP2K1", "b327", false)],
+    [preview("KIN", "6df7", false)],
+  ].map((preview_assets) => ({ preview_assets, image_count: 1 }))
+  const collapsed = collapseGenerationRequestFactorySlotOptions(21103, sources)
+  assert.deepEqual(
+    collapsed.preview_assets.map((preview) => preview.gene_symbol),
+    ["NELFB", "LRP6", "ACR", "EED", "KIN"],
+  )
 })

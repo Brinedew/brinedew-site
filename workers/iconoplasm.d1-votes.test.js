@@ -2108,9 +2108,10 @@ test("B-1001: the public Discord copy follows the author's own edit and delete, 
 })
 
 // 30. The request picker is read by every signed-in reader who opens it. Its answer is
-//     bounded (120 styles, four previews each) and carries no artist identity (B-883,
-//     B-884); the artist stays in the rollup row and goes no further.
-test("30: the request picker lists at most 120 styles, four medium previews each, and never an artist", async () => {
+//     bounded (120 styles, five previews each: four for the card and a spare for when
+//     another card already shows one of its genes, B-896) and carries no artist identity
+//     (B-883, B-884); the artist stays in the rollup row and goes no further.
+test("30: the request picker lists at most 120 styles, five medium previews each, and never an artist", async () => {
   const db = new SqliteD1()
   const previews = JSON.stringify(
     [1, 2, 3, 4, 5, 6].map((rank) => ({
@@ -2144,7 +2145,7 @@ test("30: the request picker lists at most 120 styles, four medium previews each
   assert.ok(options.length > 0 && options.length <= 120, `${options.length} styles in one answer`)
   assert.doesNotMatch(JSON.stringify(signedIn.payload), /secretartist|secret artist/i)
   for (const option of options) {
-    assert.equal(option.preview_assets.length, 4, "a card shows four of its six previews")
+    assert.equal(option.preview_assets.length, 5, "a style sends five of its six previews")
     for (const preview of option.preview_assets) {
       assert.match(String(preview.medium_url || ""), /medium\.webp$/)
       assert.equal("thumb_url" in preview, false)
