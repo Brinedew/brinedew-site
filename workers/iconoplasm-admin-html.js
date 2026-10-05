@@ -818,6 +818,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <script src="/static/iconoplasm/caretaker-admin-registry.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-detail.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-offer.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/caretaker-admin-cooldown.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
