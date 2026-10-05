@@ -33,7 +33,9 @@
 //     runs past its CPU cap: the edge answers 503) and the grid stays blank,
 //     or shows a bare "HTTP 503", until the reader switches views (B-884);
 // 16. the list keeps failing and the grid offers no way to try again, or the
-//     Try again button does not load the styles once the server recovers.
+//     Try again button does not load the styles once the server recovers;
+// 17. one gene shows on two cards (B-896: every style below also has an
+//     ACVR2B candidate, as the owner's Favorites did on 2026-10-05).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -62,14 +64,18 @@ const SINGLE_PREVIEW_SLOT = 11111
 const EMPTY_SLOT = 33333
 const QUEUED_SLOT = 51084
 
-// The server's shape since B-884: at most 4 previews, medium (3:4) only.
+// The server's shape since B-896: at most 5 previews, canonical first, medium
+// (3:4) only.
+const GENE_BY_SHA = new Map()
 function previewAssets(slot) {
   if (slot === EMPTY_SLOT) return []
-  const count = slot === SINGLE_PREVIEW_SLOT ? 1 : 4
+  const count = slot === SINGLE_PREVIEW_SLOT ? 1 : 5
   return Array.from({ length: count }, (_, i) => {
     const sha = `${String(slot).padStart(6, "0")}${i}`.padEnd(64, "a")
+    const gene = i === 3 ? "ACVR2B" : `G${slot}${"ABCDE"[i]}`
+    GENE_BY_SHA.set(sha, gene)
     return {
-      gene_symbol: ["TP53", "ATM", "ADO", "TH"][i],
+      gene_symbol: gene,
       asset_sha256: sha,
       is_current: i === 0,
       medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
@@ -310,6 +316,12 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           assert.ok(Math.abs(ratio - 0.75) < 0.02, `${where}: card art ratio ${ratio}`)
         }
         assert.ok(first.images.length > 0, `${where}: no card previews rendered`)
+        // 17. Each gene once across the visible cards.
+        const shownGenes = first.images.map((image) =>
+          GENE_BY_SHA.get((/[0-9a-f]{64}/.exec(image.src) || [""])[0]),
+        )
+        assert.equal(new Set(shownGenes).size, shownGenes.length, `${where}: ${shownGenes}`)
+        assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
           assert.ok(Math.abs(image.ratio - 0.75) < 0.03, `${where}: preview ratio ${image.ratio}`)
