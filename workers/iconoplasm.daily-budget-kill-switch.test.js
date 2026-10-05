@@ -724,11 +724,11 @@ test("admin mutation limiter policy reports the live limiter basis so Website Op
   assert.equal(payload?.ok, true)
   assert.equal(payload?.mutation_limiter?.active, true)
   assert.equal(payload?.mutation_limiter?.budget_basis, "d1_rows_written_daily_smart_limit")
-  assert.equal(payload?.mutation_limiter?.target_daily_percent, 90)
+  assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
   assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit > 0, true)
   assert.equal(
     payload?.mutation_limiter?.target_rows_written_ceiling,
-    Math.floor(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit * 0.9),
+    Math.floor(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit * 0.85),
   )
   assert.equal(payload?.mutation_limiter?.explains_do_cap, false)
   assert.match(
@@ -1142,8 +1142,8 @@ test("write-heavy admin mutations fail before starting once the configured targe
   assert.equal(payload?.code, "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE")
   assert.equal(payload?.limiter?.stage, "preflight")
   assert.equal(payload?.limiter?.reason, "rows_written_target_cap_reached_before_start")
-  assert.equal(payload?.limiter?.target_daily_percent, 90)
-  assert.equal(payload?.limiter?.target_rows_written_ceiling, 18)
+  assert.equal(payload?.limiter?.target_daily_percent, 85)
+  assert.equal(payload?.limiter?.target_rows_written_ceiling, 17)
   assert.equal(payload?.limiter?.rows_written_target_remaining, 0)
   assert.equal(db.catalogUpsertRuns, 0)
   assert.deepEqual(

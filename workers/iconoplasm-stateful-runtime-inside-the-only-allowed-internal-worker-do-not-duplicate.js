@@ -91,7 +91,18 @@ import { createOperationCostAccountUsageReader } from "./iconoplasm/operation-co
 import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.js"
 import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
-import { d1OperationalAllowance } from "../shared/iconoplasm-d1-budget-policy.js"
+import {
+  D1_CRITICALITY_SHARES,
+  d1CriticalityOfRouteFamily,
+  d1CriticalityShedBy,
+  d1OperationalAllowance,
+} from "../shared/iconoplasm-d1-budget-policy.js"
+
+// B-1026: the write-heavy admin limiter is the batch tier's write share, with
+// chunk sizing on top; one number, owned by the budget policy.
+const ICONOPLASM_MUTATION_LIMITER_DEFAULT_TARGET_DAILY_PERCENT = Math.round(
+  D1_CRITICALITY_SHARES.sheddable_plus * 100,
+)
 import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
@@ -1434,7 +1445,7 @@ function iconoplasmBudgetPolicyFromEnv(env, now = new Date()) {
       100,
       positiveNumberFromEnv(
         env?.[ICONOPLASM_MUTATION_LIMITER_TARGET_DAILY_PERCENT_ENV_DO_NOT_SET_CASUALLY],
-        90,
+        ICONOPLASM_MUTATION_LIMITER_DEFAULT_TARGET_DAILY_PERCENT,
       ),
     ),
   )
@@ -1476,7 +1487,7 @@ function iconoplasmMutationLimiterPolicyFromEnv(env, now = new Date()) {
       active: false,
       budgetBasis: "d1_rows_written_daily_smart_limit",
       budgetBasisLabel: "D1 daily allocation, capped by the Free plan",
-      targetDailyPercent: 90,
+      targetDailyPercent: ICONOPLASM_MUTATION_LIMITER_DEFAULT_TARGET_DAILY_PERCENT,
       explainsDoCap: false,
       explanation:
         "This worker derives mutation ceilings from the shared Iconoplasm D1 budget policy when that policy is enabled.",
@@ -2388,11 +2399,26 @@ async function iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead = 0, rowsWri
   return projectedSnapshot
 }
 
+// B-1026: a request whose tier's share of the day is spent is refused like an
+// exhausted day, naming the tier, before its next query as well as at the start.
+function assertIconoplasmD1CriticalityShareAvailable(snapshot, attribution) {
+  const criticality = d1CriticalityOfRouteFamily(attribution?.route_family)
+  const shedBy = d1CriticalityShedBy(snapshot, criticality)
+  if (!shedBy) return
+  throw new IconoplasmD1DailyBudgetExceededError({
+    ...(snapshot || {}),
+    exhausted: true,
+    exhausted_by: shedBy,
+    criticality,
+  })
+}
+
 async function assertIconoplasmD1DailyBudgetStillAvailable(state, { maxRowsWritten = 0 } = {}) {
   const snapshot = iconoplasmD1DailyBudgetProjectedSnapshot(state) || state?.lastSnapshot || null
   if (state?.exhausted || snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
   }
+  assertIconoplasmD1CriticalityShareAvailable(snapshot, state?.attribution)
   const reservedRowsWritten = Math.max(0, Math.trunc(Number(maxRowsWritten || 0) || 0))
   if (reservedRowsWritten <= 0) return
 
@@ -2742,25 +2768,6 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
       "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
     )
   }
-  if (laptopReservationPlan) {
-    const reservation = laptopReservationPlan.reservation
-    if (reservation) {
-      const admission = await reserveIconoplasmMutationWrites(env, {
-        lane: "laptop_delivery",
-        operationId: reservation.operationId,
-        units: reservation.units,
-        dayKey: budgets.cycleInfo.dayKey,
-      })
-      if (admission?.ok !== true) {
-        throw new IconoplasmD1DailyBudgetExceededError({
-          exhausted: true,
-          exhausted_by: "laptop_delivery_mutation_lane",
-          mutation_lane: admission,
-        })
-      }
-      env = { ...env, __iconoplasmMutationReservationOperationId: reservation.operationId }
-    }
-  }
   let snapshot
   try {
     snapshot = await iconoplasmD1DailyBudgetKillSwitchJson(stub, "/snapshot", {
@@ -2814,8 +2821,43 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   if (snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
   }
-  const targetDailyPercent = iconoplasmMutationLimiterTargetDailyPercent(env)
-  const targetRowsWrittenCeiling = iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env)
+  // The limiter answers first for its own routes: its refusal carries the
+  // write-cap detail Website Ops shows. Same share, so the decision is the same.
+  const mutationLimiter = {
+    active: isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family),
+    chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(snapshot),
+    targetDailyPercent: iconoplasmMutationLimiterTargetDailyPercent(env),
+    targetRowsWrittenCeiling: iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env),
+  }
+  assertIconoplasmAdminMutationLimiterMayStart({
+    rawEnv: env,
+    budgets,
+    attribution,
+    lastSnapshot: snapshot,
+    mutationLimiter,
+  })
+  assertIconoplasmD1CriticalityShareAvailable(snapshot, attribution)
+  // The write reservation comes after the tier check, so a refused batch call
+  // holds no reservation that would crowd a delivery for the next 15 minutes.
+  if (laptopReservationPlan) {
+    const reservation = laptopReservationPlan.reservation
+    if (reservation) {
+      const admission = await reserveIconoplasmMutationWrites(env, {
+        lane: "laptop_delivery",
+        operationId: reservation.operationId,
+        units: reservation.units,
+        dayKey: budgets.cycleInfo.dayKey,
+      })
+      if (admission?.ok !== true) {
+        throw new IconoplasmD1DailyBudgetExceededError({
+          exhausted: true,
+          exhausted_by: "laptop_delivery_mutation_lane",
+          mutation_lane: admission,
+        })
+      }
+      env = { ...env, __iconoplasmMutationReservationOperationId: reservation.operationId }
+    }
+  }
   const state = {
     rawEnv: env,
     stub,
@@ -2838,16 +2880,10 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
       queryCount: 0,
       requestCount: 0,
     },
-    mutationLimiter: {
-      active: isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family),
-      chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(snapshot),
-      targetDailyPercent,
-      targetRowsWrittenCeiling,
-    },
+    mutationLimiter,
     mutationReservationOperationId:
       sanitizeText(env?.__iconoplasmMutationReservationOperationId || "", 255) || null,
   }
-  assertIconoplasmAdminMutationLimiterMayStart(state)
   return {
     ...env,
     ICONOPLASM_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(env.ICONOPLASM_DB, state),

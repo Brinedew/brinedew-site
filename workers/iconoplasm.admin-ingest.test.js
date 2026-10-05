@@ -395,9 +395,9 @@ test("admin ingest success returns current mutation-limiter telemetry for sync f
   const payload = await response.json()
 
   assert.equal(response.status, 200)
-  assert.equal(payload?.mutation_limiter?.target_daily_percent, 90)
-  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 90)
-  assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 66)
+  assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
+  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 85)
+  assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 61)
   assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
 })
 
