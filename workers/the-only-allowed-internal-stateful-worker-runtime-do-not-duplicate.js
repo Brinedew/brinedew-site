@@ -381,6 +381,7 @@ import {
   drainIconoplasmManifestationAuthorityProjection,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
+  publishRequestPickerObject,
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   migrateIconoplasmCompactDiscoveryForScheduled,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
@@ -2000,6 +2001,8 @@ export default {
         // B-965: GeneGuessr's "Top Streaks" object on the CDN. Reads the GeneGuessr D1 (26 rows),
         // not an Iconoplasm one.
         geneguessrBoard: () => publishLeaderboardObject(env),
+        // B-896: the style picker's first page on the CDN (121 rows, written on change).
+        requestPicker: () => publishRequestPickerObject(env),
         accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),
         // B-985: after the projection drain, release uploads a caretaker abandoned and
         // never retried (at most 3 per run), so their reserved bytes and stored body return.

@@ -62,6 +62,7 @@ import {
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
   handleIconoplasmQueue,
   publishIconoplasmGeneStableObject,
+  publishRequestPickerObject,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   GENE_VOTE_IMPORT_CHUNK,
@@ -99,7 +100,13 @@ import {
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
-import { BOT_TOKEN, CHANNEL_ID, FakeNetwork } from "./test-helpers/fake-discord-and-bunny.js"
+import {
+  BOT_TOKEN,
+  CHANNEL_ID,
+  FakeNetwork,
+  STORAGE_PASSWORD,
+  STORAGE_ZONE,
+} from "./test-helpers/fake-discord-and-bunny.js"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const VOTE_TABLES = [
@@ -2248,6 +2255,91 @@ test("30b: All styles pages through every style once, in strength order, by inde
     assert.deepEqual(answer.payload.request_options, [], bad)
     assert.equal(answer.payload.next_cursor, "")
   }
+})
+
+// 30c. B-896: the picker's first page is a CDN object a background job writes, so an open
+//      reads no D1 for it. Ways this can fail, written before the code: the object differs
+//      from the API's first page; the job rewrites unchanged bytes every quarter hour (Bunny
+//      replication churn, B-923); a vote that reorders the styles never reaches the object;
+//      `scope=favorites` still reads the 120-row page; a shared user emulsion (an owner's
+//      username) lands in a public object.
+test("30c: the picker's first page is a CDN object, written only when it changed", async (t) => {
+  const network = new FakeNetwork()
+  network.install()
+  t.after(() => network.restore())
+  const db = new SqliteD1()
+  const insert = (n, h) =>
+    db.exec(
+      `INSERT INTO icono_generation_request_vision_option_rollup (
+         vision_id, emulsion_id, emulsion_family_id, artist_tag, artist_name, workflow_id,
+         workflow_label, prompt_version, variant_slot, image_count, live_count, score,
+         vote_h_index, preview_assets_json, builder_version
+       ) VALUES (?, ?, ?, '@secretartist', 'Secret Artist', 'A1', 'Anima v1', '93', ?, 3, 1, 0, ?, ?, 3)
+       ON CONFLICT(vision_id) DO UPDATE SET vote_h_index = excluded.vote_h_index`,
+      `anima-v1-${n}`,
+      `0-${n}`,
+      `0-${n}`,
+      String(n),
+      h,
+      JSON.stringify([
+        { gene_symbol: `GENE${n}`, asset_sha256: sha(String(n % 10)), is_current: true },
+      ]),
+    )
+  for (let n = 1; n <= 130; n += 1) insert(n, 0)
+  const env = withTestMutationAuthority({
+    ICONOPLASM_DB: db,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  })
+  const KEY = "picker/v1/styles.json"
+  const object = () => JSON.parse(Buffer.from(network.objects.get(KEY)).toString("utf8"))
+  const puts = () => network.calls.filter((call) => call === `bunny PUT /${STORAGE_ZONE}/${KEY}`)
+
+  const first = await publishRequestPickerObject(env)
+  assert.equal(first.published, true, JSON.stringify(first))
+  assert.equal(first.styles, 120)
+  assert.equal(puts().length, 1)
+  // The object is the API's first page, without the player's own favourites.
+  const api = await routeRequest(db, "GET", "/api/iconoplasm/requests/options")
+  assert.deepEqual(
+    object().request_options.map((option) => option.vision_id),
+    api.payload.request_options.map((option) => option.vision_id),
+  )
+  assert.equal(object().next_cursor, api.payload.next_cursor)
+  assert.doesNotMatch(JSON.stringify(object()), /secretartist|secret artist|user_emulsion/i)
+  assert.ok(Buffer.from(network.objects.get(KEY)).byteLength < 512 * 1024)
+
+  const quiet = await publishRequestPickerObject(env)
+  assert.equal(quiet.published, false, "nothing changed")
+  assert.equal(puts().length, 1, "so nothing was written")
+
+  insert(130, 1)
+  const voted = await publishRequestPickerObject(env)
+  assert.equal(voted.published, true, "a vote that reorders the styles is published")
+  assert.equal(object().request_options[0].vision_id, "anima-v1-130")
+  assert.equal(
+    network.calls.some((call) => call.startsWith("bunny DELETE")),
+    false,
+    "no purge, no delete",
+  )
+
+  // scope=favorites reads the player's favourites, not the 120-row page.
+  db.log = []
+  const favorites = await routeRequest(
+    db,
+    "GET",
+    "/api/iconoplasm/requests/options?scope=favorites",
+  )
+  assert.equal(favorites.status, 200)
+  assert.deepEqual(favorites.payload.request_options, [])
+  assert.equal(favorites.payload.next_cursor, "")
+  assert.equal(
+    db.log.some((entry) => /ORDER BY vote_h_index DESC/.test(entry.sql)),
+    false,
+    "scope=favorites read the strength page",
+  )
 })
 
 // 31. Favorites are one account's own list: idempotent, refused to guests, and only for a
