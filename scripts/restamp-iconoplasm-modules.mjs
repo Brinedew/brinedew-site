@@ -22,13 +22,13 @@ const args = process.argv.slice(2)
 const check = args.includes("--check")
 const dirArg = args.find((arg) => !arg.startsWith("--"))
 const dir = path.resolve(dirArg || "quartz/static/iconoplasm")
-// Imports of ./generated/ files are stamped too; they used to be stamped by hand.
-const STAMP = /(["'(])(\.\/(?:generated\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
+// Imports of ./generated/ and ./vendor/ files are stamped too; they used to be stamped by hand.
+const STAMP = /(["'(])(\.\/(?:generated\/|vendor\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
 
 // The edge serves /static/iconoplasm/* as immutable, so an import with no stamp is never
 // refreshed for a returning reader. Only the Iconoplasm directory is held to this rule.
 const UNSTAMPED =
-  /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\/(?:generated\/)?[A-Za-z0-9._-]+\.(?:js|css))\2/g
+  /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.\/(?:generated\/|vendor\/)?[A-Za-z0-9._-]+\.(?:js|css))\2/g
 const requireStamps = path.basename(dir) === "iconoplasm"
 
 const hashOf = (file) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 16)
