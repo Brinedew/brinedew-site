@@ -2154,6 +2154,102 @@ test("30: the request picker lists at most 120 styles, five medium previews each
   }
 })
 
+// 30b. B-1014: "All styles" reaches every style. The first answer carries a cursor; each
+//      `after=` page continues in strength order (votes, canonical portraits, score, blots,
+//      vision ID) until the cursor is empty. Ways this can fail, written before the code:
+//      a style is skipped or shown twice where sort keys tie; a page re-reads the list from
+//      the top (reads grow with depth); a bad cursor reaches SQL.
+test("30b: All styles pages through every style once, in strength order, by index seeks", async () => {
+  const db = new SqliteD1()
+  const previews = JSON.stringify([
+    { gene_symbol: "GENE1", asset_sha256: sha("1"), is_current: true, preview_rank: 1 },
+  ])
+  const expected = []
+  for (let n = 1; n <= 400; n += 1) {
+    // Ties on purpose: four h-index values, three live counts, two scores and five blot
+    // counts, so a page boundary lands inside every kind of tie group.
+    const row = {
+      vision_id: `anima-v1-${n}`,
+      vote_h_index: n % 4 === 0 ? 1 : 0,
+      live_count: n % 3,
+      score: n % 2,
+      image_count: (n % 5) + 1,
+    }
+    expected.push(row)
+    db.exec(
+      `INSERT INTO icono_generation_request_vision_option_rollup (
+         vision_id, emulsion_id, emulsion_family_id, artist_tag, artist_name, workflow_id,
+         workflow_label, prompt_version, variant_slot, image_count, live_count, score,
+         vote_h_index, preview_assets_json, builder_version
+       ) VALUES (?, ?, ?, '', '', 'A1', 'Anima v1', '93', ?, ?, ?, ?, ?, ?, 3)`,
+      row.vision_id,
+      `0-${n}`,
+      `0-${n}`,
+      String(n),
+      row.image_count,
+      row.live_count,
+      row.score,
+      row.vote_h_index,
+      previews,
+    )
+  }
+  expected.sort(
+    (a, b) =>
+      b.vote_h_index - a.vote_h_index ||
+      b.live_count - a.live_count ||
+      b.score - a.score ||
+      b.image_count - a.image_count ||
+      (a.vision_id < b.vision_id ? -1 : a.vision_id > b.vision_id ? 1 : 0),
+  )
+
+  const seen = []
+  let path = "/api/iconoplasm/requests/options"
+  let pages = 0
+  for (;;) {
+    db.log = []
+    const answer = await routeRequest(db, "GET", path)
+    assert.equal(answer.status, 200, JSON.stringify(answer.payload).slice(0, 300))
+    seen.push(...answer.payload.request_options.map((option) => option.vision_id))
+    pages += 1
+    if (pages > 1) {
+      // Every statement a page runs is a seek on the strength index: no scan, no sort.
+      const paging = db.log.filter((entry) =>
+        /FROM icono_generation_request_vision_option_rollup/.test(entry.sql),
+      )
+      assert.ok(paging.length >= 1 && paging.length <= 5, `${paging.length} statements`)
+      for (const entry of paging) {
+        const plan = db
+          .rows(`EXPLAIN QUERY PLAN ${entry.sql}`, ...entry.args)
+          .map((row) => row.detail)
+          .join(" | ")
+        assert.match(plan, /SEARCH .*idx_icono_generation_request_vision_option_rollup_priority/)
+        assert.doesNotMatch(plan, /\bSCAN\b|TEMP B-TREE/, plan)
+      }
+    }
+    const cursor = answer.payload.next_cursor
+    if (!cursor) break
+    assert.ok(pages < 20, "paging does not end")
+    path = `/api/iconoplasm/requests/options?after=${encodeURIComponent(cursor)}`
+  }
+  assert.deepEqual(
+    seen,
+    expected.map((row) => row.vision_id),
+  )
+  // 120 first, then pages of 60.
+  assert.equal(pages, 1 + Math.ceil((400 - 120) / 60))
+
+  for (const bad of ["x", "[1,2,3]", '[0,0,0,0,""]', '["a",0,0,0,"anima-v1-1"]']) {
+    const answer = await routeRequest(
+      db,
+      "GET",
+      `/api/iconoplasm/requests/options?after=${encodeURIComponent(bad)}`,
+    )
+    assert.equal(answer.status, 200)
+    assert.deepEqual(answer.payload.request_options, [], bad)
+    assert.equal(answer.payload.next_cursor, "")
+  }
+})
+
 // 31. Favorites are one account's own list: idempotent, refused to guests, and only for a
 //     style that exists. An asset that has left the picker's rollup is still favoriteable.
 test("31: emulsion favorites are per account, idempotent, refused to guests, and need a real emulsion", async () => {
