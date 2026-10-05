@@ -3,7 +3,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=247b87dc07affc85"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=72536f02bc2c96b8"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -17,7 +17,10 @@ import {
   revisionById,
 } from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
 import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
-import { renderCaretakerManifestationPanel } from "./caretaker-manifestations-view.js?v=9241dc2a16d8eba3"
+import {
+  renderCaretakerManifestationPanel,
+  suggestionReviewMarkup,
+} from "./caretaker-manifestations-view.js?v=4be0f4300149ed5d"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -164,7 +167,10 @@ export function createCaretakerManifestationPanel({
     mountCaretakerTagEditor(state.host.querySelector("[data-icono-caretaker-editor]"))
     if (state.basedOnRevisionId) showBasis(state)
     activateTab(state, state.activeTab || "manifestation")
-    holdSuggestion(state, state.suggestionHold === true)
+    // A full redraw drops an open review; nothing was applied, so forget it.
+    if (state.review && !state.host.querySelector("[data-icono-caretaker-review]")) {
+      state.review = null
+    }
     const dialog = state.host.querySelector("[data-icono-caretaker-dialog]")
     if (wasOpen) openDialog(dialog)
   }
@@ -488,10 +494,8 @@ export function createCaretakerManifestationPanel({
   }
 
   // The word is the state (WordPress's editor says "Saving" and "Saved"); CSS adds
-  // a spinner or a check. "Unsaved changes" shows only while a filled-in
-  // suggestion waits for the caretaker's Save.
+  // a spinner or a check.
   const AUTOSAVE_LABELS = Object.freeze({
-    unsaved: "Unsaved changes",
     saving: "Saving…",
     saved: "Saved",
     failed: "Not saved",
@@ -539,8 +543,6 @@ export function createCaretakerManifestationPanel({
   function scheduleAutosave(state) {
     globalThis.clearTimeout(state.autosaveTimer)
     if (state.autosaveFailed) return autosaveIndicator(state, "failed")
-    // B-995: a filled-in suggestion waits for the caretaker's own Save.
-    if (state.suggestionHold) return autosaveIndicator(state, "unsaved")
     // The save starts in 1.1 s; Google Docs also says "Saving…" from the keystroke.
     autosaveIndicator(state, "saving")
     state.autosaveTimer = globalThis.setTimeout(function () {
@@ -656,6 +658,9 @@ export function createCaretakerManifestationPanel({
         }
       }
       state.lastSavedFingerprint = fingerprint
+      if (snapshot.prose !== proseBaseline(state, proseControl, tagsControl).prose) {
+        state.proseBaseline = { prose: snapshot.prose, fields: snapshot.fieldsJson }
+      }
       state.autosaveJob = null
       state.autosaveRetries = 0
       state.autosaveRetryable = false
@@ -681,38 +686,85 @@ export function createCaretakerManifestationPanel({
     }
   }
 
-  function holdSuggestion(state, hold) {
-    state.suggestionHold = hold
-    const save = state.host.querySelector("[data-icono-caretaker-save-suggestion]")
-    if (save) save.hidden = !hold
+  // The Tags the prose was last written against. Tag-only saves don't move it:
+  // on 2026-10-05 the owner changed DCD's Tags (three autosaved versions), pressed
+  // Auto-correct, and the change list came out empty because it was taken from the
+  // last save, so the model fell back to re-reading every Tag.
+  function proseBaseline(state, proseControl, tagsControl) {
+    if (!state.proseBaseline) {
+      let fields = null
+      try {
+        fields = JSON.parse(tagsControl.dataset.initialFieldsJson || "null")
+      } catch {
+        fields = null
+      }
+      // A textarea's text content is its default value: the saved prose it opened with.
+      state.proseBaseline = { prose: String(proseControl.textContent || ""), fields }
+    }
+    return state.proseBaseline
   }
 
-  function saveSuggestion(state) {
-    holdSuggestion(state, false)
-    scheduleAutosave(state)
+  function endReview(state) {
+    const review = state.host.querySelector("[data-icono-caretaker-review]")
+    review?.remove()
+    state.host.querySelectorAll("[data-icono-caretaker-review-hidden]").forEach(function (node) {
+      node.hidden = false
+      node.removeAttribute("data-icono-caretaker-review-hidden")
+    })
+    state.review = null
   }
 
-  function savedTagFields(state, tagsControl) {
-    try {
-      if (state.lastSavedFingerprint) return JSON.parse(state.lastSavedFingerprint)[2] || null
-      return JSON.parse(tagsControl.dataset.initialFieldsJson || "null")
-    } catch {
-      return null
+  function startReview(state, review, anchor, hide) {
+    // Nothing is applied yet, so the save state stays "Saved" and autosave runs.
+    state.review = review
+    for (const node of hide) {
+      if (!node || node.hidden) continue
+      node.hidden = true
+      node.setAttribute("data-icono-caretaker-review-hidden", "")
+    }
+    anchor.insertAdjacentHTML("afterend", suggestionReviewMarkup(review, escapeHtml))
+    const changes = state.host.querySelector(".icono-caretaker-review__changes")
+    changes?.querySelector("ins, del")?.scrollIntoView?.({ block: "center" })
+    state.host.querySelector("[data-icono-caretaker-review-keep]")?.focus?.()
+  }
+
+  function keepReview(state) {
+    const review = state.review
+    if (!review) return
+    const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
+    const form = state.host.querySelector("[data-icono-caretaker-editor]")
+    endReview(state)
+    // The fill raises the same input event typing does: draft, then autosave.
+    if (review.kind === "prose" && proseControl) {
+      proseControl.value = review.after
+      // The prose now matches these Tags, whatever the next save turns out to be.
+      state.proseBaseline = { prose: review.after, fields: review.fields }
+      proseControl.dispatchEvent(new Event("input", { bubbles: true }))
+    } else if (review.kind === "tags" && form) {
+      if (!applyCaretakerTagSuggestion(form, review.after, review.afterText)) {
+        setStatus(state, "The Tags editor is not ready.", "error")
+      }
     }
   }
 
-  // B-995: ask the server for a suggestion, fill it into the editor, save nothing.
-  // The fill goes through the same input event typing does, so the draft and the
-  // "Unsaved changes" mark follow; the Save button then releases it to autosave.
+  function undoReview(state) {
+    if (!state.review) return
+    endReview(state)
+    scheduleAutosave(state)
+  }
+
+  // B-995: ask the server for a suggestion and show it as a diff with Keep / Undo.
+  // Nothing is saved until Keep.
   async function taggerize(state, direction) {
     if (state.busy || state.taggerizing) return
     const proseControl = state.host.querySelector("[data-icono-caretaker-prose]")
     const tagsControl = state.host.querySelector("[data-icono-caretaker-tags]")
     const form = state.host.querySelector("[data-icono-caretaker-editor]")
-    // The buttons are greyed out during a save; the replaced text is already a saved
-    // version in History, and nothing is saved until Save, so no confirm is needed.
-    if (!proseControl || !tagsControl || !form || state.autosaving) return
+    // The buttons are greyed out during a save and hidden during a review; nothing
+    // changes until Keep, so no confirm is needed.
+    if (!proseControl || !tagsControl || !form || state.autosaving || state.review) return
     const fromProse = direction === "tags_from_prose"
+    const baseline = proseBaseline(state, proseControl, tagsControl)
     const sentProse = proseControl.value
     const sentTags = tagsControl.value
     const sentFields = JSON.stringify(readTagFields(tagsControl))
@@ -733,9 +785,9 @@ export function createCaretakerManifestationPanel({
           direction,
           prose: sentProse,
           tags_fields: JSON.parse(sentFields),
-          // The Tags last saved with this prose (or opened with it), so the
-          // server can send the model only what the caretaker changed.
-          previous_tags_fields: savedTagFields(state, tagsControl),
+          // The Tags this prose was written against, so the server can send the
+          // model only what the caretaker changed since.
+          previous_tags_fields: baseline.fields,
         }),
       })
       // Typing while it loaded means the person moved on; their text wins.
@@ -747,16 +799,35 @@ export function createCaretakerManifestationPanel({
         return
       }
       const suggestion = result?.suggestion
-      // Hold first: the fill below raises the input event that would schedule an autosave.
-      holdSuggestion(state, true)
+      // The rows holding the two Auto buttons hide while a suggestion is reviewed.
+      const autoButtons = buttons.map(function (button) {
+        return button.closest(".icono-caretaker-editor__meta")
+      })
       if (fromProse) {
-        if (!applyCaretakerTagSuggestion(form, suggestion?.fields_json, suggestion?.tags_text)) {
-          holdSuggestion(state, false)
-          throw new Error("The Tags editor is not ready.")
-        }
+        // The chips stay as they are until Keep; the review lists what would move.
+        startReview(
+          state,
+          {
+            kind: "tags",
+            before: JSON.parse(sentFields),
+            after: suggestion?.fields_json || {},
+            afterText: suggestion?.tags_text,
+          },
+          state.host.querySelector("[data-icono-caretaker-tag-categories]"),
+          autoButtons,
+        )
       } else {
-        proseControl.value = String(suggestion?.prose || "")
-        proseControl.dispatchEvent(new Event("input", { bubbles: true }))
+        startReview(
+          state,
+          {
+            kind: "prose",
+            before: sentProse,
+            after: String(suggestion?.prose || ""),
+            fields: JSON.parse(sentFields),
+          },
+          proseControl,
+          [proseControl, ...autoButtons],
+        )
       }
     } catch (error) {
       setStatus(
@@ -786,7 +857,8 @@ export function createCaretakerManifestationPanel({
       state.autosaveFailed && state.autosaveRetryable ? retryAutosave(state) : null,
     scheduleAutosave,
     saveDraft,
-    saveSuggestion,
+    keepReview,
+    undoReview,
     setStatus,
     showBasis,
     taggerize,
