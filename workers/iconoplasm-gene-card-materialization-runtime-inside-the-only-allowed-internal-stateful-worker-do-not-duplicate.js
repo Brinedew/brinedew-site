@@ -7,6 +7,7 @@
 // ARCHITECTURE FENCE [IPD-011]: the fingerprint is derived from the exact
 // published card payload. This module never reconstructs a winner from votes.
 
+import { BROWSER_RENDERING_OPERATOR_DAILY_SECONDS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
 
 export const ICONOPLASM_GENE_CARD_QUEUE_BINDING = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
@@ -18,9 +19,11 @@ export const ICONOPLASM_GENE_BLOT_RENDERER_REVISION = "gene-blot-v2-2026-08-24-g
 export const ICONOPLASM_GENE_BLOT_WIDTH = 768
 export const ICONOPLASM_GENE_BLOT_HEIGHT = 1024
 
-const MAX_DAILY_BROWSER_SECONDS = 480
-const MAX_DAILY_BROWSER_LAUNCHES = 8
+const MAX_DAILY_BROWSER_SECONDS = BROWSER_RENDERING_OPERATOR_DAILY_SECONDS
 const RESERVED_SECONDS_PER_LAUNCH = 60
+const MAX_DAILY_BROWSER_LAUNCHES = Math.floor(
+  MAX_DAILY_BROWSER_SECONDS / RESERVED_SECONDS_PER_LAUNCH,
+)
 const MIN_LAUNCH_INTERVAL_SECONDS = 25
 const LEASE_SECONDS = 180
 const MAX_ATTEMPTS = 5

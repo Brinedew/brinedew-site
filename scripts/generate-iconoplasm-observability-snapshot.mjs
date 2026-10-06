@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url"
 import toml from "toml"
 
 import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
-import { d1DailyAllowance, FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import {
+  d1DailyAllowance,
+  FREE_D1_DAILY_LIMITS,
+  FREE_PLAN_DAILY_LIMITS,
+  FREE_PLAN_UNSAMPLED_DAILY_LIMITS,
+} from "../shared/iconoplasm-d1-budget-policy.js"
 
 const GRAPHQL_ENDPOINT = "https://api.cloudflare.com/client/v4/graphql"
 const LOOKBACK_DAYS = 14
@@ -99,7 +104,7 @@ const DURABLE_OBJECT_INVOCATIONS_QUERY = `query IconoplasmDOInvocations($account
 // Cloudflare's free-tier SQLite-backed Durable Objects really do clamp at
 // 100,000 rows_written per day. Keep this number loud in the baked snapshot so
 // the admin can show the real wall instead of drifting back into vague totals.
-const DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT = 100000
+const DURABLE_OBJECT_ROWS_WRITTEN_DAILY_LIMIT = FREE_PLAN_DAILY_LIMITS.do_rows_written
 
 const DURABLE_OBJECT_PERIODIC_QUERY = `query IconoplasmDOPeriodic($accountTag: string, $startDate: Date, $endDate: Date) {
   viewer {
@@ -235,7 +240,7 @@ const PLATFORM_USAGE_QUERY = `query IconoplasmPlatformUsage($accountTag: string,
 }`
 
 const DURABLE_OBJECT_CLASS_NAMES = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
-const WORKERS_OBSERVABILITY_DAILY_LIMIT_EVENTS = 200000
+const WORKERS_OBSERVABILITY_DAILY_LIMIT_EVENTS = FREE_PLAN_UNSAMPLED_DAILY_LIMITS.workers_log_events
 
 function parseArgs(argv) {
   let envName = "production"
@@ -884,7 +889,7 @@ async function fetchPlatformUsageSnapshot({ apiToken, accountId, startDate, endD
   const pagesFunctionsDaily = sortedDailyRows(pagesDays)
   return {
     workers: {
-      dailyLimitRequests: 100000,
+      dailyLimitRequests: FREE_PLAN_DAILY_LIMITS.requests,
       currentDay: workersDaily[workersDaily.length - 1] || null,
       totals: sumDaily(workersDaily, [
         "requests",
@@ -896,8 +901,8 @@ async function fetchPlatformUsageSnapshot({ apiToken, accountId, startDate, endD
       daily: workersDaily,
     },
     kv: {
-      dailyLimitReads: 100000,
-      dailyLimitWritesListsDeletes: 1000,
+      dailyLimitReads: FREE_PLAN_DAILY_LIMITS.kv_reads,
+      dailyLimitWritesListsDeletes: FREE_PLAN_DAILY_LIMITS.kv_writes,
       currentDay: kvDaily[kvDaily.length - 1] || null,
       totals: sumDaily(kvDaily, [
         "requests",
@@ -911,7 +916,7 @@ async function fetchPlatformUsageSnapshot({ apiToken, accountId, startDate, endD
       daily: kvDaily,
     },
     queues: {
-      dailyLimitBillableOperations: 10000,
+      dailyLimitBillableOperations: FREE_PLAN_DAILY_LIMITS.queue_operations,
       currentDay: queuesDaily[queuesDaily.length - 1] || null,
       totals: sumDaily(queuesDaily, [
         "billableOperations",
@@ -1534,6 +1539,7 @@ async function main() {
     schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     environment: envName,
+    freePlanDailyLimits: { ...FREE_PLAN_DAILY_LIMITS, ...FREE_PLAN_UNSAMPLED_DAILY_LIMITS },
     providerAdmission: {
       accountId,
       dayKey: d1.cycleEndDate,
