@@ -1722,14 +1722,27 @@ function iconoplasmBudgetActorClassFromRequest(request, path) {
   return "anonymous_public"
 }
 
+// B-1026: a credentialed workstation or admin caller says when a request is
+// part of a player's delivery (X-Iconoplasm-Criticality: critical). The policy
+// honours it only on the delivery-publication routes.
+function iconoplasmDeclaredCriticalityFromRequest(request, actorClass) {
+  if (actorClass !== "admin_token" && actorClass !== "service_bearer") return null
+  const declared = String(request.headers.get("x-iconoplasm-criticality") || "")
+    .trim()
+    .toLowerCase()
+  return declared === "critical" ? "critical" : null
+}
+
 export function iconoplasmD1BudgetAttributionFromRequest(request) {
   const path = new URL(request.url).pathname
   const routeFamily = iconoplasmBudgetRouteFamilyFromPath(path)
+  const actorClass = iconoplasmBudgetActorClassFromRequest(request, path)
   return {
     route_family: routeFamily,
     budget_class: iconoplasmBudgetClassFromRouteFamily(routeFamily),
-    actor_class: iconoplasmBudgetActorClassFromRequest(request, path),
+    actor_class: actorClass,
     source_class: iconoplasmBudgetSourceClassFromRequest(request, path, routeFamily),
+    declared_criticality: iconoplasmDeclaredCriticalityFromRequest(request, actorClass),
   }
 }
 
@@ -1789,12 +1802,13 @@ function isIconoplasmBackgroundBudgetedRouteFamily(routeFamily) {
   return ICONOPLASM_BACKGROUND_BUDGETED_ROUTE_FAMILIES.has(String(routeFamily || "").trim())
 }
 
-function iconoplasmBackgroundBudgetAttribution(routeFamily) {
+function iconoplasmBackgroundBudgetAttribution(routeFamily, { declaredCriticality = null } = {}) {
   return {
     route_family: String(routeFamily || "").trim(),
     budget_class: "background",
     actor_class: "background_worker",
     source_class: "background_queue",
+    declared_criticality: declaredCriticality === "critical" ? "critical" : null,
   }
 }
 
@@ -2402,7 +2416,10 @@ async function iconoplasmD1DailyBudgetRecordUsage(state, { rowsRead = 0, rowsWri
 // B-1026: a request whose tier's share of the day is spent is refused like an
 // exhausted day, naming the tier, before its next query as well as at the start.
 function assertIconoplasmD1CriticalityShareAvailable(snapshot, attribution) {
-  const criticality = d1CriticalityOfRouteFamily(attribution?.route_family)
+  const criticality = d1CriticalityOfRouteFamily(
+    attribution?.route_family,
+    attribution?.declared_criticality,
+  )
   const shedBy = d1CriticalityShedBy(snapshot, criticality)
   if (!shedBy) return
   throw new IconoplasmD1DailyBudgetExceededError({
@@ -18985,7 +19002,14 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
     env = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
       env,
       null,
-      iconoplasmBackgroundBudgetAttribution("background_sync_finalization"),
+      // A message the drain enqueued for a player's delivery carries
+      // drain_scoped_phases (one message per batch), and is critical.
+      iconoplasmBackgroundBudgetAttribution("background_sync_finalization", {
+        declaredCriticality:
+          messages.length === 1 && messages[0]?.body?.drain_scoped_phases === true
+            ? "critical"
+            : null,
+      }),
     )
   } catch (error) {
     if (!isIconoplasmDailyBudgetError(error)) throw error
