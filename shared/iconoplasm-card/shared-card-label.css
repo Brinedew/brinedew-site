@@ -377,11 +377,15 @@
   opacity: 1;
 }
 
+/* B-1038: the name keeps at least 9 characters of width; a symbol too long to sit
+   beside it drops to its own line under the name instead of crushing the name into
+   a column one letter wide. */
 .icono-image-only-caption-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   column-gap: clamp(0.85rem, 3.2cqw, 1.4rem);
+  row-gap: 0.2rem;
   width: 100%;
 }
 
@@ -391,7 +395,8 @@
   line-height: 0.9;
   letter-spacing: -0.05em;
   text-align: right;
-  justify-self: end;
+  flex: 0 1 auto;
+  margin-inline-start: auto;
   text-shadow:
     0 1px 0 rgba(13, 9, 7, 0.4),
     0 8px 18px rgba(8, 5, 4, 0.38);
@@ -401,6 +406,8 @@
   color: rgba(250, 238, 222, 0.92);
   font-size: clamp(0.9rem, 3.2cqw, 1.12rem);
   line-height: 1.22;
+  flex: 1 1 9ch;
+  min-inline-size: 9ch;
   max-inline-size: 20ch;
   text-align: left;
   text-wrap: pretty;
