@@ -11,8 +11,19 @@
 // The 15 minutes cover analytics lag: once the provider meter can see an
 // operation's real writes, its worst-case receipt stops counting. An uncertain
 // reservation is never cleared or refunded; it simply ages into the meter.
-// With no observation today the baseline is midnight's exact zero and every
-// receipt since midnight counts, so unknown capacity is never assumed.
+//
+// The other side is the local tally, which is live: a completed operation's
+// real writes are already in it, so only reservations still open count on top
+// (B-1036). The pressure is the larger of the two sides:
+//
+//   max(provider sample + receipts since sample - 15 min,
+//       local tally     + receipts still open)
+//
+// On 2026-10-06 the provider sample was missing all day and the old formula
+// added every receipt since midnight to a tally that already held their real
+// writes: 49,300 written plus 72,380 reserved read as 121,680, and the B-994
+// rewrites were refused with the day half used. user_action work is not in the
+// local tally, so its receipts always count on that side.
 //
 // B-897 (30 Sep 2026): the previous four fixed lanes summed every reservation
 // *started* today at worst case and never subtracted. 200 retried 50-unit
@@ -43,6 +54,9 @@ const LANES = new Set(Object.keys(MUTATION_LANE_CEILINGS))
 const PRESSURE_SQL = `SELECT COALESCE(SUM(reserved_units), 0) AS units
    FROM daily_mutation_pressure_buckets
    WHERE day = ? AND bucket_start >= ?`
+const OPEN_UNITS_SQL = `SELECT COALESCE(SUM(reserved_units), 0) AS units
+   FROM daily_mutation_lane_reservations
+   WHERE day = ? AND (status = 'reserved' OR lane = 'user_action')`
 
 function bucketStart(ms) {
   // "YYYY-MM-DDTHH:MM", UTC, floored to the bucket; sorts lexicographically.
@@ -69,12 +83,14 @@ function pressureWindow(day, { provider_rows_written, local_rows_written, observ
     Number.isFinite(observedMs) &&
     new Date(observedMs).toISOString().slice(0, 10) === day &&
     observedMs <= nowMs + MUTATION_OBSERVATION_FUTURE_TOLERANCE_MS
+  const provider = observed ? Math.max(0, Number(provider_rows_written || 0) || 0) : 0
+  const local = Math.max(0, Number(local_rows_written || 0) || 0)
   return {
     nowMs,
-    baseline: Math.max(
-      observed ? Math.max(0, Number(provider_rows_written || 0) || 0) : 0,
-      Math.max(0, Number(local_rows_written || 0) || 0),
-    ),
+    observed,
+    provider,
+    local,
+    baseline: Math.max(provider, local),
     observed_at: observed ? new Date(observedMs).toISOString() : null,
     from: bucketStart(
       Math.max(midnight, observed ? observedMs - MUTATION_ANALYTICS_LAG_MS : midnight),
@@ -243,7 +259,7 @@ export class DailyMutationLaneReservations {
       }
 
       const window = pressureWindow(day, input)
-      const inFlightUnits = this.inFlightUnits(day, window.from)
+      const inFlightUnits = this.pressureOf(day, window) - window.baseline
       const ceiling = MUTATION_LANE_CEILINGS[lane]
       const pressure = window.baseline + inFlightUnits + units
       if (pressure > ceiling) {
@@ -298,6 +314,19 @@ export class DailyMutationLaneReservations {
 
   inFlightUnits(day, from) {
     return Math.max(0, Number(this.row(PRESSURE_SQL, day, from)?.units || 0) || 0)
+  }
+
+  openUnits(day) {
+    return Math.max(0, Number(this.row(OPEN_UNITS_SQL, day)?.units || 0) || 0)
+  }
+
+  // max(provider sample + receipts since its window, local tally + open receipts)
+  pressureOf(day, window) {
+    const providerSide = window.observed
+      ? window.provider + this.inFlightUnits(day, window.from)
+      : 0
+    const localSide = window.local + this.openUnits(day)
+    return Math.max(providerSide, localSide, window.baseline)
   }
 
   complete(input) {
@@ -426,8 +455,8 @@ export class DailyMutationLaneReservations {
   snapshot(day, observation = {}) {
     const safeDay = cleanDay(day)
     const window = pressureWindow(safeDay, observation)
-    const inFlightUnits = this.inFlightUnits(safeDay, window.from)
-    const pressure = window.baseline + inFlightUnits
+    const pressure = this.pressureOf(safeDay, window)
+    const inFlightUnits = pressure - window.baseline
     return {
       day: safeDay,
       provider_limit: D1_PROVIDER_DAILY_WRITE_LIMIT,
