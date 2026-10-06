@@ -4,9 +4,42 @@ Set-StrictMode -Version Latest
 # account capacity required to keep the public dynamic site reachable.
 
 $script:CloudflareWorkerRequestBudgetSchemaVersion = 1
-$script:CloudflareWorkerRequestBudgetMaximum = 2500
 $script:CloudflareWorkerRequestBudgetLockTimeoutSeconds = 10
-$script:CloudflareWorkerRequestTelemetryCeiling = 75000
+
+# B-1036: the operator's ceilings live once, in shared/iconoplasm-d1-budget-policy.js.
+# This file reads them through Node instead of keeping copies; a copy here once held
+# the old 2,500-request cap after the Website had moved on. No policy, no request.
+function Get-IconoplasmBudgetPolicy {
+    $policyPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' 'shared' 'iconoplasm-d1-budget-policy.js') -ErrorAction Stop).Path
+    # Node turns the plain path into a file URL itself, and the path travels in the
+    # environment: on Linux CI, pwsh dropped a trailing Node argument and .NET's
+    # [Uri] produced an unusable URL.
+    $reader = "import { pathToFileURL } from 'node:url'; const p = await import(pathToFileURL(process.env.ICONOPLASM_BUDGET_POLICY_PATH).href); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))"
+    $previousPath = $env:ICONOPLASM_BUDGET_POLICY_PATH
+    $env:ICONOPLASM_BUDGET_POLICY_PATH = $policyPath
+    try {
+        $json = & node --input-type=module -e $reader
+    }
+    finally {
+        $env:ICONOPLASM_BUDGET_POLICY_PATH = $previousPath
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string] $json)) {
+        throw 'The Iconoplasm budget policy could not be read; no operator request was sent.'
+    }
+    $policy = $json | ConvertFrom-Json -ErrorAction Stop
+    foreach ($value in @($policy.requests, $policy.account.rows_read, $policy.account.rows_written, $policy.account.requests)) {
+        if ($null -eq $value -or [int64] $value -lt 1) {
+            throw 'The Iconoplasm budget policy is incomplete; no operator request was sent.'
+        }
+    }
+    return $policy
+}
+
+$script:IconoplasmBudgetPolicy = Get-IconoplasmBudgetPolicy
+$script:CloudflareWorkerRequestBudgetMaximum = [int] $script:IconoplasmBudgetPolicy.requests
+$script:CloudflareWorkerRequestTelemetryCeiling = [int] $script:IconoplasmBudgetPolicy.account.requests
+$script:CloudflareD1AccountReadCeiling = [int64] $script:IconoplasmBudgetPolicy.account.rows_read
+$script:CloudflareD1AccountWriteCeiling = [int64] $script:IconoplasmBudgetPolicy.account.rows_written
 
 function Assert-CloudflareD1AccountHeadroom {
     [CmdletBinding()]
@@ -37,8 +70,10 @@ function Assert-CloudflareD1AccountHeadroom {
         $reads += [int64] $row.sum.rowsRead
         $writes += [int64] $row.sum.rowsWritten
     }
-    if ($reads -ge 3500000 -or $writes -ge 70000) {
-        throw "D1 admission refused: account has $reads reads and $writes writes on $UtcDay UTC; operator ceilings are 3500000 reads and 70000 writes. No operator request was sent. Investigate consumption before resuming."
+    $readCeiling = $script:CloudflareD1AccountReadCeiling
+    $writeCeiling = $script:CloudflareD1AccountWriteCeiling
+    if ($reads -ge $readCeiling -or $writes -ge $writeCeiling) {
+        throw "D1 admission refused: account has $reads reads and $writes writes on $UtcDay UTC; operator ceilings are $readCeiling reads and $writeCeiling writes. No operator request was sent. Investigate consumption before resuming."
     }
     return [pscustomobject]@{ observed_d1_reads = $reads; observed_d1_writes = $writes }
 }
@@ -46,9 +81,12 @@ function Assert-CloudflareD1AccountHeadroom {
 function Assert-CloudflareWorkerRequestHeadroom {
     [CmdletBinding()]
     param(
-        [ValidateRange(1, 75000)][int] $SafeAccountRequestCeiling = $script:CloudflareWorkerRequestTelemetryCeiling,
+        [ValidateRange(1, [int]::MaxValue)][int] $SafeAccountRequestCeiling = $script:CloudflareWorkerRequestTelemetryCeiling,
         [ValidateRange(5, 60)][int] $TimeoutSeconds = 20
     )
+    if ($SafeAccountRequestCeiling -gt $script:CloudflareWorkerRequestTelemetryCeiling) {
+        throw "The account request ceiling cannot exceed the policy's $($script:CloudflareWorkerRequestTelemetryCeiling). No Worker request was sent."
+    }
 
     $apiToken = [Environment]::GetEnvironmentVariable('CLOUDFLARE_API_TOKEN', 'User')
     $accountId = [Environment]::GetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', 'User')
@@ -193,8 +231,8 @@ function Resolve-CloudflareWorkerRequestBudgetPath {
 function Reserve-CloudflareWorkerRequests {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidateRange(1, 2500)][int] $Count,
-        [ValidateRange(1, 2500)][int] $DailyLimit = 2500,
+        [Parameter(Mandatory)][ValidateRange(1, [int]::MaxValue)][int] $Count,
+        [ValidateRange(1, [int]::MaxValue)][int] $DailyLimit = $script:CloudflareWorkerRequestBudgetMaximum,
         [string] $StatePath,
         [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string] $Operation
     )
