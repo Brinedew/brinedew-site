@@ -12,8 +12,9 @@ $script:CloudflareWorkerRequestBudgetLockTimeoutSeconds = 10
 function Get-IconoplasmBudgetPolicy {
     $policyPath = Join-Path $PSScriptRoot '..' '..' 'shared' 'iconoplasm-d1-budget-policy.js'
     $policyUrl = ([Uri] (Resolve-Path -LiteralPath $policyPath -ErrorAction Stop).Path).AbsoluteUri
-    $reader = 'const p = await import(process.argv[1]); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))'
-    $json = & node --input-type=module -e $reader $policyUrl
+    # The URL goes inside the snippet: Node received no extra argument under pwsh on Linux.
+    $reader = "const p = await import('$policyUrl'); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))"
+    $json = & node --input-type=module -e $reader
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string] $json)) {
         throw 'The Iconoplasm budget policy could not be read; no operator request was sent.'
     }
