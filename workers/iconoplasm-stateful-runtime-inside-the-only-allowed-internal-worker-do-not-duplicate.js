@@ -2622,6 +2622,7 @@ async function iconoplasmAdminMutationLimiterPolicyWithSnapshotFromEnv(env) {
       cycle_key: budgets.cycleInfo.cycleKey,
       budgets,
       days_remaining_in_cycle: budgets.cycleInfo.daysRemainingInCycle,
+      observe_provider: true,
     })
   } catch (error) {
     if (!isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)) {
@@ -15783,7 +15784,10 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
         token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
       })
     this.mutationReservations = new DailyMutationLaneReservations(state.storage)
+    // B-1036: one reader of the provider meter for the lanes and the ledger, so both
+    // see the same sample and share one rate limit.
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
+      usage: this.accountUsage,
       initializeCatalog: initializePublishedHydratedCatalog,
       onAuthorityEvent: (event, scopedEnv) =>
         projectAcceptedManifestationAuthorityEvent(scopedEnv, event),
@@ -16037,7 +16041,11 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
           source: "projected_provider",
         })
       }
-    } catch {}
+    } catch (error) {
+      console.warn("[mutation-lanes] projected provider sample unreadable", {
+        code: String(error?.code || error?.name || "kv_read_failed").slice(0, 80),
+      })
+    }
     if (fresh(this.providerObservationCache)) return this.providerObservationCache
 
     // The scheduled projection is a cache, not the authority: GitHub runs its
@@ -16052,7 +16060,9 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
           source: "live_provider",
         })
       }
-    } catch {}
+    } catch {
+      // The reader logs why it had no sample (operation-cost-account-usage.js).
+    }
     return this.providerObservationCache?.day_key === dayKey ? this.providerObservationCache : null
   }
 
@@ -16343,6 +16353,11 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     }
 
     if (url.pathname === "/snapshot") {
+      // B-1036: the admin view used to print only the in-memory cache, which is empty
+      // whenever this object has just woken, so it read "observed_at: null" while the
+      // reservations sampled fine. It asks for the same observation they use. The
+      // budget wrapper on every mutation doesn't ask, so it never waits on GraphQL.
+      if (payload?.observe_provider === true) await this.providerD1Observation(dayKey)
       return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
     }
 

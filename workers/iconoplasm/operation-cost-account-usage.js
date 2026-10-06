@@ -132,7 +132,13 @@ export function createOperationCostAccountUsageReader({
           }
           snapshot = next
           return snapshot
-        } catch {
+        } catch (error) {
+          // B-1036: say why there's no sample. A silent catch here hid a whole day of
+          // "no provider sample" behind a guess. At most one line per 30 seconds.
+          console.warn("[operation-cost] account usage sample failed", {
+            code: String(error?.code || error?.name || "unknown").slice(0, 80),
+            message: String(error?.message || "").slice(0, 160),
+          })
           snapshot = null
           retryAfter = now() + 30_000
           throw unavailable()

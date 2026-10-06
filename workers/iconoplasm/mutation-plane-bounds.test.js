@@ -631,6 +631,48 @@ test("a late projection is refreshed once from the live provider authority", asy
   assert.equal(refreshes, 1)
 })
 
+// B-1036: on 2026-10-06 the admin view showed "observed_at: null" all day because it
+// printed only the in-memory cache of a freshly woken object. Fails if the admin view
+// stops asking the provider, or if the budget wrapper on every mutation starts waiting
+// on it.
+test("the admin lane snapshot asks the provider; the mutation hot path never does", async (t) => {
+  const raw = new DatabaseSync(":memory:")
+  t.after(() => raw.close())
+  const day = new Date().toISOString().slice(0, 10)
+  let refreshes = 0
+  const owner = budgetOwner(
+    raw,
+    {
+      KV: providerObservationKv({ generatedAt: new Date(Date.now() - 91 * 60_000).toISOString() }),
+    },
+    {
+      accountUsage: {
+        async refresh() {
+          refreshes += 1
+          return { day, measured_at: Date.now(), rows_read: 0, rows_written: 4_321, requests: 1 }
+        },
+      },
+    },
+  )
+  const snapshot = (body) =>
+    owner
+      .fetch(
+        new Request("https://iconoplasm-d1-daily-budget-kill-switch/snapshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ day_key: day, cycle_key: day, ...body }),
+        }),
+      )
+      .then((response) => response.json())
+  const hot = await snapshot({})
+  assert.equal(refreshes, 0, "the budget wrapper's snapshot must not wait on GraphQL")
+  assert.equal(hot.mutation_lanes.observed_at, null)
+  const admin = await snapshot({ observe_provider: true })
+  assert.equal(refreshes, 1)
+  assert.equal(admin.mutation_lanes.provider_rows_written, 4_321)
+  assert.notEqual(admin.mutation_lanes.observed_at, null)
+})
+
 test("a failed live refresh keeps the last good same-day observation", async (t) => {
   // A stale same-day sample needs a clock at least five minutes past midnight;
   // the real clock gives none in the first minutes of a UTC day, when the
