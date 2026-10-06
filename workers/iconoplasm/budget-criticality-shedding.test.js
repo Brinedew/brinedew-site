@@ -234,9 +234,9 @@ test("at 86% of the day's writes the drain's publication of a delivery runs; a b
   assert.equal(bulk.status, 503, JSON.stringify(bulk))
 })
 
-// The finalization phases of a delivery call reconcile and the read-model sync
-// in-process. They now receive the delivery's criticality; these are the two
-// routes on the other side of that call.
+// During a delivery's publication the workstation declares every admin call
+// critical, including reconcile and the read-model sync. Those two routes used
+// to ignore the declaration and pause the delivery at 85%.
 test("at 86% of the day's writes a delivery's finalization phases run; a bulk sync's pause", async (t) => {
   const call = async (path, payload, declared) => {
     const f = fixture(t, { rowsWritten: 0.86 * OPERATOR_WRITES })
