@@ -15,9 +15,21 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm-authoring/0023_saves_without_upload_reservations.sql": {
+    "iconoplasm-authoring/0024_restore_cropped_seed_bodies_q1.sql": {
       "online": true,
-      "prediction": { "rows_read": 1000, "rows_written": 100, "requests": 1 }
+      "prediction": {
+        "rows_read": 35000,
+        "rows_written": 7600,
+        "requests": 1
+      }
+    },
+    "iconoplasm/0117_restore_cropped_seed_projection_q1.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 10000,
+        "rows_written": 2600,
+        "requests": 1
+      }
     }
   }
 }
