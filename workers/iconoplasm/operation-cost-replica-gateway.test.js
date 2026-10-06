@@ -26,7 +26,7 @@ function replicaRequest() {
 }
 
 for (const code of ["COST_SHARED_DAILY_LIMIT", "COST_ACCOUNT_HEADROOM_LIMIT"]) {
-  test(`${code} says when to retry: at the next UTC reset`, async () => {
+  test(`${code} says when to retry`, async () => {
     const response = await forwardReplicaCostRequest(replicaRequest(), env, authorityRefusing(code))
     assert.equal(response.status, 503)
     const body = await response.json()
@@ -36,6 +36,18 @@ for (const code of ["COST_SHARED_DAILY_LIMIT", "COST_ACCOUNT_HEADROOM_LIMIT"]) {
     assert.equal(header > 0 && header <= 86_405, true, `Retry-After ${header}`)
   })
 }
+
+// B-1036, 2026-10-06: "midnight" for the account check parked the workstation's text pulls
+// for ten hours; that refusal clears once the provider sample catches up, within one lag.
+test("the account check says come back after one analytics lag, not at midnight", async () => {
+  const response = await forwardReplicaCostRequest(
+    replicaRequest(),
+    env,
+    authorityRefusing("COST_ACCOUNT_HEADROOM_LIMIT"),
+  )
+  const header = Number(response.headers.get("Retry-After"))
+  assert.equal(header <= 900, true, `Retry-After ${header}`)
+})
 
 test("a refusal that is not daily states no retry time", async () => {
   const response = await forwardReplicaCostRequest(
