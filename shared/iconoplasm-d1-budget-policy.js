@@ -25,6 +25,20 @@ export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes
 // first when readers fill the account.
 export const OPERATOR_DAILY_REQUEST_LIMIT = 10_000
 
+// Readers' own D1 writes (discoveries, votes) may push the account to 90,000 of the
+// Free plan's 100,000, so a reader always keeps a band that operator work, stopped at
+// D1_OPERATOR_DAILY_LIMITS.writes (70,000), can't take (B-897).
+export const D1_USER_ACTION_DAILY_WRITE_CEILING = 90_000
+
+// Operator work also stops when the whole account, readers included, reaches these
+// (the operation-cost ledger and its release scripts read them). Reads: 3.5M of the
+// Free plan's 5M; Workers requests: 75,000 of 100,000.
+export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
+  rows_read: 3_500_000,
+  rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
+  requests: 75_000,
+})
+
 export function d1OperationalAllowance(options) {
   return Math.min(d1DailyAllowance(options), D1_OPERATOR_DAILY_LIMITS[options.resource])
 }
