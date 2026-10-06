@@ -5,7 +5,26 @@
 // Used by both the runtime governor and the out-of-band cost cockpit generator.
 // This calculation creates no per-reader accounting requests or writes.
 // https://developers.cloudflare.com/d1/platform/pricing/
-export const FREE_D1_DAILY_LIMITS = Object.freeze({ reads: 5_000_000, writes: 100_000 })
+// The Cloudflare Free plan's daily allowance for every provider meter we watch. Read by
+// the CI account watcher and the operator ledger; nothing else may restate them.
+export const FREE_PLAN_DAILY_LIMITS = Object.freeze({
+  rows_read: 5_000_000,
+  rows_written: 100_000,
+  requests: 100_000,
+  kv_reads: 100_000,
+  kv_writes: 1_000,
+  kv_deletes: 1_000,
+  kv_lists: 1_000,
+  do_rows_read: 5_000_000,
+  do_rows_written: 100_000,
+  do_requests: 100_000,
+  do_duration_gb_seconds: 13_000,
+  queue_operations: 10_000,
+})
+export const FREE_D1_DAILY_LIMITS = Object.freeze({
+  reads: FREE_PLAN_DAILY_LIMITS.rows_read,
+  writes: FREE_PLAN_DAILY_LIMITS.rows_written,
+})
 
 // ARCHITECTURE FENCE [IPD-012]: the administrative/authoring ledger covers
 // only its own traffic. Giving it the entire account allowance starves login,
@@ -37,6 +56,22 @@ export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
   rows_read: 3_500_000,
   rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
   requests: 75_000,
+})
+
+// Operator KV work, kept apart from the D1 allowance in the same ledger: a protected
+// operator share of each KV meter, and the account level at which operator KV work
+// stops so readers keep the rest.
+export const KV_OPERATOR_LIMITS = Object.freeze({
+  kv_reads: 10_000,
+  kv_writes: 200,
+  kv_deletes: 100,
+  kv_lists: 100,
+})
+export const KV_ACCOUNT_CEILINGS = Object.freeze({
+  kv_reads: 70_000,
+  kv_writes: 700,
+  kv_deletes: 700,
+  kv_lists: 700,
 })
 
 export function d1OperationalAllowance(options) {
