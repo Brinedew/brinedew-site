@@ -1,6 +1,6 @@
 /* GENERATED FILE. Edit shared/iconoplasm-card/lit-archival-card.js and rerun node scripts/sync-iconoplasm-shared.mjs. */
 
-// node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/css-tag.js
+// ../../Website/node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/css-tag.js
 var t = globalThis;
 var e = t.ShadowRoot && (void 0 === t.ShadyCSS || t.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype;
 var s = /* @__PURE__ */ Symbol();
@@ -37,7 +37,7 @@ var c = e ? (t4) => t4 : (t4) => t4 instanceof CSSStyleSheet ? ((t5) => {
   return r(e6);
 })(t4) : t4;
 
-// node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/reactive-element.js
+// ../../Website/node_modules/.pnpm/@lit+reactive-element@2.1.2/node_modules/@lit/reactive-element/reactive-element.js
 var { is: i2, defineProperty: e2, getOwnPropertyDescriptor: h, getOwnPropertyNames: r2, getOwnPropertySymbols: o2, getPrototypeOf: n2 } = Object;
 var a = globalThis;
 var c2 = a.trustedTypes;
@@ -259,7 +259,7 @@ var y = class extends HTMLElement {
 };
 y.elementStyles = [], y.shadowRootOptions = { mode: "open" }, y[d("elementProperties")] = /* @__PURE__ */ new Map(), y[d("finalized")] = /* @__PURE__ */ new Map(), p?.({ ReactiveElement: y }), (a.reactiveElementVersions ??= []).push("2.1.2");
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
+// ../../Website/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/lit-html.js
 var t2 = globalThis;
 var i3 = (t4) => t4;
 var s2 = t2.trustedTypes;
@@ -513,7 +513,7 @@ var D = (t4, i6, s4) => {
   return h3._$AI(t4), h3;
 };
 
-// node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
+// ../../Website/node_modules/.pnpm/lit-element@4.2.2/node_modules/lit-element/lit-element.js
 var s3 = globalThis;
 var i4 = class extends y {
   constructor() {
@@ -542,7 +542,7 @@ var o4 = s3.litElementPolyfillSupport;
 o4?.({ LitElement: i4 });
 (s3.litElementVersions ??= []).push("4.2.2");
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
+// ../../Website/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directive.js
 var t3 = { ATTRIBUTE: 1, CHILD: 2, PROPERTY: 3, BOOLEAN_ATTRIBUTE: 4, EVENT: 5, ELEMENT: 6 };
 var e4 = (t4) => (...e6) => ({ _$litDirective$: t4, values: e6 });
 var i5 = class {
@@ -562,7 +562,7 @@ var i5 = class {
   }
 };
 
-// node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/unsafe-html.js
+// ../../Website/node_modules/.pnpm/lit-html@3.3.3/node_modules/lit-html/directives/unsafe-html.js
 var e5 = class extends i5 {
   constructor(i6) {
     if (super(i6), this.it = A, i6.type !== t3.CHILD) throw Error(this.constructor.directiveName + "() can only be used in child bindings");
@@ -580,7 +580,26 @@ var e5 = class extends i5 {
 e5.directiveName = "unsafeHTML", e5.resultType = 1;
 var o5 = e4(e5);
 
+// shared/iconoplasm-card/symbol-breaks.js
+var BREAK_AFTER_NUMBER = /(?<=\d)(?=[A-Za-z]{2})/;
+var ANY_BREAK = /(?<=-)|(?<=\d)(?=[A-Za-z]{2})/;
+function symbolBreakParts(symbol) {
+  const text = String(symbol || "");
+  const parts = text.split(BREAK_AFTER_NUMBER);
+  const pieces = text.split(ANY_BREAK);
+  return { parts, longest: Math.max(1, ...pieces.map((piece) => piece.length)) };
+}
+
 // shared/iconoplasm-card/lit-archival-card.js
+function imageOnlySymbol(symbol) {
+  const { parts, longest } = symbolBreakParts(symbol);
+  return b2`<div
+    class="icono-label-symbol icono-image-only-symbol"
+    style=${"--icono-symbol-segment:" + longest}
+  >
+    ${parts.map((part, index) => index ? b2`<wbr />${part}` : part)}
+  </div>`;
+}
 var MODEL_ATTR = "data-icono-lit-archival-model";
 var MODEL_SELECTOR = 'script[type="application/json"][data-icono-lit-archival-model]';
 var roughLoopSerial = 0;
@@ -981,7 +1000,7 @@ function imageOnlyTemplate(model) {
   var overlay = b2`<div class="icono-image-only-overlay">
     <div class="icono-image-only-caption-row">
       <div class="icono-label-name icono-image-only-name">${model.fullName || model.symbol}</div>
-      <div class="icono-label-symbol icono-image-only-symbol">${model.symbol}</div>
+      ${imageOnlySymbol(model.symbol)}
     </div>
   </div>`;
   if (href) {

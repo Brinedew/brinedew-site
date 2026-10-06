@@ -270,9 +270,9 @@
       '<div class="icono-label-name icono-image-only-name">' +
       esc(fullName || symbol) +
       "</div>" +
-      '<div class="icono-label-symbol icono-image-only-symbol">' +
-      esc(symbol) +
-      "</div>" +
+      (shared && shared.imageOnlySymbolHtml
+        ? shared.imageOnlySymbolHtml(symbol)
+        : '<div class="icono-label-symbol icono-image-only-symbol">' + esc(symbol) + "</div>") +
       "</div>" +
       "</div>"
     const bodyHtml = '<div class="' + stageClass + '">' + mediaHtml + "</div>" + overlayHtml

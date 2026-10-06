@@ -1,6 +1,18 @@
 import { html, nothing, render } from "lit"
 import { unsafeHTML } from "lit/directives/unsafe-html.js"
 
+import { symbolBreakParts } from "./symbol-breaks.js"
+
+function imageOnlySymbol(symbol) {
+  const { parts, longest } = symbolBreakParts(symbol)
+  return html`<div
+    class="icono-label-symbol icono-image-only-symbol"
+    style=${"--icono-symbol-segment:" + longest}
+  >
+    ${parts.map((part, index) => (index ? html`<wbr />${part}` : part))}
+  </div>`
+}
+
 var MODEL_ATTR = "data-icono-lit-archival-model"
 var MODEL_SELECTOR = 'script[type="application/json"][data-icono-lit-archival-model]'
 var roughLoopSerial = 0
@@ -469,7 +481,7 @@ function imageOnlyTemplate(model) {
   var overlay = html`<div class="icono-image-only-overlay">
     <div class="icono-image-only-caption-row">
       <div class="icono-label-name icono-image-only-name">${model.fullName || model.symbol}</div>
-      <div class="icono-label-symbol icono-image-only-symbol">${model.symbol}</div>
+      ${imageOnlySymbol(model.symbol)}
     </div>
   </div>`
   if (href) {

@@ -10630,9 +10630,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-label-name icono-image-only-name">' +
       esc(fullName) +
       "</div>" +
-      '<div class="icono-label-symbol icono-image-only-symbol">' +
-      safeSymbol +
-      "</div></div></div>"
+      (IconoCardShared && IconoCardShared.imageOnlySymbolHtml
+        ? IconoCardShared.imageOnlySymbolHtml(symbol)
+        : '<div class="icono-label-symbol icono-image-only-symbol">' + safeSymbol + "</div>") +
+      "</div></div>"
     return (
       '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-clan-tile" role="listitem">' +
       '<a class="icono-image-only-link" href="/gene/' +

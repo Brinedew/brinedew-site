@@ -379,26 +379,30 @@
   opacity: 1;
 }
 
-/* B-1038: the name keeps at least 9 characters of width; a symbol too long to sit
-   beside it drops to its own line under the name instead of crushing the name into
-   a column one letter wide. */
+/* B-1038: the name keeps at least 9 characters of width beside the symbol. A symbol
+   too long for the rest takes two lines at its breaks (symbol-breaks.js: after a
+   hyphen, between a number and the letters after it); one with no break shrinks
+   just enough to fit. The name never runs under the symbol. */
 .icono-image-only-caption-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(9ch, 1fr) auto;
+  align-items: end;
   column-gap: clamp(0.85rem, 3.2cqw, 1.4rem);
-  row-gap: 0.2rem;
   width: 100%;
 }
 
 .icono-image-only-overlay .icono-image-only-symbol {
   color: rgba(253, 245, 232, 0.96);
-  font-size: clamp(2rem, 11cqw, 3.75rem);
+  /* 104cqw over the longest unbreakable piece keeps a 10- or 11-letter symbol on its
+     line; shorter pieces keep the full size. */
+  font-size: min(clamp(2rem, 11cqw, 3.75rem), calc(104cqw / var(--icono-symbol-segment, 1)));
   line-height: 0.9;
   letter-spacing: -0.05em;
   text-align: right;
-  flex: 0 1 auto;
-  margin-inline-start: auto;
+  justify-self: end;
+  min-inline-size: 0;
+  overflow-wrap: normal;
+  text-wrap: balance;
   text-shadow:
     0 1px 0 rgba(13, 9, 7, 0.4),
     0 8px 18px rgba(8, 5, 4, 0.38);
@@ -408,9 +412,10 @@
   color: rgba(250, 238, 222, 0.92);
   font-size: clamp(0.9rem, 3.2cqw, 1.12rem);
   line-height: 1.22;
-  flex: 1 1 9ch;
-  min-inline-size: 9ch;
+  min-inline-size: 0;
   max-inline-size: 20ch;
+  overflow-wrap: break-word;
+  hyphens: auto;
   text-align: left;
   text-wrap: pretty;
   text-shadow: 0 3px 12px rgba(8, 5, 4, 0.42);

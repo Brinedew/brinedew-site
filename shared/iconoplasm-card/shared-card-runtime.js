@@ -1,4 +1,5 @@
 import { resolveDisplayedColorName } from "./color-name-db.js"
+import { imageOnlySymbolHtml } from "./symbol-breaks.js"
 ;(function (global) {
   "use strict"
 
@@ -1740,9 +1741,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       '<div class="icono-label-name icono-image-only-name">' +
       escapeHtml(model.fullName || model.symbol) +
       "</div>" +
-      '<div class="icono-label-symbol icono-image-only-symbol">' +
-      escapeHtml(model.symbol) +
-      "</div>" +
+      imageOnlySymbolHtml(model.symbol, escapeHtml) +
       "</div>" +
       "</div>"
     if (href) {
@@ -2623,6 +2622,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     resolveApiBase: resolveApiBase,
     fetchJSON: fetchJSON,
     escapeHtml: escapeHtml,
+    imageOnlySymbolHtml: function (symbol) {
+      return imageOnlySymbolHtml(symbol, escapeHtml)
+    },
     normalizedSymbol: normalizedSymbol,
     uniqueDisplayValues: uniqueDisplayValues,
     normalizeCardVariant: normalizeCardVariant,
