@@ -10,6 +10,11 @@ import {
   createPortraitDeliverySession,
   portraitSourceFromUrl,
 } from "../shared/iconoplasm-portrait/portrait-delivery-core.js"
+import {
+  D1_OPERATOR_DAILY_LIMITS,
+  D1_USER_ACTION_DAILY_WRITE_CEILING,
+  FREE_D1_DAILY_LIMITS,
+} from "../shared/iconoplasm-d1-budget-policy.js"
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -322,8 +327,13 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   assert.match(runtime, /lane: "finalization_recovery"/)
   assert.match(runtime, /lane: "laptop_delivery"/)
   // B-897: admission is measured provider pressure, not fixed lane totals.
-  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = 70_000/)
-  assert.match(lanes, /MUTATION_USER_ACTION_CEILING = 90_000/)
+  // B-1036: the lanes take their numbers from the one budget policy, and a reader
+  // always keeps a band above the point where operator work stops.
+  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = D1_OPERATOR_DAILY_LIMITS.writes/)
+  assert.match(lanes, /MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING/)
+  assert.doesNotMatch(lanes, /_CEILING = d/)
+  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING > D1_OPERATOR_DAILY_LIMITS.writes)
+  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING < FREE_D1_DAILY_LIMITS.writes)
   assert.match(lanes, /MUTATION_ANALYTICS_LAG_MS = 15 \* 60_000/)
   assert.doesNotMatch(lanes, /daily_mutation_lane_usage \(/)
   assert.doesNotMatch(runtime, /MUTATION_PROVIDER_OBSERVATION_(MISSING|STALE|MALFORMED)/)
