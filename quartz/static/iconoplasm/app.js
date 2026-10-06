@@ -2903,19 +2903,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function iconoSidebarPanelMarkup() {
     var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
-    if (page === "home") return ""
-    if (page === "gene") {
-      return requestInbox.caretakerPanelMarkup()
-    }
+    // B-996: the caretaking block belongs to the caretaker, so it shows on every
+    // page. It used to show on gene pages only, and a caretaker on the archive
+    // never saw their blot print. Its data comes from the immutable gene file.
+    var caretaker = requestInbox.caretakerPanelMarkup()
     if (page === "404") {
       return (
+        caretaker +
         '<div class="brd-sidebar-section"><div class="brd-sidebar-panel-title">Iconoplasm</div>' +
         '<div class="brd-sidebar-rowlist">' +
         iconoRowMarkup("Page", "Not found") +
         "</div></div>"
       )
     }
-    return ""
+    return caretaker
   }
 
   function renderIconoplasmSidebar() {
