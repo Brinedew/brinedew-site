@@ -117,13 +117,14 @@ test("a pending file older than an applied one, or an unknown applied name, refu
   )
 })
 
+// The ceilings are the one operator allowance (1M reads, 70k writes; B-1035).
 test("the reviewed prediction must fit twice over inside today's live headroom", () => {
   const total = { rows_read: 100000, rows_written: 300 }
   assert.doesNotThrow(() =>
-    admitOnlineMigrations({ total, usage: { rows_read: 1_300_000, rows_written: 13_000 } }),
+    admitOnlineMigrations({ total, usage: { rows_read: 700_000, rows_written: 13_000 } }),
   )
   assert.throws(
-    () => admitOnlineMigrations({ total, usage: { rows_read: 4_400_000, rows_written: 13_000 } }),
+    () => admitOnlineMigrations({ total, usage: { rows_read: 900_000, rows_written: 13_000 } }),
     /MIGRATION_HEADROOM: rows_read/,
   )
   assert.throws(

@@ -3,6 +3,7 @@
 // A caller-supplied bound is NOT proof that an arbitrary SQL query is bounded.
 import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 import { KV_COST_METERS, KV_OPERATOR_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
+import { MUTATION_ANALYTICS_LAG_MS } from "./iconoplasm-mutation-lane-reservations.js"
 
 const METERS = ["rows_read", "rows_written", "requests"]
 const LIMITS = {
@@ -12,10 +13,13 @@ const LIMITS = {
 }
 export const ACCOUNT_CEILINGS = Object.freeze({
   rows_read: 3_500_000,
-  rows_written: 70_000,
+  rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
   requests: 75_000,
 })
 const CONTROL_REQUEST_HEADROOM = 100
+// Shared-usage marks: one per five minutes of activity, so a mark at least one
+// analytics lag old is near at hand during a batch. At most 288 rows a day.
+const SHARED_USAGE_MARK_MS = 5 * 60_000
 
 export class OperationCostError extends Error {
   constructor(code) {
@@ -125,6 +129,12 @@ export class OperationCostLedger {
       rows_written INTEGER NOT NULL, requests INTEGER NOT NULL)`)
     // Additive owned-schema migration: old plans, ceilings and reservations are
     // never rewritten, and old D1-only operations retain their exact documents.
+    // B-1035: the shared (legacy) counter at a moment in time, so the account
+    // check can tell which of those writes the provider's sample already holds.
+    this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_shared_usage_marks (
+      day TEXT NOT NULL, bucket INTEGER NOT NULL, recorded_at INTEGER NOT NULL,
+      rows_read INTEGER NOT NULL, rows_written INTEGER NOT NULL,
+      PRIMARY KEY(day, bucket))`)
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_kv_days (
       day TEXT PRIMARY KEY, usage TEXT NOT NULL)`)
     this.storage.sql.exec(`CREATE TABLE IF NOT EXISTS operation_cost_kv_account_usage (
@@ -304,6 +314,36 @@ export class OperationCostLedger {
     })
   }
 
+  recordSharedUsageMark() {
+    const day = this.day()
+    const other = this.readOtherUsage(day)
+    if (!Number.isSafeInteger(other?.rows_read) || !Number.isSafeInteger(other?.rows_written))
+      return
+    this.storage.sql.exec(
+      `INSERT OR IGNORE INTO operation_cost_shared_usage_marks VALUES (?, ?, ?, ?, ?)`,
+      day,
+      Math.floor(this.now() / SHARED_USAGE_MARK_MS),
+      this.now(),
+      other.rows_read,
+      other.rows_written,
+    )
+  }
+
+  // Shared-counter usage the account sample already contains: the latest mark
+  // taken at least one analytics lag before the sample, never more than it.
+  sharedUsageInAccount(day, account) {
+    const mark = this.row(
+      `SELECT rows_read, rows_written FROM operation_cost_shared_usage_marks
+       WHERE day = ? AND recorded_at <= ? ORDER BY recorded_at DESC LIMIT 1`,
+      day,
+      account.measured_at - MUTATION_ANALYTICS_LAG_MS,
+    )
+    return {
+      rows_read: Math.min(mark?.rows_read ?? 0, account.rows_read),
+      rows_written: Math.min(mark?.rows_written ?? 0, account.rows_written),
+    }
+  }
+
   readPlan(id) {
     const row = this.row("SELECT document FROM operation_cost_plans WHERE id = ?", identity(id))
     requireValue(row, "COST_PREDICTION_NOT_REGISTERED")
@@ -440,6 +480,7 @@ export class OperationCostLedger {
         this.storage.sql.exec("DELETE FROM operation_cost_account_usage WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_kv_days WHERE day < ?", oldest)
         this.storage.sql.exec("DELETE FROM operation_cost_kv_account_usage WHERE day < ?", oldest)
+        this.storage.sql.exec("DELETE FROM operation_cost_shared_usage_marks WHERE day < ?", oldest)
       }
       return plan
     })
@@ -451,6 +492,9 @@ export class OperationCostLedger {
     requireValue(bound.requests > 0, "COST_REQUEST_BOUND_REQUIRED")
     const stepId = identity(input.step_id)
     const stepDigest = digest(input.step_sha256)
+    // Outside the reservation's transaction, so a refusal keeps the mark that
+    // will later prove the overlap and let the same request through.
+    this.recordSharedUsageMark()
     return this.storage.transactionSync(() => {
       const plan = this.readPlan(input.id)
       requireValue(plan.status === "active", "COST_PLAN_TRIPPED")
@@ -509,6 +553,7 @@ export class OperationCostLedger {
           METERS.every((meter) => Number.isSafeInteger(account[meter]) && account[meter] >= 0),
         "COST_ACCOUNT_USAGE_UNAVAILABLE",
       )
+      const alreadyInAccount = this.sharedUsageInAccount(plan.immutable.day, account)
       for (const meter of METERS) {
         requireValue(
           plan.used[meter] + bound[meter] <= plan.ceiling[meter],
@@ -523,11 +568,16 @@ export class OperationCostLedger {
             LIMITS[meter] - (meter === "requests" ? CONTROL_REQUEST_HEADROOM : 0),
           "COST_SHARED_DAILY_LIMIT",
         )
-        // Deliberately conservative: outstanding and today's settled operator
-        // work remain additive to account telemetry, including where telemetry
-        // already contains that work. Never subtract an assumed overlap.
+        // Operator work stays additive to account telemetry, except shared-counter
+        // writes made at least one analytics lag before the provider's sample:
+        // those are provably inside it (the mutation lanes use the same lag).
+        // Counting them twice stopped the B-994 rewrite batch at half its size.
         requireValue(
-          account[meter] + usage[meter] + otherUsage[meter] + bound[meter] <=
+          account[meter] -
+            (alreadyInAccount[meter] ?? 0) +
+            usage[meter] +
+            otherUsage[meter] +
+            bound[meter] <=
             ACCOUNT_CEILINGS[meter],
           "COST_ACCOUNT_HEADROOM_LIMIT",
         )

@@ -3,6 +3,9 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { OperationCostLedger } from "./operation-cost-ledger.js"
 import { OperationCostExecutor } from "./operation-cost-executor.js"
+import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
+
+const DAILY_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
 
 function fixture() {
   const db = new DatabaseSync(":memory:")
@@ -79,6 +82,38 @@ function enableKv(f, overrides = {}) {
   })
 }
 
+// B-1035, 2026-10-06: the B-994 rewrite batch (about 78 rows a gene) was counted
+// twice, once in the shared counter and again inside the provider's account
+// sample, and would have stopped at about half its 535 genes.
+test("the account check counts shared writes once the provider's sample provably holds them", () => {
+  const f = fixture()
+  try {
+    const shared = Math.floor(DAILY_WRITES * 0.6)
+    f.ledger.readOtherUsage = () => ({ rows_read: 0, rows_written: shared, requests: 0 })
+    f.ledger.readAccountUsage = () => ({ ...f.readAccountUsage(), rows_written: shared })
+    const plan = f.ledger.register({
+      ...f.input,
+      prediction: { rows_read: 10, rows_written: 5_000, requests: 4 },
+      expires_at: f.readAccountUsage().measured_at + 3_600_000,
+    })
+    const bound = { rows_read: 1, rows_written: 1_000, requests: 1 }
+    assert.throws(
+      () => f.ledger.reserve(f.step({ id: plan.id, bound })),
+      /COST_ACCOUNT_HEADROOM_LIMIT/,
+    )
+    f.advance(10 * 60_000)
+    assert.throws(
+      () => f.ledger.reserve(f.step({ id: plan.id, step_id: "step-2", bound })),
+      /COST_ACCOUNT_HEADROOM_LIMIT/,
+    )
+    f.advance(6 * 60_000)
+    f.ledger.reserve(f.step({ id: plan.id, step_id: "step-3", bound }))
+    assert.equal(f.ledger.readPlan(plan.id).used.rows_written, 1_000)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("capacity includes retained uncertain reservations and legacy usage without refunding either", () => {
   const f = fixture()
   try {
@@ -90,7 +125,7 @@ test("capacity includes retained uncertain reservations and legacy usage without
     assert.equal(snapshot.used.rows_read, 133)
     assert.equal(snapshot.used.rows_written, 9)
     assert.equal(snapshot.remaining.rows_read, 1_000_000 - 133)
-    assert.equal(snapshot.remaining.rows_written, 20_000 - 9)
+    assert.equal(snapshot.remaining.rows_written, DAILY_WRITES - 9)
     assert.equal(snapshot.limits.requests, 2400)
     assert.deepEqual(f.ledger.readPlan(f.input.id), before)
     f.ledger.readOtherUsage = () => ({ rows_read: NaN, rows_written: 0, requests: 0 })
@@ -394,14 +429,14 @@ test("expired continuations inherit spending and unknown reservations without re
 test("a multi-day forecast never enlarges the daily allocation or resets accumulated spending", () => {
   const f = fixture()
   try {
-    const prediction = { rows_read: 100, rows_written: 30_000, requests: 10 }
+    const prediction = { rows_read: 100, rows_written: (DAILY_WRITES * 3) / 2, requests: 10 }
     let plan = f.ledger.register({ ...f.input, prediction })
-    assert.equal(plan.ceiling.rows_written, 60_000)
+    assert.equal(plan.ceiling.rows_written, DAILY_WRITES * 3)
     for (let day = 0; day < 3; day++) {
       f.ledger.reserve(
-        f.step({ id: plan.id, bound: { rows_read: 1, rows_written: 20_000, requests: 1 } }),
+        f.step({ id: plan.id, bound: { rows_read: 1, rows_written: DAILY_WRITES, requests: 1 } }),
       )
-      assert.equal(f.ledger.readPlan(plan.id).used.rows_written, (day + 1) * 20_000)
+      assert.equal(f.ledger.readPlan(plan.id).used.rows_written, (day + 1) * DAILY_WRITES)
       assert.throws(
         () =>
           f.ledger.reserve(
