@@ -694,6 +694,8 @@ test("B-1021: the gene switch cooldown holds caretakers, closes the end-and-clai
   assert.equal(held.claim.available, false)
   assert.equal(held.claim.reason, "switch_cooldown")
   assert.equal(held.claim.available_at, "2026-08-30T00:15:00.000Z")
+  // B-1027: the button shows how much of the 15-minute wait has passed.
+  assert.equal(held.claim.cooldown_seconds, 15 * 60)
 
   // 2. A direct POST is refused with the seconds left, and nothing moves.
   const forced = await handler(

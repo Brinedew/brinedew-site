@@ -826,8 +826,14 @@ export function createRequestInbox({
     renderSidebar()
   }
 
+  // The gene this account already looks after, once the sidebar has loaded it.
+  function caretakerSymbol() {
+    return String((state.caretaker && state.caretaker.canonical_symbol) || "")
+  }
+
   return {
     caretakerPanelMarkup,
+    caretakerSymbol,
     panelMarkup,
     noteCaretakerDossier,
     noteGeneViewed,
