@@ -182,13 +182,14 @@ export const GENERATION_COMPLETION_MAX_REQUESTS = GENERATION_CLAIM_LIMIT_CEILING
 // Since B-962 a call writes only what moves (a request already on this
 // publication is not rewritten), so the series costs, measured on the complete
 // migrated schema:
-//   3 rows once, 40 rows for each request (its start, its notification, and the
-//   delivery and settlement of its group), 3 rows more for each group after the
+//   3 rows once, 41 rows for each request (its start, its notification, its
+//   entry in the unread inbox index of migration 0116, and the delivery and
+//   settlement of its group), 3 rows more for each group after the
 //   first, and four fewer rows for a request that is a group of one.
 // A group of one saves four rows and adds three, so it is never the worst case;
 // the worst grouping is the one with the most groups that each hold at least two
 // requests: floor(n / 2) groups.
-export const GENERATION_COMPLETION_REQUEST_ROWS = 40
+export const GENERATION_COMPLETION_REQUEST_ROWS = 41
 export const GENERATION_COMPLETION_FIXED_ROWS = 3
 export const GENERATION_COMPLETION_GROUP_ROWS = 3
 
