@@ -1029,34 +1029,30 @@
       drop-shadow(0 0 16px rgb(150 195 210 / 0.22));
   }
 
+  /* The lane is exposed film: caretaker-blot.js renders its density as a mask over the ink.
+     The box is twice the band's width (7.9%), so the band's lateral halo fades inside it. */
   .icono-blot__lane {
     position: absolute;
     top: 11.4%;
-    width: 8%;
+    width: 15.8%;
     height: 66%;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    mix-blend-mode: multiply;
+  }
+
+  :root[saved-theme="dark"] .icono-blot__lane {
+    mix-blend-mode: screen;
   }
 
   .icono-blot__lane--marker {
-    left: 8.5%;
+    left: 4.6%;
   }
 
   .icono-blot__lane--sample {
-    left: 19.9%;
-  }
-
-  .icono-blot__band {
-    position: absolute;
-    left: -6%;
-    right: -6%;
-    border-radius: 40% / 50%;
-    background: linear-gradient(
-      180deg,
-      rgb(var(--ink) / 0) 0%,
-      rgb(var(--ink) / calc(var(--a) * 0.9)) 35%,
-      rgb(var(--ink) / var(--a)) 50%,
-      rgb(var(--ink) / calc(var(--a) * 0.9)) 65%,
-      rgb(var(--ink) / 0) 100%
-    );
+    left: 16%;
   }
 
   .icono-blot__photo {
