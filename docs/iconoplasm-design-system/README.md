@@ -90,6 +90,7 @@ Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Re
 - Kickers are short uppercase mono tags ("GENE MNEMONICS", "ARCHIVE", "19,000+ GENE PORTRAITS").
 - Typed molecular values are uppercase typewriter (`TRANSMEMBRANE`, `INSULIN`).
 - Handwritten notes are natural case, lowercase-leaning (`61 y.o.`, `female`, `12 kg`).
+- Handwriting may overflow its field. A note that runs about one line past its slot, or spills across a ruled boundary, is the lab-notebook look working as intended, not a layout bug. Don't shorten a note, shrink its type or clip it to make it fit; only text that runs well past a line or hides another field needs a fix.
 
 **Mechanics.** Tight, scannable. Short feature bullets. Numbers are exact and a little clinical ("recorded out of 19,023", "v0.4.7", "6,706 bp"). Gene symbols always in their literal monospace form.
 
