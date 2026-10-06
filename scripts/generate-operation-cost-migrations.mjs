@@ -47,9 +47,14 @@ export function reviewedMigrationStatements(directory, name, expectedTriggers, e
 function pendingMigrations() {
   return [
     [
-      "TAGGERIZER_DAILY_CALLS",
-      "0115_taggerizer_daily_calls.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0115_taggerizer_daily_calls.sql", 0, 1),
+      "REQUEST_INBOX_UNREAD_PAGE",
+      "0116_request_inbox_unread_page.sql",
+      reviewedMigrationStatements(
+        "migrations-iconoplasm",
+        "0116_request_inbox_unread_page.sql",
+        0,
+        1,
+      ),
     ],
   ]
 }

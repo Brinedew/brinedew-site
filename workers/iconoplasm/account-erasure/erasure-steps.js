@@ -90,7 +90,7 @@ export const ERASURE_STEPS = Object.freeze(
       key: "rowid",
       where: "requester_user_id = ?",
       whereBinds: [U],
-      weight: 2,
+      weight: 3,
       covers: ["icono_request_inbox_members.requester_user_id"],
     },
     {
