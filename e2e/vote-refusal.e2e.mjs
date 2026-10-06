@@ -51,7 +51,10 @@ import {
 const PAUSED = "Voting is paused until 00:00 UTC to protect the site's daily database allowance."
 const MARKUP_SENTENCE = "<b>Voting</b> is paused until 00:00 UTC."
 // Short on purpose: the real value is the seconds to 00:00 UTC, the box treats it the same.
-const RESET_SECONDS = 6
+// It must outlast what runs inside the pause (a screenshot, animations, three taps with
+// up to 3 s each). At 6 s a slow CI runner reached the reset before the third tap; main
+// went red from 2026-10-06 10:22 UTC with no change to the box.
+const RESET_SECONDS = 15
 const NOTICE = "[data-icono-candidate-delete-notice]"
 const BOX = "[data-icono-gene-vote-box]"
 const UP = `${BOX} [data-icono-vote-up]`
