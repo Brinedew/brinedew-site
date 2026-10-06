@@ -1067,6 +1067,10 @@
     aspect-ratio: 3 / 4;
     object-fit: cover;
     object-position: 50% 0;
+    /* The site's article images get rounded corners and a vertical margin; a
+       print on film has neither, and the margin would drop it below the lanes. */
+    margin: 0;
+    border-radius: 0;
     filter: grayscale(1) contrast(1.25) brightness(0.95);
     mix-blend-mode: multiply;
     opacity: 0.92;
